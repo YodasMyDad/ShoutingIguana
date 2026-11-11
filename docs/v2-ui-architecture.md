@@ -549,19 +549,28 @@ are drawn for the app and are never swapped for Lucide's.
   4xx, 9 URLs").
 - **A check's count is called what the check flags** (`crawl/checkSubject.ts`, the one place for it, so Issues, Fix
   first and the inspector can't word a check two ways), by the catalog's `subject`. A `page` check flags only pages:
-  "Pages affected", "Share of pages, of the N pages crawled", "Affected pages", a "Pages" column, "Show all N pages in
+  "Pages affected", "Share of pages, of the N pages analysed", "Affected pages", a "Pages" column, "Show all N pages in
   URLs", and "3 pages" in its row and when J or K announces it. A `url` check can flag any URL: "URLs affected",
   "Share of URLs, of the N URLs found", "Affected URLs", a "URLs" column, "Show all N in URLs". A check without a
   `subject` (an engine from before E3b, the design fixtures) reads as a `url` check: a page is a URL, and every URL
   it flags is one the crawl found, so that's true whatever it flags.
-- **The share is of the crawl's own count, never the analysis's.** The pages crawled are the library's `pageCount`,
-  as Overview's "pages read" is; `pagesAnalyzed` is the pages the analysis audited, one short wherever the site has
-  a Cloudflare `/cdn-cgi/` page (152 of 153 on the tests' crawl). The URLs found are the URL grid's `total`, read
-  with Overview's status breakdown (`statusFacetsQuery`, `foundCount`), so it's what that breakdown adds up to. Not
-  the URLs crawled: `sitemap-url-other-host` flags a URL a sitemap lists on another host whether or not it was
-  fetched. The share keeps its place with a dash until its count is read; there is none while the crawl runs, nor
-  when the count is past what it would be a part of. `e2e/issues-subject.spec.ts` walks every check of the catalog
-  on the tests' crawl: its words by its `subject`, its denominator against the API's own count, its count within it.
+- **A share is of a count from the same moment as the check's count** (`shareWhole` and `checkShare` in
+  `crawl/checkSubject.ts`: the one place that decides it). A `page` check's is "of the N pages analysed": the
+  analysis's own `pagesAnalyzed`, the pages its page rules ran on, stored by the analysis that counted the check, so
+  the share is true however old the analysis is and can never pass 100%. Not the library's `pageCount`, which is
+  counted in the file as it is now: the same number while the analysis is current (but for a Cloudflare `/cdn-cgi/`
+  page, which the checks leave out: 152 against 153 on the tests' crawl), and another crawl's once the crawl is
+  continued (a check that flags 52 of the 1,661 pages analysed is 3.1%, not "0.6% of the 9,206 pages crawled"). A
+  `url` check's is "of the N URLs found": the URL grid's `total`, read with Overview's status breakdown
+  (`statusFacetsQuery`, `foundCount`), so it's what that breakdown adds up to. Not the URLs crawled:
+  `sitemap-url-other-host` flags a URL a sitemap lists on another host whether or not it was fetched. Nothing stores
+  how many URLs the crawl had when it was analysed, so that share is said only while the file is as the analysis saw
+  it: there is none (and the URLs aren't counted for one) while the crawl runs, or once it was continued after its
+  analysis (`outOfDateReasons` has `crawlChanged`). An analysis out of date only because the engine or the settings
+  changed is of the same file, and keeps it. The share keeps its place with a dash until the URLs found are read;
+  there is none when the count is past what it would be a part of. Fix first and the inspector show counts, never a
+  share. `e2e/issues-subject.spec.ts` walks every check of the catalog on the tests' crawl: its words by its
+  `subject`, its denominator against the API's own count, its count within it.
 
 ## Overview (the second slice)
 

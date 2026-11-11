@@ -96,8 +96,8 @@ const NOT_FOUND_GROUP = `?group=${encodeURIComponent(JSON.stringify({ detail: 'H
 
 /**
  * A check that flags only pages (the catalog's `subject` is `page`): "Pages affected", as a share of the pages
- * crawled, and pages in its list, its grid's name and its row in the checks. The pages crawled are the library's
- * count (7 here), not the 6 the analysis audited.
+ * analysed, and pages in its list, its grid's name and its row in the checks. The pages analysed are the analysis's
+ * own count (6 here), which the check's count is a part of: not the 7 the crawl's file has.
  */
 export const PageCheck: Story = {
   loaders: [() => own()],
@@ -262,7 +262,10 @@ export const PassedCheck: Story = {
   render: () => <IssuesApp path={`${ISSUES}/internal-server-error`} />,
 };
 
-/** The crawl changed after its analysis: a banner offers to analyse again. */
+/**
+ * The crawl changed after its analysis: a banner offers to analyse again. A check that can flag any URL says no
+ * share: its count is of the URLs the crawl had then, and the file's count is of the URLs it has now.
+ */
 export const OutOfDate: Story = {
   loaders: [
     () =>
@@ -272,6 +275,22 @@ export const OutOfDate: Story = {
       }),
   ],
   render: () => <IssuesApp path={`${ISSUES}/internal-client-error`} />,
+};
+
+/**
+ * The same crawl, on a check that flags only pages: its share stands, of the pages the analysis ran on (6), whatever
+ * the crawl has read since (30 here).
+ */
+export const OutOfDatePageCheck: Story = {
+  loaders: [
+    () =>
+      own({
+        analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['crawlChanged'] },
+        item: { outOfDate: true, pageCount: 30, fetchedUrlCount: 390 },
+        urlsFound: 400,
+      }),
+  ],
+  render: () => <IssuesApp path={`${ISSUES}/title-too-long`} />,
 };
 
 /** Never analysed, and stopped: offers to analyse it. */

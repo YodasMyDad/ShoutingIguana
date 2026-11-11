@@ -22,8 +22,8 @@ export interface CheckDetailProps {
   categoryTitle: string;
   analysis: Analysis;
   /**
-   * The crawl's own counts, which the check's count is a share of: the pages crawled for a check that flags only
-   * pages, the URLs found for any other. Null while the crawl runs, when no share is said.
+   * What the check's count is a share of: the pages the analysis ran on for a check that flags only pages, the URLs
+   * the crawl has found for any other, with what tells whether that count is still the analysis's (`checkShare`).
    */
   crawlCounts: CrawlCounts | null;
   /** The check's groups, once the first page says (null before, and for a check that doesn't group). */
@@ -51,7 +51,7 @@ function groupedBy(grouping: CheckEntry['check']['grouping']): string {
 /**
  * The selected check (docs/v2-ui-ia.md, Issues): its severity and category, title and actions, its figures, what's
  * wrong, why it matters and how to fix it, then what it flags. That is worded by the check's `subject`
- * (crawl/checkSubject.ts): pages, as a share of the pages crawled, only for a check that flags nothing else; URLs, as
+ * (crawl/checkSubject.ts): pages, as a share of the pages analysed, only for a check that flags nothing else; URLs, as
  * a share of the URLs found, for one that can flag any URL or doesn't say. A skipped check shows its reason, never
  * 0s; a check that passed says so plainly.
  */

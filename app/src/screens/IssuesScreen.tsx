@@ -14,7 +14,7 @@ import {
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
-import { affectedCount, affectedNoun, type CrawlCounts } from '../crawl/checkSubject';
+import { affectedCount, shareWhole, type CrawlCounts } from '../crawl/checkSubject';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -181,18 +181,19 @@ export function IssuesScreen() {
     gcTime: GRID_PAGE_GC_MS,
   });
 
-  // What the selected check's count is a share of, from the crawl itself. The pages crawled are the library's count
-  // (as Overview's "pages read" is). The URLs found are the URL grid's total, read with Overview's status breakdown
-  // (the same query, so the two screens can't disagree, and coming from Overview costs nothing), and only for a check
-  // whose count is of URLs. Neither while the crawl runs: its counts move, the library's stands still until it stops,
-  // and the analysis on screen is of the crawl as it was.
-  const countsUrls = found && affectedNoun(selected.check) === 'URL';
-  const urlFacets = useQuery({ ...statusFacetsQuery(crawlId), enabled: countsUrls && !crawling });
-  const pagesCrawled = item?.pageCount ?? null;
+  // What the selected check's count is a share of (crawl/checkSubject.ts decides it). A page check's is the pages the
+  // analysis ran on, which come with the analysis. Any other's is the URLs found: the URL grid's total, read with
+  // Overview's status breakdown (the same query, so the two screens can't disagree, and coming from Overview costs
+  // nothing), and read only when a share of them can be said: never while the crawl runs or after it was continued,
+  // when the file's count is no longer the one the analysis's counts are a part of.
+  const analysed = analysis.data;
+  const shareOf = useMemo(() => (analysed ? { analysis: analysed, crawling } : null), [analysed, crawling]);
+  const countsUrls = found && shareOf !== null && shareWhole(selected.check, shareOf) === 'urlsFound';
+  const urlFacets = useQuery({ ...statusFacetsQuery(crawlId), enabled: countsUrls });
   const urlsFound = urlFacets.data ? foundCount(urlFacets.data) : null;
   const crawlCounts = useMemo<CrawlCounts | null>(
-    () => (crawling ? null : { pages: pagesCrawled, urls: urlsFound }),
-    [crawling, pagesCrawled, urlsFound],
+    () => (shareOf ? { ...shareOf, urlsFound } : null),
+    [shareOf, urlsFound],
   );
 
   const choose = (next: string, by: SelectedBy) => {
