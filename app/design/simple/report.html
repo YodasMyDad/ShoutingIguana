@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Website check: gardenfurnituresets.co.uk, 31 October 2026</title>
+<style>
+  :root { --text: #18181B; --secondary: #46464D; --muted: #68686F; --rule: #E3E3E7; --rule-soft: #EEEEF1; --sunken: #FAFAFB; --accent: #0B6BD3; --accent-subtle: #EBF4FF; --accent-border: #A8CFFF; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: #fff; color: var(--text); font: 10pt/1.45 Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  .sheet { max-width: 760px; margin: 0 auto; padding: 44px 40px 64px; }
+  h1, h2, h3, h4, p, ul, ol, dl, dd, figure, table { margin: 0; }
+  ul, ol { padding: 0; list-style: none; }
+  a { color: var(--accent); text-decoration: none; }
+  .mono { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 0.88em; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); }
+  .num { font-variant-numeric: tabular-nums; }
+  .mark { flex: none; vertical-align: -2px; }
+  .ring { flex: none; }
+
+  .eyebrow { font-size: 9pt; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin-top: 4px; font-size: 24pt; line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+  .meta { margin-top: 8px; color: var(--secondary); }
+  h2 { margin: 20px 0 4px; font-size: 14pt; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
+  h2 + .lead { margin-bottom: 12px; color: var(--secondary); }
+  .lead { max-width: 62ch; }
+
+  .summary { display: grid; grid-template-columns: 1.5fr 1fr; margin-top: 18px; border: 1px solid var(--rule); border-radius: 10px; }
+  .summary__main { display: flex; gap: 20px; align-items: center; padding: 18px 22px; }
+  .summary__word { font-size: 17pt; line-height: 1.2; font-weight: 600; letter-spacing: -0.015em; }
+  .summary__sentence { margin-top: 4px; font-size: 11.5pt; line-height: 1.4; }
+  .summary__covers { margin-top: 8px; font-size: 9.5pt; color: var(--secondary); }
+  .tally { padding: 16px 20px; border-left: 1px solid var(--rule-soft); display: grid; align-content: center; gap: 7px; font-size: 10pt; color: var(--secondary); }
+  .tally li { display: grid; grid-template-columns: 16px 30px 1fr; gap: 8px; align-items: center; }
+  .tally b { text-align: right; font-size: 12pt; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .first { margin-top: 8px; border: 1px solid var(--rule); border-radius: 10px; }
+  .first li { display: grid; grid-template-columns: 18px 16px 1fr auto; gap: 10px; align-items: baseline; padding: 6px 14px; border-top: 1px solid var(--rule-soft); }
+  .first li:first-child { border-top: 0; }
+  .first__n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .first__title { font-weight: 600; }
+  .first__count { color: var(--secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .first__foot { margin-top: 6px; font-size: 9pt; color: var(--secondary); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; line-height: 1.4; }
+  th { padding: 6px 10px; text-align: left; font-size: 8.5pt; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--rule); }
+  td { padding: 5px 10px; vertical-align: top; border-bottom: 1px solid var(--rule-soft); }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  tfoot td { border-bottom: 0; font-weight: 600; font-size: 10.5pt; }
+  .score-note { margin-top: 6px; font-size: 9pt; color: var(--secondary); }
+
+  .group-title { display: flex; align-items: center; gap: 8px; margin: 20px 0 0; padding-bottom: 6px; border-bottom: 2px solid var(--text); font-size: 12pt; font-weight: 600; }
+  .group-title span { font-weight: 400; color: var(--muted); }
+  .problem { padding: 13px 0 14px; border-bottom: 1px solid var(--rule); }
+  .problem h3 { display: flex; align-items: baseline; gap: 8px; font-size: 11.5pt; line-height: 1.3; font-weight: 600; letter-spacing: -0.005em; }
+  .problem__tech { margin-left: auto; padding-left: 12px; font-size: 8.5pt; font-weight: 400; letter-spacing: 0; color: var(--muted); white-space: nowrap; }
+  .problem__meta { margin-top: 2px; font-size: 9pt; color: var(--muted); }
+  .problem__meta b { color: var(--text); font-weight: 600; }
+  .problem h4 { margin: 8px 0 1px; font-size: 9pt; font-weight: 600; }
+  .problem p, .problem .steps { font-size: 9.5pt; line-height: 1.42; }
+  .problem .problem__meta, .problem .more { font-size: 9pt; }
+  .problem .more { font-size: 8.5pt; }
+  .steps { counter-reset: s; display: grid; gap: 1px; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 16px 1fr; gap: 6px; }
+  .steps li::before { content: counter(s) "."; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .onefix { margin-top: 10px; padding: 9px 12px; border: 1px solid var(--accent-border); border-radius: 8px; background: var(--accent-subtle); font-size: 9.5pt; }
+  .onefix b { font-weight: 600; }
+  .examples { margin-top: 8px; font-size: 9pt; }
+  .examples td, .examples th { padding: 3.5px 8px; }
+  .examples caption { caption-side: top; padding: 0 0 2px; text-align: left; font-size: 9pt; font-weight: 600; }
+  .examples td:first-child { width: 56%; }
+  .problem__split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; }
+  .problem__split .examples { margin-top: 8px; }
+  .examples--one td:first-child { width: auto; }
+  .examples--one .found { display: block; color: var(--muted); }
+  .more { margin-top: 4px; font-size: 8.5pt; color: var(--muted); }
+
+  .plain-list li { display: grid; grid-template-columns: 16px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--rule-soft); }
+  .plain-list b { font-weight: 600; }
+  .passed { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; padding-top: 9px; font-size: 9.5pt; }
+  .passed li { display: grid; grid-template-columns: 14px 1fr; gap: 7px; padding: 2px 0; }
+  .passed h4 { margin: 0 0 2px; font-size: 8.5pt; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .facts { display: grid; grid-template-columns: 200px 1fr; font-size: 9.5pt; }
+  .facts dt, .facts dd { padding: 5px 0; border-bottom: 1px solid var(--rule-soft); }
+  .facts dt { color: var(--muted); }
+  .foot { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--rule); font-size: 8.5pt; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; }
+
+  @page { margin: 16mm 15mm 16mm; }
+  @media print {
+    .sheet { max-width: none; padding: 0; }
+    h2, h3, h4, .group-title { break-after: avoid; }
+    .summary, .first, .problem--compact, .keep, .passed, .plain-list li, tr, .onefix, .facts { break-inside: avoid; }
+    .new-page { break-before: page; }
+    .new-page > h2:first-child { margin-top: 0; padding-top: 2px; }
+    a { color: inherit; }
+  }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <header data-unit>
+    <p class="eyebrow">Website check</p>
+    <h1>gardenfurnituresets.co.uk</h1>
+    <p class="meta">Checked on 31 October 2026 · 265 pages read · 4,521 addresses checked · 82 of 86 checks run</p>
+  </header>
+
+  <section class="summary" data-unit aria-label="Summary">
+    <div class="summary__main">
+      <svg class="ring" width="112" height="112" viewBox="0 0 100 100" role="img" aria-label="Score 85 out of 100">
+      <circle cx="50" cy="50" r="44" fill="none" stroke="#EEEEF1" stroke-width="7"/>
+      <circle cx="50" cy="50" r="44" fill="none" stroke="#1F86F5" stroke-width="7" stroke-linecap="round" stroke-dasharray="235.0 276.5" transform="rotate(-90 50 50)"/>
+      <text x="50" y="52" text-anchor="middle" dominant-baseline="middle" font-size="34" font-weight="500" fill="#18181B" letter-spacing="-1">85</text>
+      <text x="50" y="72" text-anchor="middle" font-size="8.5" fill="#68686F">out of 100</text>
+    </svg>
+      <div>
+        <p class="summary__word">Good</p>
+        <p class="summary__sentence">This site is in good shape. There are 2 serious problems and 4 problems worth fixing.</p>
+        <p class="summary__covers">The score covers all 265 pages and 82 of 86 checks. 4 checks couldn't run: they are listed near the end.</p>
+      </div>
+    </div>
+    <ul class="tally">
+      <li><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg><b>2</b><span>Serious problems</span></li>
+      <li><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><b>4</b><span>Problems worth fixing</span></li>
+      <li><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><b>13</b><span>Things worth a look</span></li>
+      <li><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><b>63</b><span>Checks found nothing wrong</span></li>
+      <li><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="skipped" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-dasharray="3.2 2.6"/><path d="M8.5 12h7"/></svg><b>4</b><span>Checks couldn't run</span></li>
+    </ul>
+  </section>
+
+  <h2 data-unit data-keep>Fix these first</h2>
+  <ol class="first" data-unit>
+    <li><span class="first__n">1</span><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg><span class="first__title">Pages or files that can't be found</span><span class="first__count">9 of 4,521 addresses</span></li>
+    <li><span class="first__n">2</span><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg><span class="first__title">Links that lead to broken pages</span><span class="first__count">5 of 265 pages</span></li>
+    <li><span class="first__n">3</span><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><span class="first__title">Large images that slow pages down</span><span class="first__count">61 of 265 pages</span></li>
+    <li><span class="first__n">4</span><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><span class="first__title">Pages that share the same search description</span><span class="first__count">8 of 265 pages</span></li>
+    <li><span class="first__n">5</span><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><span class="first__title">Pages that share the same title</span><span class="first__count">6 of 265 pages</span></li>
+  </ol>
+  <p class="first__foot" data-unit>Fixing these five takes the score from 85 to 98. Each is explained from page 2 under the same number, with the first pages it's on.</p>
+
+  <h2 data-unit data-keep>How the score is worked out</h2>
+  <p class="lead" data-unit data-keep>The score starts at 100, and each check that found a problem takes points off: up to 10 for a serious problem and up to 4 for one worth fixing, by how much of the site it affects. Things worth a look take nothing off.</p>
+  <table data-unit style="margin-top:10px">
+    <thead><tr><th scope="col">What took points off</th><th scope="col">How much of the site</th><th scope="col" class="num">Points</th></tr></thead>
+    <tbody>
+      <tr><td><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg> Pages or files that can't be found</td><td>9 of 4,521 addresses: a few</td><td class="num">−2</td></tr>
+      <tr><td><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg> Links that lead to broken pages</td><td>5 of 265 pages: some</td><td class="num">−4</td></tr>
+      <tr><td><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg> Large images that slow pages down</td><td>61 of 265 pages: many</td><td class="num">−3</td></tr>
+      <tr><td><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg> Pages that share the same search description</td><td>8 of 265 pages: some</td><td class="num">−2</td></tr>
+      <tr><td><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg> Pages that share the same title</td><td>6 of 265 pages: some</td><td class="num">−2</td></tr>
+      <tr><td><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg> Pages that are slow to answer</td><td>3 of 265 pages: some</td><td class="num">−2</td></tr>
+      <tr><td class="muted"><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg> 13 things worth a look</td><td class="muted">They don't change the score</td><td class="num muted">0</td></tr>
+    </tbody>
+    <tfoot><tr><td>Score</td><td>100 − 15</td><td class="num">85</td></tr></tfoot>
+  </table>
+  <p class="score-note" data-unit>A few pages is under 1 in 100; some, under 1 in 10; many, under half; most, half or more. While any serious problem stands, the score can't be above 89. Score version 1.</p>
+
+  <div class="new-page">
+  <h2 data-unit data-break data-keep>What to fix</h2>
+  <p class="lead" data-unit data-keep>Every check that found something: what's wrong, why it matters, how to fix it, and the first pages it's on. The full lists are in the spreadsheet that goes with this report, on the sheet with the same number.</p>
+  
+    <h3 class="group-title" data-unit data-keep><svg class="mark" width="16" height="16" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg>Serious <span>2</span></h3>
+    <p class="lead muted" data-unit data-keep style="margin-top:6px">These stop pages working or being found. Fix them first.</p>
+    <article class="problem">
+      <div class="keep" data-unit><h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg><span>1. Pages or files that can't be found</span><span class="problem__tech">Internal URL returns 4xx · Error</span></h3>
+      <p class="problem__meta"><b>9 of 4,521 addresses</b> · takes 2 points off the score · usually fixed by you or your developer</p>
+      <h4>What's wrong, and why it matters</h4>
+        <p>Some addresses on your site answer with an error instead of a page or file, most often &quot;not found&quot; (a 404). Visitors who follow a link to one get an error page, and Google drops addresses like these from its results. That's the right answer for something you removed on purpose, as long as nothing still links to it.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Look at each address in the list and decide whether it should still exist.</span></li><li><span>If it should, put the page or file back.</span></li><li><span>If it has moved, forward the old address to the new one (a &quot;301 redirect&quot;), in your site's redirect settings or through your developer.</span></li><li><span>If it's gone for good, leave it, and remove the links that still point to it.</span></li></ol></div>
+      <div class="keep" data-unit><table class="examples">
+          <caption>The first 5 of 9</caption>
+          <thead><tr><th scope="col">Address</th><th scope="col">What was found</th></tr></thead>
+          <tbody><tr><td><span class="mono">/edale-4-seater-sofa-set/</span></td><td>404 Not Found</td></tr><tr><td><span class="mono">/outdoor-pe-rattan-dining-set-with-fire-pit-table/</span></td><td>404 Not Found</td></tr><tr><td><span class="mono">/patio-swivel-chair-set-with-coffee-table-soft-seat-cushions/</span></td><td>404 Not Found</td></tr><tr><td><span class="mono">/henbury-6-seater-dining-set/</span></td><td>404 Not Found</td></tr><tr><td><span class="mono">/3-pieces-patio-furniture-set/</span></td><td>404 Not Found</td></tr></tbody>
+        </table><p class="more">And 4 more: the full list is on sheet 1 of the spreadsheet.</p></div>
+    </article>
+    <article class="problem">
+      <div class="keep" data-unit><h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Serious" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.1 1.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V7.1z" style="fill:#D93636;stroke:none"/><path d="M12 7v6" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="16.6" r="1.35" style="fill:#FFFFFF;stroke:none"/></svg><span>2. Links that lead to broken pages</span><span class="problem__tech">Links to broken internal URLs · Error</span></h3>
+      <p class="problem__meta"><b>5 of 265 pages</b> · takes 4 points off the score · usually fixed by you, in your site's editor</p>
+      <h4>What's wrong, and why it matters</h4>
+        <p>Some of your pages have links that lead to an address on your site that doesn't work. Visitors who click one land on an error page, and search engines waste their visit on it. A link in a menu or footer repeats on every page, so one bad link can show up hundreds of times.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open each page in the list in your site's editor and find the link.</span></li><li><span>Point it at the right page, or remove it.</span></li><li><span>If the same link is on most pages, it's in your menu, footer or page design: fix it there once.</span></li></ol></div>
+      <div class="keep" data-unit><table class="examples">
+          <caption>All 5</caption>
+          <thead><tr><th scope="col">Page</th><th scope="col">What was found</th></tr></thead>
+          <tbody><tr><td><span class="mono">/</span></td><td>1 broken URL → <span class="mono" style="display:inline">/edale-4-seater-sofa-set/</span></td></tr><tr><td><span class="mono">/rattan-furniture/rattan-fire-pit-sets/</span></td><td>1 broken URL → <span class="mono" style="display:inline">/outdoor-pe-rattan-dining-set-with-fire-pit-table/</span></td></tr><tr><td><span class="mono">/blog/best-rattan-patio-sets/</span></td><td>5 broken URLs → <span class="mono" style="display:inline">/patio-swivel-chair-set-with-coffee-table-soft-seat-cushions/</span></td></tr><tr><td><span class="mono">/blog/what-is-rattan/</span></td><td>1 broken URL → <span class="mono" style="display:inline">/berlin-cushion-box/</span></td></tr><tr><td><span class="mono">/blog/why-we-use-oxford-fabric-for-garden-furniture-covers/</span></td><td>1 broken URL → <span class="mono" style="display:inline">/harlington-hammock-fabric-egg-chair/</span></td></tr></tbody>
+        </table></div>
+    </article>
+  
+    <h3 class="group-title" data-unit data-keep><svg class="mark" width="16" height="16" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg>Worth fixing <span>4</span></h3>
+    <p class="lead muted" data-unit data-keep style="margin-top:6px">These hold pages back. Fix them when the serious ones are done.</p>
+    <article class="problem">
+      <div class="keep" data-unit><h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><span>3. Large images that slow pages down</span><span class="problem__tech">Large images · Warning</span></h3>
+      <p class="problem__meta"><b>61 of 265 pages</b> · takes 3 points off the score · usually fixed by you, in your site's editor</p>
+      <h4>What's wrong, and why it matters</h4>
+        <p>Some pages show images whose files are over 200 KB. Big images are the most common reason a page feels slow, most of all on a phone, and people leave slow pages. Photos uploaded straight from a camera or phone are the usual cause.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Resize each image so it's no bigger than it's shown on the page.</span></li><li><span>Save it as a compressed JPEG or WebP, then upload it in place of the old one.</span></li><li><span>If your site has an image-optimising setting or plugin, turn it on so new uploads are shrunk for you.</span></li></ol></div>
+      <div class="keep" data-unit><table class="examples">
+          <caption>The first 5 of 61</caption>
+          <thead><tr><th scope="col">Page</th><th scope="col">What was found</th></tr></thead>
+          <tbody><tr><td><span class="mono">/monaco-2-seat-bistro-set/</span></td><td>2 images over 200 KB → <span class="mono" style="display:inline">/media/2474/mon-2.jpg?width=896</span></td></tr><tr><td><span class="mono">/hillcrest-garden-storage-shed/</span></td><td>1 image over 200 KB → <span class="mono" style="display:inline">/media/6058/8.png?width=896</span></td></tr><tr><td><span class="mono">/willow-wooden-picnic-bench/</span></td><td>1 image over 200 KB → <span class="mono" style="display:inline">/media/6236/willow-wooden-picnic-bench-brown-2.jpg?width=896</span></td></tr><tr><td><span class="mono">/skybrook-greenhouse/</span></td><td>1 image over 200 KB → <span class="mono" style="display:inline">/media/7125/skybrook-greenhouse-10.jpg?width=896</span></td></tr><tr><td><span class="mono">/blog/how-to-store-garden-furniture-in-winter/</span></td><td>4 images over 200 KB → <span class="mono" style="display:inline">/media/7402/cleaning-garden-chair-soapy-water-a156a6e5.jpg</span></td></tr></tbody>
+        </table><p class="more">And 56 more: the full list is on sheet 3 of the spreadsheet.</p></div>
+    </article>
+    <article class="problem">
+      <div class="keep" data-unit><h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><span>4. Pages that share the same search description</span><span class="problem__tech">Duplicate meta description · Warning</span></h3>
+      <p class="problem__meta"><b>8 of 265 pages</b> · takes 2 points off the score · usually fixed by you, in your site's editor</p>
+      <h4>What's wrong, and why it matters</h4>
+        <p>Two or more pages share one search description: the short text under a page's title in search results. Searchers can't tell the pages apart, and Google tends to write its own text instead. It's also called a &quot;meta description&quot;, and often comes from a default that the site's design fills in.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open each page in your site's editor and find its description, often under &quot;SEO&quot; or &quot;Search engine listing&quot;.</span></li><li><span>Write one or two sentences that say what's on that page and nowhere else.</span></li><li><span>Leave numbered pages of one list (page 2, page 3) until last: they matter least.</span></li></ol></div>
+      <div class="keep" data-unit><table class="examples">
+          <caption>The first 5 of 8</caption>
+          <thead><tr><th scope="col">Page</th><th scope="col">What was found</th></tr></thead>
+          <tbody><tr><td><span class="mono">/garden-sheds/</span></td><td>1 other page → <span class="mono" style="display:inline">/garden-sheds/?p=2</span></td></tr><tr><td><span class="mono">/greenhouses/</span></td><td>1 other page → <span class="mono" style="display:inline">/greenhouses/?p=2</span></td></tr><tr><td><span class="mono">/oxford-fabric-outdoor-furniture-cover-w192cm-x-d205cm-x-h61cm/</span></td><td>1 other page → <span class="mono" style="display:inline">/pe-outdoor-rectangle-furniture-cover-w222cm-x-d155cm-x-h67cm/</span></td></tr><tr><td><span class="mono">/outdoor-furniture-cover-235-x-190-x-90cm/</span></td><td>1 other page → <span class="mono" style="display:inline">/2-seater-outdoor-furniture-cover/</span></td></tr><tr><td><span class="mono">/pe-outdoor-rectangle-furniture-cover-w222cm-x-d155cm-x-h67cm/</span></td><td>1 other page → <span class="mono" style="display:inline">/oxford-fabric-outdoor-furniture-cover-w192cm-x-d205cm-x-h61cm/</span></td></tr></tbody>
+        </table><p class="more">And 3 more: the full list is on sheet 4 of the spreadsheet.</p></div>
+    </article>
+    <article class="problem">
+      <div class="keep" data-unit><h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><span>5. Pages that share the same title</span><span class="problem__tech">Duplicate title · Warning</span></h3>
+      <p class="problem__meta"><b>6 of 265 pages</b> · takes 2 points off the score · usually fixed by you, in your site's editor</p>
+      <h4>What's wrong, and why it matters</h4>
+        <p>Two or more pages have the same title: the text on the browser tab, and the link people click in search results. Searchers can't tell the pages apart, and Google may make up a title of its own. It often means two addresses show the same page, or the site's design leaves out what's different, such as the page number.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open each page in your site's editor and give it a title that says what's specific to it.</span></li><li><span>If two addresses show the same page, keep one and ask your developer to forward the other to it.</span></li></ol></div>
+      <div class="keep" data-unit><table class="examples">
+          <caption>The first 5 of 6</caption>
+          <thead><tr><th scope="col">Page</th><th scope="col">What was found</th></tr></thead>
+          <tbody><tr><td><span class="mono">/login/</span></td><td>1 other page → <span class="mono" style="display:inline">/login/?register=true</span></td></tr><tr><td><span class="mono">/garden-sheds/</span></td><td>1 other page → <span class="mono" style="display:inline">/garden-sheds/?p=2</span></td></tr><tr><td><span class="mono">/greenhouses/</span></td><td>1 other page → <span class="mono" style="display:inline">/greenhouses/?p=2</span></td></tr><tr><td><span class="mono">/login/?register=true</span></td><td>1 other page → <span class="mono" style="display:inline">/login/</span></td></tr><tr><td><span class="mono">/garden-sheds/?p=2</span></td><td>1 other page → <span class="mono" style="display:inline">/garden-sheds/</span></td></tr></tbody>
+        </table><p class="more">And 1 more: the full list is on sheet 5 of the spreadsheet.</p></div>
+    </article>
+    <article class="problem">
+      <div class="keep" data-unit><h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth fixing" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.4 22.4 20.4H1.6z" style="fill:#F5A70A;stroke:#B06C00;stroke-width:1.4" stroke-linejoin="round"/><path d="M12 9v5.2" style="stroke:#3A2600;stroke-width:2.3"/><circle cx="12" cy="17.2" r="1.25" style="fill:#3A2600;stroke:none"/></svg><span>6. Pages that are slow to answer</span><span class="problem__tech">Slow response · Warning</span></h3>
+      <p class="problem__meta"><b>3 of 265 pages</b> · takes 2 points off the score · usually fixed by your developer or hosting company</p>
+      <h4>What's wrong, and why it matters</h4>
+        <p>These pages took more than 1 second to arrive when the check asked for them. Nothing can appear on screen until the page arrives, so visitors wait, and Google visits slow sites less often. One slow reading can be a blip, so try the pages yourself before acting.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open two or three of the pages in your browser and see whether they're slow for you too.</span></li><li><span>If they are, send the list to your developer or hosting company and ask what the server is waiting for.</span></li><li><span>Ask about page caching and a faster hosting plan: they're the usual fixes.</span></li></ol></div>
+      <div class="keep" data-unit><table class="examples">
+          <caption>All 3</caption>
+          <thead><tr><th scope="col">Page</th><th scope="col">What was found</th></tr></thead>
+          <tbody><tr><td><span class="mono">/login/?register=true</span></td><td>5,476 ms (first byte after 5,475 ms)</td></tr><tr><td><span class="mono">/burford-natural-table/</span></td><td>5,217 ms (first byte after 5,214 ms)</td></tr><tr><td><span class="mono">/bayworth-corner-sofa-set/</span></td><td>4,632 ms (first byte after 4,624 ms)</td></tr></tbody>
+        </table></div>
+    </article>
+  
+    <h3 class="group-title" data-unit data-keep><svg class="mark" width="16" height="16" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg>Worth a look <span>13</span></h3>
+    <p class="lead muted" data-unit data-keep style="margin-top:6px">Often fine as they are. They don't change the score: read each one and decide.</p>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>7. Links with nothing to read</span><span class="problem__tech">Internal links without anchor text · Notice</span></h3>
+      <p class="problem__meta"><b>265 of 265 pages</b> · doesn’t change the score · usually fixed by you or your developer</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>Some links on your pages have no words: usually an image or icon, such as a logo, with no description. People who use a screen reader hear only &quot;link&quot;, and search engines learn nothing about the page it leads to. A logo or icon in the page design is the usual cause, so one fix often clears every page.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Find the link on one of the pages: the list shows where it leads.</span></li><li><span>If it's an image, give the image a short description (its &quot;alt text&quot;), such as your site's name for a logo.</span></li><li><span>If it's an icon, ask your developer to add a label to the link (an &quot;aria-label&quot;).</span></li></ol><p class="onefix"><b>One fix clears 264 of these 265 pages.</b> They share one link with no words: the link to <span class="mono">/</span>, most likely the logo in the part of the site every page shares.</p></div><div><table class="examples examples--one">
+          <caption>The first 3 of 265</caption>
+          <tbody><tr><td><span class="mono">/</span><span class="found">Links to 4 URLs → <span class="mono">/greenhouses/</span></span></td></tr><tr><td><span class="mono">/frequently-asked-questions/</span><span class="found">Links to 1 URL → <span class="mono">/</span></span></td></tr><tr><td><span class="mono">/contact-us/</span><span class="found">Links to 1 URL → <span class="mono">/</span></span></td></tr></tbody>
+        </table><p class="more">And 262 more: the full list is on sheet 7 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>8. Images that make the page jump as it loads</span><span class="problem__tech">Images without width and height attributes · Notice</span></h3>
+      <p class="problem__meta"><b>230 of 265 pages</b> · doesn’t change the score · usually fixed by your developer or hosting company</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>Some images don't tell the browser their width and height. The browser can't leave the right space, so text jumps down the page as each image arrives. That annoys readers and counts against the page in Google's speed measures. If your site's design already sets the size another way, there's nothing to do.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Load one of the pages on a slow connection and watch whether the text jumps as images appear.</span></li><li><span>If it does, ask your developer to add a width and height to the images in the page design.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 230</caption>
+          <tbody><tr><td><span class="mono">/</span><span class="found">20 images</span></td></tr><tr><td><span class="mono">/monaco-2-seat-bistro-set/</span><span class="found">24 images</span></td></tr><tr><td><span class="mono">/sorrento-7pc-black-rectangular-deluxe-recliner-set/</span><span class="found">12 images</span></td></tr></tbody>
+        </table><p class="more">And 227 more: the full list is on sheet 8 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>9. Search descriptions too long to show in full</span><span class="problem__tech">Meta description too long · Notice</span></h3>
+      <p class="problem__meta"><b>210 of 265 pages</b> · doesn’t change the score · usually fixed by you, in your site's editor</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages have a search description (a &quot;meta description&quot;) of more than 155 characters. Search results cut off the end of a long description. That's harmless when the important words come first, so only pages where the cut loses the point need changing.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open the page in your site's editor and find its description, often under &quot;SEO&quot;.</span></li><li><span>Put what matters in the first sentence.</span></li><li><span>Trim the rest to about 155 characters, or leave it if the opening already works.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 210</caption>
+          <tbody><tr><td><span class="mono">/rattan-furniture/</span><span class="found">160 characters</span></td></tr><tr><td><span class="mono">/rattan-furniture/rattan-patio-sets/</span><span class="found">307 characters</span></td></tr><tr><td><span class="mono">/rattan-furniture/rattan-sofa-sets/</span><span class="found">321 characters</span></td></tr></tbody>
+        </table><p class="more">And 207 more: the full list is on sheet 9 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>10. Titles too long to show in full</span><span class="problem__tech">Title too long · Notice</span></h3>
+      <p class="problem__meta"><b>86 of 265 pages</b> · doesn’t change the score · usually fixed by you, in your site's editor</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages have a title of more than 60 characters. Search results cut off the end of a long title, so the last words may not show. That's harmless when the important words come first.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open the page in your site's editor and find its title.</span></li><li><span>Move the words that matter most to the front.</span></li><li><span>Cut repeated words and long endings, such as a slogan after your site's name.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 86</caption>
+          <tbody><tr><td><span class="mono">/contact-us/</span><span class="found">64 characters</span></td></tr><tr><td><span class="mono">/rattan-furniture/</span><span class="found">65 characters</span></td></tr><tr><td><span class="mono">/wooden-furniture/wooden-seating/</span><span class="found">68 characters</span></td></tr></tbody>
+        </table><p class="more">And 83 more: the full list is on sheet 10 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>11. Pages with no search description</span><span class="problem__tech">Missing meta description · Notice</span></h3>
+      <p class="problem__meta"><b>11 of 265 pages</b> · doesn’t change the score · usually fixed by you, in your site's editor</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages have no search description: the short text under a page's title in search results. Without one (a &quot;meta description&quot;), Google picks some text from the page, which may not be what you'd choose. It doesn't change where the page ranks, so start with the pages you most want people to click.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open the page in your site's editor and find the description box, often under &quot;SEO&quot; or &quot;Search engine listing&quot;.</span></li><li><span>Write one or two sentences that say what the page offers.</span></li><li><span>Skip pages nobody searches for, such as login and basket pages.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 11</caption>
+          <tbody><tr><td><span class="mono">/frequently-asked-questions/</span></td></tr><tr><td><span class="mono">/login/</span></td></tr><tr><td><span class="mono">/garden-furniture/</span></td></tr></tbody>
+        </table><p class="more">And 8 more: the full list is on sheet 11 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>12. Pages that won't preview well when shared</span><span class="problem__tech">Open Graph tags missing · Notice</span></h3>
+      <p class="problem__meta"><b>11 of 265 pages</b> · doesn’t change the score · usually fixed by you or your developer</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages lack the title, description or image that apps show when someone shares a link. Without them (they're called &quot;Open Graph tags&quot;), the preview is a guess, or a bare link. It only matters for pages people are likely to share.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>In your site's editor, find the page's &quot;social sharing&quot; or &quot;social preview&quot; settings.</span></li><li><span>Add a title, a short description and an image.</span></li><li><span>If there's no such setting, ask your developer to add Open Graph tags to the page design.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 11</caption>
+          <tbody><tr><td><span class="mono">/frequently-asked-questions/</span><span class="found">Empty og:title, og:description</span></td></tr><tr><td><span class="mono">/login/</span><span class="found">Missing og:title, og:description, og:image</span></td></tr><tr><td><span class="mono">/garden-furniture/</span><span class="found">Empty og:title, og:description</span></td></tr></tbody>
+        </table><p class="more">And 8 more: the full list is on sheet 12 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>13. Very short titles</span><span class="problem__tech">Title too short · Notice</span></h3>
+      <p class="problem__meta"><b>9 of 265 pages</b> · doesn’t change the score · usually fixed by you, in your site's editor</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages have a title of fewer than 30 characters. A short title can be exactly right, such as a product name. But titles like &quot;Login&quot; or &quot;Products&quot; don't tell a searcher what the page is, or whose. Leave the ones that already say it all.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open the page in your site's editor and find its title.</span></li><li><span>Say what the page is about, and add your site's name if there's room.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 9</caption>
+          <tbody><tr><td><span class="mono">/frequently-asked-questions/</span><span class="found">26 characters</span></td></tr><tr><td><span class="mono">/login/</span><span class="found">5 characters</span></td></tr><tr><td><span class="mono">/garden-furniture/</span><span class="found">16 characters</span></td></tr></tbody>
+        </table><p class="more">And 6 more: the full list is on sheet 13 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>14. Pages that don't name their main address</span><span class="problem__tech">Missing canonical · Notice</span></h3>
+      <p class="problem__meta"><b>8 of 265 pages</b> · doesn’t change the score · usually fixed by you or your developer</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages don't say which address is their main one (they have no &quot;canonical&quot; link). The same page can often be reached at several addresses, and without this Google picks one itself. That usually works out, so this matters only if your site has many versions of each address.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>See whether your site's SEO settings or plugin can add a canonical link to every page: most can.</span></li><li><span>If not, ask your developer to add one to the page design, pointing each page at its own address.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 8</caption>
+          <tbody><tr><td><span class="mono">/frequently-asked-questions/</span></td></tr><tr><td><span class="mono">/contact-us/</span></td></tr><tr><td><span class="mono">/login/</span></td></tr></tbody>
+        </table><p class="more">And 5 more: the full list is on sheet 14 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>15. Pages with very little text</span><span class="problem__tech">Low word count · Notice</span></h3>
+      <p class="problem__meta"><b>7 of 265 pages</b> · doesn’t change the score · usually fixed by you, in your site's editor</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages have fewer than 200 words of their own, not counting menus and footers. Short pages are often fine: a contact page doesn't need an essay. This list is for spotting pages that are empty by mistake, such as one where the content failed to appear.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open each page and see whether anything is missing.</span></li><li><span>If content is missing, put it back.</span></li><li><span>If the page is meant to be short, leave it.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>The first 3 of 7</caption>
+          <tbody><tr><td><span class="mono">/contact-us/</span><span class="found">137 words</span></td></tr><tr><td><span class="mono">/login/</span><span class="found">85 words</span></td></tr><tr><td><span class="mono">/wooden-furniture/</span><span class="found">168 words</span></td></tr></tbody>
+        </table><p class="more">And 4 more: the full list is on sheet 15 of the spreadsheet.</p></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>16. Pages that name another page as the main version</span><span class="problem__tech">Canonicalised page · Notice</span></h3>
+      <p class="problem__meta"><b>1 of 265 pages</b> · doesn’t change the score · usually fixed by you or your developer</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages tell search engines that another page is the main version of them (a &quot;canonical&quot; link). Google then shows that other page instead, which is right for copies, such as page 2 of a list or a print version. It's a problem only if the page has its own content and should appear in search itself.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Look at each page and the page it points to, and decide whether they're really the same thing.</span></li><li><span>If they are, there's nothing to do.</span></li><li><span>If this page should appear in search on its own, ask your developer to point its canonical link at its own address.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>Where it is</caption>
+          <tbody><tr><td><span class="mono">/blog/?p=2</span></td></tr></tbody>
+        </table></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>17. Pages with no main heading</span><span class="problem__tech">Missing H1 · Notice</span></h3>
+      <p class="problem__meta"><b>1 of 265 pages</b> · doesn’t change the score · usually fixed by you, in your site's editor</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>These pages have no main heading (an &quot;H1&quot;): the headline that says what the page is about. People using a screen reader rely on headings to find their way, and the page is harder to scan. Often the headline is there to look at, but isn't marked as a heading.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Open the page in your site's editor.</span></li><li><span>Select the headline at the top and set its style to &quot;Heading 1&quot;.</span></li><li><span>If the headline is part of the page design, ask your developer to mark it as the H1.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>Where it is</caption>
+          <tbody><tr><td><span class="mono">/blog/</span></td></tr></tbody>
+        </table></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>18. Recommended security settings are missing</span><span class="problem__tech">Security headers missing · Notice</span></h3>
+      <p class="problem__meta"><b>1 of 265 pages</b> · doesn’t change the score · usually fixed by your developer or hosting company</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>Your site doesn't send some of the settings that tell browsers how to protect visitors (its &quot;security headers&quot;). They guard against attacks such as someone showing your site inside a fake one. Google doesn't rank on them, and many sites run without them, but they're worth having.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Send this to your developer or hosting company: the list names the missing settings.</span></li><li><span>Ask them to add the simple ones first (X-Content-Type-Options and Referrer-Policy), and to test the others before switching them on.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>Where it is</caption>
+          <tbody><tr><td><span class="mono">/</span><span class="found">Missing Content-Security-Policy, Referrer-Policy</span></td></tr></tbody>
+        </table></div></div>
+    </article>
+    <article class="problem problem--compact" data-unit>
+      <h3><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="Worth a look" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.4" style="fill:#5F6B79;stroke:none"/><path d="M12 10.6v6.2" style="stroke:#FFFFFF;stroke-width:2.4"/><circle cx="12" cy="7.3" r="1.4" style="fill:#FFFFFF;stroke:none"/></svg><span>19. No sitemap found</span><span class="problem__tech">No XML sitemap found · Notice</span></h3>
+      <p class="problem__meta"><b>1 of 4,521 addresses</b> · doesn’t change the score · usually fixed by you or your developer</p>
+      <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
+        <p>The check found no sitemap: a file that lists your pages for search engines. A small site whose pages all link to each other can manage without one, as Google finds pages by following links. It helps most on big or new sites. If you only gave your sitemap to Google Search Console, it won't show here.</p>
+        <h4>How to fix it</h4>
+        <ol class="steps"><li><span>Look in your site's SEO settings or plugin: most can create a sitemap with one switch.</span></li><li><span>Ask your developer to add its address to the site's robots.txt file, so every search engine finds it.</span></li><li><span>Check the site again: two more checks can then run.</span></li></ol></div><div><table class="examples examples--one">
+          <caption>Where it is</caption>
+          <tbody><tr><td><span class="mono">/</span></td></tr></tbody>
+        </table></div></div>
+    </article>
+  </div>
+
+  <h2 data-unit data-keep>What couldn't be checked</h2>
+  <p class="lead" data-unit data-keep>These checks didn't run, so the site may have problems they would have found.</p>
+  <ul class="plain-list">
+    <li data-unit><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="skipped" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-dasharray="3.2 2.6"/><path d="M8.5 12h7"/></svg><span><b>Your site answers at more than one address.</b> The site's other addresses (with and without www, http and https) couldn't all be tried. Check the site again to include it.</span></li>
+    <li data-unit><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="skipped" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-dasharray="3.2 2.6"/><path d="M8.5 12h7"/></svg><span><b>Pages with almost identical content.</b> This check is newer than your last site check. Check the site again to include it.</span></li>
+    <li data-unit><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="skipped" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-dasharray="3.2 2.6"/><path d="M8.5 12h7"/></svg><span><b>Pages missing from your sitemap.</b> Your site has no sitemap, the list of its pages for search engines, to compare with. Add a sitemap, then check the site again.</span></li>
+    <li data-unit><svg class="mark" width="14" height="14" viewBox="0 0 24 24" role="img" aria-label="skipped" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5" stroke-dasharray="3.2 2.6"/><path d="M8.5 12h7"/></svg><span><b>Pages nothing links to.</b> Your site has no sitemap, the list of its pages for search engines, to compare with. Add a sitemap, then check the site again.</span></li>
+  </ul>
+
+  <h2 data-unit data-keep>What was checked and found nothing wrong</h2>
+  <p class="lead" data-unit data-keep>63 checks ran and found nothing wrong.</p>
+  <div class="passed" data-unit><div><h4>Visibility in search</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No address is off limits to search engines</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page tells search engines to ignore its links</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page asks to be left out of search results</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>The site has a rules file for search engines</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>The rules file for search engines isn't returning an error</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No other version of the site has a failing rules file</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page hides its description in search results</span></li></ul></div><div><h4>Links</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every link to another website works</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every link to a part of a page finds it</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No link tells search engines not to follow it</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No link goes through a forwarding address</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Duplicate addresses</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every main address works</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every main address is a valid web address</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page names two different main addresses</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No main address is written in the wrong part of the page</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No main address is written as a partial address</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No main address is hidden from search</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No main address forwards somewhere else</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page gives search engines opposite instructions</span></li></ul></div><div><h4>Page set-up</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page risks showing garbled characters</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every page says what language it is in</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every page is set up for phones</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Search descriptions</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page has more than one search description</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No search description is very short</span></li></ul></div><div><h4>Content</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No two pages have identical content</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Headings</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every page has its own main heading</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page has more than one main heading</span></li></ul></div><div><h4>Languages</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No language version leads to a broken page</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No two pages claim the same language</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No language version uses a code that doesn't exist</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No language version is missing its link back</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No language version leaves itself out of its list</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No set of language versions lacks a fallback page</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No language version is written in the wrong part of the page</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No language version is hidden from search</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Speed</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page is too big for Google to read in full</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page has too much code to download</span></li></ul></div><div><h4>Security</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page is left on the insecure address</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No secure page loads an insecure file</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>The site is secure (HTTPS)</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Images</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No image description is too long</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every image loads</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every image has a description</span></li></ul></div><div><h4>Pages that load</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No firewall turned the check away</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page fails with a server error</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every page and file answers</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No error page passes itself off as a normal page</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Forwarded addresses</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page moves visitors on by itself</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No address forwards to a broken page</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No address forwards more than once</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No secure address forwards to an insecure one</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No address forwards in a circle</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No forwarding is marked as temporary</span></li></ul></div><div><h4>Sitemap</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No sitemap failed to load</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No sitemap lists a page that can't appear in search</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No sitemap lists a page on another site</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Rich results</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No rich-result details have an error in them</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No rich-result details are missing a required part</span></li></ul></div><div><h4>Page titles</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>Every page has a title</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No page has more than one title</span></li></ul></div></div>
+  <div class="passed" data-unit><div><h4>Web addresses</h4><ul><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No address is very long</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No address has underscores</span></li><li><svg class="mark" width="12" height="12" viewBox="0 0 24 24" role="img" aria-label="passed" fill="none" stroke="#68686F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg><span>No address has capital letters</span></li></ul></div><div></div></div>
+
+  <h2 data-unit data-keep>About this check</h2>
+  <dl class="facts" data-unit>
+    <dt>Started from</dt><dd class="mono">https://www.gardenfurnituresets.co.uk/</dd>
+    <dt>When</dt><dd>31 October 2026, 14:13 to 14:51 (37 min 25 s)</dd>
+    <dt>What was read</dt><dd>265 pages, and 4,256 images, files and links: 4,521 addresses in all</dd>
+    <dt>Pages that can appear in search</dt><dd>264 of 265</dd>
+    <dt>Not followed</dt><dd>1,765 addresses the site marks “nofollow”</dd>
+    <dt>How it was read</dt><dd>Polite speed (up to 2 addresses a second), stopping after 10,000 addresses, obeying robots.txt</dd>
+    <dt>Finished?</dt><dd>Yes: it read every address it found</dd>
+    <dt>The words in this report</dt><dd>Serious is the checks' “Error”, Worth fixing is “Warning” and Worth a look is “Notice”. An address is a URL.</dd>
+  </dl>
+
+  <footer class="foot" data-unit><span>Made with Shouting Iguana 2.0 on 1 November 2026</span><span>Score version 1 · engine 2.0.0-alpha.1</span></footer>
+</main>
+</body>
+</html>
