@@ -2160,3 +2160,10 @@ silent. `si readbench --gate` on that crawl passed every class on its second run
 200). On its first, with the machine busier, one read alone was over its gate: a regular expression over every title,
 219 ms against 190. Repeated by itself three times it took 94 to 102 ms, as it did for the engine before the score on
 a 100k crawl of its own (71 to 124 ms): the load, not the change, and no read was changed here.
+
+**After the three changes that followed** (a site-wide fault leads its severity in the order to fix;
+`site-hidden-from-search` counts noindex only; every check has its plain words), the benchmark, run once on the same
+machine, crawled its 100,000 pages in 56.8 s (1,779 pages/s), peaked at 193 MB with no growth (+1 MB over the crawl),
+analysed in 19.6 s, and found every planted issue and nothing else. The analysis's working set peaked at 331 MB, against 253 to 327 MB in
+the runs before it: one run, not repeated, and nothing these changes add is of that size (three counters in a rule,
+and 87 checks' words held once). `si readbench --gate` wasn't run again: no read changed.

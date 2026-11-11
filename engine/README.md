@@ -900,6 +900,10 @@ crawl's pace fell to a fifth for stretches of it), measured a 79 s crawl (1,273 
 (−15 MB), a 22.8 s analysis peaking at 261 MB, and a 479 MB file. The analysis of a 100k crawl, run back to back
 before and after the score on copies of one file, took 12.9 s both times.
 
+After the three changes that followed the score (a site-wide fault leads its severity in the order to fix, the
+hidden-site check counts noindex only, every check has its plain words) one run measured a 56.8 s crawl (1,779
+pages/s), a 193 MB peak with no growth (+1 MB), a 19.6 s analysis peaking at 331 MB, and a 479 MB file.
+
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the
 network and your rate settings, not by the crawler.

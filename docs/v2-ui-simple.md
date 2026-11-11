@@ -858,7 +858,7 @@ Simple itself.
 
 | Need | For | Shape |
 | --- | --- | --- |
-| Plain texts on every check | What to fix, one problem, the report | `GET /api/checks`: `plainTitle`, `plainWhat` (sentences), `plainFix` (steps), `fixer`, `plainPassed`, `plainOneFix` (optional). In `IssueCatalog`, beside the technical texts |
+| Plain texts on every check | What to fix, one problem, the report | `GET /api/checks`: `plainTitle`, `plainWhat` (sentences), `plainFix` (steps), `fixer`, `plainPassed`, `plainOneFix` and `plainLooksFor` (optional). Beside the catalog's technical texts, by check id, written in one data file |
 | Plain category titles | Summary's "What's fine", the report | `categories[].plainTitle` |
 | Plain skip reasons | Summary, What to fix, the report | `skipped[].reason.plainText` and `plainAction`, by reason code |
 | `siteWide` on a check | The score | `checks[].siteWide`: true for `robots-txt-unreachable`, `no-https`, `site-hidden-from-search`, `duplicate-site-version`, `robots-txt-unreachable-other-origin` |
