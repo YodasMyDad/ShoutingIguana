@@ -742,6 +742,11 @@ describe('where the keyboard starts in a popover', () => {
     await user.click(screen.getByRole('button', { name: 'Anchor or alt text contains about' }));
     const editing = await screen.findByRole('dialog', { name: 'Change the filter' });
     await waitFor(() => expect(within(editing).getByRole('textbox', { name: 'Text' })).toHaveFocus());
+    // Under the text, how the engine matches it: the case of A to Z only, which is what it does.
+    expect(within(editing).getByRole('textbox', { name: 'Text' })).toHaveAccessibleDescription(
+      'A to Z match in capitals or small letters. Other letters, such as é and É, match only themselves.',
+    );
+    expect(within(editing).queryByText('Capitals and small letters match each other.')).toBeNull();
   });
 });
 

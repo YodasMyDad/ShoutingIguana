@@ -82,6 +82,21 @@ export function inputFor(op: DraftOp, type: UrlColumnType): DraftInput {
   return type === 'number' ? 'number' : 'text';
 }
 
+/**
+ * How a value is matched, where the operator's words don't say, for under its field. The engine's rule (the
+ * contract's filters, and seen on a crawl with accented anchor texts): text is matched ignoring the case of the
+ * letters A to Z only, so "menu" finds "MENU" but "été" doesn't find "ÉTÉ"; a pattern tells capitals from small
+ * letters, and with `(?i)` it matches either for every letter. "is exactly" says its own.
+ */
+export function matchHint(op: DraftOp, type: UrlColumnType): string | undefined {
+  if (inputFor(op, type) !== 'text') return undefined;
+  if (op === 'regex' || op === 'notRegex') {
+    return 'A regular expression. It tells capitals from small letters unless it starts (?i).';
+  }
+  if (op === 'eq' || op === 'ne') return undefined;
+  return 'A to Z match in capitals or small letters. Other letters, such as é and É, match only themselves.';
+}
+
 /** A filter as the editor's fields hold it: everything is text until it's applied. */
 export interface FilterDraft {
   column: string;

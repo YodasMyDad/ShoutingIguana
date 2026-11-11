@@ -5,6 +5,7 @@ import {
   draftOf,
   filterOf,
   inputFor,
+  matchHint,
   newDraft,
   opWords,
   opsFor,
@@ -85,6 +86,27 @@ describe('editing a grid filter', () => {
     expect(inputFor('gte', 'number')).toBe('number');
     expect(inputFor('between', 'number')).toBe('range');
     expect(inputFor('notIn', 'enum')).toBe('values');
+  });
+
+  it('says how text is matched as the engine matches it: A to Z in either case, every other letter as typed', () => {
+    // On a crawl with accented anchor texts, "contains menu" found "MENU ETE" and "Menu ÉTÉ du café", and "contains
+    // été" found only "menu été du café": the engine folds the case of A to Z and of no other letter.
+    const hint = 'A to Z match in capitals or small letters. Other letters, such as é and É, match only themselves.';
+    for (const op of ['contains', 'notContains', 'startsWith', 'endsWith'] as const) {
+      expect(matchHint(op, 'text'), op).toBe(hint);
+      expect(matchHint(op, 'text')).not.toMatch(/match each other/);
+    }
+    // A pattern tells them apart, and (?i) matches either for every letter (it found "ÉTÉ" for "(?i)été").
+    expect(matchHint('regex', 'text')).toBe(
+      'A regular expression. It tells capitals from small letters unless it starts (?i).',
+    );
+    expect(matchHint('notRegex', 'text')).toBe(matchHint('regex', 'text'));
+    // "is exactly" says it itself, and nothing but text has a case.
+    expect(matchHint('eq', 'text')).toBeUndefined();
+    expect(matchHint('ne', 'text')).toBeUndefined();
+    expect(matchHint('isEmpty', 'text')).toBeUndefined();
+    expect(matchHint('eq', 'number')).toBeUndefined();
+    expect(matchHint('in', 'enum')).toBeUndefined();
   });
 
   it('makes the contract’s filter of each kind', () => {

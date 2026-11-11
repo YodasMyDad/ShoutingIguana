@@ -8,6 +8,7 @@ import {
   draftOf,
   filterOf,
   inputFor,
+  matchHint,
   newDraft,
   opWords,
   opsFor,
@@ -163,13 +164,7 @@ export function FilterEditor({ columns, groups, filter, startColumn, refusal, on
           // Changing a filter starts in its value, which is what's changed most (and where the engine's sentence is,
           // read with the field, when it refused the filter). A new filter starts at its first field.
           {...(filter ? { 'data-autofocus': '' } : {})}
-          description={
-            draft.op === 'regex' || draft.op === 'notRegex'
-              ? 'A regular expression. It tells capitals from small letters unless it starts (?i).'
-              : input === 'text' && draft.op !== 'eq' && draft.op !== 'ne'
-                ? 'Capitals and small letters match each other.'
-                : undefined
-          }
+          description={matchHint(draft.op, column.type)}
         />
       ) : null}
       {input === 'range' ? (
