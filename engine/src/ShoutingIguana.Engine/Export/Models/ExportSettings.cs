@@ -5,7 +5,10 @@ namespace ShoutingIguana.Engine.Export.Models;
 /// <summary>How an export runs: what it shares with the grids' reads, who hears how far it has got, and its clock.</summary>
 public sealed record ExportSettings
 {
-    /// <summary>The grids' counts, kept between reads: an export of a grid counts what the grid already counted once.</summary>
+    /// <summary>
+    /// The grids' counts, kept between reads: given the grids' own, an export counts nothing the grid already counted.
+    /// Without one, an export keeps its own for as long as it runs.
+    /// </summary>
     public ReadCache? Cache { get; init; }
 
     /// <summary>

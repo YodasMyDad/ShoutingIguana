@@ -219,8 +219,6 @@ internal sealed class ExportManager(CrawlManager crawls, ReadCache cache, EventH
                 _jobs.Remove(_ended.Dequeue());
             }
         }
-
-        job.Cancel.Dispose();
     }
 
     /// <summary>Under the lock, so an export's events go out in the order its states were.</summary>

@@ -114,7 +114,10 @@ public static class CrawlExporter
     /// <exception cref="OperationCanceledException">The token was cancelled: nothing is left behind.</exception>
     public static ExportResult Export(string crawlPath, ExportRequest request, string targetPath, ExportSettings? settings = null, CancellationToken cancellationToken = default)
     {
+        // What a grid's reads count is kept between an export's pages, as it's kept between a grid's: without it, every
+        // page of a filtered or sorted export would count its rows, and order its targets, again.
         settings ??= new ExportSettings();
+        settings = settings.Cache is null ? settings with { Cache = new ReadCache() } : settings;
         Check(request);
         var path = ExportTarget.Check(targetPath, request.Format, crawlPath);
         cancellationToken.ThrowIfCancellationRequested();

@@ -123,6 +123,11 @@ internal static class ReportDocument
           .facts dt, .facts dd { padding: 5px 0; border-bottom: 1px solid var(--rule-soft); }
           .facts dt { color: var(--muted); }
           .foot { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--rule); font-size: 8.5pt; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; }
+          .sheet--summary .foot { margin-top: 12px; padding-top: 8px; }
+          .sheet--summary h2 { margin-top: 14px; }
+          .sheet--summary .summary { margin-top: 12px; }
+          .sheet--summary .first li { padding: 5px 14px; }
+          .sheet--summary .score-table td { padding: 4px 10px; }
 
           @page { margin: 16mm 15mm 16mm; }
           @media print {
@@ -162,7 +167,7 @@ internal static class ReportDocument
             .Append("<meta name=\"referrer\" content=\"no-referrer\">\n")
             .Append("<meta name=\"generator\" content=\"Shouting Iguana ").AppendText(model.EngineVersion).Append("\">\n")
             .Append("<title>Website check: ").AppendText(model.Site).Append(", ").Append(checkedOn).Append("</title>\n")
-            .Append("<style>").Append(CSS).Append("</style>\n</head>\n<body>\n<main class=\"sheet\">\n");
+            .Append("<style>").Append(CSS).Append("</style>\n</head>\n<body>\n").Append(full ? "<main class=\"sheet\">\n" : "<main class=\"sheet sheet--summary\">\n");
 
         Head(html, model, checkedOn);
         Summary(html, model, full);

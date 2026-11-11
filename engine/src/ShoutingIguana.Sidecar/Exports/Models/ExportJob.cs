@@ -15,6 +15,7 @@ internal sealed class ExportJob(string id, string crawlId, ExportRequest request
     /// <summary>The file it writes.</summary>
     public string Path { get; } = path;
 
+    /// <summary>Cancels it. Never disposed: a cancel that arrives as the export ends finds it there, and changes nothing.</summary>
     public CancellationTokenSource Cancel { get; } = new();
 
     public DateTime StartedAt { get; } = DateTime.UtcNow;
