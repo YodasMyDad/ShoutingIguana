@@ -56,7 +56,11 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<RobotsState>),
         typeof(CamelCaseEnumConverter<RobotsLineKind>),
         typeof(CamelCaseEnumConverter<RobotsLineProblem>),
-        typeof(CamelCaseEnumConverter<RobotsBlockReason>)
+        typeof(CamelCaseEnumConverter<RobotsBlockReason>),
+
+        // Search and the favicon (E6).
+        typeof(CamelCaseEnumConverter<UrlSearchRank>),
+        typeof(CamelCaseEnumConverter<UrlSearchField>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]
@@ -109,6 +113,10 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(RobotsFileDto))]
 [JsonSerializable(typeof(RobotsBlockedRequest))]
 [JsonSerializable(typeof(RobotsBlockedPage))]
+
+// Search and the favicon (E6).
+[JsonSerializable(typeof(SearchRequest))]
+[JsonSerializable(typeof(UrlSearchResults))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]
 [JsonSerializable(typeof(double))]

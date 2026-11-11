@@ -117,6 +117,19 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         return CrawlStatsDto.From(stats);
     }
 
+    /// <summary>
+    /// Search as it's typed. The crawl's URLs and titles are kept in memory once read, and a search of them passes over
+    /// nothing in the file, so it takes no read slot: a keystroke doesn't queue behind the grids' reads, of this crawl or
+    /// another. The read that fills them (the first search of a crawl as it stands) queues as any pass over the file does.
+    /// </summary>
+    public async Task<UrlSearchResults> SearchAsync(string id, SearchRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var limit = request.Limit ?? UrlSearchReader.DEFAULT_LIMIT;
+        return await RunAsync(token => UrlSearchReader.SearchKept(path, request.Text!, limit, cache, token), cancellationToken).ConfigureAwait(false)
+               ?? await ReadAsync(token => UrlSearchReader.Search(path, request.Text!, limit, cache, token), cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
