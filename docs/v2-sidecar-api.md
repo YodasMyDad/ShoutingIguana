@@ -765,8 +765,11 @@ of the file and holds it for that one page only.
     `{"column":"check","op":"in","values":["empty-anchor-text"],"group":{"detail":null,"relatedUrlId":1}}`. It reads
     the last analysis's issues, as `/rows` does, so it works without the URL summary too (a crawl continued since its
     analysis); only a crawl never analysed refuses it, with `needs-analysis`.
-- **`search`** matches the URL or the title containing the text, ignoring the case of ASCII letters. It's a plain scan
-  for now (fast search comes in E6), at most 1,000 characters.
+- **`search`** matches the URL or the title containing the text, ignoring the case of ASCII letters, at most 1,000
+  characters. It reads every URL and every title once per text, and keeps the URLs that matched: 26 to 50 ms for the
+  first page on the 100k crawl at p95, whatever the text (one letter, forty characters, nothing matching), which E6
+  measured against an index and left as it is ([Engine changes E6 made](#engine-changes-e6-made)). The palette's
+  search as it's typed is [`/search`](#search-e6), which gives the same count.
 - **`sort`** is up to 3 `{ column, desc }`, with unknown values last whichever the direction, and the URL's `id`
   breaking ties, in the last key's direction (so an index walked backwards needs no sort). The default is crawl order.
 - **The summary.** `summary` says whether the URL summary describes the crawl (see above), and `reason` why not:
@@ -1408,6 +1411,59 @@ in crawl order; `line` narrows them to one line's and `reason` to one reason's, 
 - An origin's answer, its lines and its blocked URLs are read and kept as one, so while a crawl runs the file's
   `blocked` is the URLs its lines and `unmatched` account for, and `/robots/blocked` lists that many. The list of
   origins is kept apart (for 2 s while a crawl runs): an origin's `blocked` there can be a moment behind its file's.
+
+### Search (E6)
+
+`POST /api/crawls/{id}/search` is search as it's typed, for the palette: the best few of the crawl's URLs whose URL or
+title contains the text, on every keystroke. A `POST` with the text in the body, so a keystroke costs no preflight.
+
+```json
+{"text":"gard","limit":10}
+```
+
+```json
+{"results":[{"id":31,"url":"https://www.example.com/garden-sofas/","title":"Garden sofas | Example","isInternal":true,
+             "statusCode":200,"outcome":"success","rank":"start","matchedIn":"url"}],
+ "matching":412,"total":6286}
+```
+
+- **`text`** is what's typed so far, at most 1,000 characters. **`limit`** is 1 to 50 (default 10). No `text`, one too
+  long or holding a zero character, or a `limit` out of range is `invalid-query` (422) on that field; a `text` that
+  isn't a string is a `bad-request`, as every fixed-type field is.
+- **What matches is what the URL grid's `search` matches**: the URL or the title contains the text, the case of ASCII
+  letters ignored. So **`matching`** is the grid's `matching` under `{"search": text}`, and "All 412 in URLs" lands on
+  412 rows; **`total`** is every URL in the crawl.
+- **The order** is the page a person means first:
+
+  | `rank` | The text |
+  | --- | --- |
+  | `exact` | is the URL: the whole of it, with or without its scheme, or its path (with its query string, if it has one). The slashes around the path don't count: `about`, `/about` and `about/` all name `https://www.example.com/about/`, and `/` names the home page |
+  | `start` | starts a segment of the URL's path (`gard` in `/shop/garden-sofas/`), or its host name with or without its `www.`, or a word of the title (the character before it isn't a letter or a digit) |
+  | `anywhere` | is somewhere else in the URL or the title |
+
+  Within a rank: the site's own URLs before other sites'; a match in the URL before one in the title; the shorter URL
+  (or title) first, so `/blog/` comes before `/blog/2024/a-long-post/`; then the URL the crawl found first. A URL that
+  matches both ways takes the better of the two, and **`matchedIn`** (`url` or `title`) says which its rank is for.
+- **Each result** carries what a list shows and what opens it: `id` (for `/urls/inspect`), `url` and `title` as the crawl
+  stored them (`title` null without one), `isInternal`, and `statusCode` and `outcome` as the URL grid's columns have
+  them.
+- **An empty `text` finds nothing**: no results, and `matching` equal to `total`, as the grid with no search matches
+  every URL. It reads the crawl's text (below), so the palette can ask it as it opens and the first letter typed is
+  answered as fast as the rest.
+- **Nothing is stored for it.** The crawl's URLs and titles are read into the sidecar's memory by the first search of
+  a crawl as it stands (one pass over the URLs and one over the responses, in a grid read slot), and kept there while
+  the crawl stands still: every search after that is a pass over that text and reads the file only for its few results'
+  statuses, so it takes no read slot and never queues behind the grids' reads. A crawl made by any engine, analysed or
+  not, is searched the same way. The text takes about 95 bytes a URL (10 MB for 100,000 URLs), and two crawls' are
+  kept: the one being searched and the one before it.
+- **While a crawl runs, each answer is of one moment of it**, at most 2 s old: the results, their titles, `matching` and
+  `total` are of the URLs and titles the crawl had at that moment, and only each result's `statusCode` and `outcome` are
+  read as they now stand (a result fetched since shows its status). The text is read again once it's 2 s old, by the
+  next search.
+- **What it costs**, on the 100k crawl (112,590 URLs), p95: a keystroke with the text kept 1.5 to 2.8 ms, whatever is
+  typed (one letter that every URL matches, forty characters that none does); the first search of a crawl, which reads
+  the text, 61 to 72 ms (48 to 55 ms at p50). That first read is the one over the palette's 50 ms: the empty search
+  as the palette opens is what keeps it off the first keystroke.
 
 ## Engine changes E1 needs
 
