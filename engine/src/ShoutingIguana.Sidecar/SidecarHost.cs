@@ -155,6 +155,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         builder.Services.AddSingleton<CrawlSummaryCache>();
         builder.Services.AddSingleton<CrawlLibrary>();
         builder.Services.AddSingleton<DefaultsStore>();
+        builder.Services.AddSingleton<AnalysisSettingsStore>();
         builder.Services.AddSingleton<CrawlManager>();
         builder.Services.AddSingleton<CrawlData>();
         builder.Services.AddSingleton(new ReadCache());
@@ -179,6 +180,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         app.UseMiddleware<RequestGuard>();
         AppEndpoints.Map(app);
         OptionsEndpoints.Map(app);
+        AnalysisSettingsEndpoints.Map(app);
         LibraryEndpoints.Map(app);
         CrawlEndpoints.Map(app);
         AnalysisEndpoints.Map(app);

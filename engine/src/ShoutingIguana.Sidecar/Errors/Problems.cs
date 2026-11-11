@@ -9,6 +9,10 @@ internal static class Problems
     public static ProblemException InvalidOptions(IReadOnlyDictionary<string, IReadOnlyList<string>> errors) =>
         new(new ProblemDto("invalid-options", "Some of the crawl settings need changing.", 422) { Errors = errors });
 
+    /// <summary>The analysis's limits can't be saved as sent, with what's wrong by limit.</summary>
+    public static ProblemException InvalidSettings(IReadOnlyDictionary<string, IReadOnlyList<string>> errors) =>
+        new(new ProblemDto("invalid-settings", "Some of the analysis's limits need changing.", 422) { Errors = errors });
+
     public static ProblemException NeedsSecrets(IReadOnlyList<string> missingHeaders, bool proxyCredentials)
     {
         var needed = (missingHeaders.Count > 0, proxyCredentials) switch

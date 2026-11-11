@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -117,6 +118,10 @@ namespace ShoutingIguana.Sidecar.Serialization;
 // Search and the favicon (E6).
 [JsonSerializable(typeof(SearchRequest))]
 [JsonSerializable(typeof(RobotsOriginsRequest))]
+[JsonSerializable(typeof(AnalysisSettingsDto))]
+[JsonSerializable(typeof(ResetAnalysisSettingsRequest))]
+[JsonSerializable(typeof(Dictionary<string, JsonElement>))]
+[JsonSerializable(typeof(Dictionary<string, long>))]
 [JsonSerializable(typeof(UrlSearchResults))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]
