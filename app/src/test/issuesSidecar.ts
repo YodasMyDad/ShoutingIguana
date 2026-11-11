@@ -2,10 +2,17 @@
 // check of each kind (grouped by detail, by related URL, flat, skipped and passed), and groups and rows answered as
 // the real `/groups` and `/rows` do (a group narrows the rows, `after` reads on, `detail` sorts).
 import type { GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
-import type { Analysis, Check, Checks, CrawlListItem } from '../api/types';
+import type { Analysis, Check, CheckSubject, Checks, CrawlListItem } from '../api/types';
 import { json, problem, standardRoutes, testCrawlItem, type FakeRoute } from './fakeSidecar';
 
-const check = (id: string, category: string, severity: Check['severity'], title: string, grouping: Check['grouping']) =>
+const check = (
+  id: string,
+  category: string,
+  severity: Check['severity'],
+  title: string,
+  grouping: Check['grouping'],
+  subject: CheckSubject,
+) =>
   ({
     id,
     category,
@@ -17,6 +24,7 @@ const check = (id: string, category: string, severity: Check['severity'], title:
     learnMore:
       id === 'empty-anchor-text' ? 'https://developers.google.com/search/docs/crawling-indexing/links-crawlable' : null,
     grouping,
+    subject,
   }) satisfies Check;
 
 export const ISSUES_CHECKS: Checks = {
@@ -26,18 +34,34 @@ export const ISSUES_CHECKS: Checks = {
     { id: 'titles', title: 'Titles' },
   ],
   checks: [
-    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail'),
-    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail'),
-    check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl'),
-    check('orphan-page', 'links', 'notice', 'Orphan page', 'none'),
-    check('title-too-long', 'titles', 'notice', 'Title too long', 'none'),
+    // Each check's subject is the engine's own: the response codes flag any URL, the rest only pages.
+    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail', 'url'),
+    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail', 'url'),
+    check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl', 'page'),
+    check('orphan-page', 'links', 'notice', 'Orphan page', 'none', 'page'),
+    check('title-too-long', 'titles', 'notice', 'Title too long', 'none', 'page'),
   ],
 };
+
+/** The same catalog as an engine from before E3b gives it, and the design fixtures: no check says what it flags. */
+export const ISSUES_CHECKS_WITHOUT_SUBJECTS: Checks = {
+  ...ISSUES_CHECKS,
+  checks: ISSUES_CHECKS.checks.map(({ subject: _subject, ...rest }) => rest),
+};
+
+/**
+ * The crawl's own counts as its file has them: 7 pages crawled (one more than the 6 the analysis audited, as the
+ * engine leaves a Cloudflare `/cdn-cgi/` page out of its checks but not out of its page count), and 40 URLs crawled,
+ * which is also what the analysis saw (`ISSUES_ANALYSIS.crawledUrlCount`).
+ */
+export const ISSUES_CRAWL = { pageCount: 7, fetchedUrlCount: 40, crawledUrlCount: 40 } as const;
 
 export const ISSUES_ANALYSIS: Analysis = {
   analyzedAt: '2026-11-01T10:21:00Z',
   engineVersion: 'test',
   pagesAnalyzed: 6,
+  // The URLs crawled when it ran: what a URL check's count is a share of (a current engine's analysis keeps it).
+  crawledUrlCount: 40,
   durationMs: 1_000,
   isPartial: true,
   outOfDate: false,
@@ -143,7 +167,12 @@ export interface IssuesSidecarOptions {
 
 /** The routes the Issues screen reads, with the standard ones (library, item, health) after them. */
 export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
-  const item = testCrawlItem(options.item);
+  const item = testCrawlItem({
+    pageCount: ISSUES_CRAWL.pageCount,
+    fetchedUrlCount: ISSUES_CRAWL.fetchedUrlCount,
+    crawledUrlCount: ISSUES_CRAWL.crawledUrlCount,
+    ...options.item,
+  });
   const analysis = options.analysis === undefined ? ISSUES_ANALYSIS : options.analysis;
   const groups = options.groups ?? ISSUE_GROUPS;
   const rows = options.rows ?? ISSUE_ROWS;

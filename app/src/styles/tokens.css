@@ -427,6 +427,9 @@
   --tooltip-max-width: 320px;
   --menu-min-width: 208px;
   --popover-width: 320px;
+  /* The grid's filter editor and column chooser (the Links slice): a list in a popover scrolls past this height. */
+  --filter-values-height: 224px;
+  --column-list-height: 320px;
   --measure-text: 62ch; /* the longest line of explaining text */
   --measure-explain: 46ch;
   --opacity-disabled: 0.5;

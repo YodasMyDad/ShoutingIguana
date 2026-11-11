@@ -21,6 +21,7 @@ import {
   type UrlDetail,
 } from '../inspector';
 import type { Analysis, Check, Checks, CrawlListItem, CrawlStats, ProgressEvent, Severity } from '../types';
+import type { LinkFacts } from './linkGrid';
 
 const files = import.meta.glob<unknown>('/design/data/fixtures/**/*.json', { import: 'default' });
 
@@ -525,3 +526,41 @@ export function adaptSource(raw: Raw): HtmlSource | null {
 }
 
 export type { GridPage };
+
+// ------------------------------------------------------------------------------------------------------ Links (E3b)
+
+/**
+ * The links the inspector fixtures hold, each once, for the mock's links grid: every fixture URL's outlinks, and the
+ * inlinks to it from other pages, a page's links together in the order the fixtures have them. Real links of the
+ * garden crawl, though only the few hundred around the URLs the fixtures cover.
+ */
+export async function linkFacts(): Promise<LinkFacts[]> {
+  const byUrl = await inspectorFixtures();
+  const seen = new Set<string>();
+  const found: (LinkFacts & { order: number })[] = [];
+  const add = (fromId: number | null, toId: number | null, row: Raw) => {
+    if (fromId === null || toId === null) return;
+    const flags = Array.isArray(row.flags) ? (row.flags as unknown[]) : [];
+    const link: LinkFacts = {
+      fromId,
+      toId,
+      kind: oneOf(row.kind, LINK_KINDS),
+      text: string(row.anchorText),
+      position: oneOf(row.position, POSITIONS),
+      noFollow: flags.includes('noFollow'),
+      sponsored: flags.includes('sponsored'),
+      ugc: flags.includes('ugc'),
+      imageLink: flags.includes('imageLink'),
+      fragment: string(row.fragment),
+    };
+    const key = JSON.stringify(link);
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push({ ...link, order: found.length });
+  };
+  for (const [urlId, raw] of [...byUrl.entries()].sort(([a], [b]) => a - b)) {
+    for (const row of list((raw.outlinks as Raw | undefined)?.rows)) add(urlId, number(row.toId), row);
+    for (const row of list((raw.inlinks as Raw | undefined)?.rows)) add(number(row.fromId), urlId, row);
+  }
+  return found.sort((a, b) => a.fromId - b.fromId || a.order - b.order).map(({ order: _order, ...link }) => link);
+}

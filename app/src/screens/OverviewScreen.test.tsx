@@ -13,7 +13,7 @@ import { installKeyboard } from '../keyboard/registry';
 import { PUBLISH_INTERVAL_MS, liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
-import { ISSUES_ANALYSIS } from '../test/issuesSidecar';
+import { ISSUES_ANALYSIS, ISSUES_CHECKS_WITHOUT_SUBJECTS } from '../test/issuesSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import {
   DEAD_TWIN,
@@ -151,7 +151,7 @@ describe('the Overview of an analysed crawl', () => {
     expect(figures.getByText('1 was skipped, with why below')).toBeVisible();
   });
 
-  it('lists what to fix first, the most severe then the most pages, each opening its check', async () => {
+  it('lists what to fix first, the most severe then the most pages or URLs, each opening its check', async () => {
     sidecar();
     await open();
     const fix = region('Fix first');
@@ -164,6 +164,23 @@ describe('the Overview of an analysed crawl', () => {
     const first = within(rows[0]!).getByRole('link');
     expect(first).toHaveTextContent('2 URLs');
     expect(pathOf(first)).toBe(`/crawls/${TEST_CRAWL_ID}/issues/internal-client-error`);
+    // Each count is called what it is: URLs for a check that can flag any URL, pages for one that flags only pages.
+    expect(within(rows[1]!).getByRole('link')).toHaveTextContent('6 pages');
+    expect(within(rows[2]!).getByRole('link')).toHaveTextContent('3 pages');
+    // So the order isn't said to be by pages alone.
+    expect(fix.getByText('The most severe first, then the most pages or URLs affected')).toBeVisible();
+    expect(fix.queryByText(/most pages affected/)).toBeNull();
+  });
+
+  it('counts URLs in Fix first for checks that don’t say what they flag', async () => {
+    sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
+    await open();
+    const rows = await region('Fix first').findAllByRole('listitem');
+    expect(rows.map((row) => /[\d,]+ (?:URLs?|pages?)/.exec(within(row).getByRole('link').textContent)?.[0])).toEqual([
+      '2 URLs',
+      '6 URLs',
+      '3 URLs',
+    ]);
   });
 
   it('leaves a hidden check out of the figures and Fix first, as the sidebar does', async () => {

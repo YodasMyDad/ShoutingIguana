@@ -1,6 +1,8 @@
 // `npm run dev`: the UI in a plain browser against a real sidecar, with nothing of yours at risk.
-// - A data folder in the temp folder, with copies of your dev crawls (%LOCALAPPDATA%\ShoutingIguana\dev-crawls, copied
-//   once and refreshed when they change, never opened in place), or a small synthetic crawl when there are none.
+// - A data folder in the temp folder, with copies of your dev crawls (%LOCALAPPDATA%\ShoutingIguana\dev-crawls, never
+//   opened in place), or a small synthetic crawl when there are none. A copy is kept from run to run while its
+//   original hasn't changed (its size and modified time), so a copy you analysed stays analysed; when the original
+//   changes, it's copied again.
 // - A fresh state folder each run, so your real library and defaults are never touched.
 // - The sidecar on a fixed port with a fixed development token, allowing only the dev server's origin.
 // - Vite, given the port and token. Ctrl+C stops both; the sidecar stops crawls cleanly on its way out.
@@ -9,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { copyCrawl, devCrawlsFolder, isCurrentCopy, makeSyntheticCrawl, startSidecar } from './lib/engine.mjs';
+import { devCrawlsFolder, keepOrCopyCrawl, makeSyntheticCrawl, startSidecar } from './lib/engine.mjs';
 import { DEV_SERVER_PORT, DEV_SIDECAR_PORT } from './ports.mjs';
 
 /** Development only: the sidecar is on 127.0.0.1, checks the origin, and holds copies. Never a release token. */
@@ -17,6 +19,8 @@ const DEV_TOKEN = 'shouting-iguana-development-token-not-a-secret';
 
 const work = path.join(os.tmpdir(), 'si-app-dev');
 const dataDir = path.join(work, 'data');
+/** What each original was when it was copied, kept beside the data folder: never in the dev-crawls folder. */
+const stampDir = path.join(work, 'copied-from');
 const stateDir = mkdtempSync(path.join(os.tmpdir(), 'si-app-dev-state-'));
 
 async function prepareData() {
@@ -27,10 +31,11 @@ async function prepareData() {
       : [];
   if (crawls.length > 0) {
     for (const name of crawls) {
-      const from = path.join(source, name);
-      if (isCurrentCopy(from, path.join(dataDir, name))) continue;
-      console.log(`Copying ${name}…`);
-      copyCrawl(from, dataDir);
+      // Said before the copy, which takes a while for a big crawl.
+      const { copied } = keepOrCopyCrawl(path.join(source, name), dataDir, stampDir, () =>
+        console.log(`Copying ${name}…`),
+      );
+      if (!copied) console.log(`Keeping the copy of ${name}: its original hasn't changed.`);
     }
     return;
   }

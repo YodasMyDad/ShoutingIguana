@@ -4,7 +4,10 @@ import { statusCodeClass } from './statusClass';
 export interface StatusCodeProps {
   /** The HTTP status, or null when there was no response. */
   code: number | null | undefined;
-  /** The words for no response, or the reason after a code ("Not Found"). */
+  /**
+   * The words for no response, or the reason after a code ("Not Found"). Words in place of a code are cut short with
+   * an ellipsis where there isn't room for them (a grid's column): the caller gives them whole as a tooltip.
+   */
   reason?: string | undefined;
   /**
    * `flag` sets it on its class's tint, for a code that's the point of the row (a 404 in a list of broken links).
@@ -31,7 +34,7 @@ export function StatusCode({ code, reason, variant = 'plain', className }: Statu
       )}
     >
       <span aria-hidden="true" className="si-code__mark" />
-      {hasCode ? code : (reason ?? 'No response')}
+      {hasCode ? code : <span className="si-code__words">{reason ?? 'No response'}</span>}
       {hasCode && reason ? (
         <>
           {' '}

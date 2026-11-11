@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import type { Checks } from '../../api/types';
+import { affectedNoun } from '../../crawl/checkSubject';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Card, CardBody, CardHeader } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
@@ -68,12 +69,12 @@ export function SeverityFigures({
   );
 }
 
-/** "9 URLs", "265 URLs". */
-const affected = (entry: CheckEntry) => <Num value={entry.count} noun="URL" />;
+/** "265 pages" for a check that flags only pages, "9 URLs" for any other (crawl/checkSubject.ts). */
+const affected = (entry: CheckEntry) => <Num value={entry.count} noun={affectedNoun(entry.check)} />;
 
 /**
- * Fix first (docs/v2-ui-ia.md, flow 3): the checks that found issues, the most severe first, then the most pages
- * affected, each opening its check in Issues, where it says what's wrong, why it matters and how to fix it.
+ * Fix first (docs/v2-ui-ia.md, flow 3): the checks that found issues, the most severe first, then the most pages or
+ * URLs affected, each opening its check in Issues, where it says what's wrong, why it matters and how to fix it.
  */
 export function FixFirst({
   crawlId,
@@ -91,7 +92,7 @@ export function FixFirst({
       <CardHeader
         title="Fix first"
         titleId="overview-fix-title"
-        meta="The most severe first, then the most pages affected"
+        meta="The most severe first, then the most pages or URLs affected"
       />
       <CardBody tight>
         {list.checks.length === 0 ? (
