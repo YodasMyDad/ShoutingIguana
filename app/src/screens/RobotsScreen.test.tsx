@@ -420,6 +420,43 @@ describe('robots.txt: an origin without a file to show', () => {
     expect(screen.queryByText(/refused this origin’s URLs/)).toBeNull();
   });
 
+  it('doesn’t say the crawl went ahead and refused nothing beside a URL stored as refused: the answer is the last one', async () => {
+    // The garden crawl's origin: no answer, and 1 URL stored as refused that nothing kept accounts for.
+    const origin = testOrigin({
+      origin: 'https://slow.example.io',
+      state: 'unanswered',
+      statusCode: null,
+      error: null,
+      bytes: null,
+      blocked: 1,
+    });
+    const stored = [
+      { id: 41, url: 'https://slow.example.io/', reason: 'unknown' as const, line: null, rule: null, error: null },
+    ];
+    sidecar({
+      origins: [TEST_ORIGINS[0]!, origin],
+      files: { [origin.origin]: { ...file(origin), unmatched: { unreachable: 0, unknown: 1 } } },
+      blocked: { [origin.origin]: stored },
+    });
+    const { router } = await open(ROBOTS);
+    // The list: the state beside "1" doesn't say "crawled anyway".
+    const row = await waitFor(() => rowOf(origin.origin));
+    expect(row.querySelector('[aria-colindex="2"]')).toHaveTextContent('No answer when last asked');
+    expect(row.querySelector('[aria-colindex="3"]')).toHaveTextContent('1');
+    // The file's page: the last answer, then where the stored URL comes from.
+    await act(() => router.navigate({ to: at(origin.origin) }));
+    const page = screen.getByRole('main');
+    await waitFor(() =>
+      expect(page).toHaveTextContent(
+        'When the crawl last asked, robots.txt didn’t answer, so it gave no verdict and went ahead. 1 URL on this origin is stored as refused all the same: it was refused earlier in the crawl, or by an earlier version of Shouting Iguana.',
+      ),
+    );
+    expect(
+      await screen.findByRole('link', { name: '1 URL is stored as refused, though nothing kept here refuses it' }),
+    ).toBeVisible();
+    expect(page).not.toHaveTextContent(/this origin’s URLs show their own errors/);
+  });
+
   it('says a missing robots.txt refuses nothing', async () => {
     sidecar(options);
     await open(at('https://partner.example.org'));

@@ -25,7 +25,7 @@ export interface StateWords {
   tone: RobotsTone;
 }
 
-type Answer = Pick<RobotsOrigin, 'state' | 'statusCode' | 'error' | 'bytes'>;
+type Answer = Pick<RobotsOrigin, 'state' | 'statusCode' | 'error' | 'bytes'> & Partial<Pick<RobotsOrigin, 'blocked'>>;
 
 /** How the file answered, in the engine's own terms: its status, else how it failed. Null when neither is stored. */
 function answerOf({ statusCode, error }: Pick<RobotsOrigin, 'statusCode' | 'error'>): string | null {
@@ -40,27 +40,45 @@ function answerOf({ statusCode, error }: Pick<RobotsOrigin, 'statusCode' | 'erro
 export type Obeyed = boolean | null;
 
 /**
+ * URLs stored as refused on an origin whose answer refuses nothing. Only the last answer is kept, so they were refused
+ * by an answer that's gone: an earlier run of a crawl continued since, or an earlier version of the engine, which took
+ * no answer for a refusal. Said beside the state, so the two don't contradict each other.
+ */
+export function refusedEarlierWords(blocked: number): string {
+  const one = blocked === 1;
+  return `${formatCountOf(blocked, 'URL')} on this origin ${one ? 'is' : 'are'} stored as refused all the same: ${
+    one ? 'it was' : 'they were'
+  } refused earlier in the crawl, or by an earlier version of Shouting Iguana. Only the last answer is kept.`;
+}
+
+/**
  * What an origin's robots.txt meant to the crawl. Four states, four sentences: read (its rules applied), missing
  * (nothing is refused), unreachable (the crawl refused the origin's URLs) and unanswered (the crawl went ahead). A
  * crawl told to ignore robots.txt obeyed no rule and refused nothing, whatever the file answered: its words say so.
+ * An answer that refuses nothing, on an origin with URLs stored as refused (`blocked`), is said as the last answer
+ * only, with where those URLs come from.
  */
 export function stateWords(origin: Answer, userAgent: string, obeyed: Obeyed = true): StateWords {
   const answer = answerOf(origin);
   const how = answer ? ` (${answer})` : '';
+  const blocked = origin.blocked ?? 0;
+  const earlier = blocked > 0 ? refusedEarlierWords(blocked) : null;
   switch (origin.state) {
     case 'read':
       if (origin.bytes === 0) {
         return {
           tone: 'nothing',
           short: 'Read: empty',
-          sentence: 'The crawl read this file, and it’s empty, so nothing on this origin is refused.',
+          sentence: earlier
+            ? `When the crawl last read this file it was empty, which refuses nothing. ${earlier}`
+            : 'The crawl read this file, and it’s empty, so nothing on this origin is refused.',
         };
       }
       if (obeyed === false) {
         return {
           tone: 'nothing',
           short: 'Read: rules ignored',
-          sentence: 'The crawl read this file, and was told to ignore its rules.',
+          sentence: `The crawl read this file, and was told to ignore its rules.${earlier ? ` ${earlier}` : ''}`,
         };
       }
       return {
@@ -72,17 +90,25 @@ export function stateWords(origin: Answer, userAgent: string, obeyed: Obeyed = t
             : `The crawl read this file and obeyed its rules for ${userAgent}.`,
       };
     case 'missing':
-      return {
-        tone: 'nothing',
-        short: 'Missing: nothing refused',
-        sentence: `There’s no robots.txt here${how}, so nothing on this origin is refused.`,
-      };
+      return earlier
+        ? {
+            tone: 'nothing',
+            short: 'Missing when last asked',
+            sentence: `When the crawl last asked, there was no robots.txt here${how}, which refuses nothing. ${earlier}`,
+          }
+        : {
+            tone: 'nothing',
+            short: 'Missing: nothing refused',
+            sentence: `There’s no robots.txt here${how}, so nothing on this origin is refused.`,
+          };
     case 'unreachable':
       if (obeyed === false) {
         return {
           tone: 'nothing',
           short: 'Couldn’t be read: ignored',
-          sentence: `robots.txt couldn’t be read${how}. The crawl was told to ignore robots.txt, so it refused nothing.`,
+          sentence: `robots.txt couldn’t be read${how}. The crawl was told to ignore robots.txt, so it refused nothing.${
+            earlier ? ` ${earlier}` : ''
+          }`,
         };
       }
       return obeyed === null
@@ -93,11 +119,20 @@ export function stateWords(origin: Answer, userAgent: string, obeyed: Obeyed = t
             sentence: `robots.txt couldn’t be read${how}, so the crawl refused this origin’s URLs until it could.`,
           };
     case 'unanswered':
+      if (obeyed !== false && earlier) {
+        return {
+          tone: 'unknown',
+          short: 'No answer when last asked',
+          sentence: `When the crawl last asked, robots.txt didn’t answer${how}, so it gave no verdict and went ahead. ${earlier}`,
+        };
+      }
       return obeyed === false
         ? {
             tone: 'unknown',
             short: 'No answer: ignored',
-            sentence: `robots.txt didn’t answer${how}. The crawl was told to ignore robots.txt, so it went ahead.`,
+            sentence: `robots.txt didn’t answer${how}. The crawl was told to ignore robots.txt, so it went ahead.${
+              earlier ? ` ${earlier}` : ''
+            }`,
           }
         : {
             tone: 'unknown',

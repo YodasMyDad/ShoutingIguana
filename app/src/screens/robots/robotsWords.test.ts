@@ -10,6 +10,7 @@ import {
   blockedWhy,
   lineProblemWords,
   nothingBlockedWords,
+  refusedEarlierWords,
   stateWords,
 } from './robotsWords';
 
@@ -61,7 +62,7 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
   });
 
   it('never says a crawl told to ignore robots.txt obeyed a file or refused a URL', () => {
-    const sentences = TEST_ORIGINS.map((origin) => stateWords(origin, UA, false));
+    const sentences = TEST_ORIGINS.map((origin) => stateWords({ ...origin, blocked: 0 }, UA, false));
     expect(sentences.map((words) => words.sentence)).toEqual([
       'The crawl read this file, and was told to ignore its rules.',
       'robots.txt couldn’t be read (HTTP 503). The crawl was told to ignore robots.txt, so it refused nothing.',
@@ -111,6 +112,47 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
       );
       expect(nothingBlockedWords(file(state, 2), null)).not.toMatch(/obeyed/);
     }
+  });
+
+  it('says an answer that refuses nothing is the last one only, when the origin has URLs stored as refused', () => {
+    // The garden crawl: no answer (DNS), and 1 URL stored as refused, by an engine that took no answer for a refusal.
+    const garden = stateWords(
+      testOrigin({ origin: 'https://a.example', state: 'unanswered', statusCode: null, error: null, blocked: 1 }),
+      UA,
+    );
+    expect(garden.short).toBe('No answer when last asked');
+    expect(garden.sentence).toBe(
+      'When the crawl last asked, robots.txt didn’t answer, so it gave no verdict and went ahead. 1 URL on this origin is stored as refused all the same: it was refused earlier in the crawl, or by an earlier version of Shouting Iguana. Only the last answer is kept.',
+    );
+    const missing = stateWords(
+      testOrigin({ origin: 'https://a.example', state: 'missing', statusCode: 404, bytes: null, blocked: 1_204 }),
+      UA,
+    );
+    expect(missing.short).toBe('Missing when last asked');
+    expect(missing.sentence).toBe(
+      'When the crawl last asked, there was no robots.txt here (HTTP 404), which refuses nothing. 1,204 URLs on this origin are stored as refused all the same: they were refused earlier in the crawl, or by an earlier version of Shouting Iguana. Only the last answer is kept.',
+    );
+    const empty = stateWords(testOrigin({ origin: 'https://a.example', bytes: 0, blocked: 2 }), UA);
+    expect(empty.sentence).toMatch(/^When the crawl last read this file it was empty, which refuses nothing. 2 URLs/);
+    // A crawl told to ignore robots.txt this time, with URLs an earlier run refused.
+    const ignored = stateWords(testOrigin({ origin: 'https://a.example', blocked: 3 }), UA, false);
+    expect(ignored.sentence).toMatch(
+      /told to ignore its rules. 3 URLs on this origin are stored as refused all the same/,
+    );
+    // None of them says nothing "is refused" on an origin that has refused URLs.
+    for (const words of [garden, missing, empty, ignored]) {
+      expect(words.sentence).not.toMatch(/nothing on this origin is refused|show their own errors/);
+      expect(words.short).not.toMatch(/nothing refused|crawled anyway/);
+    }
+    expect(refusedEarlierWords(1)).toMatch(/^1 URL on this origin is stored as refused all the same: it was refused/);
+    // With nothing stored as refused the words are as they were.
+    expect(stateWords(testOrigin({ origin: 'https://a.example', state: 'missing', statusCode: 404 }), UA).short).toBe(
+      'Missing: nothing refused',
+    );
+    // An answer that does refuse things isn't qualified: its lines, or the unmatched links, account for the URLs.
+    expect(stateWords(testOrigin({ origin: 'https://a.example', blocked: 9 }), UA).sentence).toBe(
+      'The crawl read this file and obeyed its rules for ShoutingIguana.',
+    );
   });
 
   it('says so when the crawl kept no robots.txt for an origin (a state it doesn’t know reads the same)', () => {
