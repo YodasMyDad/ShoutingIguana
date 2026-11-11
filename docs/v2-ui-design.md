@@ -72,6 +72,27 @@ Why B:
 | Where the offending element is in the stored HTML, per issue row where it applies | C's evidence snippet ("the link, from the stored HTML") | Later; needs stored HTML |
 | Favicons | Every direction uses them in the breadcrumb, sidebar, library and grids | E6 |
 
+## Simple (2026-11-11)
+
+Simple is the same look, calmer and larger: not a second design. Its screens are designed in
+[Simple mode](v2-ui-simple.md) and mocked in `app/design/simple/`, on these tokens and components.
+
+- **One reading column**, 1,040 px at most, centred. Advanced's screens fill the window, as grids need.
+- **One step up the type scale.** Reading text is 16 px where Advanced's is 14, row titles are 16 px semibold, and
+  a problem's row is 72 px tall. Nothing new is added to the scale: the 48 px step, "reserved for a single hero
+  figure", is the score.
+- **The score is a ring in the accent blue** on a neutral track, with its word beside it. Never red, amber or
+  green: those mean severity and status, and nothing else. A crawl that didn't finish draws the ring dashed and
+  says "so far". Under forced colours the arc is Highlight.
+- **Severity keeps its shapes and colours.** Only the words change: Serious, Worth fixing, Worth a look.
+- **No grid, no chips, no inspector.** A list is rows of title, one sentence and a count with its share. At most
+  two labels on a row.
+- **Messages are the accent's**, as app messages already are: a banner for "stopped early", a callout for "One
+  fix". A severity colour is never used for one.
+- **The report is paper.** Light in both themes, on the canvas, in a frame. It carries its own small style sheet,
+  with the clarity light values written in, as it must stand alone.
+- **The switch** is the segmented control the design system has, at the end of the top bar.
+
 ## Tokens
 
 `app/design/directions/clarity/tokens.css` is the source. It's ported into `app/src/styles/tokens.css` under the

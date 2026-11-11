@@ -7,6 +7,11 @@ delegation of the stage sign-offs.
 **Changed on 2026-11-10.** This is the IA of Advanced. Simple, the switch and the report are added here at the
 Simple design: [Simple first](v2-rebuild.md#simple-first-advanced-on-a-switch-2026-11-10).
 
+**Simple (2026-11-11).** The app opens in Simple, with Advanced on one switch. Simple's screens, its words, the
+score and the report are designed in [Simple mode](v2-ui-simple.md). This page gains only what both modes share:
+the switch in the shell, the Report route and screen, a Simple line in the flows, and three keys. Each is marked
+"Simple".
+
 ## The shell
 
 ```text
@@ -43,6 +48,12 @@ Simple design: [Simple first](v2-rebuild.md#simple-first-advanced-on-a-switch-20
   - Search and the command palette.
 
   It's the same on every screen, so a running crawl is always visible and controllable.
+- **The switch (Simple).** The top bar ends in a two-part control, **Simple | Advanced**: to the right of search in
+  the drawing above, in both modes and on every screen. It is the one item in the bar that never shrinks or hides.
+  The mode is an app setting, remembered, and Simple on a first start. In Simple the sidebar's sections are
+  Summary, What to fix and Report. In Advanced, Report joins as the eighth section, below the crawl's Settings.
+  What switching does, and the order in which the rest of the bar gives way, are in
+  [Simple mode](v2-ui-simple.md#the-switch).
 - **Inspector.** Opens for the selected URL on any grid, and holds its place while you move between rows.
 - **Overview has two states.** While a crawl runs, it's the live crawl screen. Once the analysis is done, it's the
   answer. That gives one place to look, whatever the crawl's state.
@@ -64,7 +75,12 @@ links and "reopen where I left off" all work.
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps, and one sitemap's URLs |
 | `/crawls/:crawl/robots/:origin?` | robots.txt, with the blocked URLs and the rule that matched |
 | `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them |
+| `/crawls/:crawl/report` | Report (Simple): the engine's report in a frame, in both modes. Params: `cut` (`full` or `summary`) |
 | `/settings/:section?` | App settings: general, crawl defaults, analysis, data, shortcuts, diagnostics, updates, about |
+
+**In Simple** the same routes show Simple's screens: `/` is its Home, `/new` its four questions, `overview` the
+Summary, `issues/:check?` What to fix and one problem, and `settings` four of the sections. URLs, Links, Sitemaps,
+robots.txt and the crawl's settings are Advanced only. The table is in [Simple mode](v2-ui-simple.md#routes).
 
 ## Screens
 
@@ -159,6 +175,10 @@ crawled, not crawled or non-indexable.
 
 Actions: open in browser, copy the URL.
 
+**Report (Simple).** In both modes. A toolbar (Full report or Summary page; Spreadsheet of everything; Save; Print
+or save as PDF) over the engine's report, shown in a sandboxed frame. The document, its outline and its sizes are
+in [Simple mode](v2-ui-simple.md#the-report).
+
 ## The five flows
 
 1. **New crawl.** Ctrl+N, or the URL field on Home. Paste, press Enter, and you land on the crawl's Overview, live.
@@ -185,6 +205,11 @@ Actions: open in browser, copy the URL.
    - On Issues, it offers this check, or every check with a summary sheet.
    - A native save dialog, then a toast with progress, Cancel and "Open folder".
    - Ctrl+C copies the selected rows as tab-separated text for Excel.
+   - On Overview and Issues, Export also offers the report and the spreadsheet of everything (Simple).
+
+**In Simple** the five are three: paste an address and press Enter; watch three steps, or close the window; then
+read the Summary, open a problem and send its list on, or open the report. They are told in
+[Simple mode](v2-ui-simple.md).
 
 ## Keyboard
 
@@ -199,6 +224,9 @@ Actions: open in browser, copy the URL.
 | Ctrl+F | Filter this grid |
 | Ctrl+, | Settings |
 | Ctrl+1 to Ctrl+7 | The crawl's sections |
+| Ctrl+8 | Report (Simple). In Simple the sections are three: Ctrl+1 to Ctrl+3 |
+| Ctrl+Shift+A | Switch between Simple and Advanced (Simple) |
+| Ctrl+P | Print or save as PDF, on the Report screen (Simple) |
 | F7 | Pause or resume |
 | F8 | Stop |
 | Alt+Left, Alt+Right, mouse back and forward | Back and forward |
@@ -262,6 +290,6 @@ macOS uses Cmd where Windows uses Ctrl. One registry feeds the menus, tooltips, 
 | Projects | The library's site groups become projects: a name, notes and a schedule |
 | Crawl comparison | Overview gets "Compare with…" the site's previous crawl: new, fixed and remaining issues |
 | Scheduled crawls | Set on a site group |
-| Client reports | Export gains "Client report (PDF)" |
+| Branded client reports | The report (in step 3 since 2026-11-10) gains a logo, colours and a cover |
 | Step 4 | New crawl gets rendering, include and exclude rules, authentication and list mode. The inspector gets rendered vs raw. URLs gets extraction columns |
 | Step 5 | URLs gets Search Console and analytics columns. Settings gets Connections |
