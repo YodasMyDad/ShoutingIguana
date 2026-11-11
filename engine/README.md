@@ -9,7 +9,7 @@ Analytics / Ads integrations later.
 | Project | What it is |
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `stats`, `testsite`, `bench`, `readbench` |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `stats`, `testsite`, `bench`, `readbench` |
 | `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
@@ -26,6 +26,7 @@ dotnet run --project src/ShoutingIguana.Cli -- crawl https://example.com --db ex
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl                           # what was found
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl title-too-long            # the URLs for one issue
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl --csv issues.csv          # everything, for Excel
+dotnet run --project src/ShoutingIguana.Cli -- score example.sicrawl                            # the site's score, and how it was worked out
 dotnet run --project src/ShoutingIguana.Cli -- analyze example.sicrawl                          # re-run the checks
 dotnet run --project src/ShoutingIguana.Cli -- stats example.sicrawl
 dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl              # after Ctrl+C
@@ -176,7 +177,7 @@ pages count: a genuine 403 from a site behind one of those firewalls stays a 403
 
 ## SEO analysis
 
-When a crawl completes, `CrawlAnalyzer` runs 86 checks over what was stored and writes the issues into the same
+When a crawl completes, `CrawlAnalyzer` runs 87 checks over what was stored and writes the issues into the same
 file. It never refetches or reparses anything, so any crawl can be analysed again with new rules or thresholds
 (`si analyze`). It refuses a crawl that is still running. A rule that fails on one page (page content is untrusted)
 is logged with the URL and skipped for that page, and the analysis notes say which rule failed on how many pages.
@@ -192,6 +193,26 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   (`IssueDefinition.Grouping`) and what the URLs it flags are (`Subject`): always pages, so its count is a part of the
   pages crawled, or any URL, as a missing image is flagged for answering 404. Every end-to-end analysis holds the page
   checks to it, and each any-URL check is shown flagging something that isn't a page by its own rule.
+  - Two more things a check says of itself, neither stored nor part of the fingerprint. `SiteWide`: it finds one fault
+    of the whole site (robots.txt search engines can't read, no HTTPS, a site hidden from search, a duplicate version
+    of the site), which [the score](#the-score) counts as the whole site. `ReportedOnce`: its rule reports one issue
+    for the whole site, on the home page, or one for each other version of the site, so a host says "checked once"
+    and not "1 of 265 pages": the site-wide checks, and `robots-txt-missing`, `sitemap-error`, `sitemap-missing` and
+    `security-headers-missing`. A test puts each through its rule with the fault several times over.
+- **Plain words.** Beside the catalog's texts, for readers who aren't SEOs (the app's Simple mode, the report):
+  `Analysis/IssuePlainTexts.cs`, by check id (a title, what's wrong as sentences, how to fix it as steps, who fixes
+  it, the good news when nothing is found, and optionally what a template fault usually is and what the check looks
+  for), and `Analysis/PlainWords.cs` (a plain title for each category; a sentence and what would let the check run for
+  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. Ten checks have theirs today, word for word
+  from [the Simple design](../docs/v2-ui-simple.md#ten-checks-written-out); the rest say null until they are written,
+  and the test that demands all 87 is there, skipped. To write one, add its entry: nothing else changes, and no
+  analysis goes out of date, as the words are no part of the fingerprint. Tests hold every entry to the design's
+  template and banned words.
+  - A text names a threshold as `{limit:name}` (`{limit:titleMaxLength}`, `{limit:largeImageBytes}`), never as a
+    number. `PlainLimits.Fill` fills it from an `AnalysisSettings` with the value and its unit ("60 characters", "200
+    KB", "1 second"): the settings a crawl's analysis ran with (`AnalysisInfo.Settings`) for that crawl's words, the
+    current ones otherwise. Every numeric threshold has a name, and a name no setting has is an error a test looks for
+    in every text.
 - **Scope.** Content checks (titles, descriptions, headings, word count, duplicates, Open Graph, URL style,
   rich-result requirements, hreflang) look only at indexable pages. Technical checks look at every page the
   crawler parsed; status-checked URLs (outside the start folder, iframes) and Cloudflare's `/cdn-cgi/`
@@ -251,6 +272,10 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   two, as they take about twice the room.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
+- **Details name their status codes.** Where a rule writes a status into a detail it carries its standard name: "404
+  Not Found", "301 Moved Permanently" (`Rules/HttpStatusNames`, RFC 9110's reason phrases). A code with no standard
+  name stays "HTTP 599". What the crawl stored with a status in it (a firewall's "Rate limited (HTTP 429)", a
+  sitemap's "HTTP 500") is named the same way when a detail quotes it; the crawl file keeps its own words.
 - **What an issue names.** An issue is one check on one URL, with a short detail and the other URL involved. Where a
   page has several (it links to three broken URLs, shows two large images), `issues` keeps the first and
   `issue_targets` every one, so the Issues screen puts the page in the group of each and the inspector counts each as
@@ -279,9 +304,43 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     before the summary is out of date this way.
   - `SettingsChanged`: the stored settings differ from the ones an analysis would run with now. A threshold the
     analysing engine didn't have takes its default: one that changes what the checks find comes with a new `VERSION`.
+  - A score worked out by another `ScoreCalculator.VERSION` is `EngineChanged` too.
 
 Categories: response codes, redirects, links, indexability, canonicals, sitemaps, titles, meta descriptions,
 headings, content, images, hreflang, structured data, security, URLs, performance, HTML.
+
+### The score
+
+One number for a site, 0 to 100, to the design's version 1 ([the Simple design](../docs/v2-ui-simple.md#the-score)).
+`Analysis/ScoreCalculator` is the one place it is worked out:
+
+- It starts at 100. Each check that found something takes points off by its severity and how much of the site it
+  affects: a few (under 1 in 100), some (1 in 100 or more), many (1 in 10 or more) or most (half or more) cost an
+  error 2, 4, 7 or 10 points and a warning 1, 2, 3 or 4. A site-wide fault costs 60 (an error) or 4 (a warning)
+  whatever its count. A notice costs nothing.
+- A page check's count is a share of the pages the analysis read; any other check's, of the URLs crawled.
+- While an error check has issues the score can't be above 89. 90 and over is very good, 70 and over good, 50 and
+  over needs work, under 50 poor.
+- No page read is no score. A crawl that was stopped or failed, or whose URL or depth limit kept internal URLs out,
+  gives a partial score: of what was read so far.
+
+**The analysis works it out and stores it** as it commits (`IssueWriter`, the only writer), from the counts it has
+just stored, the pages it read and the URLs crawled as it read them, so every reader gives the same number and no
+count is ever set against a total from another moment. The `analysis` row keeps the URLs crawled (`crawled_urls`),
+the formula's version, the number, whether it is partial, and the whole score as JSON: what it covers, a line for
+every check that found something, and the score with the first five problems fixed. `IssueReader.ReadResults` reads
+it back (`AnalysisResults.Score`, with `NoScoreReason` and `FixFirst`), and `AnalysisInfo.Score` is its headline, for
+a list of crawls. `si score` prints the breakdown.
+
+`Analysis/FixFirstOrder` is the order to fix checks in, for every host: the most severe, then the most URLs flagged,
+then catalog order.
+
+The tests hold it to the design's tables row by row, and to the design's reference code: `generate.mjs` in
+`tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference` scores 286 sites with
+`app/design/simple/build/lib/score.mjs` and writes `cases.json`, which the engine then scores line for line. Run it
+again (`node engine/tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference/generate.mjs`, from the repo root)
+whenever the reference or the catalog's checks change. A changed formula is a new `ScoreCalculator.VERSION`; so is a
+change to which checks are `SiteWide`, or to a check's `Subject`, which a test catches.
 
 ### Near duplicates
 
@@ -372,7 +431,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `issue_targets` | Every other URL each issue is about (each broken target of a page's links, the canonical, a duplicate cluster's first page), which the Issues screen groups by and the inspector's "named by" counts; `0` stands for no other URL |
 | `issue_faults` | The fault an issue of `canonical-relative`, `canonical-invalid` or `structured-data-invalid` is an instance of, which its groups are by |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
-| `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
+| `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), the URLs crawled as it read them, its [score](#the-score) (the formula's version, the number, whether it is partial, and the whole of it as JSON), and what it couldn't do and why |
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
 | `link_summary`, `link_blocks`, `link_summary_state` | The links counted for the links grid, by the first analysis of the crawl as it stands: by target, and by block of 16,384 consecutive link ids, each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page; and the crawl row's stamp they were counted under, with the number of links, their highest id, the size of a block and the version of the counting |
@@ -780,6 +839,10 @@ The e2e tests also crawl these variants:
 - **HTTPS**, with a self-signed certificate. Plain HTTP answers on the same port, as port 80 does on a real site. It
   serves the home page there instead of redirecting: the planted duplicate version of the site.
 - **No sitemaps**, where the checks that need them are skipped.
+- **Hidden from search** (`HiddenFromSearch`, `si testsite --hidden-from-search`). Every product is noindex, as on a
+  site launched with its staging setting left on, so more than half of the site's pages keep themselves out of
+  search: `site-hidden-from-search` is reported once, on the home page. Off everywhere else, the benchmark included,
+  where the check must flag nothing.
 - **Dead twin** (`DeadTwin`, plain HTTP only). The site links its https:// version on its own port, which doesn't
   answer: once from the plants hub, a URL the crawler asks for and finds unreachable, and five times from the first
   orphan. Only the sitemap leads there, so the crawler reads it once no linked URL is in flight, by when it has
