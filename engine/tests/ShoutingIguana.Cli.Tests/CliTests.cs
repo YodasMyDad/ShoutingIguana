@@ -262,7 +262,7 @@ public sealed class CliTests : IAsyncLifetime
         // The links grid is timed with its link summary and without, and so are the sitemaps and robots.txt.
         Assert.All(new[] { "Links grid: ", "Without the link summary: ", "Sitemaps: ", "robots.txt: " }, name =>
             Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith(name, StringComparison.Ordinal)));
-        Assert.Equal(["link-grid", "link-pass", "link-targets"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "links-grid" || ((string)read["name"]!).StartsWith("Links grid: facets", StringComparison.Ordinal))
+        Assert.Equal(["link-grid", "link-pass", "link-pass-split", "link-targets"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "links-grid" || ((string)read["name"]!).StartsWith("Links grid: facets", StringComparison.Ordinal))
             .Select(read => (string)read!["class"]!).Distinct().Order(StringComparer.Ordinal));
         Assert.All(result["cases"]!.AsArray(), read => Assert.True((double?)read!["firstP95Ms"] >= (double?)read["firstP50Ms"]));
 

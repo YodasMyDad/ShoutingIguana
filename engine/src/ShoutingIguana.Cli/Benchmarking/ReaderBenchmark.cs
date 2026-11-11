@@ -45,6 +45,11 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// at 100k on the desktop (265 ms at worst), which the runner's 550 ms is, and held to it so they can't get slower.
     /// They grow with the links, so they'd miss at 1M. A filter most links pass isn't one of them any more: it's read
     /// from the blocks but for the others (<c>link-grid</c>).</item>
+    /// <item>The same passes split by link id over the connections a host lends (<c>link-pass-split</c>: four in all) take
+    /// about a third of the time: measured on a desktop other work was loading, a text filter 294 ms where one connection
+    /// took 870, rare text 175 for 478, a search 294 for 897, a filter on the source's depth 333 for 1,478. Held to
+    /// 1,500 ms, <b>a provisional figure</b>: the worst p95 of that one loaded run was 978 ms, and no quiet run or CI run
+    /// has yet given a better one.</item>
     /// <item>Search as it's typed (<c>search</c>) passes over the crawl's URLs and titles in memory: 1.5 to 2.8 ms at 100k
     /// on the desktop whatever is typed, against the palette's 50 ms, and held to 25 ms: a search that read the file
     /// again (the text no longer kept) takes 50 to 70 ms on the desktop and would fail it, where a gate of 50 might not.
@@ -75,6 +80,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["stats"] = 350,
         ["stats-kept"] = 10,
         ["stats-pass"] = 450,
+        ["link-pass-split"] = 1_500,
         ["search"] = 25,
         ["search-first"] = 200
     };
@@ -283,14 +289,31 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         Linked("Links grid: navigation links to pages a click from the start (a target and a position, most pass)", "link-grid",
             new UrlQuery { Filters = [In("position", "navigation"), Number("to.depth", FilterOperator.Lte, 1)] });
 
-        Linked("Links grid: text contains a common word (every link read)", "link-pass", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "product")] });
-        Linked("Links grid: text contains rare text (every link read)", "link-pass", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "Product 12345")] });
-        Linked("Links grid: from pages at depth 2 (every link read)", "link-pass", new UrlQuery { Filters = [Number("from.depth", FilterOperator.Eq, 2)] });
-        Linked("Links grid: search (every link read)", "link-pass", new UrlQuery { Search = "/p/123" });
-        Linked("Links grid: content links to pages four clicks from the start (a target and a position, the fewer pass: every link read, deep in)", "link-pass",
-            new UrlQuery { Filters = [In("position", "content"), Number("to.depth", FilterOperator.Eq, 4)] });
+        // The reads that pass over every link: on one connection, as a running crawl's are read and as any is when every
+        // read slot is taken (link-pass); and split over the connections a host with cores to spare lends (link-pass-split).
+        (string Name, UrlQuery Query)[] passes =
+        [
+            ("text contains a common word", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "product")] }),
+            ("text contains rare text", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "Product 12345")] }),
+            ("text matches a pattern", new UrlQuery { Filters = [Text("text", FilterOperator.Regex, @"Product 1\d{3}$")] }),
+            ("from pages three clicks from the start", new UrlQuery { Filters = [Number("from.depth", FilterOperator.Eq, 3)] }),
+            ("from pages four clicks from the start", new UrlQuery { Filters = [Number("from.depth", FilterOperator.Eq, 4)] }),
+            ("search", new UrlQuery { Search = "/p/123" }),
+            ("search for a common word", new UrlQuery { Search = "product" }),
+            ("content links to pages four clicks from the start (a target and a position, the fewer pass: deep in)",
+                new UrlQuery { Filters = [In("position", "content"), Number("to.depth", FilterOperator.Eq, 4)] })
+        ];
+        Linked("Links grid: from pages at depth 2 (few pages: their links read through their index)", "link-pass", new UrlQuery { Filters = [Number("from.depth", FilterOperator.Eq, 2)] });
+        foreach (var (name, query) in passes)
+        {
+            Linked($"Links grid: {name} (every link read)", "link-pass", query);
+            Linked($"Links grid: {name} (every link read, on several connections)", "link-pass-split", query, HELPERS);
+        }
+
         Timed("Links grid: facets of a text filter (every link read)", "facets", "link-pass", null,
             () => LinkGridReader.Facets(path, new UrlFacetQuery { Filters = [Text("text", FilterOperator.Contains, "product")] }));
+        Timed("Links grid: facets of a text filter (every link read, on several connections)", "facets", "link-pass-split", null,
+            () => LinkGridReader.Facets(path, new UrlFacetQuery { Filters = [Text("text", FilterOperator.Contains, "product")] }, new ReadCache { Helpers = HELPERS }));
 
         GridReadContext.ReadWithoutLinkSummary = true;
         try
@@ -328,8 +351,15 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         }
     }
 
+    /// <summary>
+    /// The connections a read may use beside its own, as a host with every core free would lend them: every other core. A
+    /// read with them still keeps nothing between runs: each is given a cache of its own, empty, that only carries them.
+    /// </summary>
+    private static readonly ReadHelpers HELPERS = ReadHelpers.UpTo(Environment.ProcessorCount - 1);
+
     /// <summary>A links grid read: its first page, and the page half way down and the one just past it.</summary>
-    private void Linked(string name, string readClass, UrlQuery query)
+    /// <param name="helpers">Connections the read may split a pass over, beside its own; none reads on one.</param>
+    private void Linked(string name, string readClass, UrlQuery query, ReadHelpers? helpers = null)
     {
         if (!Wanted(name))
         {
@@ -348,7 +378,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             return;
         }
 
-        Paged(name, "links-grid", readClass, matching, offset => LinkGridReader.Query(path, shown with { Offset = offset }));
+        Paged(name, "links-grid", readClass, matching, offset => LinkGridReader.Query(path, shown with { Offset = offset }, helpers is null ? null : new ReadCache { Helpers = helpers }));
     }
 
     /// <summary>
