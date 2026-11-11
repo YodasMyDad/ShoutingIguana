@@ -298,7 +298,7 @@ export const PLAIN = {
       'A small site whose pages all link to each other can manage without one, as Google finds pages by following links. It helps most on big or new sites.',
       'If you only gave your sitemap to Google Search Console, it won\'t show here.'],
     fix: ['Look in your site\'s SEO settings or plugin: most can create a sitemap with one switch.',
-      'Ask your developer to add its address to the site\'s robots.txt file, so every search engine finds it.',
+      'Ask your developer to add its address to the site\'s rules file for search engines (its "robots.txt"), so they all find it.',
       'Check the site again: two more checks can then run.'],
   },
   // Hard cases the garden crawl doesn't have.

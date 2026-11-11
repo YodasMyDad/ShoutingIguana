@@ -102,6 +102,9 @@ node app/design/simple/build/build.mjs
 node app/design/simple/build/shoot.mjs            # every page, both themes, 1440x900
 node app/design/simple/build/shoot.mjs --shell    # 1280x720, 900 wide, 200% zoom
 node app/design/simple/build/shoot.mjs --report   # the report as it prints, and report.pdf
+
+# 4. The owner's gallery: copies the screenshots in reading order and writes index.json beside them
+node app/design/simple/build/gallery.mjs app/design/simple/screens <the gallery's simple/shots folder>
 ```
 
 Edit the templates in `build/pages/` and `build/lib/`, not the generated HTML.

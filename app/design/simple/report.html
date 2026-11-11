@@ -383,7 +383,7 @@
       <div class="problem__split"><div><h4>What's wrong, and why it matters</h4>
         <p>The check found no sitemap: a file that lists your pages for search engines. A small site whose pages all link to each other can manage without one, as Google finds pages by following links. It helps most on big or new sites. If you only gave your sitemap to Google Search Console, it won't show here.</p>
         <h4>How to fix it</h4>
-        <ol class="steps"><li><span>Look in your site's SEO settings or plugin: most can create a sitemap with one switch.</span></li><li><span>Ask your developer to add its address to the site's robots.txt file, so every search engine finds it.</span></li><li><span>Check the site again: two more checks can then run.</span></li></ol></div><div><table class="examples examples--one">
+        <ol class="steps"><li><span>Look in your site's SEO settings or plugin: most can create a sitemap with one switch.</span></li><li><span>Ask your developer to add its address to the site's rules file for search engines (its &quot;robots.txt&quot;), so they all find it.</span></li><li><span>Check the site again: two more checks can then run.</span></li></ol></div><div><table class="examples examples--one">
           <caption>Where it is</caption>
           <tbody><tr><td><span class="mono">/</span></td></tr></tbody>
         </table></div></div>
@@ -417,8 +417,8 @@
     <dt>When</dt><dd>31 October 2026, 14:13 to 14:51 (37 min 25 s)</dd>
     <dt>What was read</dt><dd>265 pages, and 4,256 images, files and links: 4,521 addresses in all</dd>
     <dt>Pages that can appear in search</dt><dd>264 of 265</dd>
-    <dt>Not followed</dt><dd>1,765 addresses the site marks “nofollow”</dd>
-    <dt>How it was read</dt><dd>Polite speed (up to 2 addresses a second), stopping after 10,000 addresses, obeying robots.txt</dd>
+    <dt>Not followed</dt><dd>1,765 addresses the site asks search engines not to follow (“nofollow”)</dd>
+    <dt>How it was read</dt><dd>Polite speed (up to 2 addresses a second), stopping after 10,000 addresses, obeying the site's rules file (robots.txt)</dd>
     <dt>Finished?</dt><dd>Yes: it read every address it found</dd>
     <dt>The words in this report</dt><dd>Serious is the checks' “Error”, Worth fixing is “Warning” and Worth a look is “Notice”. An address is a URL.</dd>
   </dl>

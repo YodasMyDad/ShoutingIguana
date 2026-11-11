@@ -258,8 +258,8 @@ export function reportDocument() {
     <dt>When</dt><dd>31 October 2026, 14:13 to 14:51 (${duration(new Date(facts.finishedAt) - new Date(facts.startedAt))})</dd>
     <dt>What was read</dt><dd>${num(facts.pages)} pages, and ${num(facts.urlsChecked - facts.pages)} images, files and links: ${num(facts.urlsChecked)} addresses in all</dd>
     <dt>Pages that can appear in search</dt><dd>${num(facts.indexablePages)} of ${num(facts.pages)}</dd>
-    <dt>Not followed</dt><dd>${num(facts.notFollowed)} addresses the site marks “nofollow”</dd>
-    <dt>How it was read</dt><dd>Polite speed (up to 2 addresses a second), stopping after 10,000 addresses, obeying robots.txt</dd>
+    <dt>Not followed</dt><dd>${num(facts.notFollowed)} addresses the site asks search engines not to follow (“nofollow”)</dd>
+    <dt>How it was read</dt><dd>Polite speed (up to 2 addresses a second), stopping after 10,000 addresses, obeying the site's rules file (robots.txt)</dd>
     <dt>Finished?</dt><dd>Yes: it read every address it found</dd>
     <dt>The words in this report</dt><dd>Serious is the checks' “Error”, Worth fixing is “Warning” and Worth a look is “Notice”. An address is a URL.</dd>
   </dl>

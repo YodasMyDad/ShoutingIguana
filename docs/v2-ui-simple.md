@@ -497,7 +497,8 @@ then check the site again.").
   step is something the reader can check themselves, and the next is what to ask for.
 - **Details stay the engine's**, one text for both modes: a fact with its unit, not a sentence ("5,476 ms", "2
   images over 200 KB"). Where a detail is a bare code it gains the code's name, in both modes: "HTTP 404" becomes
-  "404 Not Found".
+  "404 Not Found". Round 4 reads every detail as a non-expert would, and changes the engine's text where a plainer
+  one loses nothing: "1 broken URL" is a candidate for "1 broken link".
 
 ### Ten checks, written out
 
