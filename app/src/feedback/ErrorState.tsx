@@ -13,6 +13,7 @@ import { announce } from './announce';
 export function ErrorState({
   error,
   title,
+  description,
   onRetry,
   retryLabel = 'Try again',
   actions,
@@ -22,6 +23,11 @@ export function ErrorState({
   error: unknown;
   /** Overrides the error's own plain title, when the view can say it better. */
   title?: string;
+  /**
+   * A plain sentence under the headline, in place of the error's own title there: what the engine said of it in words
+   * written for the user (why it won't run a filter). Never a raw exception: that stays behind Details.
+   */
+  description?: string | undefined;
   /** Offered only when trying again could work: never for a problem the engine meant, such as a 404 or a 422. */
   onRetry?: () => void;
   retryLabel?: string;
@@ -49,9 +55,13 @@ export function ErrorState({
         <SeverityMark severity="error" size="md" decorative />
       </span>
       <div className="flex min-w-0 flex-1 flex-col items-start gap-3">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-14 font-semibold text-text">{title ?? errorTitle(error)}</p>
-          {title ? <p className="text-13 text-text-secondary">{errorTitle(error)}</p> : null}
+        <div className="flex max-w-full flex-col gap-0.5">
+          <p className="text-14 font-semibold break-words text-text">{title ?? errorTitle(error)}</p>
+          {description ? (
+            <p className="text-13 break-words text-text-secondary">{description}</p>
+          ) : title ? (
+            <p className="text-13 text-text-secondary">{errorTitle(error)}</p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {retry ? (

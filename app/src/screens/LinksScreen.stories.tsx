@@ -300,6 +300,67 @@ export const ReadError: Story = {
   render: () => <LinksApp path={LINKS} />,
 };
 
+/** Presses the button with this name once the story has drawn it: a state the story opens on. */
+async function press(canvas: HTMLElement, name: string) {
+  const find = () =>
+    [...canvas.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === name);
+  for (let attempt = 0; attempt < 100 && !find(); attempt++) await new Promise((resolve) => setTimeout(resolve, 30));
+  find()?.click();
+}
+
+const REFUSED_FILTERS: GridFilter[] = [
+  { column: 'kind', op: 'in', values: ['hyperlink'] },
+  { column: 'text', op: 'regex', value: '(?=click)here' },
+];
+
+/**
+ * A filter the engine won't run (a pattern with a lookahead): which filter, the engine's own sentence for why, and
+ * the two ways on, in the rows' place. The other filter and the chosen columns stay as they are.
+ */
+export const FilterTheEngineRefuses: Story = {
+  loaders: [() => own()],
+  render: () => (
+    <LinksApp
+      path={withFilters(
+        LINKS,
+        REFUSED_FILTERS,
+        `&cols=${encodeURIComponent(JSON.stringify(['from.url', 'to.url', 'text', 'to.statusCode']))}`,
+      )}
+    />
+  ),
+};
+
+/** The same once "Change the filter" is pressed: the editor opens on the pattern, with the engine's sentence under it. */
+export const FilterTheEngineRefusesBeingChanged: Story = {
+  loaders: [() => own()],
+  render: () => <LinksApp path={withFilters(LINKS, REFUSED_FILTERS)} />,
+  play: ({ canvasElement }) => press(canvasElement, 'Change the filter'),
+};
+
+/** A query refused for something that isn't a filter (a sort the engine doesn't take): its sentence, and a way out. */
+export const QueryTheEngineRefuses: Story = {
+  loaders: [() => own()],
+  render: () => <LinksApp path={`${LINKS}?sort=-text`} />,
+};
+
+/** A view with the 20 filters a query takes: "Add filter" says why it takes no more. */
+export const AsManyFiltersAsAViewTakes: Story = {
+  loaders: [() => own()],
+  render: () => (
+    <LinksApp
+      path={withFilters(
+        LINKS,
+        Array.from({ length: 20 }, (_, index): GridFilter => ({
+          column: 'text',
+          op: 'notContains',
+          value: `nothing ${index + 1}`,
+        })),
+      )}
+    />
+  ),
+  play: ({ canvasElement }) => press(canvasElement, 'Add filter'),
+};
+
 /** The engine's list of columns couldn't be read: the links are still here, and what can't be done says so. */
 export const ColumnsUnreadable: Story = {
   loaders: [() => own({ columnsFail: true })],

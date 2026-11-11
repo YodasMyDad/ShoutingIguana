@@ -19,9 +19,12 @@ import { ColumnChooser } from '../grid/ColumnChooser';
 import { copyAll, type PageReader } from '../grid/copyAll';
 import { FacetMenu } from '../grid/FacetMenu';
 import { FilterBar, FilterChips } from '../grid/FilterBar';
+import { canEditFilter, refusedFilter, tooManyFiltersWords } from '../grid/filterEditing';
+import { filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
+import { RefusedFilter } from '../grid/RefusedFilter';
 import { nextSort, useHeaderHandoff } from '../grid/sort';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
@@ -31,6 +34,7 @@ import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { useInspector } from '../routing/inspector';
+import { MAX_FILTERS } from '../routing/search';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
@@ -165,8 +169,17 @@ export function LinksScreen() {
   };
 
   const setFilters = useCallback(
-    (next: readonly GridFilter[]) =>
-      void navigate({ search: (previous) => ({ ...previous, filter: next.length > 0 ? [...next] : undefined }) }),
+    (next: readonly GridFilter[]) => {
+      // The route keeps no more filters than a query takes: one more would be dropped on the way, so it's said.
+      if (next.length > MAX_FILTERS) {
+        notifyResult('That filter wasn’t added', {
+          id: 'links.tooManyFilters',
+          description: tooManyFiltersWords(MAX_FILTERS),
+        });
+        return;
+      }
+      void navigate({ search: (previous) => ({ ...previous, filter: next.length > 0 ? [...next] : undefined }) });
+    },
     [navigate],
   );
   /** All links again, in crawl order, with the columns as they are. */
@@ -243,6 +256,11 @@ export function LinksScreen() {
 
   const [adding, setAdding] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  /** The filter whose editor is open, by its place: a chip opens its own, and so does "Change the filter". */
+  const [editingFilter, setEditingFilter] = useState<number | null>(null);
+  // A filter the engine won't run (a pattern it refuses): which one, and the engine's sentence for why.
+  const refused = failed && isProblem(rows.error, 'invalid-query') ? refusedFilter(rows.error.errors, filters) : null;
+  const refusedOne = refused ? filters[refused.index] : undefined;
   const [cursorColumn, setCursorColumn] = useState<string | undefined>(undefined);
   /** The column a copy takes: the one the grid's cursor is in, else the first. */
   const copyColumn = cursorColumn !== undefined && shown.includes(cursorColumn) ? cursorColumn : shown[0];
@@ -467,6 +485,10 @@ export function LinksScreen() {
         editor={editor}
         adding={adding}
         onAddingChange={setAdding}
+        editing={editingFilter}
+        onEditingChange={setEditingFilter}
+        refused={refused}
+        maxFilters={MAX_FILTERS}
         onClear={() => setFilters([])}
         className="flex flex-wrap items-center gap-2 px-6 pb-3"
       >
@@ -507,14 +529,31 @@ export function LinksScreen() {
         isProblem(rows.error, 'needs-analysis') ? (
           <NeedsAnalysis error={rows.error} action={analyse('Analyse it')} onClear={clearView} />
         ) : isProblem(rows.error, 'invalid-query') ? (
-          <ErrorState
-            error={rows.error}
-            actions={
-              <Button size="sm" onClick={() => void navigate({ search: {} })}>
-                Reset the view
-              </Button>
-            }
-          />
+          refused && refusedOne ? (
+            // The engine is the judge of a filter (a pattern most of all): its own sentence, and the filter changed
+            // or removed. The other filters, the search, the sort and the columns stay.
+            <RefusedFilter
+              error={rows.error}
+              sentence={filterSentences(refusedOne, words)
+                .slice(0, 1)
+                .map((sentence) => `${sentence.field} ${sentence.op} ${sentence.value}`)
+                .join('')}
+              message={refused.message}
+              onChange={canEditFilter(refusedOne, editor?.columns) ? () => setEditingFilter(refused.index) : undefined}
+              onRemove={() => setFilters(filters.filter((_, index) => index !== refused.index))}
+            />
+          ) : (
+            // Refused for something else the route holds (a column, a sort): the engine's sentence, and a way out.
+            <ErrorState
+              error={rows.error}
+              description={rows.error.detail}
+              actions={
+                <Button size="sm" onClick={() => void navigate({ search: {} })}>
+                  Reset the view
+                </Button>
+              }
+            />
+          )
         ) : (
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )

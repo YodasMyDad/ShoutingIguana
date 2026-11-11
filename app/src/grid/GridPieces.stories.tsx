@@ -135,6 +135,18 @@ export const FilterEditors: Story = {
             />
           </div>
         </section>
+        <section aria-label="A pattern the engine refused" className="flex flex-col gap-2">
+          <h2 className="text-12 font-semibold text-text-secondary">A pattern the engine wouldn’t run</h2>
+          <div className="si-popover">
+            <FilterEditor
+              columns={COLUMNS}
+              groups={LINK_FILTER_GROUPS}
+              filter={{ column: 'text', op: 'regex', value: '(?=click)here' }}
+              refusal="This pattern needs backtracking (a backreference, a lookaround or an atomic group), which isn’t supported: rewrite it without."
+              onApply={() => undefined}
+            />
+          </div>
+        </section>
       </div>
     </StoryFrame>
   ),

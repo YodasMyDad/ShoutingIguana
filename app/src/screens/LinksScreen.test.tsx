@@ -597,9 +597,151 @@ describe('the Links grid’s states', () => {
     sidecar();
     const { router, user } = await open(`${LINKS}?sort=-text`, createQueryClientWithoutBackoff());
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
+    // With what the engine said of it, in place: not only behind Details.
+    expect(screen.getByText('The view can’t be sorted by “text”.')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Reset the view' }));
     await counted('13 links');
     expect(router.state.location.search).toEqual({});
+  });
+});
+
+describe('a filter the engine won’t run', () => {
+  const BACKTRACKING =
+    'This pattern needs backtracking (a backreference, a lookaround or an atomic group), which isn’t supported: rewrite it without.';
+  const refusedView = (pattern: string) => {
+    const filter = JSON.stringify([
+      { column: 'kind', op: 'in', values: ['hyperlink'] },
+      { column: 'text', op: 'regex', value: pattern },
+    ]);
+    const cols = JSON.stringify(['from.url', 'to.url', 'text']);
+    return `${LINKS}?filter=${encodeURIComponent(filter)}&cols=${encodeURIComponent(cols)}&sort=to.statusCode`;
+  };
+  /** The state in the rows' place, by its headline. */
+  const refusal = async (headline: string | RegExp) =>
+    (await screen.findByText(headline)).closest<HTMLElement>('[role="alert"]')!;
+
+  it('says the engine’s own sentence in place, and opens the filter on its pattern to change it', async () => {
+    sidecar();
+    const { router, user } = await open(refusedView('(?=x)y'), createQueryClientWithoutBackoff());
+    // Which filter, and why, in the engine's words: not a generic sentence with the reason behind Details.
+    const alert = await refusal('This filter can’t be run: Anchor or alt text matches (?=x)y');
+    expect(within(alert).getByText(BACKTRACKING)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Reset the view' })).toBeNull();
+    // The other filter and the chosen columns are still the view's.
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    expect(within(bar).getByRole('button', { name: 'Kind is Hyperlink' })).toBeVisible();
+
+    await user.click(within(alert).getByRole('button', { name: 'Change the filter' }));
+    const editing = await screen.findByRole('dialog', { name: 'Change the filter' });
+    const pattern = within(editing).getByRole('textbox', { name: 'Pattern' });
+    expect(pattern).toHaveValue('(?=x)y');
+    // The keyboard is in the pattern, which says what the engine said of it.
+    await waitFor(() => expect(pattern).toHaveFocus());
+    expect(pattern).toBeInvalid();
+    expect(pattern).toHaveAccessibleDescription(expect.stringContaining(BACKTRACKING));
+    // Changing it takes the sentence away: it was about the pattern as it was.
+    await user.clear(pattern);
+    expect(within(editing).queryByText(BACKTRACKING)).toBeNull();
+    // A pattern the engine runs and a browser wouldn't compile goes to the engine as typed.
+    await user.type(pattern, '(?im)^ABOUT');
+    await user.click(within(editing).getByRole('button', { name: 'Apply' }));
+    await counted('2 of 13 links');
+    expect(router.state.location.search).toEqual({
+      filter: [
+        { column: 'kind', op: 'in', values: ['hyperlink'] },
+        { column: 'text', op: 'regex', value: '(?im)^ABOUT' },
+      ],
+      cols: ['from.url', 'to.url', 'text'],
+      sort: [{ column: 'to.statusCode', desc: false }],
+    });
+    expect(screen.queryByText(/^This filter can’t be run/)).toBeNull();
+  });
+
+  it('removes that one filter, and keeps the others, the sort and the columns', async () => {
+    sidecar();
+    const { router, user } = await open(refusedView('(unclosed'), createQueryClientWithoutBackoff());
+    const alert = await refusal('This filter can’t be run: Anchor or alt text matches (unclosed');
+    expect(within(alert).getByText(/^This isn’t a valid regular expression: /)).toBeVisible();
+    const remove = within(alert).getByRole('button', { name: 'Remove the filter' });
+    remove.focus();
+    await user.click(remove);
+    await counted('9 of 13 links');
+    expect(router.state.location.search).toEqual({
+      filter: [{ column: 'kind', op: 'in', values: ['hyperlink'] }],
+      cols: ['from.url', 'to.url', 'text'],
+      sort: [{ column: 'to.statusCode', desc: false }],
+    });
+    expect(
+      within(await grid())
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Source URL', 'Target URL', 'Anchor or alt text']);
+    // The button went with the state it was in: the keyboard isn't left on the page.
+    await waitFor(() => expect(document.body).not.toHaveFocus());
+  });
+
+  it('offers only to remove a filter its editor has no fields for', async () => {
+    sidecar();
+    const filter = JSON.stringify([{ column: 'to.id', op: 'regex', value: 'x' }]);
+    await open(`${LINKS}?filter=${encodeURIComponent(filter)}`, createQueryClientWithoutBackoff());
+    const alert = await refusal(/^This filter can’t be run: Target URL /);
+    expect(within(alert).getByRole('button', { name: 'Remove the filter' })).toBeVisible();
+    expect(within(alert).queryByRole('button', { name: 'Change the filter' })).toBeNull();
+  });
+});
+
+describe('a view with as many filters as a query takes', () => {
+  const twenty = (): GridFilter[] =>
+    Array.from({ length: 20 }, (_, index) => ({ column: 'text', op: 'notContains', value: `nothing-${index}` }));
+
+  it('says why another can’t be added, in place of the editor, and when a facet’s value would be one too many', async () => {
+    sidecar();
+    const { router, user } = await open(`${LINKS}?filter=${encodeURIComponent(JSON.stringify(twenty()))}`);
+    await counted('13 links');
+    expect(filtersOf(router)).toHaveLength(20);
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    const adding = await screen.findByRole('dialog', { name: 'Add a filter' });
+    expect(within(adding).getByText('A view takes at most 20 filters. Remove one to add another.')).toBeVisible();
+    expect(within(adding).queryByRole('button', { name: 'Add filter' })).toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // A facet's value would be the twenty-first: it isn't dropped on the way to the route without a word.
+    await user.click(screen.getByRole('button', { name: 'Filter by kind' }));
+    await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: /^Image/ }));
+    expect(await screen.findByText('That filter wasn’t added')).toBeVisible();
+    expect(screen.getByText('A view takes at most 20 filters. Remove one to add another.')).toBeVisible();
+    expect(filtersOf(router)).toEqual(twenty());
+    await counted('13 links');
+  });
+});
+
+describe('where the keyboard starts in a popover', () => {
+  it('is its first field, never the Close button of its head', async () => {
+    sidecar();
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    const adding = await screen.findByRole('dialog', { name: 'Add a filter' });
+    await waitFor(() => expect(within(adding).getByRole('button', { name: /^About:/ })).toHaveFocus());
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: 'Columns' }));
+    const columns = await screen.findByRole('dialog', { name: 'Columns' });
+    await waitFor(() => expect(within(columns).getByRole('searchbox', { name: 'Find a column' })).toHaveFocus());
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('is the value of a filter being changed: that is what’s changed', async () => {
+    sidecar();
+    const filter = JSON.stringify([{ column: 'text', op: 'contains', value: 'about' }]);
+    const { user } = await open(`${LINKS}?filter=${encodeURIComponent(filter)}`);
+    await counted('2 of 13 links');
+    await user.click(screen.getByRole('button', { name: 'Anchor or alt text contains about' }));
+    const editing = await screen.findByRole('dialog', { name: 'Change the filter' });
+    await waitFor(() => expect(within(editing).getByRole('textbox', { name: 'Text' })).toHaveFocus());
   });
 });
 

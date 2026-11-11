@@ -5,7 +5,13 @@ import { AddFilterChip, FilterChip } from '../ui/FilterChip';
 import { Popover } from '../ui/Popover';
 import { focusQuietly } from '../ui/quietFocus';
 import { FilterEditor } from './FilterEditor';
-import { draftOf, type FilterColumn, type FilterGroup } from './filterEditing';
+import {
+  canEditFilter,
+  tooManyFiltersWords,
+  type FilterColumn,
+  type FilterGroup,
+  type FilterRefusal,
+} from './filterEditing';
 import { filterSentences, type FilterWords } from './filterSentence';
 
 /** The filters without one of them, or without one's group (a check's group is a chip of its own). */
@@ -32,21 +38,43 @@ export interface FilterChipsProps {
   editor?: { columns: readonly FilterColumn[]; groups: readonly FilterGroup[] } | undefined;
   /** Where focus goes when a chip's editor closes and the chip has gone. */
   focusFallback?: (() => HTMLElement | null | undefined) | undefined;
+  /**
+   * The filter whose editor is open, by its place, when the view opens it too ("Change the filter", beside what the
+   * engine said of it); null for none. Left out, the chips keep it themselves.
+   */
+  editing?: number | null | undefined;
+  onEditingChange?: ((index: number | null) => void) | undefined;
+  /** The filter the engine wouldn't run, with its sentence: its editor says it under the value until it's changed. */
+  refused?: FilterRefusal | null | undefined;
 }
 
 /**
  * A view's filters as chips that read as sentences ("Status class is 4xx", "Target is on another site"), each
  * removable, and editable where the view says what its columns are. The chips alone: `FilterBar` adds the rest.
  */
-export function FilterChips({ filters, onChange, words, relatedUrl, editor, focusFallback }: FilterChipsProps) {
-  const [editing, setEditing] = useState<number | null>(null);
-  const columnOf = (id: string) => editor?.columns.find((column) => column.id === id);
+export function FilterChips({
+  filters,
+  onChange,
+  words,
+  relatedUrl,
+  editor,
+  focusFallback,
+  editing: editingGiven,
+  onEditingChange,
+  refused,
+}: FilterChipsProps) {
+  const [editingHere, setEditingHere] = useState<number | null>(null);
+  const editing = editingGiven === undefined ? editingHere : editingGiven;
+  const setEditing = (index: number | null) => {
+    setEditingHere(index);
+    onEditingChange?.(index);
+  };
   return (
     <>
       {filters.flatMap((filter, index) =>
         filterSentences(filter, words, relatedUrl).map((sentence, part) => {
           // Only the filter itself is edited, never its group's chip, and only one the editor has fields for.
-          const editable = editor !== undefined && part === 0 && draftOf(filter, columnOf(filter.column)) !== null;
+          const editable = editor !== undefined && part === 0 && canEditFilter(filter, editor.columns);
           const chip = (
             <FilterChip
               key={`${index}-${part}`}
@@ -72,6 +100,7 @@ export function FilterChips({ filters, onChange, words, relatedUrl, editor, focu
                 columns={editor.columns}
                 groups={editor.groups}
                 filter={filter}
+                refusal={refused?.index === index ? refused.message : undefined}
                 onApply={(next) => {
                   setEditing(null);
                   onChange(filters.map((other, at) => (at === index ? next : other)));
@@ -91,6 +120,11 @@ export interface FilterBarProps extends FilterChipsProps {
   onAddingChange?: ((adding: boolean) => void) | undefined;
   /** Removes every filter at once. */
   onClear?: (() => void) | undefined;
+  /**
+   * The most filters the view takes (the contract's 20: a route keeps no more). At the limit "Add filter" says so in
+   * place of its editor, so a filter is never typed out only to be dropped.
+   */
+  maxFilters?: number | undefined;
   /** Quick filters that come before the chips (a view's facets). */
   children?: ReactNode;
   className?: string | undefined;
@@ -106,9 +140,13 @@ export function FilterBar({
   words,
   relatedUrl,
   editor,
+  editing,
+  onEditingChange,
+  refused,
   adding,
   onAddingChange,
   onClear,
+  maxFilters,
   children,
   className,
 }: FilterBarProps) {
@@ -129,17 +167,24 @@ export function FilterBar({
         relatedUrl={relatedUrl}
         editor={editor}
         focusFallback={() => addRef.current}
+        editing={editing}
+        onEditingChange={onEditingChange}
+        refused={refused}
       />
       {editor ? (
         <Popover trigger={<AddFilterChip ref={addRef} />} title="Add a filter" open={isAdding} onOpenChange={setAdding}>
-          <FilterEditor
-            columns={editor.columns}
-            groups={editor.groups}
-            onApply={(next) => {
-              setAdding(false);
-              onChange([...filters, next]);
-            }}
-          />
+          {maxFilters !== undefined && filters.length >= maxFilters ? (
+            <p className="text-13 text-text-secondary">{tooManyFiltersWords(maxFilters)}</p>
+          ) : (
+            <FilterEditor
+              columns={editor.columns}
+              groups={editor.groups}
+              onApply={(next) => {
+                setAdding(false);
+                onChange([...filters, next]);
+              }}
+            />
+          )}
         </Popover>
       ) : null}
       {onClear && filters.length > 0 ? (
