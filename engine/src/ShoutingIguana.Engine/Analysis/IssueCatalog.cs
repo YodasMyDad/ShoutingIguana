@@ -265,7 +265,8 @@ public static class IssueCatalog
         Why = """Google treats a robots.txt it can't fetch as a server error: it stops crawling the whole site for the first 12 hours, then uses its last good copy for up to 30 days (or assumes no restrictions if it has none). If it's still failing after that and the site is otherwise up, Google acts as if there were no robots.txt. Until it's fixed, new and changed pages aren't crawled, so fix this first.""",
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#http-status-codes",
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        SiteWide = true
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN = new("robots-txt-unreachable-other-origin", IssueCategory.Indexability, IssueSeverity.Warning,
@@ -276,7 +277,8 @@ public static class IssueCatalog
         Why = """Each origin (scheme, host and port) has its own robots.txt, so only that origin is affected: Google stops crawling it for 12 hours, then relies on its last good copy for up to 30 days. The main site carries on as normal. It matters if pages or files you want in search live there, or if that origin's redirects to the main site haven't been picked up yet.""",
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#file-location-and-range-of-validity",
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        SiteWide = true
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
@@ -288,6 +290,18 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/create-robots-txt",
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition SITE_HIDDEN_FROM_SEARCH = new("site-hidden-from-search", IssueCategory.Indexability, IssueSeverity.Error,
+        "Most pages hidden from search",
+        """More than half of the pages the crawl read can't appear in search results because the site says so: they're noindex, or their canonical names another URL. The detail gives the numbers. A canonical that leads back to the page, to a broken URL, or to the same page on another version of the site (www or not, http or https) doesn't count. Reported once, on the home page, or on the start URL when the home page wasn't read.""",
+        """Find what sets it on every page: a "discourage search engines" setting or a staging configuration left on, an X-Robots-Tag header from the server or CDN, or a template that gives every page the same canonical. Remove the noindex, and point each canonical at the page's own URL, on the pages that should appear in search, then crawl again.""")
+    {
+        Why = """Google drops a noindex page from its results, and usually indexes the URL a canonical names in place of the page, so most of this site can't be found in search. It's nearly always a launch mistake: a staging site's noindex or a "discourage search engines" setting left on, or a template that points every page's canonical at one URL. If the pages are meant to stay out, as on a private site, or the crawl read mostly filtered and sorted listings that name their main page, check the noindex and canonicalised pages and ignore this.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        SiteWide = true
     };
 
 
@@ -651,7 +665,8 @@ public static class IssueCatalog
         Why = """Every page is then reachable at two or more addresses. Google treats the versions as duplicate URLs and picks one, preferring HTTPS, which may not be the version you want, and it crawls the copies less. If the duplicate is the http version, visitors who land on it browse unencrypted. The other version is only probed, not parsed, so a canonical on it isn't seen; a redirect is what makes the choice yours.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#reasons-to-specify-a-canonical-url",
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        SiteWide = true
     };
 
 
@@ -835,7 +850,8 @@ public static class IssueCatalog
         Why = """Browsers label HTTP pages "Not secure", and anything visitors send, such as form data, can be read or changed on the way. Google has used HTTPS as a lightweight ranking signal since 2014 and prefers HTTPS URLs as canonical when both versions exist. Fix this first.""",
         LearnMore = "https://web.dev/articles/enable-https",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        SiteWide = true
     };
 
     public static readonly IssueDefinition HTTP_PAGE = new("http-page", IssueCategory.Security, IssueSeverity.Warning,
@@ -994,7 +1010,7 @@ public static class IssueCatalog
         BROKEN_INTERNAL_LINKS, BROKEN_EXTERNAL_LINKS, LINKS_TO_REDIRECTS, INTERNAL_NOFOLLOW_LINKS, EMPTY_ANCHOR_TEXT,
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
         NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE,
-        ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, ROBOTS_TXT_MISSING,
+        ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, ROBOTS_TXT_MISSING, SITE_HIDDEN_FROM_SEARCH,
         CANONICALISED_PAGE, CANONICAL_MISSING, CANONICAL_MULTIPLE, CANONICAL_BROKEN, CANONICAL_TO_REDIRECT,
         CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID,
         NOINDEX_WITH_CANONICAL,

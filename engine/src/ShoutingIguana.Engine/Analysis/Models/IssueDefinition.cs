@@ -36,6 +36,15 @@ public sealed record IssueDefinition(
     public required IssueSubject Subject { get; init; }
 
     /// <summary>
+    /// The check finds one fault of the whole site, not a fault of pages: robots.txt that search engines can't read, a
+    /// site not on HTTPS. However many URLs it is reported on (one, or each other version of the site that answers), the
+    /// score counts it as the whole site (<see cref="ScoreCalculator"/>). It isn't part of
+    /// <see cref="AnalysisFreshness.ChecksFingerprint"/>: a change to it, or to <see cref="Subject"/>, changes what a
+    /// score is worked out from, so it comes with a new <see cref="ScoreCalculator.VERSION"/>.
+    /// </summary>
+    public bool SiteWide { get; init; }
+
+    /// <summary>
     /// For a check grouped by detail whose detail is each page's own instance of a fault (the href of its relative canonical,
     /// a JSON parser's message saying where in the block it failed): the fault the detail shows, which its groups are by
     /// instead, so a fault in the site's template is one group. The analysis stores it beside each issue, and the issue keeps

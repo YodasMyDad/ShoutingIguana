@@ -73,6 +73,9 @@ public sealed class AnalysisFreshnessTests
             Title = "Renamed", Description = "", Fix = "", Why = "Different.", LearnMore = null
         })));
 
+        // Nor does what the score makes of a check: that is the score version's to say.
+        Assert.Equal(fingerprint, AnalysisFreshness.Fingerprint(checks.Select(check => check with { SiteWide = !check.SiteWide })));
+
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint(checks.Skip(1)));
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint([.. checks, checks[0] with { Id = "a-new-check" }]));
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint(checks.Select((check, index) =>

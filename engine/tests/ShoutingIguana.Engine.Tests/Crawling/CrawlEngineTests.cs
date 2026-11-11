@@ -83,6 +83,26 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         await AssertFindsExactlyThePlantsAsync(server, Options(server));
     }
 
+    /// <summary>
+    /// Every product is noindex, as on a site launched with its staging setting left on: more than half of the pages keep
+    /// themselves out of search, which is one fault of the whole site, reported once, on the home page, with the numbers.
+    /// The site without it (every other test here, and the benchmark) is never flagged: the whole issues table is compared.
+    /// </summary>
+    [Fact]
+    public async Task FindsASiteHiddenFromSearch()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, HiddenFromSearch = true });
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
+
+        var expected = server.Site.GetExpectations();
+        Assert.True(expected.Noindex >= VARIANT_PAGES - 1 && (expected.Noindex + expected.Canonicalised) * 2 > expected.AnalysedPages);
+        var hidden = Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, 10));
+        Assert.Equal(
+            (server.BaseUri.AbsoluteUri, (string?)null, string.Create(CultureInfo.InvariantCulture,
+                $"{expected.Noindex + expected.Canonicalised:N0} of {expected.AnalysedPages:N0} pages: {expected.Noindex:N0} noindex, {expected.Canonicalised:N0} canonicalised")),
+            (hidden.Url, hidden.RelatedUrl, hidden.Detail));
+    }
+
     /// <summary>Crawls the site and checks the crawl and every issue against what the site planted; returns the crawl file.</summary>
     private async Task<string> AssertFindsExactlyThePlantsAsync(SyntheticSiteServer server, CrawlOptions options)
     {
