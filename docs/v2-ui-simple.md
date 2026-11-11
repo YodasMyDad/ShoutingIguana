@@ -215,8 +215,9 @@ Top to bottom:
    the score covers, and "How the score is worked out". Beside it, five counts, each a link to its part of What to
    fix: serious problems, problems worth fixing, things worth a look, checks that found nothing wrong, checks that
    couldn't run.
-3. **Fix these first**: up to five problems, Serious and Worth fixing only, in Advanced's own "Fix first" order
-   (severity, then the most affected), so the two modes agree. Each row: the mark, the plain title, the first
+3. **Fix these first**: up to five problems, Serious and Worth fixing only, in the engine's "Fix first" order
+   (severity; within a severity a site-wide fault first, however small its count; then the most affected), which
+   Advanced's "Fix first" uses too, so the two modes agree. Each row: the mark, the plain title, the first
    sentence of what's wrong, and its count and share. Then one sentence, "Fixing these five takes the score from
    85 to 98", and a link to the whole list. Why five: the comparison's "five things first"; a first screen that
    lists every check that fired is what Simple exists to avoid.
@@ -272,7 +273,8 @@ The sentence is built from counts only:
 - **Order and grouping.** Three groups, by severity, each with its count and one line on what the group means:
   Serious ("These stop pages working or being found. Fix them first"), Worth fixing ("These hold pages back"),
   Worth a look ("Often fine as they are. They don't change the score: read each one and decide"). Within a group,
-  the most affected first. Then **Couldn't check**, always listed with reasons, and **Nothing wrong**, folded.
+  a site-wide fault first, then the most affected: the engine's "Fix first" order. Then **Couldn't check**, always
+  listed with reasons, and **Nothing wrong**, folded.
 - **How many at once.** Every Serious and Worth fixing problem. Worth a look shows its first three and "Show all
   13 things worth a look" while anything above needs fixing; with nothing above, it shows them all. Nothing wrong
   is folded behind "Show the 63 checks that found nothing wrong", and lists each check's good-news line ("Every

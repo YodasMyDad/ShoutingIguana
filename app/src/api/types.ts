@@ -344,8 +344,10 @@ export interface Analysis {
    */
   crawledUrlCount?: number | null;
   /**
-   * The score: the ids of the checks that found something, in the order to fix them (the most severe, then the most
-   * URLs flagged, then catalog order). Checks the user has hidden are in it: hiding is the app's.
+   * The score: the ids of the checks that found something, in the order to fix them: the most severe; within a
+   * severity a `siteWide` check before any other, however small its count; then the most URLs flagged; then catalog
+   * order. Take the order from here rather than sorting by count. Checks the user has hidden are in it: hiding is
+   * the app's.
    */
   fixFirst?: string[];
   /** The score: the site's score as the analysis stored it, or null when there is none (`noScoreReason` says why). */

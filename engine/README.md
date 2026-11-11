@@ -332,11 +332,13 @@ every check that found something, and the score with the first five problems fix
 it back (`AnalysisResults.Score`, with `NoScoreReason` and `FixFirst`), and `AnalysisInfo.Score` is its headline, for
 a list of crawls. `si score` prints the breakdown.
 
-`Analysis/FixFirstOrder` is the order to fix checks in, for every host: the most severe, then the most URLs flagged,
-then catalog order.
+`Analysis/FixFirstOrder` is the order to fix checks in, for every host: the most severe; within a severity, a fault of
+the whole site (`SiteWide`) before any other, those in catalog order among themselves; then the most URLs flagged;
+then catalog order. A site-wide fault is one issue, so its count would put it last of its severity: it leads however
+small its count. The design's reference code has the same order (`fixFirstOrder` in `score.mjs`).
 
 The tests hold it to the design's tables row by row, and to the design's reference code: `generate.mjs` in
-`tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference` scores 286 sites with
+`tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference` scores 288 sites with
 `app/design/simple/build/lib/score.mjs` and writes `cases.json`, which the engine then scores line for line. Run it
 again (`node engine/tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference/generate.mjs`, from the repo root)
 whenever the reference or the catalog's checks change. A changed formula is a new `ScoreCalculator.VERSION`; so is a

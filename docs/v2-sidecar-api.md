@@ -657,9 +657,11 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   flagged a share of `pagesAnalyzed`: "9 of the 4,521 URLs crawled" is the analysis's 9 over the analysis's 4,521.
   **Use these two, not the library's counts, beside a check's count**: a crawl continued since has more URLs than its
   analysis saw, and the library counts those. Null when an engine from before the score ran the analysis.
-- **`fixFirst`** (the score) is the checks that found something, in the order to fix them: the most severe first, then
-  the most URLs flagged, then catalog order. It is the order the UI's own "Fix first" has always had, now the
-  engine's, so every host agrees. **Checks the user has hidden are in it**: hiding is the app's own preference, which
+- **`fixFirst`** (the score) is the checks that found something, in the order to fix them: the most severe first;
+  within a severity, a fault of the whole site (a `siteWide` check) before any other; then the most URLs flagged;
+  then catalog order ([The score](#the-score) says how it is made, and why). It is the engine's order, so every host
+  agrees: **take the order from here, don't sort again by count**, which would put a site-wide fault last of its
+  severity. **Checks the user has hidden are in it**: hiding is the app's own preference, which
   the engine doesn't know, so the UI takes hidden checks out of what it lists. A check a newer engine counted, which
   this catalog doesn't have, isn't in it. It is worked out from the counts whenever the analysis is read, so an
   analysis by any engine has it.
@@ -710,6 +712,22 @@ one moment is never set against a total from another, and the app, the report an
   `noScoreReason` is null. A crawl never analysed has no analysis to ask: `not-analyzed`, as before.
 - **Out of date.** An analysis scored by another version of the formula is out of date with `engineChanged`, as one
   by another analysis version is. Its score is still served, as stored, until the crawl is analysed again.
+- **How the order to fix is made.** `fixFirst`, and so `lines` and `ifFixed`, is made in four steps, each settling
+  only what the one before left level:
+  1. **Severity**: errors, then warnings, then notices.
+  2. **A fault of the whole site leads its severity.** Every `siteWide` check that found something comes before every
+     other check of its severity, **however small its count**. Among themselves, site-wide checks are in catalog
+     order: their counts don't order them (a site-wide fault's count is of nothing: 1 on most sites, 3 for a site
+     that answers at three other addresses).
+  3. **The most URLs flagged**, among the rest.
+  4. **Catalog order**, where checks are still level (titles before meta descriptions).
+
+  Why step 2: a site-wide fault is one issue, so by its count it would come after every check of its severity that
+  flagged more, and on a site with five other errors it would be outside the first five to fix, and outside
+  `ifFixed`, while taking 60 points off: the one thing to fix first, listed sixth. So a site not on HTTPS with six
+  errors on hundreds of pages each has `no-https` first, and `ifFixed` takes it and the four largest away. Where no
+  check is site-wide the order is what the UI's "Fix first" has always had (severity, count, catalog). A warning
+  never comes before an error, site-wide or not, and a notice never before a warning.
 - **Hidden checks count.** The score, its lines and `ifFixed` take in every check, hidden in the app or not.
 - **A partial score is still a score.** It changes no number: it says the crawl didn't read all of the site.
 
@@ -1969,7 +1987,7 @@ a new field; nothing is taken away. Each has its own tests.
   worked out at read time would set an analysis's counts against the crawl's totals as they are now, and a crawl
   continued since has more URLs than its analysis saw. A score this engine can't read (a later engine's, a crafted
   file's) is no score, never an error.
-  - Tests: every row of the design's "Worked examples", "What each mix gives" and "It can't say these lies"; 286
+  - Tests: every row of the design's "Worked examples", "What each mix gives" and "It can't say these lies"; 288
     cases scored by the design's reference code (`app/design/simple/build/lib/score.mjs`) and then by the engine,
     line for line (`ScoreReference/cases.json`, which `generate.mjs` beside it writes: the design's named sites, the
     mockups', every band edge, and 120 random sites); the catalog's site-wide and any-URL checks against the
@@ -1986,14 +2004,23 @@ a new field; nothing is taken away. Each has its own tests.
   own definition (every URL with an outcome, less those never asked because their host had stopped answering), and
   serves it as the analysis's `crawledUrlCount`, beside `pagesAnalyzed`. Every end-to-end crawl of the synthetic site
   holds it to the library's count, the dead twin's unchecked URLs included.
-- **"Fix first" is the engine's.** `FixFirstOrder` is the app's order exactly (`rankChecksToFix`: the most severe,
-  then the most URLs flagged, then catalog order), served as the analysis's `fixFirst`; the score's lines follow it,
-  and `ifFixed` takes its first five errors and warnings away. Hidden checks are in it: hiding is the app's.
-  **Known, and left as the app has it:** a site-wide error is one issue, so by count it sorts after every other error
-  that flagged more, and on a site with five or more of those it is outside the first five and so outside `ifFixed`,
-  where the design's Summary has a site-wide fault lead the list. Putting site-wide faults first within their
-  severity is one line in `FixFirstOrder`; it would move them in Advanced's "Fix first" too, so it is the owner's
-  call, not made here.
+- **"Fix first" is the engine's, and a fault of the whole site leads its severity.** `FixFirstOrder` is the one
+  order, served as the analysis's `fixFirst`; the score's lines follow it, and `ifFixed` takes its first five errors
+  and warnings away. Hidden checks are in it: hiding is the app's. It is the app's order (`rankChecksToFix`: the most
+  severe, then the most URLs flagged, then catalog order) with one step added: within a severity, `siteWide` checks
+  come first, in catalog order among themselves ([The score](#the-score) has the steps). By count alone a site-wide
+  error, one issue, sorted after every error that flagged more, and on a site with five of those it was outside the
+  first five and outside `ifFixed`, where the design's Summary has it lead.
+  - The design's reference code has the same order (`fixFirstOrder` and `firstToFix` in `score.mjs`, which the
+    mockups' data now uses), and the replayed cases take their order and `ifFixed` from it: two more named cases
+    hold a site-wide error among six errors that flagged more, and three site-wide errors with two site-wide
+    warnings.
+  - Tests: a site-wide error on 1 URL leads six errors on 200 to 700, and is in `ifFixed`; site-wide checks lead in
+    catalog order whatever their counts; with every check of the catalog counted, every site-wide check is before
+    every other of its severity.
+  - **The app's own sort no longer agrees where a check is site-wide.** `rankChecksToFix`
+    (`app/src/screens/issues/checkList.ts`) still sorts by severity, count and catalog, so its list puts a site-wide
+    fault by its count until a screen reads `fixFirst` instead. No screen code is changed here.
 - **The score in the library, at no cost.** The headline is three columns of the row the summary already reads, so a
   list reads no more than it did, and it is kept in the summary cache (`summaries.json`, whose format moves to 4: a
   summary kept before the score is read again, once). Measured back to back on copies of the two development
