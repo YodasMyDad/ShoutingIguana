@@ -155,7 +155,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
             url.Redirects,
             new IndexabilityDto(indexability.Indexable, indexability.Reason, indexability.JudgedBy, [.. indexability.Tests.Select(IndexabilityTestDto.From)]),
             url.Content, url.Limits, url.Links, url.LinkTotals, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
-            new SourceStateDto(url.SourceStored));
+            new SourceStateDto(url.SourceStored), url.ListedIn);
     }
 
     public async Task<LinkPageDto> LinksAsync(string id, LinkDirection direction, LinksRequest request, CancellationToken cancellationToken)
@@ -256,12 +256,16 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                     ?? throw Problems.SitemapNotFound());
     }
 
-    public async Task<RobotsOriginPageDto> RobotsAsync(string id, GroupsRequest? request, CancellationToken cancellationToken)
+    public async Task<RobotsOriginPageDto> RobotsAsync(string id, RobotsOriginsRequest? request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
-        var page = await ReadAsync(token => RobotsReader.ReadOrigins(path, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
-            cancellationToken).ConfigureAwait(false);
-        return new RobotsOriginPageDto(page.Total, page.Offset, page.Respected, page.UserAgent, page.Blocked, [.. page.Origins.Select(RobotsOriginDto.From)]);
+        var query = new RobotsOriginQuery
+        {
+            Search = request?.Search, Blocked = request?.Blocked, Offset = request?.Offset ?? 0, Limit = request?.Limit ?? UrlGridReader.DEFAULT_LIMIT
+        };
+        var page = await ReadAsync(token => RobotsReader.ReadOrigins(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+        return new RobotsOriginPageDto(page.Total, page.Offset, page.Respected, page.UserAgent, page.Blocked, [.. page.Origins.Select(RobotsOriginDto.From)], page.Matching,
+            page.Counts);
     }
 
     public async Task<RobotsFileDto> RobotsFileAsync(string id, RobotsFileRequest request, CancellationToken cancellationToken)
@@ -271,7 +275,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         var file = await ReadAsync(token => RobotsReader.ReadFile(path, origin, cache, token), cancellationToken).ConfigureAwait(false) ?? throw Problems.OriginNotFound();
         var read = RobotsOriginDto.From(file.Origin);
         return new RobotsFileDto(read.Origin, read.IsInternal, read.State, read.StatusCode, read.FetchedAt, read.Error, read.Bytes, read.Blocked, file.UserAgent, file.Lines,
-            file.Unmatched);
+            file.Unmatched, file.Respected);
     }
 
     public async Task<RobotsBlockedPage> RobotsBlockedAsync(string id, RobotsBlockedRequest request, CancellationToken cancellationToken)
@@ -289,8 +293,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                 ["reason"] = [$"There's no reason called '{other}': there are rule, unreachable and unknown."]
             })
         };
-        return await ReadAsync(token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
-                   cancellationToken).ConfigureAwait(false)
+        // An id no URL could have is one the origin didn't block: no rows, as for any other URL it didn't.
+        int? urlId = request.UrlId is { } asked ? asked is < 1 or > int.MaxValue ? 0 : (int)asked : null;
+        return await ReadAsync(
+                       token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token, urlId),
+                       cancellationToken).ConfigureAwait(false)
                ?? throw Problems.OriginNotFound();
     }
 

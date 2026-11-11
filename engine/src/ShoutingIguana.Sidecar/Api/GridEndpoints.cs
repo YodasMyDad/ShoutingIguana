@@ -66,7 +66,7 @@ internal static class GridEndpoints
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlPageDto));
 
         api.MapPost("/api/crawls/{id}/robots", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
-            TypedResults.Json(await data.RobotsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GroupsRequest).ConfigureAwait(false),
+            TypedResults.Json(await data.RobotsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.RobotsOriginsRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.RobotsOriginPageDto));
 
         api.MapPost("/api/crawls/{id}/robots/file", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>

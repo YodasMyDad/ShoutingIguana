@@ -195,7 +195,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         var product = await InspectAsync(IdOf("/p/7"));
         Assert.Equal(
             ["id", "url", "urlLength", "isInternal", "type", "discovery", "response", "redirects", "indexability", "content", "limits", "links", "linkTotals",
-             "headers", "structuredData", "hreflang", "issues", "namedBy", "summary", "source"],
+             "headers", "structuredData", "hreflang", "issues", "namedBy", "summary", "source", "listedIn"],
             product.AsObject().Select(property => property.Key));
         Assert.Equal("page", (string?)product["type"]);
         Assert.Equal("success", (string?)product["response"]!["outcome"]);
@@ -211,7 +211,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal("analysis", (string?)indexability["judgedBy"]);
         var tests = indexability["tests"]!.AsArray();
         Assert.Equal("""{"test":"answered","outcome":"pass","statusCode":200}""", tests[0]!.ToJsonString());
-        Assert.Equal("""{"test":"robotsTxt","outcome":"pass"}""", tests[1]!.ToJsonString());
+        Assert.Equal($$"""{"test":"robotsTxt","outcome":"pass","origin":"{{grid.Url(string.Empty)}}"}""", tests[1]!.ToJsonString());
         Assert.Equal("""{"test":"noindex","outcome":"pass","meta":false,"header":false}""", tests[2]!.ToJsonString());
         Assert.Equal(grid.Url("/p/7"), (string?)tests[3]!["canonical"]!["url"]);
 

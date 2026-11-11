@@ -116,6 +116,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
 
 // Search and the favicon (E6).
 [JsonSerializable(typeof(SearchRequest))]
+[JsonSerializable(typeof(RobotsOriginsRequest))]
 [JsonSerializable(typeof(UrlSearchResults))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]
