@@ -81,11 +81,21 @@ export function gridPagesOf(crawlId: string): QueryFilters {
  */
 export const ANALYSIS_GRIDS: readonly string[] = ['issueGroups', 'issueRows'];
 
-/** The pages of one crawl's grids that a running crawl changes: every grid but the analysis's. */
+/**
+ * The reads a view refreshes itself while a crawl runs, so the once-a-second refresh leaves them be. One origin's
+ * robots.txt is read whole (a file of 512 KB is over 2 MB as lines), and changes only when the origin's answer or
+ * what it blocked does: its view reads it again then (screens/robots/RobotsFileView.tsx), not every second.
+ */
+export const SELF_REFRESHED_GRIDS: readonly string[] = ['robotsFile'];
+
+/** The pages of one crawl's grids that a running crawl changes: every grid but the analysis's and the above. */
 export function liveGridPagesOf(crawlId: string): QueryFilters {
   return {
     queryKey: queryKeys.gridPrefix,
-    predicate: (query) => query.queryKey[2] === crawlId && !ANALYSIS_GRIDS.includes(String(query.queryKey[1])),
+    predicate: (query) =>
+      query.queryKey[2] === crawlId &&
+      !ANALYSIS_GRIDS.includes(String(query.queryKey[1])) &&
+      !SELF_REFRESHED_GRIDS.includes(String(query.queryKey[1])),
   };
 }
 
@@ -275,7 +285,8 @@ export const issueGroupPlaceQuery = (id: string, checkId: string, group: CheckGr
 //
 // Their reads are keyed as grids (`['grid', <grid>, <crawl id>, ...]`), the single reads included (the list of
 // sitemaps, one origin's file): a running crawl changes every one of them, and the live bridge refreshes a crawl's
-// grids in place once a second, with nothing blanked.
+// grids in place once a second, with nothing blanked. All but an origin's file, which can be megabytes: its view
+// reads it again when what it blocked changes (SELF_REFRESHED_GRIDS).
 
 export const sitemapKeys = {
   /** The list of sitemaps, with each one's counts. */

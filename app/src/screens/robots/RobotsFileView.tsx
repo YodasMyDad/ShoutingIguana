@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Copy, ExternalLink, FileX } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState, type FocusEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { api } from '../../api/client';
 import { isProblem, missingPlaceWords } from '../../api/errors';
 import type { RobotsBlockedUrl, RobotsFile } from '../../api/grids';
@@ -63,6 +63,10 @@ const FRAME_SLACK = 36;
 /** A blocked URL's row is its URL, wherever a running crawl moves it in the list. */
 const blockedUrlOf = (row: RobotsBlockedUrl) => row.id;
 
+/** While a crawl runs: how often an origin's file is read again for its answer, and one the crawl hasn't come to yet. */
+const FILE_REFRESH_MS = 10_000;
+const FILE_MISSING_MS = 2_000;
+
 export interface RobotsFileViewProps {
   crawlId: string;
   /** The origin the route names, as the engine spells it. */
@@ -84,7 +88,17 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   // The chip that narrows the list goes when it's removed: focus goes to the view's title.
   useFocusRescue(container, () => title.current);
 
-  const file = useQuery(robotsFileQuery(crawlId, origin));
+  const crawling = crawl.crawling;
+  const file = useQuery({
+    ...robotsFileQuery(crawlId, origin),
+    // While the crawl runs, the file isn't read again each second with the lists (a big one is megabytes as lines).
+    // It's read again when what it blocked changes (the list beside it says so, below), and now and then for its
+    // answer; one the crawl hasn't come to yet is looked for more often, so its page fills in soon after it does.
+    refetchInterval: (query) =>
+      !crawling ? false : query.state.status === 'error' ? FILE_MISSING_MS : FILE_REFRESH_MS,
+  });
+  const refetchFile = file.refetch;
+  const fileChanged = useCallback(() => void refetchFile(), [refetchFile]);
   // Whether the crawl obeyed robots.txt at all is the list of origins' to say (its first page), which this reads from
   // the cache or asks for. Undefined while it's read: what the file meant to the crawl isn't said until it's known,
   // so a crawl told to ignore robots.txt is never told it obeyed. Null when it can't be read: the words then say no
@@ -328,6 +342,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
               narrowing={narrowing}
               crawl={crawl}
               obeyed={obeyed ?? null}
+              onFileChanged={fileChanged}
               inspecting={search.inspect !== undefined}
               onNarrow={narrow}
               onCursor={setCursor}
@@ -426,6 +441,7 @@ function BlockedUrls({
   narrowing,
   crawl,
   obeyed,
+  onFileChanged,
   inspecting,
   onNarrow,
   onCursor,
@@ -438,6 +454,8 @@ function BlockedUrls({
   narrowing: Narrowing;
   crawl: CrawlState;
   obeyed: Obeyed;
+  /** The origin's blocked URLs are no longer as many as the file says: its lines' counts have moved. */
+  onFileChanged: () => void;
   inspecting: boolean;
   onNarrow: (narrowing: Narrowing) => void;
   onCursor: (row: RobotsBlockedUrl | undefined) => void;
@@ -455,6 +473,15 @@ function BlockedUrls({
     [crawlId, query],
   );
   const rows = usePagedRows<RobotsBlockedUrl>({ queryKey, fetchPage, rowHeight });
+
+  // The list is read again each second while a crawl runs, and says how many URLs the origin blocked in all. The
+  // file says the same, with each line's share: when the two differ the file is behind, and is read again, once.
+  const blockedNow = rows.unfilteredTotal;
+  const blockedInFile = file?.blocked;
+  const live = crawl.crawling;
+  useEffect(() => {
+    if (live && blockedNow !== null && blockedInFile !== undefined && blockedNow !== blockedInFile) onFileChanged();
+  }, [live, blockedNow, blockedInFile, onFileChanged]);
 
   const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 400) - WHY_WIDTH - FRAME_SLACK);
   const columns = useMemo<GridColumn<RobotsBlockedUrl>[]>(

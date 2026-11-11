@@ -2,7 +2,7 @@ import { createMemoryHistory } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RobotsBlockedQuery, RobotsFile } from '../api/grids';
-import { gridPagesOf } from '../api/queries';
+import { gridPagesOf, liveGridPagesOf } from '../api/queries';
 import { setTransport, type TransportRequest } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
@@ -784,6 +784,47 @@ describe('robots.txt: an origin without a file to show', () => {
 });
 
 describe('robots.txt: live and refreshing', () => {
+  it('reads the file once while a crawl runs, not each second with the list, and again when what it blocked changes', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const { transport } = sidecar({ item: running });
+    const reads = (path: string, from: { requests: TransportRequest[] } = transport) =>
+      from.requests.filter((request) => request.path.endsWith(path)).length;
+    const { queryClient } = await open(FILE);
+    await screen.findByText(`${SITE}/old-private`);
+    await screen.findByTestId('source-viewer');
+    expect(reads('/robots/file')).toBe(1);
+    // The crawl's tick, as the live bridge makes it each second: the list is read again, the file isn't.
+    const listed = reads('/robots/blocked');
+    for (let tick = 0; tick < 3; tick++) {
+      await act(() => queryClient.invalidateQueries(liveGridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    }
+    await waitFor(() => expect(reads('/robots/blocked')).toBeGreaterThan(listed));
+    expect(reads('/robots/file')).toBe(1);
+    // The crawl is kept from another URL on this origin: the list's count of them moves, so the file's lines'
+    // counts have too, and it's read again for them, once.
+    const more = [
+      ...TEST_BLOCKED,
+      { id: 25, url: `${SITE}/admin/new`, reason: 'rule' as const, line: 6, rule: 'Disallow: /admin/', error: null },
+    ];
+    const grown = sidecar({
+      item: running,
+      files: {
+        [SITE]: {
+          ...TEST_FILE,
+          blocked: 5,
+          lines: TEST_FILE.lines.map((line) => (line.number === 6 ? { ...line, blocked: 4 } : line)),
+        },
+      },
+      blocked: { [SITE]: more },
+    }).transport;
+    await act(() => queryClient.invalidateQueries(liveGridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    expect(await screen.findByRole('button', { name: 'line 6: Blocked 4 URLs' })).toBeVisible();
+    expect(reads('/robots/file', grown)).toBe(1);
+    // And not again while nothing more changes.
+    await act(() => queryClient.invalidateQueries(liveGridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    expect(reads('/robots/file', grown)).toBe(1);
+  });
+
   it('keeps the file and the list on screen while they’re read again', async () => {
     let hold: (() => void) | null = null;
     let calls = 0;
