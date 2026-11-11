@@ -16,6 +16,7 @@ public sealed partial class IssuePlainTextsTests
 {
     private const int TITLE_MAX_CHARACTERS = 60;
     private const int PASSED_MAX_CHARACTERS = 60;
+    private const int LOOKS_FOR_MAX_CHARACTERS = 60;
     private const int FIRST_SENTENCE_MAX_CHARACTERS = 120;
     private const int WHAT_MAX_WORDS = 70;
     private const int SENTENCE_MAX_WORDS = 30;
@@ -33,6 +34,13 @@ public sealed partial class IssuePlainTextsTests
 
     /// <summary>The design's "never" list: say what to look at instead.</summary>
     private static readonly string[] NEVER = ["investigate", "look into", "requires further investigation"];
+
+    /// <summary>
+    /// Every check's plain words as a reader gets them: each limit a text names filled in, at the default thresholds. The
+    /// template's limits and the banned words are judged on these, as "{limit:titleMaxLength}" reads "60 characters".
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, IssuePlainText> FILLED =
+        IssuePlainTexts.All.ToDictionary(entry => entry.Key, entry => PlainLimits.Fill(entry.Value, new AnalysisSettings()), StringComparer.Ordinal);
 
     /// <summary>
     /// Every check has all of its plain words or none: the title, what's wrong, how to fix it, who fixes it and the good
@@ -55,7 +63,10 @@ public sealed partial class IssuePlainTextsTests
             Assert.NotEmpty(plain.What);
             Assert.NotEmpty(plain.Fix);
             Assert.All(plain.What.Concat(plain.Fix), text => Assert.False(string.IsNullOrWhiteSpace(text), check.Id));
+
+            // The two optional parts are absent or written, never empty.
             Assert.True(plain.OneFix is null || !string.IsNullOrWhiteSpace(plain.OneFix), check.Id);
+            Assert.True(plain.LooksFor is null || !string.IsNullOrWhiteSpace(plain.LooksFor), check.Id);
         });
 
         // No entry is for a check the catalog doesn't have: a mistyped id would leave its check without words.
@@ -67,8 +78,8 @@ public sealed partial class IssuePlainTextsTests
     [Fact]
     public void EveryPlainTextKeepsToTheTemplate()
     {
-        Assert.NotEmpty(IssuePlainTexts.All);
-        Assert.All(IssuePlainTexts.All, entry =>
+        Assert.NotEmpty(FILLED);
+        Assert.All(FILLED, entry =>
         {
             var (id, plain) = (entry.Key, entry.Value);
 
@@ -98,7 +109,48 @@ public sealed partial class IssuePlainTextsTests
             Assert.True(plain.Passed.Length <= PASSED_MAX_CHARACTERS, $"{id}: the good news is {plain.Passed.Length} characters");
             Assert.True(char.IsUpper(plain.Passed[0]) && !plain.Passed.EndsWith('.'), $"{id}: {plain.Passed}");
             Assert.True(plain.OneFix is null || IsOneSentence(plain.OneFix), $"{id}: {plain.OneFix}");
+
+            // What the check looks for: a short noun phrase, not a sentence.
+            Assert.True(plain.LooksFor is null || IsANounPhrase(plain.LooksFor), $"{id}: {plain.LooksFor}");
         });
+    }
+
+    /// <summary>What a check looks for is a short noun phrase ("A missing sitemap"): 60 characters at most, sentence case, no full stop.</summary>
+    [Fact]
+    public void WhatACheckLooksForIsAShortNounPhrase()
+    {
+        Assert.True(IsANounPhrase("A missing sitemap"));
+        Assert.True(IsANounPhrase("Titles over 60 characters"));
+        Assert.False(IsANounPhrase("The check looks for a sitemap."));
+        Assert.False(IsANounPhrase("a missing sitemap"));
+        Assert.False(IsANounPhrase(new string('a', LOOKS_FOR_MAX_CHARACTERS + 1)));
+        Assert.True(IsANounPhrase("A" + new string('a', LOOKS_FOR_MAX_CHARACTERS - 1)));
+
+        // It is optional even for a check with its other words: the ten written so far have none, and say null.
+        Assert.All(IssuePlainTexts.All.Values, plain => Assert.True(plain.LooksFor is null || IsANounPhrase(PlainLimits.Fill(plain.LooksFor, new AnalysisSettings()))));
+    }
+
+    /// <summary>
+    /// A plain text names a threshold as {limit:name}. Every text the engine has, of every check, category and skip reason,
+    /// fills without error at any settings: a name no setting has would throw here, and a token that is misspelt would be
+    /// left in the text, braces and all.
+    /// </summary>
+    [Fact]
+    public void EveryLimitAPlainTextNamesIsAThresholdTheSettingsHave()
+    {
+        var settings = new AnalysisSettings { TitleMaxLength = 70, LargeImageBytes = 300 * 1024, SlowResponseMs = 1_500 };
+        List<string> filled = [];
+        foreach (var plain in IssuePlainTexts.All.Values.Select(plain => PlainLimits.Fill(plain, settings)))
+        {
+            filled.AddRange([plain.Title, .. plain.What, .. plain.Fix, plain.Passed]);
+            filled.AddRange(new[] { plain.OneFix, plain.LooksFor }.OfType<string>());
+        }
+
+        filled.AddRange(PlainWords.SkipReasons.Values.Select(reason => PlainLimits.Fill(reason, settings)).SelectMany(reason => new[] { reason.Text, reason.Action }));
+        filled.AddRange(Enum.GetValues<IssueCategory>().Select(PlainWords.CategoryTitle).OfType<string>().Select(title => PlainLimits.Fill(title, settings)));
+
+        Assert.True(filled.Count > 100);
+        Assert.All(filled, text => Assert.True(!text.Contains('{') && !text.Contains('}'), $"A token was left in: {text}"));
     }
 
     /// <summary>
@@ -108,15 +160,16 @@ public sealed partial class IssuePlainTextsTests
     [Fact]
     public void NoPlainTextHoldsAWordTheRulesBan()
     {
-        Assert.All(IssuePlainTexts.All, entry =>
+        Assert.All(FILLED, entry =>
         {
             var (id, plain) = (entry.Key, entry.Value);
-            List<string> texts = [plain.Title, .. plain.What, .. plain.Fix, plain.Passed, .. plain.OneFix is { } oneFix ? [oneFix] : Array.Empty<string>()];
+            List<string> texts = [plain.Title, .. plain.What, .. plain.Fix, plain.Passed, .. new[] { plain.OneFix, plain.LooksFor }.OfType<string>()];
             var quoted = string.Join('\n', texts.SelectMany(text => Quoted().Matches(text).Select(match => match.Value)));
 
             Assert.All(NEVER_BARE, term =>
             {
-                Assert.False(Holds(plain.Title, term) || Holds(plain.Passed, term), $"{id}: \"{term}\" in a title or the good news");
+                Assert.False(Holds(plain.Title, term) || Holds(plain.Passed, term) || Holds(plain.LooksFor ?? string.Empty, term),
+                    $"{id}: \"{term}\" in a title, the good news or what the check looks for");
                 Assert.True(!texts.Any(text => Holds(text, term)) || Holds(quoted, term), $"{id}: \"{term}\" is used but never given in quotation marks");
             });
             Assert.All(NEVER, phrase => Assert.DoesNotContain(texts, text => text.Contains(phrase, StringComparison.OrdinalIgnoreCase)));
@@ -222,6 +275,8 @@ public sealed partial class IssuePlainTextsTests
     ];
 
     private static int Words(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private static bool IsANounPhrase(string text) => text.Length <= LOOKS_FOR_MAX_CHARACTERS && char.IsUpper(text[0]) && !text.EndsWith('.');
 
     /// <summary>It ends with a full stop, and no full stop inside it is followed by the start of another sentence.</summary>
     private static bool IsOneSentence(string text) => text.EndsWith('.') && !SentenceBreak().IsMatch(text[..^1]);

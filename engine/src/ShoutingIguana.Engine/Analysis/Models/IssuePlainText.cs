@@ -16,4 +16,10 @@ public sealed record IssuePlainText(string Title, IReadOnlyList<string> What, IR
 {
     /// <summary>What a fault in the site's template usually is, in one sentence, for a check where one fix can clear most pages. Optional.</summary>
     public string? OneFix { get; init; }
+
+    /// <summary>
+    /// What the check looks for, as a short noun phrase ("A missing sitemap"), 60 characters at most: for a list of checks
+    /// that couldn't run, where a title that is a sentence would read as a finding. Optional.
+    /// </summary>
+    public string? LooksFor { get; init; }
 }

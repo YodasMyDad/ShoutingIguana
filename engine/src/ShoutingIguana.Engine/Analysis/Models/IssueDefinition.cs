@@ -55,7 +55,8 @@ public sealed record IssueDefinition(
     public bool ReportedOnce { get; init; }
 
     /// <summary>
-    /// The check in plain words (<see cref="IssuePlainTexts"/>), or null while it has none. Not part of
+    /// The check in plain words (<see cref="IssuePlainTexts"/>), or null while it has none, as written: a limit in them
+    /// is still its token, which <see cref="PlainLimits"/> fills from an analysis's settings. Not part of
     /// <see cref="AnalysisFreshness.ChecksFingerprint"/>, nor of what an analysis stores.
     /// </summary>
     public IssuePlainText? Plain => IssuePlainTexts.Find(Id);

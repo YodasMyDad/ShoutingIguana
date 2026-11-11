@@ -12,6 +12,11 @@ namespace ShoutingIguana.Engine.Analysis;
 /// place. Today these are the ten checks the design document writes out, word for word. To add a check, add its entry: a
 /// test holds every entry to the template's limits and the words the design rules out.
 /// </para>
+/// <para>
+/// A text names a threshold as <c>{limit:name}</c>, never as a number: <c>{limit:titleMaxLength}</c> reads "60 characters"
+/// once <see cref="PlainLimits.Fill(IssuePlainText, AnalysisSettings)"/> has filled it from the settings an analysis ran
+/// with, so the words follow a changed threshold. The entries here are as written, tokens and all: hosts show them filled.
+/// </para>
 /// </summary>
 public static class IssuePlainTexts
 {

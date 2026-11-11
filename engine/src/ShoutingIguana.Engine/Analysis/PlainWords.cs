@@ -5,7 +5,8 @@ namespace ShoutingIguana.Engine.Analysis;
 /// <summary>
 /// The categories and the reasons a check was skipped, in plain words (docs/v2-ui-simple.md, "Plain words"): the
 /// companion of <see cref="IssuePlainTexts"/>, and like it no part of what an analysis stores. A reason with no entry has
-/// no plain words yet, and hosts get null for it.
+/// no plain words yet, and hosts get null for it. A text may name a threshold as <c>{limit:name}</c>, which
+/// <see cref="PlainLimits"/> fills.
 /// </summary>
 public static class PlainWords
 {
