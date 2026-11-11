@@ -347,8 +347,11 @@ Left, in this order. Items 3, 4 and 6 were added on 2026-11-10, and items 5 and 
 1. Round 2, built and paused (above): E3c; Links, with the Issues "pages affected" wording; Sitemaps and
    robots.txt. Each still to be reviewed, fixed, merged and verified.
 2. The UI takes up E3c's fields (the list above), and the shell pass's open findings are fixed.
-3. The comparison with Screaming Frog and Sitebulb: research only, into `docs/v2-comparison.md`. It can run beside
-   items 1 and 2.
+3. Done on 2026-11-11: [the comparison](v2-comparison.md) with Screaming Frog and Sitebulb, from their own sites
+   and screenshots. We cover 71 of Screaming Frog's 348 issues and 7 more in part; 100 of the rest need only what
+   we already fetch (about 50 worth adding in the check audit), and 113 need a browser (step 4). For step 3 it
+   asks for export on every grid, and for the URL grid to hold more: columns, header sort, a filter builder and
+   compact rows. Its "For Simple mode" section is input to item 4.
 4. The Simple design. The IA, the design doc and the glossary say what Simple shows, where the switch is, what the
    report holds and how it is made, and what New crawl and Settings look like in each mode. Mockups are published
    for the owner as a private artifact. The work then goes on under the standing delegation unless the owner
