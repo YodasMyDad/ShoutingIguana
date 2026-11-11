@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridFilter, GridQuery } from '../api/grids';
+import { answerLinkQuery } from '../api/mock/linkGrid';
 import { liveGridPagesOf } from '../api/queries';
 import { setTransport, type TransportRequest } from '../api/transport';
 import { App } from '../app/App';
@@ -10,8 +11,9 @@ import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { onAnnounce } from '../feedback/announce';
 import { commands } from '../keyboard/registry';
-import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { inspectorRoutes, testLinkRow, testUrlDetail } from '../test/inspectorSidecar';
+import { ISSUES_CHECKS } from '../test/issuesSidecar';
 import {
   LINKS_COUNTS,
   LINKS_FACTS,
@@ -192,6 +194,33 @@ describe('the Links filter bar', () => {
     await counted('13 links');
     expect(filtersOf(router)).toBeUndefined();
     expect(within(bar).getByRole('button', { name: 'Add filter' })).toHaveFocus();
+  });
+
+  it('reads a filter by an end’s check as the check’s title, never its id', async () => {
+    // The sidecar's own filter: the links whose target a check flagged. The tests' mock has no issues by link end, so
+    // this sidecar answers it as "every link": what's under test is the chip's words.
+    const answered = (request: TransportRequest) => {
+      const query = request.body as GridQuery;
+      const filters = query.filters.filter((filter) => !filter.column.endsWith('.check'));
+      const answer = answerLinkQuery(testLinkRows(), { ...query, filters }, { available: true, reason: null });
+      return answer.ok ? json(answer.page) : problem(answer.problem);
+    };
+    const { transport } = sidecar({}, [
+      ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/links$/, answered],
+      ['GET', /^\/api\/checks$/, () => json(ISSUES_CHECKS)],
+    ]);
+    const filter = JSON.stringify([{ column: 'to.check', op: 'in', values: ['internal-client-error'] }]);
+    await open(`${LINKS}?filter=${encodeURIComponent(filter)}`);
+    await counted('13 links');
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    // The catalog's title, as the URL grid's chip for a check reads.
+    expect(
+      await within(bar).findByRole('button', { name: 'Remove the filter Target check is Internal URL returns 4xx' }),
+    ).toBeVisible();
+    expect(within(bar).queryByText('internal-client-error')).toBeNull();
+    expect(screen.queryByText(/internal-client-error/)).toBeNull();
+    // The catalog was read for it, once; a view that names no check never reads it.
+    expect(transport.requests.filter((request) => request.path === '/api/checks')).toHaveLength(1);
   });
 
   it('adds a filter on either end by the column’s type, and edits one from its chip', async () => {

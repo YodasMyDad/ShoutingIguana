@@ -132,15 +132,21 @@ const SITE_WORDS = { true: 'this site', false: 'another site' } as const;
 
 /**
  * How the Links grid's filters read as sentences: "Kind is Hyperlink", "Target status class is 4xx", "Target is on
- * another site", "Target URL is /contact/". `urlWords` gives the words of a URL a filter names by its id (`to.id`):
- * the URL itself, a placeholder while it's read, or plain words when it can't be.
+ * another site", "Target URL is /contact/", "Target check is Internal URL returns 4xx". `urlWords` gives the words of
+ * a URL a filter names by its id (`to.id`): the URL itself, a placeholder while it's read, or plain words when it
+ * can't be. `checkWords` does the same for a check an end is filtered by (`to.check`): its title from the catalog,
+ * as the URL grid's chips word a check, never its id.
  */
-export function linkFilterWords(urlWords: (urlId: number) => string): FilterWords {
+export function linkFilterWords(
+  urlWords: (urlId: number) => string,
+  checkWords: (checkId: string | number) => string = () => 'a check',
+): FilterWords {
   return {
     column: linkColumnName,
     value: (column, value) => {
       const end = endColumn(column);
       if (end?.column === 'id' && typeof value === 'number') return urlWords(value);
+      if (end?.column === 'check') return checkWords(value);
       return linkFilterValue(column, value);
     },
     empty: (column, empty): FilterSentence | null => {
@@ -158,6 +164,11 @@ export function linkFilterWords(urlWords: (urlId: number) => string): FilterWord
       return { field: END_WORDS[end.end], op: 'is on', value: SITE_WORDS[value ? 'true' : 'false'] };
     },
   };
+}
+
+/** Whether a filter set names a check (by an end: `from.check`, `to.check`), so the catalog is read for its title. */
+export function namesCheck(filters: readonly GridFilter[]): boolean {
+  return filters.some((filter) => endColumn(filter.column)?.column === 'check');
 }
 
 /** The ids of the URLs a filter set names by id, for their words to be read: `to.id`, `from.id`. */

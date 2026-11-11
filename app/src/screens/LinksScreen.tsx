@@ -29,6 +29,7 @@ import { nextSort, useHeaderHandoff } from '../grid/sort';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
+import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
@@ -56,7 +57,7 @@ import {
   sharedUrlWidth,
   shownLinkColumns,
 } from './links/linkColumns';
-import { endColumn, linkColumnName, linkFilterWords, urlIdsNamed } from './links/linkWords';
+import { endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
 import { LINK_PRESETS, activePreset, sortShown } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './links/states';
@@ -236,7 +237,7 @@ export function LinksScreen() {
     [catalogue.data, summaryAvailable],
   );
   const namedUrls = useMemo(() => urlIdsNamed(filters), [filters]);
-  const words = linkFilterWords(useUrlWords(crawlId, namedUrls, siteOrigin));
+  const words = linkFilterWords(useUrlWords(crawlId, namedUrls, siteOrigin), useCheckWords(namesCheck(filters)));
 
   // A filter or a search the user applied is answered once, with the count it leaves. The count itself is no live
   // region: a running crawl moves it every second.

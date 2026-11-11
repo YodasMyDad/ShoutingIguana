@@ -26,6 +26,7 @@ import {
   linkColumnName,
   linkColumnShortName,
   linkFilterWords,
+  namesCheck,
   linkValueName,
   urlIdsNamed,
 } from './linkWords';
@@ -82,6 +83,42 @@ describe('the links’ words', () => {
     expect(linkValueName('to.outcome', 'robotsDisallowed')).toBe('Blocked by robots.txt');
     expect(linkValueName('to.indexability', 'none')).toBe('Indexable');
     expect(linkValueName('to.statusClass', 'noResponse')).toBe('No response');
+  });
+
+  it('reads a filter by an end’s check as the check’s title, never its id', () => {
+    const titles: Record<string, string> = {
+      'internal-client-error': 'Internal URL returns 4xx',
+      'title-too-long': 'Title too long',
+    };
+    const words = linkFilterWords(
+      () => '/gone',
+      (id) => titles[String(id)] ?? 'a check this version doesn’t have',
+    );
+    const sentence = (filter: GridFilter) =>
+      filterSentences(filter, words)
+        .map((part) => `${part.field} ${part.op} ${part.value}`)
+        .join(' + ');
+    expect(sentence({ column: 'to.check', op: 'in', values: ['internal-client-error'] })).toBe(
+      'Target check is Internal URL returns 4xx',
+    );
+    expect(sentence({ column: 'from.check', op: 'notIn', values: ['title-too-long', 'internal-client-error'] })).toBe(
+      'Source check is not Title too long or Internal URL returns 4xx',
+    );
+    expect(sentence({ column: 'to.check', op: 'in', values: ['made-up'] })).toBe(
+      'Target check is a check this version doesn’t have',
+    );
+    // Without the catalog's words, plain words: still never the id.
+    const bare = linkFilterWords(() => '/gone');
+    expect(
+      filterSentences({ column: 'to.check', op: 'in', values: ['internal-client-error'] }, bare).map(
+        (part) => part.value,
+      ),
+    ).toEqual(['a check']);
+    // Which filters need the catalog read.
+    expect(namesCheck([{ column: 'to.check', op: 'in', values: ['x'] }])).toBe(true);
+    expect(namesCheck([{ column: 'from.check', op: 'notIn', values: ['x'] }])).toBe(true);
+    expect(namesCheck([{ column: 'to.statusClass', op: 'in', values: ['4xx'] }])).toBe(false);
+    expect(namesCheck([])).toBe(false);
   });
 
   it('reads filters as sentences', () => {

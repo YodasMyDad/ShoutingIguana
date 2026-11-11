@@ -5,7 +5,7 @@ import { useCallback, useMemo } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { GridFilter, UrlRow } from '../api/grids';
-import { checksQuery, crawlQuery } from '../api/queries';
+import { crawlQuery } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
@@ -13,13 +13,13 @@ import { ErrorState } from '../feedback/ErrorState';
 import { notifyResult } from '../feedback/notify';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { FilterChips } from '../grid/FilterBar';
-import { LOOKING_UP } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfNames } from '../grid/summaryWords';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
+import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
 import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
@@ -316,7 +316,8 @@ function ActiveFilters({
   filters: readonly GridFilter[];
   onChange: (filters: GridFilter[]) => void;
 }) {
-  const checks = useQuery({ ...checksQuery(), enabled: filters.some((filter) => filter.column === 'check') });
+  // Names, never ids: while they're read, a placeholder; when they can't be, plain words.
+  const checkWords = useCheckWords(filters.some((filter) => filter.column === 'check'));
   const relatedIds = useMemo(
     () =>
       filters.flatMap((filter) =>
@@ -325,12 +326,6 @@ function ActiveFilters({
     [filters],
   );
   const relatedWords = useUrlWords(crawlId, relatedIds, siteOrigin);
-  // Names, never ids: while they're read, a placeholder; when they can't be, plain words.
-  const checkWords = (id: string | number) => {
-    if (checks.data)
-      return checks.data.checks.find((check) => check.id === id)?.title ?? 'a check this version doesn’t have';
-    return checks.isError ? 'a check whose name couldn’t be read' : LOOKING_UP;
-  };
   const words = {
     column: (id: string) =>
       id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? urlColumnWords(id) ?? id),
