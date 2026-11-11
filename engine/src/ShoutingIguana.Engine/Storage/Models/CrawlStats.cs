@@ -40,6 +40,12 @@ public sealed record CrawlStats
     public IReadOnlyDictionary<SkipReason, long> SkipReasons { get; init; } = new Dictionary<SkipReason, long>();
 
     /// <summary>
+    /// The part of <see cref="Outcomes"/> and <see cref="StatusCodes"/> that is the crawler's own probes of the site's
+    /// other versions, which nothing on the site leads to.
+    /// </summary>
+    public SiteVersionStats SiteVersions { get; init; } = SiteVersionStats.None;
+
+    /// <summary>
     /// URLs failed without a request, because their host had stopped answering ("Not checked"), on this site or another.
     /// How they would have answered isn't known, so they aren't among <see cref="NonIndexableReasons"/>.
     /// </summary>

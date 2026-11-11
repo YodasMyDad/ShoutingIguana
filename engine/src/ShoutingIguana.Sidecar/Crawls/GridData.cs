@@ -103,6 +103,16 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         return Facets(await ReadAsync(token => LinkGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// The crawl's headline numbers, read as a grid is: in one of the read slots, stopped when its request is given up, and
+    /// kept with the grids' counts, so they're read once while the crawl stands still (a running crawl's, every 2 s).
+    /// </summary>
+    public async Task<CrawlStatsDto> StatsAsync(string id, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        return CrawlStatsDto.From(await ReadAsync(token => CrawlStatsReader.Read(path, cache, token), cancellationToken).ConfigureAwait(false));
+    }
+
     public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
@@ -123,11 +133,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                   ?? throw Problems.UrlNotFound();
         var indexability = url.Indexability;
         return new UrlDetailDto(
-            url.Id, url.Url, url.IsInternal, url.Type, url.Discovery,
+            url.Id, url.Url, url.UrlLength, url.IsInternal, url.Type, url.Discovery,
             url.Response is { } response ? UrlResponseDto.From(response) : null,
             url.Redirects,
             new IndexabilityDto(indexability.Indexable, indexability.Reason, indexability.JudgedBy, [.. indexability.Tests.Select(IndexabilityTestDto.From)]),
-            url.Content, url.Limits, url.Links, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
+            url.Content, url.Limits, url.Links, url.LinkTotals, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
             new SourceStateDto(url.SourceStored));
     }
 

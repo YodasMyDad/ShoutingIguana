@@ -239,8 +239,11 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True((bool?)result["summaryAvailable"]);
         Assert.Equal(2, (int?)result["runs"]);
         Assert.Empty(result["failures"]!.AsArray());
-        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps"],
+        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps", "stats"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
+
+        // The crawl's headline numbers: read, read again from what was kept, and without the link summary.
+        Assert.Equal(["stats", "stats", "stats-pass"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "stats").Select(read => (string)read!["class"]!));
 
         // The links grid is timed with its link summary and without, and so are the sitemaps and robots.txt.
         Assert.All(new[] { "Links grid: ", "Without the link summary: ", "Sitemaps: ", "robots.txt: " }, name =>

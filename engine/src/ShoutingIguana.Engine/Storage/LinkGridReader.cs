@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using ShoutingIguana.Engine.Storage.Models;
@@ -1090,9 +1091,11 @@ public static class LinkGridReader
     /// <item>filters on the target too: through the targets, when they have few links in all (<see cref="Drive"/>); else on
     /// the links' index by target, when it holds all the filters ask and the targets are few enough to list
     /// (<see cref="Placed"/>); else by walking from the nearer end when the page is near one, or at any place when a filter
-    /// names one target, whose index the walk follows; else from the set, read once (<see cref="Ids"/>): as every link but
-    /// the others when most links match, through the targets again when their index holds all that's asked, however many
-    /// they are, otherwise in one pass over the links.</item>
+    /// names one target, whose index the walk follows; else, where most of the links the filters could match pass the one
+    /// on the target, from the blocks that hold the page, counted as the blocks' own count but for the others
+    /// (<see cref="ButTheOthers"/>); else from the set, read once (<see cref="Ids"/>): as every link but the others when
+    /// most links match, through the targets again when their index holds all that's asked, however many they are,
+    /// otherwise in one pass over the links.</item>
     /// </list>
     /// </summary>
     private static long[] Page(GridReadContext context, Filters filters, long total, long matching, bool descending, int offset, int limit, long? after, out bool more)
@@ -1181,6 +1184,10 @@ public static class LinkGridReader
                     context.Note(slow);
                 }
             }
+            else if (ButTheOthers(context, filters) is { } blocks)
+            {
+                ids = BlockWalk(context, filters, descending: false, after: null, first, take, blocks);
+            }
             else
             {
                 ids = Set().Range(first, take);
@@ -1252,9 +1259,10 @@ public static class LinkGridReader
     /// </summary>
     /// <param name="after">The link to read on from, in the direction asked; null to start at a place.</param>
     /// <param name="skip">Ascending, without a cursor: the place to start at among the matching links.</param>
-    private static long[] BlockWalk(GridReadContext context, Filters filters, bool descending, long? after, long skip, int take)
+    /// <param name="counted">The matching links by block, when they aren't the filters' own count of <c>link_blocks</c> (<see cref="ButTheOthers"/>).</param>
+    private static long[] BlockWalk(GridReadContext context, Filters filters, bool descending, long? after, long skip, int take, Blocks? counted = null)
     {
-        var blocks = BlocksOf(context, filters);
+        var blocks = counted ?? BlocksOf(context, filters);
         var shift = context.LinkSummary!.Value.BlockShift;
         var step = descending ? -1 : 1;
         int index;
@@ -1306,6 +1314,104 @@ public static class LinkGridReader
         }
 
         return [.. ids];
+    }
+
+    /// <summary>Kept whether or not the blocks could be counted this way, so it's worked out once per filter set.</summary>
+    private sealed record OtherBlocks(Blocks? Blocks);
+
+    /// <summary>
+    /// The matching links counted by block for a filter on the target that most of the links it could match pass: the links
+    /// to the site's own URLs, the hyperlinks to URLs that answered, the navigation links to the pages a click from the
+    /// start. <c>link_blocks</c> counts links by what they are, not by where they lead, so it counts the links the rest of
+    /// the filters match (all of them, when the target is all that's asked), block by block; the others among those, which
+    /// lead to the targets that fail, are the fewer, and are read through those targets on the links' index. A block's
+    /// matching links are the difference, so a page anywhere is read from the blocks that hold it (<see cref="BlockWalk"/>),
+    /// as under a filter on what a link is: nothing is read for every matching link, no set of ids is kept, and missing
+    /// link ids change nothing, where every id but the others' needs a crawl with none missing (<see cref="AllBut"/>).
+    /// <para>
+    /// Null when the links aren't counted by block, the fewer links pass, the others are too many to read, or the counts
+    /// don't add up to what the link summary says match (a summary that isn't the links').
+    /// </para>
+    /// </summary>
+    private static Blocks? ButTheOthers(GridReadContext context, Filters filters) =>
+        !filters.HasSummary || !filters.Summarised || filters.Shaped || DriveCap < 0
+            ? null
+            : HeldLarge(context, "linkblocks|others|" + filters.Key, () => new OtherBlocks(CountButTheOthers(context, filters))).Blocks;
+
+    private static Blocks? CountButTheOthers(GridReadContext context, Filters filters)
+    {
+        // What the filters ask of a link apart from its target: those links are counted by block, and by target.
+        var shape = new Filters([.. filters.Conditions.Where(condition => !condition.OnTarget)], HasSummary: true);
+        var matched = Tally(context, filters);
+        var every = Tally(context, shape);
+        if (matched.ToUnknown > 0 || every.ToUnknown > 0 || matched.Links * 2 <= every.Links)
+        {
+            return null;
+        }
+
+        // A target passes or fails whole: the others are every link of that shape to a target that fails.
+        List<int> failing = [];
+        foreach (var (target, links) in every.Targets())
+        {
+            var passing = matched.To(target);
+            if (passing == 0)
+            {
+                failing.Add(target);
+            }
+            else if (passing != links)
+            {
+                return null;
+            }
+        }
+
+        // Read on the index by target: an entry each where the index holds all that's asked of a link (its kind, or
+        // nothing), else the rows of every link to those targets, which the summary adds up before any is read.
+        var others = $"[{string.Join(",", failing)}]";
+        var total = Total(context);
+        var onIndex = shape.Indexed && (shape.Conditions.Count == 0 || context.HasLinkKindIndex);
+        var reads = onIndex
+            ? every.Links - matched.Links
+            : context.Scalar("SELECT COALESCE(SUM(c.links), 0) FROM link_summary c WHERE c.to_id IN (SELECT value FROM json_each($others))", [new("$others", others)]);
+        if (reads > Math.Max(Math.Max(DriveRows, 0), total / 8))
+        {
+            return null;
+        }
+
+        var shift = context.LinkSummary!.Value.BlockShift;
+        Dictionary<long, long> otherLinks = [];
+        if (failing.Count > 0)
+        {
+            var index = onIndex && shape.Conditions.Count > 0 ? "ix_links_to_kind" : "ix_links_to";
+            var sql = $"SELECT l.rowid FROM links l INDEXED BY {index}{shape.Where("l.to_id IN (SELECT value FROM json_each($others))")}";
+            Ran?.Invoke(sql);
+            using var command = context.Command(sql, [.. shape.Parameters, new("$others", others)]);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                CollectionsMarshal.GetValueRefOrAddDefault(otherLinks, reader.GetInt64(0) >> shift, out _)++;
+            }
+        }
+
+        List<long> ids = [];
+        List<long> through = [];
+        long counted = 0;
+        var blocks = BlocksOf(context, shape);
+        for (var index = 0; index < blocks.Ids.Length; index++)
+        {
+            var links = blocks.Through[index] - (index == 0 ? 0 : blocks.Through[index - 1]) - otherLinks.GetValueOrDefault(blocks.Ids[index]);
+            if (links < 0)
+            {
+                return null;
+            }
+
+            if (links > 0)
+            {
+                ids.Add(blocks.Ids[index]);
+                through.Add(counted += links);
+            }
+        }
+
+        return counted == matched.Links ? new Blocks([.. ids], [.. through]) : null;
     }
 
     /// <summary>

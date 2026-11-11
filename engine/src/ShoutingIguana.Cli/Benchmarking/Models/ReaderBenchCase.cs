@@ -4,7 +4,7 @@ namespace ShoutingIguana.Cli.Benchmarking.Models;
 /// One read the reader benchmark times: its first page, a page half way down and one just past it (read backwards from
 /// the far end) when it has more than one.
 /// </summary>
-/// <param name="Kind">What it reads: <c>grid</c>, <c>facets</c>, <c>lookup</c>, <c>inspector</c>, <c>links</c>, <c>groups</c>, <c>rows</c>, <c>links-grid</c>, <c>sitemaps</c> or <c>robots</c>.</param>
+/// <param name="Kind">What it reads: <c>grid</c>, <c>facets</c>, <c>lookup</c>, <c>inspector</c>, <c>links</c>, <c>groups</c>, <c>rows</c>, <c>links-grid</c>, <c>sitemaps</c>, <c>robots</c> or <c>stats</c>.</param>
 /// <param name="Class">How it reads, which sets how it grows with the crawl and so its gate (<see cref="ReaderBenchmark.GATE_MS"/>).</param>
 /// <param name="Matching">The rows it lists, where it lists rows.</param>
 /// <param name="HalfP50Ms">Null when it has one page.</param>

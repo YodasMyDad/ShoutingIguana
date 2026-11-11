@@ -50,6 +50,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
     // Raised on any thread, stored by the loop: they wait here, not in the channel, so a full channel can't lose one.
     private readonly ConcurrentQueue<CrawlNotice> _notices = new();
+
+    // The run's stretches of crawling as its clock last had them, waiting to be stored, as notices do; and where each is kept.
+    private readonly ConcurrentQueue<RunStretch> _runTime = new();
+    private readonly Dictionary<int, long> _stretchRows = [];
+    private bool _keepsRunTime;
+    private long _run = 1;
+    private bool _crawlStamped;
     private SqliteTransaction? _transaction;
     private Task _loop = Task.CompletedTask;
     private int _nextUrlId = 1;
@@ -77,6 +84,12 @@ internal sealed class CrawlWriter : IAsyncDisposable
     public bool SitemapsDone { get; private set; }
 
     /// <summary>
+    /// The time the crawl's earlier runs spent crawling; none for a new crawl. Null when it isn't all known: a run before
+    /// this one wasn't timed (an earlier engine's), or the file keeps its time in a table this engine can't use.
+    /// </summary>
+    public TimeSpan? TimeCrawledBefore { get; private set; } = TimeSpan.Zero;
+
+    /// <summary>
     /// Locks the crawl file, opens or creates the crawl database, restores a resumed crawl and marks it running, then
     /// starts the write loop.
     /// </summary>
@@ -101,6 +114,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
             CrawlDatabase.Execute(connection, CrawlSchema.NOTICES);
             CheckNoticesTable(connection, databasePath);
 
+            // And one from before the time spent crawling was kept, its table: what it spent before isn't known.
+            CrawlDatabase.Execute(connection, CrawlSchema.RUN_TIME);
+
             // The columns for lanes 1 to 3 of the content fingerprint are added here, to a new file as to one an earlier engine
             // made, whose pages so far have none.
             AddMissingResponseColumns(connection);
@@ -108,10 +124,14 @@ internal sealed class CrawlWriter : IAsyncDisposable
             if (created)
             {
                 writer.InsertCrawlRow();
+                writer._keepsRunTime = true;
             }
             else
             {
-                writer.RestoreState();
+                // Before the run stamps the crawl row: the stamp tells whether every run so far was timed.
+                var earlier = CrawlRunReader.Read(connection, transaction: null);
+                writer.RestoreState(timed: earlier is not null);
+                writer.RestoreRunTime(earlier);
             }
 
             writer._loop = Task.Run(writer.RunAsync);
@@ -228,6 +248,17 @@ internal sealed class CrawlWriter : IAsyncDisposable
     }
 
     /// <summary>
+    /// Keeps a stretch of the run's crawling as its clock has it now, from any thread, without waiting: stored with the
+    /// writer's next batch, and whatever is left as it closes. The latest heard of a stretch stands, and one that has
+    /// ended stays ended.
+    /// </summary>
+    public void RecordRunTime(RunStretch stretch)
+    {
+        _runTime.Enqueue(stretch);
+        _commands.Writer.TryWrite(StoreNoticesCommand.Instance);
+    }
+
+    /// <summary>
     /// Stops accepting commands, drains and commits what is queued, then folds the WAL into the file. Never throws: a
     /// failed loop has already surfaced its error through <see cref="Completion"/>, and the file is closed either way.
     /// </summary>
@@ -237,7 +268,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         try
         {
             await _loop.ConfigureAwait(false);
-            StoreLastNotices();
+            StoreWhatIsLeft();
         }
         catch (Exception exception) when (_loop.IsFaulted)
         {
@@ -276,6 +307,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
                     if (++commandsInTransaction >= MAX_COMMANDS_PER_TRANSACTION || transactionAge.Elapsed >= MAX_TRANSACTION_AGE)
                     {
                         StoreNotices();
+                        StoreRunTime();
                         CommitTransaction();
                         commandsInTransaction = 0;
                     }
@@ -284,6 +316,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 if (_transaction is not null)
                 {
                     StoreNotices();
+                    StoreRunTime();
                     CommitTransaction();
                     commandsInTransaction = 0;
                 }
@@ -333,9 +366,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
                     break;
                 case UpdateCrawlStatusCommand status:
                     _statements.UpdateCrawlStatus(status.Status, status.IsFinished, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                    _crawlStamped = true;
                     break;
                 case StoreNoticesCommand:
-                    // Stored with the batch, before it commits.
+                    // Notices, and the run's time: stored with the batch, before it commits.
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown writer command {command.GetType().Name}.");
@@ -416,7 +450,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         // A probe the site has since found was adopted meanwhile, so the response is one of the site's.
         _counters.OnRecorded(new RecordedResponse(response.Outcome, response.StatusCode, IsPage(item.IsInternal, response),
-            IsSiteUrl: item.IsInternal && !entry.IsProbe, IsNotChecked(response), DownloadedBytes(response.SizeBytes, response.BodyBytes)));
+            IsSiteUrl: item.IsInternal && !entry.IsProbe, IsNotChecked(response), DownloadedBytes(response.SizeBytes, response.BodyBytes), entry.IsProbe));
         PropagateDepths();
     }
 
@@ -718,17 +752,18 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// </summary>
     private UrlEntry PromoteChecked(UrlEntry entry, bool isInternal) =>
         _statements.ReadOutcome(entry.Id) is { Outcome: FetchOutcome.Success } check
-            ? Refetch(entry, FetchMode.Crawl, isInternal, check, wasSiteUrl: isInternal)
+            ? Refetch(entry, FetchMode.Crawl, isInternal, check, wasSiteUrl: isInternal && !entry.IsProbe, wasProbe: entry.IsProbe)
             : SetMode(entry, FetchMode.Crawl);
 
     /// <summary>Drops what a recorded URL's fetch stored and queues it again, to be fetched in <paramref name="mode"/>.</summary>
     /// <param name="wasSiteUrl">The response was counted as one of the site's own URLs, rather than a probe's.</param>
-    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, StoredOutcome stored, bool wasSiteUrl)
+    /// <param name="wasProbe">The response was counted as a probe's, on the site or off it.</param>
+    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, StoredOutcome stored, bool wasSiteUrl, bool wasProbe)
     {
         _statements.DeleteResponse(entry.Id);
         _statements.RequeueUrl(entry.Id, mode, entry.Depth);
         _counters.OnResponseRemoved(new RecordedResponse(stored.Outcome, stored.StatusCode, isInternal && stored.IsPage, wasSiteUrl,
-            stored.IsNotChecked, stored.Bytes));
+            stored.IsNotChecked, stored.Bytes, wasProbe));
         NoteRefetch(entry.Id, isInternal);
         return entry with { State = UrlState.Queued, Mode = mode };
     }
@@ -755,6 +790,11 @@ internal sealed class CrawlWriter : IAsyncDisposable
             _counters.OnAdopted(found: entry.State != UrlState.Skipped, fetched: stored is not null && !refetch);
         }
 
+        if (stored is { } kept && !refetch)
+        {
+            _counters.OnProbeResponseAdopted(kept.Outcome, kept.StatusCode, kept.IsNotChecked);
+        }
+
         if (link.IsInternal && entry.State is UrlState.Fetching or UrlState.Done)
         {
             _claimedInternal++;
@@ -763,7 +803,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         if (refetch)
         {
-            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored!.Value, wasSiteUrl: false);
+            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored!.Value, wasSiteUrl: false, wasProbe: true);
             _urls[link.Key] = adopted;
         }
 
@@ -879,7 +919,8 @@ internal sealed class CrawlWriter : IAsyncDisposable
         command.ExecuteNonQuery();
     }
 
-    private void RestoreState()
+    /// <param name="timed">The file knows the time every run so far spent crawling, and must go on knowing it while this one starts.</param>
+    private void RestoreState(bool timed)
     {
         // In one transaction: URLs claimed but never recorded when the last run stopped go back on the queue, and the
         // crawl is marked running again. A status of Running left by a crash is fine; the lock says nothing else writes.
@@ -888,6 +929,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
             _statements.SetTransaction(transaction);
             CrawlDatabase.Execute(_connection, "UPDATE urls SET state = 0 WHERE state = 1;", transaction);
             _statements.UpdateCrawlStatus(CrawlStatus.Running, false, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            if (timed)
+            {
+                // The stamp just moved is this engine's doing: the last stretch takes it with the same commit, so a
+                // reader never finds the crawl stamped past what was timed while a big crawl's URLs are read back in.
+                PassStampOn(transaction);
+            }
+
             transaction.Commit();
         }
 
@@ -932,7 +980,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _counters.RestoreUrls(_urls.Count, queued, skipped, siteUrlsFound);
         SkipQueuedIfAtUrlLimit();
 
-        // Grouped as the live counts are kept: by outcome and status code.
+        // Grouped as the live counts are kept: by outcome and status code, the probes of the site's other versions apart.
         using (var command = _connection.CreateCommand())
         {
             command.CommandText = $"""
@@ -940,15 +988,16 @@ internal sealed class CrawlWriter : IAsyncDisposable
                        SUM(CASE WHEN {CrawlSchema.PAGE} THEN 1 ELSE 0 END),
                        COALESCE(SUM(CASE WHEN r.body_bytes IS NOT NULL THEN r.size_bytes END), 0),
                        SUM(u.is_internal = 1 AND u.source <> {(int)DiscoverySource.SiteVersion}),
-                       SUM(r.outcome = {(int)FetchOutcome.NetworkError} AND {AnalysisReader.NOT_CHECKED})
+                       SUM(r.outcome = {(int)FetchOutcome.NetworkError} AND {AnalysisReader.NOT_CHECKED}),
+                       u.source = {(int)DiscoverySource.SiteVersion}
                 FROM responses r JOIN urls u ON u.id = r.url_id
-                GROUP BY r.outcome, r.status_code
+                GROUP BY r.outcome, r.status_code, u.source = {(int)DiscoverySource.SiteVersion}
                 """;
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 _counters.AddResponses((FetchOutcome)reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetInt32(1), reader.GetInt64(2),
-                    reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6));
+                    reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6), reader.GetBoolean(7));
             }
         }
 
@@ -966,12 +1015,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
     }
 
     /// <summary>
-    /// The loop has ended, so notices raised as it closed are stored on their own. Never throws: whatever stops this (a
-    /// full disk) has its own error already, and the crawl's state is stored either way.
+    /// The loop has ended, so notices raised as it closed, and the run's last stretch of crawling if it ended since, are
+    /// stored on their own. Never throws: whatever stops this (a full disk) has its own error already, and the crawl's
+    /// state is stored either way.
     /// </summary>
-    private void StoreLastNotices()
+    private void StoreWhatIsLeft()
     {
-        if (_notices.IsEmpty)
+        if (_notices.IsEmpty && _runTime.IsEmpty && !_crawlStamped)
         {
             return;
         }
@@ -980,13 +1030,110 @@ internal sealed class CrawlWriter : IAsyncDisposable
         {
             BeginTransaction();
             StoreNotices();
+            StoreRunTime();
             CommitTransaction();
         }
         catch (SqliteException exception)
         {
-            _logger.LogWarning(exception, "Could not store the crawl's last notices");
+            _logger.LogWarning(exception, "Could not store the crawl's last notices and the time it spent crawling");
             RollBackTransaction();
         }
+    }
+
+    /// <summary>
+    /// What the file knows of the time spent crawling before this run, as it was before the run stamped the crawl row, and
+    /// which run this one is. Where that isn't the whole of it (the file is from before the time was kept, or an engine
+    /// that doesn't keep it ran the crawl since), a row without a time says so for good: the crawl's time then isn't
+    /// known, however many runs are timed from here on.
+    /// </summary>
+    private void RestoreRunTime(CrawlRuns? earlier)
+    {
+        using var transaction = _connection.BeginTransaction();
+        _keepsRunTime = RunTime("SELECT group_concat(name, ',') FROM (SELECT name FROM pragma_table_info('run_time') ORDER BY cid)", transaction) as string
+                        == CrawlSchema.RUN_TIME_COLUMNS;
+        if (!_keepsRunTime)
+        {
+            TimeCrawledBefore = null;
+            _logger.LogWarning("Another program changed the table the time spent crawling is kept in (run_time), so this run's isn't kept");
+            return;
+        }
+
+        // A stretch left going by a run whose process died ended then, as near as the file knows.
+        RunTime("UPDATE run_time SET ended = 1 WHERE ended = 0", transaction);
+        var lastRun = RunTime("SELECT MAX(run) FROM run_time WHERE typeof(run) = 'integer'", transaction) as long? ?? 0;
+        var untimed = RunTime("SELECT 1 FROM run_time WHERE crawled_ms IS NULL LIMIT 1", transaction) is not null;
+        if (earlier is null && !untimed)
+        {
+            // From the crawl's start when nothing was ever timed, else from where the last stretch known ended.
+            RunTime("""
+                INSERT INTO run_time (run, started_at, crawled_ms, ended, crawl_updated_at)
+                SELECT $run, COALESCE((SELECT started_at + COALESCE(crawled_ms, 0) FROM run_time ORDER BY id DESC LIMIT 1), started_at), NULL, 1, updated_at
+                FROM crawl WHERE id = 1
+                """, transaction, ("$run", ++lastRun));
+        }
+
+        TimeCrawledBefore = earlier?.TimeCrawling;
+        _run = lastRun + 1;
+        transaction.Commit();
+    }
+
+    /// <summary>
+    /// Stores the run's stretches of crawling as last heard, in the batch about to commit: each in its own row, the latest
+    /// time heard of it, and ended once it has. A batch that stamped the crawl row (the run's end) passes the stamp on to
+    /// the last stretch, which is how a reader knows no run went untimed since.
+    /// </summary>
+    private void StoreRunTime()
+    {
+        if (!_keepsRunTime)
+        {
+            _runTime.Clear();
+            return;
+        }
+
+        while (_runTime.TryDequeue(out var stretch))
+        {
+            if (_stretchRows.TryGetValue(stretch.Index, out var row))
+            {
+                RunTime("UPDATE run_time SET crawled_ms = MAX(crawled_ms, $ms), ended = MAX(ended, $ended) WHERE id = $id", _transaction,
+                    ("$ms", stretch.CrawledMs), ("$ended", stretch.Ended ? 1 : 0), ("$id", row));
+            }
+            else
+            {
+                _stretchRows[stretch.Index] = (long)RunTime("""
+                    INSERT INTO run_time (run, started_at, crawled_ms, ended, crawl_updated_at)
+                    SELECT $run, $startedAt, $ms, $ended, updated_at FROM crawl WHERE id = 1
+                    RETURNING id
+                    """, _transaction, ("$run", _run), ("$startedAt", stretch.StartedAt.ToUnixTimeMilliseconds()), ("$ms", stretch.CrawledMs),
+                    ("$ended", stretch.Ended ? 1 : 0))!;
+            }
+        }
+
+        if (_crawlStamped)
+        {
+            PassStampOn(_transaction);
+            _crawlStamped = false;
+        }
+    }
+
+    /// <summary>
+    /// The last stretch stored takes the crawl row's stamp as it stands, whichever run it's of (a run paused before it
+    /// began has none of its own): this writer moved the stamp, and what it crawls it times, so no run has gone untimed.
+    /// </summary>
+    private void PassStampOn(SqliteTransaction? transaction) =>
+        RunTime("UPDATE run_time SET crawl_updated_at = (SELECT updated_at FROM crawl WHERE id = 1) WHERE id = (SELECT MAX(id) FROM run_time)", transaction);
+
+    private object? RunTime(string sql, SqliteTransaction? transaction, params (string Name, object Value)[] parameters)
+    {
+        using var command = _connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value);
+        }
+
+        var result = command.ExecuteScalar();
+        return result is DBNull ? null : result;
     }
 
     private void BeginTransaction()
@@ -1038,6 +1185,8 @@ internal sealed class CrawlWriter : IAsyncDisposable
         try
         {
             _statements.UpdateCrawlStatus(CrawlStatus.Failed, false, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            _crawlStamped = true;
+            StoreRunTime();
         }
         catch (Exception exception) when (exception is SqliteException or InvalidOperationException)
         {

@@ -110,6 +110,41 @@ public sealed class GridServingTests(GridSidecar grid) : IClassFixture<GridSidec
         Assert.Contains(field, refused["errors"]!.AsObject().Select(error => error.Key));
     }
 
+    /// <summary>
+    /// The crawl's headline numbers are read as a grid is, in a read slot with its request's token, and kept with the
+    /// grids' counts: read once while the crawl stands still, and again once a run has stamped it.
+    /// </summary>
+    [Fact]
+    public async Task TheStatsAreReadAsAGridIsAndKept()
+    {
+        var path = string.Empty;
+        var id = grid.Copy(copy => path = copy);
+        var data = Sidecar.Host.Services.GetRequiredService<GridData>();
+        var reads = 0;
+        data.ReadStarting = _ => Interlocked.Increment(ref reads);
+        try
+        {
+            var expected = CrawlStatsReader.Read(path);
+            var stats = await Sidecar.GetJsonAsync($"api/crawls/{id}/stats");
+            Assert.Equal(1, Volatile.Read(ref reads));
+            Assert.Equal((expected.UrlCount, expected.LinkCount, expected.HtmlPageCount, expected.UnlinkedPageCount, expected.IndexablePageCount),
+                ((long)stats["urlCount"]!, (long)stats["linkCount"]!, (long)stats["htmlPageCount"]!, (long)stats["unlinkedPageCount"]!, (long)stats["indexablePageCount"]!));
+            Assert.True(expected.UnlinkedPageCount > 0 && expected.NonIndexableReasons.Count > 0);
+            Assert.Equal(expected.NonIndexableReasons.Values.Sum(), stats["nonIndexableReasons"]!.AsObject().Sum(reason => (long)reason.Value!));
+            Assert.Equal(expected.Outcomes.Values.Sum(), stats["outcomes"]!.AsObject().Sum(outcome => (long)outcome.Value!));
+
+            // Changed behind the crawl's back, its stamp as it was: the numbers kept are given again.
+            Change(path, "DELETE FROM urls WHERE id = (SELECT MAX(id) FROM urls)");
+            Assert.Equal(expected.UrlCount, (long?)(await Sidecar.GetJsonAsync($"api/crawls/{id}/stats"))["urlCount"]);
+            Change(path, "UPDATE crawl SET updated_at = updated_at + 1000");
+            Assert.Equal(expected.UrlCount - 1, (long?)(await Sidecar.GetJsonAsync($"api/crawls/{id}/stats"))["urlCount"]);
+        }
+        finally
+        {
+            data.ReadStarting = null;
+        }
+    }
+
     [Fact]
     public async Task StoredValuesThisEngineDoesntKnowAreNull()
     {

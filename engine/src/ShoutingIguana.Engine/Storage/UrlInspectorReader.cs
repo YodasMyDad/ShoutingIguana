@@ -83,6 +83,7 @@ public static class UrlInspectorReader
         {
             Id = urlId,
             Url = url,
+            UrlLength = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? UrlRules.MeasuredLength(uri) : null,
             IsInternal = self.IsInternal,
             Type = answered && contentType is not null ? ResourceTypes.OfContentType(contentType) : ResourceTypes.OfUrl(url),
             Discovery = new UrlDiscovery(
@@ -99,6 +100,7 @@ public static class UrlInspectorReader
             Content = facts is null ? null : Content(facts),
             Limits = limits,
             Links = links,
+            LinkTotals = new UrlLinkTotals(TotalLinks(context, LinkDirection.Inlinks, urlId), TotalLinks(context, LinkDirection.Outlinks, urlId)),
             Headers = details?.Headers ?? [],
             StructuredData = facts is null ? [] : [.. facts.JsonLd.Select(StructuredData)],
             Hreflang = facts is null ? [] : [.. facts.Hreflangs.Select(entry => Hreflang(context, entry))],
@@ -142,7 +144,7 @@ public static class UrlInspectorReader
         var where = $"l.{near} = $id AND l.{far} <> $id{ofKinds}";
         KeyValuePair<string, object>[] parameters = [new("$id", urlId)];
         var hash = $"{direction}|{urlId}|{ofKinds}";
-        var total = context.Count($"links|{hash}", () => Count(context, direction, urlId, kinds, ofKinds));
+        var total = kinds.Count == 0 ? TotalLinks(context, direction, urlId) : context.Count($"links|{hash}", () => Count(context, direction, urlId, kinds, ofKinds));
 
         // Where the page starts: after a cursor's link; at an offset found on the index alone, when every kind is listed, or
         // when some kinds of link to the URL are, on the index of each kind's (merged, in crawl order); otherwise, for some
@@ -175,7 +177,7 @@ public static class UrlInspectorReader
             }
         }
 
-        var (status, indexable, fetched, join) = OtherEnd(context);
+        var (status, indexable, fetched, outcome, join) = OtherEnd(context);
         var sourceNofollow = direction == LinkDirection.Inlinks ? "COALESCE(src.is_nofollow, 0)" : "$selfNofollow";
 
         var order = reverse ? "DESC" : "ASC";
@@ -186,7 +188,7 @@ public static class UrlInspectorReader
         {
             KeyValuePair<string, object>[] values = [.. parameters, new("$start", start), new("$selfNofollow", SelfNofollow(context, urlId) ? 1 : 0)];
             using var command = context.Command($"""
-                SELECT o.id, o.url, l.kind, l.text, l.position, l.flags, l.fragment, {status}, {indexable}, {fetched}, {sourceNofollow}, l.rowid
+                SELECT o.id, o.url, l.kind, l.text, l.position, l.flags, l.fragment, {status}, {indexable}, {fetched}, {sourceNofollow}, l.rowid, {outcome}
                 FROM {links}
                 JOIN urls o ON o.id = l.{far}
                 {join}
@@ -212,7 +214,8 @@ public static class UrlInspectorReader
                     reader.IsDBNull(6) ? null : reader.GetString(6),
                     Int32OrNull(reader, 7),
                     reader.IsDBNull(8) ? null : reader.GetBoolean(8),
-                    !reader.IsDBNull(9) && reader.GetBoolean(9)), reader.GetInt64(11)));
+                    !reader.IsDBNull(9) && reader.GetBoolean(9),
+                    Known<UrlOutcome>(reader, 12)), reader.GetInt64(11)));
             }
         }
 
@@ -285,22 +288,26 @@ public static class UrlInspectorReader
 
     /// <summary>
     /// The other end of a link as the grids show it: its status, whether it can be indexed, whether it was fetched; from
-    /// the URL summary, or without one from the crawl's tables, as the URL grid's columns read them.
+    /// the URL summary, or without one from the crawl's tables, as the URL grid's columns read them. And what became of
+    /// the request for it, which only its response says, with or without the summary, as the URL grid's outcome column
+    /// reads it.
     /// </summary>
-    private static (string Status, string Indexable, string Fetched, string Join) OtherEnd(GridReadContext context)
+    private static (string Status, string Indexable, string Fetched, string Outcome, string Join) OtherEnd(GridReadContext context)
     {
+        var notChecked = AnalysisReader.NOT_CHECKED.Replace("r.", "orr.", StringComparison.Ordinal);
+        var outcome = $"CASE WHEN orr.url_id IS NULL THEN NULL WHEN {notChecked} THEN {(int)UrlOutcome.NotChecked} ELSE orr.outcome END";
         if (context.Mode == GridMode.Summary)
         {
-            return ("os.status_code", "os.indexable", "(os.status_code IS NOT NULL OR os.indexability_reason IS NOT NULL)", "LEFT JOIN url_summary os ON os.url_id = o.id");
+            return ("os.status_code", "os.indexable", "(os.status_code IS NOT NULL OR os.indexability_reason IS NOT NULL)", outcome,
+                "LEFT JOIN url_summary os ON os.url_id = o.id LEFT JOIN responses orr ON orr.url_id = o.id");
         }
 
-        var notChecked = AnalysisReader.NOT_CHECKED.Replace("r.", "orr.", StringComparison.Ordinal);
         var fetched = $"(orr.url_id IS NOT NULL AND NOT {notChecked})";
         var reason = context.HasEffectiveIndexability ? "COALESCE(oe.indexability_reason, orr.indexability_reason)" : "orr.indexability_reason";
         var unread = $"(orr.outcome = {(int)FetchOutcome.Success} AND orr.is_html = 1 AND {reason} = 0 AND orr.word_count IS NULL)";
         var join = "LEFT JOIN responses orr ON orr.url_id = o.id" +
                    (context.HasEffectiveIndexability ? " LEFT JOIN effective_indexability oe ON oe.url_id = o.id" : string.Empty);
-        return ($"CASE WHEN {fetched} AND orr.status_code > 0 THEN orr.status_code END", $"CASE WHEN {fetched} AND NOT {unread} THEN {reason} = 0 END", fetched, join);
+        return ($"CASE WHEN {fetched} AND orr.status_code > 0 THEN orr.status_code END", $"CASE WHEN {fetched} AND NOT {unread} THEN {reason} = 0 END", fetched, outcome, join);
     }
 
     /// <summary>
@@ -449,7 +456,7 @@ public static class UrlInspectorReader
         }
 
         var tooLong = !loop && hops.Count == UrlTable.MAX_REDIRECT_HOPS && NextHop(context, current) is not null;
-        return new RedirectChain(hops, new UrlTarget(current.Id, current.Url, current.Status), loop, tooLong);
+        return new RedirectChain(hops, new UrlTarget(current.Id, current.Url, current.Status, current.Shown), loop, tooLong);
     }
 
     /// <summary>
@@ -509,7 +516,7 @@ public static class UrlInspectorReader
             answered = new IndexabilityTest(IndexabilityTestKind.Answered, refresh is null ? TestOutcome.Pass : TestOutcome.Fail)
             {
                 StatusCode = self.Status,
-                MetaRefresh = refresh is null ? null : new UrlTarget(refresh.Id, refresh.Url, refresh.Status)
+                MetaRefresh = refresh is null ? null : new UrlTarget(refresh.Id, refresh.Url, refresh.Status, refresh.Shown)
             };
         }
         else
@@ -582,7 +589,7 @@ public static class UrlInspectorReader
         {
             return new IndexabilityTest(IndexabilityTestKind.Canonical, TestOutcome.Pass)
             {
-                Canonical = new UrlTarget(self.Id, self.Url, self.Status), CanonicalUrl = target
+                Canonical = new UrlTarget(self.Id, self.Url, self.Status, self.Shown), CanonicalUrl = target
             };
         }
 
@@ -595,7 +602,7 @@ public static class UrlInspectorReader
         var ignored = Redirects(context, named).Final.Id == self.Id || IsBrokenThroughRedirects(context, named);
         return new IndexabilityTest(IndexabilityTestKind.Canonical, ignored ? TestOutcome.Pass : TestOutcome.Fail)
         {
-            Canonical = new UrlTarget(named.Id, named.Url, named.Status), CanonicalUrl = target
+            Canonical = new UrlTarget(named.Id, named.Url, named.Status, named.Shown), CanonicalUrl = target
         };
     }
 
@@ -721,7 +728,7 @@ public static class UrlInspectorReader
             using var command = context.Command("SELECT id FROM urls WHERE url = $url", [new("$url", url)]);
             if (command.ExecuteScalar() is long id && Inspected(context, (int)id) is { } found)
             {
-                target = new UrlTarget(found.Id, found.Url, found.Status);
+                target = new UrlTarget(found.Id, found.Url, found.Status, found.Shown);
             }
         }
 
@@ -789,9 +796,24 @@ public static class UrlInspectorReader
     /// the analysis doesn't audit (Cloudflare's /cdn-cgi/ ones), which only parsed pages have: so a home page's two
     /// million are counted without reading each link for its kind.
     /// </summary>
+    /// <summary>
+    /// Every link to or from a URL, of every kind, its links to itself left out: counted once and kept, for the inspector's
+    /// totals and for its lists of links alike.
+    /// </summary>
+    private static long TotalLinks(GridReadContext context, LinkDirection direction, int urlId) =>
+        context.Count($"links|{direction}|{urlId}|", () => Count(context, direction, urlId, [], string.Empty));
+
     private static long Count(GridReadContext context, LinkDirection direction, int urlId, IReadOnlyList<LinkKind> kinds, string ofKinds)
     {
         KeyValuePair<string, object>[] parameters = [new("$id", urlId)];
+
+        // Every link to the URL, where the link summary counts the crawl as it stands: it has them by target, a page's
+        // links to itself apart, in a few rows, where the links' index has an entry a link (a home page's million).
+        if (direction == LinkDirection.Inlinks && kinds.Count == 0 && context.LinkSummary is not null)
+        {
+            return context.Scalar("SELECT COALESCE(SUM(links), 0) FROM link_summary WHERE to_id = $id AND self = 0", parameters);
+        }
+
         if (direction == LinkDirection.Inlinks && kinds is [LinkKind.Hyperlink] && context.Mode == GridMode.Summary)
         {
             var audited = context.Scalar("SELECT COALESCE((SELECT inlinks FROM url_summary WHERE url_id = $id), 0)", parameters);

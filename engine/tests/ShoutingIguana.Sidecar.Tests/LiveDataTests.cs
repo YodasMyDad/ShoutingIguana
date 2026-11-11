@@ -85,6 +85,21 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1 AND u.source <> 3"),
             (long?)last["internalFetched"]);
 
+        // The URLs crawled, as the URL grid counts them, and the part of the figures that is the crawler's own probe of
+        // the site's https:// version, which doesn't answer: one network error, said apart, not the site's.
+        Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses WHERE error IS NULL OR error NOT LIKE 'Not checked%'"), (long?)last["crawled"]);
+        var grid = await _sidecar.PostAsync($"api/crawls/{id}/urls", JsonNode.Parse("""{"filters":[{"column":"fetched","op":"is","value":true}],"limit":1}"""));
+        Assert.Equal((long?)last["crawled"], (long?)grid.Body!["matching"]);
+        var probes = last["siteVersions"]!;
+        Assert.Equal(1, (long?)probes["fetched"]);
+        Assert.Equal((1L, 1L), ((long)probes["statusClasses"]!["noResponse"]!, (long)probes["noResponse"]!["networkError"]!));
+        Assert.Empty(probes["statusCodes"]!.AsObject());
+        Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.source = 3 AND r.status_code IS NULL"),
+            (long?)probes["statusClasses"]!["noResponse"]);
+        var probeFree = await _sidecar.PostAsync($"api/crawls/{id}/urls", JsonNode.Parse(
+            """{"filters":[{"column":"statusClass","op":"in","values":["noResponse"]},{"column":"source","op":"notIn","values":["siteVersion"]}],"limit":1}"""));
+        Assert.Equal((long)last["statusClasses"]!["noResponse"]! - (long)last["noResponse"]!["notChecked"]! - 1, (long?)probeFree.Body!["matching"]);
+
         // The analysis, phase by phase in order, each to its end, all between "analyzing" and the crawl's return to "completed".
         var analyzing = seen.FindLastIndex(sent => sent.Name == "crawl" && (string?)sent.Data["crawlId"] == id && (string?)sent.Data["status"] == "analyzing");
         var analysed = seen.FindLastIndex(sent => sent.Name == "crawl" && (string?)sent.Data["crawlId"] == id && (string?)sent.Data["status"] == "completed");
@@ -124,6 +139,21 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses"), (long?)points[^1]!["fetched"]);
         Assert.Equal((long?)last["internalFound"], (long?)points[^1]!["internalFound"]);
         Assert.All(points, point => Assert.Null(point!["discovered"]));
+
+        // The time spent crawling: never more than the run's time while it ran, and where its last progress put it, in the
+        // library and in the history, whose one run it is, in one stretch, from the crawl's start to its end.
+        Assert.All(reports, report => Assert.InRange((long)report["crawlingMs"]!, 0, (long)report["elapsedMs"]! + 100));
+        var item = await _sidecar.GetJsonAsync($"api/crawls/{id}");
+        Assert.True((long)last["crawlingMs"]! > 0);
+        Assert.Equal((long?)last["crawlingMs"], (long?)item["crawlingMs"]);
+        Assert.Equal((long?)item["crawlingMs"], (long?)history["crawlingMs"]);
+        var run = Assert.Single(history["runs"]!.AsArray())!;
+        Assert.Equal((long?)item["crawlingMs"], (long?)run["crawlingMs"]);
+        var stretch = Assert.Single(run["crawling"]!.AsArray())!;
+        Assert.Equal(((string?)run["startedAt"], (string?)run["endedAt"]), ((string?)stretch["from"], (string?)stretch["to"]));
+        Assert.Equal((long)run["crawlingMs"]!, (long)(At("to", stretch) - At("from", stretch)).TotalMilliseconds);
+        Assert.InRange(At("startedAt", run), At("startedAt", item), At("finishedAt", item));
+        Assert.InRange(At("endedAt", run), At("startedAt", run), At("finishedAt", item).AddSeconds(1));
     }
 
     /// <summary>
@@ -174,8 +204,26 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.InRange((long)earlier[^1]!["fetched"]!, 1, firstRun);
         AssertRises(points);
 
+        // Two runs, the second going on: its end isn't known yet, and the time between the two is in neither. The time
+        // spent crawling is theirs added up, as the progress event has it, less than the clock time since the start.
+        var runs = history["runs"]!.AsArray();
+        Assert.Equal(2, runs.Count);
+        Assert.NotNull(runs[0]!["endedAt"]);
+        Assert.Null(runs[1]!["endedAt"]);
+        Assert.True(At("startedAt", runs[1]!) > At("endedAt", runs[0]!));
+        Assert.Equal((long?)history["crawlingMs"], runs.Sum(run => (long)run!["crawlingMs"]!));
+        var progress = await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["crawlingMs"] >= (long)history["crawlingMs"]!);
+        Assert.True((long)progress["crawlingMs"]! >= (long)runs[0]!["crawlingMs"]! + (long)progress["elapsedMs"]! - 100, progress.ToJsonString());
+
         Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
         await events.CrawlStatusAsync(id, "stopped");
+
+        // Stopped: both runs have ended, and the library's time is what the history's runs add up to.
+        history = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");
+        runs = history["runs"]!.AsArray();
+        Assert.All(runs, run => Assert.NotNull(run!["endedAt"]));
+        Assert.Equal((long?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["crawlingMs"], runs.Sum(run => (long)run!["crawlingMs"]!));
+        Assert.True((long)history["crawlingMs"]! < (At("endedAt", runs[1]!) - At("startedAt", runs[0]!)).TotalMilliseconds);
     }
 
     /// <summary>A crawl made by another program (the CLI) has its alerts in its file; one from before they were kept has none.</summary>
@@ -328,6 +376,17 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.Equal((long?)classes["noResponse"], noResponse.Sum(entry => (long)entry.Value!));
         Assert.Equal((long?)progress["robotsDisallowed"], (long?)noResponse["robotsDisallowed"]);
         Assert.InRange((long)progress["internalFetched"]!, 0, (long)progress["internalFound"]!);
+
+        // The URLs crawled are those fetched but for the ones never asked; the probes' part is within each figure, and adds up too.
+        Assert.Equal((long)progress["fetched"]! - (long)noResponse["notChecked"]!, (long?)progress["crawled"]);
+        var probes = progress["siteVersions"]!;
+        var probeClasses = probes["statusClasses"]!.AsObject();
+        Assert.Equal(classes.Select(entry => entry.Key), probeClasses.Select(entry => entry.Key));
+        Assert.Equal((long?)probes["fetched"], probeClasses.Sum(entry => (long)entry.Value!));
+        Assert.All(probeClasses, entry => Assert.InRange((long)entry.Value!, 0, (long)classes[entry.Key]!));
+        Assert.Equal(noResponse.Select(entry => entry.Key), probes["noResponse"]!.AsObject().Select(entry => entry.Key));
+        Assert.Equal((long?)probeClasses["noResponse"], probes["noResponse"]!.AsObject().Sum(entry => (long)entry.Value!));
+        Assert.All(probes["statusCodes"]!.AsObject(), entry => Assert.InRange((long)entry.Value!, 1, (long)progress["statusCodes"]![entry.Key]!));
     }
 
     private static void AssertRises(JsonArray points) =>
@@ -337,7 +396,9 @@ public sealed class LiveDataTests : IAsyncLifetime
             Assert.True((long)pair.Second!["fetched"]! >= (long)pair.First!["fetched"]!);
         });
 
-    private static DateTime At(JsonNode point) => DateTime.Parse((string)point["at"]!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+    private static DateTime At(JsonNode point) => At("at", point);
+
+    private static DateTime At(string name, JsonNode from) => DateTime.Parse((string)from[name]!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     private async Task<JsonNode> StartAsync(JsonObject options)
     {

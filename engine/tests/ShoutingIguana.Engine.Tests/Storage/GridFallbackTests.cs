@@ -65,6 +65,7 @@ public sealed class GridFallbackTests : IDisposable
         Assert.Equal(IndexabilityJudge.Crawl, inspected.Indexability.JudgedBy);
         Assert.True(inspected.Indexability.Indexable);
         Assert.Null(inspected.Links);
+        Assert.Equal(new UrlLinkTotals(Inlinks: 0, Outlinks: 3), inspected.LinkTotals);
         Assert.Null(inspected.Issues);
         Assert.Equal(3, UrlInspectorReader.ReadLinks(path, home, LinkDirection.Outlinks, new LinkQuery { Kinds = [LinkKind.Hyperlink] })!.Total);
 

@@ -10,6 +10,12 @@ public sealed record UrlDetail
 
     public required string Url { get; init; }
 
+    /// <summary>
+    /// The URL's length as the check for long URLs measures it (<see cref="Analysis.Rules.UrlRules.MeasuredLength"/>), to
+    /// set against <see cref="ContentLimits.MaxUrlLength"/>; null for a stored URL that isn't one.
+    /// </summary>
+    public int? UrlLength { get; init; }
+
     public required bool IsInternal { get; init; }
 
     /// <summary>By the content type of a successful response, otherwise by the extension, as the checks tell files from pages.</summary>
@@ -31,6 +37,9 @@ public sealed record UrlDetail
 
     /// <summary>From the URL summary; null without one (<see cref="Summary"/>).</summary>
     public UrlLinkCounts? Links { get; init; }
+
+    /// <summary>Every link to the URL and from it, of every kind: there with or without a URL summary.</summary>
+    public required UrlLinkTotals LinkTotals { get; init; }
 
     /// <summary>As stored: names lowercased, for internal URLs only.</summary>
     public required IReadOnlyList<ResponseHeader> Headers { get; init; }
