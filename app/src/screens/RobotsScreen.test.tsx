@@ -349,6 +349,54 @@ describe('robots.txt: one origin’s file', () => {
     expect(screen.queryByText(/Line 999 blocked no URLs/)).toBeNull();
   });
 
+  it('reaches the file’s search with Ctrl+F from anywhere on the page, and from the palette’s command', async () => {
+    const uninstall = installKeyboard();
+    sidecar();
+    await open(FILE);
+    const search = await screen.findByRole('searchbox', { name: 'Search the file' });
+    const grid = await screen.findByRole('grid', { name: 'Blocked URLs' });
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
+    const press = (from: HTMLElement) => fireEvent.keyDown(from, { key: 'f', code: 'KeyF', ctrlKey: true });
+    // From the blocked URLs, beside the file.
+    act(() => grid.focus());
+    expect(grid).toHaveFocus();
+    press(grid);
+    await waitFor(() => expect(search).toHaveFocus());
+    // From the page's title, and from nowhere in particular.
+    const title = screen.getByRole('heading', { level: 1 });
+    act(() => title.focus());
+    press(title);
+    await waitFor(() => expect(search).toHaveFocus());
+    act(() => search.blur());
+    press(document.body);
+    await waitFor(() => expect(search).toHaveFocus());
+    // What was searched for last is selected, to type over.
+    fireEvent.change(search, { target: { value: 'admin' } });
+    act(() => grid.focus());
+    press(grid);
+    await waitFor(() => expect(search).toHaveFocus());
+    expect([(search as HTMLInputElement).selectionStart, (search as HTMLInputElement).selectionEnd]).toEqual([0, 5]);
+    // The palette lists it, and running it from there goes to the field too.
+    const command = commands.get('robots.search');
+    expect(command).toMatchObject({ title: 'Search the file', group: 'robots.txt', keys: ['mod+f'] });
+    act(() => grid.focus());
+    act(() => void commands.run('robots.search'));
+    await waitFor(() => expect(search).toHaveFocus());
+    uninstall();
+  });
+
+  it('has no search to go to on an origin with no file to show', async () => {
+    sidecar({
+      files: { [SITE]: { ...TEST_FILE, state: 'missing', statusCode: 404, bytes: null, lines: [], blocked: 0 } },
+      blocked: {},
+    });
+    await open(FILE);
+    await screen.findByRole('heading', { name: 'No file to show' });
+    const command = commands.get('robots.search');
+    expect(command && commands.isEnabled(command)).toBe(false);
+    expect(commands.run('robots.search')).toBe(false);
+  });
+
   it('copies the file as it is from its button', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });

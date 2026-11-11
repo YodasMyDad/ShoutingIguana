@@ -137,8 +137,32 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   // one the crawl hasn't come to yet): there's no file on the page, so only the way back to the list can run.
   const missing = isProblem(file.error, 'origin-not-found') || isProblem(file.error, 'invalid-query');
 
+  /**
+   * The file's search is asked for from somewhere on the page (Ctrl+F in the blocked URLs, on the title; the
+   * palette's "Search the file"): its field takes focus once it's there, and the request is then met. With focus in
+   * the file's pane the pane takes the key itself, as it does in the inspector's Source.
+   */
+  const [searchRequested, setSearchRequested] = useState(false);
+  const searchFocused = useCallback(() => {
+    setSearchRequested(false);
+    // As Ctrl+F does in the pane: what was searched for last is selected, to type over.
+    if (document.activeElement instanceof HTMLInputElement) document.activeElement.select();
+  }, []);
+  const searchable = (data?.lines.length ?? 0) > 0;
+
   useCommands(
     () => [
+      {
+        id: 'robots.search',
+        title: 'Search the file',
+        group: 'robots.txt',
+        keys: ['mod+f'],
+        inInputs: true,
+        keywords: ['find', 'robots.txt'],
+        // Only a file with text has a search to go to.
+        enabled: () => searchable,
+        run: () => setSearchRequested(true),
+      },
       { id: 'robots.list', title: 'Show every origin’s robots.txt', group: 'robots.txt', run: toList },
       {
         id: 'robots.copyFile',
@@ -171,7 +195,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
         run: () => narrow({ by: 'none' }),
       },
     ],
-    [data, narrowing, blockedCount, copying, missing, crawlId, origin, navigate],
+    [data, narrowing, blockedCount, copying, missing, searchable, crawlId, origin, navigate],
   );
 
   const back = (
@@ -284,6 +308,8 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
               text={text}
               chosenLine={markedLine(narrowing, cursor)}
               onLine={(line) => narrow({ by: 'line', line })}
+              focusSearch={searchRequested}
+              onSearchFocused={searchFocused}
             />
           </Card>
           <Card
@@ -321,6 +347,8 @@ function FilePane({
   text,
   chosenLine,
   onLine,
+  focusSearch,
+  onSearchFocused,
 }: {
   file: RobotsFile | undefined;
   error: unknown;
@@ -330,6 +358,9 @@ function FilePane({
   text: string;
   chosenLine: number | null;
   onLine: (line: number) => void;
+  /** The search field is asked to take focus (Ctrl+F from elsewhere on the page, the palette). */
+  focusSearch: boolean;
+  onSearchFocused: () => void;
 }) {
   // The viewer is a chunk of its own (CodeMirror), shared with the inspector's HTML source.
   const viewer = useSourceViewer();
@@ -373,6 +404,8 @@ function FilePane({
       lineMarks={marks}
       chosenLine={chosenLine}
       onLineAction={onLine}
+      focusSearch={focusSearch}
+      onSearchFocused={onSearchFocused}
       meta={
         <>
           <span className="figures">{formatCountOf(file.lines.length, 'line')}</span>
