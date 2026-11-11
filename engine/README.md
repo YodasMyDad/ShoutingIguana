@@ -883,6 +883,12 @@ is the crawler's own probes) four runs on the same machine, still shared, measur
 pages/s), a 188–194 MB peak with no growth (−9 to 0 MB), an 11.4, 11.8, 12.2 and 18.1 s analysis peaking at
 253–327 MB, and a 478–495 MB file: all within the spread of the runs before it.
 
+With the score (one more cross-page rule, the score worked out as the analysis commits, five more columns of the
+analysis row; nothing in the crawl itself changed) one run on the same machine, heavily shared at the time (the
+crawl's pace fell to a fifth for stretches of it), measured a 79 s crawl (1,273 pages/s), a 198 MB peak with no growth
+(−15 MB), a 22.8 s analysis peaking at 261 MB, and a 479 MB file. The analysis of a 100k crawl, run back to back
+before and after the score on copies of one file, took 12.9 s both times.
+
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the
 network and your rate settings, not by the crawler.

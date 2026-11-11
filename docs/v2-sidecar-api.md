@@ -2073,3 +2073,13 @@ a new field; nothing is taken away. Each has its own tests.
 Nothing here changed what a crawl stores, so the crawl's schema version is as it was, and either engine reads and
 continues either file. An analysis of the 100k development crawl took 12.9 s before and 12.9 s now (a second analysis
 of each copy, back to back; the first of each, with other work loading the machine, 23.3 s and 20.7 s).
+
+**After the score**, on the same machine, with other agents' builds and benchmarks loading it throughout: the
+benchmark, run once, crawled its 100,000 pages in 79 s (36 to 58 s on a quieter machine; its pace fell to a fifth for
+stretches, and nothing in the crawl changed), peaked at 198 MB with no growth (−15 MB over the crawl), analysed in
+22.8 s, and found every planted issue and nothing else, `site-hidden-from-search` among the checks that must stay
+silent. `si readbench --gate` on that crawl passed every class on its second run (`text` 75 ms against 190, `stats`
+108 ms against 350, `stats-pass` 207 ms against 600, the links grid slowest read from the link summary 120 ms against
+200). On its first, with the machine busier, one read alone was over its gate: a regular expression over every title,
+219 ms against 190. Repeated by itself three times it took 94 to 102 ms, as it did for the engine before the score on
+a 100k crawl of its own (71 to 124 ms): the load, not the change, and no read was changed here.
