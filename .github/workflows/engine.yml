@@ -76,6 +76,17 @@ jobs:
           dotnet src/ShoutingIguana.Cli/bin/Release/net10.0/si.dll readbench bench.sicrawl
           --runs 20 --gate --json readbench.json
 
+      # A smaller crawl with the links grid read all the while, a read always part-way through the file, as the Links
+      # screen's reads of a running crawl are. SQLite can then never start the crawl's write-ahead log again by itself,
+      # and the log grew by everything the crawl wrote, to more than the file. The crawl's writer folds it in once it
+      # passes 64 MB: this fails if the log passes twice that, if a read of the links fails, or if the crawl whose log
+      # was folded under it misses a planted issue. No memory limits: the reads' memory is the benchmark's own.
+      - name: Crawl with the links grid read all the while
+        run: >
+          dotnet src/ShoutingIguana.Cli/bin/Release/net10.0/si.dll bench
+          --pages 40000 --concurrency 16 --read-links --max-log-mb 128
+          --json bench-read-links.json
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -83,3 +94,4 @@ jobs:
           path: |
             engine/bench.json
             engine/readbench.json
+            engine/bench-read-links.json
