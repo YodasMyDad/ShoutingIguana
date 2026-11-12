@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { SlidersHorizontal } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import { crawlOptionDefaultsQuery, crawlOptionsQuery, queryKeys } from '../api/queries';
@@ -254,6 +254,13 @@ function NewCrawlForm({
     [mode, options, everyTime],
   );
 
+  // Ctrl+Enter from anywhere in the form, before a control there takes Enter for itself (a checkbox prevents it).
+  const startOnKey = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    event.preventDefault();
+    if (!event.repeat) void start();
+  };
+
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     void start();
@@ -292,6 +299,7 @@ function NewCrawlForm({
     <form
       ref={rootRef}
       onSubmit={submit}
+      onKeyDownCapture={startOnKey}
       noValidate
       className="flex flex-col gap-6"
       aria-label={mode === 'simple' ? 'Check a website' : 'New crawl'}

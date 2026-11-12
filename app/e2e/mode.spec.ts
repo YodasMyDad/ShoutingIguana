@@ -57,8 +57,9 @@ test('Ctrl+Shift+A switches, from a text field too', async ({ page }) => {
 test('the palette switches, and lists only what works in the mode', async ({ page }) => {
   const crawl = await seededCrawl();
   await page.goto(`/crawls/${crawl.id}/overview`);
+  await expect(sidebar(page).getByRole('link', { name: /^Summary/ })).toBeVisible();
   await page.keyboard.press('Control+K');
-  const palette = page.getByRole('dialog');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
   await palette.getByRole('combobox').fill('go to');
   await expect(palette.getByRole('option', { name: /Go to Summary/ })).toBeVisible();
   await expect(palette.getByRole('option', { name: /Go to URLs/ })).toHaveCount(0);
@@ -115,12 +116,10 @@ test('a switch shows its other view within 100 ms', async ({ page }) => {
   }
   timings.sort((a, b) => a - b);
   const median = timings[Math.floor(timings.length / 2)] ?? 0;
-  test
-    .info()
-    .annotations.push({
-      type: 'switch-ms',
-      description: `median ${median.toFixed(1)}, max ${timings.at(-1)?.toFixed(1)}`,
-    });
+  test.info().annotations.push({
+    type: 'switch-ms',
+    description: `median ${median.toFixed(1)}, max ${timings.at(-1)?.toFixed(1)}`,
+  });
   console.warn(`mode switch to visible: median ${median.toFixed(1)} ms, max ${(timings.at(-1) ?? 0).toFixed(1)} ms`);
   expect(median).toBeLessThan(100);
 });

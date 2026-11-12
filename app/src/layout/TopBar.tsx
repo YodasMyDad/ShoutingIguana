@@ -264,15 +264,20 @@ function ControlButton({
 
 /**
  * Search and the palette (Ctrl+K). The field, with its words and keys; in Simple, and in Advanced once the bar is short
- * of room (step 3), its icon. Either way it's named "Search or run a command", with the keys in its tooltip.
+ * of room (step 3), its icon. Either way it's named for its words, with the keys in its tooltip.
  */
 function SearchButton({ iconOnly }: { iconOnly: boolean }) {
   return (
-    <Tooltip content="Search or run a command" chord="mod+k" triggerName="Search or run a command">
+    <Tooltip
+      content="Search or run a command"
+      chord="mod+k"
+      triggerName={iconOnly ? 'Search or run a command' : 'Search or run a command…'}
+    >
       <button
         type="button"
         onClick={() => setOverlay('palette')}
-        aria-label="Search or run a command"
+        // Its words name it; as its icon (Simple), it's named for them.
+        aria-label={iconOnly ? 'Search or run a command' : undefined}
         aria-keyshortcuts={ariaKeyShortcut(parseChord('mod+k'), isMac)}
         data-icon-only={iconOnly ? '' : undefined}
         className={clsx(
@@ -285,9 +290,8 @@ function SearchButton({ iconOnly }: { iconOnly: boolean }) {
         <Icon icon={Search} size="sm" />
         {iconOnly ? null : (
           <>
-            <span aria-hidden="true" className="flex-1 truncate text-left group-data-give-3/topbar:hidden">
-              Search or run a command…
-            </span>
+            {/* Its name: short of room (step 3), read but not shown. */}
+            <span className="flex-1 truncate text-left group-data-give-3/topbar:sr-only">Search or run a command…</span>
             <span className="flex group-data-give-3/topbar:hidden">
               <Kbd chord="mod+k" size="sm" aria-hidden />
             </span>

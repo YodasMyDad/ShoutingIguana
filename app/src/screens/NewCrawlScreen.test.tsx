@@ -136,6 +136,15 @@ describe('New crawl in Simple', () => {
     });
   });
 
+  it('starts on Ctrl+Enter from a control that takes Enter for itself, a checkbox', async () => {
+    sidecar();
+    const router = await open('/new?url=https://example.com/', 'simple');
+    const box = await screen.findByRole('checkbox', { name: 'Images and other files' });
+    box.focus();
+    fireEvent.keyDown(box, { key: 'Enter', code: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/overview`));
+  });
+
   it('saves the choices as defaults, without secrets, when asked to use them every time', async () => {
     const transport = sidecar();
     await open('/new?url=https://example.com/', 'simple');

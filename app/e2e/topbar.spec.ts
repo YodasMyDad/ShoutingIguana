@@ -76,7 +76,7 @@ async function expectNeverGone(page: Page, live: boolean) {
   const bar = page.getByRole('banner');
   await expect(bar.getByRole('button', { name: 'Back' })).toBeVisible();
   await expect(bar.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]')).toBeVisible();
-  await expect(bar.getByRole('button', { name: 'Search or run a command' })).toBeVisible();
+  await expect(bar.getByRole('button', { name: /^Search or run a command/ })).toBeVisible();
   await expect(bar.getByRole('radio', { name: 'Simple' })).toBeVisible();
   await expect(bar.getByRole('radio', { name: 'Advanced' })).toBeVisible();
   if (live) {

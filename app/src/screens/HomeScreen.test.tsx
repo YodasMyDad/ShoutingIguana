@@ -30,7 +30,7 @@ describe('Home’s URL field', () => {
 
   it('has a palette button named by its words, its keys given as aria-keyshortcuts', async () => {
     await open(() => json([]));
-    const palette = await screen.findByRole('button', { name: 'Search or run a command' });
+    const palette = await screen.findByRole('button', { name: 'Search or run a command…' });
     expect(palette).toHaveAttribute('aria-keyshortcuts', 'Control+K');
   });
 });
