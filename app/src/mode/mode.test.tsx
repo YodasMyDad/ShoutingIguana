@@ -38,12 +38,17 @@ afterEach(() => {
 });
 
 describe('the mode', () => {
-  it('is Simple on a first start, and whatever was stored after that', () => {
+  it('is Simple on a first start, Advanced for preferences from before the mode, and whatever was stored after that', () => {
     expect(DEFAULT_SETTINGS.mode).toBe('simple');
+    // A first start: nothing stored.
     expect(readSettings(null).mode).toBe('simple');
-    expect(readSettings({ theme: 'dark' }).mode).toBe('simple');
+    expect(readSettings(undefined).mode).toBe('simple');
+    // Preferences from before the mode existed: someone who used the app as it was.
+    expect(readSettings({ theme: 'dark' }).mode).toBe('advanced');
+    expect(readSettings({}).mode).toBe('advanced');
+    expect(readSettings({ mode: 'simple' }).mode).toBe('simple');
     expect(readSettings({ mode: 'advanced' }).mode).toBe('advanced');
-    expect(readSettings({ mode: 'expert' }).mode).toBe('simple');
+    expect(readSettings({ mode: 'expert', theme: 'dark' }).mode).toBe('advanced');
   });
 });
 

@@ -75,7 +75,8 @@ function numberIn<T extends number | null>(
 
 /** Reads stored settings of any shape (or none) into valid ones. */
 export function readSettings(value: unknown): Settings {
-  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const hadSettings = typeof value === 'object' && value !== null;
+  const stored = hadSettings ? (value as Record<string, unknown>) : {};
   const lastViews: Record<string, string> = {};
   if (typeof stored.lastViewByCrawl === 'object' && stored.lastViewByCrawl !== null) {
     for (const [crawl, view] of Object.entries(stored.lastViewByCrawl).slice(-MAX_REMEMBERED_CRAWLS)) {
@@ -83,7 +84,9 @@ export function readSettings(value: unknown): Settings {
     }
   }
   return {
-    mode: oneOf(stored.mode, ['simple', 'advanced'], DEFAULT_SETTINGS.mode),
+    // Simple on a first start, with nothing stored. Preferences stored before the mode existed are someone who has
+    // used the app as it was, which is Advanced.
+    mode: oneOf(stored.mode, ['simple', 'advanced'], hadSettings ? 'advanced' : DEFAULT_SETTINGS.mode),
     theme: oneOf(stored.theme, ['system', 'light', 'dark'], DEFAULT_SETTINGS.theme),
     density: oneOf(stored.density, ['compact', 'standard', 'comfortable'], DEFAULT_SETTINGS.density),
     zoom: numberIn(stored.zoom, ZOOM_RANGE, DEFAULT_SETTINGS.zoom),
