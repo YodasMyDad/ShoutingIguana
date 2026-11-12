@@ -984,6 +984,15 @@ of the file and holds it for that one page only.
   first page on the 100k crawl at p95, whatever the text (one letter, forty characters, nothing matching), which E6
   measured against an index and left as it is ([Engine changes E6 made](#engine-changes-e6-made)). The palette's
   search as it's typed is [`/search`](#search-e6), which gives the same count.
+- **`linkEnds`** (E6) narrows the grid to the URLs at one end of the links a view of the links grid matches:
+  `{ "end": "from" | "to", "filters": [link filters], "search": "…" }`, where `filters` and `search` are the links
+  grid's own ([Links](#links-e3b)) and none of either means every link. `from` is the pages those links are on, `to`
+  the URLs they lead to. It narrows beside `filters` and `search`, as one more filter, and `matching` under it alone is
+  `total` of [`/links/ends`](#link-ends-e6) for the same links: the number a links view can state before it opens
+  "these pages in URLs". `/urls/facets`, a check's `/rows` and `/sitemaps/urls` take it too. Its errors are keyed
+  under it (`linkEnds.end`, `linkEnds.filters[0].column`), a link filter that needs the URL summary without one is
+  refused with `needs-analysis` as the links grid refuses it, and a cursor read under other links is refused on
+  `after`. What it costs is what the list of ends costs.
 - **`sort`** is up to 3 `{ column, desc }`, with unknown values last whichever the direction, and the URL's `id`
   breaking ties, in the last key's direction (so an index walked backwards needs no sort). The default is crawl order.
 - **The summary.** `summary` says whether the URL summary describes the crawl (see above), and `reason` why not:
@@ -1447,6 +1456,45 @@ value with the `filter` that selects it, as the URL grid's facets do:
 | `follow` | `followed`, `nofollow` and `notHyperlink` |
 | `to.statusClass` | The target's status class, as the URL grid's, and null (not fetched) |
 | `to.isInternal` | true (the site's own URL) and false |
+
+#### Link ends (E6)
+
+`POST /api/crawls/{id}/links/ends` lists the URLs at one end of the links a view matches, each once: the view's
+targets, or the pages its links are on, however many links the view holds. It is what "Copy the target URLs" reads
+for a view of more than a page of links, and what [`linkEnds`](#urls-e3a) narrows the URL grid to.
+
+```json
+{"end":"to","filters":[{"column":"kind","op":"in","values":["hyperlink"]},{"column":"to.statusClass","op":"in","values":["4xx"]}],
+ "offset":0,"limit":100}
+```
+
+```json
+{"end":"to","total":4572,"links":50318,"offset":0,
+ "rows":[{"id":212,"url":"https://www.example.com/old/","links":31}],
+ "summary":{"available":true,"reason":null}}
+```
+
+- **`end`** is `to` (the URLs the links lead to) or `from` (the pages they are on); it must be given. **`filters`** and
+  **`search`** are the links grid's, and none of either is every link. **`offset`** and **`limit`** (1 to 1,000,
+  default 100) page the list; there is no cursor, and a page past the end has no rows. The links grid's own `/links`
+  and `/links/facets` refuse `linkEnds` (`bad-request`): they take the filters themselves.
+- **`rows`** are in the order the crawl found the URLs (by `id`), each with **`links`**, how many of the view's links
+  have it at that end. **`total`** is how many URLs there are at that end, and is the URL grid's `matching` under the
+  same `linkEnds`; top-level **`links`** is the links the view matches, the links grid's `matching`. So the rows'
+  `links` add up to it.
+- **What it costs.** The targets come from what the links grid counts by target anyway: the link summary's rows where
+  it holds what the filters test (20 to 58 ms for the first page on the 100k crawl at p95: every link's 112,588
+  targets, the 4,572 targets of the hyperlinks to 4xx URLs), else the pass over the links that gives the view its
+  count. **The pages take a pass over every link**, as nothing counts links by the page they're on: once per set of
+  filters, kept as the view's other counts are, and split over connections as any pass is. On the 100k crawl's 5
+  million links that is 155 to 280 ms where the sidecar has read slots free, **inside the budget**, and 475 to 740 ms
+  on one connection (a two-core machine, every slot taken, a running crawl), **over it**; the same for the targets
+  of a view beyond the link summary (a text filter: 170 ms split, 505 to 565 on one). The URL grid narrowed to
+  either end costs the same, as it reads the same set. Not measured at 1M URLs: the pass grows with the links.
+- **While a crawl runs** an answer is of one moment of it, as the links grid's are: its rows, `total` and `links`
+  are of the links the crawl had then, and the URL grid narrowed within the same 2 s counts the same URLs.
+- Errors: `invalid-query` on `end`, `filters[…]`, `search`, `offset` and `limit`; `needs-analysis` for a filter that
+  needs the URL summary, without one.
 
 #### How the links are read
 
