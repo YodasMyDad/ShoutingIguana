@@ -526,12 +526,13 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
         ConcurrentDictionary<long, int> totals = new();
         ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers = new();
         ConcurrentDictionary<long, long> searched = new();
+        ConcurrentDictionary<(LinkEnd End, long Links), long> ended = new();
         var readers = Enumerable.Range(0, READERS).Select(reader => Task.Run(() =>
         {
             var reads = 0;
             for (var round = reader; !job.Completion.IsCompleted && wrong.Count < 20; round++)
             {
-                reads += ReadEverything(path, cache, round, wrong, totals, answers, searched);
+                reads += ReadEverything(path, cache, round, wrong, totals, answers, searched, ended);
             }
 
             return reads;
@@ -577,12 +578,23 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
             Assert.Equal((total, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE id <= {total} AND instr(lower(url), '{IN_URLS_ONLY}') > 0")), (total, matching));
         }
 
+        // And a view's ends: a moment with so many hyperlinks had the first so many of the file's, so how many pages they
+        // were on, and how many URLs they led to, the finished file still says.
+        Assert.True(ended.Count >= 6, $"The ends of the hyperlinks were listed at only {ended.Count} moments.");
+        foreach (var ((end, links), total) in ended)
+        {
+            var column = end == LinkEnd.From ? "from_id" : "to_id";
+            Assert.Equal((end, links, TestCrawls.Count(path, $"SELECT COUNT(DISTINCT {column}) FROM (SELECT {column} FROM links WHERE {TRUTHS["hyperlinks"]} ORDER BY rowid LIMIT {links})")),
+                (end, links, total));
+        }
+
         return folds;
     }
 
     /// <summary>One round of every read, each answer checked against itself; what's wrong is noted, and the reads counted.</summary>
     private static int ReadEverything(string path, ReadCache cache, int round, ConcurrentQueue<string> wrong, ConcurrentDictionary<long, int> totals,
-        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers, ConcurrentDictionary<long, long> searched)
+        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers, ConcurrentDictionary<long, long> searched,
+        ConcurrentDictionary<(LinkEnd End, long Links), long> ended)
     {
         var reads = 0;
         void Read(string what, Func<string?> read)
@@ -657,6 +669,35 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
                 Read($"{name}, by {sort.Column} from {matching / 2}", () => Wrong(Page(sorted with { Offset = (int)(matching / 2) }), sorted with { Offset = (int)(matching / 2) }));
                 Read($"{name}, by {sort.Column} by cursor", () => WrongWalk(Page, sorted));
             }
+        }
+
+        // A view's ends, as a list and as the URL grid narrowed to them: each answer's rows are what its counts say.
+        foreach (var end in new[] { LinkEnd.From, LinkEnd.To })
+        {
+            var hyperlinks = SETS[1].Filters;
+            Read($"the hyperlinks' ends ({end})", () =>
+            {
+                var ends = LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = hyperlinks, Limit = 1_000 }, cache);
+                if (ends.Rows.Count != Math.Min(1_000, ends.Total) || ends.Total > ends.Links || ends.Rows.Any(row => row.Links < 1 || row.Url.Length == 0) ||
+                    !ends.Rows.Select(row => row.Id).SequenceEqual(ends.Rows.Select(row => row.Id).Distinct().Order()) ||
+                    (ends.Total <= 1_000 ? ends.Rows.Sum(row => row.Links) != ends.Links : ends.Rows.Sum(row => row.Links) > ends.Links))
+                {
+                    return $"{ends.Rows.Count} ends of {ends.Total}, with {ends.Rows.Sum(row => row.Links)} links between them, of {ends.Links} links";
+                }
+
+                // Two answers for one moment must be one answer.
+                return ends.Summary.Reason == SummaryUnavailableReason.Crawling && ended.GetOrAdd((end, ends.Links), ends.Total) is var first && first != ends.Total
+                    ? $"{ends.Links} hyperlinks have {ends.Total} ends where they had {first}"
+                    : null;
+            });
+            Read($"the URL grid of the hyperlinks' ends ({end})", () =>
+            {
+                var grid = UrlGridReader.Query(path, new UrlQuery { LinkEnds = new UrlLinkEnds(end, hyperlinks), Limit = LIMIT }, cache);
+                var last = UrlGridReader.Query(path, new UrlQuery { LinkEnds = new UrlLinkEnds(end, hyperlinks), Offset = (int)Math.Max(0, grid.Matching - 10), Limit = LIMIT }, cache);
+                return grid.Matching > grid.Total || grid.Rows.Count != Math.Min(LIMIT, grid.Matching) || last.Rows.Count > Math.Min(LIMIT, last.Matching)
+                    ? $"{grid.Rows.Count} URLs of {grid.Matching} that are ends, of {grid.Total}; from near the end, {last.Rows.Count} of {last.Matching}"
+                    : null;
+            });
         }
 
         foreach (var text in SEARCHES)

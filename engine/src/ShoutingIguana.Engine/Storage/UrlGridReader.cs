@@ -98,6 +98,7 @@ public static class UrlGridReader
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidateFilters(query.Filters, query.Search, GridScope.AllUrls, errors);
+        LinkGridReader.ValidateEnds(query.LinkEnds, errors);
         for (var index = 0; index < query.Facets.Count; index++)
         {
             if (!FACETS.Contains(query.Facets[index]))
@@ -113,8 +114,8 @@ public static class UrlGridReader
     private static UrlFacets Facets(GridReadContext context, UrlFacetQuery query)
     {
         RefuseWithoutSummary(context, query.Filters, [], GridScope.AllUrls);
-        var compiled = UrlQueryCompiler.Compile(new UrlQuery { Filters = query.Filters, Search = query.Search }, context.Mode, GridScope.AllUrls, context.Reason);
-        compiled = GridPlanner.Materialize(context, compiled);
+        var compiled = UrlQueryCompiler.Compile(new UrlQuery { Filters = query.Filters, Search = query.Search, LinkEnds = query.LinkEnds }, context.Mode, GridScope.AllUrls, context.Reason);
+        compiled = WithLinkEnds(context, GridPlanner.Materialize(context, compiled));
         var total = GridPlanner.Total(context, compiled);
         var matching = GridPlanner.Matching(context, compiled, total);
         var asked = (query.Facets.Count == 0 ? FACETS : query.Facets).Distinct(StringComparer.Ordinal).ToList();
@@ -220,7 +221,7 @@ public static class UrlGridReader
             };
         }
 
-        compiled = GridPlanner.Materialize(context, compiled);
+        compiled = WithLinkEnds(context, GridPlanner.Materialize(context, compiled));
         var total = GridPlanner.Total(context, compiled);
         var matching = GridPlanner.Matching(context, compiled, total);
         if (scope.SitemapId is { } sitemap)
@@ -246,6 +247,24 @@ public static class UrlGridReader
             context.Summary,
             compiled.Unavailable);
     }
+
+    /// <summary>
+    /// The query with its condition on the ends of some links, if it has one, read: the links grid gives the set of the
+    /// URLs at that end of the links its filters match (kept, per set of link filters), which each row is tested against,
+    /// with a URL summary or without.
+    /// </summary>
+    internal static CompiledQuery WithLinkEnds(GridReadContext context, CompiledQuery query) =>
+        query.Predicates.All(predicate => predicate.LinkEnds is null)
+            ? query
+            : query with
+            {
+                Predicates =
+                [
+                    .. query.Predicates.Select(predicate => predicate.LinkEnds is { } ends
+                        ? GridPlanner.InSet(context, query.Mode, predicate, LinkGridReader.EndIds(context, ends))
+                        : predicate)
+                ]
+            };
 
     internal static void ThrowIfInvalid(Dictionary<string, List<string>> errors)
     {

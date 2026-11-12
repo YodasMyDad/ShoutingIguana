@@ -16,6 +16,9 @@ public sealed record UrlQuery
     /// <summary>Text the URL or the title contains, ignoring the case of ASCII letters.</summary>
     public string? Search { get; init; }
 
+    /// <summary>Only the URLs at one end of the links these link filters match, beside the filters above; null for no such narrowing.</summary>
+    public UrlLinkEnds? LinkEnds { get; init; }
+
     /// <summary>Up to three keys, unknown values last whatever the direction. Crawl order breaks ties, and is the default.</summary>
     public IReadOnlyList<UrlSort> Sort { get; init; } = [];
 

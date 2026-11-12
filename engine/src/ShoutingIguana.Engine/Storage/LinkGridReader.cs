@@ -146,6 +146,7 @@ public static class LinkGridReader
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         ValidateFilters(query.Filters, query.Search, errors);
+        RefuseEnds(query.LinkEnds, errors);
         for (var index = 0; index < query.Facets.Count; index++)
         {
             if (!FACETS.Contains(query.Facets[index]))
@@ -157,6 +158,91 @@ public static class LinkGridReader
         UrlGridReader.ThrowIfInvalid(errors);
         return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Settled(context, () => Facets(context, query))));
     }
+
+    /// <summary>
+    /// One page of the URLs at one end of the links the filters match, each once, in the order the crawl found them, with
+    /// how many of those links each has: a view's targets (or the pages its links are on) as a list, however many links
+    /// the view holds. Their number is the URL grid's count under the same links (<see cref="UrlQuery.LinkEnds"/>).
+    /// <list type="bullet">
+    /// <item>The targets come from what the links grid counts by target anyway: the link summary's rows where it holds
+    /// what the filters test, else the pass over the links that gives the view its count.</item>
+    /// <item>The sources are counted in a pass over the links, as nothing counts links by the page they're on: once per
+    /// set of filters, and kept.</item>
+    /// </list>
+    /// </summary>
+    /// <inheritdoc cref="Query(string, UrlQuery, ReadCache?, CancellationToken)" path="/exception"/>
+    public static LinkEndPage Ends(string databasePath, LinkEndQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
+    {
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        ValidateFilters(query.Filters, query.Search, errors);
+        UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, after: null, errors);
+        UrlGridReader.ThrowIfInvalid(errors);
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
+        {
+            var filters = Compile(context, query.Filters, query.Search, sort: null);
+            var tally = EndTally(context, filters, query.End);
+            var total = Held(context, $"linkendcount|{query.End}|{filters.Key}", () => tally.Targets().LongCount());
+            List<(int Id, int Links)> ends = [.. tally.Targets().Skip(query.Offset).Take(query.Limit)];
+            Dictionary<int, string> urls = [];
+            if (ends.Count > 0)
+            {
+                using var command = context.Command($"SELECT id, url FROM urls WHERE id IN ({string.Join(",", ends.Select(end => end.Id.ToString(CultureInfo.InvariantCulture)))})", []);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    urls[reader.GetInt32(0)] = reader.GetString(1);
+                }
+            }
+
+            // An end the crawl has no URL for (a crafted file's link to nowhere) has no row: it's counted, and can't be named.
+            return new LinkEndPage(query.End, total, tally.Links, query.Offset,
+                [.. ends.Where(end => urls.ContainsKey(end.Id)).Select(end => new LinkEndRow(end.Id, urls[end.Id], end.Links))], context.Summary);
+        }));
+    }
+
+    /// <summary>The filters of a condition on the ends of links, checked as the links grid's own are, each error under <c>linkEnds</c>.</summary>
+    internal static void ValidateEnds(UrlLinkEnds? ends, Dictionary<string, List<string>> errors)
+    {
+        if (ends is null)
+        {
+            return;
+        }
+
+        Dictionary<string, List<string>> found = new(StringComparer.Ordinal);
+        ValidateFilters(ends.Filters, ends.Search, found);
+        foreach (var (field, messages) in found)
+        {
+            messages.ForEach(message => UrlQueryCompiler.Add(errors, "linkEnds." + field, message));
+        }
+    }
+
+    /// <summary>
+    /// The URLs at one end of the links some link filters match, as a set, for the URL grid to narrow itself by: read from
+    /// the same counts <see cref="Ends"/> lists, so the grid's count is the list's, and kept per set of link filters.
+    /// </summary>
+    /// <exception cref="NeedsAnalysisException">A link filter needs the URL summary, and there's none.</exception>
+    internal static UrlIdSet EndIds(GridReadContext context, UrlLinkEnds ends)
+    {
+        var filters = Compile(context, ends.Filters, ends.Search, sort: null);
+        return HeldLarge(context, $"linkendids|{ends.End}|{filters.Key}", () =>
+        {
+            var set = UrlIds(context);
+            foreach (var (id, _) in EndTally(context, filters, ends.End).Targets())
+            {
+                set.Add(id);
+            }
+
+            return set.Seal(GridPlanner.ID_SET_CAP);
+        });
+    }
+
+    /// <summary>
+    /// The matching links counted by the URL at one end: by target as the grid counts them for its facets and its sorts
+    /// (<see cref="Tally"/>), or by the page they're on, which takes a pass over the links of its own, kept per filter set.
+    /// </summary>
+    private static LinkTally EndTally(GridReadContext context, Filters filters, LinkEnd end) => end == LinkEnd.To
+        ? Tally(context, filters)
+        : HeldHuge(context, "linksources|" + filters.Key, () => Scan(context, filters, Total(context), ids: false, tally: true, bySource: true).Tally!);
 
     /// <returns>Null when a running crawl's moment no longer holds (<see cref="Settled"/>).</returns>
     private static LinkGridPage? Read(GridReadContext context, UrlQuery query)
@@ -356,6 +442,7 @@ public static class LinkGridReader
         }
 
         ValidateFilters(query.Filters, query.Search, errors);
+        RefuseEnds(query.LinkEnds, errors);
         if (query.Sort.Count > 1)
         {
             UrlQueryCompiler.Add(errors, "sort", "The links grid sorts by one column.");
@@ -383,6 +470,15 @@ public static class LinkGridReader
 
         UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, query.After, errors);
         return errors;
+    }
+
+    /// <summary>The ends of some links narrow the URL grids: asked of the links grid, which its own filters narrow, it's a field error.</summary>
+    private static void RefuseEnds(UrlLinkEnds? ends, Dictionary<string, List<string>> errors)
+    {
+        if (ends is not null)
+        {
+            UrlQueryCompiler.Add(errors, "linkEnds", "Only the URL grids take linkEnds: the links grid takes the link filters themselves.");
+        }
     }
 
     private static void ValidateFilters(IReadOnlyList<UrlFilter> filters, string? search, Dictionary<string, List<string>> errors)
@@ -767,14 +863,17 @@ public static class LinkGridReader
     /// False to read every link in order whatever the conditions name: the link summary has said the ends they name have
     /// many links, each of which the index would fetch from wherever it's stored.
     /// </param>
-    private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true)
+    /// <param name="bySource">Counts the links by the page they're on rather than by their target: the tally's targets are then the sources.</param>
+    private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true, bool bySource = false)
     {
         var largest = LargestLinkId(context);
         LinkIdSet? NewIds() => ids ? new LinkIdSet(largest, total) : null;
         var nofollow = tally ? NofollowPages(context) : null;
 
         // With nothing to count, the id is all that's passed on.
-        var each = tally ? $"{ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)" : $"{ReaderFunctions.LINK_ID}(l.rowid)";
+        var each = tally
+            ? $"{ReaderFunctions.LINK}(l.rowid, {(bySource ? "l.from_id" : "l.to_id")}, l.from_id, l.kind, l.position, l.flags)"
+            : $"{ReaderFunctions.LINK_ID}(l.rowid)";
         var inOrder = !indexed || !filters.Direct;
         var from = inOrder ? "links l NOT INDEXED" : filters.From;
 
