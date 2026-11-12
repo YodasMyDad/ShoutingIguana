@@ -58,6 +58,10 @@ internal static class GridEndpoints
             TypedResults.Json(await data.LinkFacetsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.FacetsRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.FacetsDto));
 
+        api.MapPost("/api/crawls/{id}/links/ends", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.LinkEndsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.LinkEndsRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.LinkEndPage));
+
         api.MapGet("/api/crawls/{id}/sitemaps", async (string id, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.SitemapsAsync(id, cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.SitemapList));
 

@@ -67,8 +67,9 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         var filters = GridRequests.Filters(request?.Filters, errors);
         var asked = GridRequests.Facets(request?.Facets, errors);
+        var ends = GridRequests.LinkEnds(request?.LinkEnds, errors);
         GridRequests.ThrowIfAny(errors);
-        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked };
+        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked, LinkEnds = ends };
         return Facets(await ReadAsync(token => UrlGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
@@ -86,14 +87,34 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         }
 
         RefuseSitemap(request);
+        RefuseLinkEnds(request?.LinkEnds);
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var page = await ReadAsync(token => LinkGridReader.Query(path, query, cache, token), cancellationToken).ConfigureAwait(false);
         return new LinkGridPageDto(page.Columns, new LinkRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable);
     }
 
+    /// <summary>
+    /// The URLs at one end of the links a links view matches, a page of them: the view's targets, or the pages its links
+    /// are on, each once, however many links the view holds.
+    /// </summary>
+    public async Task<LinkEndPage> LinkEndsAsync(string id, LinkEndsRequest? request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        var filters = GridRequests.Filters(request?.Filters, errors);
+        var end = GridRequests.End(request?.End, errors);
+        GridRequests.ThrowIfAny(errors);
+        var query = new LinkEndQuery
+        {
+            End = end!.Value, Filters = filters, Search = request?.Search, Offset = request?.Offset ?? 0, Limit = request?.Limit ?? UrlGridReader.DEFAULT_LIMIT
+        };
+        return await ReadAsync(token => LinkGridReader.Ends(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<FacetsDto> LinkFacetsAsync(string id, FacetsRequest? request, CancellationToken cancellationToken)
     {
+        RefuseLinkEnds(request?.LinkEnds);
         var path = crawls.PathOf(id);
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         var filters = GridRequests.Filters(request?.Filters, errors);
@@ -305,6 +326,15 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
     private static string Origin(string? origin) => string.IsNullOrWhiteSpace(origin)
         ? throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>> { ["origin"] = ["Give the origin, as the list of origins names it."] })
         : origin;
+
+    /// <summary>The ends of some links narrow the URL grids: the links grid is narrowed by its own filters.</summary>
+    private static void RefuseLinkEnds(LinkEndsDto? ends)
+    {
+        if (ends is not null)
+        {
+            throw Problems.BadRequest("Only the URL grids take linkEnds: the links grid takes the link filters themselves.");
+        }
+    }
 
     /// <summary>A sitemap's id belongs to the sitemap's own grid.</summary>
     private static void RefuseSitemap(GridQueryRequest? request)

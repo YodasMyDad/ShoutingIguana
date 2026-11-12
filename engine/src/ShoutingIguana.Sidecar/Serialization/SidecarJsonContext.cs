@@ -62,6 +62,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
         // Search and the favicon (E6).
         typeof(CamelCaseEnumConverter<UrlSearchRank>),
         typeof(CamelCaseEnumConverter<UrlSearchField>),
+        typeof(CamelCaseEnumConverter<LinkEnd>),
 
         // The score and plain words (round 3).
         typeof(CamelCaseEnumConverter<ScoreBand>),
@@ -126,6 +127,8 @@ namespace ShoutingIguana.Sidecar.Serialization;
 // Search and the favicon (E6).
 [JsonSerializable(typeof(SearchRequest))]
 [JsonSerializable(typeof(RobotsOriginsRequest))]
+[JsonSerializable(typeof(LinkEndsRequest))]
+[JsonSerializable(typeof(LinkEndPage))]
 [JsonSerializable(typeof(AnalysisSettingsDto))]
 [JsonSerializable(typeof(ResetAnalysisSettingsRequest))]
 [JsonSerializable(typeof(Dictionary<string, JsonElement>))]

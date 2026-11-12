@@ -107,6 +107,100 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         Assert.Equal((long)fresh["total"]!, (long)(await PostOkAsync($"api/crawls/{grid.FreshId}/links/facets"))["matching"]!);
     }
 
+    /// <summary>
+    /// From a view of the links to its URLs (E6): the view's ends are listed, each once with its links, and the URL grids
+    /// narrow to them, to the list's own count.
+    /// </summary>
+    [Fact]
+    public async Task AViewOfTheLinksListsItsEndsAndTheUrlGridsNarrowToThem()
+    {
+        var view = JsonNode.Parse("""{"filters":[{"column":"kind","op":"in","values":["hyperlink"]},{"column":"to.statusClass","op":"in","values":["3xx","4xx"]}]}""")!;
+        var links = (long)(await PostOkAsync($"api/crawls/{grid.Id}/links", view))["matching"]!;
+        Assert.True(links > 0);
+        foreach (var end in new[] { "from", "to" })
+        {
+            var asked = With(view, "end", end);
+            var first = await PostOkAsync($"api/crawls/{grid.Id}/links/ends", asked);
+            Assert.Equal(["end", "total", "links", "offset", "rows", "summary"], first.AsObject().Select(property => property.Key));
+            Assert.Equal(["id", "url", "links"], first["rows"]![0]!.AsObject().Select(property => property.Key));
+            Assert.Equal((end, links, 0, """{"available":true,"reason":null}"""), ((string?)first["end"], (long)first["links"]!, (int)first["offset"]!, first["summary"]!.ToJsonString()));
+            var total = (long)first["total"]!;
+            Assert.InRange(total, 2, Math.Min(links, 999));
+
+            // Paged to its end: every end once, in the order the crawl found the URLs, and their links are the view's.
+            List<JsonNode> rows = [];
+            for (var offset = 0; rows.Count == offset; offset += 7)
+            {
+                var page = await PostOkAsync($"api/crawls/{grid.Id}/links/ends", new JsonObject
+                {
+                    ["end"] = end, ["filters"] = view["filters"]!.DeepClone(), ["offset"] = offset, ["limit"] = 7
+                });
+                Assert.Equal((total, links, offset), ((long)page["total"]!, (long)page["links"]!, (int)page["offset"]!));
+                rows.AddRange(page["rows"]!.AsArray().Select(row => row!));
+            }
+
+            Assert.Equal(total, rows.Count);
+            Assert.Equal(rows.Select(row => (int)row["id"]!).Distinct().Order(), rows.Select(row => (int)row["id"]!));
+            Assert.Equal(links, rows.Sum(row => (long)row["links"]!));
+
+            // The URL grid narrowed to them lists the same URLs, to the same count; its facets count them; and a filter of
+            // the grid's own narrows them further.
+            var narrowed = new JsonObject { ["linkEnds"] = asked.DeepClone(), ["columns"] = new JsonArray("url"), ["limit"] = 1_000 };
+            var urls = await PostOkAsync($"api/crawls/{grid.Id}/urls", narrowed);
+            Assert.Equal(total, (long)urls["matching"]!);
+            Assert.Equal(rows.Select(row => ((int)row["id"]!, (string?)row["url"])), urls["rows"]!.AsArray().Select(row => ((int)row!["id"]!, (string?)row["url"])));
+            var facets = await PostOkAsync($"api/crawls/{grid.Id}/urls/facets", new JsonObject { ["linkEnds"] = asked.DeepClone(), ["facets"] = new JsonArray("statusClass") });
+            Assert.Equal((total, total), ((long)facets["matching"]!, facets["facets"]!["statusClass"]!.AsArray().Sum(bucket => (long)bucket!["count"]!)));
+            var some = With(narrowed, "search", "/p/");
+            Assert.Equal(rows.Count(row => ((string)row["url"]!).Contains("/p/", StringComparison.Ordinal)), (long)(await PostOkAsync($"api/crawls/{grid.Id}/urls", some))["matching"]!);
+        }
+
+        // A check's rows and a sitemap's URLs narrow the same way: a page with a long title has links on it, and none of
+        // them says what no link says.
+        var flagged = await PostOkAsync($"api/crawls/{grid.Id}/issues/title-too-long/rows", JsonNode.Parse("""{"linkEnds":{"end":"from"},"limit":1}"""));
+        Assert.True((long)flagged["total"]! > 0);
+        Assert.Equal((long)flagged["total"]!, (long)flagged["matching"]!);
+        Assert.Equal(0, (long)(await PostOkAsync($"api/crawls/{grid.Id}/issues/title-too-long/rows",
+            JsonNode.Parse("""{"linkEnds":{"end":"from","filters":[{"column":"text","op":"contains","value":"no link says this at all"}]}}""")))["matching"]!);
+        var sitemap = (int)(await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/sitemaps"))["sitemaps"]![1]!["id"]!;
+        var listed = await PostOkAsync($"api/crawls/{grid.Id}/sitemaps/urls", new JsonObject { ["sitemapId"] = sitemap, ["linkEnds"] = new JsonObject { ["end"] = "to" }, ["limit"] = 1 });
+        Assert.InRange((long)listed["matching"]!, 1, (long)listed["total"]!);
+
+        // What can't be answered says why, by field; the links grid takes the filters themselves.
+        async Task<IEnumerable<string>> RefusedAsync(string path, string body) =>
+            TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/{path}", JsonNode.Parse(body)), HttpStatusCode.UnprocessableEntity, "invalid-query")["errors"]!
+                .AsObject().Select(error => error.Key);
+
+        Assert.Equal(["end"], await RefusedAsync("links/ends", "{}"));
+        Assert.Equal(["end"], await RefusedAsync("links/ends", """{"end":"both"}"""));
+        Assert.Equal(["filters[0].column"], await RefusedAsync("links/ends", """{"end":"to","filters":[{"column":"anchor","op":"contains","value":"a"}]}"""));
+        Assert.Equal(["limit"], await RefusedAsync("links/ends", """{"end":"to","limit":1001}"""));
+        Assert.Equal(["linkEnds.end"], await RefusedAsync("urls", """{"linkEnds":{}}"""));
+        Assert.Equal(["linkEnds.filters[0].column"], await RefusedAsync("urls", """{"linkEnds":{"end":"from","filters":[{"column":"anchor","op":"contains","value":"a"}]}}"""));
+        Assert.Equal(["linkEnds.filters[0].op"], await RefusedAsync("urls/facets", """{"linkEnds":{"end":"from","filters":[{"column":"text","op":"gt","value":4}]}}"""));
+        foreach (var (path, body) in new[]
+                 {
+                     ("links", """{"linkEnds":{"end":"to"}}"""), ("links/facets", """{"linkEnds":{"end":"to"}}"""), ("links/ends", """{"end":"to","sort":[]}"""),
+                     ("urls", """{"linkEnds":{"end":"to","limit":5}}"""), ("links/ends", """{"end":7}""")
+                 })
+        {
+            TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/{path}", JsonNode.Parse(body)), HttpStatusCode.BadRequest, "bad-request");
+        }
+
+        TestSidecar.AssertProblem(await Sidecar.PostAsync("api/crawls/0000000000000000/links/ends", JsonNode.Parse("""{"end":"to"}""")), HttpStatusCode.NotFound, "crawl-not-found");
+
+        // A crawl never analysed lists its ends from the links themselves, and refuses a link filter that needs the analysis.
+        var freshLinks = (long)(await PostOkAsync($"api/crawls/{grid.FreshId}/links", JsonNode.Parse("""{"filters":[{"column":"kind","op":"in","values":["hyperlink"]}],"limit":1}""")))["matching"]!;
+        var fresh = await PostOkAsync($"api/crawls/{grid.FreshId}/links/ends", JsonNode.Parse("""{"end":"from","filters":[{"column":"kind","op":"in","values":["hyperlink"]}],"limit":3}"""));
+        Assert.True(freshLinks > 3, $"The crawl never analysed has {freshLinks} hyperlinks.");
+        Assert.Equal((freshLinks, 3, """{"available":false,"reason":"notAnalyzed"}"""), ((long)fresh["links"]!, fresh["rows"]!.AsArray().Count, fresh["summary"]!.ToJsonString()));
+        Assert.Equal((long)fresh["total"]!, (long)(await PostOkAsync($"api/crawls/{grid.FreshId}/urls",
+            JsonNode.Parse("""{"linkEnds":{"end":"from","filters":[{"column":"kind","op":"in","values":["hyperlink"]}]},"limit":1}""")))["matching"]!);
+        var needs = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.FreshId}/links/ends",
+            JsonNode.Parse("""{"end":"from","filters":[{"column":"to.inlinks","op":"gt","value":3}]}""")), HttpStatusCode.Conflict, "needs-analysis");
+        Assert.Equal("""["to.inlinks"]""", needs["columns"]!.ToJsonString());
+    }
+
     [Fact]
     public async Task TheSitemapsAreListedAndOneOpensItsUrls()
     {
