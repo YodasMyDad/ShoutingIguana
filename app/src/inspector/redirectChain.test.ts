@@ -159,8 +159,16 @@ describe('redirectChainLayout', () => {
     );
     expect(end('robotsDisallowed').steps[1]?.noCode).toBe('Blocked by robots.txt');
     expect(end('networkError').summary).toBe('The chain ends at a URL that didn’t answer.');
-    // No outcome either: whether it was never fetched isn't said with a hop.
-    expect(end(null).summary).toBe('The chain ends at a URL the crawl has no answer from.');
-    expect(end(null).steps[1]?.noCode).toBe('No status');
+    expect(end('notChecked').summary).toBe(
+      'The chain ends at a URL the crawl didn’t request: its host had stopped answering.',
+    );
+    expect(end('notChecked').steps[1]?.noCode).toBe('Not checked');
+    expect(end('timeout').steps[1]?.noCode).toBe('Timed out');
+    // No outcome: never fetched (the contract's null), and while the crawl runs, not yet.
+    expect(end(null).summary).toBe('The chain ends at a URL the crawl didn’t fetch.');
+    expect(end(null).steps[1]?.noCode).toBe('Not fetched');
+    const live = redirectChainLayout(redirecting([hop(6, null, { outcome: null })]), true);
+    expect(live.summary).toBe('The chain ends at a URL the crawl hasn’t fetched yet.');
+    expect(live.steps[1]?.noCode).toBe('Not fetched yet');
   });
 });

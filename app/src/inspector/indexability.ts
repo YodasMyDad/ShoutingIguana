@@ -1,7 +1,7 @@
 // "Indexable, and why" (docs/v2-ui-design.md): the engine's four tests (answered 2xx, allowed by robots.txt, no
 // noindex, canonical is itself) as a checklist, with the one that failed marked, and the verdict in words. The verdict
 // and each test's outcome are the engine's; this only words them, with the evidence each test carries.
-import type { IndexabilityReason } from '../api/grids';
+import type { IndexabilityReason, UrlOutcome } from '../api/grids';
 import type { IndexabilityTest, IndexabilityTestName, UrlDetail, UrlTarget } from '../api/inspector';
 import { reasonPhrase } from './words';
 
@@ -17,7 +17,7 @@ export interface IndexabilityRow {
   /** The detail only says again what the label does (a test that passed with nothing more to tell): it can go unsaid. */
   plain?: boolean | undefined;
   /** The other URL the test names: a canonical's target, an instant meta refresh's. */
-  target?: { id: number | null; url: string; statusCode: number | null } | undefined;
+  target?: { id: number | null; url: string; statusCode: number | null; outcome?: UrlOutcome | null } | undefined;
 }
 
 export interface IndexabilityVerdict {
@@ -83,7 +83,10 @@ function notCheckedWords(subject: Subject, earlierFailed: boolean, test: Indexab
 }
 
 function canonicalTarget(test: IndexabilityTest): IndexabilityRow['target'] {
-  if (test.canonical) return { id: test.canonical.id, url: test.canonical.url, statusCode: test.canonical.statusCode };
+  if (test.canonical) {
+    const { id, url, statusCode, outcome } = test.canonical;
+    return { id, url, statusCode, ...(outcome === undefined ? {} : { outcome }) };
+  }
   return test.canonicalUrl ? { id: null, url: test.canonicalUrl, statusCode: null } : undefined;
 }
 
@@ -137,7 +140,12 @@ function rowFor(subject: Subject, test: IndexabilityTest, earlierFailed: boolean
   }
 }
 
-const refreshTarget = (target: UrlTarget) => ({ id: target.id, url: target.url, statusCode: target.statusCode });
+const refreshTarget = ({ id, url, statusCode, outcome }: UrlTarget) => ({
+  id,
+  url,
+  statusCode,
+  ...(outcome === undefined ? {} : { outcome }),
+});
 
 /** The checklist and the verdict, for the summary. The four tests always come in the engine's order. */
 export function indexabilityVerdict(subject: Subject): IndexabilityVerdict {

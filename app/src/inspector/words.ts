@@ -110,6 +110,39 @@ export const OUTCOME_WORDS: Record<UrlOutcome, string> = {
   notChecked: 'Not checked',
 };
 
+/**
+ * What became of a URL with no status code, in a few words: the inspector's title for each outcome (fetchState), for
+ * the URL itself and for every URL it names (a link's other end, a redirect's hop, a canonical's, a meta refresh's or an
+ * hreflang's target). Only for an outcome that comes with no code: one that answered says its code.
+ */
+export const NO_CODE_TITLES: Partial<Record<UrlOutcome, string>> = {
+  robotsDisallowed: 'Blocked by robots.txt',
+  blocked: 'Blocked by the server',
+  notChecked: 'Not checked',
+  timeout: 'Timed out',
+  networkError: 'Couldn’t be reached',
+  processingError: 'Couldn’t be read',
+};
+
+/** A URL the crawl has an outcome for and no status code, from an engine that doesn't say which outcome (before E3c). */
+export const NO_STATUS = 'No status';
+
+/**
+ * A named URL's state where it has no status code, from its `outcome` (E3c), as the inspector words the URL's own:
+ * not fetched (yet, while the crawl runs: it's in the queue or on its way), refused by robots.txt, blocked, not
+ * checked, or no response. `outcome` undefined is an engine that doesn't say: then only whether it was fetched
+ * (`fetched`, where the row has it), never a guess at why there's no code.
+ */
+export function noStatusWords(
+  outcome: UrlOutcome | null | undefined,
+  fetched: boolean | undefined,
+  crawling: boolean,
+): string {
+  if (outcome === undefined) return fetched === false ? 'Not fetched' : NO_STATUS;
+  if (outcome === null) return crawling ? 'Not fetched yet' : 'Not fetched';
+  return NO_CODE_TITLES[outcome] ?? 'No response';
+}
+
 /** Why a URL found wasn't fetched, as a sentence. */
 export const NOT_FETCHED_WORDS: Record<NotFetchedBecause, string> = {
   none: 'The crawl found it but didn’t fetch it.',

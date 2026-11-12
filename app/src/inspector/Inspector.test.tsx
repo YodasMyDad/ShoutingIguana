@@ -292,6 +292,28 @@ describe('the summary', () => {
     expect(canonical()).not.toHaveTextContent('Not fetched');
   });
 
+  it('says what became of a canonical’s target with no status: refused by robots.txt, not “No status”', async () => {
+    const page = testUrlDetail({
+      indexability: {
+        ...testUrlDetail().indexability,
+        tests: testUrlDetail().indexability.tests.map((test) =>
+          test.test === 'canonical'
+            ? {
+                ...test,
+                canonical: { id: 3, url: OTHER.url, statusCode: null, outcome: 'robotsDisallowed' as const },
+                canonicalUrl: OTHER.url,
+              }
+            : test,
+        ),
+      },
+    });
+    const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: page, 3: OTHER } });
+    const tests = await within(inspector).findByRole('list', { name: 'Indexability tests' });
+    const canonical = within(tests).getAllByRole('listitem')[3]!;
+    expect(canonical).toHaveTextContent('Blocked by robots.txt');
+    expect(canonical).not.toHaveTextContent('No status');
+  });
+
   it('says a page that moves on with an instant meta refresh has its canonical not checked, not unread', async () => {
     const refreshing = testUrlDetail({
       content: { ...testUrlDetail().content!, metaRefresh: { delaySeconds: 0, url: OTHER.url } },
@@ -1239,6 +1261,23 @@ describe('walking the site', () => {
     expect(await within(grid).findByText('No status')).toBeVisible();
     expect(within(grid).getByText('Not fetched')).toBeVisible();
     expect(within(grid).queryByText('No response')).toBeNull();
+  });
+
+  it('says what became of a link’s URL where it has no status, in the inspector’s words for each outcome', async () => {
+    const refused = testLinkRow({
+      id: 3,
+      url: OTHER.url,
+      statusCode: null,
+      fetched: true,
+      outcome: 'robotsDisallowed',
+    });
+    const unchecked = testLinkRow({ id: 1, url: HOME.url, statusCode: null, fetched: false, outcome: 'notChecked' });
+    const { inspector, user } = await open(`${URLS}?inspect=2`, { ...SITE, outlinks: { 2: [refused, unchecked] } });
+    await user.click(await within(inspector).findByRole('tab', { name: /^Outlinks/ }));
+    const grid = await within(inspector).findByRole('grid', { name: 'Outlinks' });
+    expect(await within(grid).findByText('Blocked by robots.txt')).toBeVisible();
+    expect(within(grid).getByText('Not checked')).toBeVisible();
+    expect(within(grid).queryByText('No status')).toBeNull();
   });
 
   it('says so when a URL has no inlinks', async () => {

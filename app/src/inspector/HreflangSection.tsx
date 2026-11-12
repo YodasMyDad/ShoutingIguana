@@ -42,7 +42,7 @@ export function HreflangSection({ detail }: { detail: UrlDetail }) {
       <Block title={formatCountOf(entries.length, 'annotation')}>
         <ul aria-label="Hreflang annotations" className="flex flex-col">
           {entries.map((entry, index) => {
-            const problem = hreflangProblem(entry);
+            const problem = hreflangProblem(entry, crawling);
             return (
               <li
                 key={`${entry.language}-${index}`}
@@ -55,6 +55,7 @@ export function HreflangSection({ detail }: { detail: UrlDetail }) {
                       id={entry.target.id}
                       url={entry.target.url}
                       statusCode={entry.target.statusCode}
+                      outcome={entry.target.outcome}
                       showStatus
                     />
                   ) : (

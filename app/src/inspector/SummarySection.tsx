@@ -263,6 +263,7 @@ function TestRow({ row }: { row: IndexabilityRow }) {
             id={row.target.id}
             url={row.target.url}
             statusCode={row.target.id === null ? undefined : row.target.statusCode}
+            outcome={row.target.outcome}
             showStatus
             className="mt-0.5"
           />

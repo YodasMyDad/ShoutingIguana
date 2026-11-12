@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useState, type ReactNode } from 'react';
-import type { CheckGroupRef } from '../api/grids';
+import type { CheckGroupRef, UrlOutcome } from '../api/grids';
 import type { UrlDetail, UrlIssue } from '../api/inspector';
 import { analysisQuery, crawlQuery } from '../api/queries';
 import { analyseCrawl } from '../crawl/actions';
@@ -20,9 +20,8 @@ import { TextLink } from '../ui/TextLink';
 import { Url } from '../ui/Url';
 import { checkTitle, issuesAreStale, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
-import { NO_STATUS } from './links';
 import { splitHidden } from './sections';
-import { reasonPhrase } from './words';
+import { noStatusWords, reasonPhrase } from './words';
 
 /** A block of a section, under a hairline, with its title. */
 export function Block({
@@ -66,6 +65,7 @@ export function WalkUrl({
   id,
   url,
   statusCode,
+  outcome,
   showStatus = false,
   truncate = 'middle',
   className,
@@ -74,12 +74,14 @@ export function WalkUrl({
   id: number | null;
   url: string;
   statusCode?: number | null | undefined;
+  /** E3c: what became of it, said where it has no status code; undefined from an engine that doesn't say. */
+  outcome?: UrlOutcome | null | undefined;
   /** Its status after it, when that's the point: where a canonical or a redirect leads. */
   showStatus?: boolean | undefined;
   truncate?: 'middle' | 'wrap' | undefined;
   className?: string | undefined;
 }) {
-  const { urlId, siteOrigin, walk } = useInspectorContext();
+  const { urlId, siteOrigin, walk, crawling } = useInspectorContext();
   const walkable = id !== null && id !== urlId;
   return (
     <span className={clsx('flex min-w-0 items-center gap-2', className)}>
@@ -95,8 +97,8 @@ export function WalkUrl({
       {showStatus && statusCode !== undefined ? (
         <StatusCode
           code={statusCode}
-          // A target comes with its status alone: why there's none (never fetched, blocked, unreachable) isn't said.
-          reason={statusCode === null ? NO_STATUS : reasonPhrase(statusCode)}
+          // Where it has no code, what became of it (E3c's `outcome`), in the inspector's words for the URL itself.
+          reason={statusCode === null ? noStatusWords(outcome, undefined, crawling) : reasonPhrase(statusCode)}
           className="shrink-0 text-12"
         />
       ) : null}

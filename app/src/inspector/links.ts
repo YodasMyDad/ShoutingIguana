@@ -1,7 +1,7 @@
 // The link grids' words and what they remember for the session: the kind of link each last showed, and the row the
 // cursor was left on in each URL's links.
 import type { LinkKind, LinkRow } from '../api/inspector';
-import { FLAG_WORDS } from './words';
+import { FLAG_WORDS, NO_STATUS, noStatusWords } from './words';
 
 export type LinkDirection = 'inlinks' | 'outlinks';
 export type KindChoice = LinkKind | 'all';
@@ -59,14 +59,18 @@ export function followWords(row: Pick<LinkRow, 'followed' | 'flags'>): string {
   return [lead, ...others].join(', ');
 }
 
-/** A URL the crawl has an outcome for and no status code: which outcome isn't said where only the code comes. */
-export const NO_STATUS = 'No status';
+/** Kept where it was for the modules that take it from here: the words are words.ts's. */
+export { NO_STATUS };
 
 /**
- * The other end's status as text: its code, or that there's none. A link's row says whether the crawl has an outcome
- * for its URL (`fetched`) but not which: blocked by robots.txt, timed out and unreachable all come with no code, so
- * "No response" would be a guess (robots.txt never let the request be made).
+ * The other end's status as text: its code, or what became of it (E3c's `outcome` on the row: refused by robots.txt,
+ * blocked, not checked, no response, or not fetched, yet while the crawl runs), in the inspector's words for the URL
+ * itself. An earlier engine's row says only whether the crawl has an outcome for it (`fetched`), not which, so
+ * "No response" would be a guess (robots.txt never let the request be made): it says "No status".
  */
-export function linkStatusWords(row: Pick<LinkRow, 'statusCode' | 'fetched'>): string {
-  return row.statusCode === null ? (row.fetched ? NO_STATUS : 'Not fetched') : String(row.statusCode);
+export function linkStatusWords(
+  row: Pick<LinkRow, 'statusCode' | 'fetched'> & Partial<Pick<LinkRow, 'outcome'>>,
+  crawling = false,
+): string {
+  return row.statusCode === null ? noStatusWords(row.outcome, row.fetched, crawling) : String(row.statusCode);
 }
