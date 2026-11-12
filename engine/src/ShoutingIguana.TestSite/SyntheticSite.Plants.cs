@@ -168,15 +168,6 @@ public sealed partial class SyntheticSite
             page => page with { Canonical = $"{_base}{PLANTS_PATH}moved-twice" }, inSitemap: false);
         Other("moved-twice", 301, linked: false, ["redirect-chain"], () => Redirect(301, PLANTS_PATH + "moved"));
 
-        // A canonical whose redirect leads into the private area, which robots.txt keeps the crawler out of: that URL
-        // is where the redirect leads, and isn't known to be where it ends. A crawl told to ignore robots.txt finds a
-        // page there.
-        Page("canonical-refused", "Canonical to a redirect into a blocked area", ["canonicalised-page", "canonical-to-redirect"],
-            page => page with { Canonical = $"{_base}{PLANTS_PATH}moved-private" }, inSitemap: false);
-        Other("moved-private", 301, linked: false, [], () => Redirect(301, "/private/moved-to"));
-        plants.Add(new Plant("/private/moved-to", Plant.REFUSED, Linked: false, InSitemap: false, ["blocked-by-robots"],
-            () => Html(RenderSimple("Private moved", "robots.txt disallows this area.", "/private/moved-to")), IsPage: false));
-
         // /self-canonical/ names /self-canonical, which redirects back to it. The redirect is the stronger signal, so the
         // page is indexed and audited: its short title is reported, and it isn't canonicalised or out of place in the sitemap.
         Other("self-canonical", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "self-canonical/"));

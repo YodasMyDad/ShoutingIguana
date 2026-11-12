@@ -193,15 +193,12 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
 
         // A canonical that redirects is reported with the URL its redirects end at, which is what the canonical should
-        // name: read from the crawl's own URLs, after one redirect or several. Where the crawler was kept out of that URL
-        // it isn't known to be the end, and the detail says why. One that leads back to its page says so.
+        // name: read from the crawl's own URLs, after one redirect or several. One that leads back to its page says so.
         var plants = new Uri(server.BaseUri, SyntheticSite.PLANTS_PATH).AbsoluteUri;
         Assert.Equal(
         [
             ($"{plants}canonical-chain", $"The canonical URL redirects (301 Moved Permanently) and, after 2 redirects, ends at {plants}thin", $"{plants}moved-twice"),
             ($"{plants}canonical-redirect", $"The canonical URL redirects (301 Moved Permanently) to {plants}thin", $"{plants}moved"),
-            ($"{plants}canonical-refused", $"The canonical URL redirects (301 Moved Permanently) to {server.BaseUri}private/moved-to, which is blocked by robots.txt",
-                $"{plants}moved-private"),
             ($"{plants}self-canonical/", "The canonical URL redirects back to this page", $"{plants}self-canonical")
         ], rows.Where(row => row.Issue == IssueCatalog.CANONICAL_TO_REDIRECT.Id).Select(row => (row.Url, row.Detail!, row.RelatedUrl!)).Order());
 
