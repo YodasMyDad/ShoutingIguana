@@ -100,6 +100,59 @@ export function ContextMenu({ children, content, onOpenChange, disabled = false,
   );
 }
 
+export interface MenuAtProps {
+  /** Where it opens: the pointer that right-clicked, or the corner of the cell the keys opened it from. */
+  at: { x: number; y: number } | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Its accessible name: what it's the menu of ("Menu for /about/"). */
+  label: string;
+  /**
+   * Where the keyboard goes once it has closed (a grid: back to the row). Without it, it goes nowhere in particular.
+   * An item that took the keyboard elsewhere (a navigation, a dialog) keeps it there.
+   */
+  onCloseFocus?: (() => void) | undefined;
+  children: ReactNode;
+  className?: string | undefined;
+}
+
+/**
+ * A menu at a point, opened by something other than a button of its own: a grid row's menu, from a right-click,
+ * Shift+F10 or the menu key. The same items as a dropdown, the same keys (arrows, typing, Esc), its first item
+ * focused when the keys opened it. It's anchored to an empty mark at the point, which nothing else sees.
+ */
+export function MenuAt({ at, open, onOpenChange, label, onCloseFocus, children, className }: MenuAtProps) {
+  return (
+    <DropdownPrimitive.Root modal={false} open={open && at !== null} onOpenChange={onOpenChange}>
+      <DropdownPrimitive.Trigger asChild>
+        {/* The point the menu opens from: no size, no name, never focused (a span takes no focus). */}
+        <span aria-hidden="true" className="si-menu-anchor" style={{ left: at?.x ?? 0, top: at?.y ?? 0 }} />
+      </DropdownPrimitive.Trigger>
+      <DropdownPrimitive.Portal>
+        <DropdownPrimitive.Content
+          align="start"
+          side="bottom"
+          sideOffset={0}
+          collisionPadding={COLLISION_PADDING}
+          loop
+          aria-label={label}
+          // Named by its label, not by the mark it's anchored to, which has no words.
+          aria-labelledby={undefined}
+          onCloseAutoFocus={(event) => {
+            // Focus goes where the opener said (a grid takes it back), never to the mark, which can't hold it.
+            event.preventDefault();
+            const focused = document.activeElement;
+            if (focused === null || focused === document.body) onCloseFocus?.();
+          }}
+          className={clsx('si-menu', className)}
+        >
+          <KindContext.Provider value="dropdown">{children}</KindContext.Provider>
+        </DropdownPrimitive.Content>
+      </DropdownPrimitive.Portal>
+    </DropdownPrimitive.Root>
+  );
+}
+
 interface ItemCommon {
   children: ReactNode;
   icon?: IconLike | undefined;

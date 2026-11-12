@@ -69,9 +69,9 @@ const VALUES: Record<string, Record<string, string>> = {
     script: 'script',
     stylesheet: 'stylesheet',
     font: 'font',
-    media: 'media',
+    media: 'media file',
     pdf: 'PDF',
-    other: 'other',
+    other: 'file',
   },
   indexability: {
     none: 'indexable',
@@ -88,7 +88,7 @@ const VALUES: Record<string, Record<string, string>> = {
     seed: 'the start URL',
     link: 'a link',
     sitemap: 'a sitemap',
-    siteVersion: 'a check of the site’s versions',
+    siteVersion: 'a probe of the site’s other versions',
   },
 };
 

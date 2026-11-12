@@ -23,6 +23,8 @@ export type CommandGroup =
   | 'Go to'
   | 'Crawl'
   | 'Issues'
+  // The URL grid (its slice).
+  | 'URLs'
   | 'Links'
   // Sitemaps and robots.txt (their slice).
   | 'Sitemaps'
@@ -36,6 +38,7 @@ export const COMMAND_GROUPS: readonly CommandGroup[] = [
   'Go to',
   'Crawl',
   'Issues',
+  'URLs',
   'Links',
   'Sitemaps',
   'robots.txt',

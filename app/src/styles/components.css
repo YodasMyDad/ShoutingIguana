@@ -888,6 +888,14 @@
     color: var(--color-text);
   }
 
+  /* The point a menu opens from when no button of its own opens it (a grid row's menu): nothing to see or press. */
+  .si-menu-anchor {
+    position: fixed;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
   .si-menu {
     min-width: var(--menu-min-width);
     max-height: var(--radix-dropdown-menu-content-available-height, var(--dialog-max-height));
