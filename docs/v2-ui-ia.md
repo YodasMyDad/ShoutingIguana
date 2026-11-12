@@ -185,6 +185,9 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
   sitemap lists (a link to them in URLs), or that the analysis didn't count them and why.
 - Open a sitemap for its URLs: the URL grid narrowed to it, each URL with what the crawl did with it, and quick
   filters for each of its counts and for redirecting or broken. "All sitemaps" leads back.
+- In a short window (200% zoom) the screen scrolls: the list keeps five rows, or all it has, and a sitemap's URLs
+  keep five. In a window too narrow for every column the counts come straight after the sitemap's address, and a
+  sitemap's filters take a second line.
 
 **robots.txt.**
 
@@ -198,6 +201,9 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 - Beside it, the blocked URLs, each with the line that decided it. Choosing a rule marks it and lists what it
   blocked; moving through the URLs shows each one's line. A URL opens the inspector.
 - A crawl told to ignore robots.txt says so at the top, and is never said to have obeyed a file, a line or a rule.
+- In a short window (200% zoom) the screen scrolls: the origins keep five rows, or all there are, with what each
+  blocked straight after the origin where not every column fits; the file and its blocked URLs stack, and the
+  blocked URLs keep five rows.
 - A sitemap or an origin the crawl doesn't have: "not so far" while the crawl hasn't ended (the page fills in if it
   gets there), a stale link once it has.
 
