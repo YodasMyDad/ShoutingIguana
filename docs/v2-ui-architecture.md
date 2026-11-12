@@ -116,8 +116,21 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   Pause and Resume, and Quit. Hidden, the webview is told it's invisible, its memory target is set Low, and the page is
   suspended: no rendering, timers or live updates while hidden, so memory doesn't creep back. It resumes when the
   window comes back and catches up from the engine, as after any reconnect (a sidecar replaced meanwhile included).
-  The 50 MB tray budget holds over a long stay: with a crawl running, the shell and its WebView2 processes measured
-  9.6 MB at 30 s, 20 MB at 3 minutes and a flat 23 MB from 6 to 11 minutes. The shell's own event stream keeps the
+  What the tray holds depends on which of Windows' measures is read, so the budget names one: the 50 MB tray budget
+  is of the **private working set** (the pages in RAM no other process shares: Task Manager's "Memory" column, summed
+  over the shell and every process it started, its engine and what the engine started left out), and it holds. The
+  earlier "flat 23 MB" (9.6 MB at 30 s, 20 MB at 3 minutes, 23 MB from 6 to 11 minutes) didn't say which it
+  was; by its size it was this one (inferred: no other measure comes near it). The shell pass's 66 MB was the
+  **working set**, which counts every shared page (the system's and WebView2's DLLs) once in each of the seven
+  processes. `npm run smoke:shell -- --tray-stay <s>` now reads all three every 30 s while the window is hidden (`shellMemory` in `scripts/lib/shell.mjs`). Measured on 12 Nov 2026 (WebView2 157,
+  Windows 11, a crawl of the test site running throughout, two runs, 30 s to 3 minutes hidden): private working set
+  19 to 20 MB at 30 s, 28 MB at 60 s, 31 to 32 MB at 2 minutes, 33 to 34 MB at 3 minutes, still creeping by under
+  1 MB a minute; working set 80 to 81 MB at 30 s and 95 to 96 MB at 3 minutes; **private bytes** (memory committed
+  to the processes, in RAM or paged out, most of it WebView2's browser and GPU processes) a steady 316 to 321 MB.
+  So the budget holds by the measure it names, and wouldn't by the other two, which no budget here is of. Not
+  measured: a stay past 3 minutes this time, so whether it levels off near the earlier run's 23 MB plateau or
+  higher isn't known. While hidden, the DevTools connection the walk drives the page through drops (the page
+  doesn't: it comes back as it was), so the walk attaches again after a long stay. The shell's own event stream keeps the
   tray and the notifications going, and a crawl the engine took with it when it crashed is told once the new engine
   reports it: "Crawl interrupted".
 - **OS.** Single instance. A second launch focuses the window, and the `.sicrawl` paths of every launch wait in the
@@ -176,8 +189,14 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   `--shots <folder>` keeps a picture of the page after each step, `--skip keys,live,tray,restart` leaves parts out.
 - **What the first walk by hand found** (10 Nov 2026, WebView2 157, Windows 11 at 150%): everything above works as in
   Chromium, with these differences. Back from the tray after a crawl ended there, Overview failed (fixed: see
-  Overview's `useAnalysisAnswer`). Scrollbars show (headless Chromium hides them), in the colours `base.css` gives
-  them. The quit question and the tray's menu are Windows' own, so they don't follow the app's theme. With the browser
+  Overview's `useAnalysisAnswer`). Scrollbars show (headless Chromium hides them): they were Windows' classic ones,
+  arrows and all, and one under the inspector's tabs. They are now `base.css`'s: thin, a border-control thumb on no
+  track and no arrows, by the `::-webkit-scrollbar` parts in Chromium (which ignores the parts on an element that sets
+  `scrollbar-width` or `scrollbar-color`, and with `scrollbar-width: thin` alone still draws small arrows), the
+  standard properties in a browser without the parts, and the system's own under forced colours; a strip of tabs has
+  none (`scrollbar-width: none`) and scrolls its chosen tab into view. Headless Chromium draws these parts too, so the
+  end-to-end tests now lay out with the shell's 10 px bars. Seen in the release build through this walk, before and
+  after (12 Nov 2026). The quit question and the tray's menu are Windows' own, so they don't follow the app's theme. With the browser
   keys turned off, WebView2 still raises nothing of its own for F5, Ctrl+R, F3, Ctrl+G, Ctrl+J, Ctrl+P, Ctrl+S, Ctrl+U,
   F12 or Shift+Esc, checked against a build that leaves them on, where each does its browser thing. F10 and a tap of
   Alt are handled by the shell and leave the next key alone; Shift+F10 and Alt+Left get through.
@@ -636,9 +655,13 @@ answer. What it settled:
   severity, Fix first, categories, skipped checks by reason, indexability, depth, response times), `emptyCrawl.ts`
   (why a crawl read no pages) and `links.ts` (where every figure leads). All unit-tested, each figure with its link.
 - **It builds on Issues' list** (`issues/checkList.ts`): the answer sentence, the totals and the severity counts are
-  the same functions, and `rankChecksToFix` is the order both screens use (`firstCheckToFix` is its first). Fix first
-  counts each check in what it flags ("3 pages", "4 URLs": `crawl/checkSubject.ts`), and says its order is "the most
-  severe first, then the most pages or URLs affected".
+  the same functions, and `rankChecksToFix` is the order both screens use (`firstCheckToFix` is its first): the
+  engine's, the analysis's `fixFirst` (severity, a fault of the whole site before any other of its severity, the URLs
+  flagged, catalog order), taken as it comes and never sorted again by count, the hidden checks left out of what's
+  listed; the app's own (severity, then count, then catalog order) only for an earlier engine's analysis, which has
+  no `fixFirst`. Fix first counts each check in what it flags ("3 pages", "4 URLs": `crawl/checkSubject.ts`), and says
+  which order it is: "a fault of the whole site before the rest, then the most URLs affected", or the app's "then the
+  most pages or URLs affected".
   Analysing from a screen is one hook, `issues/useAnalysisControl.ts`, and what the analysis's read says of a crawl is
   another, `issues/useAnalysisAnswer.ts`: "not analysed" is an answer that comes as an error, which the query forgets
   the moment it's asked again, so a screen that went by the query alone swapped itself for its loading frame whenever
@@ -666,15 +689,27 @@ answer. What it settled:
   it, and a line under the classes says how many there are in the engine's words ("weren't checked because their
   sites had stopped answering"), opening `outcome in [notChecked]`. Live the count is `noResponse.notChecked`; done
   it is a second facets read beside the status one (`statusFacetsQuery`, the two as one query), because the facets
-  can't tell these URLs from the ones only found and `/stats` is too slow to wait for. "N URLs crawled" and a stopped
-  crawl's "after N URLs" are the status breakdown's total, which is what their link opens.
+  can't tell these URLs from the ones only found and `/stats` is too slow to wait for.
+- **"N URLs" is one number everywhere** (E3c): the URLs the grid lists as crawled (`fetched` is true), the library's
+  `crawledUrlCount` and a running crawl's `crawled` (`crawledUrls` in `crawl/status.ts`): Home's library, the top
+  bar's status pill, the sidebar's running crawls, the Crawl stopped and Crawl finished toasts, the finished
+  Overview's "N URLs crawled" and a stopped crawl's "after N URLs". From an earlier engine, which sends neither, the
+  same subtraction is made from `fetchedUrlCount` or `fetched`.
 - **What the breakdowns count.** Status codes: every URL fetched, as the grid counts them. Indexability: the site's
   page URLs the crawl asked for (`isInternal`, `type` page, `fetched`), errors and redirects included, as "why not"
   names them. The crawler's own probes of the site's other versions (`source` `siteVersion`) are on the site and look
   like pages, but aren't the site's: every page filter leaves them out (`SITE_PAGES`), as the engine's own counts do,
-  so an http site's https version not answering isn't one of its pages that "Didn't answer". The status codes count
-  every URL fetched, probes included, live and done: a crawl's first "Network error × 1" is often that probe, which
-  the live event counts (the engine's `statusClasses` are of every URL). Depth and response times: the site's pages,
+  so an http site's https version not answering isn't one of its pages that "Didn't answer". The status codes are
+  the site's own too, live and done (E3c): each class, code, reason and the URLs not checked less the probes' part
+  (live, the progress event's `siteVersions`; done, the probes' own rows in the URL grid, a handful on any site, read
+  beside the facets in `statusFacetsQuery` and counted as the event counts them, `probeCountsOf`), each link with
+  `source notIn [siteVersion]` beside its filters, so an http-only site no longer shows "Network error × 1" from its
+  first seconds. A line under the classes says the probes apart ("N URLs the crawler tried for the site's other
+  versions (http or https, www or not) aren't counted here"), opening `source in [siteVersion]` with `outcome
+  isNotEmpty`: the classes' total and it add up to Crawled. Live, the line's room is kept from the start, as the
+  probes answer in a crawl's first seconds. `e2e/overview.spec.ts` pauses a live crawl of the test site and walks
+  every figure (Crawled, Pages, each class, the probes, the URLs not checked) to its count in the grid. Depth and
+  response times: the site's pages,
   which is one count everywhere. A page is the engine's (`CrawlSchema.PAGE`): a URL of the site that answered 2xx with HTML the crawl read, so the filter ends with
   `wordCount isNotEmpty` (only parsed HTML has a word count; a URL whose status alone was checked, an iframe's target,
   has none). The cards' "N pages", the live "Pages" and its link, and the library's "pages read" are then the same
@@ -684,13 +719,15 @@ answer. What it settled:
   the catalog and three facet reads, each card with its own skeleton and its own error.
 - **One clock for the live screen's times**: the time the run being watched has spent crawling (the live store's
   run clock). Elapsed shows it, the chart's time axis is it, and the pace is read over the last minute of it, so the
-  three agree, a pause moves none of them, and a resumed crawl's time left is right at once. A continued crawl's
-  screen is of this run: its chart starts where the run did, at the counts it started with, and says "since it was
-  continued". The earlier runs are in `/history`, counted back from the file, but the file doesn't keep when each run
-  began and ended, so the hours or days between them can't be told from crawling, and on one axis they were most of
-  the chart. The finished crawl's line says when it started and not how long it took, for the same reason: nothing
-  the engine keeps is the time spent crawling (an engine gap; `finishedAt - startedAt` has every pause and stop in
-  it).
+  three agree, a pause moves none of them, and a resumed crawl's time left is right at once. A continued crawl is
+  drawn whole (E3c's `/history.runs`): the earlier runs' points, counted back from the file, are placed by the time
+  their stretches had spent crawling (`crawlingAt` in `foundAndCrawled.ts`), so the days between runs and the pauses
+  take no room, and this run follows on from their total; each later run's start is a dashed rule (`LineChart`'s
+  `markers`), and the chart's name says the runs and where each continued ("over 10 min 4 s of crawling, in 2 runs,
+  continued at 10 min of it"). Elapsed is that same clock: the earlier runs' time and this run's. From an engine
+  without `runs`, the chart is of this run, starting where it did and saying "since it was continued". The finished
+  crawl's line says how long it spent crawling (`crawlingMs`), "not counting pauses or the time between runs", and
+  for a crawl an earlier version made, that it isn't known, never `finishedAt - startedAt`.
 - **The time left** shows only with a URL limit: what's left of the limit at the pace of the last minute of crawling,
   worded "done within" while the crawl may still find fewer URLs than its limit, and "about ... left" once it has
   found as many as it may fetch. At the limit there's none: the figure says the limit is reached.
@@ -780,9 +817,17 @@ is what it shows. What it settled:
 - **What the crawl did with a URL is said once, and no more than is known.** `fetchState.ts` takes whether the
   crawl is running: a URL it hasn't reached is on its way while it runs, and "The crawl stopped before it reached
   this URL" once it doesn't. Every section with nothing to show for the URL says that state's words, Redirects
-  included (a URL that never answered isn't said to answer for itself). Where only a status code comes with a URL (a
-  link's row, a canonical's or hreflang's target, a hop without an outcome), no code reads "No status": the crawl
-  may never have asked (robots.txt), so "No response" and "Not fetched" would be guesses. Depth 0 is "the start
+  included (a URL that never answered isn't said to answer for itself). A URL it names with no status code (a link's
+  row, a redirect's hop and end, a canonical's, a meta refresh's or an hreflang's target) says what became of it from
+  its `outcome` (E3c), in the words the inspector uses for the URL itself (`noStatusWords` in `words.ts`, held to
+  `fetchState`'s titles by a test): Blocked by robots.txt, Blocked by the server, Not checked, Timed out, Couldn't be
+  reached, Couldn't be read, No response, and Not fetched, or Not fetched yet while the crawl runs. From an earlier
+  engine, which sends only the code, it reads "No status": the crawl may never have asked (robots.txt), so "No
+  response" and "Not fetched" would be guesses.
+- **The tabs' link counts come with the URL** (E3c's `linkTotals`): a running crawl's tick reads the URL shown once,
+  where it read `/urls/inlinks` and `/urls/outlinks` too for their totals (three reads a tick, counted both ways by a
+  test); an earlier engine's inspect has no totals, and the lists are read for them. A page's `urlLength`, the check's
+  own measure, is drawn on the analysis's `maxUrlLength` as the other values are. Depth 0 is "the start
   URL" only for the URL the crawl started at; a probe of the site's other versions has depth 0 too.
 - **An analysis that no longer stands is said where the URL's issues are**, in the summary and in the Issues
   section, by the Issues screen's own banner and its "Analyse again" (`crawl/LastAnalysisBanner.tsx`, which both
