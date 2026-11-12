@@ -370,7 +370,8 @@ export function UrlsScreen() {
   const noUrls = noUrlsWords(crawling);
   const preset = activeUrlPreset(shown);
   const rowMenu = useRowMenu<UrlRow>();
-  const menuRow = rowMenu.state ? rows.getRow(rowMenu.state.index) : undefined;
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
   const menuCount = rowMenu.state?.menu.indices.length ?? 1;
 
   useCommands(

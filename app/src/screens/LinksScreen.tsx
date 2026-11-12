@@ -438,7 +438,8 @@ export function LinksScreen() {
   // A row's menu acts on the end of the link the menu was opened in: the page it's on from one of its columns, the
   // target from anywhere else, as Enter does.
   const rowMenu = useRowMenu<LinkRow>();
-  const menuRow = rowMenu.state ? rows.getRow(rowMenu.state.index) : undefined;
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
   const menuEnd: 'from' | 'to' =
     rowMenu.state && endColumn(columns[rowMenu.state.column]?.id ?? '')?.end === 'from' ? 'from' : 'to';
   const menuUrl = menuRow?.[`${menuEnd}.url`];

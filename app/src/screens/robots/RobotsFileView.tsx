@@ -486,7 +486,8 @@ function BlockedUrls({
     [crawlId, query],
   );
   const rows = usePagedRows<RobotsBlockedUrl>({ queryKey, fetchPage, rowHeight });
-  const menuRow = rowMenu.state ? rows.getRow(rowMenu.state.index) : undefined;
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
 
   // The list is read again each second while a crawl runs, and says how many URLs the origin blocked in all. The
   // file says the same, with each line's share: when the two differ the file is behind, and is read again, once.

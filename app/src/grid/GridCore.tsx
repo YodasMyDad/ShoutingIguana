@@ -48,11 +48,16 @@ export interface GridCopyResult {
 
 /** What a row's menu acts on: the row it was opened on, or the selection that row is in. */
 export interface GridMenuContext<Row> {
-  /** The rows' indices, in order: the selection's (at most MAX_COPY_ROWS of it), or the one row. */
+  /** The rows' indices when the menu opened, in order: the selection's (at most MAX_COPY_ROWS of it), or the row's. */
   indices: readonly number[];
+  /**
+   * The row the menu was opened on, as it was then: what its items inspect, open and name. Undefined only for a row
+   * whose page wasn't loaded. Never read it again by its number: the rows can move while the menu is open.
+   */
+  row: Row | undefined;
   /** The selection had more rows than a menu acts on. */
   truncated: boolean;
-  /** The rows themselves, read where they aren't loaded; undefined for one that couldn't be. */
+  /** The rows themselves, as they were when the menu opened (read then where they weren't loaded); undefined for one that couldn't be. */
   rows: () => Promise<readonly (Row | undefined)[]>;
   /** Copies the rows as tab-separated text with a header row, as Ctrl+C copies a selection. */
   copy: () => Promise<void>;
@@ -435,11 +440,15 @@ function GridCoreInner<Row>({
    * (a group's link to all its rows), is left out rather than copied as a blank line: `rows` is what was copied,
    * `unread` what couldn't be. Throws when a page can't be fetched.
    */
-  const selectionText = async (indices: readonly number[]) => {
+  const rowsAt = async (indices: readonly number[]): Promise<readonly (Row | undefined)[]> => {
     const missing = indices.filter((index) => getRow(index) === undefined);
     const fetched = missing.length && fetchRows ? await fetchRows(missing) : [];
     const byIndex = new Map(missing.map((index, i) => [index, fetched[i]]));
-    const rows = indices.map((index) => getRow(index) ?? byIndex.get(index));
+    return indices.map((index) => getRow(index) ?? byIndex.get(index));
+  };
+
+  /** Rows as text, with a header row; a row that has no text (a group's link to all its rows) is left out. */
+  const textOf = (rows: readonly (Row | undefined)[]) => {
     const lines = rows
       .filter((row) => row !== undefined)
       .map((row) => columns.map((column) => column.text(row)))
@@ -461,7 +470,7 @@ function GridCoreInner<Row>({
   const copy = async () => {
     const pick = selectedIndices(selection, MAX_COPY_ROWS);
     if (pick.indices.length > 0) {
-      await copyRows(pick.indices, pick.truncated);
+      await copyRows(() => rowsAt(pick.indices), pick.truncated);
       return;
     }
     try {
@@ -481,9 +490,9 @@ function GridCoreInner<Row>({
   };
 
   /** Rows as tab-separated text with a header row: a selection's (Ctrl+C), or a row menu's. */
-  const copyRows = async (indices: readonly number[], truncated: boolean) => {
+  const copyRows = async (read: () => Promise<readonly (Row | undefined)[]>, truncated: boolean) => {
     try {
-      const copied = await selectionText(indices);
+      const copied = textOf(await read());
       if (copied.rows === 0) throw new NothingToCopy();
       if (!(await copyText(copied.text))) throw new ClipboardRefused();
       // What was copied, never what was selected: rows that weren't there aren't counted.
@@ -578,15 +587,27 @@ function GridCoreInner<Row>({
     const effect = result.effect;
     if (effect?.type === 'activate') activate(effect.row, result.state.active?.col ?? active?.col ?? 0);
     else if (effect?.type === 'copy') void copy();
-    else if (effect?.type === 'contextMenu') {
-      const cell = document.getElementById(cellId(effect.row, effect.col))?.getBoundingClientRect();
-      onContextMenu?.(
-        effect.row,
-        effect.col,
-        cell ? { x: cell.left, y: cell.bottom } : { x: 0, y: 0 },
-        menuContext(effect.row, selection),
-      );
-    }
+    else if (effect?.type === 'contextMenu') openMenuFromKeys(effect.row, effect.col);
+  };
+
+  /**
+   * Shift+F10 or the menu key: the menu opens at the bottom-left corner of the cursor's cell (the row's one cell, for a
+   * row drawn as one), worked out from where the row is in the grid's scroll space, not measured: the keys have just
+   * scrolled the row into view where it wasn't, and what's drawn still has it where it was (or the copy of it kept
+   * off screen for assistive technology).
+   */
+  const openMenuFromKeys = (row: number, col: number) => {
+    const element = scrollRef.current;
+    if (!element || !onContextMenu) return;
+    const at = spans(row) ? 0 : col;
+    const box = element.getBoundingClientRect();
+    const left = box.left + columns.slice(0, at).reduce((sum, column) => sum + column.width, 0) - element.scrollLeft;
+    const bottom = box.top + headerHeight + (row + 1) * rowHeight - model.offset();
+    const anchor = {
+      x: Math.min(Math.max(left, box.left), box.right),
+      y: Math.min(Math.max(bottom, box.top + headerHeight), box.bottom),
+    };
+    onContextMenu(row, at, anchor, menuContext(row, selection));
   };
 
   /**
@@ -596,17 +617,18 @@ function GridCoreInner<Row>({
   const menuContext = (row: number, within: typeof selection): GridMenuContext<Row> => {
     const inSelection = effectiveRanges(within).some(([first, last]) => row >= first && row <= last);
     const pick = inSelection ? selectedIndices(within, MAX_COPY_ROWS) : { indices: [row], truncated: false };
-    const read = async () => {
-      const missing = pick.indices.filter((index) => getRow(index) === undefined);
-      const fetched = missing.length > 0 && fetchRows ? await fetchRows(missing) : [];
-      const byIndex = new Map(missing.map((index, i) => [index, fetched[i]]));
-      return pick.indices.map((index) => getRow(index) ?? byIndex.get(index));
-    };
+    // The rows themselves, held as they are now: a running crawl's refresh can put other rows at these numbers while
+    // the menu is open, and the menu is of these. Rows not loaded are read at once, before anything can move.
+    const held = pick.indices.map((index) => getRow(index));
+    const reading = held.some((entry) => entry === undefined) ? rowsAt(pick.indices) : Promise.resolve(held);
+    // A read that fails says so when an item asks for the rows, not here.
+    reading.catch(() => undefined);
     return {
       indices: pick.indices,
       truncated: pick.truncated,
-      rows: read,
-      copy: () => copyRows(pick.indices, pick.truncated),
+      row: getRow(row),
+      rows: () => reading,
+      copy: () => copyRows(() => reading, pick.truncated),
       focus: () => scrollRef.current?.focus({ preventScroll: true }),
     };
   };
@@ -661,11 +683,16 @@ function GridCoreInner<Row>({
     const position = positionOf(event.target);
     if (!position || !onContextMenu) return;
     event.preventDefault();
+    // The cursor goes to the row the menu is for, from the header too, so the keys go on from there once it closes.
+    setHeaderCursor(null);
     let within = selection;
     if (!ranges.some(([first, last]) => position.row >= first && position.row <= last)) {
       const next = gridPointer({ active, selection, follow: nav.follow }, position, { shift: false, mod: false });
       apply(next, null);
       within = next.selection;
+    } else if (active?.row !== position.row || active.col !== position.col) {
+      // Inside the selection: the selection stays (the menu is of it), and the cursor moves to the row clicked.
+      apply({ active: position, selection, follow: false }, null);
     }
     onContextMenu(
       position.row,

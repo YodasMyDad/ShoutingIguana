@@ -901,3 +901,22 @@ describe('GridCore’s row menu', () => {
     expect(fireEvent.contextMenu(grid)).toBe(false);
   });
 });
+
+describe('GridCore’s row menu from a right-click inside the selection', () => {
+  it('keeps the selection and moves the cursor to the row clicked, telling the move', () => {
+    const onContextMenu = vi.fn();
+    const onActiveRowChange = vi.fn();
+    const { grid, activeCell } = setup({ onContextMenu, onActiveRowChange });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(grid, { key: 'ArrowDown', shiftKey: true });
+    expect(activeCell()?.closest('[role="row"]')).toHaveAttribute('aria-rowindex', '4');
+    onActiveRowChange.mockClear();
+    fireEvent.contextMenu(grid.querySelector('[data-row="0"][data-col="1"]')!);
+    expect((onContextMenu.mock.lastCall?.[3] as GridMenuContext<Row>).indices).toEqual([0, 1, 2]);
+    expect(grid.querySelectorAll('[role="row"][aria-selected="true"]')).toHaveLength(3);
+    // The cursor is on the row the menu is for: with the inspector open, it follows it there.
+    expect(activeCell()?.closest('[role="row"]')).toHaveAttribute('aria-rowindex', '2');
+    expect(onActiveRowChange).toHaveBeenLastCalledWith(0);
+  });
+});

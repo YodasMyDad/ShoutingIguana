@@ -68,7 +68,8 @@ export function IssueRowsGrid({
   const rows = usePagedRows<IssueRow>({ queryKey, fetchPage, rowHeight });
   const handoff = useHeaderHandoff(sort);
   const rowMenu = useRowMenu<IssueRow>();
-  const menuRow = rowMenu.state ? rows.getRow(rowMenu.state.index) : undefined;
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
 
   const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 720) - DETAIL_WIDTH - FRAME_SLACK);
   const columns = useMemo<GridColumn<IssueRow>[]>(() => {

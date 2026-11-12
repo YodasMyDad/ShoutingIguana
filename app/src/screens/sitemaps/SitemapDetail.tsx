@@ -128,7 +128,8 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   const rows = usePagedRows<UrlRow>({ queryKey, fetchPage, rowHeight, enabled });
   const inspector = useInspector();
   const rowMenu = useRowMenu<UrlRow>();
-  const menuRow = rowMenu.state ? rows.getRow(rowMenu.state.index) : undefined;
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
   const inspecting = search.inspect !== undefined;
   const handoff = useHeaderHandoff(sort);
   // Which columns the engine sorts by: its own word for it, never a list kept here.

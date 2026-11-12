@@ -36,6 +36,7 @@ import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { FIRST_GROUP_ROWS, childRows, groupFilter, groupRefOf, treeLayout, type OpenGroup } from './groupTree';
 import { IssuePageMenu } from './IssuePageMenu';
+import { checkUrlsReader, copyUrls } from './copyUrls';
 
 /** A row of the tree: a group, one of the open group's first pages or URLs, or its link to all of them. */
 type TreeRow =
@@ -455,7 +456,8 @@ export function IssueGroups({
       : (groups.firstPage?.rows.find((group) => group.likelyTemplate) ?? null);
 
   const rows = layout.rowCount;
-  const menuRow = rowMenu.state ? getRow(rowMenu.state.index) : undefined;
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
   const shown = groupCount === null ? Math.min(Math.max(total, 1), 6) : Math.max(rows, 1);
   const height = shown * rowHeight + headerHeight + 2;
 
@@ -509,6 +511,12 @@ export function IssueGroups({
             ? {
                 words: showInUrlsWords(check, menuRow.group.pages),
                 filter: groupFilter(check.id, groupRefOf(menuRow.group)),
+                urls: menuRow.group.pages,
+                onCopyUrls: () =>
+                  void copyUrls({
+                    read: checkUrlsReader(crawlId, check.id, groupRefOf(menuRow.group)),
+                    expected: menuRow.group.pages,
+                  }),
               }
             : null
         }

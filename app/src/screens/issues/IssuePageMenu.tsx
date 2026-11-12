@@ -2,10 +2,11 @@
 // and the Issues screen's own, "Show the page in URLs", the URL grid narrowed to that one URL with the inspector on
 // it. A group's row has its own: its pages in URLs, as its "Show all" link has them.
 import { useNavigate } from '@tanstack/react-router';
-import { ListFilter } from 'lucide-react';
+import { ClipboardList, Copy, ListFilter } from 'lucide-react';
 import type { GridFilter } from '../../api/grids';
 import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
 import { copyRowUrls, rowMenuLabel, type RowMenuState } from '../../grid/rowMenuState';
+import { formatCount } from '../../lib/format';
 import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { urlDisplay } from '../../ui/urlText';
 import { oneUrlFilter } from '../urls/urlPlaces';
@@ -17,8 +18,11 @@ export interface IssuePageMenuProps<Row> {
   siteOrigin: string | null;
   /** The page the menu was opened on: its id and URL. Null for a row that isn't one (a group). */
   page: { id: number; url: string } | null;
-  /** A group's rows in URLs, for a menu opened on a group's row: its words ("Show all 12 pages in URLs") and filter. */
-  group?: { words: string; filter: GridFilter[] } | null | undefined;
+  /**
+   * A menu opened on a group's row: its rows in URLs ("Show all 12 pages in URLs") and their filter, how many URLs it
+   * has, and a copy of them.
+   */
+  group?: { words: string; filter: GridFilter[]; urls: number; onCopyUrls: () => void } | null | undefined;
   /** The URL of each row the menu acts on, for a copy; null for a row that has none (a group). */
   urlOf: (row: Row) => string | null | undefined;
   onInspect: (urlId: number) => void;
@@ -67,14 +71,23 @@ export function IssuePageMenu<Row>({
           </MenuItem>
         </>
       ) : group ? (
-        <MenuItem
-          icon={ListFilter}
-          onSelect={() =>
-            void navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { filter: group.filter } })
-          }
-        >
-          {group.words}
-        </MenuItem>
+        <>
+          <MenuItem icon={Copy} onSelect={group.onCopyUrls}>
+            {group.urls === 1 ? 'Copy the group’s URL' : `Copy the group’s ${formatCount(group.urls)} URLs`}
+          </MenuItem>
+          <MenuItem icon={ClipboardList} shortcut="mod+c" onSelect={() => void state?.menu.copy()}>
+            Copy the row
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem
+            icon={ListFilter}
+            onSelect={() =>
+              void navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { filter: group.filter } })
+            }
+          >
+            {group.words}
+          </MenuItem>
+        </>
       ) : null}
     </RowMenu>
   );
