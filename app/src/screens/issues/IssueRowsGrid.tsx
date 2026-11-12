@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import type { GridSort, IssueRow } from '../../api/grids';
 import { queryKeys } from '../../api/queries';
 import type { Check } from '../../api/types';
+import { affectedWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
@@ -97,7 +98,7 @@ export function IssueRowsGrid({
     <div ref={measure} className="flex max-h-(--evidence-max-height) min-h-0 flex-col" style={{ height }}>
       <GridCore<IssueRow>
         key={JSON.stringify(queryKey)}
-        label={`${check.title}: affected pages`}
+        label={`${check.title}: ${affectedWords(check).named}`}
         columns={columns}
         rowCount={rows.rowCount}
         getRow={rows.getRow}

@@ -1,22 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { RefreshCw } from 'lucide-react';
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo } from 'react';
 import { api } from '../api/client';
-import { isProblem, type ProblemError } from '../api/errors';
-import type { GridFilter, SummaryReason, UrlRow } from '../api/grids';
-import { checksQuery, crawlQuery } from '../api/queries';
+import { isProblem } from '../api/errors';
+import type { GridFilter, UrlRow } from '../api/grids';
+import { crawlQuery } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyResult } from '../feedback/notify';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
-import { LOOKING_UP, filterSentences } from '../grid/filterSentence';
+import { FilterChips } from '../grid/FilterBar';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
+import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
 import { useGridMetrics } from '../grid/metrics';
+import { NeedsAnalysis } from '../grid/NeedsAnalysis';
+import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfNames } from '../grid/summaryWords';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
+import { useCheckWords } from '../grid/useCheckWords';
+import { useUrlWords } from '../grid/useUrlWords';
 import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
 import { urlColumnWords, urlEmptyWords, urlValueWords } from '../grid/urlFilterWords';
@@ -25,11 +30,10 @@ import { useLiveCrawl } from '../live/liveStore';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { FilteredEmptyState } from '../ui/EmptyState';
-import { FilterChip } from '../ui/FilterChip';
 import { LiveBadge } from '../ui/LiveBadge';
 import { GridHeader, ResultCount } from '../ui/PageHeader';
 import { SearchField } from '../ui/SearchField';
-import { siteOriginOf, urlDisplay } from '../ui/urlText';
+import { siteOriginOf } from '../ui/urlText';
 
 /** Words for the indexability column: the reason it isn't indexable, or Indexable. */
 const INDEXABILITY: Record<string, string> = {
@@ -110,18 +114,9 @@ const COLUMNS: readonly GridColumn<UrlRow>[] = [
 /** What the query asks for: the columns shown, and statusClass, to tell "No response" from "not fetched". */
 const QUERY_COLUMNS = [...COLUMNS.map((column) => column.id), 'statusClass'];
 
-/** Why the analysis's columns are empty now, after the columns' names: the summary's reason, in plain words. */
-const UNAVAILABLE_BECAUSE: Record<SummaryReason, string> = {
-  crawling: 'fill in once the crawl has finished and been analysed',
-  notAnalyzed: 'need an analysis: this crawl hasn’t been analysed yet',
-  engineChanged: 'need this crawl analysed again: another version of Shouting Iguana analysed it',
-  crawlChanged: 'need this crawl analysed again: it was continued after its last analysis',
-};
-
-/** "Inlinks", "Inlinks and Issues", "Title, Inlinks and Issues". */
+/** "Inlinks", "Inlinks and Issues", "Title, Inlinks and Issues": the columns' names, in the grid's order. */
 function namesOf(ids: readonly string[]): string {
-  const names = COLUMNS.filter((column) => ids.includes(column.id)).map((column) => column.header);
-  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}` : (names[0] ?? '');
+  return listOfNames(COLUMNS.filter((column) => ids.includes(column.id)).map((column) => column.header));
 }
 
 /**
@@ -197,6 +192,13 @@ export function UrlsScreen() {
         {label}
       </Button>
     ) : null;
+  // While the crawl is being analysed the summary still gives the reason from before (never analysed, out of date):
+  // what's true now is that the analysis under way fills the columns, and there's nothing to press.
+  const analysing = crawlStatus === 'analyzing';
+  const unavailableBecause =
+    analysing && summary?.reason !== 'crawling'
+      ? UNAVAILABLE_WHILE_ANALYSING
+      : UNAVAILABLE_BECAUSE[summary?.reason ?? 'notAnalyzed'];
   const clearView = () => void navigate({ search: {} });
   const chips = (
     <ActiveFilters
@@ -210,7 +212,7 @@ export function UrlsScreen() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <GridScreen>
       <GridHeader
         title="URLs"
         count={count}
@@ -240,19 +242,19 @@ export function UrlsScreen() {
       {summary && !summary.available && unavailable.length > 0 ? (
         <Banner inset className="mx-6 mb-3">
           <span className="inline-flex flex-wrap items-center gap-3">
-            {namesOf(unavailable)} {UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']}.
-            {summary.reason === 'crawling'
-              ? null
-              : analyse(summary.reason === 'notAnalyzed' ? 'Analyse it' : 'Analyse again')}
+            {namesOf(unavailable)} {unavailableBecause}.
+            {summary.reason === 'crawling' || analysing ? null : analyse(analyseWords(summary.reason))}
           </span>
         </Banner>
       ) : null}
       {rows.error && rows.rowCount === null ? (
         isProblem(rows.error, 'needs-analysis') ? (
-          <NeedsAnalysis error={rows.error} action={analyse('Analyse it')} onClear={clearView} />
+          <NeedsAnalysis error={rows.error} action={analyse} onClear={clearView} />
         ) : isProblem(rows.error, 'invalid-query') ? (
+          // With what the engine said of it, in place: its sentence is written for the user, not for Details.
           <ErrorState
             error={rows.error}
+            description={rows.error.detail}
             actions={
               <Button size="sm" onClick={clearView}>
                 Reset the view
@@ -263,67 +265,51 @@ export function UrlsScreen() {
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
       ) : (
-        <GridCore
-          key={JSON.stringify(queryKey)}
-          label="URLs"
-          columns={columns}
-          rowCount={rows.rowCount}
-          getRow={rows.getRow}
-          rowHeight={rowHeight}
-          headerHeight={headerHeight}
-          onRangeChange={rows.onRangeChange}
-          onScrollOffset={rows.onScrollOffset}
-          fetchRows={rows.fetchRows}
-          onCopy={onCopy}
-          onActivate={(_index, row) => {
-            if (row) inspector.open(row.id);
-          }}
-          // While it's open, the inspector follows the cursor, in place.
-          onActiveRowChange={(index) => {
-            const row = inspecting && index !== null ? rows.getRow(index) : undefined;
-            if (row) inspector.open(row.id);
-          }}
-          // Live refreshes update in place: the progress line is for a refresh the user asked for.
-          busy={rows.isRefreshing && !crawling}
-          emptyState={
-            <FilteredEmptyState
-              title="No URLs match these filters."
-              level="none"
-              filters={filters.length > 0 ? chips : undefined}
-              onClear={clearView}
-            />
-          }
-          className="mx-6 mb-4 flex-1 rounded-lg border border-border shadow-1"
-        />
+        <GridScreenBody className="mx-6 pb-4">
+          <GridCore
+            key={JSON.stringify(queryKey)}
+            label="URLs"
+            // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
+            minRows={GRID_SCREEN_MIN_ROWS}
+            columns={columns}
+            rowCount={rows.rowCount}
+            getRow={rows.getRow}
+            rowHeight={rowHeight}
+            headerHeight={headerHeight}
+            onRangeChange={rows.onRangeChange}
+            onScrollOffset={rows.onScrollOffset}
+            fetchRows={rows.fetchRows}
+            onCopy={onCopy}
+            onActivate={(_index, row) => {
+              if (row) inspector.open(row.id);
+            }}
+            // While it's open, the inspector follows the cursor, in place.
+            onActiveRowChange={(index) => {
+              const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+              if (row) inspector.open(row.id);
+            }}
+            // Live refreshes update in place: the progress line is for a refresh the user asked for.
+            busy={rows.isRefreshing && !crawling}
+            emptyState={
+              <FilteredEmptyState
+                title="No URLs match these filters."
+                level="none"
+                filters={filters.length > 0 ? chips : undefined}
+                onClear={clearView}
+              />
+            }
+            className="flex-1 rounded-lg border border-border shadow-1"
+          />
+        </GridScreenBody>
       )}
-    </div>
-  );
-}
-
-/**
- * A sort or filter on a column the analysis fills, with no analysis to read: the engine's plain sentence says why, and
- * the view offers what can work: analysing the crawl, or dropping the sort and filters. Trying again can't.
- */
-function NeedsAnalysis({ error, action, onClear }: { error: ProblemError; action: ReactNode; onClear: () => void }) {
-  return (
-    <ErrorState
-      error={error}
-      actions={
-        <>
-          {error.reason === 'crawling' ? null : action}
-          <Button size="sm" onClick={onClear}>
-            Clear the sort and filters
-          </Button>
-        </>
-      }
-    />
+    </GridScreen>
   );
 }
 
 /**
  * The view's filters as chips that read as sentences ("Check is Internal links without anchor text", "Related URL is
- * /"), each removable. A stand-in for the URL grid's filter bar, its own slice: it reads every filter the route can
- * hold, and edits none yet.
+ * /"), each removable: the grid's own chips (`grid/FilterBar.tsx`, which the Links grid edits its filters with), given
+ * the URL grid's words. Editing them here, with the rest of the full filter bar, is the URLs slice's.
  */
 function ActiveFilters({
   crawlId,
@@ -337,33 +323,16 @@ function ActiveFilters({
   filters: readonly GridFilter[];
   onChange: (filters: GridFilter[]) => void;
 }) {
-  const checks = useQuery({ ...checksQuery(), enabled: filters.some((filter) => filter.column === 'check') });
-  const relatedIds = filters.flatMap((filter) =>
-    'group' in filter && filter.group.relatedUrlId !== null ? [filter.group.relatedUrlId] : [],
-  );
-  const related = useQuery({
-    queryKey: ['crawl', crawlId, 'urlText', relatedIds, siteOrigin],
-    queryFn: async ({ signal }) => {
-      const page = await api.urls(
-        crawlId,
-        { columns: ['url'], filters: [{ column: 'id', op: 'in', values: relatedIds }], sort: [], limit: 100 },
-        signal,
-      );
-      return new Map(page.rows.map((row) => [row.id, row.url ? urlDisplay(row.url, siteOrigin).shown : '']));
-    },
-    enabled: relatedIds.length > 0,
-    staleTime: Infinity,
-  });
   // Names, never ids: while they're read, a placeholder; when they can't be, plain words.
-  const checkWords = (id: string | number) => {
-    if (checks.data)
-      return checks.data.checks.find((check) => check.id === id)?.title ?? 'a check this version doesn’t have';
-    return checks.isError ? 'a check whose name couldn’t be read' : LOOKING_UP;
-  };
-  const relatedWords = (urlId: number) => {
-    if (related.data) return related.data.get(urlId) ?? 'a URL that isn’t in this crawl';
-    return related.isError ? 'a URL that couldn’t be read' : LOOKING_UP;
-  };
+  const checkWords = useCheckWords(filters.some((filter) => filter.column === 'check'));
+  const relatedIds = useMemo(
+    () =>
+      filters.flatMap((filter) =>
+        'group' in filter && filter.group.relatedUrlId !== null ? [filter.group.relatedUrlId] : [],
+      ),
+    [filters],
+  );
+  const relatedWords = useUrlWords(crawlId, relatedIds, siteOrigin);
   const words = {
     column: (id: string) =>
       id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? urlColumnWords(id) ?? id),
@@ -372,30 +341,5 @@ function ActiveFilters({
       column === 'check' ? checkWords(value) : urlValueWords(column, value),
     empty: urlEmptyWords,
   };
-  return (
-    <>
-      {filters.flatMap((filter, index) =>
-        filterSentences(filter, words, relatedWords).map((sentence, part) => (
-          <FilterChip
-            key={`${index}-${part}`}
-            field={sentence.field}
-            op={sentence.op}
-            value={sentence.value}
-            truncate
-            onRemove={() =>
-              onChange(
-                part === 0
-                  ? filters.filter((_, other) => other !== index)
-                  : filters.map((other, at) => {
-                      if (at !== index || !('group' in other)) return other;
-                      const { group: _group, ...rest } = other;
-                      return rest;
-                    }),
-              )
-            }
-          />
-        )),
-      )}
-    </>
-  );
+  return <FilterChips filters={filters} onChange={onChange} words={words} relatedUrl={relatedWords} />;
 }

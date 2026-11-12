@@ -25,6 +25,7 @@ import {
   validateHomeSearch,
   validateInspectSearch,
   validateIssuesSearch,
+  validateLinksSearch,
   validateNewCrawlSearch,
   validateNoSearch,
 } from '../routing/search';
@@ -114,7 +115,7 @@ export const urlsRoute = createRoute({
 export const linksRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'links',
-  validateSearch: validateGridSearch,
+  validateSearch: validateLinksSearch,
   component: lazyRouteComponent(() => import('../screens/LinksScreen'), 'LinksScreen'),
 });
 

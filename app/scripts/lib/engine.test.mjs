@@ -16,7 +16,15 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, it } from 'node:test';
-import { copyCrawl, isCurrentCopy, readyLine, startOnCurrentCrawl, syntheticCrawlArgs } from './engine.mjs';
+import {
+  copyCrawl,
+  isCurrentCopy,
+  keepOrCopyCrawl,
+  readyLine,
+  sourceStamp,
+  startOnCurrentCrawl,
+  syntheticCrawlArgs,
+} from './engine.mjs';
 
 const folders = [];
 function folder() {
@@ -66,6 +74,198 @@ describe('copying a crawl', () => {
     writeFileSync(`${crawl}-wal`, 'log');
     assert.equal(isCurrentCopy(crawl, copied), false, 'the original has a log the copy hasn’t');
     assert.equal(isCurrentCopy(crawl, path.join(target, 'missing.sicrawl')), false);
+  });
+
+  it('refuses the original’s own folder, and leaves the original and its log as they were', () => {
+    const source = folder();
+    const crawl = path.join(source, 'site.sicrawl');
+    writeFileSync(crawl, 'db');
+    writeFileSync(`${crawl}-wal`, 'pages not yet in the file');
+    writeFileSync(`${crawl}-shm`, 'index');
+    // However the folder is written: as it is, with a way round, with a trailing separator, in another case.
+    const spellings = [
+      source,
+      path.join(source, '.'),
+      path.join(source, 'sub', '..'),
+      `${source}${path.sep}`,
+      ...(process.platform === 'win32' ? [source.toUpperCase(), source.toLowerCase()] : []),
+    ];
+    for (const spelling of spellings) {
+      assert.throws(() => copyCrawl(crawl, spelling), /never copied into its own folder/, spelling);
+      assert.equal(readFileSync(crawl, 'utf8'), 'db');
+      // Its write-ahead log isn't removed as a stale copy's would be: it holds what the crawl hasn't checkpointed.
+      assert.equal(readFileSync(`${crawl}-wal`, 'utf8'), 'pages not yet in the file', spelling);
+      assert.equal(readFileSync(`${crawl}-shm`, 'utf8'), 'index');
+    }
+    // Another folder is still copied into, a folder inside the original's among them.
+    const inside = path.join(source, 'copies');
+    assert.equal(copyCrawl(crawl, inside), path.join(inside, 'site.sicrawl'));
+    assert.equal(readFileSync(`${path.join(inside, 'site.sicrawl')}-wal`, 'utf8'), 'pages not yet in the file');
+  });
+});
+
+describe('a dev crawl’s copy from one `npm run dev` to the next', () => {
+  /** A source folder with one crawl, a data folder and a stamps folder, as dev.mjs has them. */
+  function setUp(content = 'crawl') {
+    const [source, data, stamps] = [folder(), folder(), path.join(folder(), 'copied-from')];
+    const crawl = path.join(source, 'site.sicrawl');
+    writeFileSync(crawl, content);
+    // An original from a while ago, as a dev crawl is: its time is nothing like the copy's.
+    const made = new Date(Date.now() - 86_400_000);
+    utimesSync(crawl, made, made);
+    return { source, data, stamps, crawl, copy: path.join(data, 'site.sicrawl') };
+  }
+  /** What the sidecar does to a copy when it analyses it: the file grows and is newer, with a log beside it. */
+  function analyse(copy) {
+    writeFileSync(copy, `${readFileSync(copy, 'utf8')} and its analysis`);
+    writeFileSync(`${copy}-wal`, 'the analysis’s log');
+  }
+  const listing = (dir) => readdirSync(dir).map((name) => [name, statSync(path.join(dir, name)).mtimeMs]);
+
+  it('refuses the original’s own folder as the data folder, before the original is taken for its copy', () => {
+    const [source, stamps] = [folder(), folder()];
+    const crawl = path.join(source, 'site.sicrawl');
+    writeFileSync(crawl, 'db');
+    writeFileSync(`${crawl}-wal`, 'log');
+    // There the original reads as a copy that's current: it would be kept, and a dev run would analyse it in place.
+    assert.throws(() => keepOrCopyCrawl(crawl, source, stamps), /never copied into its own folder/);
+    assert.equal(readFileSync(crawl, 'utf8'), 'db');
+    assert.equal(readFileSync(`${crawl}-wal`, 'utf8'), 'log');
+    assert.deepEqual(readdirSync(stamps), [], 'no stamp says the original is a copy');
+  });
+
+  it('copies a crawl it has no copy of', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    assert.deepEqual(keepOrCopyCrawl(crawl, data, stamps), { path: copy, copied: true });
+    assert.equal(readFileSync(copy, 'utf8'), 'crawl');
+  });
+
+  /** The brief's case: every start copied the 100k crawl again, so every session began by analysing it. */
+  it('keeps a copy that was analysed while the original is as it was', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    keepOrCopyCrawl(crawl, data, stamps);
+    analyse(copy);
+    assert.equal(isCurrentCopy(crawl, copy), false, 'by size, the analysed copy reads as stale');
+
+    assert.deepEqual(keepOrCopyCrawl(crawl, data, stamps), { path: copy, copied: false });
+    assert.equal(readFileSync(copy, 'utf8'), 'crawl and its analysis');
+    assert.equal(readFileSync(`${copy}-wal`, 'utf8'), 'the analysis’s log', 'its log is the copy’s own, and stays');
+    // And on the start after that.
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, false);
+  });
+
+  it('copies again when the original’s size changes', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    keepOrCopyCrawl(crawl, data, stamps);
+    analyse(copy);
+    const before = statSync(crawl).mtime;
+    writeFileSync(crawl, 'crawled further');
+    utimesSync(crawl, before, before);
+
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(copy, 'utf8'), 'crawled further');
+    assert.equal(existsSync(`${copy}-wal`), false, 'the old copy’s log would be replayed onto the new one');
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, false, 'the new copy is kept in its turn');
+  });
+
+  it('copies again when only the original’s modified time changes, either way', () => {
+    const { crawl, data, stamps, copy } = setUp('12345');
+    keepOrCopyCrawl(crawl, data, stamps);
+    analyse(copy);
+    writeFileSync(crawl, '54321');
+    const later = new Date(Date.now() - 3_600_000);
+    utimesSync(crawl, later, later);
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(copy, 'utf8'), '54321');
+
+    // An older file put back in its place (restored from a backup) is another original too.
+    writeFileSync(crawl, '99999');
+    const earlier = new Date(Date.now() - 7 * 86_400_000);
+    utimesSync(crawl, earlier, earlier);
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(copy, 'utf8'), '99999');
+  });
+
+  it('copies again when the original gains or loses a companion', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    keepOrCopyCrawl(crawl, data, stamps);
+    writeFileSync(`${crawl}-wal`, 'the original’s log');
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(`${copy}-wal`, 'utf8'), 'the original’s log');
+
+    rmSync(`${crawl}-wal`);
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(existsSync(`${copy}-wal`), false);
+  });
+
+  it('copies again when the copy has gone, whatever is remembered of it', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    keepOrCopyCrawl(crawl, data, stamps);
+    rmSync(copy);
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(copy, 'utf8'), 'crawl');
+  });
+
+  it('takes a copy from before it remembered anything as it is when it is still the original’s twin', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    copyCrawl(crawl, data);
+    const copiedAt = statSync(copy).mtimeMs;
+    assert.deepEqual(keepOrCopyCrawl(crawl, data, stamps), { path: copy, copied: false });
+    assert.equal(statSync(copy).mtimeMs, copiedAt, 'it wasn’t written again');
+    // From then on it's kept through an analysis, as a copy made here is.
+    analyse(copy);
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, false);
+  });
+
+  it('copies over a changed copy from before it remembered anything: nothing says what it was made from', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    copyCrawl(crawl, data);
+    analyse(copy);
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(copy, 'utf8'), 'crawl');
+  });
+
+  it('copies again after a copy that was cut short, and when what it remembers can’t be read', () => {
+    const { crawl, data, stamps, copy } = setUp();
+    keepOrCopyCrawl(crawl, data, stamps);
+    const stamp = path.join(stamps, 'site.sicrawl.json');
+    // A copy cut short leaves a part of the file and no stamp: the stamp goes before the copy starts.
+    rmSync(stamp);
+    writeFileSync(copy, 'cr');
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(copy, 'utf8'), 'crawl');
+
+    writeFileSync(stamp, 'not json');
+    analyse(copy);
+    assert.equal(keepOrCopyCrawl(crawl, data, stamps).copied, true);
+    assert.equal(readFileSync(copy, 'utf8'), 'crawl');
+  });
+
+  it('says so before it copies, and not when it keeps the copy', () => {
+    const { crawl, data, stamps } = setUp();
+    let said = 0;
+    keepOrCopyCrawl(crawl, data, stamps, () => said++);
+    assert.equal(said, 1);
+    keepOrCopyCrawl(crawl, data, stamps, () => said++);
+    assert.equal(said, 1);
+  });
+
+  it('never writes to the original’s folder, and never changes the original', () => {
+    const { source, crawl, data, stamps, copy } = setUp();
+    writeFileSync(`${crawl}-wal`, 'log');
+    const before = listing(source);
+    const stamped = sourceStamp(crawl);
+
+    keepOrCopyCrawl(crawl, data, stamps);
+    analyse(copy);
+    keepOrCopyCrawl(crawl, data, stamps);
+    writeFileSync(copy, 'changed again');
+    keepOrCopyCrawl(crawl, data, stamps);
+
+    assert.deepEqual(listing(source), before, 'the same files, each with the time it had');
+    assert.deepEqual(sourceStamp(crawl), stamped);
+    assert.equal(readFileSync(crawl, 'utf8'), 'crawl');
+    assert.deepEqual(readdirSync(stamps), ['site.sicrawl.json'], 'what it remembers is in the folder it was given');
   });
 });
 

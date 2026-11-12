@@ -89,7 +89,7 @@ describe('issues by severity', () => {
 });
 
 describe('fix first', () => {
-  it('lists the checks by severity, then pages affected, each leading to its check', () => {
+  it('lists the checks by severity, then the pages or URLs affected, each leading to its check', () => {
     const list = fixFirst(entries());
     expect(list.checks.map((item) => [item.entry.check.id, item.entry.count])).toEqual([
       ['internal-client-error', 9],

@@ -5,6 +5,8 @@
 // expect it.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { colourTweensEnd } from './colourTweens';
+import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -13,58 +15,13 @@ const env = (name: string) => {
 };
 const site = () => env('SI_E2E_SITE');
 
-interface Crawl {
-  id: string;
-  status: string;
-}
-
-/** The sidecar, from the test itself (no page, so no CORS): to tidy up the crawls a test started. */
-async function sidecar(route: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${env('SI_E2E_SIDECAR')}${route}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${env('SI_E2E_TOKEN')}` },
-  });
-}
-
-const crawls = async () => (await (await sidecar('/api/crawls')).json()) as Crawl[];
-const LIVE = ['running', 'paused', 'stopping', 'analyzing'];
-
 let seeded: string[] = [];
 test.beforeAll(async () => {
-  seeded = (await crawls()).map((crawl) => crawl.id);
+  seeded = await libraryIds();
 });
 
 /** Stops and deletes every crawl the tests started: the library is the one seeded crawl again. */
-test.afterEach(async () => {
-  const started = Date.now();
-  for (;;) {
-    const mine = (await crawls()).filter((crawl) => !seeded.includes(crawl.id));
-    if (mine.length === 0) return;
-    for (const crawl of mine) {
-      if (crawl.status === 'running' || crawl.status === 'paused') {
-        await sidecar(`/api/crawls/${crawl.id}/stop`, { method: 'POST' });
-      } else if (crawl.status === 'analyzing') {
-        await sidecar(`/api/crawls/${crawl.id}/analyze/cancel`, { method: 'POST' });
-      } else if (!LIVE.includes(crawl.status)) {
-        await sidecar(`/api/crawls/${crawl.id}/delete-file`, { method: 'POST' });
-      }
-    }
-    if (Date.now() - started > 60_000) throw new Error('The crawls the test started couldn’t be removed');
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-});
-
-/**
- * A theme changed on an open page tweens its colours, and axe measuring part-way through sees a contrast that
- * neither theme has. Waits for the tweens to end. Only transitions: a spinner's animation never does.
- */
-async function colourTweensEnd(page: Page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const tweens = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
-    await Promise.all(tweens.map((tween) => tween.finished.catch(() => undefined)));
-  });
-}
+test.afterEach(() => removeCrawlsNotIn(seeded));
 
 async function expectNoViolations(page: Page) {
   await colourTweensEnd(page);

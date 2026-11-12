@@ -127,6 +127,11 @@ function ItemEnd({ keys }: { keys: string | null | undefined }) {
 }
 
 export interface MenuItemProps extends ItemCommon {
+  /**
+   * What the item would give, at its end: a count ("17,641"). It's part of what the item says, so it's read with its
+   * label, where a shortcut's keycaps are not.
+   */
+  detail?: ReactNode;
   /** Runs this registry command when chosen: its title stays the caller's, its keys and whether it can run, the registry's. */
   command?: string | undefined;
   onSelect?: (() => void) | undefined;
@@ -142,6 +147,7 @@ export function MenuItem({
   command,
   onSelect,
   destructive = false,
+  detail,
 }: MenuItemProps) {
   const Parts = useParts();
   useRegistryVersion();
@@ -162,6 +168,9 @@ export function MenuItem({
         <IconSlot icon={icon} size="md" />
       </span>
       <span className="si-menu-item__label">{children}</span>
+      {detail === undefined || detail === null ? null : (
+        <span className="si-menu-item__end si-menu-item__detail">{detail}</span>
+      )}
       <ItemEnd keys={keys} />
     </Parts.Item>
   );

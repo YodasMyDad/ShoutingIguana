@@ -1,0 +1,2 @@
+# Shell scripts keep LF on every machine: bash fails on CRLF, and Windows checkouts convert text files by default.
+*.sh text eol=lf

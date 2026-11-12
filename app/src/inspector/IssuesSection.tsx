@@ -1,6 +1,7 @@
 import { ShieldCheck, SearchX } from 'lucide-react';
 import type { UrlDetail } from '../api/inspector';
 import { analyseCrawl } from '../crawl/actions';
+import { affectedCount } from '../crawl/checkSubject';
 import { formatCountOf } from '../lib/format';
 import { useSettings } from '../settings/settingsStore';
 import { Badge } from '../ui/Badge';
@@ -81,7 +82,7 @@ export function IssuesSection({ detail }: { detail: UrlDetail }) {
                 <li key={entry.checkId} className="flex min-h-(--row-height-issue) items-baseline gap-3 py-1 text-13">
                   <IssueCheckLink
                     checkId={entry.checkId}
-                    // A check grouped by the other URL has this URL's group: the pages whose issue names it.
+                    // A check grouped by the other URL has this URL's group: the URLs whose issue names it.
                     group={check?.grouping === 'relatedUrl' ? { detail: null, relatedUrlId: urlId } : undefined}
                     className="inline-flex min-h-(--target-min) min-w-0 items-center font-medium"
                   >
@@ -89,7 +90,8 @@ export function IssuesSection({ detail }: { detail: UrlDetail }) {
                   </IssueCheckLink>
                   {isHidden ? <Badge variant="outline">Hidden</Badge> : null}
                   <span className="figures ml-auto shrink-0 text-12 text-text-muted">
-                    {formatCountOf(entry.count, 'URL')}
+                    {/* How many URLs have an issue that names this one: pages, where the check flags nothing else. */}
+                    {affectedCount(check, entry.count)}
                   </span>
                 </li>
               );

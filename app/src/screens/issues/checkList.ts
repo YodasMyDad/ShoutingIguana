@@ -1,5 +1,5 @@
 // The Issues screen's checks list, built from the catalog and the last analysis (docs/v2-ui-ia.md, Issues): checks by
-// category in catalog order, each with its severity and pages affected. Pure, so every rule is unit-tested:
+// category in catalog order, each with its severity and the pages or URLs it flags. Pure, so every rule is tested:
 // - skipped checks are always listed, in their category, with their reason: hiding them would read as clean;
 // - checks that passed are listed only when asked for, and each category says how many passed;
 // - the severity and text filters narrow what's listed, and hidden checks stay out unless shown.
@@ -219,9 +219,9 @@ export function foundBySeverity(
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, notice: 2 };
 
 /**
- * The checks that found issues, in the order to fix them: the most severe, then the most pages affected, then catalog
- * order. Hidden checks are left out, unless every check with issues is hidden. Overview's "Fix first" is this list,
- * and Issues opens on its first.
+ * The checks that found issues, in the order to fix them: the most severe, then the most pages or URLs affected (each
+ * check's count, whichever it is of), then catalog order. Hidden checks are left out, unless every check with issues
+ * is hidden. Overview's "Fix first" is this list, and Issues opens on its first.
  */
 export function rankChecksToFix(entries: readonly CheckEntry[]): CheckEntry[] {
   const found = entries.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
@@ -233,8 +233,8 @@ export function rankChecksToFix(entries: readonly CheckEntry[]): CheckEntry[] {
 }
 
 /**
- * The check to fix first: the most severe, then the most pages affected, then catalog order. Hidden checks are left
- * out, unless every check with issues is hidden. Null when no check found an issue.
+ * The check to fix first: the most severe, then the most pages or URLs affected, then catalog order. Hidden checks
+ * are left out, unless every check with issues is hidden. Null when no check found an issue.
  */
 export function firstCheckToFix(entries: readonly CheckEntry[]): CheckEntry | null {
   return rankChecksToFix(entries)[0] ?? null;

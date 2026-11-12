@@ -23,8 +23,8 @@ type Search = Record<string, unknown>;
  * The search with the inspected URL set or removed. Every view with a grid has `inspect` in its checked search, but
  * from `.` the router types the search as no route's in particular, so the updater is written once, here.
  */
-const withInspect = (urlId: number | undefined) =>
-  ((previous: Search) => ({ ...previous, inspect: urlId })) as unknown as SearchUpdate;
+const withInspect = (urlId: number | undefined, more: Search = {}) =>
+  ((previous: Search) => ({ ...previous, ...more, inspect: urlId })) as unknown as SearchUpdate;
 type SearchUpdate = NonNullable<Parameters<AppRouter['navigate']>[0]['search']>;
 type State = { inspectSteps?: number; __TSR_index?: number } | undefined;
 
@@ -41,13 +41,14 @@ function inspecting(router: AppRouter): boolean {
 
 /**
  * From a grid: opens the inspector on a URL, or moves it to another as the grid's cursor moves. In place, keeping the
- * steps walked to this entry, so Esc still goes back over them.
+ * steps walked to this entry, so Esc still goes back over them. `more` is what else of the view's search goes with
+ * the URL, set in the same step: which of a link's two ends it is (Links' `end`).
  */
-export function inspectFromGrid(router: AppRouter, urlId: number): Promise<void> {
+export function inspectFromGrid(router: AppRouter, urlId: number, more?: Search): Promise<void> {
   const steps = inspecting(router) ? walkedSteps(router.state.location.state) : 0;
   return router.navigate({
     to: '.',
-    search: withInspect(urlId),
+    search: withInspect(urlId, more),
     state: (previous) => ({ ...previous, inspectSteps: steps }),
     replace: true,
   });
@@ -188,8 +189,11 @@ async function closeOnce(router: AppRouter): Promise<void> {
 }
 
 export interface Inspector {
-  /** A grid's Enter or double-click, or its cursor moving while the inspector is open: in place. */
-  open: (urlId: number) => void;
+  /**
+   * A grid's Enter or double-click, or its cursor moving while the inspector is open: in place. `more` is what else
+   * of the view's own search is set with it (Links: which end of the row the URL is).
+   */
+  open: (urlId: number, more?: Record<string, unknown>) => void;
   /** A link inside the inspector: a new place, a step back retraces. */
   walk: (urlId: number) => void;
   /** Esc or Close: back to the view as it was before the inspector opened. */
@@ -203,7 +207,7 @@ export function useInspector(): Inspector {
   const router = useRouter();
   return useMemo(
     () => ({
-      open: (urlId) => void inspectFromGrid(router, urlId),
+      open: (urlId, more) => void inspectFromGrid(router, urlId, more),
       walk: (urlId) => void walkTo(router, urlId),
       close: () => void closeInspector(router),
       goTo: (crawlId, urlId) => void goToUrl(router, crawlId, urlId),

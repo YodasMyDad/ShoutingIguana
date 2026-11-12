@@ -71,7 +71,7 @@ links and "reopen where I left off" all work.
 | `/crawls/:crawl/overview` | Live crawl, then the answer |
 | `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `category` (one category's checks, by its id in the catalog: where Overview's category counts lead), `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
 | `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
-| `/crawls/:crawl/links` | Links. Same params as URLs |
+| `/crawls/:crawl/links` | Links. Params: `filter`, `sort` (one key: crawl order, or a column of the target), `cols`, `q`, `inspect`, over the links' columns, either end's included (`to.statusClass`, `from.depth`); `end=from` with `inspect` when the URL inspected is the page a link is on (a target, the default, has no word) |
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps, and one sitemap's URLs |
 | `/crawls/:crawl/robots/:origin?` | robots.txt, with the blocked URLs and the rule that matched |
 | `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them |
@@ -117,7 +117,8 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 
 **Overview (done).**
 
-- Issues by severity, and "Fix first": severity, then pages affected.
+- Issues by severity, and "Fix first": severity, then pages or URLs affected (a check counts pages only when
+  pages are all it flags).
 - Issues by category, status codes, indexability with its reasons, depth, and response times.
 - Every number opens its URLs.
 - Skipped checks and analysis notes, in plain words.
@@ -130,7 +131,7 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 **Issues.**
 
 - The checks list, grouped by category and filterable by severity and search. Its rows show severity, title and pages
-  affected. Skipped checks are always listed in their category, with their reasons: hiding them would read as
+  affected, or URLs affected for a check that can flag a URL that isn't a page (a missing image, a redirect). Skipped checks are always listed in their category, with their reasons: hiding them would read as
   clean. "Show the N checks that passed" adds the ones that passed. The filters, that switch and the hidden checks'
   count sit above the list, so Tab goes from the list to the selected check. A category a link narrowed the list to
   (Overview's "Issues by category") shows there as a chip that removes it: it is never text in the search field, as a
@@ -151,7 +152,24 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 - URLs on the crawled host show their path after the site's favicon, with the host named once in the column header.
   Other hosts, and the site's other versions, show in full. "Show full URLs" is a view option.
 
-**Links.** All links, with anchor text, position, follow flags and the target's status, in the same grid.
+**Links.**
+
+- Every link the crawl stored, in crawl order, in the same grid: the page it's on, its target, its anchor or alt
+  text, its kind, its position, whether it's followed, and how its target answered. More columns of the link, its
+  source page and its target are in the column chooser.
+- Views for what a link audit looks for: Broken links, Links to redirects, Nofollow links, No anchor text, External
+  links. Each is its filters, shown as chips.
+- Quick filters with counts (kind, position, follow, the target's status, the target's site), each count opening
+  exactly that many links, counted when their menu opens; a filter bar over any column of the link or of either end
+  (at most 20 filters, as a query takes); search over the anchor text and both URLs. A filter the engine won't run (a
+  pattern it refuses) says so in the engine's own words, with "Change the filter" and "Remove the filter".
+- Either end opens the inspector on that URL, which then follows the cursor down that end; which end is in the
+  address. The inspector's Inlinks and Outlinks open here: "All N in Links" ("Show it in Links" for one).
+- A sort is by a column the grid shows: hiding the column drops the sort.
+- Copy: the selected rows, the column the cursor is in, the view's source or target URLs. A copy reads the view's
+  first 10,000 links, and says so on a bigger view ("Copy the first 10,000 links' target URLs"). Export comes with the
+  engine's export (E5).
+- In a window too short for the toolbars and the grid (200% zoom), the screen scrolls: the grid keeps five rows.
 
 **Sitemaps.** The sitemap tree, with each file's status and URL count. Open a sitemap for its URLs, each marked
 crawled, not crawled or non-indexable.
@@ -245,6 +263,15 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Ctrl+C | Copy as tab-separated text |
 | Home, End, Page Up, Page Down | Jump |
 | Shift+F10 or the menu key | Right-click menu |
+
+### On Links
+
+| Keys | Action |
+| --- | --- |
+| Ctrl+F | Search the links |
+| Enter on a row | Inspect the end the cursor's column is of: the page the link is on, or its target |
+| Up from the first row, then Enter | Sort by the header the cursor is on, where the engine sorts by it |
+| Ctrl+Shift+C | Copy the view's target URLs |
 
 ### In the inspector
 

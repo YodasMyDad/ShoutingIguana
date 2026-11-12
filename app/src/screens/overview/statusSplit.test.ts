@@ -5,6 +5,7 @@ import {
   MIN_REST_PERCENT,
   MIN_SEGMENT_PERCENT,
   crawledCount,
+  foundCount,
   partsText,
   sharePercents,
   splitFilters,
@@ -299,6 +300,10 @@ describe('a finished crawl’s breakdown, from the URL facets', () => {
     const split = statusSplitFromFacets(deadTwin, deadTwinStats);
     expect(split.total).toBe(6909);
     expect(crawledCount(deadTwin)).toBe(6909);
+    // Every URL the crawl found is in one of the three: crawled, not checked, or only found. Issues says a check's
+    // count of URLs as a share of this, so it's the same number the breakdown adds up to.
+    expect(foundCount(deadTwin)).toBe(7054);
+    expect(split.total + (split.notChecked?.count ?? 0) + (split.notFetched?.count ?? 0)).toBe(foundCount(deadTwin));
     expect(split.notChecked).toEqual({
       count: 5,
       link: { to: 'urls', filters: [{ column: 'outcome', op: 'in', values: ['notChecked'] }] },

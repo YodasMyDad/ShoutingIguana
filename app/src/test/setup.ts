@@ -2,7 +2,7 @@
 // runs in plain Node (`@vitest-environment node`, such as the compiled tokens') has no DOM, and needs none of them.
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { afterEach } from 'vitest';
 
 const hasDom = typeof window !== 'undefined';
 
@@ -40,7 +40,9 @@ if (hasDom) {
         // Nothing to disconnect.
       }
     }
-    vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+    // Defined outright, as matchMedia is: a stub is put back after a file's first test (`unstubGlobals`), and Radix's
+    // checkbox and switch ask for it without checking, so a popover with one in it then threw in every later test.
+    Object.defineProperty(window, 'ResizeObserver', { configurable: true, writable: true, value: ResizeObserverStub });
   }
 
   if (typeof Element.prototype.scrollIntoView !== 'function') {

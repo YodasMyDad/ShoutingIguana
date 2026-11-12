@@ -2,7 +2,17 @@
 // CLI for synthetic crawls, and crawl files for a data folder. Used by `npm run dev`, `npm run make:crawl` and the
 // end-to-end tests. Never touches the developer's dev-crawls folder or real library: it only ever copies out of it.
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -171,11 +181,40 @@ export async function makeSyntheticCrawl({
 /** A SQLite database's companion files: its write-ahead log and the log's index. */
 const COMPANIONS = ['-wal', '-shm'];
 
+/** Where a path leads once links are followed; as it's written, for one that isn't there (yet). */
+function realPath(file) {
+  try {
+    return realpathSync.native(file);
+  } catch {
+    return path.resolve(file);
+  }
+}
+
 /**
- * Copies a crawl file and its SQLite companions (-wal, -shm) into a folder. Never opens the original. Companions the
- * target has from an earlier copy go first: SQLite would replay a stale write-ahead log onto the new copy.
+ * Refuses the original's own folder as the place for its copy, before anything is touched: there the "copy" is the
+ * original itself, so its write-ahead log and index would be removed as a stale copy's (losing what the log holds)
+ * and the file copied onto itself; or, taken for a copy that's current, opened and changed in place. The folder is
+ * compared as it resolves (`.`, `..`, a link or a junction to it, and on Windows any letter case).
+ * @param {string} source
+ * @param {string} folder
+ */
+function refuseOwnFolder(source, folder) {
+  const [from, to] = [realPath(source), realPath(path.join(folder, path.basename(source)))];
+  const same = process.platform === 'win32' ? from.toLowerCase() === to.toLowerCase() : from === to;
+  if (same) {
+    throw new Error(
+      `A crawl is never copied into its own folder (${path.dirname(from)}): the copy would be the original. Give another folder.`,
+    );
+  }
+}
+
+/**
+ * Copies a crawl file and its SQLite companions (-wal, -shm) into a folder. Never opens the original, and refuses its
+ * own folder. Companions the target has from an earlier copy go first: SQLite would replay a stale write-ahead log
+ * onto the new copy.
  */
 export function copyCrawl(source, folder) {
+  refuseOwnFolder(source, folder);
   mkdirSync(folder, { recursive: true });
   const target = path.join(folder, path.basename(source));
   for (const suffix of COMPANIONS) rmSync(target + suffix, { force: true });
@@ -201,6 +240,77 @@ function isSameFile(original, copy) {
   const a = statSync(original);
   const b = statSync(copy);
   return a.size === b.size && b.mtimeMs >= a.mtimeMs;
+}
+
+/**
+ * What a crawl file and each of its companions are now, by size and modified time: what `keepOrCopyCrawl` goes by to
+ * tell whether the original has changed since it was copied. A file that isn't there is null.
+ * @param {string} source
+ * @returns {Record<string, { size: number, mtimeMs: number } | null>}
+ */
+export function sourceStamp(source) {
+  return Object.fromEntries(
+    ['', ...COMPANIONS].map((suffix) => {
+      if (!existsSync(source + suffix)) return [suffix, null];
+      const { size, mtimeMs } = statSync(source + suffix);
+      return [suffix, { size, mtimeMs }];
+    }),
+  );
+}
+
+/** Whether two stamps are of the same files: each there or not alike, with the same size and modified time. */
+function isSameStamp(a, b) {
+  return ['', ...COMPANIONS].every((suffix) => {
+    const [one, other] = [a?.[suffix] ?? null, b?.[suffix] ?? null];
+    if (one === null || other === null) return one === other;
+    return one.size === other.size && one.mtimeMs === other.mtimeMs;
+  });
+}
+
+/** The stamp kept for a copy, or null when there's none that can be read. */
+function readStamp(file) {
+  try {
+    const stamp = JSON.parse(readFileSync(file, 'utf8'));
+    return typeof stamp === 'object' && stamp !== null ? stamp : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A copy of `source` in `folder` for a development run that may change it (analyse it, continue it): the copy that's
+ * there is kept while the original is as it was when the copy was made, by the size and modified time of the crawl
+ * file and each companion, so a copy analysed in one run is still analysed in the next. `isCurrentCopy` can't say
+ * that: an analysed copy is bigger than its original, so it reads as stale and was copied over on every start.
+ *
+ * What the original was is kept in `stamps` (a folder of the caller's, never the original's own: nothing is ever
+ * written beside the original). A copy from before there were stamps is taken as it is when it's still the same as
+ * the original, and copied again otherwise. The stamp goes before a copy starts and comes back when it's done, so a
+ * copy cut short is made again.
+ * @param {string} source
+ * @param {string} folder
+ * @param {string} stamps
+ * @param {() => void} [onCopy] Called just before a copy starts: a big crawl's takes a while.
+ * @returns {{ path: string, copied: boolean }}
+ */
+export function keepOrCopyCrawl(source, folder, stamps, onCopy = () => undefined) {
+  // Before the copy that's there is looked at: in its own folder the original would read as a copy that's current,
+  // and be handed to a run that analyses and continues it.
+  refuseOwnFolder(source, folder);
+  const target = path.join(folder, path.basename(source));
+  const stampFile = path.join(stamps, `${path.basename(source)}.json`);
+  const now = sourceStamp(source);
+  const kept = existsSync(target) && isSameStamp(readStamp(stampFile), now);
+  if (kept) return { path: target, copied: false };
+  const untouched = !existsSync(stampFile) && isCurrentCopy(source, target);
+  rmSync(stampFile, { force: true });
+  if (!untouched) {
+    onCopy();
+    copyCrawl(source, folder);
+  }
+  mkdirSync(stamps, { recursive: true });
+  writeFileSync(stampFile, JSON.stringify(now));
+  return { path: target, copied: !untouched };
 }
 
 /**

@@ -39,7 +39,7 @@ export function severityFigures(entries: readonly CheckEntry[]): SeverityFigure[
 export const FIX_FIRST_LIMIT = 8;
 
 export interface FixFirst {
-  /** The checks to fix first, in order: the most severe, then the most pages affected. */
+  /** The checks to fix first, in order: the most severe, then the most pages or URLs affected. */
   checks: { entry: CheckEntry; link: IssuesLink }[];
   /** Checks with issues that aren't listed. */
   more: number;

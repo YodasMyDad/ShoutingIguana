@@ -95,6 +95,22 @@ function setup(props: Partial<Parameters<typeof GridCore<Row>>[0]> = {}) {
   return { grid, activeCell, onActivate, onCopy, writeText };
 }
 
+/** A grid of its own, to be taken away again: several in one test. */
+function setupUnmountable(props: Partial<Parameters<typeof GridCore<Row>>[0]> = {}) {
+  const { unmount } = render(
+    <GridCore<Row>
+      label="URLs"
+      columns={columns}
+      rowCount={rows.length}
+      getRow={(index) => rows[index]}
+      rowHeight={32}
+      headerHeight={32}
+      {...props}
+    />,
+  );
+  return { grid: screen.getByRole('grid', { name: 'URLs' }), unmount };
+}
+
 describe('GridCore', () => {
   it('follows the ARIA grid pattern: counts include the header row', () => {
     const { grid } = setup();
@@ -136,7 +152,7 @@ describe('GridCore', () => {
     const active = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
     expect(active).toHaveTextContent('https://example.com/0');
     fireEvent.keyDown(grid, { key: 'Enter' });
-    expect(onActivate).toHaveBeenCalledWith(0, rows[0]);
+    expect(onActivate).toHaveBeenCalledWith(0, rows[0], 'url');
   });
 
   it('leaves the cursor unset when rows arrive while it doesn’t have focus', () => {
@@ -151,7 +167,7 @@ describe('GridCore', () => {
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'ArrowDown' });
     fireEvent.keyDown(grid, { key: 'Enter' });
-    expect(onActivate).toHaveBeenCalledWith(1, rows[1]);
+    expect(onActivate).toHaveBeenCalledWith(1, rows[1], 'url');
   });
 
   it('selects rows with Space and Shift, and marks them selected', () => {
@@ -253,6 +269,44 @@ describe('GridCore', () => {
     const region = screen.getByRole('group', { name: 'Empty: no rows' });
     expect(region).toHaveAttribute('tabindex', '0');
     expect(region).toHaveTextContent('No URLs match these filters.');
+  });
+
+  it('keeps room for the fewest rows it’s asked to, however little its container has', () => {
+    // A screen's own grid: five rows under its header, and the room its border and scrollbar take.
+    const { grid, unmount } = setupUnmountable({ minRows: 5 });
+    const frame = grid.parentElement!;
+    expect(frame.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // Its size is its container's to give, never its rows': a scroller of millions of pixels has no say in it.
+    expect(frame.style.contain).toBe('size');
+    unmount();
+    // By the density's own row and header heights.
+    const compact = setupUnmountable({ minRows: 5, rowHeight: 28, headerHeight: 30 });
+    expect(compact.grid.parentElement!.style.minHeight).toBe(`${30 + 5 * 28 + 12}px`);
+    compact.unmount();
+    // A grid with a height of its own asks for none, and is given none.
+    const own = setupUnmountable();
+    expect(own.grid.parentElement!.style.minHeight).toBe('');
+    expect(own.grid.parentElement!.style.contain).toBe('');
+    own.unmount();
+  });
+
+  it('keeps room for all its empty state says, where that’s more than its fewest rows', () => {
+    // "No links match these filters", three chips wrapped onto three lines, and Clear: 240 px of it.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.why === 'tall' ? 240 : this.dataset.why === 'short' ? 96 : 0;
+    });
+    const tall = setupUnmountable({ minRows: 5, rowCount: 0, emptyState: <p data-why="tall">No links match.</p> });
+    expect(tall.grid.parentElement!.style.minHeight).toBe(`${32 + 240 + 12}px`);
+    tall.unmount();
+    // Less than five rows' worth leaves the five rows' room as it is.
+    const short = setupUnmountable({ minRows: 5, rowCount: 0, emptyState: <p data-why="short">No links match.</p> });
+    expect(short.grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    short.unmount();
+    // And only while it's shown: the same grid with rows keeps five rows' room.
+    const rowsAgain = setupUnmountable({ minRows: 5, emptyState: <p data-why="tall">No links match.</p> });
+    expect(rowsAgain.grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    rowsAgain.unmount();
+    vi.restoreAllMocks();
   });
 
   it('is busy, with no row count, until the first page arrives', () => {
@@ -691,5 +745,102 @@ describe('GridCore with columns that sort', () => {
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'ArrowUp' });
     expect(activeCell()).toHaveTextContent('https://example.com/0');
+  });
+
+  describe('a grid whose rows hold more than one thing to open', () => {
+    it('says which column the cursor was in on Enter, and which cell was double-clicked', () => {
+      const { grid, onActivate } = setup();
+      act(() => grid.focus());
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      fireEvent.keyDown(grid, { key: 'ArrowRight' });
+      fireEvent.keyDown(grid, { key: 'Enter' });
+      expect(onActivate).toHaveBeenLastCalledWith(1, rows[1], 'status');
+      fireEvent.doubleClick(screen.getByText('https://example.com/3'));
+      expect(onActivate).toHaveBeenLastCalledWith(3, rows[3], 'url');
+      const status = screen.getByText('https://example.com/4').closest('[role="row"]')?.querySelector('[data-col="1"]');
+      if (!status) throw new Error('No status cell');
+      fireEvent.doubleClick(status);
+      expect(onActivate).toHaveBeenLastCalledWith(4, rows[4], 'status');
+    });
+
+    it('says the column the cursor moves to, and not again while it stays in it', () => {
+      const onActiveColumnChange = vi.fn();
+      const { grid } = setup({ onActiveColumnChange });
+      act(() => grid.focus());
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      fireEvent.keyDown(grid, { key: 'ArrowRight' });
+      expect(onActiveColumnChange).toHaveBeenLastCalledWith('status');
+      const calls = onActiveColumnChange.mock.calls.length;
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(onActiveColumnChange).toHaveBeenCalledTimes(calls);
+      fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+      expect(onActiveColumnChange).toHaveBeenLastCalledWith('url');
+    });
+  });
+
+  describe('a column that doesn’t sort, in a grid whose others do', () => {
+    const HINT = 'Rows can’t be sorted by their URL: they sort by status.';
+    const mixed: GridColumn<Row>[] = [
+      { ...columns[0]!, sortHint: HINT },
+      { ...columns[1]!, sortable: true },
+    ];
+
+    it('says why in its header’s tooltip, and has no button to press', () => {
+      setup({ columns: mixed, onSort: vi.fn() });
+      const [url, status] = screen.getAllByRole('columnheader');
+      expect(url).toHaveAttribute('title', HINT);
+      expect(url?.querySelector('button')).toBeNull();
+      expect(status).not.toHaveAttribute('title');
+      expect(status?.querySelector('button')).not.toBeNull();
+    });
+
+    it('says why when Enter or Space is pressed on its header, and sorts nothing', () => {
+      const onSort = vi.fn();
+      const { grid } = setup({ columns: mixed, onSort });
+      act(() => grid.focus());
+      fireEvent.keyDown(grid, { key: 'ArrowUp' });
+      fireEvent.keyDown(grid, { key: 'Enter' });
+      expect(announce).toHaveBeenLastCalledWith(HINT);
+      fireEvent.keyDown(grid, { key: ' ' });
+      expect(announce).toHaveBeenCalledTimes(2);
+      expect(onSort).not.toHaveBeenCalled();
+      // The next header sorts, and says nothing more.
+      fireEvent.keyDown(grid, { key: 'ArrowRight' });
+      fireEvent.keyDown(grid, { key: 'Enter' });
+      expect(onSort).toHaveBeenCalledWith('status', true);
+      expect(announce).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives no tooltip in a grid that doesn’t sort at all', () => {
+      setup({ columns: mixed });
+      expect(screen.getAllByRole('columnheader')[0]).not.toHaveAttribute('title');
+    });
+  });
+
+  describe('a first load that takes a while', () => {
+    it('says what it is doing over its skeleton, once one shows, and no longer than the load lasts', () => {
+      vi.useFakeTimers();
+      try {
+        const props = {
+          label: 'URLs',
+          columns,
+          getRow: (index: number) => rows[index],
+          rowHeight: 32,
+          headerHeight: 32,
+        };
+        const note = 'Reading all 5,053,909 links: a search looks at every one.';
+        const { rerender } = render(<GridCore<Row> {...props} rowCount={null} loadingNote={note} />);
+        // A load that comes within 150 ms shows neither a skeleton nor the words.
+        expect(screen.queryByText(note)).toBeNull();
+        act(() => void vi.advanceTimersByTime(200));
+        expect(screen.getByText(note)).toBeVisible();
+        // It's for the eye: the view announces it, and it's no part of the grid's rows.
+        expect(screen.getByText(note).closest('[role="grid"]')).toBeNull();
+        rerender(<GridCore<Row> {...props} rowCount={rows.length} loadingNote={note} />);
+        expect(screen.queryByText(note)).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
