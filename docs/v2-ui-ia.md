@@ -66,17 +66,17 @@ links and "reopen where I left off" all work.
 | Route | Screen |
 | --- | --- |
 | `/` | Home: the crawl library. Params: `q` (search) |
-| `/new?url=` | New crawl settings, pre-filled |
+| `/new?url=` | New crawl settings, pre-filled. Params: `url` (the start URL), `from` (a crawl's id: its settings, "Crawl again with these"), `focus` (`speed`, `headers`, `proxy`, `userAgent` or `robots`: that setting open and in focus) |
 | `/crawls/:crawl` | Goes to the crawl's last view: Overview the first time |
-| `/crawls/:crawl/overview` | Live crawl, then the answer |
+| `/crawls/:crawl/overview` | Live crawl, then the answer. Params: `score` (`1`: the score's breakdown, open) |
 | `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `category` (one category's checks, by its id in the catalog: where Overview's category counts lead), `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
 | `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
 | `/crawls/:crawl/links` | Links. Params: `filter`, `sort` (one key: crawl order, or a column of the target), `cols`, `q`, `inspect`, over the links' columns, either end's included (`to.statusClass`, `from.depth`); `end=from` with `inspect` when the URL inspected is the page a link is on (a target, the default, has no word) |
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps: the list, and one sitemap's URLs (its id in the path). Params on one sitemap: `filter`, `sort`, `q`, `inspect`, as URLs. On the list: `url`, a sitemap's address, which goes on to that sitemap |
 | `/crawls/:crawl/robots/:origin?` | robots.txt: the origins, and one origin's file with the URLs it blocked (the origin in the path). Params on one origin: `line` (the line chosen), `reason` (`unreachable` or `unknown`: the blocked URLs no line accounts for), `inspect` |
-| `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them |
-| `/crawls/:crawl/report` | Report (Simple): the engine's report in a frame, in both modes. Params: `cut` (`full` or `summary`) |
-| `/settings/:section?` | App settings: general, crawl defaults, analysis, data, shortcuts, diagnostics, updates, about |
+| `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them. Params: `focus` (`speed`, `headers` or `proxy`: what Continue may change, in focus) |
+| `/crawls/:crawl/report` | Report (Simple): the engine's report in a frame, in both modes. Params: `cut` (`full` or `summary`). There once its screen is (round 4), not found until then |
+| `/settings/:section?` | App settings: `general` (none), `crawl-defaults`, `analysis`, `data`, `shortcuts`, `diagnostics`, `updates`, `about`. Analysis is listed once it can be set; a section there's none of opens General |
 
 **In Simple** the same routes show Simple's screens: `/` is its Home, `/new` its four questions, `overview` the
 Summary, `issues/:check?` What to fix and one problem, and `settings` four of the sections. URLs, Links, Sitemaps,
@@ -100,10 +100,26 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 **New crawl.**
 
 - The start URL and three speed presets, with the rate in words: "Polite: up to 2 requests a second".
-- Folded sections: scope, limits, robots and sitemaps, headers and network, advanced. Each setting has a one-line
-  "what this does".
-- Validation is inline, field by field.
-- Start (Ctrl+Enter), and "Save as my defaults".
+- Folded sections: scope, limits, robots and sitemaps, headers and network, advanced. Each shows its values in a line
+  folded, and each setting has a one-line "what this does".
+- Validation is inline, field by field: a field's message shows once it's been left, and all of them once Start is
+  pressed. A refused Start opens the section of the first and puts focus on it.
+- Start (Ctrl+Enter, from any field), and "Save as my defaults". Header values and a proxy's password are used for
+  the crawl and never saved.
+- In Simple, "Check a website": the address, how fast, how much, and two switches, "Use these choices every time", and
+  a line naming any Advanced setting that differs from its default. What is typed goes across the switch.
+
+**The crawl's settings.**
+
+- What the crawl used, by section, in words. "Crawl again with these" opens New crawl with them.
+- Continue, for a stopped crawl: the speed, the timeout, the headers and the proxy may change; the headers' values
+  and the proxy's password, which a crawl file doesn't keep, are asked for again, with "Continue without" for headers.
+
+**Settings.**
+
+- General (Mode, Theme, and Density in Advanced), Crawl defaults (New crawl's form, saved as it changes), Analysis
+  (once the engine can save limits), Data folder, Shortcuts, Diagnostics (Copy diagnostics, the logs' folder), Updates,
+  About. Simple lists General, Data folder, Updates and About, and says where the rest are.
 
 **Overview (live).**
 
@@ -272,13 +288,14 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | --- | --- |
 | Ctrl+K | Palette |
 | Ctrl+N | New crawl |
+| Ctrl+Enter | Start the crawl, on New crawl |
 | Ctrl+O | Open |
 | Ctrl+E | Export this view |
 | Ctrl+F | Filter this grid |
 | Ctrl+, | Settings |
 | Ctrl+1 to Ctrl+7 | The crawl's sections |
 | Ctrl+8 | Report (Simple). In Simple the sections are three: Ctrl+1 to Ctrl+3 |
-| Ctrl+Shift+A | Switch between Simple and Advanced (Simple) |
+| Ctrl+Shift+A | Switch between Simple and Advanced, from a text field too |
 | Ctrl+P | Print or save as PDF, on the Report screen (Simple) |
 | F7 | Pause or resume |
 | F8 | Stop |

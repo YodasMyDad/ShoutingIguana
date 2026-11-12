@@ -417,37 +417,31 @@ test('at 200% zoom, the top bar keeps the palette button in the window and its c
   await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
   await page.setViewportSize(ZOOMED);
+  // The bar measures itself before the next frame is painted (layout/useGiveWay.ts): look at the frame that is.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.getByRole('button', { name: 'Expand the sidebar' })).toHaveAttribute('aria-expanded', 'false');
+  await page.waitForFunction(() => document.getAnimations().length === 0);
   const header = page.locator('header').first();
   // Nothing reaches past the window's edge or out of the bar.
   expect(await pastTheEdge(page)).toEqual([]);
   expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  // The palette button narrows to its magnifier and keys, all of it in the window.
-  const palette = header.getByRole('button', { name: /Search or run a command/ });
+  // The palette button gives way to its magnifier (never to a letter of its words), all of it in the window, its
+  // name kept.
+  const palette = header.getByRole('button', { name: /^Search or run a command/ });
   const button = await palette.boundingBox();
-  const keys = await palette.locator('kbd').first().boundingBox();
   expect(button && button.x + button.width).toBeLessThanOrEqual(ZOOMED.width);
-  expect(keys && button && keys.x + keys.width).toBeLessThanOrEqual((button?.x ?? 0) + (button?.width ?? 0));
-  // The crumbs truncate, the date first, and keep to their own room rather than run under the palette button.
+  expect(button?.width).toBeLessThanOrEqual(40);
+  // The crumbs keep to their own room, before the palette button, and hold all they show: the date has given way
+  // (still read), and the section you're on shows in full.
   const crumbs = header.getByRole('navigation', { name: 'Breadcrumb' });
-  expect(await crumbs.evaluate((element) => getComputedStyle(element).overflowX)).toBe('clip');
   const room = await crumbs.boundingBox();
   expect(room && button && room.x + room.width).toBeLessThanOrEqual(button?.x ?? 0);
-
-  // A window this narrow shows the sidebar collapsed to icons, which leaves room for where you are: the palette
-  // button's words and the date give way first, so the crawl's name and its section show, most of each at least.
-  await expect(page.getByRole('button', { name: 'Expand the sidebar' })).toHaveAttribute('aria-expanded', 'false');
-  const widths = (locator: Locator) =>
-    locator.evaluate((element) => ({ shown: element.clientWidth, full: element.scrollWidth }));
-  const nameCrumb = crumbs.getByRole('listitem').filter({ hasText: site() }).locator('span.truncate');
-  // The sidebar narrows over its transition: measure once it's done.
-  await expect.poll(async () => (await widths(nameCrumb)).shown).toBeGreaterThan(0);
-  await page.waitForFunction(() => document.getAnimations().length === 0);
-  const name = await widths(nameCrumb);
-  const section = await widths(crumbs.locator('[aria-current="page"]'));
-  const date = await widths(crumbs.getByRole('listitem').filter({ hasText: / \d{4}, / }));
-  expect(date.shown).toBeLessThan(name.shown);
-  expect(name.shown).toBeGreaterThanOrEqual(name.full * 0.75);
-  expect(section.shown).toBeGreaterThanOrEqual(section.full * 0.75);
+  expect(await crumbs.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const date = crumbs.getByRole('listitem').filter({ hasText: / \d{4}, / });
+  expect(await date.evaluate((element) => element.getBoundingClientRect().width <= 1)).toBe(true);
+  const section = crumbs.locator('[aria-current="page"]');
+  await expect(section).toHaveText('Overview');
+  expect(await section.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await pastTheEdge(page)).toEqual([]);
 });
 

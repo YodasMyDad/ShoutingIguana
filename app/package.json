@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:filled": "node scripts/e2e-filled.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test:stories": "node scripts/check-stories.mjs",

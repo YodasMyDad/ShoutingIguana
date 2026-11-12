@@ -1,6 +1,7 @@
 import type { Preview } from '@storybook/react-vite';
 import { createMockTransport } from '../src/api/mock/mockTransport';
 import { setTransport } from '../src/api/transport';
+import { replaceSettings } from '../src/settings/settingsStore';
 import { setDirectConnection } from '../src/shell/connection';
 import { TooltipProvider } from '../src/ui/Tooltip';
 import '../src/styles/index.css';
@@ -24,7 +25,13 @@ const preview: Preview = {
     },
   },
   initialGlobals: { theme: 'light', density: 'standard' },
-  loaders: [() => setTransport(mock)],
+  // Each story starts in Advanced, which the screens built before Simple were written for; a story of Simple says so.
+  loaders: [
+    () => {
+      setTransport(mock);
+      replaceSettings({ mode: 'advanced' });
+    },
+  ],
   decorators: [
     (Story, context) => {
       const root = document.documentElement;

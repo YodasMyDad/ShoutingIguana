@@ -330,6 +330,8 @@ export function createMockTransport(): Transport {
   let loaded: Promise<void> | null = null;
   /** The analyses running, each with what cancels it. */
   const analyses = new Map<string, () => void>();
+  /** "My defaults", once saved: the fixture's (the engine's) until then. */
+  let savedDefaults: CrawlOptionDefaults | null = null;
 
   const emit = (event: string, data: Json) => subscribers.forEach((send) => send(event, data));
 
@@ -486,14 +488,26 @@ export function createMockTransport(): Transport {
     ['GET', /^\/api\/health$/, async () => json(await fixture('api/health.json'))],
     ['POST', /^\/api\/shutdown$/, () => Promise.resolve(empty(202))],
     ['GET', /^\/api\/checks$/, async () => json(adaptChecks(await fixture<SavedChecks>('api/checks.json')))],
-    ['GET', /^\/api\/crawl-options\/defaults$/, async () => json(await fixture('api/crawl-options-defaults.json'))],
+    [
+      'GET',
+      /^\/api\/crawl-options\/defaults$/,
+      async () => json(savedDefaults ?? (await fixture('api/crawl-options-defaults.json'))),
+    ],
     [
       'PUT',
       /^\/api\/crawl-options\/defaults$/,
       async (_match, request) => {
         const defaults = await fixture<CrawlOptionDefaults>('api/crawl-options-defaults.json');
-        const options = { ...defaults.options, ...(request.body as CrawlOptions), startUrl: null };
-        return json({ ...defaults, options });
+        // As the sidecar keeps them: no start URL, header names without values, the proxy without credentials.
+        const body = request.body as CrawlOptions;
+        const options = {
+          ...defaults.options,
+          ...body,
+          startUrl: null,
+          extraHeaders: Object.fromEntries(Object.keys(body.extraHeaders ?? {}).map((name) => [name, ''])),
+        };
+        savedDefaults = { ...defaults, options };
+        return json(savedDefaults);
       },
     ],
     [

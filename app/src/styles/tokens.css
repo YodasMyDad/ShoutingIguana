@@ -422,9 +422,18 @@
   --search-width-min: 144px; /* a search that shares a line with filters gives way down to this before it wraps */
   --search-width-filter: 160px;
   --search-width-library: 260px;
+  --topbar-site-max: 240px; /* the site's name in the top bar's crumbs: longer is cut, with the whole in its tooltip */
+  --topbar-site-min: 112px; /* how short it's cut, the bar short of room, before it goes */
+  --topbar-section-min: 72px; /* the section you're on, cut as short as this and no shorter, before it goes */
   --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
   --library-site-min: 144px; /* Home's Site column never gives up more of its room than this */
   --settings-nav-width: 192px;
+  --choice-card-min: 200px; /* a choice card's least width (the speed presets): narrower, they stack */
+  --choice-columns: repeat(auto-fit, minmax(var(--choice-card-min), 1fr)); /* as many cards a row as fit */
+  --form-max: 760px; /* the crawl settings form and a settings section: lines a reader can follow */
+  --number-field-width: 96px; /* a count typed inline in a sentence: "Stop after [5,000] addresses" */
+  --number-row-width: 320px; /* a setting's own field for a number or a short choice */
+  --header-name-width: 200px; /* an extra header's name, beside its value */
   --detail-max-height: 192px; /* an error's technical detail, before it scrolls */
   --palette-width: 640px;
   --palette-top: 12vh; /* the palette sits high, near where the eye already is */
@@ -437,6 +446,7 @@
   --skeleton-figure: 18px;
   --skeleton-figure-width: 48px;
   --skeleton-pill-width: 44px;
+  --skeleton-card-height: 160px; /* a form's card while its values load */
   --stat-value-size: var(--text-36);
   --stat-value-leading: var(--leading-36);
   --checkbox-size: 16px;

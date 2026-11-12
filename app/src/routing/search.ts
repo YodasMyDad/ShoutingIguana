@@ -157,13 +157,59 @@ export function validateHomeSearch(search: Record<string, unknown>): HomeSearch 
   return strictSearch(search, { q: text(search.q) });
 }
 
+/**
+ * A setting a link opens a form on, in focus: an alert's "Continue more slowly" (`speed`), "Add headers" (`headers`),
+ * "Crawl as another user agent" (`userAgent`) and "Crawl again with robots.txt ignored" (`robots`).
+ */
+export const SETTING_FOCUSES = ['speed', 'headers', 'proxy', 'userAgent', 'robots'] as const;
+export type SettingFocus = (typeof SETTING_FOCUSES)[number];
+
+function settingFocus(value: unknown): SettingFocus | undefined {
+  return SETTING_FOCUSES.find((focus) => focus === value);
+}
+
 export interface NewCrawlSearch {
   /** Pre-fills the start URL. */
   url?: string | undefined;
+  /** Pre-fills every setting from this crawl's (its id): "Crawl again with these". */
+  from?: string | undefined;
+  /** The setting to put focus on, its section open. */
+  focus?: SettingFocus | undefined;
 }
 
 export function validateNewCrawlSearch(search: Record<string, unknown>): NewCrawlSearch {
-  return strictSearch(search, { url: text(search.url) });
+  return strictSearch(search, {
+    url: text(search.url),
+    from: typeof search.from === 'string' && /^[0-9a-f]{16}$/.test(search.from) ? search.from : undefined,
+    focus: settingFocus(search.focus),
+  });
+}
+
+export interface OverviewSearch {
+  /** The score's breakdown, open over the Summary (Simple) or Overview: "How the score is worked out". */
+  score?: 1 | undefined;
+}
+
+export function validateOverviewSearch(search: Record<string, unknown>): OverviewSearch {
+  return strictSearch(search, { score: search.score === 1 || search.score === '1' ? 1 : undefined });
+}
+
+export interface CrawlSettingsSearch {
+  /** The setting to put focus on: what Continue may change (`speed`, `headers`, `proxy`). */
+  focus?: SettingFocus | undefined;
+}
+
+export function validateCrawlSettingsSearch(search: Record<string, unknown>): CrawlSettingsSearch {
+  return strictSearch(search, { focus: settingFocus(search.focus) });
+}
+
+export interface ReportSearch {
+  /** The whole report, or its summary. */
+  cut?: 'full' | 'summary' | undefined;
+}
+
+export function validateReportSearch(search: Record<string, unknown>): ReportSearch {
+  return strictSearch(search, { cut: search.cut === 'full' || search.cut === 'summary' ? search.cut : undefined });
 }
 
 export interface IssuesSearch {

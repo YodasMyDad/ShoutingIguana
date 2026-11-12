@@ -2,11 +2,14 @@ import { Outlet, useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useEffect } from 'react';
 import { focusFallback, useModalOpen, useOverlay } from '../app/overlays';
+import { setCrawlSettingsOpener } from '../crawl/actions';
 import { Announcer } from '../feedback/Announcer';
 import { AppToaster } from '../feedback/AppToaster';
 import { RegionBoundary } from '../feedback/RegionBoundary';
 import { useAppCommands } from '../keyboard/useAppCommands';
+import { useSimpleScreenShown } from '../app/modeScreen';
 import { useChunk } from '../lib/chunk';
+import { useModeGuard } from '../mode/useModeGuard';
 import { useSettings } from '../settings/settingsStore';
 import { InspectorSlot } from './InspectorSlot';
 import { paletteChunk, preloadOverlays, shortcutsChunk } from './overlayChunks';
@@ -29,6 +32,10 @@ export function AppShell() {
   useAppCommands();
   useShellIntegration();
   useFocusAfterNavigation();
+  useModeGuard();
+  useCrawlSettingsOpener();
+  // Simple has no inspector: a page's detail is Advanced's. Its `inspect` param stays in the address, for the switch back.
+  const inspector = !useSimpleScreenShown();
   const dock = useSettings((settings) => settings.inspectorDock);
   const overlay = useOverlay();
   const modal = useModalOpen();
@@ -64,9 +71,11 @@ export function AppShell() {
             <main id="main" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-auto outline-none">
               <Outlet />
             </main>
-            <RegionBoundary name="inspector">
-              <InspectorSlot />
-            </RegionBoundary>
+            {inspector ? (
+              <RegionBoundary name="inspector">
+                <InspectorSlot />
+              </RegionBoundary>
+            ) : null}
           </div>
         </div>
       </div>
@@ -77,6 +86,17 @@ export function AppShell() {
       <Announcer />
     </>
   );
+}
+
+/** Continue's toast, asked for a proxy password again, opens the crawl's settings on the proxy. */
+function useCrawlSettingsOpener() {
+  const router = useRouter();
+  useEffect(() => {
+    setCrawlSettingsOpener(
+      (crawl) => void router.navigate({ to: '/crawls/$crawl/settings', params: { crawl }, search: { focus: 'proxy' } }),
+    );
+    return () => setCrawlSettingsOpener(null);
+  }, [router]);
 }
 
 const hasFocus = () => document.activeElement !== null && document.activeElement !== document.body;

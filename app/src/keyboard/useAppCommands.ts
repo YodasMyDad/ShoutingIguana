@@ -3,7 +3,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { crawlQuery } from '../api/queries';
-import { CRAWL_SECTIONS, type CrawlSection } from '../app/sections';
+import { SIMPLE_SECTIONS } from '../app/modeRoutes';
+import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection } from '../app/sections';
+import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { getOverlay, setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { pickAndOpenCrawls } from '../crawl/openFiles';
@@ -11,6 +13,8 @@ import { crawlControls, effectiveStatus } from '../crawl/status';
 import { toggleSidebar } from '../layout/sidebarState';
 import { isTauri } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
+import { MODE_NAMES, otherMode, useMode } from '../mode/mode';
+import { switchMode } from '../mode/switchMode';
 import type { Density, ThemePreference } from '../settings/schema';
 import { getSettings, updateSettings } from '../settings/settingsStore';
 import { ZOOM_LEVELS, quitApp } from '../shell/os';
@@ -80,8 +84,15 @@ function nextZoom(direction: 1 | -1): number {
   return levels.find((level) => (direction === 1 ? level > zoom + 0.001 : level < zoom - 0.001)) ?? zoom;
 }
 
+/**
+ * The app's commands in the current mode. Simple lists its own screens and actions, in its own words, and no
+ * Advanced-only command but "Switch to Advanced": the palette and the `?` sheet read what's registered, so each lists
+ * what works in the mode shown.
+ */
 export function useAppCommands(): void {
   const router = useRouter();
+  const mode = useMode();
+  const simple = mode === 'simple';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { crawl: crawlId } = useParams({ strict: false });
@@ -105,10 +116,18 @@ export function useAppCommands(): void {
         return navigate({ to: '/crawls/$crawl/robots/{-$origin}', params: { crawl, origin: undefined } });
       case 'settings':
         return navigate({ to: '/crawls/$crawl/settings', params: { crawl } });
+      case 'report':
+        return navigate({ to: '/crawls/$crawl/report', params: { crawl } });
       default:
         return navigate({ to: '/crawls/$crawl/overview', params: { crawl } });
     }
   };
+
+  // The crawl's sections in this mode: Simple's three (the Report once it exists), or Advanced's seven and the Report.
+  const reportExists = SIMPLE_SCREENS.report !== null;
+  const sections = [...CRAWL_SECTIONS, ...(reportExists ? [REPORT_SECTION] : [])].filter(
+    (section) => !simple || SIMPLE_SECTIONS.includes(section.id),
+  );
 
   useCommands(
     () => [
@@ -130,8 +149,17 @@ export function useAppCommands(): void {
         run: () => setOverlay('shortcuts'),
       },
       {
+        id: 'app.mode',
+        title: `Switch to ${MODE_NAMES[otherMode(mode)]}`,
+        group: 'App',
+        keys: ['mod+shift+a'],
+        inInputs: true,
+        keywords: ['mode', 'simple', 'advanced', 'view'],
+        run: () => switchMode(router, otherMode(mode)),
+      },
+      {
         id: 'crawl.new',
-        title: 'New crawl',
+        title: simple ? 'Check a website' : 'New crawl',
         group: 'Crawl',
         keys: ['mod+n'],
         inInputs: true,
@@ -139,7 +167,7 @@ export function useAppCommands(): void {
       },
       {
         id: 'crawl.open',
-        title: 'Open a crawl file…',
+        title: simple ? 'Open a site check file…' : 'Open a crawl file…',
         group: 'Crawl',
         keys: ['mod+o'],
         inInputs: true,
@@ -157,17 +185,22 @@ export function useAppCommands(): void {
         keywords: ['library', 'crawls'],
         run: () => navigate({ to: '/', search: {} }),
       },
-      {
-        id: 'go.url',
-        title: 'Go to URL…',
-        group: 'Go to',
-        keywords: ['inspect', 'inspector', 'find', 'open', 'page', 'address'],
-        enabled: () => crawlId !== undefined,
-        run: () => {
-          setPaletteMode({ kind: 'url', text: '' });
-          setOverlay('palette');
-        },
-      },
+      // The inspector is Advanced's.
+      ...(simple
+        ? []
+        : [
+            {
+              id: 'go.url',
+              title: 'Go to URL…',
+              group: 'Go to',
+              keywords: ['inspect', 'inspector', 'find', 'open', 'page', 'address'],
+              enabled: () => crawlId !== undefined,
+              run: () => {
+                setPaletteMode({ kind: 'url', text: '' });
+                setOverlay('palette');
+              },
+            } satisfies Command,
+          ]),
       {
         id: 'go.settings',
         title: 'Open settings',
@@ -193,18 +226,18 @@ export function useAppCommands(): void {
         palette: false,
         run: () => router.history.forward(),
       },
-      ...CRAWL_SECTIONS.map<Command>((section) => ({
+      ...sections.map<Command>((section) => ({
         id: `section.${section.id}`,
-        title: `Go to ${section.title}`,
+        title: `Go to ${(simple ? section.simpleTitle : undefined) ?? section.title}`,
         group: 'Go to',
-        keys: [section.key],
+        keys: [(simple ? section.simpleKey : undefined) ?? section.key],
         inInputs: true,
         enabled: () => crawlId !== undefined,
         run: () => (crawlId ? goToSection(section.id, crawlId) : undefined),
       })),
       {
         id: 'crawl.pauseResume',
-        title: status === 'paused' ? 'Resume the crawl' : 'Pause the crawl',
+        title: `${status === 'paused' ? 'Resume' : 'Pause'} the ${simple ? 'check' : 'crawl'}`,
         group: 'Crawl',
         keys: ['f7'],
         inInputs: true,
@@ -214,7 +247,7 @@ export function useAppCommands(): void {
       },
       {
         id: 'crawl.stop',
-        title: 'Stop the crawl',
+        title: simple ? 'Stop the check' : 'Stop the crawl',
         group: 'Crawl',
         keys: ['f8'],
         inInputs: true,
@@ -223,7 +256,7 @@ export function useAppCommands(): void {
       },
       {
         id: 'crawl.continue',
-        title: 'Continue the crawl',
+        title: simple ? 'Continue the check' : 'Continue the crawl',
         group: 'Crawl',
         keywords: ['resume'],
         enabled: () => controls.canContinue,
@@ -231,7 +264,7 @@ export function useAppCommands(): void {
       },
       {
         id: 'crawl.analyse',
-        title: 'Analyse again',
+        title: simple ? 'Work out the results again' : 'Analyse again',
         group: 'Crawl',
         keywords: ['analyze', 'checks'],
         enabled: () => controls.canAnalyse,
@@ -245,7 +278,8 @@ export function useAppCommands(): void {
         enabled: () => getSettings().theme !== theme.value,
         run: () => updateSettings({ theme: theme.value }),
       })),
-      ...DENSITIES.map<Command>((density) => ({
+      // Density is the grids', which are Advanced's.
+      ...(simple ? [] : DENSITIES).map<Command>((density) => ({
         id: `view.density.${density.value}`,
         title: density.title,
         group: 'View',
@@ -294,6 +328,7 @@ export function useAppCommands(): void {
       ...GRID_KEY_COMMANDS,
     ],
     [
+      mode,
       router,
       navigate,
       queryClient,

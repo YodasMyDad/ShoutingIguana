@@ -1,0 +1,35 @@
+// The engine's own defaults for a crawl's options (engine `CrawlOptions`), for Simple's "N Advanced settings are
+// changed" and Home's "Uses your saved settings". `GET /api/crawl-options/defaults` gives these only until the user
+// saves defaults of their own, after which nothing serves them: the app keeps this copy, and the end-to-end tests check
+// it against a sidecar that has none saved (e2e/new-crawl.spec.ts).
+import type { CrawlOptions } from '../../api/types';
+
+export const ENGINE_DEFAULTS = {
+  maxUrls: 0,
+  maxDepth: 0,
+  concurrency: 5,
+  externalConcurrency: 4,
+  maxRequestsPerSecond: 0,
+  userAgent: 'shoutingIguana',
+  customUserAgent: null,
+  acceptLanguage: 'en-US,en;q=0.9',
+  extraHeaders: {},
+  respectRobotsTxt: true,
+  respectCrawlDelay: false,
+  checkResources: true,
+  checkExternalLinks: true,
+  includeSubdomains: false,
+  stayInStartFolder: true,
+  followNofollow: false,
+  crawlCanonicals: true,
+  crawlHreflang: false,
+  crawlPagination: false,
+  discoverSitemaps: true,
+  extraSitemaps: [],
+  storeHtml: false,
+  useCookies: true,
+  proxyUrl: null,
+  requestTimeoutSeconds: 20,
+  maxRetries: 2,
+  maxHtmlBytes: 8 * 1024 * 1024,
+} as const satisfies Omit<Required<CrawlOptions>, 'startUrl' | 'hasRedactedProxyCredentials'>;

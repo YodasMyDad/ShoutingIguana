@@ -4,8 +4,12 @@
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type Density = 'compact' | 'standard' | 'comfortable';
 export type InspectorDock = 'right' | 'bottom';
+/** Simple or Advanced: one app, two views of the same crawl (docs/v2-ui-simple.md, The switch). */
+export type Mode = 'simple' | 'advanced';
 
 export interface Settings {
+  /** Simple on a first start; the switch in the top bar and Settings > General > Mode are this one value. */
+  mode: Mode;
   theme: ThemePreference;
   /** Grid rows of 28, 32 or 40 px. */
   density: Density;
@@ -29,6 +33,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  mode: 'simple',
   theme: 'system',
   density: 'standard',
   zoom: 1,
@@ -70,7 +75,8 @@ function numberIn<T extends number | null>(
 
 /** Reads stored settings of any shape (or none) into valid ones. */
 export function readSettings(value: unknown): Settings {
-  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const hadSettings = typeof value === 'object' && value !== null;
+  const stored = hadSettings ? (value as Record<string, unknown>) : {};
   const lastViews: Record<string, string> = {};
   if (typeof stored.lastViewByCrawl === 'object' && stored.lastViewByCrawl !== null) {
     for (const [crawl, view] of Object.entries(stored.lastViewByCrawl).slice(-MAX_REMEMBERED_CRAWLS)) {
@@ -78,6 +84,9 @@ export function readSettings(value: unknown): Settings {
     }
   }
   return {
+    // Simple on a first start, with nothing stored. Preferences stored before the mode existed are someone who has
+    // used the app as it was, which is Advanced.
+    mode: oneOf(stored.mode, ['simple', 'advanced'], hadSettings ? 'advanced' : DEFAULT_SETTINGS.mode),
     theme: oneOf(stored.theme, ['system', 'light', 'dark'], DEFAULT_SETTINGS.theme),
     density: oneOf(stored.density, ['compact', 'standard', 'comfortable'], DEFAULT_SETTINGS.density),
     zoom: numberIn(stored.zoom, ZOOM_RANGE, DEFAULT_SETTINGS.zoom),

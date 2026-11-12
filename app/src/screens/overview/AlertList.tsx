@@ -25,13 +25,24 @@ function ActionFor({
   switch (action.kind) {
     case 'crawlSettings':
       return (
-        <TextLink to="/crawls/$crawl/settings" params={{ crawl: crawlId }}>
+        <TextLink
+          to="/crawls/$crawl/settings"
+          params={{ crawl: crawlId }}
+          search={action.focus ? { focus: action.focus } : {}}
+        >
           {action.label}
         </TextLink>
       );
     case 'newCrawl':
       return (
-        <TextLink to="/new" search={{ url: action.url }}>
+        <TextLink
+          to="/new"
+          search={{
+            ...(action.url ? { url: action.url } : {}),
+            ...(action.again ? { from: crawlId } : {}),
+            ...(action.focus ? { focus: action.focus } : {}),
+          }}
+        >
           {action.label}
         </TextLink>
       );
@@ -83,9 +94,17 @@ const AlertItem = memo(function AlertItem({ crawlId, entry, live, canContinue, o
         {entry.advice ? <p>{entry.advice}</p> : null}
         {/* Under the words, not beside them: the card is narrow, and the words need its width. */}
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
-          {entry.action ? (
-            <ActionFor crawlId={crawlId} action={entry.action} canContinue={canContinue} onContinue={onContinue} />
-          ) : null}
+          {[entry.action, ...(entry.more ?? [])].map((action) =>
+            action ? (
+              <ActionFor
+                key={action.label}
+                crawlId={crawlId}
+                action={action}
+                canContinue={canContinue}
+                onContinue={onContinue}
+              />
+            ) : null,
+          )}
           <span className="text-12 text-text-muted" aria-live={live ? 'off' : undefined}>
             <RelativeTime iso={entry.at} />
           </span>

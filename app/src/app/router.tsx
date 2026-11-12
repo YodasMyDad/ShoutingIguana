@@ -21,16 +21,22 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { NotFoundScreen } from '../screens/NotFoundScreen';
 import { getSettings } from '../settings/settingsStore';
 import {
+  validateCrawlSettingsSearch,
   validateGridSearch,
   validateHomeSearch,
   validateIssuesSearch,
   validateLinksSearch,
   validateNewCrawlSearch,
   validateNoSearch,
+  validateOverviewSearch,
+  validateReportSearch,
   validateRobotsSearch,
   validateSitemapsSearch,
 } from '../routing/search';
+import { simpleHasSection } from './modeRoutes';
+import { modeScreen, sameInBothModes } from './modeScreen';
 import { CRAWL_ID, isCrawlSection } from './sections';
+import { SIMPLE_SCREENS } from './simpleScreens';
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -47,7 +53,7 @@ const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   validateSearch: validateHomeSearch,
-  component: HomeScreen,
+  component: modeScreen('home', HomeScreen),
 });
 
 const newCrawlRoute = createRoute({
@@ -66,13 +72,18 @@ export const crawlRoute = createRoute({
   component: CrawlLayout,
 });
 
-/** `/crawls/:crawl` opens the crawl's last view: Overview the first time. */
+/**
+ * `/crawls/:crawl` opens the crawl's last view in the current mode: Overview (the Summary) the first time, and in Simple
+ * whenever the last view was one Simple doesn't have.
+ */
 const crawlIndexRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: '/',
   beforeLoad: ({ params }) => {
-    const view = getSettings().lastViewByCrawl[params.crawl];
-    const section = isCrawlSection(view) ? view : 'overview';
+    const { lastViewByCrawl, mode } = getSettings();
+    const view = lastViewByCrawl[params.crawl];
+    const known = isCrawlSection(view) && (view !== 'report' || SIMPLE_SCREENS.report !== null) ? view : 'overview';
+    const section = mode === 'simple' && !simpleHasSection(known) ? 'overview' : known;
     switch (section) {
       case 'issues':
         throw redirect({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl: params.crawl }, replace: true });
@@ -86,6 +97,8 @@ const crawlIndexRoute = createRoute({
         throw redirect({ to: '/crawls/$crawl/robots/{-$origin}', params: { crawl: params.crawl }, replace: true });
       case 'settings':
         throw redirect({ to: '/crawls/$crawl/settings', params, replace: true });
+      case 'report':
+        throw redirect({ to: '/crawls/$crawl/report', params, replace: true });
       default:
         throw redirect({ to: '/crawls/$crawl/overview', params, replace: true });
     }
@@ -95,15 +108,21 @@ const crawlIndexRoute = createRoute({
 const overviewRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'overview',
-  validateSearch: validateNoSearch,
-  component: lazyRouteComponent(() => import('../screens/OverviewScreen'), 'OverviewScreen'),
+  validateSearch: validateOverviewSearch,
+  component: modeScreen(
+    'overview',
+    lazyRouteComponent(() => import('../screens/OverviewScreen'), 'OverviewScreen'),
+  ),
 });
 
 export const issuesRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'issues/{-$check}',
   validateSearch: validateIssuesSearch,
-  component: lazyRouteComponent(() => import('../screens/IssuesScreen'), 'IssuesScreen'),
+  component: modeScreen(
+    'issues',
+    lazyRouteComponent(() => import('../screens/IssuesScreen'), 'IssuesScreen'),
+  ),
 });
 
 export const urlsRoute = createRoute({
@@ -137,14 +156,34 @@ const robotsRoute = createRoute({
 const crawlSettingsRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'settings',
-  validateSearch: validateNoSearch,
+  validateSearch: validateCrawlSettingsSearch,
   component: lazyRouteComponent(() => import('../screens/CrawlSettingsScreen'), 'CrawlSettingsScreen'),
+});
+
+/** The Report, the same screen in both modes: there once its screen is (app/simpleScreens.ts), not found until then. */
+const reportRoute = createRoute({
+  getParentRoute: () => crawlRoute,
+  path: 'report',
+  validateSearch: validateReportSearch,
+  beforeLoad: () => {
+    if (SIMPLE_SCREENS.report === null) throw notFound();
+  },
+  component: sameInBothModes('report', NotFoundScreen),
 });
 
 export const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'settings/{-$section}',
   validateSearch: validateNoSearch,
+  // A section there's no file for (Analysis until its slice) is General, in the address too: nothing turns Advanced
+  // on, or lands, on a section that isn't there. Its list comes with the screen's chunk.
+  beforeLoad: async ({ params }) => {
+    if (params.section === undefined) return;
+    const { SETTINGS_SECTIONS } = await import('../screens/settings/registry');
+    if (!SETTINGS_SECTIONS.some((entry) => entry.id === params.section)) {
+      throw redirect({ to: '/settings/{-$section}', params: { section: undefined }, replace: true });
+    }
+  },
   component: lazyRouteComponent(() => import('../screens/SettingsScreen'), 'SettingsScreen'),
 });
 
@@ -160,6 +199,7 @@ export const routeTree = rootRoute.addChildren([
     sitemapsRoute,
     robotsRoute,
     crawlSettingsRoute,
+    reportRoute,
   ]),
   settingsRoute,
 ]);

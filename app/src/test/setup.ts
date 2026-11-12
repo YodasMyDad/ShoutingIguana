@@ -2,9 +2,16 @@
 // runs in plain Node (`@vitest-environment node`, such as the compiled tokens') has no DOM, and needs none of them.
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
+import { afterEach, beforeEach } from 'vitest';
 
 const hasDom = typeof window !== 'undefined';
+
+// Every test starts in Advanced, which every screen built before Simple was written for; a test of Simple says so.
+// Imported here, not above: after the test file's own module mocks are in place (the settings store reaches the shell).
+beforeEach(async () => {
+  const { replaceSettings } = await import('../settings/settingsStore');
+  replaceSettings({ mode: 'advanced' });
+});
 
 if (hasDom) {
   afterEach(() => cleanup());

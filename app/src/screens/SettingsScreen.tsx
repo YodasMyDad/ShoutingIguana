@@ -1,155 +1,77 @@
-import { useQuery } from '@tanstack/react-query';
-import { useParams } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
-import { healthQuery } from '../api/queries';
-import { ShortcutList } from '../keyboard/ShortcutSheet';
-import { isTauri } from '../lib/platform';
-import type { Density, ThemePreference } from '../settings/schema';
-import { updateSettings, useSettings } from '../settings/settingsStore';
-import { ipc, type ShellInfo } from '../shell/ipc';
-import { Fact, Facts } from '../ui/Facts';
+import { useParams, useRouter } from '@tanstack/react-router';
+import { useMode } from '../mode/mode';
+import { switchMode } from '../mode/switchMode';
+import { Button } from '../ui/Button';
+import { listOf } from '../crawl/options/words';
 import { NavItem } from '../ui/NavItem';
-import { SegmentedControl } from '../ui/SegmentedControl';
-import { ScreenStub } from './ScreenStub';
+import { SETTINGS_SECTIONS, sectionsFor } from './settings/registry';
 
-const SECTIONS = [
-  { id: 'general', title: 'General' },
-  { id: 'crawl-defaults', title: 'Crawl defaults' },
-  { id: 'analysis', title: 'Analysis' },
-  { id: 'data', title: 'Data folder' },
-  { id: 'shortcuts', title: 'Shortcuts' },
-  { id: 'diagnostics', title: 'Diagnostics' },
-  { id: 'updates', title: 'Updates' },
-  { id: 'about', title: 'About' },
-] as const;
+/** How Simple's note names each Advanced-only section, mid-sentence. */
+const IN_A_SENTENCE: Record<string, string> = {
+  'crawl-defaults': 'crawl defaults',
+  analysis: 'the checks’ limits',
+  shortcuts: 'shortcuts',
+  diagnostics: 'diagnostics',
+};
 
-/** App settings (docs/v2-ui-ia.md: general, crawl defaults, analysis, data, shortcuts, diagnostics, updates, about). */
+/** "Crawl defaults, shortcuts and diagnostics are Advanced settings.": the sections there are, and only those. */
+function advancedOnlyNote(ids: readonly string[]): string {
+  const words = listOf(ids.map((id) => IN_A_SENTENCE[id] ?? id));
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} ${ids.length === 1 ? 'is an Advanced setting' : 'are Advanced settings'}.`;
+}
+
+/**
+ * App settings (docs/v2-ui-ia.md, Routes; docs/v2-ui-simple.md, Settings in each mode): the sections the mode lists,
+ * each one file in `settings/sections/` (settings/registry.ts). Simple lists four, with a note saying where the rest
+ * are. An address naming a section there's no file for opens General.
+ */
 export function SettingsScreen() {
   const { section = 'general' } = useParams({ from: '/settings/{-$section}' });
-  const current = SECTIONS.find((candidate) => candidate.id === section) ?? SECTIONS[0];
+  const router = useRouter();
+  const mode = useMode();
+  const listed = sectionsFor(mode);
+  const current =
+    SETTINGS_SECTIONS.find((candidate) => candidate.id === section) ??
+    SETTINGS_SECTIONS.find((candidate) => candidate.id === 'general') ??
+    SETTINGS_SECTIONS[0];
+  const Current = current?.Section;
+
+  // "Show them in Advanced" goes with Simple: focus goes to the first section it brought into the list.
+  const showInAdvanced = () => {
+    switchMode(router, 'advanced');
+    requestAnimationFrame(() => {
+      const added = SETTINGS_SECTIONS.find((entry) => !listed.includes(entry));
+      if (added) document.querySelector<HTMLElement>(`[data-settings-section="${added.id}"]`)?.focus();
+    });
+  };
+
   return (
     <div className="flex gap-8 px-(--page-gutter) py-6">
-      <nav aria-label="Settings" className="w-(--settings-nav-width) shrink-0">
+      <nav aria-label="Settings" className="flex w-(--settings-nav-width) shrink-0 flex-col gap-4">
         <ul className="flex flex-col gap-0.5">
-          {SECTIONS.map((entry) => (
+          {listed.map((entry) => (
             <li key={entry.id}>
               <NavItem
                 to="/settings/{-$section}"
                 params={{ section: entry.id === 'general' ? undefined : entry.id }}
                 activeOptions={{ exact: true }}
-                aria-current={entry.id === current.id ? 'page' : undefined}
+                aria-current={entry.id === current?.id ? 'page' : undefined}
+                data-settings-section={entry.id}
                 label={entry.title}
               />
             </li>
           ))}
         </ul>
+        {mode === 'simple' ? (
+          <p className="border-t border-border-subtle px-2.5 pt-3 text-12 text-text-secondary">
+            {advancedOnlyNote(SETTINGS_SECTIONS.filter((entry) => !listed.includes(entry)).map((entry) => entry.id))}{' '}
+            <Button variant="ghost" size="sm" className="mt-1 -ml-2.5" onClick={showInAdvanced}>
+              Show them in Advanced
+            </Button>
+          </p>
+        ) : null}
       </nav>
-      <div className="min-w-0 flex-1">
-        {current.id === 'general' ? <General /> : null}
-        {current.id === 'shortcuts' ? (
-          <ScreenStub title="Shortcuts" purpose="Every shortcut, from the same list the ? sheet and the menus use.">
-            <ShortcutList />
-          </ScreenStub>
-        ) : null}
-        {current.id === 'about' ? <About /> : null}
-        {current.id !== 'general' && current.id !== 'shortcuts' && current.id !== 'about' ? (
-          <ScreenStub title={current.title} purpose="This section arrives with its slice." />
-        ) : null}
-      </div>
+      <div className="min-w-0 flex-1">{Current ? <Current /> : null}</div>
     </div>
-  );
-}
-
-function General() {
-  const theme = useSettings((settings) => settings.theme);
-  const density = useSettings((settings) => settings.density);
-  return (
-    <ScreenStub title="General" purpose="How the app looks. Changes apply at once and are remembered.">
-      <Choice<ThemePreference>
-        legend="Theme"
-        value={theme}
-        options={[
-          { value: 'system', label: 'Follow the system' },
-          { value: 'light', label: 'Light' },
-          { value: 'dark', label: 'Dark' },
-        ]}
-        onChange={(value) => updateSettings({ theme: value })}
-      />
-      <Choice<Density>
-        legend="Density"
-        value={density}
-        options={[
-          { value: 'compact', label: 'Compact', hint: 'Rows of 28 px' },
-          { value: 'standard', label: 'Standard', hint: 'Rows of 32 px' },
-          { value: 'comfortable', label: 'Comfortable', hint: 'Rows of 40 px' },
-        ]}
-        onChange={(value) => updateSettings({ density: value })}
-      />
-    </ScreenStub>
-  );
-}
-
-/** One setting chosen from a few, all in view: the segmented control, its legend, and what the choice means. */
-function Choice<T extends string>({
-  legend,
-  value,
-  options,
-  onChange,
-}: {
-  legend: string;
-  value: T;
-  options: { value: T; label: string; hint?: string }[];
-  onChange: (value: T) => void;
-}) {
-  const hint = options.find((option) => option.value === value)?.hint;
-  return (
-    <div className="flex flex-col items-start gap-2">
-      {/* The control's own name is the legend: this is its visible copy. */}
-      <span aria-hidden="true" className="text-14 font-medium">
-        {legend}
-      </span>
-      {/* Each option's hint is its segment's description, so it's heard on the segment; the chosen one's shows. */}
-      <SegmentedControl<T>
-        label={legend}
-        value={value}
-        options={options.map((option) => ({ ...option, description: option.hint }))}
-        onValueChange={onChange}
-      />
-      {hint ? (
-        <span aria-hidden="true" className="text-12 text-text-muted">
-          {hint}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function About() {
-  const health = useQuery(healthQuery());
-  const [shell, setShell] = useState<ShellInfo | null>(null);
-  useEffect(() => {
-    if (isTauri)
-      void ipc
-        .shellInfo()
-        .then(setShell)
-        .catch(() => undefined);
-  }, []);
-  return (
-    <ScreenStub title="About" purpose="Shouting Iguana: an SEO crawler and site auditor.">
-      <Facts auto className="max-w-(--content-max)">
-        <Fact label="App" className="font-mono text-12">
-          {shell ? `${shell.appVersion}${shell.debug ? ' (debug build)' : ''}` : 'Running in a browser'}
-        </Fact>
-        <Fact label="Engine" className="font-mono text-12">
-          {health.data ? health.data.engineVersion : health.error ? 'Not connected' : '…'}
-        </Fact>
-        <Fact label="Data folder" className="font-mono text-12">
-          {health.data?.dataDir ?? '–'}
-        </Fact>
-        <Fact label="Logs" className="font-mono text-12">
-          {shell?.logDir ?? health.data?.stateDir ?? '–'}
-        </Fact>
-      </Facts>
-    </ScreenStub>
   );
 }

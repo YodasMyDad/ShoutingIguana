@@ -21,6 +21,8 @@ describe('stored settings', () => {
       }),
     ).toEqual({
       ...DEFAULT_SETTINGS,
+      // Stored before the mode existed: Advanced (src/mode/mode.test.tsx).
+      mode: 'advanced',
       theme: 'dark',
       zoom: 2,
       inspectorWidth: 320,

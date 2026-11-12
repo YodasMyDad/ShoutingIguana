@@ -1,0 +1,45 @@
+// The one table from a route to its Simple screen (docs/v2-ui-simple.md, Routes; docs/v2-ui-architecture.md, Modes).
+//
+// A route whose row is null shows its Advanced screen in either mode. To give a route its Simple screen, set its row,
+// and change nothing else: the router, the switch, the sidebar and the keys all read this table.
+//
+//   overview: simpleScreen(() => import('../simple/SummaryScreen'), 'SummaryScreen'),
+//
+// Each row is one line with a comment line between it and the next, so screens added on separate branches never
+// touch the same lines. Routes Simple doesn't have (URLs, Links, Sitemaps, robots.txt, the crawl's settings and four
+// of Settings' sections) aren't rows: they're Advanced only (app/modeRoutes.ts). New crawl and Settings aren't rows
+// either: each is one screen that reads the mode itself.
+import { lazyRouteComponent, type RouteComponent } from '@tanstack/react-router';
+
+/** A route's Simple screen: a component of its own chunk, loaded when it's first shown. */
+export type SimpleScreen = RouteComponent;
+
+export interface SimpleScreens {
+  home: SimpleScreen | null;
+  overview: SimpleScreen | null;
+  issues: SimpleScreen | null;
+  report: SimpleScreen | null;
+}
+
+/** A Simple screen from its module, as the router's lazy route components are: `simpleScreen(() => import(…), 'Name')`. */
+export const simpleScreen = lazyRouteComponent as <T extends Record<string, unknown>>(
+  load: () => Promise<T>,
+  name: keyof T,
+) => SimpleScreen;
+
+export const SIMPLE_SCREENS: SimpleScreens = {
+  // `/`: Home in Simple. Check a website, and Your sites.
+  home: null,
+
+  // `/crawls/:crawl/overview`: Checking a site while it runs, then the Summary.
+  overview: null,
+
+  // `/crawls/:crawl/issues/:check?`: What to fix, and one problem.
+  issues: null,
+
+  // `/crawls/:crawl/report`: the Report screen, the same in both modes. Its sidebar item (third in Simple, eighth in
+  // Advanced), its key (Ctrl+3, Ctrl+8) and its route appear once this is set.
+  report: null,
+};
+
+export type SimpleScreenKey = keyof SimpleScreens;

@@ -6,8 +6,10 @@ import { checksQuery, libraryQuery } from '../api/queries';
 import { afterFocusReturns, restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatRelativeTime } from '../lib/format';
+import { useMode } from '../mode/mode';
 import { Kbd } from '../ui/Kbd';
 import { GoToUrl } from './GoToUrl';
+import { groupTitle, listedIn } from './modeWords';
 import { setPaletteMode, usePaletteMode } from './paletteMode';
 import { looksLikeUrl, searchPalette, type PaletteEntry } from './paletteSearch';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
@@ -43,11 +45,18 @@ export function CommandPalette() {
   const { crawl: crawlId } = useParams({ strict: false });
   const library = useQuery({ ...libraryQuery(), enabled: open }).data;
   const checks = useQuery({ ...checksQuery(), enabled: open && crawlId !== undefined }).data;
+  const appMode = useMode();
 
   const entries = useMemo<PaletteItem[]>(() => {
     const list: PaletteItem[] = commands
       .list()
-      .filter((command) => command.scope !== 'grid' && command.palette !== false && commands.isEnabled(command))
+      .filter(
+        (command) =>
+          command.scope !== 'grid' &&
+          command.palette !== false &&
+          commands.isEnabled(command) &&
+          listedIn(command, appMode),
+      )
       .map((command) => ({
         id: `command:${command.id}`,
         group: command.group,
@@ -59,11 +68,13 @@ export function CommandPalette() {
       }));
     if (crawlId && checks) {
       for (const check of checks.checks) {
+        // A check is found by either of its titles in both modes, and shows the mode's own.
+        const plain = check.plainTitle ?? null;
         list.push({
           id: `check:${check.id}`,
           group: 'Checks',
-          title: check.title,
-          keywords: [check.id, check.severity, check.category],
+          title: appMode === 'simple' && plain ? plain : check.title,
+          keywords: [check.id, check.severity, check.category, ...(plain ? [plain, check.title] : [])],
           run: () => navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl: crawlId, check: check.id } }),
         });
       }
@@ -79,7 +90,7 @@ export function CommandPalette() {
       });
     }
     return list;
-  }, [crawlId, checks, library, navigate]);
+  }, [crawlId, checks, library, navigate, appMode]);
 
   // However it closes (Esc, a click outside, the key that opens it, a command's own doing), it opens on the commands
   // next time: "Go to URL…" is asked for each time it's wanted.
@@ -144,6 +155,7 @@ export function PaletteBody({
   onUrl?: ((text: string) => void) | undefined;
 }) {
   const id = useId();
+  const appMode = useMode();
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const results = useMemo(() => {
@@ -239,7 +251,7 @@ export function PaletteBody({
           <div key={entry.id}>
             {startsGroup[index] ? (
               <div aria-hidden="true" className="si-palette-heading">
-                {entry.group}
+                {groupTitle(entry.group, appMode)}
               </div>
             ) : null}
             {/* The combobox pattern: focus stays in the input, which takes the keys and names this option through
@@ -256,7 +268,7 @@ export function PaletteBody({
               className="si-palette-item"
             >
               <span className="truncate">{entry.title}</span>
-              <span className="sr-only">, {entry.group}</span>
+              <span className="sr-only">, {groupTitle(entry.group, appMode)}</span>
               {entry.hint ? <span className="ml-auto">{entry.hint}</span> : null}
             </div>
           </div>

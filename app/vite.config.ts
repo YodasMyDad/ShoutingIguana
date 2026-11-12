@@ -1,11 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { FILLED_TABLE, filledTable } from './scripts/filled-table.mjs';
 import { DEV_SERVER_PORT, PREVIEW_PORT } from './scripts/ports.mjs';
 
 // The dev server's port is fixed: the Tauri shell's devUrl and the dev sidecar's allowed origin both name it.
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss()],
+  // `SI_FILLED_TABLE=1`: every row of the routes' table a stub screen, for `npm run e2e:filled`.
+  plugins: [react(), tailwindcss(), ...(FILLED_TABLE ? [filledTable()] : [])],
   clearScreen: false,
   server: {
     host: 'localhost',

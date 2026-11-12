@@ -33,6 +33,10 @@ export interface SegmentedControlProps<T extends string> {
    */
   wrap?: boolean | undefined;
   className?: string | undefined;
+  /** The keys that work the whole control (the mode switch's Ctrl+Shift+A), as `aria-keyshortcuts` (`Control+Shift+A`). */
+  ariaKeyShortcuts?: string | undefined;
+  /** What the whole control does, read with its name. */
+  groupDescription?: string | undefined;
 }
 
 /**
@@ -47,6 +51,8 @@ export function SegmentedControl<T extends string>({
   fill = false,
   wrap = false,
   className,
+  ariaKeyShortcuts,
+  groupDescription,
 }: SegmentedControlProps<T>) {
   const descriptionId = useId();
   const descriptionOf = (option: SegmentOption<T>) => `${descriptionId}-${option.value}`;
@@ -60,6 +66,8 @@ export function SegmentedControl<T extends string>({
       <ToggleGroup.Root
         type="single"
         aria-label={label}
+        aria-keyshortcuts={ariaKeyShortcuts}
+        aria-describedby={groupDescription ? `${descriptionId}-group` : undefined}
         value={value}
         onValueChange={choose}
         loop
@@ -96,6 +104,11 @@ export function SegmentedControl<T extends string>({
           );
         })}
       </ToggleGroup.Root>
+      {groupDescription ? (
+        <span id={`${descriptionId}-group`} hidden>
+          {groupDescription}
+        </span>
+      ) : null}
       {options.map((option) =>
         option.description ? (
           <span key={option.value} id={descriptionOf(option)} hidden>

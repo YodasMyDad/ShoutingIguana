@@ -434,8 +434,18 @@ describe('the Overview of an analysed crawl', () => {
     expect(await alerts.findByText('The site is blocking the crawl')).toBeVisible();
     // The crawl is over: what it came to, not "so far".
     expect(alerts.getByText('example.com answered with a Cloudflare challenge. 37 responses blocked.')).toBeVisible();
-    expect(pathOf(alerts.getByRole('link', { name: 'Open the crawl’s settings' }))).toBe(
-      `/crawls/${TEST_CRAWL_ID}/settings`,
+    // Each way on opens where it's done, on its setting.
+    expect(alerts.getByRole('link', { name: 'Continue more slowly' })).toHaveAttribute(
+      'href',
+      `/crawls/${TEST_CRAWL_ID}/settings?focus=speed`,
+    );
+    expect(alerts.getByRole('link', { name: 'Add headers' })).toHaveAttribute(
+      'href',
+      `/crawls/${TEST_CRAWL_ID}/settings?focus=headers`,
+    );
+    expect(alerts.getByRole('link', { name: 'Crawl as another user agent' })).toHaveAttribute(
+      'href',
+      `/new?from=${TEST_CRAWL_ID}&focus=userAgent`,
     );
   });
 });
@@ -1070,14 +1080,15 @@ describe('the Overview while the crawl runs', () => {
     const { queryClient } = await open();
     await heard(message('progress', progressAt(100, POLITE)));
     const bar = within(document.querySelector('header')!);
-    const pause = bar.getByRole('button', { name: /Pause/ });
+    // By its own name: More (the bar at its narrowest) names Pause and Stop too.
+    const pause = bar.getByRole('button', { name: /^Pause/ });
     act(() => pause.focus());
     fireEvent.click(pause);
     await heard(message('progress', progressAt(100.5, { ...POLITE, status: 'paused' })));
     expect(pause.isConnected).toBe(false);
-    expect(document.activeElement).toBe(bar.getByRole('button', { name: /Resume/ }));
+    expect(document.activeElement).toBe(bar.getByRole('button', { name: /^Resume/ }));
     // Stop: while the crawl is stopping the bar has no control at all.
-    const stop = bar.getByRole('button', { name: /Stop/ });
+    const stop = bar.getByRole('button', { name: /^Stop/ });
     act(() => stop.focus());
     fireEvent.click(stop);
     setStatus(queryClient, 'stopping');

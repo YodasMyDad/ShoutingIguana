@@ -25,7 +25,12 @@ describe('alerts', () => {
       detail: 'www.example.com answered with a Cloudflare challenge.',
       // What it came to, apart: said of a crawl that isn't running, as the count is read once and would stand still.
       tally: '12 responses blocked.',
-      action: { kind: 'crawlSettings' },
+      // Each of the advice's three ways on, with the setting it opens on.
+      action: { kind: 'crawlSettings', label: 'Continue more slowly', focus: 'speed' },
+      more: [
+        { kind: 'crawlSettings', label: 'Add headers', focus: 'headers' },
+        { kind: 'newCrawl', label: 'Crawl as another user agent', again: true, focus: 'userAgent' },
+      ],
     });
     expect(blocked?.advice).toMatch(/more slowly/);
 

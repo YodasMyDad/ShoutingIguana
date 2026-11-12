@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { PREVIEW_PORT } from './scripts/ports.mjs';
+import { ADVANCED_STORAGE, BASE_URL } from './e2e/storage';
 
 // End to end against the real sidecar: e2e/global-setup.ts starts one on a temp data folder holding a crawl, builds
 // the app pointed at it and serves the build. Chromium stands in for WebView2 (the same engine, as the spike measured).
@@ -13,7 +13,8 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   timeout: 30_000,
   use: {
-    baseURL: `http://localhost:${PREVIEW_PORT}`,
+    baseURL: BASE_URL,
+    storageState: ADVANCED_STORAGE,
     trace: 'retain-on-failure',
     viewport: { width: 1280, height: 800 },
   },
