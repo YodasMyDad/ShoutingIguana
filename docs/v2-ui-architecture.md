@@ -194,7 +194,8 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   track and no arrows, by the `::-webkit-scrollbar` parts in Chromium (which ignores the parts on an element that sets
   `scrollbar-width` or `scrollbar-color`, and with `scrollbar-width: thin` alone still draws small arrows), the
   standard properties in a browser without the parts, and the system's own under forced colours; a strip of tabs has
-  none (`scrollbar-width: none`) and scrolls its chosen tab into view. Headless Chromium draws these parts too, so the
+  none (`scrollbar-width: none`): a plain wheel scrolls it sideways, an end with more tabs past it fades
+  (`--tabs-fade`), and its chosen tab is scrolled into view when it changes and when the tabs change size. Headless Chromium draws these parts too, so the
   end-to-end tests now lay out with the shell's 10 px bars. Seen in the release build through this walk, before and
   after (12 Nov 2026). The quit question and the tray's menu are Windows' own, so they don't follow the app's theme. With the browser
   keys turned off, WebView2 still raises nothing of its own for F5, Ctrl+R, F3, Ctrl+G, Ctrl+J, Ctrl+P, Ctrl+S, Ctrl+U,
@@ -717,15 +718,18 @@ answer. What it settled:
 - **The answer never waits for `/stats`**, which counts every link (1.1 to 1.4 s on the 100k crawl). It adds why URLs
   got no response to one row when it arrives, and a stopped crawl's queue to its banner. The answer is the analysis,
   the catalog and three facet reads, each card with its own skeleton and its own error.
-- **One clock for the live screen's times**: the time the run being watched has spent crawling (the live store's
-  run clock). Elapsed shows it, the chart's time axis is it, and the pace is read over the last minute of it, so the
-  three agree, a pause moves none of them, and a resumed crawl's time left is right at once. A continued crawl is
+- **One clock for the live screen's times**: time spent crawling, which stands still while the crawl is paused.
+  Elapsed shows the crawl's, the chart's time axis is it, and the pace is read over the last minute of this run's (the
+  live store's run clock), so the three agree, a pause moves none of them, and a resumed crawl's time left is right at once. A continued crawl is
   drawn whole (E3c's `/history.runs`): the earlier runs' points, counted back from the file, are placed by the time
   their stretches had spent crawling (`crawlingAt` in `foundAndCrawled.ts`), so the days between runs and the pauses
   take no room, and this run follows on from their total; each later run's start is a dashed rule (`LineChart`'s
   `markers`), and the chart's name says the runs and where each continued ("over 10 min 4 s of crawling, in 2 runs,
-  continued at 10 min of it"). Elapsed is that same clock: the earlier runs' time and this run's. From an engine
-  without `runs`, the chart is of this run, starting where it did and saying "since it was continued". The finished
+  continued at 10 min of it"). The run being watched is the one begun from the history's `liveFrom`: a run before it
+  that never ended (its process died) is an earlier one, and the bridge reads the history again when a crawl starts
+  or is continued. Elapsed is the progress event's `crawlingMs` (every run's time spent crawling, which a live
+  client takes), so it never waits for the history; from an engine without it, the run clock and the earlier runs'
+  time. From an engine without `runs`, the chart is of this run, starting where it did and saying "since it was continued". The finished
   crawl's line says how long it spent crawling (`crawlingMs`), "not counting pauses or the time between runs", and
   for a crawl an earlier version made, that it isn't known, never `finishedAt - startedAt`.
 - **The time left** shows only with a URL limit: what's left of the limit at the pace of the last minute of crawling,
