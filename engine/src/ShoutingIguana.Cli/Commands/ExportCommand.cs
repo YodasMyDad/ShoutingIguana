@@ -65,8 +65,26 @@ internal static class ExportCommand
                 return 2;
             }
 
+            // An option that belongs to another kind is refused, never ignored, as the API refuses its field: by the same list.
+            (Option Option, string Field)[] owned =
+            [
+                (columns, "columns"), (filters, "filters"), (search, "search"), (sort, "sort"), (sitemap, "sitemapId"), (origin, "origin"), (line, "line"), (reason, "reason"),
+                (check, "checkId"), (cut, "cut"), (examples, "examples"), (lookExamples, "lookExamples")
+            ];
+            var misplaced = owned.Where(option => parse.GetResult(option.Option) is { Implicit: false } && !ExportFields.Takes(exportKind, option.Field)).ToList();
+            foreach (var (option, field) in misplaced)
+            {
+                Console.Error.WriteLine(
+                    $"{option.Name} isn't for an export of {ExportFields.Name(exportKind)}: it belongs to {string.Join(" and ", ExportFields.Owners(field).Select(ExportFields.Name))}.");
+            }
+
+            if (misplaced.Count > 0)
+            {
+                return 2;
+            }
+
             if (!TryReason(parse.GetValue(reason), out var blockReason) || !TryCut(parse.GetValue(cut), out var reportCut) ||
-                Query(parse.GetValue(columns), parse.GetValue(filters) ?? [], parse.GetValue(search), parse.GetValue(sort) ?? []) is not { } query)
+                Query(exportKind, parse.GetValue(columns), parse.GetValue(filters) ?? [], parse.GetValue(search), parse.GetValue(sort) ?? []) is not { } query)
             {
                 return 2;
             }
@@ -224,12 +242,13 @@ internal static class ExportCommand
     }
 
     /// <summary>A grid's query from the options; null, with why on stderr, when one of them can't be read.</summary>
-    private static UrlQuery? Query(string? columns, string[] filters, string? search, string[] sorts)
+    private static UrlQuery? Query(ExportKind kind, string? columns, string[] filters, string? search, string[] sorts)
     {
+        var known = kind == ExportKind.Links ? LinkGridReader.Columns : UrlGridReader.IssueRowColumns;
         List<UrlFilter> parsed = [];
         foreach (var text in filters)
         {
-            if (Filter(text) is not { } filter)
+            if (Filter(text, known) is not { } filter)
             {
                 Console.Error.WriteLine(
                     $"--filter '{Format.Printable(text)}' isn't column:operator[:value]. The operators are {string.Join(", ", OPERATORS.Keys)}; in and notIn take a,b,c and between takes min..max.");
@@ -254,10 +273,12 @@ internal static class ExportCommand
     }
 
     /// <summary>
-    /// <c>column:operator[:value]</c>. A value that reads as a number is one, and true or false is a boolean, unless the
-    /// operator is one only text takes; whether the column takes it, the engine says.
+    /// <c>column:operator[:value]</c>. A value is of its column's type, not of what it looks like: a title that is
+    /// "404" is text, as a status of 404 is a number, and true or false is a boolean for a column of them. What isn't of
+    /// the column's type is passed as the text it is, and the engine says what the column takes; so is the value for a
+    /// column this grid doesn't have, which the engine names.
     /// </summary>
-    private static UrlFilter? Filter(string text)
+    private static UrlFilter? Filter(string text, IReadOnlyList<UrlColumnInfo> known)
     {
         var parts = text.Split(':', 3);
         if (parts.Length < 2 || parts[0].Length == 0 || !OPERATORS.TryGetValue(parts[1], out var op))
@@ -266,12 +287,13 @@ internal static class ExportCommand
         }
 
         var value = parts.Length == 3 ? parts[2] : null;
-        var textOnly = op is FilterOperator.Contains or FilterOperator.NotContains or FilterOperator.StartsWith or FilterOperator.EndsWith or FilterOperator.Regex or FilterOperator.NotRegex;
-        FilterValue Value(string given) =>
-            textOnly ? FilterValue.Of(given)
-            : bool.TryParse(given, out var flag) ? FilterValue.Of(flag)
-            : double.TryParse(given, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? FilterValue.Of(number)
-            : FilterValue.Of(given);
+        var type = known.FirstOrDefault(column => column.Id == parts[0])?.Type;
+        FilterValue Value(string given) => type switch
+        {
+            UrlColumnType.Number when double.TryParse(given, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => FilterValue.Of(number),
+            UrlColumnType.Boolean when bool.TryParse(given, out var flag) => FilterValue.Of(flag),
+            _ => FilterValue.Of(given)
+        };
 
         switch (op)
         {

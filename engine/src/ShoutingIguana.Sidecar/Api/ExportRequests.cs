@@ -1,3 +1,4 @@
+using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Export.Models;
 using ShoutingIguana.Engine.Reporting.Models;
 using ShoutingIguana.Engine.Storage.Models;
@@ -18,7 +19,7 @@ internal static class ExportRequests
     private static readonly Dictionary<string, ExportFormat> FORMATS = Enum.GetValues<ExportFormat>().ToDictionary(format => Camel(format.ToString()), StringComparer.Ordinal);
 
     /// <summary>The kinds whose export is a grid's query.</summary>
-    private static readonly HashSet<ExportKind> GRIDS = [ExportKind.Urls, ExportKind.Links, ExportKind.SitemapUrls, ExportKind.IssueRows];
+    private static readonly HashSet<ExportKind> GRIDS = [.. ExportFields.Grids];
 
     public static ExportRequest Request(ExportRequestDto body)
     {
@@ -34,28 +35,28 @@ internal static class ExportRequests
         }
 
         // A field that belongs to another kind: refused, as the grids refuse a group or a sitemap that isn't theirs.
-        void Only(bool given, string field, params ExportKind[] kinds)
+        // Which kinds take which field is the engine's to say (ExportFields), as the command line refuses the same.
+        void Only(bool given, string field)
         {
-            if (given && !kinds.Contains(kind))
+            if (given && !ExportFields.Takes(kind, field))
             {
-                errors[field] = [$"An export of {kindName} doesn't take {field}: it belongs to {string.Join(" and ", kinds.Select(owner => Camel(owner.ToString())))}."];
+                errors[field] = [$"An export of {kindName} doesn't take {field}: it belongs to {string.Join(" and ", ExportFields.Owners(field).Select(ExportFields.Name))}."];
             }
         }
 
-        var grids = GRIDS.ToArray();
-        Only(body.Columns is not null, "columns", grids);
-        Only(body.Filters is not null, "filters", grids);
-        Only(body.Search is not null, "search", grids);
-        Only(body.Sort is not null, "sort", grids);
-        Only(body.Group is not null, "group", ExportKind.IssueRows);
-        Only(body.SitemapId is not null, "sitemapId", ExportKind.SitemapUrls);
-        Only(body.Origin is not null, "origin", ExportKind.RobotsBlocked);
-        Only(body.Line is not null, "line", ExportKind.RobotsBlocked);
-        Only(body.Reason is not null, "reason", ExportKind.RobotsBlocked);
-        Only(body.CheckId is not null, "checkId", ExportKind.IssueRows, ExportKind.Check);
-        Only(body.Cut is not null, "cut", ExportKind.Report);
-        Only(body.Examples is not null, "examples", ExportKind.Report);
-        Only(body.LookExamples is not null, "lookExamples", ExportKind.Report);
+        Only(body.Columns is not null, "columns");
+        Only(body.Filters is not null, "filters");
+        Only(body.Search is not null, "search");
+        Only(body.Sort is not null, "sort");
+        Only(body.Group is not null, "group");
+        Only(body.SitemapId is not null, "sitemapId");
+        Only(body.Origin is not null, "origin");
+        Only(body.Line is not null, "line");
+        Only(body.Reason is not null, "reason");
+        Only(body.CheckId is not null, "checkId");
+        Only(body.Cut is not null, "cut");
+        Only(body.Examples is not null, "examples");
+        Only(body.LookExamples is not null, "lookExamples");
 
         RobotsBlockReason? reason = body.Reason switch
         {
