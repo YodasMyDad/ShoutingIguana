@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Favicons;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing;
@@ -25,6 +26,7 @@ internal sealed class PageProcessor(
     ICrawlObserver observer,
     CrawlScope scope,
     HostGateRegistry gates,
+    FaviconFetcher favicon,
     TimeProvider timeProvider)
 {
     private const int FORBIDDEN_SAMPLE_SIZE = 20;
@@ -165,6 +167,11 @@ internal sealed class PageProcessor(
 
         var facts = parsed?.Facts;
         var isParsedHtml = facts is not null && response.IsHtml && response.Body is not null;
+        if (isParsedHtml)
+        {
+            // The crawl's first page names the site's icon, which is fetched beside the crawl.
+            favicon.Offer(item, uri, facts!);
+        }
         var reason = IndexabilityOf(item.Url, response.Outcome, facts);
         var h1s = facts?.Headings.Where(heading => heading.Level == 1).ToList() ?? [];
 

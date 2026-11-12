@@ -578,6 +578,9 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
             Assert.Equal((total, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE id <= {total} AND instr(lower(url), '{IN_URLS_ONLY}') > 0")), (total, matching));
         }
 
+        // The site's icon was read all the while too, and the crawl kept it.
+        Assert.Equal(SyntheticSite.Favicon, FaviconReader.Read(path)!.Bytes);
+
         // And a view's ends: a moment with so many hyperlinks had the first so many of the file's, so how many pages they
         // were on, and how many URLs they led to, the finished file still says.
         Assert.True(ended.Count >= 6, $"The ends of the hyperlinks were listed at only {ended.Count} moments.");
@@ -808,6 +811,10 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
 
             return null;
         });
+        // The site's icon: none yet, or the image the site serves, whole.
+        Read("the site's icon", () => FaviconReader.Read(path) is { } icon && (icon.ContentType != "image/png" || !icon.Bytes.SequenceEqual(SyntheticSite.Favicon))
+            ? $"the icon read is {icon.Bytes.Length} bytes of {icon.ContentType}"
+            : null);
         return reads;
     }
 

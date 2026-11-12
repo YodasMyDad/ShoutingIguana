@@ -169,6 +169,32 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
+    /// The site's icon, as the crawl fetched it near its start: one row at most, the image's bytes as the site sent them,
+    /// already told to be an image by their own signature (<c>Favicons.FaviconSniffer</c>). A crawl-time table, created
+    /// whenever the writer opens a file, as <see cref="NOTICES"/> is, so a file from an earlier engine gets it when it is
+    /// continued (and an icon only if that run reads the start page). The fetch is no URL of the crawl: nothing else in
+    /// the file knows of it. <c>content_type</c>, <c>width</c> and <c>height</c> are what the engine read from the bytes,
+    /// kept so the file explains itself; readers read them from the bytes again.
+    /// </summary>
+    public const string FAVICON = """
+        CREATE TABLE IF NOT EXISTS favicon (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            url TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL,
+            fetched_at INTEGER NOT NULL,
+            body BLOB NOT NULL
+        );
+        """;
+
+    /// <summary>
+    /// The columns of <see cref="FAVICON"/>, in order. A table of any other shape is another program's: the writer then
+    /// keeps no icon (a crawl matters more than its icon), and readers find none.
+    /// </summary>
+    public const string FAVICON_COLUMNS = "id,url,content_type,width,height,fetched_at,body";
+
+    /// <summary>
     /// The columns of <see cref="RUN_TIME"/>, in order. A table of any other shape is another program's: the writer then
     /// keeps no time (a crawl matters more than how long it took), and readers don't know the crawl's.
     /// </summary>
