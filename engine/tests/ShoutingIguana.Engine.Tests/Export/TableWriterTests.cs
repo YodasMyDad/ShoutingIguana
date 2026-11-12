@@ -180,6 +180,48 @@ public sealed class TableWriterTests : IDisposable
         Assert.Equal(new string('c', 32_767), sheet.Rows[3][0].Value);
     }
 
+    /// <summary>
+    /// Excel reads at most 32,758 characters of a CSV field as one cell: at the 32,759th it ends the row and starts
+    /// another with what is left, in column A, where nothing guards it, so a formula at the end of a site's long URL
+    /// would run. A longer text is cut to what Excel reads whole, its guard's apostrophe counted in, never between the
+    /// halves of an emoji, and the cut is counted as a workbook's is. The quotes CSV doubles are the file's, not the cell's.
+    /// </summary>
+    [Fact]
+    public void ACsvFieldLongerThanExcelReadsAsOneCellIsCutAndCounted()
+    {
+        var path = Path.Combine(_folder, "long.csv");
+        long truncated;
+        using (var output = File.Create(path))
+        using (var table = new CsvTableWriter(output))
+        {
+            table.Begin("Long", ["Text", "After"]);
+            table.WriteRow([new string('a', 32_758), "kept whole"]);
+            table.WriteRow([new string('b', 32_755) + "=1+1", "one over"]);
+            table.WriteRow([new string('c', 40_000) + "=1+1", "far over"]);
+            table.WriteRow(["=" + new string('d', 32_758), "guarded"]);
+            table.WriteRow([new string('e', 32_757) + "🦎", "half an emoji"]);
+            table.WriteRow(["\"" + new string('f', 32_757) + ",\"", "quoted"]);
+            table.WriteRow(["\"" + new string('g', 32_756) + "\"", "quoted and whole"]);
+            table.End();
+            table.Complete();
+            truncated = table.TruncatedCells;
+        }
+
+        var rows = CsvFile.Read(path);
+        Assert.Equal(8, rows.Count);
+        Assert.All(rows, row => Assert.Equal(2, row.Length));
+        Assert.Equal(["After", "kept whole", "one over", "far over", "guarded", "half an emoji", "quoted", "quoted and whole"], rows.Select(row => row[1]));
+        Assert.All(rows, row => Assert.True(row[0].Length <= 32_758, $"{row[1]}: {row[0].Length} characters."));
+        Assert.Equal(new string('a', 32_758), rows[1][0]);
+        Assert.Equal(new string('b', 32_755) + "=1+", rows[2][0]);
+        Assert.Equal(new string('c', 32_758), rows[3][0]);
+        Assert.Equal("'=" + new string('d', 32_756), rows[4][0]);
+        Assert.Equal(new string('e', 32_757), rows[5][0]);
+        Assert.Equal("\"" + new string('f', 32_757), rows[6][0]);
+        Assert.Equal("\"" + new string('g', 32_756) + "\"", rows[7][0]);
+        Assert.Equal(5, truncated);
+    }
+
     [Fact]
     public void ATableLongerThanASheetGoesOnToTheNextUnderTheSameHeader()
     {

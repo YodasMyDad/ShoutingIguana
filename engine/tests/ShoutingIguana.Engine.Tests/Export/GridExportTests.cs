@@ -316,6 +316,30 @@ public sealed class GridExportTests : IDisposable
         Assert.Contains(csv, row => row[0] == "'=cmd|' /C calc'!A0");
     }
 
+    /// <summary>
+    /// A site's URL longer than a spreadsheet's cell (nothing caps a URL's length): cut in both files, to what each
+    /// reads as one cell, and the result says how many cells were cut. The CSV is still a row a URL.
+    /// </summary>
+    [Fact]
+    public void AUrlLongerThanACellIsCutInBothFilesAndTheResultSaysSo()
+    {
+        var copy = _crawl.Copy();
+        var url = "https://other.example/?q=" + new string('L', 40_000) + "=1+1";
+        Change(copy, "UPDATE urls SET url = $url WHERE id = (SELECT MAX(id) FROM urls)", ("$url", url));
+        var request = new ExportRequest { Kind = ExportKind.Urls, Format = ExportFormat.Csv, Query = new UrlQuery { Columns = ["url", "id"] } };
+        var matching = UrlGridReader.Query(copy, new UrlQuery { Limit = 1 }).Matching;
+
+        var (csv, csvRows) = Export(copy, request, "URLs");
+        Assert.Equal(1, csv.TruncatedCells);
+        Assert.Equal(matching + 1, csvRows.Count);
+        Assert.All(csvRows, row => Assert.Equal(2, row.Length));
+        Assert.Equal(url[..32_758], csvRows[^1][0]);
+
+        var (xlsx, xlsxRows) = Export(copy, request with { Format = ExportFormat.Xlsx }, "URLs");
+        Assert.Equal(1, xlsx.TruncatedCells);
+        Assert.Equal(url[..32_767], xlsxRows[^1][0]);
+    }
+
     [Fact]
     public void AnExportSaysHowFarItHasGotAndEndsOnItsCount()
     {

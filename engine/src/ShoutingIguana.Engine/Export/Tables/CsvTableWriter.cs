@@ -12,9 +12,24 @@ namespace ShoutingIguana.Engine.Export.Tables;
 /// as plain text (OWASP's guard against CSV injection). A number is written as its digits, so a negative one in a
 /// numeric column stays the number it is.
 /// </para>
+/// <para>
+/// <b>No field is longer than Excel reads as one cell</b> (<see cref="MAX_FIELD_CHARS"/>): Excel ends the row where a
+/// longer field passes that, and starts another with what is left, in column A, where no apostrophe guards it. A site's
+/// URL has no limit on its length, so a formula at the end of a long one would run. Longer text is cut, and counted
+/// (<see cref="TruncatedCells"/>), as a workbook's is.
+/// </para>
 /// </summary>
 internal sealed class CsvTableWriter : ITableWriter
 {
+    /// <summary>
+    /// The most characters of a CSV field that Excel reads as one cell: 32,758, nine short of the 32,767 a cell holds.
+    /// Found by opening fields of every length around it in Excel 16: one of 32,758 characters is read whole and the
+    /// row goes on; at 32,759 the row ends there and the rest of the line starts a new row. The count is of the cell's
+    /// own text in UTF-16 units, whatever the alphabet and the column: the quotes around a field and the ones doubled
+    /// inside it are the file's and don't count, and the apostrophe that guards a formula is the cell's and does.
+    /// </summary>
+    public const int MAX_FIELD_CHARS = 32_758;
+
     private const int BUFFER_BYTES = 1 << 16;
     private static readonly System.Buffers.SearchValues<char> SPECIAL = System.Buffers.SearchValues.Create(",\"\r\n");
 
@@ -28,7 +43,7 @@ internal sealed class CsvTableWriter : ITableWriter
 
     public int Sheets => 0;
 
-    public long TruncatedCells => 0;
+    public long TruncatedCells { get; private set; }
 
     public void Begin(string name, IReadOnlyList<string> titles)
     {
@@ -117,6 +132,15 @@ internal sealed class CsvTableWriter : ITableWriter
     private void WriteText(ReadOnlySpan<char> text)
     {
         var guarded = SpreadsheetText.LooksLikeFormula(text);
+
+        // Cut to what Excel reads as one cell, the guard's apostrophe among it, and never between the halves of a pair.
+        var most = guarded ? MAX_FIELD_CHARS - 1 : MAX_FIELD_CHARS;
+        if (text.Length > most)
+        {
+            text = text[..(char.IsHighSurrogate(text[most - 1]) ? most - 1 : most)];
+            TruncatedCells++;
+        }
+
         if (!guarded && !text.ContainsAny(SPECIAL))
         {
             _writer.Write(text);

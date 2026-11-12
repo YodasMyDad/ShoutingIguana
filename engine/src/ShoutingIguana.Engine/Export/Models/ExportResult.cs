@@ -15,7 +15,10 @@ public sealed record ExportResult(string Path, long Rows, long Bytes)
     /// <summary>Columns asked for that are in the file with no values, as the crawl has no URL summary to read them from.</summary>
     public IReadOnlyList<string> UnavailableColumns { get; init; } = [];
 
-    /// <summary>For an Excel file: cells whose text was cut to the 32,767 characters a cell holds.</summary>
+    /// <summary>
+    /// Cells whose text was cut to what a spreadsheet takes: the 32,767 characters an Excel cell holds, and in CSV the
+    /// 32,758 that Excel reads of a field before it ends the row.
+    /// </summary>
     public long TruncatedCells { get; init; }
 
     /// <summary>

@@ -182,6 +182,35 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Empty(Directory.GetFiles(_folder, "*.tmp"));
     }
 
+    /// <summary>
+    /// <c>si issues --csv</c> cuts a field to what Excel reads as one cell from a CSV file (32,758 characters), as
+    /// <c>si export</c> does, and says how many it cut: a longer one would be split by Excel, its end starting a row.
+    /// </summary>
+    [Fact]
+    public async Task TheIssuesCsvCutsAFieldLongerThanExcelReadsAsOneCell()
+    {
+        var crawl = await CrawlAsync();
+        var url = "https://other.example/?q=" + new string('L', 40_000) + "=1+1";
+        using (var connection = new SqliteConnection($"Data Source={crawl};Pooling=False"))
+        {
+            connection.Open();
+            using var update = connection.CreateCommand();
+            update.CommandText = "UPDATE urls SET url = $url WHERE id = (SELECT MAX(url_id) FROM issues)";
+            update.Parameters.AddWithValue("$url", url);
+            Assert.Equal(1, update.ExecuteNonQuery());
+        }
+
+        var flagged = IssueReader.ReadAll(crawl).Sum(row => (row.Url == url ? 1 : 0) + (row.RelatedUrl == url ? 1 : 0));
+        Assert.True(flagged > 0);
+        var csv = Path.Combine(_folder, "long.csv");
+        var export = await RunAsync("issues", crawl, "--csv", csv);
+        Assert.True(export.ExitCode == 0, export.Error);
+        var text = (await File.ReadAllTextAsync(csv)).TrimStart((char)0xFEFF);
+        Assert.Equal(flagged, Regex.Matches(text, Regex.Escape(url[..32_758]) + "(,|\r\n)").Count);
+        Assert.DoesNotContain(url[..32_759], text, StringComparison.Ordinal);
+        Assert.Contains($"{flagged:N0} {(flagged == 1 ? "field was" : "fields were")} cut to the 32,758 characters", export.Output, StringComparison.Ordinal);
+    }
+
     /// <summary>si export and si report write what the app's Export writes, by the same code: here, that each kind reaches its file.</summary>
     [Fact]
     public async Task ExportsAGridTheWorkbookAndTheReport()

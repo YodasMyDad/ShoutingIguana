@@ -145,7 +145,9 @@ internal static class ExportCommand
 
             if (result.TruncatedCells > 0)
             {
-                Console.WriteLine($"  {Format.Count(result.TruncatedCells, "cell was", "cells were")} cut to the 32,767 characters an Excel cell holds.");
+                Console.WriteLine(request.Format == ExportFormat.Csv
+                    ? $"  {Format.Count(result.TruncatedCells, "field was", "fields were")} cut to the 32,758 characters Excel reads of a CSV field."
+                    : $"  {Format.Count(result.TruncatedCells, "cell was", "cells were")} cut to the 32,767 characters an Excel cell holds.");
             }
 
             if (result.CrawlWasRunning)
