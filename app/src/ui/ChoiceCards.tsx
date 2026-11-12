@@ -58,6 +58,7 @@ export function ChoiceCards<T extends string>({
       <div className={clsx('grid gap-2', columns === 3 ? 'grid-cols-(--choice-columns)' : 'grid-cols-2')}>
         {options.map((option, index) => {
           const textId = `${ownId}-${option.value}-text`;
+          const titleId = `${ownId}-${option.value}-title`;
           return (
             <label
               key={option.value}
@@ -70,11 +71,15 @@ export function ChoiceCards<T extends string>({
                 value={option.value}
                 checked={value === option.value}
                 onChange={() => onValueChange(option.value)}
+                // Named by its title, described by its line: the label holds both.
+                aria-labelledby={titleId}
                 aria-describedby={option.text ? textId : undefined}
                 className="mt-0.5 size-4 shrink-0 accent-(--color-accent-fill) focus-visible:outline-none"
               />
               <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="font-medium text-text">{option.title}</span>
+                <span id={titleId} className="font-medium text-text">
+                  {option.title}
+                </span>
                 {option.text ? (
                   <span id={textId} className="text-12 text-text-secondary">
                     {option.text}
