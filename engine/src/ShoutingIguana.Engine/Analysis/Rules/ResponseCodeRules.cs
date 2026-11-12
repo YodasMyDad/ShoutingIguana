@@ -28,13 +28,13 @@ internal sealed class ResponseCodeRules(UrlTable urls, IReadOnlyDictionary<int, 
 
             var hit = url.Outcome switch
             {
-                FetchOutcome.ClientError => new IssueHit(IssueCatalog.INTERNAL_CLIENT_ERROR, id, $"HTTP {url.StatusCode}"),
-                FetchOutcome.ServerError => new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, id, $"HTTP {url.StatusCode}"),
+                FetchOutcome.ClientError => new IssueHit(IssueCatalog.INTERNAL_CLIENT_ERROR, id, HttpStatusNames.Describe(url.StatusCode)),
+                FetchOutcome.ServerError => new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, id, HttpStatusNames.Describe(url.StatusCode)),
                 FetchOutcome.Timeout => new IssueHit(IssueCatalog.INTERNAL_UNREACHABLE, id, "Timed out"),
                 FetchOutcome.NetworkError => new IssueHit(IssueCatalog.INTERNAL_UNREACHABLE, id, "Connection failed"),
-                FetchOutcome.Blocked => new IssueHit(IssueCatalog.INTERNAL_BLOCKED, id, blockReasons.GetValueOrDefault(id) ?? $"HTTP {url.StatusCode}"),
+                FetchOutcome.Blocked => new IssueHit(IssueCatalog.INTERNAL_BLOCKED, id, StoredReason(id) ?? HttpStatusNames.Describe(url.StatusCode)),
                 // Refused because robots.txt couldn't be read says so; a robots.txt rule needs no explaining.
-                FetchOutcome.RobotsDisallowed => new IssueHit(IssueCatalog.BLOCKED_BY_ROBOTS, id, blockReasons.GetValueOrDefault(id)),
+                FetchOutcome.RobotsDisallowed => new IssueHit(IssueCatalog.BLOCKED_BY_ROBOTS, id, StoredReason(id)),
                 _ => (IssueHit?)null
             };
 
@@ -44,4 +44,7 @@ internal sealed class ResponseCodeRules(UrlTable urls, IReadOnlyDictionary<int, 
             }
         }
     }
+
+    /// <summary>The crawl's own reason, a status in it by its name: "Rate limited (429 Too Many Requests)".</summary>
+    private string? StoredReason(int id) => blockReasons.GetValueOrDefault(id) is { } reason ? HttpStatusNames.NameIn(reason) : null;
 }

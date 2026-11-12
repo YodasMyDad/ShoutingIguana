@@ -16,4 +16,10 @@ public sealed record AnalysisSummary(long PagesAnalyzed, IReadOnlyList<IssueCoun
 
     /// <summary>The checks left out of <see cref="Issues"/>, each with why, in catalog order. Also stored with the issues.</summary>
     public IReadOnlyList<SkippedCheck> Skipped { get; init; } = [];
+
+    /// <summary>The URLs crawled, as they stood when the analysis ran: what a check on any URL flagged is a share of. Also stored with the issues.</summary>
+    public long CrawledUrlCount { get; init; }
+
+    /// <summary>The site's score (<see cref="ScoreCalculator"/>), or null when no page was read. Also stored with the issues.</summary>
+    public SiteScore? Score { get; init; }
 }

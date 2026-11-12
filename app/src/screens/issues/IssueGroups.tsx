@@ -13,6 +13,7 @@ import {
   type GroupPlace,
 } from '../../api/queries';
 import type { Check } from '../../api/types';
+import { affectedWords, partOfAffected, showInUrlsWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
 import { notifyResult } from '../../feedback/notify';
 import { NO_DETAIL } from '../../grid/filterSentence';
@@ -34,7 +35,7 @@ import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { FIRST_GROUP_ROWS, childRows, groupFilter, groupRefOf, treeLayout, type OpenGroup } from './groupTree';
 
-/** A row of the tree: a group, one of the open group's first pages, or its link to all of them. */
+/** A row of the tree: a group, one of the open group's first pages or URLs, or its link to all of them. */
 type TreeRow =
   | { kind: 'group'; group: IssueGroup }
   | { kind: 'page'; row: IssueRow; group: IssueGroup }
@@ -88,10 +89,12 @@ export interface IssueGroupsProps {
 }
 
 /**
- * A check's affected pages grouped by their cause (E3a, Issue groups): one treegrid row per group, largest first, with
- * its detail or related URL, pages, and share drawn as a bar. Opening a group shows its first pages and "Show all N
+ * What a check flags, grouped by cause (E3a, Issue groups): one treegrid row per group, largest first, with its
+ * detail or related URL, its count, and its share drawn as a bar. Opening a group shows its first rows and "Show all N
  * pages in URLs", which opens the URL grid filtered to it. The groups are paged and virtualised like any grid, as a
  * big crawl's duplicate titles can make thousands. A group that's probably in the site's template gets the callout.
+ * The engine calls a group's count `pages` whatever the check flags: here it's worded by the check's `subject`
+ * (crawl/checkSubject.ts), pages only for a check that flags nothing else.
  */
 export function IssueGroups({
   crawlId,
@@ -108,6 +111,8 @@ export function IssueGroups({
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
   const grouping = check.grouping;
+  // The same object for every check of one subject, so what's memoised on it holds.
+  const words = affectedWords(check);
 
   const queryKey = useMemo(() => queryKeys.issueGroupsGrid(crawlId, check.id), [crawlId, check.id]);
   const fetchPage = useCallback(
@@ -347,7 +352,7 @@ export function IssueGroups({
       ...first,
       {
         id: 'pages',
-        header: 'Pages',
+        header: words.column,
         width: PAGES_WIDTH,
         numeric: true,
         cell: (row) => (row.kind === 'group' ? formatCount(row.group.pages) : null),
@@ -362,7 +367,7 @@ export function IssueGroups({
         text: (row) => (row.kind === 'group' ? String(row.group.share) : ''),
       },
     ];
-  }, [grouping, room, showRelated, siteOrigin, total]);
+  }, [grouping, room, showRelated, siteOrigin, total, words]);
 
   const spanRow = useCallback(
     (row: TreeRow): ReactNode => {
@@ -387,7 +392,6 @@ export function IssueGroups({
         );
       }
       const { group } = row;
-      const pages = group.pages === 1 ? 'Show the page in URLs' : `Show all ${formatCount(group.pages)} pages in URLs`;
       // The group's own parts, as the URL grid's chips will read them: its related URL, or its detail and any URL.
       const parts =
         grouping === 'relatedUrl'
@@ -405,7 +409,7 @@ export function IssueGroups({
             tabIndex={-1}
             className="shrink-0"
           >
-            {pages}
+            {showInUrlsWords(check, group.pages)}
           </TextLink>
           <FilterChip field="Check" value={check.title} variant="preview" size="sm" truncate />
           {/* The group's chips are usually short ("/", "HTTP 404"): they keep their words, and the check's gives way. */}
@@ -423,7 +427,7 @@ export function IssueGroups({
         </span>
       );
     },
-    [crawlId, check.id, check.title, grouping, siteOrigin],
+    [crawlId, check, grouping, siteOrigin],
   );
 
   // The insight: the open group when it's probably the template's, else the largest group that is.
@@ -442,19 +446,14 @@ export function IssueGroups({
 
   return (
     <div className="flex flex-col gap-3">
-      {insight ? <TemplateCallout group={insight} total={total} grouping={grouping} siteOrigin={siteOrigin} /> : null}
+      {insight ? <TemplateCallout group={insight} total={total} check={check} siteOrigin={siteOrigin} /> : null}
       {rowsFailed ? (
-        <ErrorState
-          error={firstRows.error}
-          title="The group’s pages couldn’t be read."
-          onRetry={() => void firstRows.refetch()}
-          compact
-        />
+        <ErrorState error={firstRows.error} title={words.unread} onRetry={() => void firstRows.refetch()} compact />
       ) : null}
       <div ref={measureFrame} className="flex max-h-(--evidence-max-height) min-h-0 flex-col" style={{ height }}>
         <GridCore<TreeRow>
           key={queryKey.join('|')}
-          label={`${check.title}: affected pages, grouped by ${grouping === 'relatedUrl' ? 'related URL' : 'detail'}`}
+          label={`${check.title}: ${words.named}, grouped by ${grouping === 'relatedUrl' ? 'related URL' : 'detail'}`}
           columns={columns}
           rowCount={groupCount === null ? null : rows}
           getRow={getRow}
@@ -484,20 +483,22 @@ export function IssueGroups({
 
 /**
  * "The same related URL on 264 of 265 pages, so it's likely in the site's template: one fix clears the group." Built
- * from what the engine says (`likelyTemplate`, the group's pages and the check's total), never more.
+ * from what the engine says (`likelyTemplate`, the group's count and the check's total), never more, and in pages only
+ * for a check that flags nothing else.
  */
 function TemplateCallout({
   group,
   total,
-  grouping,
+  check,
   siteOrigin,
 }: {
   group: IssueGroup;
   total: number;
-  grouping: Check['grouping'];
+  check: Check;
   siteOrigin: string | null;
 }) {
-  const share = `${formatCount(group.pages)} of ${formatCount(total)} pages`;
+  const grouping = check.grouping;
+  const share = partOfAffected(check, group.pages, total);
   return (
     <Callout tone="insight" title="Likely in the site’s template">
       {grouping === 'relatedUrl' && group.relatedUrl ? (

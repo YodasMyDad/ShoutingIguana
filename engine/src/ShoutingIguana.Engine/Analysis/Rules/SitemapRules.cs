@@ -84,7 +84,7 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
         var failed = sitemaps.Where(sitemap => sitemap is { Error: not null, IsProbe: false, NotReadReason: null }).ToList();
         if (failed.Count > 0)
         {
-            var listed = string.Join(", ", failed.Take(LISTED_FAILURES).Select(sitemap => $"{sitemap.Url} ({sitemap.Error})"));
+            var listed = string.Join(", ", failed.Take(LISTED_FAILURES).Select(sitemap => $"{sitemap.Url} ({HttpStatusNames.NameIn(sitemap.Error!)})"));
             var more = failed.Count > LISTED_FAILURES ? $" and {failed.Count - LISTED_FAILURES:N0} more" : string.Empty;
             yield return new IssueHit(IssueCatalog.SITEMAP_ERROR, urls.HomeId, listed + more);
         }

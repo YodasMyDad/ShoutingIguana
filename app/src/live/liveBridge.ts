@@ -42,6 +42,9 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   const lastStatus = new Map<string, CrawlStatus>();
   /** When each crawling crawl's grids last refreshed. */
   const gridRefreshedAt = new Map<string, number>();
+  /** The crawls whose grids a tick would have refreshed while the window was hidden: refreshed once, when it's shown. */
+  const missedWhileHidden = new Set<string>();
+  const isHidden = () => typeof document !== 'undefined' && document.hidden;
   /** The sidecar generation the last `hello` came from; undefined before the first. */
   let helloGeneration: number | null | undefined;
 
@@ -114,9 +117,14 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
    * While a crawl runs, its grids' counts and rows refresh in place (the IA's "12,345 of 101,107 URLs, live while
    * crawling"): at most once a second, never cancelling a page that's still on its way, so a slow page isn't fetched
    * forever. Only grids on screen fetch; the rest are marked stale for when they're next shown. The URL open in the
-   * inspector refreshes with them.
+   * inspector refreshes with them. A window nobody can see reads nothing and draws nothing (the live store holds its
+   * renders back the same way): the crawl's grids refresh once, when the window is shown again.
    */
   function refreshLiveGrids(crawlId: string) {
+    if (isHidden()) {
+      missedWhileHidden.add(crawlId);
+      return;
+    }
     const now = Date.now();
     const last = gridRefreshedAt.get(crawlId);
     if (last !== undefined && now - last < LIVE_GRID_REFRESH_MS) return;
@@ -143,6 +151,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     dismissStaleToasts(event);
     if (status === 'completed' || status === 'stopped' || status === 'failed') {
       gridRefreshedAt.delete(crawlId);
+      // Everything of the crawl is read again below: nothing is left to catch up on when the window is shown.
+      missedWhileHidden.delete(crawlId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.crawl(crawlId) });
       void queryClient.invalidateQueries(gridPagesOf(crawlId));
     } else {
@@ -273,6 +283,18 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     });
   }
 
+  /** The window was shown again: the grids that ticked while it was hidden refresh now, once, whenever they last did. */
+  const onVisibilityChange = () => {
+    if (isHidden()) return;
+    const missed = [...missedWhileHidden];
+    missedWhileHidden.clear();
+    for (const crawlId of missed) {
+      gridRefreshedAt.delete(crawlId);
+      refreshLiveGrids(crawlId);
+    }
+  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibilityChange);
+
   // A new sidecar: anything could have changed while it was away.
   let generation = getConnection()?.generation ?? null;
   const offStatus = subscribeSidecarStatus(() => {
@@ -286,6 +308,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     stream.stop();
     offEvents();
     offStatus();
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibilityChange);
   };
 }
 

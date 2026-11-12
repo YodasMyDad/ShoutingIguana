@@ -50,9 +50,9 @@ internal sealed class SiteVersionRules(UrlTable urls, Uri start, Func<string, in
             }
 
             yield return trace.Hops == 0
-                ? new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, id, $"Answers HTTP {final.StatusCode} instead of redirecting to {_home}")
+                ? new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, id, $"Answers {HttpStatusNames.Describe(final.StatusCode)} instead of redirecting to {_home}")
                 : new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, id,
-                    $"Redirects to {finalUrl}, which answers HTTP {final.StatusCode} instead of redirecting to {_home}", trace.FinalId);
+                    $"Redirects to {finalUrl}, which answers {HttpStatusNames.Describe(final.StatusCode)} instead of redirecting to {_home}", trace.FinalId);
         }
     }
 

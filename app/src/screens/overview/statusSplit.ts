@@ -280,6 +280,14 @@ export function statusSplitFromFacets(
  */
 export const crawledCount = (facets: StatusFacets): number => statusSplitFromFacets(facets).total;
 
+/**
+ * How many URLs a finished crawl found, crawled or not: the URL grid's count with no filter, and what the breakdown's
+ * figures add up to (the URLs crawled, those found but not crawled, and those that weren't checked). It's what a
+ * check's count of URLs is a part of on Issues, since such a check can flag a URL that was never crawled (one a
+ * sitemap lists on another host).
+ */
+export const foundCount = (facets: Pick<FacetsPage, 'total'>): number => facets.total;
+
 /** "404 × 8, 403 × 2", the most first, at most `limit` of them, then how many more kinds there are. */
 export function partsText(parts: readonly SplitPart[], format: (count: number) => string, limit = 3): string {
   const listed = parts.slice(0, limit).map((part) => `${part.label} × ${format(part.count)}`);

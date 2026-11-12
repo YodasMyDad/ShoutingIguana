@@ -17,6 +17,7 @@ import type {
   RobotsBlockedUrl,
   RobotsOrigin,
   RobotsOriginPage,
+  LinkFacetsQuery,
   UrlRow,
 } from './grids';
 import type { LinkKind, LinkPage, LinkRow } from './inspector';
@@ -68,6 +69,18 @@ export const queryKeys = {
   gridPage: (grid: string, id: string, query: Omit<GridQuery, 'offset' | 'limit'>, page: number) =>
     ['grid', grid, id, query, page] as const,
   gridPrefix: ['grid'] as const,
+  // ---- Links (E3b)
+  linkColumns: ['link-columns'] as const,
+  /** The links grid's pages for one view of it: its columns, filters, search and sort. */
+  linksGrid: (
+    id: string,
+    view: { columns: readonly string[]; filters: readonly GridFilter[]; q: string; sort: readonly GridSort[] },
+  ) => ['grid', 'links', id, view] as const,
+  /**
+   * The links counted by value under a view's filters and search. Among the grids' keys, so a running crawl's
+   * refresh moves the counts with the rows, and whatever changes the crawl refreshes both.
+   */
+  linkFacets: (id: string, query: LinkFacetsQuery) => ['grid', 'linkFacets', id, query] as const,
 };
 
 /** Every page of every grid of one crawl: what a change to the crawl makes stale. */
@@ -160,6 +173,24 @@ export const urlFacetsQuery = (id: string, query: FacetsQuery) =>
   queryOptions({
     queryKey: queryKeys.urlFacets(id, query),
     queryFn: ({ signal }) => api.urlFacets(id, query, signal),
+    staleTime: Infinity,
+  });
+
+// ---- Links (E3b)
+
+/** The links grid's columns never change while the sidecar runs. */
+export const linkColumnsQuery = () =>
+  queryOptions({
+    queryKey: queryKeys.linkColumns,
+    queryFn: ({ signal }) => api.linkColumns(signal),
+    staleTime: Infinity,
+  });
+
+/** The links a view matches, counted by value (docs/v2-sidecar-api.md, Link facets): each count with its filter. */
+export const linkFacetsQuery = (id: string, query: LinkFacetsQuery) =>
+  queryOptions({
+    queryKey: queryKeys.linkFacets(id, query),
+    queryFn: ({ signal }) => api.linkFacets(id, query, signal),
     staleTime: Infinity,
   });
 

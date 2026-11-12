@@ -15,10 +15,11 @@ internal sealed record LinkRowDto(
     string? Fragment,
     int? StatusCode,
     bool? Indexable,
-    bool Fetched)
+    bool Fetched,
+    UrlOutcome? Outcome)
 {
     public static LinkRowDto From(LinkRow link) => new(
         link.Id, link.Url, link.Kind, link.Text, link.Position,
         [.. Enum.GetValues<LinkFlags>().Where(flag => flag != LinkFlags.None && link.Flags.HasFlag(flag)).Select(flag => char.ToLowerInvariant(flag.ToString()[0]) + flag.ToString()[1..])],
-        link.Followed, link.Fragment, link.StatusCode, link.Indexable, link.Fetched);
+        link.Followed, link.Fragment, link.StatusCode, link.Indexable, link.Fetched, link.Outcome);
 }

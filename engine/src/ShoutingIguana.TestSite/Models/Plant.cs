@@ -1,7 +1,10 @@
 namespace ShoutingIguana.TestSite.Models;
 
 /// <summary>A URL with known defects, and what a correct crawl and analysis report for it.</summary>
-/// <param name="Status">The status code it answers with, or 0 when it drops the connection.</param>
+/// <param name="Status">
+/// The status code it answers with, 0 when it drops the connection, or <see cref="REFUSED"/> when robots.txt keeps the
+/// crawler from asking.
+/// </param>
 /// <param name="Linked">Linked from the plants hub. Others are reached through a redirect, canonical, iframe or image.</param>
 /// <param name="InSitemap">
 /// Listed in the extra sitemap. Only indexable pages are, so the sitemap itself stays clean, apart from partner-site
@@ -25,4 +28,8 @@ internal sealed record Plant(
     bool IsPage = true,
     bool IsAnalysed = true,
     bool OnPartnerSite = false,
-    string? Url = null);
+    string? Url = null)
+{
+    /// <summary>The status of a URL robots.txt disallows: the crawler never asks for it, so it has none.</summary>
+    public const int REFUSED = -1;
+}

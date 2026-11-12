@@ -17,10 +17,11 @@ internal static class TestSiteCommand
         var links = new Option<int>("--links") { Description = "Content links per product page.", DefaultValueFactory = _ => 20 };
         var noCompression = new Option<bool>("--no-compression") { Description = "Serve uncompressed responses." };
         var deadTwin = new Option<bool>("--dead-twin") { Description = "Link the site's https:// version, which doesn't answer, so some of its URLs aren't checked." };
+        var hidden = new Option<bool>("--hidden-from-search") { Description = "Make every product page noindex, so the site as a whole is hidden from search." };
 
         var command = new Command("testsite", "Serve a synthetic site with planted SEO issues, for testing and benchmarks.")
         {
-            pages, port, externalPort, links, noCompression, deadTwin
+            pages, port, externalPort, links, noCompression, deadTwin, hidden
         };
 
         command.SetAction(async (parse, cancellationToken) =>
@@ -30,7 +31,8 @@ internal static class TestSiteCommand
                 PageCount = parse.GetValue(pages),
                 ContentLinksPerPage = parse.GetValue(links),
                 Compress = !parse.GetValue(noCompression),
-                DeadTwin = parse.GetValue(deadTwin)
+                DeadTwin = parse.GetValue(deadTwin),
+                HiddenFromSearch = parse.GetValue(hidden)
             };
 
             await using var server = await SyntheticSiteServer.StartAsync(options, parse.GetValue(port), parse.GetValue(externalPort), cancellationToken);

@@ -21,24 +21,24 @@ internal static class RuleText
         ? Characters(measured.Characters)
         : string.Create(CultureInfo.InvariantCulture, $"{Characters(measured.Characters)} ({measured.Width:N0} counting full-width characters as two)");
 
-    /// <summary>What the crawl found at a URL, phrased to follow "the URL": "returns HTTP 404", "is noindex".</summary>
+    /// <summary>What the crawl found at a URL, phrased to follow "the URL": "returns 404 Not Found", "is noindex".</summary>
     public static string Status(UrlStatus url) => url.Outcome switch
     {
         FetchOutcome.Redirect when url.IsMetaRefresh => "redirects with an instant meta refresh",
-        FetchOutcome.Redirect when url.RedirectTargetId == 0 => $"redirects with HTTP {url.StatusCode} but no usable Location header",
-        FetchOutcome.Redirect => $"redirects (HTTP {url.StatusCode})",
+        FetchOutcome.Redirect when url.RedirectTargetId == 0 => $"redirects with {HttpStatusNames.Describe(url.StatusCode)} but no usable Location header",
+        FetchOutcome.Redirect => $"redirects ({HttpStatusNames.Describe(url.StatusCode)})",
         FetchOutcome.Timeout => "timed out",
         FetchOutcome.NetworkError => "couldn't be reached",
         FetchOutcome.Blocked => "is blocked by a firewall",
         FetchOutcome.RobotsDisallowed => "is blocked by robots.txt",
         FetchOutcome.Success when url.IndexabilityReason == IndexabilityReason.Noindex => "is noindex",
         FetchOutcome.Success when url.IndexabilityReason == IndexabilityReason.Canonicalised => "is canonicalised to another URL",
-        _ => $"returns HTTP {url.StatusCode}"
+        _ => $"returns {HttpStatusNames.Describe(url.StatusCode)}"
     };
 
     /// <summary>
     /// What's wrong with a URL that <see cref="UrlTable.IsBrokenThroughRedirects"/>, phrased to follow "the URL":
-    /// "returns HTTP 404", or for a redirect where it goes wrong, "redirects to a URL that returns HTTP 404".
+    /// "returns 404 Not Found", or for a redirect where it goes wrong, "redirects to a URL that returns 404 Not Found".
     /// </summary>
     public static string BrokenStatus(UrlTable urls, int id)
     {
@@ -56,7 +56,7 @@ internal static class RuleText
 
     /// <summary>
     /// "2 broken URLs", saying where the first one goes wrong when that's only at the end of its redirects, since the
-    /// first is the issue's related URL and a redirect there would look fine: "1 image (it redirects to a URL that returns HTTP 404)".
+    /// first is the issue's related URL and a redirect there would look fine: "1 image (it redirects to a URL that returns 404 Not Found)".
     /// </summary>
     public static string BrokenTargets(UrlTable urls, TargetSet targets, string singular, string plural)
     {

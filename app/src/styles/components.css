@@ -932,6 +932,12 @@
     font-size: var(--text-12);
   }
 
+  /* What an item would give (a count): figures that line up down the menu. */
+  .si-menu-item__detail {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: var(--type-features-figures);
+  }
+
   .si-menu-item__check {
     color: var(--color-accent-text);
   }
@@ -1204,6 +1210,18 @@
     --mark: var(--color-5xx);
     --mark-text: var(--color-5xx-text);
     --mark-subtle: var(--color-5xx-subtle);
+  }
+
+  /* Words in place of a code ("Blocked by robots.txt") shorten where a column is narrower than they are. */
+  .si-code:has(.si-code__words) {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .si-code__words {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .si-code__mark {
@@ -1970,6 +1988,8 @@
 
   .si-empty__content {
     display: grid;
+    /* One column no wider than the state itself: a chip longer than that is cut short in it, not run out of it. */
+    grid-template-columns: minmax(0, 1fr);
     justify-items: start;
     gap: var(--space-2);
     min-width: 0;
@@ -1994,6 +2014,9 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
+    /* No wider than the state: a chip that doesn't fit a line of it shortens (its own ellipsis), whole in its name. */
+    min-width: 0;
+    max-width: 100%;
     margin-top: var(--space-1);
   }
 
@@ -2281,6 +2304,34 @@
   .si-result-count__of {
     color: var(--color-text-secondary);
     font-size: var(--text-13);
+  }
+
+  /* ---------------------------------------------------------- Grid screens */
+  /*
+    A screen that is one grid under its toolbars (GridScreen: URLs, Links). The height of the main region, which
+    scrolls: the toolbars keep their own height, and the grid takes what they leave, never less than its own least
+    (GridCore's minRows, a min-height on its frame). In a window too short for both, the grid runs past the screen's
+    foot and the main region scrolls to it; with room to spare the grid fills it. The height is the region's own, not
+    a least height: the grid inside is a scroller of millions of pixels, which would otherwise be its size.
+  */
+  .si-grid-screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .si-grid-screen > :not(.si-grid-screen__body) {
+    flex: none;
+  }
+
+  .si-grid-screen__body {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+  }
+
+  .si-grid-screen__body > * {
+    flex: 1 1 0%;
   }
 
   /* ------------------------------------------------------ Navigation items */

@@ -1,0 +1,2681 @@
+{
+ "note": "The garden crawl, analysed by this branch's engine. Written by build/extract.mjs: regenerate it, never edit it.",
+ "facts": {
+  "startUrl": "https://www.gardenfurnituresets.co.uk/",
+  "startedAt": "2026-10-31T14:13:58.399Z",
+  "finishedAt": "2026-10-31T14:51:23.197Z",
+  "engineVersion": "2.0.0-alpha.1",
+  "analysisVersion": 6,
+  "speed": {
+   "concurrency": 2,
+   "maxRequestsPerSecond": 2
+  },
+  "maxUrls": 10000,
+  "urlsFound": 6286,
+  "urlsChecked": 4521,
+  "pages": 265,
+  "indexablePages": 264,
+  "images": 4203,
+  "notFollowed": 1765,
+  "links": 21914,
+  "statusCodes": {
+   "0": 2,
+   "200": 4492,
+   "301": 12,
+   "302": 4,
+   "403": 2,
+   "404": 9
+  }
+ },
+ "totals": {
+  "checksInCatalog": 86,
+  "checksRun": 82,
+  "checksWithIssues": 19,
+  "checksPassed": 63,
+  "issues": {
+   "error": 14,
+   "warning": 78,
+   "notice": 841
+  },
+  "checks": {
+   "error": 2,
+   "warning": 4,
+   "notice": 13
+  }
+ },
+ "skipped": [
+  {
+   "check_id": "duplicate-site-version",
+   "reason": "site-versions-unchecked",
+   "text": "The site's other versions (www or not, http or https) weren't all checked."
+  },
+  {
+   "check_id": "near-duplicate-content",
+   "reason": "earlier-version",
+   "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it."
+  },
+  {
+   "check_id": "not-in-sitemap",
+   "reason": "no-sitemap",
+   "text": "No sitemap could be read."
+  },
+  {
+   "check_id": "orphan-page",
+   "reason": "no-sitemap",
+   "text": "No sitemap could be read."
+  }
+ ],
+ "passed": [
+  {
+   "id": "blocked-by-robots",
+   "category": "Indexability"
+  },
+  {
+   "id": "broken-external-links",
+   "category": "Links"
+  },
+  {
+   "id": "broken-fragment-links",
+   "category": "Links"
+  },
+  {
+   "id": "canonical-broken",
+   "category": "Canonicals"
+  },
+  {
+   "id": "canonical-invalid",
+   "category": "Canonicals"
+  },
+  {
+   "id": "canonical-multiple",
+   "category": "Canonicals"
+  },
+  {
+   "id": "canonical-outside-head",
+   "category": "Canonicals"
+  },
+  {
+   "id": "canonical-relative",
+   "category": "Canonicals"
+  },
+  {
+   "id": "canonical-to-non-indexable",
+   "category": "Canonicals"
+  },
+  {
+   "id": "canonical-to-redirect",
+   "category": "Canonicals"
+  },
+  {
+   "id": "charset-missing",
+   "category": "Html"
+  },
+  {
+   "id": "description-multiple",
+   "category": "MetaDescriptions"
+  },
+  {
+   "id": "description-too-short",
+   "category": "MetaDescriptions"
+  },
+  {
+   "id": "duplicate-content",
+   "category": "Content"
+  },
+  {
+   "id": "h1-duplicate",
+   "category": "Headings"
+  },
+  {
+   "id": "h1-multiple",
+   "category": "Headings"
+  },
+  {
+   "id": "hreflang-broken-target",
+   "category": "Hreflang"
+  },
+  {
+   "id": "hreflang-duplicate-code",
+   "category": "Hreflang"
+  },
+  {
+   "id": "hreflang-invalid-code",
+   "category": "Hreflang"
+  },
+  {
+   "id": "hreflang-missing-return",
+   "category": "Hreflang"
+  },
+  {
+   "id": "hreflang-missing-self",
+   "category": "Hreflang"
+  },
+  {
+   "id": "hreflang-missing-x-default",
+   "category": "Hreflang"
+  },
+  {
+   "id": "hreflang-outside-head",
+   "category": "Hreflang"
+  },
+  {
+   "id": "hreflang-to-non-indexable",
+   "category": "Hreflang"
+  },
+  {
+   "id": "html-past-crawl-limit",
+   "category": "Performance"
+  },
+  {
+   "id": "http-page",
+   "category": "Security"
+  },
+  {
+   "id": "image-alt-too-long",
+   "category": "Images"
+  },
+  {
+   "id": "image-broken",
+   "category": "Images"
+  },
+  {
+   "id": "image-missing-alt",
+   "category": "Images"
+  },
+  {
+   "id": "internal-blocked",
+   "category": "ResponseCodes"
+  },
+  {
+   "id": "internal-nofollow-links",
+   "category": "Links"
+  },
+  {
+   "id": "internal-server-error",
+   "category": "ResponseCodes"
+  },
+  {
+   "id": "internal-unreachable",
+   "category": "ResponseCodes"
+  },
+  {
+   "id": "lang-missing",
+   "category": "Html"
+  },
+  {
+   "id": "large-page",
+   "category": "Performance"
+  },
+  {
+   "id": "links-to-redirects",
+   "category": "Links"
+  },
+  {
+   "id": "meta-refresh",
+   "category": "Redirects"
+  },
+  {
+   "id": "mixed-content",
+   "category": "Security"
+  },
+  {
+   "id": "no-https",
+   "category": "Security"
+  },
+  {
+   "id": "nofollow-page",
+   "category": "Indexability"
+  },
+  {
+   "id": "noindex-page",
+   "category": "Indexability"
+  },
+  {
+   "id": "noindex-with-canonical",
+   "category": "Canonicals"
+  },
+  {
+   "id": "redirect-broken",
+   "category": "Redirects"
+  },
+  {
+   "id": "redirect-chain",
+   "category": "Redirects"
+  },
+  {
+   "id": "redirect-downgrade",
+   "category": "Redirects"
+  },
+  {
+   "id": "redirect-loop",
+   "category": "Redirects"
+  },
+  {
+   "id": "redirect-temporary",
+   "category": "Redirects"
+  },
+  {
+   "id": "robots-txt-missing",
+   "category": "Indexability"
+  },
+  {
+   "id": "robots-txt-unreachable",
+   "category": "Indexability"
+  },
+  {
+   "id": "robots-txt-unreachable-other-origin",
+   "category": "Indexability"
+  },
+  {
+   "id": "sitemap-error",
+   "category": "Sitemaps"
+  },
+  {
+   "id": "sitemap-non-indexable",
+   "category": "Sitemaps"
+  },
+  {
+   "id": "sitemap-url-other-host",
+   "category": "Sitemaps"
+  },
+  {
+   "id": "snippet-blocked",
+   "category": "Indexability"
+  },
+  {
+   "id": "soft-404",
+   "category": "ResponseCodes"
+  },
+  {
+   "id": "structured-data-invalid",
+   "category": "StructuredData"
+  },
+  {
+   "id": "structured-data-missing-required",
+   "category": "StructuredData"
+  },
+  {
+   "id": "title-missing",
+   "category": "Titles"
+  },
+  {
+   "id": "title-multiple",
+   "category": "Titles"
+  },
+  {
+   "id": "url-too-long",
+   "category": "Urls"
+  },
+  {
+   "id": "url-underscores",
+   "category": "Urls"
+  },
+  {
+   "id": "url-uppercase",
+   "category": "Urls"
+  },
+  {
+   "id": "viewport-missing",
+   "category": "Html"
+  }
+ ],
+ "checks": [
+  {
+   "id": "broken-internal-links",
+   "severity": "error",
+   "category": "Links",
+   "title": "Links to broken internal URLs",
+   "count": 5,
+   "targetCount": 9,
+   "targets": [
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/3-pieces-patio-furniture-set/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/best-rattan-patio-sets/",
+       "title": "Best Rattan Patio Sets - Hand Picked by Experts"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/berlin-cushion-box/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/what-is-rattan/",
+       "title": "What is Rattan Furniture & How Is It Different to Wicker?"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/edale-4-seater-sofa-set/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/",
+       "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/harlington-hammock-fabric-egg-chair/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/why-we-use-oxford-fabric-for-garden-furniture-covers/",
+       "title": "Why We Use Oxford Fabric For Garden Furniture Covers"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/henbury-6-seater-dining-set/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/best-rattan-patio-sets/",
+       "title": "Best Rattan Patio Sets - Hand Picked by Experts"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/outdoor-pe-rattan-dining-set-with-fire-pit-table/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-fire-pit-sets/",
+       "title": "Gas Fire Pit Rattan Table & Chairs | Rattan Dining"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/patio-swivel-chair-set-with-coffee-table-soft-seat-cushions/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/best-rattan-patio-sets/",
+       "title": "Best Rattan Patio Sets - Hand Picked by Experts"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/wentworth-cube-dining-set/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/best-rattan-patio-sets/",
+       "title": "Best Rattan Patio Sets - Hand Picked by Experts"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/wentworth-imperial-bistro-set/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/best-rattan-patio-sets/",
+       "title": "Best Rattan Patio Sets - Hand Picked by Experts"
+      }
+     ]
+    }
+   ],
+   "details": [
+    {
+     "detail": "1 broken URL",
+     "pages": 4
+    },
+    {
+     "detail": "5 broken URLs",
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/",
+     "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets",
+     "detail": "1 broken URL",
+     "related": "https://www.gardenfurnituresets.co.uk/edale-4-seater-sofa-set/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-fire-pit-sets/",
+     "title": "Gas Fire Pit Rattan Table & Chairs | Rattan Dining",
+     "detail": "1 broken URL",
+     "related": "https://www.gardenfurnituresets.co.uk/outdoor-pe-rattan-dining-set-with-fire-pit-table/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/best-rattan-patio-sets/",
+     "title": "Best Rattan Patio Sets - Hand Picked by Experts",
+     "detail": "5 broken URLs",
+     "related": "https://www.gardenfurnituresets.co.uk/patio-swivel-chair-set-with-coffee-table-soft-seat-cushions/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/what-is-rattan/",
+     "title": "What is Rattan Furniture & How Is It Different to Wicker?",
+     "detail": "1 broken URL",
+     "related": "https://www.gardenfurnituresets.co.uk/berlin-cushion-box/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/why-we-use-oxford-fabric-for-garden-furniture-covers/",
+     "title": "Why We Use Oxford Fabric For Garden Furniture Covers",
+     "detail": "1 broken URL",
+     "related": "https://www.gardenfurnituresets.co.uk/harlington-hammock-fabric-egg-chair/"
+    }
+   ]
+  },
+  {
+   "id": "canonical-missing",
+   "severity": "notice",
+   "category": "Canonicals",
+   "title": "Missing canonical",
+   "count": 8,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": null,
+     "pages": 8
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/frequently-asked-questions/",
+     "title": "Frequently Asked Questions",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/contact-us/",
+     "title": "Contact Us - GardenFurnitureSets | Phone, Email or Contract Form",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/",
+     "title": "Login",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/privacy-policy/",
+     "title": "Privacy Policy",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/terms-conditions/",
+     "title": "Terms & Conditions",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/return-refund-policy/",
+     "title": "Return & Refund Policy",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/forgot-password/",
+     "title": "Forgot Password",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+     "title": "Login",
+     "detail": null,
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "canonicalised-page",
+   "severity": "notice",
+   "category": "Canonicals",
+   "title": "Canonicalised page",
+   "count": 1,
+   "targetCount": 1,
+   "targets": [
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/blog/",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/?p=2",
+       "title": "All Things Garden & Furniture | GardenFurnitureSet's Blog"
+      }
+     ]
+    }
+   ],
+   "details": [
+    {
+     "detail": null,
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/?p=2",
+     "title": "All Things Garden & Furniture | GardenFurnitureSet's Blog",
+     "detail": null,
+     "related": "https://www.gardenfurnituresets.co.uk/blog/"
+    }
+   ]
+  },
+  {
+   "id": "description-duplicate",
+   "severity": "warning",
+   "category": "MetaDescriptions",
+   "title": "Duplicate meta description",
+   "count": 8,
+   "targetCount": 4,
+   "targets": [
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/garden-sheds/",
+     "pages": 2,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/",
+       "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/?p=2",
+       "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+     "pages": 2,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+       "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/greenhouses/?p=2",
+       "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/outdoor-furniture-cover-235-x-190-x-90cm/",
+     "pages": 2,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/outdoor-furniture-cover-235-x-190-x-90cm/",
+       "title": "PE Fabric Outdoor Furniture Cover Water & UV Resistant"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/2-seater-outdoor-furniture-cover/",
+       "title": "Oxford Fabric 2-Seater Outdoor Furniture Cover With Rope Ties"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/oxford-fabric-outdoor-furniture-cover-w192cm-x-d205cm-x-h61cm/",
+     "pages": 2,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/oxford-fabric-outdoor-furniture-cover-w192cm-x-d205cm-x-h61cm/",
+       "title": "Grey Outdoor UV & Water Resistant Furniture Cover"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/pe-outdoor-rectangle-furniture-cover-w222cm-x-d155cm-x-h67cm/",
+       "title": "PE Outdoor Rectangle Furniture Cover - Water & UV Resistant"
+      }
+     ]
+    }
+   ],
+   "details": [
+    {
+     "detail": "1 other page",
+     "pages": 8
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/",
+     "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/garden-sheds/?p=2"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+     "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/?p=2"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/oxford-fabric-outdoor-furniture-cover-w192cm-x-d205cm-x-h61cm/",
+     "title": "Grey Outdoor UV & Water Resistant Furniture Cover",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/pe-outdoor-rectangle-furniture-cover-w222cm-x-d155cm-x-h67cm/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/outdoor-furniture-cover-235-x-190-x-90cm/",
+     "title": "PE Fabric Outdoor Furniture Cover Water & UV Resistant",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/2-seater-outdoor-furniture-cover/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/pe-outdoor-rectangle-furniture-cover-w222cm-x-d155cm-x-h67cm/",
+     "title": "PE Outdoor Rectangle Furniture Cover - Water & UV Resistant",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/oxford-fabric-outdoor-furniture-cover-w192cm-x-d205cm-x-h61cm/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/?p=2",
+     "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/garden-sheds/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/greenhouses/?p=2",
+     "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/2-seater-outdoor-furniture-cover/",
+     "title": "Oxford Fabric 2-Seater Outdoor Furniture Cover With Rope Ties",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/outdoor-furniture-cover-235-x-190-x-90cm/"
+    }
+   ]
+  },
+  {
+   "id": "description-missing",
+   "severity": "notice",
+   "category": "MetaDescriptions",
+   "title": "Missing meta description",
+   "count": 11,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": null,
+     "pages": 11
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/frequently-asked-questions/",
+     "title": "Frequently Asked Questions",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/",
+     "title": "Login",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-furniture/",
+     "title": "Garden Furniture",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/furniture-accessories/",
+     "title": "Furniture Accessories",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-shade/",
+     "title": "Garden Parasols & Pergolas | Huge Range",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/privacy-policy/",
+     "title": "Privacy Policy",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/terms-conditions/",
+     "title": "Terms & Conditions",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/",
+     "title": "All Things Garden & Furniture | GardenFurnitureSet's Blog",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/return-refund-policy/",
+     "title": "Return & Refund Policy",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/forgot-password/",
+     "title": "Forgot Password",
+     "detail": null,
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+     "title": "Login",
+     "detail": null,
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "description-too-long",
+   "severity": "notice",
+   "category": "MetaDescriptions",
+   "title": "Meta description too long",
+   "count": 210,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "160 characters",
+     "pages": 23
+    },
+    {
+     "detail": "162 characters",
+     "pages": 14
+    },
+    {
+     "detail": "161 characters",
+     "pages": 13
+    },
+    {
+     "detail": "163 characters",
+     "pages": 13
+    },
+    {
+     "detail": "156 characters",
+     "pages": 11
+    },
+    {
+     "detail": "159 characters",
+     "pages": 11
+    },
+    {
+     "detail": "158 characters",
+     "pages": 9
+    },
+    {
+     "detail": "165 characters",
+     "pages": 9
+    },
+    {
+     "detail": "157 characters",
+     "pages": 8
+    },
+    {
+     "detail": "166 characters",
+     "pages": 5
+    },
+    {
+     "detail": "164 characters",
+     "pages": 4
+    },
+    {
+     "detail": "169 characters",
+     "pages": 3
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/",
+     "title": "Rattan Garden Furniture Sets | Sunloungers, Patio Sets, Sofa Sets",
+     "detail": "160 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-patio-sets/",
+     "title": "Rattan Patio Sets | Low Price & Free Delivery",
+     "detail": "307 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-sofa-sets/",
+     "title": "Rattan Sofa Sets | Garden Sofas | Free Delivery",
+     "detail": "321 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-sunloungers/",
+     "title": "Rattan Sunloungers | Reclining Garden Chairs | Free Delivery",
+     "detail": "206 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-fire-pit-sets/",
+     "title": "Gas Fire Pit Rattan Table & Chairs | Rattan Dining",
+     "detail": "227 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-companion-sets/",
+     "title": "Rattan Companion Sets | Garden Sets For Two | Free Delivery",
+     "detail": "220 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/",
+     "title": "Wooden Garden Furniture | Patio Sets, Wooden Seating",
+     "detail": "178 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/wooden-patio-sets/",
+     "title": "Wooden Patio Sets | 2, 4 or 6 Seat Garden Furniture Sets",
+     "detail": "380 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/wooden-seating/",
+     "title": "Wooden Garden Seating | Benches, Companion Sets, Swing Chairs & More",
+     "detail": "213 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/",
+     "title": "Metal Garden Furniture Sets | Patio Sets, Metal Seating, Sun Loungers",
+     "detail": "158 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/metal-sunloungers/",
+     "title": "Metal Garden Sun Loungers | Fast & Free Delivery",
+     "detail": "165 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-storage/",
+     "title": "Garden Storage | Garden Sheds & Storage Boxes",
+     "detail": "171 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-storage-boxes/",
+     "title": "Garden Storage Boxes | Maze Rattan | Plastic Storage",
+     "detail": "161 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+     "title": "Monaco 2 Seat Bistro Set - 3 Colours Available - Egg Style Design",
+     "detail": "189 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/sorrento-7pc-black-rectangular-deluxe-recliner-set/",
+     "title": "Sorrento 7pc Black Rectangular Deluxe Recliner Set",
+     "detail": "346 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/gillman-metal-shed/",
+     "title": "Gillman 9ft x 6ft Metal Garden Storage Shed With Lockable Sliding Doors",
+     "detail": "477 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/hillcrest-garden-storage-shed/",
+     "title": "Hillcrest Wooden Garden Storage Shed With Shelves",
+     "detail": "169 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/avalon-wooden-storage-shed/",
+     "title": "Avalon Tall Wooden Garden Tool Shed With 3 Shelves & Asphalt Roof",
+     "detail": "526 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/willow-wooden-picnic-bench/",
+     "title": "Willow Slatted Outdoor 6-Seater Wooden Picnic Bench",
+     "detail": "156 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/skyvault-greenhouse/",
+     "title": "Skyvault 6ft x 4ft Walk-In Polycarbonate Garden Greenhouse",
+     "detail": "160 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/truro-adjustable-sun-lounger/",
+     "title": "Truro Adjustable Folding Sun Lounger - Multi-Position Recline",
+     "detail": "409 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/oasis-292l-outdoor-storage-box/",
+     "title": "Oasis 292L Slatted Wooden Outdoor Storage Box",
+     "detail": "163 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/elmfield-metal-shed/",
+     "title": "Elmfield 4ft x 6ft Brown Lockable Metal Garden Storage Shed",
+     "detail": "160 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/verdora-greenhouse/",
+     "title": "Verdora 7ft x 5ft Walk-In PE Greenhouse with Roll-Up Door",
+     "detail": "165 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/2-seater-outdoor-wooden-storage-bench/",
+     "title": "2-Seater Outdoor Wooden Bench With 164L Storage Capacity",
+     "detail": "159 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/skybrook-greenhouse/",
+     "title": "Skybrook 6ft x 8ft Walk-In Polycarbonate Garden Greenhouse",
+     "detail": "165 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/beeley-steel-sliding-door-storage-shed/",
+     "title": "Beeley Steel Sliding Door Storage Shed - 12'6'' x 11'",
+     "detail": "157 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/3m-pop-up-gazebo/",
+     "title": "Langdon 3m Foldable Garden Gazebo - 4 Colour Choices",
+     "detail": "359 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/malaga-2-seater-fixed-bistro-set/",
+     "title": "Malaga 2 Seater Fixed Bistro Set - Includes Weathershield Cushions",
+     "detail": "272 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/mayfair-corner-lounging-set-with-fire-pit/",
+     "title": "Mayfair Metal Garden Corner Lounging Set With Fire Pit - Seats 8 People",
+     "detail": "403 characters",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "empty-anchor-text",
+   "severity": "notice",
+   "category": "Links",
+   "title": "Internal links without anchor text",
+   "count": 265,
+   "targetCount": 5,
+   "targets": [
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/",
+     "pages": 264,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/frequently-asked-questions/",
+       "title": "Frequently Asked Questions"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/contact-us/",
+       "title": "Contact Us - GardenFurnitureSets | Phone, Email or Contract Form"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/login/",
+       "title": "Login"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/edale-4-seater-sofa-set/",
+     "pages": 1,
+     "status": 404,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/",
+       "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/",
+       "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/",
+       "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/sorrento-7pc-black-rectangular-deluxe-recliner-set/",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/",
+       "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets"
+      }
+     ]
+    }
+   ],
+   "details": [
+    {
+     "detail": "Links to 1 URL",
+     "pages": 264
+    },
+    {
+     "detail": "Links to 4 URLs",
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/",
+     "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets",
+     "detail": "Links to 4 URLs",
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/frequently-asked-questions/",
+     "title": "Frequently Asked Questions",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/contact-us/",
+     "title": "Contact Us - GardenFurnitureSets | Phone, Email or Contract Form",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/",
+     "title": "Login",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-furniture/",
+     "title": "Garden Furniture",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/",
+     "title": "Rattan Garden Furniture Sets | Sunloungers, Patio Sets, Sofa Sets",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-patio-sets/",
+     "title": "Rattan Patio Sets | Low Price & Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-sofa-sets/",
+     "title": "Rattan Sofa Sets | Garden Sofas | Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-sunloungers/",
+     "title": "Rattan Sunloungers | Reclining Garden Chairs | Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-fire-pit-sets/",
+     "title": "Gas Fire Pit Rattan Table & Chairs | Rattan Dining",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-companion-sets/",
+     "title": "Rattan Companion Sets | Garden Sets For Two | Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/",
+     "title": "Wooden Garden Furniture | Patio Sets, Wooden Seating",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/wooden-patio-sets/",
+     "title": "Wooden Patio Sets | 2, 4 or 6 Seat Garden Furniture Sets",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/wooden-seating/",
+     "title": "Wooden Garden Seating | Benches, Companion Sets, Swing Chairs & More",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/",
+     "title": "Metal Garden Furniture Sets | Patio Sets, Metal Seating, Sun Loungers",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/metal-fire-pit-sets/",
+     "title": "Gas Powered Fire Pit With Metal Garden Furniture Set | Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/metal-patio-sets/",
+     "title": "Metal Garden Patio Sets | 2, 4, 6 Seat Garden Furniture Sets",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/metal-seating/",
+     "title": "Metal Garden Seating | Benches, Swing Chairs & More",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/metal-sunloungers/",
+     "title": "Metal Garden Sun Loungers | Fast & Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/furniture-accessories/",
+     "title": "Furniture Accessories",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/furniture-accessories/furniture-covers/",
+     "title": "Garden Furniture Covers | Waterproof & Durable",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-storage/",
+     "title": "Garden Storage | Garden Sheds & Storage Boxes",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-storage-boxes/",
+     "title": "Garden Storage Boxes | Maze Rattan | Plastic Storage",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/",
+     "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-log-storage/",
+     "title": "Garden Log Storage | Keep Your Firewood Dry & Organised",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+     "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-shade/",
+     "title": "Garden Parasols & Pergolas | Huge Range",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/parasols-bases/",
+     "title": "Garden Parasols & Bases | Huge Range | Free Delivery",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/pergolas/",
+     "title": "Garden Pergolas & Gazebos You'll Love | Garden & Outdoor",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+     "title": "Monaco 2 Seat Bistro Set - 3 Colours Available - Egg Style Design",
+     "detail": "Links to 1 URL",
+     "related": "https://www.gardenfurnituresets.co.uk/"
+    }
+   ]
+  },
+  {
+   "id": "h1-missing",
+   "severity": "notice",
+   "category": "Headings",
+   "title": "Missing H1",
+   "count": 1,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": null,
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/",
+     "title": "All Things Garden & Furniture | GardenFurnitureSet's Blog",
+     "detail": null,
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "image-missing-dimensions",
+   "severity": "notice",
+   "category": "Images",
+   "title": "Images without width and height attributes",
+   "count": 230,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "20 images",
+     "pages": 35
+    },
+    {
+     "detail": "18 images",
+     "pages": 27
+    },
+    {
+     "detail": "16 images",
+     "pages": 23
+    },
+    {
+     "detail": "22 images",
+     "pages": 23
+    },
+    {
+     "detail": "12 images",
+     "pages": 16
+    },
+    {
+     "detail": "10 images",
+     "pages": 12
+    },
+    {
+     "detail": "14 images",
+     "pages": 11
+    },
+    {
+     "detail": "26 images",
+     "pages": 11
+    },
+    {
+     "detail": "24 images",
+     "pages": 9
+    },
+    {
+     "detail": "5 images",
+     "pages": 8
+    },
+    {
+     "detail": "8 images",
+     "pages": 8
+    },
+    {
+     "detail": "23 images",
+     "pages": 6
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/",
+     "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets",
+     "detail": "20 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+     "title": "Monaco 2 Seat Bistro Set - 3 Colours Available - Egg Style Design",
+     "detail": "24 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/sorrento-7pc-black-rectangular-deluxe-recliner-set/",
+     "title": "Sorrento 7pc Black Rectangular Deluxe Recliner Set",
+     "detail": "12 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/gillman-metal-shed/",
+     "title": "Gillman 9ft x 6ft Metal Garden Storage Shed With Lockable Sliding Doors",
+     "detail": "33 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/hillcrest-garden-storage-shed/",
+     "title": "Hillcrest Wooden Garden Storage Shed With Shelves",
+     "detail": "22 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/avalon-wooden-storage-shed/",
+     "title": "Avalon Tall Wooden Garden Tool Shed With 3 Shelves & Asphalt Roof",
+     "detail": "36 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/willow-wooden-picnic-bench/",
+     "title": "Willow Slatted Outdoor 6-Seater Wooden Picnic Bench",
+     "detail": "20 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/skyvault-greenhouse/",
+     "title": "Skyvault 6ft x 4ft Walk-In Polycarbonate Garden Greenhouse",
+     "detail": "26 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/truro-adjustable-sun-lounger/",
+     "title": "Truro Adjustable Folding Sun Lounger - Multi-Position Recline",
+     "detail": "27 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/oasis-292l-outdoor-storage-box/",
+     "title": "Oasis 292L Slatted Wooden Outdoor Storage Box",
+     "detail": "20 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/elmfield-metal-shed/",
+     "title": "Elmfield 4ft x 6ft Brown Lockable Metal Garden Storage Shed",
+     "detail": "20 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/verdora-greenhouse/",
+     "title": "Verdora 7ft x 5ft Walk-In PE Greenhouse with Roll-Up Door",
+     "detail": "26 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/2-seater-outdoor-wooden-storage-bench/",
+     "title": "2-Seater Outdoor Wooden Bench With 164L Storage Capacity",
+     "detail": "20 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/skybrook-greenhouse/",
+     "title": "Skybrook 6ft x 8ft Walk-In Polycarbonate Garden Greenhouse",
+     "detail": "24 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/beeley-steel-sliding-door-storage-shed/",
+     "title": "Beeley Steel Sliding Door Storage Shed - 12'6'' x 11'",
+     "detail": "29 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/3m-pop-up-gazebo/",
+     "title": "Langdon 3m Foldable Garden Gazebo - 4 Colour Choices",
+     "detail": "28 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/malaga-2-seater-fixed-bistro-set/",
+     "title": "Malaga 2 Seater Fixed Bistro Set - Includes Weathershield Cushions",
+     "detail": "16 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/mayfair-corner-lounging-set-with-fire-pit/",
+     "title": "Mayfair Metal Garden Corner Lounging Set With Fire Pit - Seats 8 People",
+     "detail": "34 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/paris-deluxe-modular-corner-fire-pit-dining-set/",
+     "title": "Paris Deluxe Modular Corner Fire Pit Dining Set - Seats 8 People",
+     "detail": "28 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/how-to-store-garden-furniture-in-winter/",
+     "title": "How to Store Garden Furniture in Winter: A Practical Guide",
+     "detail": "5 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/how-greenhouses-work/",
+     "title": "How Greenhouses Work: The Science Behind It",
+     "detail": "10 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/",
+     "title": "All Things Garden & Furniture | GardenFurnitureSet's Blog",
+     "detail": "10 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/oxford-fabric-outdoor-furniture-cover-w192cm-x-d205cm-x-h61cm/",
+     "title": "Grey Outdoor UV & Water Resistant Furniture Cover",
+     "detail": "18 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/oxford-fabric-outdoor-swing-chair-cover-h164cm-x-w205cm-x-d124cm/",
+     "title": "Oxford Fabric Outdoor Swing Chair Cover - Water & UV Resistant",
+     "detail": "24 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/bodmin-2-seater-bistro-set/",
+     "title": "Bodmin 2 Seater Black Metal Bistro Set With Round Table",
+     "detail": "12 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/harpswell-metal-patio-set/",
+     "title": "Harpswell Grey Outdoor Metal Patio Sofa Set With Coffee Table",
+     "detail": "20 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rosella-recliner-set/",
+     "title": "Rosella Rattan Recliner Set - 2 Chairs, 2 Stools & Table",
+     "detail": "26 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/selena-rattan-patio-set/",
+     "title": "Selena 7-Piece Garden Rattan Patio Set - 1 Table + 6 Armchairs",
+     "detail": "26 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/frankland-woven-rope-outdoor-patio-set/",
+     "title": "Frankland Grey Woven Rope Outdoor Patio Set With Side Table",
+     "detail": "20 images",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-bar-stool-set-with-4-wicker-chairs/",
+     "title": "Outdoor Rattan Bar Stool Set with 4 Wicker Chairs & Table",
+     "detail": "8 images",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "image-too-large",
+   "severity": "warning",
+   "category": "Images",
+   "title": "Large images",
+   "count": 61,
+   "targetCount": 126,
+   "targets": [
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/1332/wen140car-ws-2.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/wentworth-6-seater-carver-dining-set/",
+       "title": "Wentworth 6 Seater Rattan Garden Dining Set - Carver Chairs - Royalcraft"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/1812/amalfi-ivory-4-seater-padded-set-4.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/amalfi-4-seater-patio-set-including-parasol/",
+       "title": "Amalfi Black Patio Set Including Parasol & Cushions - 4 or 6 Seats"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/2009/mon01grey-1.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+       "title": "Monaco 2 Seat Bistro Set - 3 Colours Available - Egg Style Design"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/2192/110204-9.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/napoli-companion-set/",
+       "title": "Napoli Companion Set - Duo seat For 2 People - Royalcraft"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/2380/prague-pergola-2.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/prague-grey-pergola/",
+       "title": "Prague Grey Pergola Gazebo - 2 Sizes - Sliding Canopy"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/2403/san-remo-pergola-gazebo-275-366m-mocha-3.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/san-remo-pergola-gazebo/",
+       "title": "San Remo Pergola Gazebo - 2 Colours - Sliding Shade Canopy"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/2432/ubai-gazebo-3x3m-mocha-1.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/dubai-gazebo/",
+       "title": "Dubai Gazebo - Ideal For Small Gardens - Powder Coated Frame"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/2474/mon-2.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+       "title": "Monaco 2 Seat Bistro Set - 3 Colours Available - Egg Style Design"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/2931/84b-557v70-7.jpg?width=896",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/bamford-6-seater-sofa-set/",
+       "title": "Bamford 6 Seater Garden Sofa Set With Adjustable Backs & Coffee Table"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/4328/wentworth-imperial-bistro-set.jpg",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/what-is-rattan/",
+       "title": "What is Rattan Furniture & How Is It Different to Wicker?"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/4330/atlow-4-seater-sofa-set.jpg",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/how-long-does-rattan-furniture-last/",
+       "title": "How Long Does Rattan Furniture Last? Your Guide"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/media/4332/rattan-garden-furniture2.jpg",
+     "pages": 1,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/blog/how-to-repair-rattan-furniture/",
+       "title": "How to Repair Rattan Furniture - Your Guide"
+      }
+     ]
+    }
+   ],
+   "details": [
+    {
+     "detail": "1 image over 200 KB",
+     "pages": 37
+    },
+    {
+     "detail": "2 images over 200 KB",
+     "pages": 12
+    },
+    {
+     "detail": "7 images over 200 KB",
+     "pages": 4
+    },
+    {
+     "detail": "3 images over 200 KB",
+     "pages": 3
+    },
+    {
+     "detail": "4 images over 200 KB",
+     "pages": 2
+    },
+    {
+     "detail": "5 images over 200 KB",
+     "pages": 2
+    },
+    {
+     "detail": "10 images over 200 KB",
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+     "title": "Monaco 2 Seat Bistro Set - 3 Colours Available - Egg Style Design",
+     "detail": "2 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/2474/mon-2.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/hillcrest-garden-storage-shed/",
+     "title": "Hillcrest Wooden Garden Storage Shed With Shelves",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6058/8.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/willow-wooden-picnic-bench/",
+     "title": "Willow Slatted Outdoor 6-Seater Wooden Picnic Bench",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6236/willow-wooden-picnic-bench-brown-2.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/skybrook-greenhouse/",
+     "title": "Skybrook 6ft x 8ft Walk-In Polycarbonate Garden Greenhouse",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/7125/skybrook-greenhouse-10.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/how-to-store-garden-furniture-in-winter/",
+     "title": "How to Store Garden Furniture in Winter: A Practical Guide",
+     "detail": "4 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/7402/cleaning-garden-chair-soapy-water-a156a6e5.jpg"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/harpswell-metal-patio-set/",
+     "title": "Harpswell Grey Outdoor Metal Patio Sofa Set With Coffee Table",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/5264/harpswell-metal-patio-set-9.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/selena-rattan-patio-set/",
+     "title": "Selena 7-Piece Garden Rattan Patio Set - 1 Table + 6 Armchairs",
+     "detail": "2 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6545/selena-rattan-patio-set-brown-2.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-bar-stool-set-with-4-wicker-chairs/",
+     "title": "Outdoor Rattan Bar Stool Set with 4 Wicker Chairs & Table",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/5165/3.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/talia-4-seater-sofa-set/",
+     "title": "Talia Outdoor 4-Piece Sofa Set With Rope Arms & Back",
+     "detail": "5 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6742/2.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/ciela-sofa-set/",
+     "title": "Outdoor Rattan Sofa Set - 1 Corner Sofa & Coffee Table",
+     "detail": "4 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6757/1.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/arla-rattan-sofa-set/",
+     "title": "Arla 6-Piece Rattan Sofa Set With Sofa, Chairs & Footstools",
+     "detail": "3 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6776/1.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/amira-rattan-sofa-set/",
+     "title": "Amira Rattan Sofa Set – 1 Sofa, 2 Chairs & Coffee Table",
+     "detail": "7 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6789/1.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/alma-rattan-sofa-set/",
+     "title": "Alma Outdoor Rattan Sofa Set - 2 Sofas, 2 Chairs & 2 Tables",
+     "detail": "7 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6813/1.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-6-seater-carver-dining-set/",
+     "title": "Wentworth 6 Seater Rattan Garden Dining Set - Carver Chairs - Royalcraft",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/1332/wen140car-ws-2.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/how-long-does-rattan-furniture-last/",
+     "title": "How Long Does Rattan Furniture Last? Your Guide",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/4330/atlow-4-seater-sofa-set.jpg"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/what-is-rattan/",
+     "title": "What is Rattan Furniture & How Is It Different to Wicker?",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/4328/wentworth-imperial-bistro-set.jpg"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/how-to-repair-rattan-furniture/",
+     "title": "How to Repair Rattan Furniture - Your Guide",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/4332/rattan-garden-furniture2.jpg"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/how-to-paint-rattan-garden-furniture/",
+     "title": "How To Paint Rattan Garden Furniture | Our Top Tips",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/4357/painted-rattan-furniture-set.jpg"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/dubai-rattan-double-sun-lounger/",
+     "title": "Dubai Rattan Double Sun Lounger With Pillows And Side Tray",
+     "detail": "5 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6288/6.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/amari-recliner-set/",
+     "title": "Amari Recliner Set - 2 Sun Loungers With Glass Top Table",
+     "detail": "7 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6295/1.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/shardlow-rattan-patio-furniture-set/",
+     "title": "Shardlow Black Rattan Patio Furniture Set With Chairs & Table",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/5780/shardlow-rattan-patio-furniture-set-2.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/skyla-rattan-bistro-set/",
+     "title": "Skyla 3-Piece Rattan Bistro Set – 2 Chairs & 1 Table",
+     "detail": "7 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6592/1.png?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/how-to-paint-outdoor-wooden-furniture/",
+     "title": "How To Paint Outdoor Wooden Furniture | Our Top Tips",
+     "detail": "3 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/4336/poradir-lifestyles-blog-image.jpg"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/haventree-garden-bench/",
+     "title": "Haventree 4-Seater Heavy-Duty Backless Garden Bench",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/5860/183cm-patio-long-bench-with-weatherproof-hdpe-seat-for-4-people-6.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/harbor-garden-bench/",
+     "title": "Harbor 3-Seater Wooden Garden Bench With Cast Metal Legs",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/5822/126cm-patio-garden-bench-with-curved-armrests-and-appealing-back-4.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/broughton-2-seater-wooden-garden-bench/",
+     "title": "Broughton 2-Seater Wooden Garden Bench With Backrest",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6522/broughton-2-seater-wooden-garden-bench-5.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/napoli-companion-set/",
+     "title": "Napoli Companion Set - Duo seat For 2 People - Royalcraft",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/2192/110204-9.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/restoring-metal-garden-furniture/",
+     "title": "Your Guide To Restoring Metal Garden Furniture",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/4356/metal-garden-furniture-set.jpg"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/lila-2-seater-bistro-set/",
+     "title": "Lila 2 Seater Outdoor Bistro Set – Round Table & Chairs",
+     "detail": "2 images over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/6198/lila-2-seater-bistro-set-bronze-2.jpg?width=896"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/piper-companion-set/",
+     "title": "Piper Outdoor Two Seater Rocking Chair Companion Set With Table",
+     "detail": "1 image over 200 KB",
+     "related": "https://www.gardenfurnituresets.co.uk/media/5804/84b-735-5.jpg?width=896"
+    }
+   ]
+  },
+  {
+   "id": "internal-client-error",
+   "severity": "error",
+   "category": "ResponseCodes",
+   "title": "Internal URL returns 4xx",
+   "count": 9,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "HTTP 404",
+     "pages": 9
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/edale-4-seater-sofa-set/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/outdoor-pe-rattan-dining-set-with-fire-pit-table/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/patio-swivel-chair-set-with-coffee-table-soft-seat-cushions/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/henbury-6-seater-dining-set/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/3-pieces-patio-furniture-set/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-imperial-bistro-set/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-cube-dining-set/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/berlin-cushion-box/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/harlington-hammock-fabric-egg-chair/",
+     "title": null,
+     "detail": "HTTP 404",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "low-word-count",
+   "severity": "notice",
+   "category": "Content",
+   "title": "Low word count",
+   "count": 7,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "115 words",
+     "pages": 1
+    },
+    {
+     "detail": "137 words",
+     "pages": 1
+    },
+    {
+     "detail": "168 words",
+     "pages": 1
+    },
+    {
+     "detail": "68 words",
+     "pages": 1
+    },
+    {
+     "detail": "85 words",
+     "pages": 1
+    },
+    {
+     "detail": "86 words",
+     "pages": 1
+    },
+    {
+     "detail": "96 words",
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/contact-us/",
+     "title": "Contact Us - GardenFurnitureSets | Phone, Email or Contract Form",
+     "detail": "137 words",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/",
+     "title": "Login",
+     "detail": "85 words",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/",
+     "title": "Wooden Garden Furniture | Patio Sets, Wooden Seating",
+     "detail": "168 words",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/furniture-accessories/",
+     "title": "Furniture Accessories",
+     "detail": "86 words",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-shade/",
+     "title": "Garden Parasols & Pergolas | Huge Range",
+     "detail": "115 words",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/forgot-password/",
+     "title": "Forgot Password",
+     "detail": "68 words",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+     "title": "Login",
+     "detail": "96 words",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "open-graph-missing",
+   "severity": "notice",
+   "category": "Html",
+   "title": "Open Graph tags missing",
+   "count": 11,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "Empty og:title, og:description",
+     "pages": 6
+    },
+    {
+     "detail": "Missing og:title, og:description, og:image",
+     "pages": 3
+    },
+    {
+     "detail": "Empty og:description",
+     "pages": 2
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/frequently-asked-questions/",
+     "title": "Frequently Asked Questions",
+     "detail": "Empty og:title, og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/",
+     "title": "Login",
+     "detail": "Missing og:title, og:description, og:image",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-furniture/",
+     "title": "Garden Furniture",
+     "detail": "Empty og:title, og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/furniture-accessories/",
+     "title": "Furniture Accessories",
+     "detail": "Empty og:title, og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-shade/",
+     "title": "Garden Parasols & Pergolas | Huge Range",
+     "detail": "Empty og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/privacy-policy/",
+     "title": "Privacy Policy",
+     "detail": "Empty og:title, og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/terms-conditions/",
+     "title": "Terms & Conditions",
+     "detail": "Empty og:title, og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/blog/",
+     "title": "All Things Garden & Furniture | GardenFurnitureSet's Blog",
+     "detail": "Empty og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/return-refund-policy/",
+     "title": "Return & Refund Policy",
+     "detail": "Empty og:title, og:description",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/forgot-password/",
+     "title": "Forgot Password",
+     "detail": "Missing og:title, og:description, og:image",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+     "title": "Login",
+     "detail": "Missing og:title, og:description, og:image",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "security-headers-missing",
+   "severity": "notice",
+   "category": "Security",
+   "title": "Security headers missing",
+   "count": 1,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "Missing Content-Security-Policy, Referrer-Policy",
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/",
+     "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets",
+     "detail": "Missing Content-Security-Policy, Referrer-Policy",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "sitemap-missing",
+   "severity": "notice",
+   "category": "Sitemaps",
+   "title": "No XML sitemap found",
+   "count": 1,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": null,
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/",
+     "title": "GardenFurnitureSets™ Huge Savings On Garden Furniture Sets",
+     "detail": null,
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "slow-response",
+   "severity": "warning",
+   "category": "Performance",
+   "title": "Slow response",
+   "count": 3,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "4,632 ms (first byte after 4,624 ms)",
+     "pages": 1
+    },
+    {
+     "detail": "5,217 ms (first byte after 5,214 ms)",
+     "pages": 1
+    },
+    {
+     "detail": "5,476 ms (first byte after 5,475 ms)",
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+     "title": "Login",
+     "detail": "5,476 ms (first byte after 5,475 ms)",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/burford-natural-table/",
+     "title": "Burford Dining Table With Natural Table Top & Acacia Wood Legs",
+     "detail": "5,217 ms (first byte after 5,214 ms)",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/bayworth-corner-sofa-set/",
+     "title": "Bayworth Outdoor Corner Sofa Set With Dark Grey Cushions",
+     "detail": "4,632 ms (first byte after 4,624 ms)",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "title-duplicate",
+   "severity": "warning",
+   "category": "Titles",
+   "title": "Duplicate title",
+   "count": 6,
+   "targetCount": 3,
+   "targets": [
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/garden-sheds/",
+     "pages": 2,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/",
+       "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/?p=2",
+       "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+     "pages": 2,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+       "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/greenhouses/?p=2",
+       "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets"
+      }
+     ]
+    },
+    {
+     "related": "https://www.gardenfurnituresets.co.uk/login/",
+     "pages": 2,
+     "status": 200,
+     "sample": [
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/login/",
+       "title": "Login"
+      },
+      {
+       "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+       "title": "Login"
+      }
+     ]
+    }
+   ],
+   "details": [
+    {
+     "detail": "1 other page",
+     "pages": 6
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/",
+     "title": "Login",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/login/?register=true"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/",
+     "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/garden-sheds/?p=2"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+     "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/?p=2"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+     "title": "Login",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/login/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-sheds/?p=2",
+     "title": "Garden Sheds | Wooden, Metal & Plastic Sheds | Free Delivery",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/garden-sheds/"
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/greenhouses/?p=2",
+     "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets",
+     "detail": "1 other page",
+     "related": "https://www.gardenfurnituresets.co.uk/greenhouses/"
+    }
+   ]
+  },
+  {
+   "id": "title-too-long",
+   "severity": "notice",
+   "category": "Titles",
+   "title": "Title too long",
+   "count": 86,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "62 characters",
+     "pages": 20
+    },
+    {
+     "detail": "61 characters",
+     "pages": 18
+    },
+    {
+     "detail": "63 characters",
+     "pages": 9
+    },
+    {
+     "detail": "65 characters",
+     "pages": 8
+    },
+    {
+     "detail": "66 characters",
+     "pages": 7
+    },
+    {
+     "detail": "64 characters",
+     "pages": 6
+    },
+    {
+     "detail": "68 characters",
+     "pages": 5
+    },
+    {
+     "detail": "71 characters",
+     "pages": 3
+    },
+    {
+     "detail": "67 characters",
+     "pages": 2
+    },
+    {
+     "detail": "69 characters",
+     "pages": 2
+    },
+    {
+     "detail": "70 characters",
+     "pages": 2
+    },
+    {
+     "detail": "72 characters",
+     "pages": 2
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/contact-us/",
+     "title": "Contact Us - GardenFurnitureSets | Phone, Email or Contract Form",
+     "detail": "64 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/rattan-furniture/",
+     "title": "Rattan Garden Furniture Sets | Sunloungers, Patio Sets, Sofa Sets",
+     "detail": "65 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wooden-furniture/wooden-seating/",
+     "title": "Wooden Garden Seating | Benches, Companion Sets, Swing Chairs & More",
+     "detail": "68 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/",
+     "title": "Metal Garden Furniture Sets | Patio Sets, Metal Seating, Sun Loungers",
+     "detail": "69 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/metal-furniture/metal-fire-pit-sets/",
+     "title": "Gas Powered Fire Pit With Metal Garden Furniture Set | Free Delivery",
+     "detail": "68 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/greenhouses/",
+     "title": "Buy Greenhouses Online | Free UK Delivery | GardenFurnitureSets",
+     "detail": "63 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/monaco-2-seat-bistro-set/",
+     "title": "Monaco 2 Seat Bistro Set - 3 Colours Available - Egg Style Design",
+     "detail": "65 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/gillman-metal-shed/",
+     "title": "Gillman 9ft x 6ft Metal Garden Storage Shed With Lockable Sliding Doors",
+     "detail": "71 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/avalon-wooden-storage-shed/",
+     "title": "Avalon Tall Wooden Garden Tool Shed With 3 Shelves & Asphalt Roof",
+     "detail": "65 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/truro-adjustable-sun-lounger/",
+     "title": "Truro Adjustable Folding Sun Lounger - Multi-Position Recline",
+     "detail": "61 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/malaga-2-seater-fixed-bistro-set/",
+     "title": "Malaga 2 Seater Fixed Bistro Set - Includes Weathershield Cushions",
+     "detail": "66 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/mayfair-corner-lounging-set-with-fire-pit/",
+     "title": "Mayfair Metal Garden Corner Lounging Set With Fire Pit - Seats 8 People",
+     "detail": "71 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/paris-deluxe-modular-corner-fire-pit-dining-set/",
+     "title": "Paris Deluxe Modular Corner Fire Pit Dining Set - Seats 8 People",
+     "detail": "64 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/oxford-fabric-outdoor-swing-chair-cover-h164cm-x-w205cm-x-d124cm/",
+     "title": "Oxford Fabric Outdoor Swing Chair Cover - Water & UV Resistant",
+     "detail": "62 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/harpswell-metal-patio-set/",
+     "title": "Harpswell Grey Outdoor Metal Patio Sofa Set With Coffee Table",
+     "detail": "61 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/selena-rattan-patio-set/",
+     "title": "Selena 7-Piece Garden Rattan Patio Set - 1 Table + 6 Armchairs",
+     "detail": "62 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/hemsby-rattan-sofa-set/",
+     "title": "Hemsby Outsoor Mix Brown Rattan Patio Set With White Cushions",
+     "detail": "61 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-6-seater-carver-dining-set/",
+     "title": "Wentworth 6 Seater Rattan Garden Dining Set - Carver Chairs - Royalcraft",
+     "detail": "72 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/buxworth-corner-lounging-set/",
+     "title": "Buxworth 5 Seater Rattan Corner Lounging Set With Coffee Table",
+     "detail": "62 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-adjustable-corner-lounging-set/",
+     "title": "Wentworth Adjustable Corner Lounging Set - Adjustable Table - Royalcraft",
+     "detail": "72 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/calver-reclining-sun-lounger/",
+     "title": "Calver Rattan Reclining Sun Lounger With 5-Position Adjustable Back",
+     "detail": "67 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/berlin-relaxer-set/",
+     "title": "Berlin 4 Seater Rattan Garden Relaxer Set - 2 Colours - Royalcraft",
+     "detail": "66 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-4-seater-multi-setting-relaxer-set/",
+     "title": "Wentworth 4 Seater Rattan Garden Multi Setting Relaxer Set - Royalcraft",
+     "detail": "71 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-deluxe-gas-reclining-chair-set/",
+     "title": "Wentworth Rattan Garden Deluxe Gas Reclining Chair Set & Table - Royalcraft",
+     "detail": "75 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/wentworth-deluxe-modular-corner-dining-lounging-set/",
+     "title": "Wentworth Rattan Garden Corner Lounging Dining Set - Royalcraft",
+     "detail": "63 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/shardlow-rattan-patio-furniture-set/",
+     "title": "Shardlow Black Rattan Patio Furniture Set With Chairs & Table",
+     "detail": "61 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/bodway-rocking-chair-bistro-set/",
+     "title": "Rattan 2 Seater Garden Bistro Set With Rocking Chairs - Bodway",
+     "detail": "62 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/outdoor-rattan-conversation-set-with-seat-and-back-cushions/",
+     "title": "5 Pieces Rattan Patio Set With Two Chairs, Two Footrests & A Table",
+     "detail": "66 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/toulouse-rattan-patio-set/",
+     "title": "Toulouse Rattan Patio Set With 2 Chairs, 2 Footstools & Table",
+     "detail": "61 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/paris-fixed-2-seater-companion-set/",
+     "title": "Paris Fixed 2 Seater Companion Set - Includes Pull Out Stools",
+     "detail": "61 characters",
+     "related": null
+    }
+   ]
+  },
+  {
+   "id": "title-too-short",
+   "severity": "notice",
+   "category": "Titles",
+   "title": "Title too short",
+   "count": 9,
+   "targetCount": 0,
+   "targets": [],
+   "details": [
+    {
+     "detail": "5 characters",
+     "pages": 2
+    },
+    {
+     "detail": "14 characters",
+     "pages": 1
+    },
+    {
+     "detail": "15 characters",
+     "pages": 1
+    },
+    {
+     "detail": "16 characters",
+     "pages": 1
+    },
+    {
+     "detail": "18 characters",
+     "pages": 1
+    },
+    {
+     "detail": "21 characters",
+     "pages": 1
+    },
+    {
+     "detail": "22 characters",
+     "pages": 1
+    },
+    {
+     "detail": "26 characters",
+     "pages": 1
+    }
+   ],
+   "rows": [
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/frequently-asked-questions/",
+     "title": "Frequently Asked Questions",
+     "detail": "26 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/",
+     "title": "Login",
+     "detail": "5 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/garden-furniture/",
+     "title": "Garden Furniture",
+     "detail": "16 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/furniture-accessories/",
+     "title": "Furniture Accessories",
+     "detail": "21 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/privacy-policy/",
+     "title": "Privacy Policy",
+     "detail": "14 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/terms-conditions/",
+     "title": "Terms & Conditions",
+     "detail": "18 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/return-refund-policy/",
+     "title": "Return & Refund Policy",
+     "detail": "22 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/forgot-password/",
+     "title": "Forgot Password",
+     "detail": "15 characters",
+     "related": null
+    },
+    {
+     "url": "https://www.gardenfurnituresets.co.uk/login/?register=true",
+     "title": "Login",
+     "detail": "5 characters",
+     "related": null
+    }
+   ]
+  }
+ ]
+}

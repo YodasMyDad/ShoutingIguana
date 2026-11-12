@@ -28,7 +28,11 @@ internal static class ReaderFunctions
     /// <summary><c>si_keep(key, id)</c>: keeps a row's sort key and URL id, for a page selected in memory (<see cref="GridReadContext.Kept"/>), and gives 1.</summary>
     public const string KEEP = "si_keep";
 
-    /// <summary><c>si_tally(value)</c>: counts one more row with this value (<see cref="GridReadContext.Tallies"/>), and gives 1.</summary>
+    /// <summary>
+    /// <c>si_tally(value)</c>: counts one more row with this value (<see cref="GridReadContext.Tallies"/>), and gives 1.
+    /// <c>si_tally(slot, value)</c> counts it in one of several tallies (<see cref="GridReadContext.TalliesIn"/>), for a
+    /// pass that counts its rows several ways at once; a null value isn't counted, and gives null.
+    /// </summary>
     public const string TALLY = "si_tally";
 
     /// <summary>
@@ -107,6 +111,25 @@ internal static class ReaderFunctions
             try
             {
                 ((GridReadContext)state).Tally(raw.sqlite3_value_int64(arguments[0]));
+                raw.sqlite3_result_int(call, 1);
+            }
+            catch (Exception exception)
+            {
+                raw.sqlite3_result_error(call, exception.Message);
+            }
+        });
+
+        raw.sqlite3_create_function(handle, TALLY, 2, raw.SQLITE_UTF8, context, static (call, state, arguments) =>
+        {
+            try
+            {
+                if (raw.sqlite3_value_type(arguments[1]) == raw.SQLITE_NULL)
+                {
+                    raw.sqlite3_result_null(call);
+                    return;
+                }
+
+                ((GridReadContext)state).Tally((int)raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_int64(arguments[1]));
                 raw.sqlite3_result_int(call, 1);
             }
             catch (Exception exception)

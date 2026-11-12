@@ -465,13 +465,15 @@ internal sealed class CrawlManager(
         if (crawl?.RunStartedAt is not { } runStartedAt)
         {
             var history = _histories.Get(id, path, () => EngineErrors.Read(() => CrawlHistoryReader.Read(path)));
-            return new HistoryDto(id, history.StartedAt.UtcDateTime, null, [.. history.Points.Select(HistoryPointDto.FromFile)]);
+            return new HistoryDto(id, history.StartedAt.UtcDateTime, null, [.. history.Points.Select(HistoryPointDto.FromFile)]).With(history.Runs);
         }
 
+        // When the crawl was crawling is read from its file each time: a pause a moment ago is in it, and it's a few rows.
+        var runs = EngineErrors.Read(() => CrawlRunReader.Read(path));
         var live = crawl.History.Points();
         if (!crawl.Resumed)
         {
-            return new HistoryDto(id, runStartedAt, runStartedAt, live);
+            return new HistoryDto(id, runStartedAt, runStartedAt, live).With(runs);
         }
 
         // Read outside the lock, as a big crawl takes a moment, and kept. Two requests at once may both read it: either will do.
@@ -490,7 +492,7 @@ internal sealed class CrawlManager(
             }
         }
 
-        return new HistoryDto(id, earlier.StartedAt.UtcDateTime, runStartedAt, [.. earlier.Points.Select(HistoryPointDto.FromFile), .. live]);
+        return new HistoryDto(id, earlier.StartedAt.UtcDateTime, runStartedAt, [.. earlier.Points.Select(HistoryPointDto.FromFile), .. live]).With(runs);
     }
 
     /// <summary>
@@ -837,13 +839,16 @@ internal sealed class CrawlManager(
             StartedAt = summary?.StartedAt.UtcDateTime,
             FinishedAt = crawling ? null : summary?.FinishedAt?.UtcDateTime,
             UpdatedAt = summary?.UpdatedAt.UtcDateTime,
+            CrawlingMs = (long?)(crawling && live?.Progress is { } progress ? progress.TimeCrawling : summary?.TimeCrawling)?.TotalMilliseconds,
             FetchedUrlCount = (crawling ? live?.Progress?.Fetched : null) ?? summary?.FetchedUrlCount ?? 0,
+            CrawledUrlCount = (crawling ? live?.Progress?.Crawled : null) ?? summary?.CrawledUrlCount ?? 0,
             PageCount = (crawling ? live?.Progress?.HtmlPages : null) ?? summary?.PageCount ?? 0,
             Issues = summary?.FlaggedChecks is { } flagged
                 ? new IssueCountsDto(flagged.GetValueOrDefault(IssueSeverity.Error), flagged.GetValueOrDefault(IssueSeverity.Warning),
                     flagged.GetValueOrDefault(IssueSeverity.Notice))
                 : null,
             AnalyzedAt = analyzedAt?.UtcDateTime,
+            Score = summary?.Analysis?.Score,
 
             // A crawl running here changes its file as it goes; otherwise the file says whether its analysis still stands.
             OutOfDate = analyzedAt is not null && (crawling || summary!.OutOfDate(AnalysisSettings).Count > 0),

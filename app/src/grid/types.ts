@@ -15,6 +15,11 @@ export interface GridColumn<Row> {
   sort?: 'ascending' | 'descending';
   /** Its header is a button that sorts by it (the grid's `onSort`). */
   sortable?: boolean;
+  /**
+   * Why this column doesn't sort, in a grid whose other columns do ("Links can’t be sorted by their anchor text"):
+   * its header's tooltip, and what Enter or Space on its header says, so a header that does nothing says why.
+   */
+  sortHint?: string;
   /** What the cell shows. Crawled text renders as text, never as HTML. */
   cell: (row: Row) => ReactNode;
   /** The cell as plain text, for copying and for the accessible name of rich cells. */

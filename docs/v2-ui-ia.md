@@ -4,6 +4,14 @@ Stage 2 of [the UI brief](v2-ui-brief.md#how-to-work): the screens, the navigati
 page. The words follow [the glossary](v2-ui-discovery.md#glossary). Signed off on 2026-11-01, under the owner's
 delegation of the stage sign-offs.
 
+**Changed on 2026-11-10.** This is the IA of Advanced. Simple, the switch and the report are added here at the
+Simple design: [Simple first](v2-rebuild.md#simple-first-advanced-on-a-switch-2026-11-10).
+
+**Simple (2026-11-11).** The app opens in Simple, with Advanced on one switch. Simple's screens, its words, the
+score and the report are designed in [Simple mode](v2-ui-simple.md). This page gains only what both modes share:
+the switch in the shell, the Report route and screen, a Simple line in the flows, and three keys. Each is marked
+"Simple".
+
 ## The shell
 
 ```text
@@ -40,6 +48,12 @@ delegation of the stage sign-offs.
   - Search and the command palette.
 
   It's the same on every screen, so a running crawl is always visible and controllable.
+- **The switch (Simple).** The top bar ends in a two-part control, **Simple | Advanced**: to the right of search in
+  the drawing above, in both modes and on every screen. It is the one item in the bar that never shrinks or hides.
+  The mode is an app setting, remembered, and Simple on a first start. In Simple the sidebar's sections are
+  Summary, What to fix and Report. In Advanced, Report joins as the eighth section, below the crawl's Settings.
+  What switching does, and the order in which the rest of the bar gives way, are in
+  [Simple mode](v2-ui-simple.md#the-switch).
 - **Inspector.** Opens for the selected URL on any grid, and holds its place while you move between rows.
 - **Overview has two states.** While a crawl runs, it's the live crawl screen. Once the analysis is done, it's the
   answer. That gives one place to look, whatever the crawl's state.
@@ -57,11 +71,16 @@ links and "reopen where I left off" all work.
 | `/crawls/:crawl/overview` | Live crawl, then the answer |
 | `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `category` (one category's checks, by its id in the catalog: where Overview's category counts lead), `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
 | `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
-| `/crawls/:crawl/links` | Links. Same params as URLs |
+| `/crawls/:crawl/links` | Links. Params: `filter`, `sort` (one key: crawl order, or a column of the target), `cols`, `q`, `inspect`, over the links' columns, either end's included (`to.statusClass`, `from.depth`); `end=from` with `inspect` when the URL inspected is the page a link is on (a target, the default, has no word) |
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps: the list, and one sitemap's URLs (its id in the path). Params on one sitemap: `filter`, `sort`, `q`, `inspect`, as URLs. On the list: `url`, a sitemap's address, which goes on to that sitemap |
 | `/crawls/:crawl/robots/:origin?` | robots.txt: the origins, and one origin's file with the URLs it blocked (the origin in the path). Params on one origin: `line` (the line chosen), `reason` (`unreachable` or `unknown`: the blocked URLs no line accounts for), `inspect` |
 | `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them |
+| `/crawls/:crawl/report` | Report (Simple): the engine's report in a frame, in both modes. Params: `cut` (`full` or `summary`) |
 | `/settings/:section?` | App settings: general, crawl defaults, analysis, data, shortcuts, diagnostics, updates, about |
+
+**In Simple** the same routes show Simple's screens: `/` is its Home, `/new` its four questions, `overview` the
+Summary, `issues/:check?` What to fix and one problem, and `settings` four of the sections. URLs, Links, Sitemaps,
+robots.txt and the crawl's settings are Advanced only. The table is in [Simple mode](v2-ui-simple.md#routes).
 
 ## Screens
 
@@ -98,7 +117,8 @@ links and "reopen where I left off" all work.
 
 **Overview (done).**
 
-- Issues by severity, and "Fix first": severity, then pages affected.
+- Issues by severity, and "Fix first": severity, then pages or URLs affected (a check counts pages only when
+  pages are all it flags).
 - Issues by category, status codes, indexability with its reasons, depth, and response times.
 - Every number opens its URLs.
 - Skipped checks and analysis notes, in plain words.
@@ -111,7 +131,7 @@ links and "reopen where I left off" all work.
 **Issues.**
 
 - The checks list, grouped by category and filterable by severity and search. Its rows show severity, title and pages
-  affected. Skipped checks are always listed in their category, with their reasons: hiding them would read as
+  affected, or URLs affected for a check that can flag a URL that isn't a page (a missing image, a redirect). Skipped checks are always listed in their category, with their reasons: hiding them would read as
   clean. "Show the N checks that passed" adds the ones that passed. The filters, that switch and the hidden checks'
   count sit above the list, so Tab goes from the list to the selected check. A category a link narrowed the list to
   (Overview's "Issues by category") shows there as a chip that removes it: it is never text in the search field, as a
@@ -132,7 +152,24 @@ links and "reopen where I left off" all work.
 - URLs on the crawled host show their path after the site's favicon, with the host named once in the column header.
   Other hosts, and the site's other versions, show in full. "Show full URLs" is a view option.
 
-**Links.** All links, with anchor text, position, follow flags and the target's status, in the same grid.
+**Links.**
+
+- Every link the crawl stored, in crawl order, in the same grid: the page it's on, its target, its anchor or alt
+  text, its kind, its position, whether it's followed, and how its target answered. More columns of the link, its
+  source page and its target are in the column chooser.
+- Views for what a link audit looks for: Broken links, Links to redirects, Nofollow links, No anchor text, External
+  links. Each is its filters, shown as chips.
+- Quick filters with counts (kind, position, follow, the target's status, the target's site), each count opening
+  exactly that many links, counted when their menu opens; a filter bar over any column of the link or of either end
+  (at most 20 filters, as a query takes); search over the anchor text and both URLs. A filter the engine won't run (a
+  pattern it refuses) says so in the engine's own words, with "Change the filter" and "Remove the filter".
+- Either end opens the inspector on that URL, which then follows the cursor down that end; which end is in the
+  address. The inspector's Inlinks and Outlinks open here: "All N in Links" ("Show it in Links" for one).
+- A sort is by a column the grid shows: hiding the column drops the sort.
+- Copy: the selected rows, the column the cursor is in, the view's source or target URLs. A copy reads the view's
+  first 10,000 links, and says so on a bigger view ("Copy the first 10,000 links' target URLs"). Export comes with the
+  engine's export (E5).
+- In a window too short for the toolbars and the grid (200% zoom), the screen scrolls: the grid keeps five rows.
 
 **Sitemaps.**
 
@@ -177,6 +214,10 @@ links and "reopen where I left off" all work.
 
 Actions: open in browser, copy the URL.
 
+**Report (Simple).** In both modes. A toolbar (Full report or Summary page; Spreadsheet of everything; Save; Print
+or save as PDF) over the engine's report, shown in a sandboxed frame. The document, its outline and its sizes are
+in [Simple mode](v2-ui-simple.md#the-report).
+
 ## The five flows
 
 1. **New crawl.** Ctrl+N, or the URL field on Home. Paste, press Enter, and you land on the crawl's Overview, live.
@@ -203,6 +244,11 @@ Actions: open in browser, copy the URL.
    - On Issues, it offers this check, or every check with a summary sheet.
    - A native save dialog, then a toast with progress, Cancel and "Open folder".
    - Ctrl+C copies the selected rows as tab-separated text for Excel.
+   - On Overview and Issues, Export also offers the report and the spreadsheet of everything (Simple).
+
+**In Simple** the five are three: paste an address and press Enter; watch three steps, or close the window; then
+read the Summary, open a problem and send its list on, or open the report. They are told in
+[Simple mode](v2-ui-simple.md).
 
 ## Keyboard
 
@@ -217,6 +263,9 @@ Actions: open in browser, copy the URL.
 | Ctrl+F | Filter this grid |
 | Ctrl+, | Settings |
 | Ctrl+1 to Ctrl+7 | The crawl's sections |
+| Ctrl+8 | Report (Simple). In Simple the sections are three: Ctrl+1 to Ctrl+3 |
+| Ctrl+Shift+A | Switch between Simple and Advanced (Simple) |
+| Ctrl+P | Print or save as PDF, on the Report screen (Simple) |
 | F7 | Pause or resume |
 | F8 | Stop |
 | Alt+Left, Alt+Right, mouse back and forward | Back and forward |
@@ -235,6 +284,15 @@ Actions: open in browser, copy the URL.
 | Ctrl+C | Copy as tab-separated text |
 | Home, End, Page Up, Page Down | Jump |
 | Shift+F10 or the menu key | Right-click menu |
+
+### On Links
+
+| Keys | Action |
+| --- | --- |
+| Ctrl+F | Search the links |
+| Enter on a row | Inspect the end the cursor's column is of: the page the link is on, or its target |
+| Up from the first row, then Enter | Sort by the header the cursor is on, where the engine sorts by it |
+| Ctrl+Shift+C | Copy the view's target URLs |
 
 ### In the inspector
 
@@ -296,6 +354,6 @@ macOS uses Cmd where Windows uses Ctrl. One registry feeds the menus, tooltips, 
 | Projects | The library's site groups become projects: a name, notes and a schedule |
 | Crawl comparison | Overview gets "Compare with…" the site's previous crawl: new, fixed and remaining issues |
 | Scheduled crawls | Set on a site group |
-| Client reports | Export gains "Client report (PDF)" |
+| Branded client reports | The report (in step 3 since 2026-11-10) gains a logo, colours and a cover |
 | Step 4 | New crawl gets rendering, include and exclude rules, authentication and list mode. The inspector gets rendered vs raw. URLs gets extraction columns |
 | Step 5 | URLs gets Search Console and analytics columns. Settings gets Connections |

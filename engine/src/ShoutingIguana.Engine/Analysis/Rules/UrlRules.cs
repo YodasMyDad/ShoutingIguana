@@ -26,12 +26,18 @@ internal sealed class UrlRules(AnalysisSettings settings) : IPageRule
             yield return new IssueHit(IssueCatalog.URL_UNDERSCORES, page.UrlId);
         }
 
-        var length = RuleText.Length(DisplayUrl(page.Uri));
+        var length = MeasuredLength(page.Uri);
         if (length > settings.MaxUrlLength)
         {
             yield return new IssueHit(IssueCatalog.URL_TOO_LONG, page.UrlId, RuleText.Characters(length));
         }
     }
+
+    /// <summary>
+    /// A URL's length as <see cref="IssueCatalog.URL_TOO_LONG"/> judges it against <see cref="AnalysisSettings.MaxUrlLength"/>:
+    /// the URL as people read it, in characters as a reader counts them. The check and the inspector both measure with this.
+    /// </summary>
+    public static int MeasuredLength(Uri uri) => RuleText.Length(DisplayUrl(uri));
 
     /// <summary>The URL as people read it: escapes decoded and the host in its own script, so /каталог/ is 9 characters, not 42.</summary>
     private static string DisplayUrl(Uri uri)

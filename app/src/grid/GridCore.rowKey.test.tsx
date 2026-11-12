@@ -62,7 +62,7 @@ describe('a grid whose rows have an identity', () => {
     // The cursor's row is the same row: no move is told.
     expect(onActiveRowChange).not.toHaveBeenCalled();
     fireEvent.keyDown(element, { key: 'Enter' });
-    expect(onActivate).toHaveBeenCalledWith(2, { id: 'zebra' });
+    expect(onActivate).toHaveBeenCalledWith(2, { id: 'zebra' }, 'id');
     // And it moves on from where its row is now.
     fireEvent.keyDown(element, { key: 'ArrowUp' });
     expect(cursorText()).toBe('apple');

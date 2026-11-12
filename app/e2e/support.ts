@@ -2,6 +2,10 @@
 // crawl holds), the way into a crawl's section as a user goes, and axe with the wait for a theme's colours to settle.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page } from '@playwright/test';
+import { colourTweensEnd } from './colourTweens';
+
+// The wait itself is one function for every spec (e2e/colourTweens.ts): still reachable from here, as it was.
+export { colourTweensEnd };
 
 export const env = (name: string) => {
   const value = process.env[name];
@@ -84,18 +88,6 @@ export async function crawlTestSite(): Promise<SeededCrawl> {
 export async function removeCrawl(id: string): Promise<void> {
   await settled(id, 60_000);
   await sidecar(`/api/crawls/${id}/delete-file`, { method: 'POST' });
-}
-
-/**
- * A theme changed on an open page tweens its colours, and axe measuring part-way through sees a contrast that
- * neither theme has. Waits for the tweens to end. Only transitions: a spinner's animation never does.
- */
-export async function colourTweensEnd(page: Page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const tweens = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
-    await Promise.all(tweens.map((tween) => tween.finished.catch(() => undefined)));
-  });
 }
 
 /** axe at WCAG 2.2 AA, with zero violations allowed, once the theme's colours have settled. */

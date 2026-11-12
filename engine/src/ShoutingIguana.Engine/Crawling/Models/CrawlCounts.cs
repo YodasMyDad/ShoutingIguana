@@ -30,4 +30,7 @@ internal sealed record CrawlCounts(
 {
     public static CrawlCounts None { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, CrawlStatusClasses.None, CrawlNoResponseCounts.None,
         new Dictionary<int, long>());
+
+    /// <summary>The part of these that is the probes of the site's other versions.</summary>
+    public CrawlSiteVersionCounts SiteVersions { get; init; } = CrawlSiteVersionCounts.None;
 }

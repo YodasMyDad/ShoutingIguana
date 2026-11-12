@@ -45,6 +45,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.All(earlier["skipped"]!.AsArray(), skip => Assert.Null(skip!["reason"]));
         Assert.NotEmpty(earlier["notes"]!.AsArray());
         Assert.NotEmpty(earlier["counts"]!.AsArray());
+        Assert.Equal(("notScored", true), ((string?)earlier["noScoreReason"], earlier["score"] is null));
 
         await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
         Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/analyze")).Status);
@@ -58,6 +59,8 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.Empty(analysis["outOfDateReasons"]!.AsArray());
         var orphans = analysis["skipped"]!.AsArray().Single(skip => (string?)skip!["checkId"] == IssueCatalog.ORPHAN_PAGE.Id)!;
         Assert.Equal(SkippedCheckReasons.URL_LIMIT, (string?)orphans["reason"]!["code"]);
+        Assert.NotNull(analysis["score"]);
+        Assert.Null(analysis["noScoreReason"]);
     }
 
     [Fact]

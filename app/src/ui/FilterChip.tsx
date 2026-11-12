@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Plus, X } from 'lucide-react';
-import type { KeyboardEvent, ReactNode, Ref } from 'react';
+import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode, Ref } from 'react';
 import { Icon } from './Icon';
 import { focusQuietly } from './quietFocus';
 import { Tooltip } from './Tooltip';
@@ -150,20 +150,24 @@ export function FilterChip({
   );
 }
 
-/** The dashed chip that adds a filter. */
+/**
+ * The dashed chip that adds a filter. It takes a button's other attributes, so it can be a popover's trigger and say
+ * whether its editor is open (`aria-expanded`).
+ */
 export function AddFilterChip({
   children = 'Add filter',
   onClick,
   ref,
   className,
+  ...rest
 }: {
   children?: string | undefined;
-  onClick?: (() => void) | undefined;
+  onClick?: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] | (() => void) | undefined;
   ref?: Ref<HTMLButtonElement> | undefined;
   className?: string | undefined;
-}) {
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'className' | 'type'>) {
   return (
-    <button ref={ref} type="button" className={clsx('si-chip si-chip--add', className)} onClick={onClick}>
+    <button ref={ref} type="button" {...rest} className={clsx('si-chip si-chip--add', className)} onClick={onClick}>
       <Icon icon={Plus} size="sm" />
       {children}
     </button>

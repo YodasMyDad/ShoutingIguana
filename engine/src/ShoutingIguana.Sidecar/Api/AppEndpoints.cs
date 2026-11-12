@@ -2,6 +2,7 @@ using ShoutingIguana.Engine;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Sidecar.Api.Models;
+using ShoutingIguana.Sidecar.Crawls;
 using ShoutingIguana.Sidecar.Errors;
 using ShoutingIguana.Sidecar.Models;
 using ShoutingIguana.Sidecar.Serialization;
@@ -11,11 +12,6 @@ namespace ShoutingIguana.Sidecar.Api;
 /// <summary>The sidecar itself, and what every check means.</summary>
 internal static class AppEndpoints
 {
-    private static readonly ChecksDto CHECKS = new(
-        [.. Enum.GetValues<IssueCategory>().Select(category => new CategoryDto(category, category.DisplayName()))],
-        [.. IssueCatalog.All.Select(check => new CheckDto(check.Id, check.Category, check.Severity, check.Title, check.Description, check.Fix,
-            check.Why, check.LearnMore, GridRequests.Grouping(check.Grouping), check.Subject))]);
-
     public static void Map(IEndpointRouteBuilder api)
     {
         api.MapGet("/api/health", (SidecarOptions options) => TypedResults.Json(
@@ -33,9 +29,18 @@ internal static class AppEndpoints
             return Results.StatusCode(StatusCodes.Status202Accepted);
         });
 
-        api.MapGet("/api/checks", () => TypedResults.Json(CHECKS, SidecarJsonContext.Default.ChecksDto));
+        api.MapGet("/api/checks", (HttpRequest request, CrawlData data) =>
+            TypedResults.Json(Checks(data.LimitsFor(request.Query)), SidecarJsonContext.Default.ChecksDto));
 
         // Every path, those that look like files included (/api/foo.json): the default pattern leaves those out.
         api.MapFallback("{*path}", (HttpContext context) => ProblemWriter.WriteAsync(context, Problems.NotFound()));
     }
+
+    /// <summary>The catalog, every plain text with its limits filled from these thresholds.</summary>
+    private static ChecksDto Checks(AnalysisSettings settings) => new(
+        [
+            .. Enum.GetValues<IssueCategory>().Select(category => new CategoryDto(category, category.DisplayName(),
+                PlainWords.CategoryTitle(category) is { } title ? PlainLimits.Fill(title, settings) : null))
+        ],
+        [.. IssueCatalog.All.Select(check => CheckDto.From(check, settings))]);
 }

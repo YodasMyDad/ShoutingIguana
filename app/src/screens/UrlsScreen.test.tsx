@@ -87,6 +87,20 @@ async function open(path: string, queryClient = createQueryClient()) {
 
 afterEach(() => setTransport(fakeSidecar([])));
 
+describe('the URL grid in a short window', () => {
+  it('keeps its grid room for five rows under whatever its toolbars take, in the frame every grid screen shares', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const filter = JSON.stringify([{ column: 'statusClass', op: 'in', values: ['2xx'] }]);
+    await open(`${URLS}?filter=${encodeURIComponent(filter)}`);
+    const table = await screen.findByRole('grid', { name: 'URLs' });
+    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    const frame = table.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    expect(table.closest('.si-grid-screen__body')?.parentElement).toBe(frame);
+    expect(screen.getByRole('group', { name: 'Filters' }).parentElement).toBe(frame);
+  });
+});
+
 describe('the URL grid without the URL summary', () => {
   it('says why the analysis’s columns are empty, and offers to analyse the crawl', async () => {
     const { analyse } = sidecar({ analyzedAt: null, summary: { available: false, reason: 'notAnalyzed' } });
@@ -107,6 +121,14 @@ describe('the URL grid without the URL summary', () => {
     expect(within(notice).queryByRole('button')).toBeNull();
   });
 
+  it('says the columns fill in when the analysis that’s running is done, with nothing to press, while it runs', async () => {
+    sidecar({ status: 'analyzing', analyzedAt: null, summary: { available: false, reason: 'notAnalyzed' } });
+    await open(URLS);
+    const notice = await screen.findByText(/Inlinks and Issues fill in when the analysis that’s running is done/);
+    expect(within(notice).queryByRole('button')).toBeNull();
+    expect(screen.queryByText(/hasn’t been analysed yet/)).toBeNull();
+  });
+
   it('turns a sort on such a column into the engine’s reason, with what can work instead of Try again', async () => {
     sidecar({ analyzedAt: null, summary: { available: false, reason: 'notAnalyzed' } });
     const { router } = await open(`${URLS}?sort=-issues`);
@@ -122,11 +144,24 @@ describe('the URL grid without the URL summary', () => {
     expect(await screen.findByRole('grid', { name: 'URLs' })).toBeVisible();
   });
 
+  it('offers to analyse again, in those words, a crawl that was analysed before: never "Analyse it"', async () => {
+    const { analyse } = sidecar({ summary: { available: false, reason: 'crawlChanged' } });
+    await open(`${URLS}?sort=-issues`);
+    await screen.findByText(/^Filtering or sorting by these columns needs an analysis, and /);
+    const main = screen.getByRole('main');
+    const again = within(main).getByRole('button', { name: 'Analyse again' });
+    expect(within(main).queryByRole('button', { name: 'Analyse it' })).toBeNull();
+    fireEvent.click(again);
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+  });
+
   it('turns a query the engine can’t run into a plain sentence, with a way back', async () => {
     sidecar({ summary: { available: true, reason: null } });
     // `outcome` filters, but doesn't sort.
     const { router } = await open(`${URLS}?sort=-outcome`);
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
+    // With what the engine said of it, in place: not only behind Details.
+    expect(screen.getByText('The view can’t be sorted by “outcome”.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Reset the view' }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));

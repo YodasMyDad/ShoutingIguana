@@ -34,9 +34,10 @@ another checkout of the engine, such as a clean worktree while someone edits thi
 
 `npm run dev` never touches your own library or crawls:
 
-- It copies the crawls in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls` into `%TEMP%\si-app-dev\data` (once, and again
-  when they change). With no dev crawls, or with `--synthetic`, it makes a small crawl of the engine's synthetic site
-  with the CLI.
+- It copies the crawls in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls` into `%TEMP%\si-app-dev\data`, and keeps a copy
+  from run to run while its original hasn't changed (its size and modified time, kept in
+  `%TEMP%\si-app-dev\copied-from`), so a copy you analysed stays analysed. When an original changes, its copy is made
+  again. With no dev crawls, or with `--synthetic`, it makes a small crawl of the engine's synthetic site with the CLI.
 - The sidecar gets a fresh state folder each run, a fixed development token and only the dev server's origin.
 - Ctrl+C stops both. Set `SI_DEV_LOG=1` to see the sidecar's log.
 
@@ -57,7 +58,7 @@ answers for the few URLs the fixtures hold it for.
 | `npm run e2e` | Playwright against the real sidecar, with axe: zero violations allowed. `e2e/states.spec.ts` also checks what only a browser shows: state indicators at 3:1 and their text at 4.5:1 in both themes and under forced colours, focus coming back after an overlay, the grid's cursor kept in view, and toasts in the app's look |
 | `npm run build-storybook` | Storybook builds |
 | `npm run test:stories` | axe on every story of the built Storybook, in both themes: zero violations allowed (`-- --forced` under forced colours, `-- --shots=<folder>` to screenshot each) |
-| `node --test "scripts/**/*.test.mjs"` | The scripts' own tests: ports, crawl copies, signing |
+| `node --test "scripts/**/*.test.mjs"` | The scripts' own tests: ports, crawl copies, signing, the shell walk's options and steps |
 
 `npm run e2e` builds the app for the test (`--mode e2e`), starts the sidecar on a temp data folder holding one crawl,
 and serves the build. The crawl is `SI_E2E_CRAWL` if set, otherwise a small synthetic crawl made with the CLI (kept in
@@ -65,6 +66,12 @@ and serves the build. The crawl is `SI_E2E_CRAWL` if set, otherwise a small synt
 synthetic crawl an older engine analysed is made again, and an out-of-date `SI_E2E_CRAWL` has its copy analysed again
 (never the file itself). An out-of-date analysis would put its "Analyse again" offer on the screens, a Tab stop of its
 own. It needs `npm run build:sidecar` first, and Playwright's Chromium (`npx playwright install chromium`).
+
+`e2e/links-sweep.spec.ts` walks every count on Links (the header's under each view, every value of every facet, the
+inspector's "All N in Links") against the screen it lands on and the sidecar's own count. It runs with the rest on the
+synthetic crawl; to sweep a real crawl, every preset included, give it the file:
+`SI_E2E_CRAWL=<a .sicrawl file> npx playwright test e2e/links-sweep.spec.ts`. Most other specs look for the synthetic
+site's planted pages, so they are run on the synthetic crawl only.
 
 The setup also serves the engine's synthetic test site (the CLI's `testsite`, on a free port), which the Overview's
 tests crawl live from Home: watched to the answer, paused, resumed, stopped and continued. They never crawl a real
@@ -77,13 +84,17 @@ from there (a test site started by hand) keeps the build from replacing it: stop
 npm run tauri build      # src-tauri/target/release/shouting-iguana.exe, and a per-user NSIS installer in bundle/
 npm run check:orphans    # closing the app, or killing it, leaves no sidecar behind
 npm run smoke:tauri      # the built app, in its own WebView2: it shows the library from a temp data folder
+npm run smoke:shell      # the five flows walked in the built app: keys, the tray, quitting, the engine restarted
 powershell -File scripts/smoke-installer.ps1   # the installer: silent install, .sicrawl, a run, silent uninstall
 ```
 
 Tauri's build needs the sidecar binary to exist, so on a fresh clone or in CI run `npm run build:sidecar` first.
 
 The smoke tests and the orphan check run the app with its own temporary profile (`SI_APP_PROFILE_DIR`), so they
-never touch your own copy of the app and run beside it. The installer smoke test installs into a temporary folder,
+never touch your own copy of the app and run beside it. `smoke:shell` drives the real window over WebView2's DevTools
+port and, for what that can't reach (keys as the webview itself receives them, the tray icon, native dialogs),
+`scripts/shell-window.ps1`; what it walks and why is in the architecture doc's "The shell smoke walk". It crawls only
+the engine's test site, takes about a minute, and needs a desktop session, so CI doesn't run it. The installer smoke test installs into a temporary folder,
 but it does register `.sicrawl` and add Start menu and desktop shortcuts until it uninstalls: run it on a build machine
 or with a test product name.
 

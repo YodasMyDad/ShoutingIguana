@@ -56,7 +56,15 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<RobotsState>),
         typeof(CamelCaseEnumConverter<RobotsLineKind>),
         typeof(CamelCaseEnumConverter<RobotsLineProblem>),
-        typeof(CamelCaseEnumConverter<RobotsBlockReason>)
+        typeof(CamelCaseEnumConverter<RobotsBlockReason>),
+
+        // The score and plain words (round 3).
+        typeof(CamelCaseEnumConverter<ScoreBand>),
+        typeof(CamelCaseEnumConverter<ScoreExtent>),
+        typeof(CamelCaseEnumConverter<ScoreUnit>),
+        typeof(CamelCaseEnumConverter<ScoreIncompleteReason>),
+        typeof(CamelCaseEnumConverter<NoScoreReason>),
+        typeof(CamelCaseEnumConverter<IssueFixer>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]

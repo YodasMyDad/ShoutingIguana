@@ -131,7 +131,8 @@ describe('a grid whose cells lead to different places', () => {
     expect(onActivate).not.toHaveBeenCalled();
     view.rerender(<GridCore<Row> {...props} onActivate={onActivate} />);
     fireEvent.keyDown(grid, { key: 'Enter' });
-    expect(onActivate).toHaveBeenCalledExactlyOnceWith(0, ROWS[0]);
+    // With the column the cursor is in, as every grid's onActivate is told (the Links slice's third argument).
+    expect(onActivate).toHaveBeenCalledExactlyOnceWith(0, ROWS[0], 'name');
   });
 });
 

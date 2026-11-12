@@ -1,0 +1,471 @@
+[
+ {
+  "id": "canonical-to-redirect",
+  "field": "plainFix[0]",
+  "kind": "untrue",
+  "present": "Look at where each main address in the list ends up: the list shows it.",
+  "problem": "The list shows the main address that forwards, not where it ends up (a row holds the page, a detail such as \"The canonical URL redirects (HTTP 301)\" and that address), so the step sends the reader to look for something that isn't there.",
+  "replacement": "Open the main address the list shows for a page in your browser, and note the address you end up at."
+ },
+ {
+  "id": "broken-fragment-links",
+  "field": "plainWhat[2]",
+  "kind": "untrue",
+  "present": "Search engines ignore these links, so only visitors are affected.",
+  "problem": "Search engines don't ignore the link: they ignore the \"#\" part and follow the link to the page as usual.",
+  "replacement": "Search engines still follow the link to the page, so only visitors are affected."
+ },
+ {
+  "id": "hreflang-invalid-code",
+  "field": "plainTitle",
+  "kind": "untrue",
+  "present": "Language versions labelled with a code that doesn't exist",
+  "problem": "\"A code that doesn't exist\" is untrue of codes the rule flags: es-419 exists (Google doesn't support it), and \"en-UK\" is two codes that both exist.",
+  "replacement": "Language versions labelled with the wrong code"
+ },
+ {
+  "id": "hreflang-invalid-code",
+  "field": "plainWhat[0]",
+  "kind": "untrue",
+  "present": "These pages list their versions in other languages, but label one with a language or country code that doesn't exist.",
+  "problem": "As the title: \"doesn't exist\" is wider than the rule.",
+  "replacement": "These pages list their versions in other languages, but label one with the wrong language or country code."
+ },
+ {
+  "id": "hreflang-invalid-code",
+  "field": "plainWhat[1]",
+  "kind": "untrue",
+  "present": "Search engines ignore that entry (an \"hreflang\" link), so searchers in that language may be shown the wrong version.",
+  "problem": "\"Search engines ignore that entry\" is untrue of the text's own example: for \"en-UK\" Google drops the region and reads the entry as plain \"en\".",
+  "replacement": "Google ignores that entry (an \"hreflang\" link), or reads only its language, so searchers may be shown the wrong version."
+ },
+ {
+  "id": "hreflang-invalid-code",
+  "field": "plainPassed",
+  "kind": "untrue",
+  "present": "No language version uses a code that doesn't exist",
+  "problem": "As the title.",
+  "replacement": "No language version is labelled with the wrong code"
+ },
+ {
+  "id": "mixed-content",
+  "field": "plainOneFix",
+  "kind": "untrue",
+  "present": "That's almost certainly a file your page design loads on every page, such as a font, script or logo.",
+  "problem": "A font can't be what was found: the rule looks at images, scripts, stylesheets, frames, audio and video only.",
+  "replacement": "That's almost certainly a file your page design loads on every page, such as a script, style file or logo."
+ },
+ {
+  "id": "links-to-redirects",
+  "field": "plainPassed",
+  "kind": "untrue",
+  "present": "No link goes through a forwarding address",
+  "problem": "Only links to the site's own addresses are checked, so a link to another website that forwards passes, and the line is then untrue.",
+  "replacement": "No link between your pages goes through a forwarding address"
+ },
+ {
+  "id": "redirect-temporary",
+  "field": "plainWhat[1]",
+  "kind": "misleading",
+  "present": "Google then keeps the old address in its results, which delays the switch when the move is really for good.",
+  "problem": "Stronger than the fact: Google treats a temporary move as a weak signal, so the old address can stay, not must.",
+  "replacement": "Google may then keep the old address in its results, which delays the switch when the move is really for good."
+ },
+ {
+  "id": "robots-txt-unreachable-other-origin",
+  "field": "plainWhat[1]",
+  "kind": "misleading",
+  "present": "Google stops visiting that part until the file answers again, while your main site carries on as normal.",
+  "problem": "\"Until the file answers again\" is stronger than the fact (after 12 hours Google falls back on its last good copy for up to 30 days); reference 1 says only \"when that happens\".",
+  "replacement": "Google stops visiting that part of the site when that happens, while your main site carries on as normal."
+ },
+ {
+  "id": "image-missing-dimensions",
+  "field": "plainWhat[1]",
+  "kind": "misleading",
+  "present": "The browser can't leave the right space, so text jumps down the page as each image arrives.",
+  "problem": "Stated as certain. The rule reads only the page's code, so where the site's design sets the size (sentence 4) nothing jumps, and that is most modern sites.",
+  "replacement": "The browser may not leave the right space, so text can jump down the page as each image arrives."
+ },
+ {
+  "id": "robots-txt-missing",
+  "field": "plainTitle",
+  "kind": "misleading",
+  "present": "Your site has no rules file for search engines",
+  "problem": "The rule also fires when only another part of the site lacks the file and the main site has one (the detail lists which): the title then says the opposite of what is so.",
+  "replacement": "A rules file for search engines is missing"
+ },
+ {
+  "id": "url-too-long",
+  "field": "plainFix[1]",
+  "kind": "misleading",
+  "present": "Remove tracking codes (the part after a \"?\") from links between your own pages.",
+  "problem": "The part after a \"?\" isn't always a tracking code: on many sites it picks the product or the page, and a reader who strips it breaks the link.",
+  "replacement": "Remove tracking codes, such as \"?utm_source=newsletter\", from links between your own pages."
+ },
+ {
+  "id": "canonical-outside-head",
+  "field": "plainFix[0]",
+  "kind": "misleading",
+  "present": "Note any plugin, tracking code or banner added to the site lately: one of them is the likely cause.",
+  "problem": "A guess stated as likely: the rule doesn't know the cause, and there may be nothing new on the site at all.",
+  "replacement": "Note any plugin, tracking code or banner added to the site lately, as one of them may be the cause."
+ },
+ {
+  "id": "hreflang-outside-head",
+  "field": "plainFix[0]",
+  "kind": "misleading",
+  "present": "Note any plugin, tracking code or banner added to the site lately: one of them is the likely cause.",
+  "problem": "As canonical-outside-head: a guess stated as likely.",
+  "replacement": "Note any plugin, tracking code or banner added to the site lately, as one of them may be the cause."
+ },
+ {
+  "id": "sitemap-missing",
+  "field": "plainPassed",
+  "kind": "misleading",
+  "present": "A sitemap was found for the site",
+  "problem": "The check also passes when the site names a sitemap that is missing or broken (sitemap-error then fires), so \"A sitemap was found\" can sit beside \"A sitemap on your site can't be read: it's missing…\". The pair the design warns of, the other way round.",
+  "replacement": "A sitemap was found, or the site names one"
+ },
+ {
+  "id": "image-alt-too-long",
+  "field": "plainWhat[2]",
+  "kind": "misleading",
+  "present": "125 characters is a rule of thumb, so a description just over it that reads well is fine to leave.",
+  "problem": "Calls the limit's number \"a rule of thumb\" a second time: untrue once the limit is changed in Advanced, and one more number to keep in step.",
+  "replacement": "The limit is a rule of thumb, so a description just over it that reads well is fine to leave."
+ },
+ {
+  "id": "robots-txt-unreachable-other-origin",
+  "field": "plainWhat[0]",
+  "kind": "unclear",
+  "present": "The rules file for search engines answers with an error on another part of your site: the list names which.",
+  "problem": "Sentence 1 stands alone in the lists and on the report's first page, where there is no list for \"the list names which\" to point at; and \"another part of your site\" doesn't say what kind of part.",
+  "replacement": "The rules file for search engines answers with an error on another part of your site, such as shop.example.com."
+ },
+ {
+  "id": "sitemap-error",
+  "field": "plainWhat[1]",
+  "kind": "unclear",
+  "present": "Search engines get nothing from a sitemap (a file that lists your pages for them) that they can't read.",
+  "problem": "The bracket splits \"a sitemap … that they can't read\": read twice.",
+  "replacement": "A sitemap is a file that lists your pages for search engines, and they get nothing from one they can't read."
+ },
+ {
+  "id": "description-duplicate",
+  "field": "plainWhat[2]",
+  "kind": "unclear",
+  "present": "It's also called a \"meta description\", and often comes from a default that the site's design fills in.",
+  "problem": "Two unrelated ideas in one sentence, and \"It\" changes meaning halfway.",
+  "replacement": "The shared text (a \"meta description\") often comes from a default that the site's design fills in."
+ },
+ {
+  "id": "image-missing-dimensions",
+  "field": "plainFix[0]",
+  "kind": "unclear",
+  "present": "Load one of the pages on a slow connection and watch whether the text jumps as images appear.",
+  "problem": "A shop owner can't arrange \"a slow connection\".",
+  "replacement": "Open one of the pages on a phone and watch whether the text jumps as the images appear."
+ },
+ {
+  "id": "robots-txt-missing",
+  "field": "plainWhat[2]",
+  "kind": "unclear",
+  "present": "What you miss is a place to tell them where your sitemap is, and to keep them out of pages with no search value.",
+  "problem": "\"Pages with no search value\" is a phrase to look up.",
+  "replacement": "What you miss is a place to tell them where your sitemap is, and to keep them out of pages such as baskets."
+ },
+ {
+  "id": "mixed-content",
+  "field": "plainWhat[1]",
+  "kind": "unclear",
+  "present": "Browsers block or change such files (they call it \"mixed content\"), so parts of the page can break or go missing.",
+  "problem": "\"Change such files\" isn't something a reader can picture.",
+  "replacement": "Browsers block some of these files (they call it \"mixed content\"), so parts of the page can break or go missing."
+ },
+ {
+  "id": "large-page",
+  "field": "plainWhat[3]",
+  "kind": "unclear",
+  "present": "Under that, a page that still feels quick on a phone needs nothing done.",
+  "problem": "\"Under that\" has to be traced back to the 2 MB of the sentence before.",
+  "replacement": "Below 2 MB, a page that still feels quick on a phone needs nothing done."
+ },
+ {
+  "id": "nofollow-page",
+  "field": "plainTitle",
+  "kind": "unclear",
+  "present": "Pages whose links search engines are told to ignore",
+  "problem": "Reads twice (\"links search engines…\"), and says \"ignore\" where its own text and the links check say \"not to follow\": two words for one thing.",
+  "replacement": "Pages that tell search engines not to follow their links"
+ },
+ {
+  "id": "nofollow-page",
+  "field": "plainPassed",
+  "kind": "unclear",
+  "present": "No page tells search engines to ignore its links",
+  "problem": "As the title.",
+  "replacement": "No page tells search engines not to follow its links"
+ },
+ {
+  "id": "internal-nofollow-links",
+  "field": "plainTitle",
+  "kind": "unclear",
+  "present": "Links search engines are told not to follow",
+  "problem": "Without \"that\", the first three words read as one name (\"links search engines\").",
+  "replacement": "Links that search engines are told not to follow"
+ },
+ {
+  "id": "blocked-by-robots",
+  "field": "plainTitle",
+  "kind": "unclear",
+  "present": "Addresses search engines are told not to visit",
+  "problem": "Without \"that\", the first three words read as one name (\"addresses search engines\").",
+  "replacement": "Addresses that search engines are told not to visit"
+ },
+ {
+  "id": "orphan-page",
+  "field": "plainPassed",
+  "kind": "unclear",
+  "present": "No page in the sitemap lacks a link from another page",
+  "problem": "A double negative with \"lacks\": read twice.",
+  "replacement": "No page in the sitemap is left with no links to it"
+ },
+ {
+  "id": "hreflang-missing-x-default",
+  "field": "plainPassed",
+  "kind": "unclear",
+  "present": "No set of language versions lacks a fallback page",
+  "problem": "A double negative with \"lacks\": read twice.",
+  "replacement": "No list of language versions is missing a fallback page"
+ },
+ {
+  "id": "hreflang-to-non-indexable",
+  "field": "plainPassed",
+  "kind": "unclear",
+  "present": "No language version is one search engines can't show",
+  "problem": "\"Is one search engines can't show\" reads twice; its neighbour says \"leads to a broken page\".",
+  "replacement": "No language version leads to a page search can't show"
+ },
+ {
+  "id": "image-broken",
+  "field": "plainPassed",
+  "kind": "unclear",
+  "present": "No image was found that doesn't load",
+  "problem": "\"Was found that doesn't\" is two clauses for one fact, and past tense among present ones.",
+  "replacement": "No image fails to load"
+ },
+ {
+  "id": "sitemap-error",
+  "field": "plainPassed",
+  "kind": "unclear",
+  "present": "No sitemap was found that can't be read",
+  "problem": "\"Was found that can't be read\": two clauses for one fact.",
+  "replacement": "No sitemap fails to load or has mistakes in it"
+ },
+ {
+  "id": "skipReasons.sitemap-unreadable",
+  "field": "plainAction",
+  "kind": "unclear",
+  "present": "Fix that sitemap, then check the site again.",
+  "problem": "\"That sitemap\" points nowhere: the plain sentence doesn't name it (the technical one does). The same results always list it under sitemap-error.",
+  "replacement": "Fix the sitemap that can't be read (it's listed as a serious problem), then check the site again."
+ },
+ {
+  "id": "skipReasons.url-limit",
+  "field": "plainAction",
+  "kind": "unclear",
+  "present": "Choose \"The whole site\" when you start a check, then check the site again.",
+  "problem": "Reads as two steps where there is one: the choice is made as the check is started.",
+  "replacement": "Check the site again, and choose \"The whole site\" when you start it."
+ },
+ {
+  "id": "skipReasons.external-links-off",
+  "field": "plainAction",
+  "kind": "unclear",
+  "present": "Tick \"Links to other websites\" when you start a check, then check the site again.",
+  "problem": "As url-limit: one step written as two.",
+  "replacement": "Check the site again, with \"Links to other websites\" ticked."
+ },
+ {
+  "id": "skipReasons.resources-off",
+  "field": "plainAction",
+  "kind": "unclear",
+  "present": "Tick \"Images and other files\" when you start a check, then check the site again.",
+  "problem": "As url-limit: one step written as two.",
+  "replacement": "Check the site again, with \"Images and other files\" ticked."
+ },
+ {
+  "id": "sitemap-url-other-host",
+  "field": "plainFix[2]",
+  "kind": "rule",
+  "present": "Ask your developer to correct the site's main address setting if the sitemap keeps using the old one.",
+  "problem": "One name for one thing: \"main address\" is Simple's word for a canonical in every other check; here it means the address the site is set to.",
+  "replacement": "Ask your developer to correct the web address your site is set to, if the sitemap keeps using the old one."
+ },
+ {
+  "id": "sitemap-non-indexable",
+  "field": "plainTitle",
+  "kind": "rule",
+  "present": "Sitemap lists addresses that can't appear in search",
+  "problem": "A headline with its article dropped, among titles that name a thing; as a thing it also reads right in the passed and skipped lists.",
+  "replacement": "Sitemap addresses that can't appear in search"
+ },
+ {
+  "id": "sitemap-url-other-host",
+  "field": "plainTitle",
+  "kind": "rule",
+  "present": "Sitemap lists addresses outside its own website",
+  "problem": "As sitemap-non-indexable.",
+  "replacement": "Sitemap addresses outside its own website"
+ },
+ {
+  "id": "hreflang-missing-x-default",
+  "field": "plainTitle",
+  "kind": "rule",
+  "present": "No fallback page for other languages",
+  "problem": "The only one of the eight language titles that doesn't name a thing; \"No fallback page…\" beside \"Not checked\" or a tick reads as a finding.",
+  "replacement": "Language versions with no fallback page"
+ },
+ {
+  "id": "title-too-short",
+  "field": "plainWhat[1]",
+  "kind": "rule",
+  "present": "A short title can be exactly right, such as a product name, and then there's nothing to do.",
+  "problem": "Sentence order: the template puts the cost second and \"when it is fine\" last; here they are swapped.",
+  "replacement": "Titles like \"Login\" or \"Products\" don't tell a searcher what the page is, or whose."
+ },
+ {
+  "id": "title-too-short",
+  "field": "plainWhat[2]",
+  "kind": "rule",
+  "present": "But titles like \"Login\" or \"Products\" don't tell a searcher what the page is, or whose.",
+  "problem": "As above: \"when it is fine\" goes last.",
+  "replacement": "A short title can be exactly right, such as a product name, and then there's nothing to do."
+ },
+ {
+  "id": "categories.redirects",
+  "field": "plainTitle",
+  "kind": "rule",
+  "present": "Forwarded addresses",
+  "problem": "The glossary's word, and the checks' own, is \"a forwarding address\".",
+  "replacement": "Forwarding addresses"
+ },
+ {
+  "id": "title-duplicate",
+  "field": "plainPassed",
+  "kind": "untrue",
+  "present": "Every page has its own title",
+  "problem": "REFERENCE. \"Every page has its own title\" is printed as good news on a site whose pages have no title at all (title-missing fails, this passes). The writer's other duplicates say \"No two pages share…\".",
+  "replacement": "No two pages share a title",
+  "reference": true
+ },
+ {
+  "id": "broken-internal-links",
+  "field": "plainPassed",
+  "kind": "untrue",
+  "present": "Every link on the site leads to a working page",
+  "problem": "REFERENCE. The check covers links to the site's own addresses only, so this line sits, untrue, beside a failing \"Links to other websites that don't work\".",
+  "replacement": "Every link between your pages leads to a working page",
+  "reference": true
+ },
+ {
+  "id": "empty-anchor-text",
+  "field": "plainPassed",
+  "kind": "untrue",
+  "present": "Every link has words to read",
+  "problem": "REFERENCE. The rule tests only links to the site's own addresses (LinkRules leaves links to other sites before the text test), so a site whose social icons have no label passes with a line that is untrue. Its text also never says when a Notice is fine.",
+  "replacement": "Every link between your pages has words to read",
+  "reference": true
+ },
+ {
+  "id": "internal-client-error",
+  "field": "plainPassed",
+  "kind": "misleading",
+  "present": "Every page and file on the site can be found",
+  "problem": "REFERENCE, borderline. Beside a failing \"Pages or files that don't answer\" or \"…fail with a server error\", \"Every page and file on the site can be found\" reads as untrue.",
+  "replacement": "No page or file answers with a \"not found\" error",
+  "reference": true
+ },
+ {
+  "id": "robots-txt-unreachable",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A rules file that search engines can't read",
+  "newField": true
+ },
+ {
+  "id": "robots-txt-unreachable-other-origin",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A rules file that fails on another part of your site",
+  "newField": true
+ },
+ {
+  "id": "robots-txt-missing",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A missing rules file for search engines",
+  "newField": true
+ },
+ {
+  "id": "site-hidden-from-search",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A site that hides most of its pages from search",
+  "newField": true
+ },
+ {
+  "id": "sitemap-error",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A sitemap that can't be read",
+  "newField": true
+ },
+ {
+  "id": "sitemap-missing",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A missing sitemap",
+  "newField": true
+ },
+ {
+  "id": "duplicate-site-version",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A site that answers at more than one address",
+  "newField": true
+ },
+ {
+  "id": "no-https",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "A site that isn't secure (no HTTPS)",
+  "newField": true
+ },
+ {
+  "id": "security-headers-missing",
+  "field": "plainLooksFor",
+  "kind": "rule",
+  "present": null,
+  "problem": "NEW FIELD (recommendation 2). The title is a sentence about the site, which reads as a finding beside \"Not checked\" or under \"Looks for\".",
+  "replacement": "Missing security settings",
+  "newField": true
+ }
+]

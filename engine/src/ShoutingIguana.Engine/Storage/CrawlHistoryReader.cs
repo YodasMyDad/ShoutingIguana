@@ -8,8 +8,9 @@ namespace ShoutingIguana.Engine.Storage;
 /// A crawl's progress over time, counted back from its file. Each response keeps when it was fetched, so how many URLs
 /// had been fetched by any moment can be told: pages, the site's own, errors and blocked ones too. When each URL was
 /// found isn't kept, but the page that first linked it is, and a URL is found as that page is fetched, so the site's own
-/// URLs found can be told too. The other counts of what was found (all of it, queued, not followed) can't be; nor can when
-/// each run began and ended, so a gap where nothing was fetched can be a pause, a stop or a site that wasn't answering.
+/// URLs found can be told too. The other counts of what was found (all of it, queued, not followed) can't be. When each
+/// run began and ended, and when it was paused, comes with it where the file keeps that (<see cref="CrawlRunReader"/>):
+/// a gap where nothing was fetched is then known for a pause or a stop, or for a site that wasn't answering.
 /// Safe while the crawl runs.
 /// </summary>
 public static class CrawlHistoryReader
@@ -93,6 +94,6 @@ public static class CrawlHistoryReader
         }
 
         points.AddRange(series.Points());
-        return new CrawlHistory(start, points);
+        return new CrawlHistory(start, points) { Runs = CrawlRunReader.Read(connection, snapshot) };
     }
 }

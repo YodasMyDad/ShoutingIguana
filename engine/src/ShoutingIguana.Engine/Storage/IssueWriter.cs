@@ -1,10 +1,12 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -175,18 +177,21 @@ internal sealed class IssueWriter : IDisposable
     }
 
     /// <summary>
-    /// Records every check that ran with its URL count, the URL summary, and the analysis itself with its notes and the
-    /// checks it skipped, then commits.
+    /// Records every check that ran with its URL count, the URL summary, and the analysis itself with its notes, the
+    /// checks it skipped and its score, then commits. The score is worked out here, from the counts this analysis stored,
+    /// the pages it read and the URLs crawled as it read them: the file's lock keeps any crawl out until the commit, so
+    /// they are all of one moment, and nothing else ever writes a score.
     /// </summary>
     /// <param name="checks">The checks that ran; ones the crawl couldn't support are left out.</param>
     /// <param name="info">The analysis, with what it was run against (its version, partial or not).</param>
     /// <param name="skipped">The checks left out, and why.</param>
     /// <param name="urls">What the analysis judged of every URL, for the summary.</param>
     /// <param name="sitemapsCovered">Every sitemap was read, so the summary can say a URL isn't in one.</param>
+    /// <param name="incomplete">Why the crawl didn't read all of the site, or null when it did: the score is then partial.</param>
     /// <param name="progress">Told of the URL summary as it is built, then of the writing.</param>
-    /// <returns>Flagged URL counts per issue id.</returns>
-    public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> checks, AnalysisInfo info, string settingsJson, IReadOnlyList<string> notes,
-        IReadOnlyList<SkippedCheck> skipped, UrlTable urls, bool sitemapsCovered, AnalysisProgressReporter progress)
+    /// <returns>Flagged URL counts per issue id, the URLs crawled, and the score.</returns>
+    public CommittedAnalysis Commit(IReadOnlyList<IssueDefinition> checks, AnalysisInfo info, string settingsJson, IReadOnlyList<string> notes,
+        IReadOnlyList<SkippedCheck> skipped, UrlTable urls, bool sitemapsCovered, ScoreIncompleteReason? incomplete, AnalysisProgressReporter progress)
     {
         progress.Start(AnalysisPhase.UrlSummary, urls.Length - 1);
         Dictionary<string, long> counts = new(StringComparer.Ordinal);
@@ -236,12 +241,16 @@ internal sealed class IssueWriter : IDisposable
             _logger.LogDebug("Stored the link summary in {Rows} rows in {Elapsed}", linkRows, linkTime.Elapsed);
         }
 
+        var crawledUrls = urls.CountCrawled();
+        var score = ScoreCalculator.Calculate([.. checks.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id)))], skipped.Count,
+            info.PagesAnalyzed, crawledUrls, incomplete, urls.CountBlockedByRobots());
+
         // The crawl row's updated_at as it stands: the lock keeps any crawl out until this commits, so it's the one analysed.
         using (var analysis = Command("""
                    INSERT INTO analysis (id, analyzed_at, engine_version, settings_json, pages, duration_ms, is_partial, crawl_updated_at,
-                                         analysis_version, checks_fingerprint)
+                                         analysis_version, checks_fingerprint, crawled_urls, score_version, score, score_partial, score_json)
                    VALUES (1, $analyzedAt, $engineVersion, $settings, $pages, $durationMs, $isPartial, (SELECT updated_at FROM crawl WHERE id = 1),
-                           $analysisVersion, $checksFingerprint)
+                           $analysisVersion, $checksFingerprint, $crawledUrls, $scoreVersion, $score, $scorePartial, $scoreJson)
                    """))
         {
             analysis.Parameters.AddWithValue("$analyzedAt", info.AnalyzedAt.ToUnixTimeMilliseconds());
@@ -252,6 +261,11 @@ internal sealed class IssueWriter : IDisposable
             analysis.Parameters.AddWithValue("$isPartial", (object?)info.IsPartial ?? DBNull.Value);
             analysis.Parameters.AddWithValue("$analysisVersion", (object?)info.AnalysisVersion ?? DBNull.Value);
             analysis.Parameters.AddWithValue("$checksFingerprint", (object?)info.ChecksFingerprint ?? DBNull.Value);
+            analysis.Parameters.AddWithValue("$crawledUrls", crawledUrls);
+            analysis.Parameters.AddWithValue("$scoreVersion", ScoreCalculator.VERSION);
+            analysis.Parameters.AddWithValue("$score", (object?)score?.Value ?? DBNull.Value);
+            analysis.Parameters.AddWithValue("$scorePartial", score is null ? DBNull.Value : score.Partial);
+            analysis.Parameters.AddWithValue("$scoreJson", score is null ? DBNull.Value : JsonSerializer.Serialize(score, EngineJsonContext.Default.SiteScore));
             analysis.ExecuteNonQuery();
         }
 
@@ -281,7 +295,7 @@ internal sealed class IssueWriter : IDisposable
 
         _transaction.Commit();
         IndexLinkKinds();
-        return counts;
+        return new CommittedAnalysis(counts, crawledUrls, score);
     }
 
     /// <summary>Rolls back unless committed, then folds the write-ahead log and closes the file.</summary>

@@ -70,6 +70,7 @@ internal sealed class GridReadContext : IDisposable
     private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _once = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, Dictionary<long, long>> _talliesBySlot = [];
     private (long Links, long MaxLinkId, int BlockShift)? _linkSummary;
     private bool _linkSummaryRead;
     private readonly Dictionary<string, Regex> _patterns = new(StringComparer.Ordinal);
@@ -318,6 +319,9 @@ internal sealed class GridReadContext : IDisposable
     /// <summary>Whether an earlier read noted this of the crawl as it stands.</summary>
     public bool Noted(string key) => Stamp is { } stamp && _cache?.Has($"{stamp}|{key}", MaxAge(stamp)) == true;
 
+    /// <summary>Whether a value is kept under the key for the crawl as it stands (<see cref="Cached{T}"/> would give it without reading).</summary>
+    public bool Keeps(string key) => Noted(key);
+
     /// <summary>Whether something large is kept already, read by an earlier read.</summary>
     public bool HasLarge(string key) => Stamp is { } stamp && _cache is { } cache && cache.HasLarge($"{stamp}|{key}", MaxAge(stamp));
 
@@ -431,6 +435,22 @@ internal sealed class GridReadContext : IDisposable
     public Dictionary<long, long> Tallies { get; } = [];
 
     public void Tally(long value) => CollectionsMarshal.GetValueRefOrAddDefault(Tallies, value, out _)++;
+
+    /// <summary>
+    /// How many rows a statement counted with each value in one of several tallies (<c>si_tally(slot, value)</c>), where
+    /// one pass counts its rows several ways at once; empty for a slot nothing was counted in.
+    /// </summary>
+    public Dictionary<long, long> TalliesIn(int slot)
+    {
+        if (!_talliesBySlot.TryGetValue(slot, out var tallies))
+        {
+            _talliesBySlot[slot] = tallies = [];
+        }
+
+        return tallies;
+    }
+
+    public void Tally(int slot, long value) => CollectionsMarshal.GetValueRefOrAddDefault(TalliesIn(slot), value, out _)++;
 
     /// <summary>The ids of the links a statement is reading (<c>si_link</c>), in the order it reads them.</summary>
     public LinkIdSet? LinkIds { get; set; }

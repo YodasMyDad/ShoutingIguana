@@ -183,7 +183,7 @@ public static class IssueGroupReader
     /// A group one fix probably clears, as it's in the site's template: it holds at least half of the check's flagged URLs,
     /// and at least <see cref="TEMPLATE_MIN_PAGES"/>, and either they share the other URL involved (the logo link without
     /// text, a canonical every page names) or its detail names a fault in the page's own HTML ("Missing og:image"). How
-    /// a URL itself answered ("HTTP 404") is no evidence of a template, however many share it. Where a check's detail takes
+    /// a URL itself answered ("404 Not Found") is no evidence of a template, however many share it. Where a check's detail takes
     /// only a value or two (no H1 at all, or an empty one), it says no more than that most of its pages share the fault.
     /// </summary>
     public static bool IsLikelyTemplate(IssueGrouping grouping, long pages, long total, bool sharesUrl) =>

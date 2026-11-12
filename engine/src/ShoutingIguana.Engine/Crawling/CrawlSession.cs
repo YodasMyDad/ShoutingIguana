@@ -36,6 +36,12 @@ internal sealed class CrawlSession
     private static readonly TimeSpan IDLE_DELAY = TimeSpan.FromMilliseconds(20);
     private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>
+    /// How often the time spent crawling is stored while a stretch of it goes on, in progress reports: every five seconds,
+    /// which is as much of it as a run cut short (the process died) can lose.
+    /// </summary>
+    private const int RUN_TIME_EVERY = 10;
+
     private readonly CrawlRequest _request;
     private readonly CrawlOptions _options;
     private readonly Uri _startUri;
@@ -46,6 +52,7 @@ internal sealed class CrawlSession
     private readonly PauseGate _pause = new();
     private readonly CancellationTokenSource _stop = new();
     private readonly Stopwatch _elapsed = new();
+    private readonly RunClock _crawling;
     private readonly CrawlWriter _writer;
     private readonly HttpFetcher _fetcher;
     private readonly OutLinkFactory _links;
@@ -66,6 +73,9 @@ internal sealed class CrawlSession
     private int _deferredTotal;
     private DateTimeOffset? _pausedAt;
 
+    // Between the run's start and its end: only then does a pause end a stretch of crawling, and a resume begin one.
+    private bool _isTimed;
+
     // Held back since the last retry pass began because robots.txt couldn't be read.
     private int _refusedByRobots;
 
@@ -74,6 +84,7 @@ internal sealed class CrawlSession
         _request = request;
         _options = request.Options;
         _timeProvider = timeProvider;
+        _crawling = new RunClock(timeProvider);
         _logger = loggerFactory.CreateLogger<CrawlSession>();
 
         UrlNormalizer.TryNormalize(_options.StartUrl, out var startUrl);
@@ -121,6 +132,7 @@ internal sealed class CrawlSession
         {
             _pausedAt ??= _timeProvider.GetUtcNow();
             _pause.Pause();
+            KeepRunTime(_crawling.End());
         }
     }
 
@@ -136,6 +148,19 @@ internal sealed class CrawlSession
             }
 
             _pause.Resume();
+            if (_isTimed)
+            {
+                KeepRunTime(_crawling.Begin());
+            }
+        }
+    }
+
+    /// <summary>Has the writer keep a stretch of the run's crawling as it stands, if there is one.</summary>
+    private void KeepRunTime(RunStretch? stretch)
+    {
+        if (stretch is { } known)
+        {
+            _writer.RecordRunTime(known);
         }
     }
 
@@ -189,6 +214,8 @@ internal sealed class CrawlSession
             StatusClasses = counts.StatusClasses,
             StatusCodes = counts.StatusCodes,
             NoResponse = counts.NoResponse,
+            SiteVersions = counts.SiteVersions,
+            TimeCrawling = _writer.TimeCrawledBefore is { } before ? before + TimeSpan.FromMilliseconds(_crawling.ElapsedMs) : null,
             InternalFound = counts.InternalFound,
             InternalFetched = counts.InternalFetched,
             MaxUrls = _options.MaxUrls > 0 ? _options.MaxUrls : null,
@@ -267,6 +294,16 @@ internal sealed class CrawlSession
     public async Task<CrawlSummary> RunAsync()
     {
         _elapsed.Start();
+        lock (_pauseSync)
+        {
+            // The run's first stretch of crawling begins here, unless the crawl was paused before it began.
+            _isTimed = true;
+            if (!_pause.IsPaused)
+            {
+                KeepRunTime(_crawling.Begin());
+            }
+        }
+
         using var progressStop = new CancellationTokenSource();
         var progress = ReportProgressAsync(progressStop.Token);
         var sitemaps = Task.CompletedTask;
@@ -311,6 +348,13 @@ internal sealed class CrawlSession
             await progressStop.CancelAsync().ConfigureAwait(false);
             await WhenAllQuietlyAsync([progress]).ConfigureAwait(false);
             _elapsed.Stop();
+            lock (_pauseSync)
+            {
+                // The run is over: its last stretch of crawling ends, and is stored as the file closes.
+                _isTimed = false;
+                KeepRunTime(_crawling.End());
+            }
+
             await CloseAsync().ConfigureAwait(false);
         }
 
@@ -628,10 +672,16 @@ internal sealed class CrawlSession
     {
         var samples = new Queue<(TimeSpan At, long Fetched)>();
         using var timer = new PeriodicTimer(PROGRESS_INTERVAL, _timeProvider);
+        var reports = 0;
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
+                if (++reports % RUN_TIME_EVERY == 0)
+                {
+                    KeepRunTime(_crawling.Current);
+                }
+
                 // One record of counts for the rate and the report, so the rate is of the numbers it goes out with.
                 var counts = _counters.Current;
                 var now = _elapsed.Elapsed;

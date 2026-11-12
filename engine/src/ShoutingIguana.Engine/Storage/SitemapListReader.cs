@@ -62,8 +62,7 @@ public static class SitemapListReader
             // (the usual case), counted apart otherwise.
             var under = Under(sitemap.Id, children);
             var counts = under.Count == 1 ? own.GetValueOrDefault(sitemap.Id, NONE)
-                : disjoint.Value ? under.Select(id => own.GetValueOrDefault(id, NONE)).Aggregate(NONE, (sum, each) =>
-                    new SitemapUrlCounts(sum.Listed + each.Listed, sum.Fetched + each.Fetched, sum.Indexable + each.Indexable, sum.NonIndexable + each.NonIndexable))
+                : disjoint.Value ? under.Select(id => own.GetValueOrDefault(id, NONE)).Aggregate(NONE, (sum, each) => sum.Plus(each))
                 : UnderCounts(context, sitemap.Id);
             sitemaps.Add(new SitemapInfo(sitemap.Id, sitemap.Url, sitemap.ParentId, foundVia, state, sitemap.Status, sitemap.IsIndex, sitemap.Entries,
                 children[sitemap.Id].Count(), sitemap.Error, counts));
@@ -131,16 +130,29 @@ public static class SitemapListReader
         return (declared, given);
     }
 
-    /// <summary>The URL grid's <c>fetched</c> and <c>indexable</c> columns over the URLs listed, by the URL grid's own SQL for the mode.</summary>
+    /// <summary>
+    /// The URL grid's <c>fetched</c>, <c>indexable</c> and <c>outcome</c> columns over the URLs listed, by the URL grid's
+    /// own SQL for the mode: the outcome is each URL's response's, with the URL summary as without it. With the summary,
+    /// a URL it has a 2xx status for answered (or was a block page, which has its own outcome): it's neither refused by
+    /// robots.txt nor redirecting or broken, and its response isn't looked up, which keeps the list's one pass over a
+    /// hundred thousand listed URLs at what it took before the two counts.
+    /// </summary>
     private static (string From, string Sums) Judged(GridReadContext context)
     {
         string Sql(string column) => UrlColumns.Find(column, issueColumns: false)!.Sql(context.Mode)!.Replace(UrlColumns.REASON, context.Reason, StringComparison.Ordinal);
-        var (fetched, indexable) = (Sql("fetched"), Sql("indexable"));
+        var (fetched, indexable, outcome) = (Sql("fetched"), Sql("indexable"), Sql("outcome"));
         var from = context.Mode == GridMode.Summary
             ? "JOIN url_summary s ON s.url_id = m.url_id"
             : "JOIN urls u ON u.id = m.url_id LEFT JOIN responses r ON r.url_id = u.id" +
               (context.HasEffectiveIndexability ? " LEFT JOIN effective_indexability e ON e.url_id = u.id" : string.Empty);
-        return (from, $"COUNT(*), COALESCE(SUM(({fetched}) <> 0), 0), COALESCE(SUM(({indexable}) = 1), 0), COALESCE(SUM(({indexable}) = 0), 0)");
+        if (context.Mode == GridMode.Summary)
+        {
+            outcome = $"CASE WHEN s.status_code BETWEEN 200 AND 299 THEN NULL ELSE (SELECT {outcome} FROM responses r WHERE r.url_id = m.url_id) END";
+        }
+
+        var broken = string.Join(", ", SitemapUrlCounts.REDIRECTING_OR_BROKEN.Select(value => ((int)value).ToString(CultureInfo.InvariantCulture)));
+        return (from, $"COUNT(*), COALESCE(SUM(({fetched}) <> 0), 0), COALESCE(SUM(({indexable}) = 1), 0), COALESCE(SUM(({indexable}) = 0), 0), " +
+                      $"COALESCE(SUM(({outcome}) = {(int)UrlOutcome.RobotsDisallowed}), 0), COALESCE(SUM(({outcome}) IN ({broken})), 0)");
     }
 
     /// <summary>Each sitemap's own listed URLs, counted in one pass over what the sitemaps list.</summary>
@@ -152,7 +164,7 @@ public static class SitemapListReader
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            counts[reader.GetInt32(0)] = new SitemapUrlCounts(reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3), reader.GetInt64(4));
+            counts[reader.GetInt32(0)] = new SitemapUrlCounts(reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6));
         }
 
         return counts;
@@ -177,6 +189,6 @@ public static class SitemapListReader
             [new(UrlQueryCompiler.SITEMAP_PARAMETER, sitemapId)]);
         using var reader = command.ExecuteReader();
         reader.Read();
-        return new SitemapUrlCounts(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3));
+        return new SitemapUrlCounts(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5));
     }
 }

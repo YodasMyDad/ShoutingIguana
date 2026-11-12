@@ -1,3 +1,5 @@
+using ShoutingIguana.Engine.Analysis.Models;
+
 namespace ShoutingIguana.Sidecar.Api.Models;
 
 /// <summary>One crawl in the library.</summary>
@@ -20,8 +22,20 @@ internal sealed record CrawlListItem
     public DateTime? FinishedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 
-    /// <summary>URLs with a stored outcome, as <c>si stats</c> and a crawl's progress count them; live, the crawl's progress.</summary>
+    /// <summary>
+    /// The time spent crawling over every run, pauses and the time between runs left out; live, the crawl's progress. Null
+    /// when it isn't known: a run of the crawl was made by an engine that didn't keep it.
+    /// </summary>
+    public long? CrawlingMs { get; init; }
+
+    /// <summary>
+    /// URLs with a stored outcome, as <c>si stats</c> and a crawl's progress count them; live, the crawl's progress. Those
+    /// that weren't checked are among them, which <see cref="CrawledUrlCount"/> leaves out.
+    /// </summary>
     public long FetchedUrlCount { get; init; }
+
+    /// <summary>The URLs crawled, as the URL grid counts them (fetched); live, the crawl's progress.</summary>
+    public long CrawledUrlCount { get; init; }
 
     /// <summary>Internal HTML pages fetched and parsed.</summary>
     public long PageCount { get; init; }
@@ -30,6 +44,12 @@ internal sealed record CrawlListItem
     public IssueCountsDto? Issues { get; init; }
 
     public DateTime? AnalyzedAt { get; init; }
+
+    /// <summary>
+    /// The score of the last analysis: the number, its word, and whether it is of a crawl that didn't read all of the
+    /// site. Null when there's none: never analysed, no page read, or analysed by an engine from before the score.
+    /// </summary>
+    public SiteScoreSummary? Score { get; init; }
 
     /// <summary>
     /// The last analysis no longer stands: the crawl changed after it, this engine would judge it differently, or its

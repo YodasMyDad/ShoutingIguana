@@ -245,51 +245,73 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         Assert.Equal(1, ran.Count(sql => sql.Contains("ORDER BY l.rowid DESC", StringComparison.Ordinal)));
         Assert.DoesNotContain(ran, sql => Scanned(sql) || Blocks(sql) || sql.Contains("$driven", StringComparison.Ordinal));
 
-        // And a page in its middle: the matching links' ids are read once and kept. Most links pass this filter, so they're
-        // every link but those to the other targets, which are read through those targets, on the index by target; the
-        // next pages read no link for them.
+        // And a page in its middle. Most links pass this filter, so its links are counted by block as every link but the
+        // others, which lead to the other targets and are read through those, once, on the index by target: the page is
+        // read from the blocks that hold it, and so are the next pages, which read nothing else. No link is read for
+        // every matching one, and no set of ids is kept.
         cache = new ReadCache();
         ran.Clear();
         Assert.Equal(Reference.Matching(internalLinks.Filters).Skip(matching / 2).Take(20).Select(link => link.Id),
             LinkGridReader.Query(crawl.Path, internalLinks with { Offset = matching / 2 }, cache).Rows.Select(row => row.Id));
-        Assert.Equal("SELECT COUNT(si_link_id(l.rowid)) FROM links l INDEXED BY ix_links_to WHERE l.to_id IN (SELECT value FROM json_each($others))",
-            Assert.Single(ran, sql => sql.Contains("FROM links", StringComparison.Ordinal)));
+        Assert.Equal("SELECT l.rowid FROM links l INDEXED BY ix_links_to WHERE l.to_id IN (SELECT value FROM json_each($others))",
+            Assert.Single(ran, sql => sql.Contains("FROM links", StringComparison.Ordinal) && !Blocks(sql)));
+        Assert.Contains(ran, Blocks);
+        Assert.DoesNotContain(ran, sql => Scanned(sql) || sql.Contains("si_link_id(", StringComparison.Ordinal));
         ran.Clear();
         LinkGridReader.Query(crawl.Path, internalLinks with { Offset = matching / 2 - 500 }, cache);
-        LinkGridReader.Query(crawl.Path, internalLinks with { Offset = 20 }, cache);
-        Assert.Empty(ran);
+        Assert.Equal(Enumerable.Reverse(Reference.Matching(internalLinks.Filters)).Skip(matching / 2 + 300).Take(20).Select(link => link.Id),
+            LinkGridReader.Query(crawl.Path, internalLinks with { Offset = matching / 2 + 300, Sort = [new UrlSort("id", true)] }, cache).Rows.Select(row => row.Id));
+        Assert.NotEmpty(ran);
+        Assert.All(ran, sql => Assert.True(Blocks(sql), sql));
 
-        // The hyperlinks among them are most links too: every link but those to the other targets and, to these targets,
-        // the links of other kinds.
+        // The hyperlinks among them are most hyperlinks too: every hyperlink, which the blocks count, but those to the
+        // other targets, an entry each on the index by target and kind.
         var hyperlinksToTheSite = internalLinks with { Filters = [.. internalLinks.Filters, Names("kind", FilterOperator.In, "hyperlink")] };
         var internalHyperlinks = Reference.Matching(hyperlinksToTheSite.Filters).Select(link => link.Id).ToList();
         Assert.True(internalHyperlinks.Count > Reference.Links.Count / 2);
         cache = new ReadCache();
         ran.Clear();
         Assert.Equal(internalHyperlinks.Skip(internalHyperlinks.Count / 2).Take(20), LinkGridReader.Query(crawl.Path, hyperlinksToTheSite with { Offset = internalHyperlinks.Count / 2 }, cache).Rows.Select(row => row.Id));
-        Assert.Equal(
-        [
-            "SELECT COUNT(si_link_id(l.rowid)) FROM links l INDEXED BY ix_links_to WHERE l.to_id IN (SELECT value FROM json_each($others))",
-            "SELECT COUNT(si_link_id(l.rowid)) FROM links l INDEXED BY ix_links_to_kind WHERE l.to_id IN (SELECT value FROM json_each($others)) AND l.kind > 0"
-        ], ran.Where(sql => sql.Contains("FROM links", StringComparison.Ordinal)));
+        var others = Assert.Single(ran, sql => sql.Contains("FROM links", StringComparison.Ordinal) && !Blocks(sql));
+        Assert.StartsWith("SELECT l.rowid FROM links l INDEXED BY ix_links_to_kind WHERE l.to_id IN (SELECT value FROM json_each($others)) AND (CASE WHEN l.kind", others, StringComparison.Ordinal);
+        Assert.DoesNotContain(ran, sql => Scanned(sql) || sql.Contains("si_link_id(", StringComparison.Ordinal));
 
         // A filter the fewer links pass, with too many targets to list: its ids are read once through its own targets,
-        // however many, as the index by target holds all the filter asks; with a kind of link too, on the index by kind.
-        foreach (var filters in new[] { new[] { Boolean("to.isInternal", false) }, [Boolean("to.isInternal", true), Names("kind", FilterOperator.In, "image")] })
+        // however many, as the index by target holds all the filter asks; with a kind of link too, on the index by kind
+        // (the scripts to the site: the fewer of the scripts, as most are another site's... or, where most of a kind
+        // pass, as the images to the site, from the blocks again, but for the other images).
+        foreach (var filters in new[] { new[] { Boolean("to.isInternal", false) }, [Boolean("to.isInternal", false), Names("kind", FilterOperator.In, "hyperlink")], [Boolean("to.isInternal", true), Names("kind", FilterOperator.In, "image")] })
         {
             (LinkGridReader.DriveCap, LinkGridReader.WalkRows, LinkGridReader.DriveRows) = (0, -1, -1);
             var fewer = Reference.Matching(filters).Select(link => link.Id).ToList();
             Assert.InRange(fewer.Count, 10, Reference.Links.Count / 2);
+            var ofItsKind = filters.Length == 1 ? Reference.Links.Count : Reference.Matching([filters[1]]).Count;
             cache = new ReadCache();
             ran.Clear();
             Assert.Equal(fewer.Skip(fewer.Count / 2).Take(20), LinkGridReader.Query(crawl.Path, new UrlQuery { Filters = filters, Offset = fewer.Count / 2, Limit = 20 }, cache).Rows.Select(row => row.Id));
-            Assert.Equal($"SELECT COUNT(si_link_id(l.rowid)) FROM links l INDEXED BY {(filters.Length == 1 ? "ix_links_to" : "ix_links_to_kind")} WHERE l.to_id IN (SELECT value FROM json_each($driven)){(filters.Length == 1 ? string.Empty : " AND l.kind = 1")}",
-                Assert.Single(ran, sql => sql.Contains("FROM links", StringComparison.Ordinal)));
-            ran.Clear();
-            LinkGridReader.Query(crawl.Path, new UrlQuery { Filters = filters, Offset = 20, Limit = 20 }, cache);
-            Assert.Empty(ran);
+            if (fewer.Count * 2 > ofItsKind)
+            {
+                // The others, if there are any (every image here may be the site's own), on the index by target and kind.
+                Assert.All(ran.Where(sql => sql.Contains("FROM links", StringComparison.Ordinal) && !Blocks(sql)), sql => Assert.StartsWith(
+                    "SELECT l.rowid FROM links l INDEXED BY ix_links_to_kind WHERE l.to_id IN (SELECT value FROM json_each($others)) AND (CASE WHEN l.kind", sql, StringComparison.Ordinal));
+                Assert.Contains(ran, Blocks);
+                ran.Clear();
+                LinkGridReader.Query(crawl.Path, new UrlQuery { Filters = filters, Offset = 20, Limit = 20 }, cache);
+                Assert.All(ran, sql => Assert.True(Blocks(sql), sql));
+            }
+            else
+            {
+                Assert.Equal($"SELECT COUNT(si_link_id(l.rowid)) FROM links l INDEXED BY {(filters.Length == 1 ? "ix_links_to" : "ix_links_to_kind")} WHERE l.to_id IN (SELECT value FROM json_each($driven)){(filters.Length == 1 ? string.Empty : " AND l.kind = 0")}",
+                    Assert.Single(ran, sql => sql.Contains("FROM links", StringComparison.Ordinal)));
+                ran.Clear();
+                LinkGridReader.Query(crawl.Path, new UrlQuery { Filters = filters, Offset = 20, Limit = 20 }, cache);
+                Assert.Empty(ran);
+            }
+
             (LinkGridReader.DriveCap, LinkGridReader.WalkRows, LinkGridReader.DriveRows) = (50, 2_000, _driveRows);
         }
+
+        Assert.True(Reference.Matching([Boolean("to.isInternal", true), Names("kind", FilterOperator.In, "image")]).Count * 2 > Reference.Matching([Names("kind", FilterOperator.In, "image")]).Count);
 
         // Targets with many links between them, as a large crawl's menu has (here: no links are few): a page anywhere is
         // found on the links' index by target, by counting their links between ids, and read there. Nothing is kept, no
@@ -610,6 +632,184 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
+    /// A filter on the target that most of the links it could match pass (the links to the site, alone or with what a link
+    /// is: its kind, its position, whether it's followed) has its links counted by block as the blocks' own count but for
+    /// the others, so a page anywhere is read from the blocks that hold it: in a crawl with link ids missing (one in
+    /// seven, and a run of them) and blocks of sixteen, at every offset and from every cursor, in either direction, with
+    /// no link read for each that matches and no pass over the links. A filter the fewer of them pass isn't read that way.
+    /// </summary>
+    [Fact]
+    public async Task AFilterMostLinksPassIsReadFromTheBlocksButForTheOthers()
+    {
+        const int SHIFT = 4;
+        var copy = crawl.Copy();
+        Change(copy, "DELETE FROM links WHERE rowid % 7 = 0 OR rowid BETWEEN 3000 AND 3400");
+        Stamp(copy);
+        LinkSummaryBuilder.BlockShift = SHIFT;
+        try
+        {
+            await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy);
+        }
+        finally
+        {
+            LinkSummaryBuilder.BlockShift = CrawlSchema.LINK_BLOCK_SHIFT;
+        }
+
+        var links = LinkReference.Load(copy, GridReference.Load(copy));
+        Assert.True(links.Links[^1].Id > links.Links.Count + 300, "The copy's link ids have gaps.");
+        List<string> ran = [];
+        LinkGridReader.Ran = ran.Add;
+        bool EveryLink(string sql) => sql.Contains("si_link(", StringComparison.Ordinal) || sql.Contains("si_link_id(", StringComparison.Ordinal);
+        bool Blocks(string sql) => sql.Contains("l.rowid BETWEEN $low AND $high", StringComparison.Ordinal);
+
+        // No targets are few enough to list or to read through, and no page is walked from an end: a page is read from
+        // the blocks, or from a set of the matching ids.
+        (LinkGridReader.DriveRows, LinkGridReader.DriveCap, LinkGridReader.WalkRows) = (-1, 0, -1);
+        (string Name, UrlFilter[] Filters)[] most =
+        [
+            ("to the site", [Boolean("to.isInternal", true)]),
+            ("hyperlinks to the site", [Boolean("to.isInternal", true), Names("kind", FilterOperator.In, "hyperlink")]),
+            ("in the menu, to the site", [Boolean("to.isInternal", true), Names("position", FilterOperator.In, "navigation", "header")]),
+            ("followed, to the site", [Boolean("followed", true), Boolean("to.isInternal", true)]),
+            ("in the content, to URLs that answered", [Names("position", FilterOperator.In, "content"), Names("to.statusClass", FilterOperator.In, "2xx")])
+        ];
+        foreach (var (name, filters) in most)
+        {
+            var expected = links.Matching(filters).Select(link => link.Id).ToList();
+            var ofItsKind = links.Matching([.. filters.Where(filter => !filter.Column.StartsWith("to.", StringComparison.Ordinal))]).Count;
+            Assert.True(expected.Count * 2 > ofItsKind && expected.Count > 500, $"{name}: {expected.Count} of {ofItsKind}");
+            var query = new UrlQuery { Filters = filters };
+            var descending = query with { Sort = [new UrlSort("id", true)] };
+            var cache = new ReadCache();
+            ran.Clear();
+            Assert.True(expected.SequenceEqual(ByOffset(copy, query, cache, 211)), $"{name}: by offset");
+            Assert.True(Enumerable.Reverse(expected).SequenceEqual(ByOffset(copy, descending, cache, 211)), $"{name}: last first, by offset");
+            Assert.True(expected.SequenceEqual(ByCursor(copy, query, cache, limit: 97)), $"{name}: by cursor");
+            Assert.True(Enumerable.Reverse(expected).SequenceEqual(ByCursor(copy, descending, cache, limit: 97)), $"{name}: last first, by cursor");
+
+            // The others are read once for all those pages, through their targets (the menu's links all lead to the site:
+            // there are none), and each page from its blocks.
+            Assert.True(ran.Count(Blocks) > 10, name);
+            Assert.Equal(expected.Count < ofItsKind ? 1 : 0,
+                ran.Count(sql => sql.StartsWith("SELECT l.rowid FROM links l INDEXED BY ix_links_to", StringComparison.Ordinal) && sql.Contains("$others", StringComparison.Ordinal)));
+            foreach (var offset in new[] { 0, 1, 15, 16, 17, expected.Count / 3, expected.Count / 2, expected.Count - 20, expected.Count - 1 })
+            {
+                Assert.Equal(expected.Skip(offset).Take(5), LinkGridReader.Query(copy, query with { Offset = offset, Limit = 5 }).Rows.Select(row => row.Id));
+                Assert.Equal(Enumerable.Reverse(expected).Skip(offset).Take(5), LinkGridReader.Query(copy, descending with { Offset = offset, Limit = 5 }).Rows.Select(row => row.Id));
+            }
+
+            Assert.DoesNotContain(ran, EveryLink);
+        }
+
+        Assert.Contains(most, set => links.Matching(set.Filters).Count < links.Matching([.. set.Filters.Where(filter => !filter.Column.StartsWith("to.", StringComparison.Ordinal))]).Count);
+
+        // The fewer links of their kind: the blocks can't say where they are, and reading the others would read most links.
+        UrlFilter[] fewer = [Names("position", FilterOperator.In, "content"), Text("to.url", FilterOperator.Contains, "/p/1")];
+        var some = links.Matching(fewer).Select(link => link.Id).ToList();
+        Assert.InRange(some.Count, 100, links.Matching([fewer[0]]).Count / 2);
+        ran.Clear();
+        Assert.Equal(some.Skip(some.Count / 2).Take(5), LinkGridReader.Query(copy, new UrlQuery { Filters = fewer, Offset = some.Count / 2, Limit = 5 }).Rows.Select(row => row.Id));
+        Assert.DoesNotContain(ran, Blocks);
+        Assert.Contains(ran, EveryLink);
+    }
+
+    /// <summary>
+    /// The blocks but for the others serve a filter only while the others are few, an index entry being read for each:
+    /// up to an eighth of the crawl's links. Either side of that eighth, by one target's links, the rows are the right
+    /// rows, and they're read the way each side should be: the others through their targets and the pages from the
+    /// blocks, or every link passed over. And where the blocks' counts less the others read don't come to the links the
+    /// summary says match (a file whose counts another program changed), the blocks aren't used, so no page is placed
+    /// by counts that are wrong.
+    /// </summary>
+    [Fact]
+    public async Task TheOthersAreReadThroughTheirTargetsOnlyUpToAnEighthOfTheLinks()
+    {
+        const int SHIFT = 4;
+        var copy = crawl.Copy();
+        Stamp(copy);
+        LinkSummaryBuilder.BlockShift = SHIFT;
+        try
+        {
+            await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy);
+        }
+        finally
+        {
+            LinkSummaryBuilder.BlockShift = CrawlSchema.LINK_BLOCK_SHIFT;
+        }
+
+        var links = LinkReference.Load(copy, GridReference.Load(copy));
+        var eighth = links.Links.Count / 8;
+
+        // Targets whose links come to an eighth of the links or just under, taking the most linked that still fit; and
+        // one more target, which takes them past it.
+        List<(int To, int Links)> targets = [.. links.Links.GroupBy(link => link.To).Select(group => (group.Key, group.Count())).OrderByDescending(target => target.Item2)];
+        List<int> under = [];
+        var others = 0;
+        foreach (var (to, count) in targets.Where(target => target.Links > 1))
+        {
+            if (others + count <= eighth)
+            {
+                under.Add(to);
+                others += count;
+            }
+        }
+
+        var extra = targets.First(target => !under.Contains(target.To));
+        Assert.InRange(others, eighth / 2, eighth);
+        Assert.True(others + extra.Links > eighth);
+        UrlFilter[] within = [Numbers("to.id", FilterOperator.NotIn, [.. under.Select(id => (double)id)])];
+        UrlFilter[] past = [Numbers("to.id", FilterOperator.NotIn, [.. under.Append(extra.To).Select(id => (double)id)])];
+
+        List<string> ran = [];
+        LinkGridReader.Ran = ran.Add;
+        bool EveryLink(string sql) => sql.Contains("si_link(", StringComparison.Ordinal) || sql.Contains("si_link_id(", StringComparison.Ordinal);
+        bool Blocks(string sql) => sql.Contains("l.rowid BETWEEN $low AND $high", StringComparison.Ordinal);
+        bool Others(string sql) => sql.StartsWith("SELECT l.rowid FROM links l INDEXED BY ix_links_to", StringComparison.Ordinal) && sql.Contains("$others", StringComparison.Ordinal);
+        (LinkGridReader.DriveRows, LinkGridReader.DriveCap, LinkGridReader.WalkRows) = (-1, 0, -1);
+
+        void Reads(string file, UrlFilter[] filters, bool fromBlocks, string name)
+        {
+            var expected = links.Matching(filters).Select(link => link.Id).ToList();
+            Assert.Equal(links.Links.Count - others - (filters == past ? extra.Links : 0), expected.Count);
+            var cache = new ReadCache();
+            ran.Clear();
+            foreach (var offset in new[] { 0, 17, expected.Count / 3, expected.Count / 2, expected.Count - 20, expected.Count - 1 })
+            {
+                var page = LinkGridReader.Query(file, new UrlQuery { Filters = filters, Offset = offset, Limit = 5 }, cache);
+                Assert.True(expected.Skip(offset).Take(5).SequenceEqual(page.Rows.Select(row => row.Id)), $"{name}: the page from {offset}");
+            }
+
+            // The others read once, through their targets, and every page from its blocks; or no page from the blocks.
+            Assert.True(fromBlocks ? ran.Count(Others) == 1 && ran.Count(Blocks) >= 6 && !ran.Any(EveryLink) : !ran.Any(Blocks),
+                $"{name}: {ran.Count(Others)} reads of the others, {ran.Count(Blocks)} of blocks, {ran.Count(EveryLink)} of every link");
+        }
+
+        Reads(copy, within, fromBlocks: true, "an eighth of the links to the others");
+        Reads(copy, past, fromBlocks: false, "over an eighth of the links to the others");
+
+        // A file whose counts by block another program changed: the first block says three links more than it has, so
+        // every page past it would be placed three links early. The others are read (they're still under an eighth),
+        // the blocks less the others don't come to the links the summary says match, and the pages are read from the
+        // links themselves instead, which are as they were.
+        var tampered = crawl.Copy();
+        File.Copy(copy, tampered, overwrite: true);
+        Change(tampered, """
+            UPDATE link_blocks SET links = links + 3
+            WHERE (block, kind, position, flags, self, has_text, source_nofollow) = (SELECT block, kind, position, flags, self, has_text, source_nofollow FROM link_blocks ORDER BY block LIMIT 1)
+            """);
+        var expectedStill = links.Matching(within).Select(link => link.Id).ToList();
+        var tamperedCache = new ReadCache();
+        ran.Clear();
+        foreach (var offset in new[] { expectedStill.Count / 2, expectedStill.Count - 20, expectedStill.Count - 1 })
+        {
+            var page = LinkGridReader.Query(tampered, new UrlQuery { Filters = within, Offset = offset, Limit = 5 }, tamperedCache);
+            Assert.True(expectedStill.Skip(offset).Take(5).SequenceEqual(page.Rows.Select(row => row.Id)), $"Links gone behind the summary's back: the page from {offset}");
+        }
+
+        Assert.True(ran.Count(Others) == 1 && !ran.Any(Blocks), $"{ran.Count(Others)} reads of the others, {ran.Count(Blocks)} of blocks, {ran.Count(EveryLink)} of every link");
+    }
+
+    /// <summary>
     /// A page of the links to a filter's targets is found on the links' index by target wherever it is: the place is
     /// closed in on to the link, by counting between ids, in a crawl whose ids have gaps (one in five, and a run of them),
     /// for targets with links from every page and for targets whose links are all in one part of the crawl, for one kind
@@ -658,14 +858,24 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
                 }
 
                 // The link summary's rows for the counts; every read of the links on the index by target, between two ids
-                // or, kept, through every target.
+                // or, kept, through every target. Where the targets are too many to list and most links pass, though, the
+                // links are counted by block but for the others, read through the other targets, and a page is read from
+                // its blocks: missing ids and all, with no link read for each that matches. A cursor's page is walked from
+                // its link, the next matching links being right there.
                 var index = filters.Length == 1 ? "ix_links_to" : "ix_links_to_kind";
                 var kind = filters.Length == 1 ? string.Empty : " AND l.kind = 0";
+                var fromBlocks = cap == 0 && name is "to the site" or "hyperlinks to the site";
                 Assert.All(ran.Where(sql => !sql.Contains("FROM link_summary c", StringComparison.Ordinal)), sql => Assert.True(
-                    sql.Contains($"FROM links l INDEXED BY {index} WHERE l.to_id IN (SELECT value FROM json_each($targets)){kind} AND l.rowid > $low AND l.rowid <= $high", StringComparison.Ordinal) ||
-                    (cap == 0 && sql == $"SELECT COUNT(si_link_id(l.rowid)) FROM links l INDEXED BY {index} WHERE l.to_id IN (SELECT value FROM json_each($driven)){kind}"),
+                    fromBlocks
+                        ? sql.StartsWith("SELECT c.block, SUM(c.links) FROM link_blocks c", StringComparison.Ordinal) ||
+                          sql.StartsWith($"SELECT l.rowid FROM links l INDEXED BY {index} WHERE l.to_id IN (SELECT value FROM json_each($others))", StringComparison.Ordinal) ||
+                          sql.Contains("l.rowid BETWEEN $low AND $high", StringComparison.Ordinal) || sql.Contains("l.rowid > $after", StringComparison.Ordinal) ||
+                          sql.Contains("l.rowid < $after", StringComparison.Ordinal)
+                        : sql.Contains($"FROM links l INDEXED BY {index} WHERE l.to_id IN (SELECT value FROM json_each($targets)){kind} AND l.rowid > $low AND l.rowid <= $high", StringComparison.Ordinal) ||
+                          (cap == 0 && sql == $"SELECT COUNT(si_link_id(l.rowid)) FROM links l INDEXED BY {index} WHERE l.to_id IN (SELECT value FROM json_each($driven)){kind}"),
                     $"{name}, slack {slack}, cap {cap}: {sql}"));
-                Assert.Equal(cap == 0, ran.Any(sql => sql.Contains("si_link_id(", StringComparison.Ordinal)));
+                Assert.Equal(cap == 0 && !fromBlocks, ran.Any(sql => sql.Contains("si_link_id(", StringComparison.Ordinal)));
+                Assert.Equal(fromBlocks, ran.Any(sql => sql.Contains("l.rowid BETWEEN $low AND $high", StringComparison.Ordinal)));
                 Assert.True(expected.Count > 5, name);
             }
         }
@@ -685,7 +895,9 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         UrlFilter[] images = [Boolean("to.isInternal", true), Names("kind", FilterOperator.In, "image")];
         var expectedImages = LinkReference.Load(swapped, GridReference.Load(swapped)).Matching(images).Select(link => link.Id).ToList();
         Assert.True(expectedImages.Count > Reference.Links.Count / 2);
-        (LinkGridReader.DriveRows, LinkGridReader.PlaceSlack, LinkGridReader.DriveCap, LinkGridReader.WalkRows) = (-1, _placeSlack, 0, -1);
+        // (Without the links counted by block, which would count these but for the others: this is how a filter most links
+        // pass is read when the others are too many for that.)
+        (LinkGridReader.DriveRows, LinkGridReader.PlaceSlack, LinkGridReader.DriveCap, LinkGridReader.WalkRows, LinkGridReader.UseBlocks) = (-1, _placeSlack, 0, -1, false);
         var kept = new ReadCache();
         ran.Clear();
         Assert.Equal(expectedImages, ByOffset(swapped, new UrlQuery { Filters = images }, kept, 211));
@@ -800,8 +1012,14 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
     {
         List<string> ran = [];
         LinkGridReader.Ran = ran.Add;
-        bool Walked(string sql) => sql.Contains("ORDER BY l.rowid", StringComparison.Ordinal);
-        var query = new UrlQuery { Filters = [Boolean("to.isInternal", true), Names("position", FilterOperator.In, "content")], Limit = 20 };
+        bool Walked(string sql) => sql.Contains("ORDER BY l.rowid", StringComparison.Ordinal) && !sql.Contains("BETWEEN $low AND $high", StringComparison.Ordinal);
+
+        // A filter on the target and on what a link is that the fewer links of its kind pass: its place can't be told from
+        // the links counted by block, nor from the index by target.
+        var content = Reference.Matching([Names("position", FilterOperator.In, "content")]).Count;
+        var query = new UrlFilter[] { Text("to.url", FilterOperator.Contains, "/p/1"), Number("to.depth", FilterOperator.Gte, 3), Names("to.type", FilterOperator.In, "image") }
+            .Select(target => new UrlQuery { Filters = [target, Names("position", FilterOperator.In, "content")], Limit = 20 })
+            .First(candidate => Reference.Matching(candidate.Filters).Count is var matches && matches > 200 && matches * 2 <= content);
         var expected = Reference.Matching(query.Filters).Select(link => link.Id).ToList();
         Assert.True(expected.Count > 200);
 
@@ -832,8 +1050,17 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
 
         // The note is the filter set's: another's first page is walked.
         ran.Clear();
-        LinkGridReader.Query(crawl.Path, query with { Filters = [Boolean("to.isInternal", true), Names("position", FilterOperator.In, "footer")] }, cache);
+        var footer = query with { Filters = [Boolean("to.isInternal", true), Names("position", FilterOperator.In, "footer")] };
+        LinkGridReader.Query(crawl.Path, footer, cache);
         Assert.Single(ran, Walked);
+
+        // And where most links of the kind pass (the footer's links all lead to the site), the page after a walk that took
+        // long is read from the blocks that hold it: no pass over the links for a set of ids.
+        ran.Clear();
+        var inFooter = Reference.Matching(footer.Filters).Select(link => link.Id).ToList();
+        Assert.Equal(inFooter.Skip(20).Take(20), LinkGridReader.Query(crawl.Path, footer with { Offset = 20 }, cache).Rows.Select(row => row.Id));
+        Assert.DoesNotContain(ran, sql => Walked(sql) || sql.Contains("si_link(", StringComparison.Ordinal) || sql.Contains("si_link_id(", StringComparison.Ordinal));
+        Assert.Contains(ran, sql => sql.Contains("l.rowid BETWEEN $low AND $high", StringComparison.Ordinal));
     }
 
     [Fact]
