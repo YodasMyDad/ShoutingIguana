@@ -45,11 +45,14 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// at 100k on the desktop (265 ms at worst), which the runner's 550 ms is, and held to it so they can't get slower.
     /// They grow with the links, so they'd miss at 1M. A filter most links pass isn't one of them any more: it's read
     /// from the blocks but for the others (<c>link-grid</c>).</item>
-    /// <item>The same passes split by link id over the connections a host lends (<c>link-pass-split</c>: four in all) take
-    /// about a third of the time: measured on a desktop other work was loading, a text filter 294 ms where one connection
-    /// took 870, rare text 175 for 478, a search 294 for 897, a filter on the source's depth 333 for 1,478. Held to
-    /// 1,500 ms, <b>a provisional figure</b>: the worst p95 of that one loaded run was 978 ms, and no quiet run or CI run
-    /// has yet given a better one.</item>
+    /// <item>The same passes split by link id over the connections a host lends (<c>link-pass-split</c>: eight in all at
+    /// most), and a view's pages counted the same way. Timed in turn with the engine from before the split, three rounds
+    /// on a desktop other work was loading: a pass takes a quarter of the time on four connections and a sixth on eight
+    /// (a text filter 113 to 123 ms at p50 where one connection took 665 to 934, a search 183 to 211 for 1,233 to
+    /// 1,592, a filter on the source's depth 210 to 228 for 819 to 1,536). Their worst p95 was 489 ms on eight and 532
+    /// on four, with one of 1,295 as the machine was busiest. Held to 1,500 ms: CI's 4-core runner has three helpers to
+    /// lend and is taken as twice as slow a core, so over twice the worst on four connections, and above the busy run.
+    /// <b>No CI run has yet confirmed it.</b></item>
     /// <item>Search as it's typed (<c>search</c>) passes over the crawl's URLs and titles in memory: 1.5 to 2.8 ms at 100k
     /// on the desktop whatever is typed, against the palette's 50 ms, and held to 25 ms: a search that read the file
     /// again (the text no longer kept) takes 50 to 70 ms on the desktop and would fail it, where a gate of 50 might not.

@@ -92,11 +92,15 @@ public static class LinkGridReader
     internal static int WalkRows { get; set; } = 200_000;
 
     /// <summary>
-    /// The most helpers a pass over every link takes beside its own connection (<see cref="ReadHelpers"/>): four
-    /// connections in all. Measured on the 100k benchmark's 5 million links, a pass split in four takes a quarter of the
-    /// time, and one in eight a fifth to a sixth, for twice the cores kept from other reads. Tests change it.
+    /// The most helpers a pass over every link takes beside its own connection (<see cref="ReadHelpers"/>): eight
+    /// connections in all. Measured on the 100k benchmark's 5 million links, beside the same pass on one connection, a
+    /// pass split in four takes a quarter of the time and one split in eight a sixth, for twice the cores kept from other
+    /// reads for a fraction of a second. Eight is what brings a search and a filter on the source's depth inside the
+    /// budget (190 and 230 ms, where four gave 290 and 400), so eight it is; a host with fewer cores to lend gives fewer.
+    /// Each part keeps its own ids and counts until they're put together: a megabyte a part for those 5 million links.
+    /// Tests change it.
     /// </summary>
-    internal static int PassHelpers { get; set; } = 3;
+    internal static int PassHelpers { get; set; } = 7;
 
     /// <summary>
     /// From this many links on, a pass over all of them is worth splitting: below it the pass takes tens of milliseconds

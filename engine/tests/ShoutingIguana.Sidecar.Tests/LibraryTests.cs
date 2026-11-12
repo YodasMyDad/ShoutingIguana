@@ -296,7 +296,31 @@ public sealed class LibraryTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Summaries kept by a build from before the score (the format before this one) aren't used: one would say a scored
+    /// Summaries kept by a build from before the site's icon was (the format before this one) aren't used: one would say
+    /// a crawl that has its icon has none. The crawl is read again.
+    /// </summary>
+    [Fact]
+    public async Task SummariesKeptBeforeTheIconAreReadAgain()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "before-the-icon.sicrawl"));
+        var id = CrawlIds.For(path);
+        Assert.True((bool)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["hasFavicon"]!);
+        await _sidecar.DisposeAsync();
+
+        // As the build before it left the file: the format before, and nothing said of an icon.
+        var file = Path.Combine(_root, "state", "summaries.json");
+        var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+        Assert.Equal(5, (int)cache["format"]!);
+        cache["format"] = 4;
+        Assert.All(cache["summaries"]!.AsArray(), summary => Assert.True(summary!["summary"]!.AsObject().Remove("hasFavicon")));
+        await File.WriteAllTextAsync(file, cache.ToJsonString());
+
+        _sidecar = await TestSidecar.StartAsync(_root);
+        Assert.True((bool)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["hasFavicon"]!);
+    }
+
+    /// <summary>
+    /// Summaries kept by a build from before the score (two formats before this one) aren't used: one would say a scored
     /// crawl has no score, and that its analysis is out of date. The crawl is read again.
     /// </summary>
     [Fact]
@@ -307,10 +331,10 @@ public sealed class LibraryTests : IAsyncLifetime
         var score = (await _sidecar.GetJsonAsync($"api/crawls/{id}"))["score"]!.ToJsonString();
         await _sidecar.DisposeAsync();
 
-        // As the build before it left the file: the format before, and no score with the analysis.
+        // As the build before it left the file: the format it kept, and no score with the analysis.
         var file = Path.Combine(_root, "state", "summaries.json");
         var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
-        Assert.Equal(4, (int)cache["format"]!);
+        Assert.Equal(5, (int)cache["format"]!);
         cache["format"] = 3;
         foreach (var summary in cache["summaries"]!.AsArray())
         {

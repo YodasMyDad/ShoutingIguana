@@ -182,9 +182,9 @@ internal sealed class FaviconFetcher(
     }
 
     /// <summary>
-    /// Whether the crawl may ask for the URL at all: another site's only when the crawl checks other sites' links, and
-    /// any only once its origin's robots.txt has been read and, when the crawl obeys robots.txt, allows it. A robots.txt
-    /// that couldn't be read refuses, as it does every URL.
+    /// Whether the crawl may ask for the URL at all: another site's only when the crawl checks other sites' links; and,
+    /// when the crawl obeys robots.txt, any URL only once its origin's has been read and allows it. A robots.txt that
+    /// couldn't be read refuses, as it does every URL.
     /// </summary>
     private async Task<bool> MayAskAsync(Uri uri, CancellationToken cancellationToken)
     {
