@@ -125,6 +125,18 @@ export interface IndexabilityTest {
   canonical?: UrlTarget;
   /** The canonical as the page gives it, normalised, whether or not the crawl has that URL. Left out when there is none. */
   canonicalUrl?: string;
+  /**
+   * E6, the `robotsTxt` test: the origin whose robots.txt decides the URL, to pass to `/robots/file` and
+   * `/robots/blocked`. There whenever the crawl has a robots.txt answer for that origin, and always for a URL
+   * robots.txt refused; left out when the crawl never asked that origin for one.
+   */
+  origin?: string;
+  /** E6, a URL robots.txt refused: why. `rule` comes with `line` and `rule`. */
+  reason?: 'rule' | 'unreachable' | 'unknown';
+  /** E6: the line of the file that refused it, numbered from 1, for `reason` `rule`. */
+  line?: number;
+  /** E6: that line's text. */
+  rule?: string;
 }
 
 export interface Indexability {
@@ -193,6 +205,27 @@ export interface UrlLinkCounts {
 export interface UrlLinkTotals {
   inlinks: number;
   outlinks: number;
+  /**
+   * E6: the hyperlinks among the inlinks, every one the crawl stored: the links grid's `matching` under `to.id` `eq`
+   * this URL, `kind` `in` `["hyperlink"]`, `selfLink` `is` false. The figure to show as a link to Links ("N
+   * hyperlinks"), because it lands; `links.inlinks` can be less (the analysis doesn't count links on pages it doesn't
+   * audit). Absent from a sidecar built before E6.
+   */
+  hyperlinkInlinks?: number;
+}
+
+/** A sitemap of the crawl, by its id in `/sitemaps`, which `/sitemaps/urls` takes. */
+export interface SitemapRef {
+  id: number;
+  url: string;
+}
+
+/** E6: the sitemaps whose own file lists a URL, in the order the crawl found them. */
+export interface UrlSitemaps {
+  /** How many list it. */
+  total: number;
+  /** The first 20 of them. */
+  sitemaps: SitemapRef[];
 }
 
 export interface StructuredDataBlock {
@@ -255,6 +288,11 @@ export interface UrlDetail extends UrlRef {
   namedBy: { total: number; checks: { checkId: string; count: number }[] } | null;
   summary: SummaryState;
   source: { stored: boolean };
+  /**
+   * E6: the sitemaps that list the URL, so the inspector opens the sitemap itself. Read from what the crawl stored, so
+   * it's there with or without a URL summary and while a crawl runs. Absent from a sidecar built before E6.
+   */
+  listedIn?: UrlSitemaps;
 }
 
 export type LinkPosition = 'content' | 'navigation' | 'header' | 'footer' | 'sidebar' | 'head';

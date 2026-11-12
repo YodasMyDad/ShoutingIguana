@@ -205,4 +205,126 @@ describe('the API client', () => {
       'http://127.0.0.1:5000/api/crawls/0123456789abcdef/issues/title-too-long?limit=200&offset=400',
     );
   });
+
+  /** What each call sent: its method, its URL, and its JSON body (undefined when it sent none). */
+  function sent() {
+    return fetchMock.mock.calls.map((call) => {
+      const raw = call[1]?.body;
+      return {
+        method: call[1]?.method,
+        url: call[0],
+        body: typeof raw === 'string' ? (JSON.parse(raw) as unknown) : undefined,
+      };
+    });
+  }
+
+  it('posts E6’s reads: a search as typed, a links view’s ends, and robots.txt’s origins searched', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(Response.json({})));
+    await api.search('0123456789abcdef', 'gard');
+    await api.search('0123456789abcdef', '', 5);
+    await api.linkEnds('0123456789abcdef', {
+      end: 'to',
+      filters: [{ column: 'kind', op: 'in', values: ['hyperlink'] }],
+      limit: 1000,
+    });
+    await api.urls('0123456789abcdef', {
+      filters: [],
+      sort: [],
+      limit: 200,
+      linkEnds: { end: 'from', search: 'sale' },
+    });
+    await api.robotsOrigins('0123456789abcdef', { search: 'cdn', blocked: true, offset: 0, limit: 100 });
+    expect(sent()).toEqual([
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/search',
+        body: { text: 'gard' },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/search',
+        body: { text: '', limit: 5 },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/links/ends',
+        body: { end: 'to', filters: [{ column: 'kind', op: 'in', values: ['hyperlink'] }], limit: 1000 },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/urls',
+        body: { filters: [], sort: [], limit: 200, linkEnds: { end: 'from', search: 'sale' } },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/robots',
+        body: { search: 'cdn', blocked: true, offset: 0, limit: 100 },
+      },
+    ]);
+  });
+
+  it('reads, saves, checks and resets the analysis’s limits, a reset of all of them with no body', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(Response.json({ settings: {}, limits: [], isDefault: true })));
+    await api.analysisSettings();
+    await api.saveAnalysisSettings({ titleMaxLength: 70, minWordCount: null });
+    await api.validateAnalysisSettings({ titleMaxLength: 0 });
+    await api.resetAnalysisSettings(['titleMaxLength']);
+    await api.resetAnalysisSettings();
+    expect(sent()).toEqual([
+      { method: 'GET', url: 'http://127.0.0.1:5000/api/analysis-settings', body: undefined },
+      {
+        method: 'PUT',
+        url: 'http://127.0.0.1:5000/api/analysis-settings',
+        body: { titleMaxLength: 70, minWordCount: null },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/analysis-settings/validate',
+        body: { titleMaxLength: 0 },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/analysis-settings/reset',
+        body: { limits: ['titleMaxLength'] },
+      },
+      { method: 'POST', url: 'http://127.0.0.1:5000/api/analysis-settings/reset', body: undefined },
+    ]);
+  });
+
+  it('keeps the limits a save refused, by limit', async () => {
+    fetchMock.mockResolvedValue(
+      problem(
+        {
+          type: 'invalid-settings',
+          title: 'Some limits can’t be saved.',
+          status: 422,
+          errors: { titleMaxLength: ['This must be from 1 to 10,000 characters.'] },
+        },
+        422,
+      ),
+    );
+    const error: unknown = await api.saveAnalysisSettings({ titleMaxLength: 0 }).catch((caught: unknown) => caught);
+    expect(isProblem(error, 'invalid-settings')).toBe(true);
+    expect((error as ProblemError).errors).toEqual({
+      titleMaxLength: ['This must be from 1 to 10,000 characters.'],
+    });
+  });
+
+  it('gives a crawl’s icon as the image it is, and null for a crawl that has none', async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    fetchMock.mockResolvedValueOnce(new Response(png, { status: 200, headers: { 'Content-Type': 'image/png' } }));
+    const icon = await api.favicon('0123456789abcdef');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:5000/api/crawls/0123456789abcdef/favicon');
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('GET');
+    expect(icon?.type).toBe('image/png');
+    expect(new Uint8Array(await icon!.arrayBuffer())).toEqual(png);
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(api.favicon('0123456789abcdef')).resolves.toBeNull();
+
+    fetchMock.mockResolvedValueOnce(
+      problem({ type: 'crawl-not-found', title: 'That crawl isn’t in the library.', status: 404 }, 404),
+    );
+    await expect(api.favicon('0000000000000000')).rejects.toBeInstanceOf(ProblemError);
+  });
 });
