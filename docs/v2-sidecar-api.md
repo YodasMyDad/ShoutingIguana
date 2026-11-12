@@ -843,9 +843,11 @@ what each analysis stores in its crawl file.
   saves nothing: a value outside its range ("This must be from 1 to 10,000 characters."), one that isn't a whole
   number (text, a fraction, true: a field error here, not a 400, as an option of the wrong type is), and a longest
   length that isn't more than its shortest, reported on the longest (`titleMaxLength`, `descriptionMaxLength`) and
-  judged with the engine's value for whichever of the two wasn't sent. A limit that doesn't exist, or a body that
-  isn't an object of limits, is a `bad-request` (400), as a property the API doesn't know is everywhere. `reset` with
-  a name that's no limit's is `invalid-settings` on `limits[<index>]`, and changes nothing.
+  judged with the engine's value for whichever of the two wasn't sent. A rule of the engine's that no one limit
+  breaks, only the limits together, is keyed `settings`: so `errors`' keys are limits' names, `settings`, or (for
+  `reset`) `limits[<index>]`, and a client shows a key it has no field for above the form. A limit that doesn't
+  exist, or a body that isn't an object of limits, is a `bad-request` (400), as a property the API doesn't know is
+  everywhere. `reset` with a name that's no limit's is `invalid-settings` on `limits[<index>]`, and changes nothing.
 - **Resetting one of a pair** that would leave the longest under the shortest (the shortest title raised to 70, the
   longest put back to 60) puts both back.
 - **What a change does to the crawls already analysed.** An analysis stores the limits it ran with, and one that ran
