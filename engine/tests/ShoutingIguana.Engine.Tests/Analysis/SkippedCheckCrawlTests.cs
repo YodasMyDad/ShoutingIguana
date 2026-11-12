@@ -97,10 +97,11 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 70 });
         var options = new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 };
 
-        // By the rules: a product links the private area and a sitemap lists a URL in it, and both are flagged.
+        // By the rules: a product links the private area, a sitemap lists a URL in it and a redirect leads into it, and
+        // all three are flagged.
         var obeying = await CrawlAndAnalyseAsync(options);
         Assert.Empty(obeying.Skipped);
-        Assert.Equal(2, obeying.Issues.Single(issue => issue.Issue == IssueCatalog.BLOCKED_BY_ROBOTS).Count);
+        Assert.Equal(3, obeying.Issues.Single(issue => issue.Issue == IssueCatalog.BLOCKED_BY_ROBOTS).Count);
         foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })
         {
             File.Delete(path);

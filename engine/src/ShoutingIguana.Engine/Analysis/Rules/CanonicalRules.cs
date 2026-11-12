@@ -94,14 +94,29 @@ internal sealed class CanonicalRules(UrlTable urls, Func<int, string?> readUrl) 
 
     /// <summary>
     /// Where the canonical's redirects end, which is the URL the canonical should name: " to https://example.com/page" after
-    /// one redirect, " and, after 3 redirects, ends at https://example.com/page" after more.
+    /// one redirect, " and, after 3 redirects, ends at https://example.com/page" after more. Only a URL that answered is
+    /// known to be the end: one the crawl never asked for, or was refused at, may redirect again, so it is where the
+    /// redirects lead, and the detail says why no more is known: ", which wasn't checked", ", which is blocked by robots.txt".
     /// </summary>
-    private string EndsAt(RedirectTrace trace) => readUrl(trace.FinalId) switch
+    private string EndsAt(RedirectTrace trace)
     {
-        null => string.Empty,
-        var final when trace.Hops == 1 => $" to {final}",
-        var final => $" and, after {RuleText.Count(trace.Hops, "redirect", "redirects")}, ends at {final}"
-    };
+        if (readUrl(trace.FinalId) is not { } final)
+        {
+            return string.Empty;
+        }
+
+        var last = urls[trace.FinalId];
+        var unknown = last switch
+        {
+            { Fetched: false } => ", which wasn't checked",
+            { Outcome: FetchOutcome.Success } => string.Empty,
+            _ => $", which {RuleText.Status(last)}"
+        };
+
+        return trace.Hops == 1
+            ? $" to {final}{unknown}"
+            : $" and, after {RuleText.Count(trace.Hops, "redirect", "redirects")}, {(unknown.Length == 0 ? "ends at" : "leads to")} {final}{unknown}";
+    }
 
     private static bool IsAbsolute(string href) =>
         href.TrimStart().StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||

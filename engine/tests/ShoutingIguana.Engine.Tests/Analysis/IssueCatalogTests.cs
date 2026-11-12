@@ -124,6 +124,10 @@ public sealed class IssueCatalogTests
             // The detail names where the canonical's redirects end.
             () => Assert.Contains("The detail gives the URL the redirects end at", IssueCatalog.CANONICAL_TO_REDIRECT.Description),
 
+            // A URL the crawl didn't check, or was refused at, may redirect again: the texts don't call it the end.
+            () => Assert.Contains("may not be where they end", IssueCatalog.CANONICAL_TO_REDIRECT.Description),
+            () => Assert.Contains("it may redirect again", IssueCatalog.CANONICAL_TO_REDIRECT.Fix),
+
             // The home page must be noindex too, the check is only ever reported there, and a noindex page is never a variant.
             () => Assert.StartsWith("The home page is noindex, and so are more than half of the site's pages", hidden.Description),
             () => Assert.EndsWith("Reported once, on the home page.", hidden.Description),

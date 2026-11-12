@@ -530,7 +530,7 @@ public static class IssuePlainTexts
                 """Often it forwards straight back to the page itself, which does little harm but is still worth tidying."""
             ],
             [
-                """Look at where each main address in the list ends up: the list names the final address.""",
+                """Look at where each main address in the list ends up: the list names the address, and says when it couldn't be checked.""",
                 """Put that final address in the "canonical" box of your site's editor, often under "SEO", if it has one.""",
                 """Ask your developer to correct it in the page design if the same thing shows on many pages."""
             ],

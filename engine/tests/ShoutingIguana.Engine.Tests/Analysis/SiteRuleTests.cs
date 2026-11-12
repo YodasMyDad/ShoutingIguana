@@ -448,9 +448,14 @@ public sealed class SiteRuleTests
         site.Fetched($"{site.Site}/third", FetchOutcome.Redirect, 308, redirectTo: $"{site.Site}/new");
         var away = Page("/away", $"{site.Site}/out");
         var leaving = site.Fetched($"{site.Site}/out", FetchOutcome.Redirect, 301, redirectTo: "https://partner.example/landing");
+        var farAway = Page("/far-away", $"{site.Site}/out-first");
+        var leavingTwice = site.Fetched($"{site.Site}/out-first", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/out");
+        var refused = Page("/refused", $"{site.Site}/to-private");
+        var toPrivate = site.Fetched($"{site.Site}/to-private", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/private/page");
+        site.Fetched($"{site.Site}/private/page", FetchOutcome.RobotsDisallowed, 0);
         var back = Page("/back/", $"{site.Site}/back");
         var toBack = site.Fetched($"{site.Site}/back", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/back/");
-        AnalyzedPage[] pages = [once, thrice, away, back];
+        AnalyzedPage[] pages = [once, thrice, away, farAway, refused, back];
         var urls = site.Table(canonicals: pages.Select(page => (page.UrlId, page.Links.Single(link => link.Kind == LinkKind.Canonical).ToId)));
         var rules = new CanonicalRules(urls, site.UrlOf);
         IssueHit Hit(AnalyzedPage page) => rules.Check(RuleHarness.AsAnalysed(page, urls)).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_REDIRECT);
@@ -459,10 +464,18 @@ public sealed class SiteRuleTests
         Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, thrice.UrlId,
             "The canonical URL redirects (302 Found) and, after 3 redirects, ends at https://example.com/new", first), Hit(thrice));
 
-        // The partner's page was never asked for: it is still where the redirect goes.
+        // The partner's page was never asked for (links to other sites off, a limit, a stopped crawl), so it may redirect
+        // again: it is where the redirects lead, not known to be where they end, and the detail says so.
         Assert.False(urls[site.Find("https://partner.example/landing")].Fetched);
         Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, away.UrlId,
-            "The canonical URL redirects (301 Moved Permanently) to https://partner.example/landing", leaving), Hit(away));
+            "The canonical URL redirects (301 Moved Permanently) to https://partner.example/landing, which wasn't checked", leaving), Hit(away));
+        Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, farAway.UrlId,
+            "The canonical URL redirects (301 Moved Permanently) and, after 2 redirects, leads to https://partner.example/landing, which wasn't checked", leavingTwice),
+            Hit(farAway));
+
+        // Nor is a URL the crawler was kept out of known to be the end.
+        Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, refused.UrlId,
+            "The canonical URL redirects (301 Moved Permanently) to https://example.com/private/page, which is blocked by robots.txt", toPrivate), Hit(refused));
         Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, back.UrlId, "The canonical URL redirects back to this page", toBack), Hit(back));
     }
 

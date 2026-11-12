@@ -356,8 +356,8 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CANONICAL_TO_REDIRECT = new("canonical-to-redirect", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Canonical points to a redirect",
-        """The page's canonical names a URL that redirects. The detail gives the URL the redirects end at, or says that they lead back to this page.""",
-        """Change the canonical to the redirect's final URL, which the detail gives; when the redirect leads back here, that's this page's own URL.""")
+        """The page's canonical names a URL that redirects. The detail gives the URL the redirects end at, or says that they lead back to this page. Where the crawl didn't check that URL, or was refused there, the detail says so: it is where the redirects lead, and may not be where they end.""",
+        """Change the canonical to the redirect's final URL, which the detail gives; when the redirect leads back here, that's this page's own URL. If the detail says the URL wasn't checked, or was refused, open it first and use the address you end up at: it may redirect again.""")
     {
         Why = """A canonical should name the final URL you want indexed. Naming a redirect sends search engines two signals that disagree: the canonical says to index the named URL, and its redirect says to index another. When the redirect leads back to this page, such as a canonical to /page on /page/ when /page redirects to /page/, this page most likely stays the indexed one, but the canonical is still wrong.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
