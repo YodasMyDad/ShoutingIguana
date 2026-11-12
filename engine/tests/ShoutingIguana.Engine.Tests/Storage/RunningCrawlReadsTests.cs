@@ -317,10 +317,11 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
             Assert.Equal((SummaryUnavailableReason.Crawling, 1_000), (before.Summary.Reason, sortedBefore.Rows.Count));
 
             // A page is fetched again: its links go, and are stored again after every other link. Among them are the newest
-            // links there were; with them, every other link to the sort's first target.
+            // links there were; with them, every other link to the sort's first target, its first among them (a target
+            // with one link, at an odd id, would otherwise have none stored again, as a crawl's order made it once).
             var page = TestCrawls.Count(running, "SELECT from_id FROM links ORDER BY rowid DESC LIMIT 1");
             var early = Convert.ToInt64(sortedBefore.Rows[0].Values[1], CultureInfo.InvariantCulture);
-            var again = $"from_id = {page} OR (to_id = {early} AND rowid % 2 = 0)";
+            var again = $"from_id = {page} OR (to_id = {early} AND (rowid % 2 = 0 OR rowid = (SELECT MIN(rowid) FROM links WHERE to_id = {early})))";
             Assert.InRange(TestCrawls.Count(running, $"SELECT COUNT(*) FROM links WHERE {again}"), 5, before.Total - 1);
             Change(running, $"""
                 BEGIN;
