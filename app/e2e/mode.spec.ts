@@ -34,8 +34,8 @@ test('the switch works by click, keeps the screen and focus, and is kept across 
   await expect(page).toHaveURL(new RegExp(`/crawls/${crawl.id}/overview$`));
   await expect(sidebar(page).getByRole('link', { name: /^URLs/ })).toBeVisible();
 
-  // A restart: the preferences are read again from where they're kept.
-  await page.waitForTimeout(500);
+  // A restart: the preferences are read again from where they're kept, once they've been written there.
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('si.settings'))).toContain('"mode":"advanced"');
   await page.reload();
   await chosen(page, 'Advanced');
   await expect(sidebar(page).getByRole('link', { name: /^Issues/ })).toBeVisible();
