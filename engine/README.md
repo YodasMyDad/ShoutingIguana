@@ -940,7 +940,24 @@ one sheet.
 **The report** (`Reporting/`) is one self-contained HTML document to [the design](../docs/v2-ui-simple.md#the-report):
 `ReportReader` reads what it says (counts, and a few rows a check, so its size follows the checks that found
 something, never the site's), `ReportDocument` writes it, and the workbook's summary sheet is written from the same
-model, so the two can't differ. The score and each check's words reach both through `ReportSources`.
+model, so the two can't differ. The score and each check's words reach both through `ReportSources`, and neither
+works out anything of its own:
+
+- the score, its lines and "Fixing these five takes the score from 85 to 98" are the score the analysis stored
+  (`AnalysisResults.Score`, or why there is none: `NoScoreReason`), and the addresses are the URLs crawled when the
+  analysis ran;
+- problems are numbered in `AnalysisResults.FixFirst`'s order, in the report's first list, its sections and the
+  workbook's sheets alike;
+- a check's words are the catalog's plain ones (`IssueDefinition.Plain`), with any `{limit:…}` filled from the
+  thresholds the analysis ran with (`PlainLimits.Fill`), and its technical texts where it has no plain ones; a check
+  that couldn't run is named by what it looks for (`LooksFor`);
+- a check reported once for the whole site (`ReportedOnce`) says "Checked once, for the whole site" where another
+  says its share.
+
+`si report` writes it in 0.3 s for the garden crawl (19 checks found something: 94 KB, 12 pages of A4, 13 of Letter)
+and 0.5 s for the 100k benchmark crawl (75 checks: 210 KB, 33 pages of A4); `--cut summary` is its first page (18 KB)
+or, with a score of 45 lines, its first three (38 KB). A crawl never analysed has no report: `si report` says so,
+with the `si analyze` command to run, and exits 2.
 
 ## Synthetic site and benchmark
 

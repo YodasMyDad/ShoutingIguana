@@ -447,7 +447,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 | `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
 | `analysis` | `{ crawlId, phase, done, total }` | E4. While an analysis runs: each phase as it starts (`done` 0) and as it ends (`done` equal to `total`), and at most every 250 ms between, the phases in the order under **Analysis progress** below. All of them come after the crawl's `analyzing` event and before the one that ends it |
-| `export` | The export, whole: `{ exportId, crawlId, kind, format, path, status, rowsWritten, rowsExpected, startedAt, finishedAt, result, error }` | E5. As an export starts, at most every 250 ms while it writes rows, and as it ends (`done`, `cancelled` or `failed`). Never merged or dropped. See [Export](#export-e5) |
+| `export` | The export, whole: `{ exportId, crawlId, kind, format, path, status, rowsWritten, rowsExpected, startedAt, finishedAt, result, error }` | E5. As an export starts, at most every 250 ms while it writes rows, and as it ends (`done`, `cancelled` or `failed`). Never merged or dropped. Its exact shape is under **Exports** below; what an export is, under [Export](#export-e5) |
 
 #### Progress (E4)
 
@@ -608,6 +608,65 @@ continued, which adds the table, and reads as `[]`. Files are shared, so an aler
 as well as it can be: one without a code or a message is left out, a missing level reads as `warning` and a missing
 time as the crawl's start, and a table of another shape reads as `[]`. Continuing a crawl whose alerts table the engine
 couldn't store an alert in is refused (`not-a-crawl`), in words that say so.
+
+#### Exports (E5)
+
+An `export` event's data is the export, whole: the object `POST /api/crawls/{id}/export` answered with and
+`GET /api/exports/{exportId}` reads, with the same twelve properties in the same order, every one of them always
+there (a value not yet known is `null`, never left out). Nothing else is in it, and no other event tells an export.
+
+```json
+{"exportId":"3f9a61c2d0b4e87a","crawlId":"…","kind":"links","format":"xlsx",
+ "path":"C:\\Users\\me\\Documents\\example.com 2026-10-31 links.xlsx","status":"running","rowsWritten":41000,
+ "rowsExpected":5053909,"startedAt":"2026-11-01T17:42:00.118Z","finishedAt":null,"result":null,"error":null}
+```
+
+| Property | Type | Is |
+| --- | --- | --- |
+| `exportId` | string | 16 hex digits. What an export is keyed by: several can run at once, and for one crawl |
+| `crawlId` | string | The crawl it reads |
+| `kind` | string | `urls`, `links`, `sitemapUrls`, `robotsBlocked`, `issueRows`, `check`, `workbook` or `report` |
+| `format` | string | `csv`, `xlsx` or `html` |
+| `path` | string | The file it writes, as the sidecar resolved the path it was given |
+| `status` | string | `running`, then once `done`, `cancelled` or `failed` |
+| `rowsWritten` | number | Rows of data written so far, headers apart. 0 for the report throughout |
+| `rowsExpected` | number or null | The rows it will write: null until its first page is read, and for the report throughout |
+| `startedAt` | string | When it started: ISO 8601, UTC |
+| `finishedAt` | string or null | When it ended; null while it runs |
+| `result` | object or null | Once `done`: `{ rows, bytes, sheets, unavailableColumns, truncatedCells, crawlWasRunning }`, three numbers, an array of column ids, a number and a boolean. `sheets` is 0 for a file that isn't Excel's |
+| `error` | object or null | Once `failed`: the problem, `{ type, title, status }` with `detail`, `errors`, `reason` and `columns` where the problem has them, as a call's answer would |
+
+```json
+{"exportId":"3f9a61c2d0b4e87a","crawlId":"…","kind":"links","format":"xlsx","path":"…","status":"done",
+ "rowsWritten":5053909,"rowsExpected":5053909,"startedAt":"2026-11-01T17:42:00.118Z",
+ "finishedAt":"2026-11-01T17:42:20.530Z",
+ "result":{"rows":5053909,"bytes":167143014,"sheets":5,"unavailableColumns":[],"truncatedCells":0,"crawlWasRunning":false},
+ "error":null}
+```
+
+```json
+{"exportId":"9c04e1b7a25d3f68","crawlId":"…","kind":"urls","format":"csv","path":"…","status":"failed",
+ "rowsWritten":0,"rowsExpected":null,"startedAt":"2026-11-01T17:43:02.007Z","finishedAt":"2026-11-01T17:43:02.031Z",
+ "result":null,
+ "error":{"type":"needs-analysis","title":"…","status":409,"reason":"notAnalyzed","columns":["inlinks"]}}
+```
+
+- **When.** One as the export starts (`running`, `rowsWritten` 0, `rowsExpected` null), one as soon as its rows are
+  counted, then at most one every 250 ms while rows are written, and one as it ends: the only event whose `status`
+  isn't `running`, and the last. An export of a few rows is two or three events.
+- **In order, and all of them.** One export's events are sent in the order its states were, and none is merged or
+  dropped. The first is sent as the export is started, so it can reach the stream before the call that started it is
+  answered: the UI keys what it shows by `exportId`, from whichever of the two it has first.
+- **A stream that connects later.** `hello.exports` lists the exports running then, and each one's latest event
+  follows. An export that ended while no stream was connected is in neither: the UI reads it once with
+  `GET /api/exports/{exportId}`, which knows the last 64 that ended. `export-not-found` then means that 64 others
+  have ended since, or that the sidecar that ran it has gone: a sidecar that is shut down cancels its exports, and
+  one that dies leaves an export's file unwritten or, at worst, a part-written file under another name beside it,
+  never a short file under the name asked for.
+- **In the app**, the event is one of `SidecarEvent` (`app/src/api/types.ts`), its data an `ExportJob`
+  (`app/src/api/exports.ts`). The live store reads it at the boundary (`parseExportJob`: an event that isn't an
+  export is dropped), and hands it to its listeners (`onEvent`). It keeps none of it: showing an export's progress is
+  its screen's.
 
 ### History (E4)
 
@@ -1742,15 +1801,45 @@ path (`kind` `report`), and `si report` writes it from the command line.
   checked", with why; "What was checked and found nothing wrong"; and "About this check".
 - **Its length follows the checks that found something, never the site's size**: what it reads is counts, and a few
   rows a check.
-- **Every state is the document's own to say.** A crawl stopped early, or at its URL limit, says so under the site
-  ("This check was stopped early: 312 pages read, 1,380 addresses still to check. This report covers only what was
-  read."), marks its score "so far" with a dashed ring, and says how to finish under "Finished?". A site with nothing
-  to fix has "Nothing to fix" in place of the first list, and no "What to fix". A crawl that read no page has no
-  score, and says why in the score's place. Results that no longer stand (the crawl went on, or the checks changed)
-  are said to be out of date under the site, with their date.
-- **The score and the words.** The score, its breakdown, the order problems are numbered in and each check's plain
-  words are the analysis's and the catalog's. Where a check has no plain words yet, its technical texts stand in, and
-  its technical title is beside either.
+- **Every state is the document's own to say.**
+  - *Stopped early, or failed*: a note under the site ("This check was stopped early: 312 pages read, 1,380 addresses
+    still to check. This report covers only what was read."), the score "so far" on a dashed ring, and how to finish
+    under "Finished?" (continue the check).
+  - *At its URL limit, or its limit of clicks from the start*: the same note in its own words ("This check stopped at
+    its limit of 500 addresses: 212 pages read, 1,840 addresses past the limit."; "…its limit of 3 clicks from the
+    start: … further in than that."), the score "so far", and "check the site again with a higher limit".
+  - *Still running*: "This check hasn't finished", with what is still to check.
+  - *Nothing to fix*: "Nothing to fix" in place of the first list, with how many things are worth a look, and no "What
+    to fix" unless there are those.
+  - *No score*, with its reason in the score's place (the analysis's `noScoreReason`): no page could be read
+    (`noPages`: it names the start URL, and says so if robots.txt kept the crawl out), or the results were worked out
+    before the score was (`notScored`: an analysis by an engine older than the score, which says to work the results
+    out again). The ring is its track alone, and "How the score is worked out" is left out.
+  - *Checks that couldn't run* are listed under "What couldn't be checked", each by what it looks for (`plainLooksFor`,
+    or its plain title) with the reason's plain text and what to do about it (`plainText`, `plainAction`); a reason a
+    later engine wrote, which this one has no words for, is said in its stored text.
+  - *Results that no longer stand* (the crawl went on, or the checks changed) are said to be out of date under the
+    site, with their date.
+- **The score, the order and the words are the analysis's and the catalog's**; the document works out none of its
+  own.
+  - The score, its lines, "so far", the ceiling and "Fixing these five takes the score from 85 to 98" are the score
+    the analysis stored (`GET /analysis`'s `score`), line for line. "Addresses checked" is the URLs crawled when the
+    analysis ran (its `crawledUrlCount`), which its shares are of, not the crawl's count now.
+  - Problems are numbered in the engine's "Fix first" order (`fixFirst`): the first list, the sections and the
+    workbook's sheets carry one number.
+  - A check's title, what's wrong, how to fix it, who fixes it, its good news and its "One fix" sentence are its
+    plain words, with its technical title and severity beside the title. A limit named in them (`{limit:…}`) is
+    filled with the thresholds **the analysis ran with**, as stored with it, so a crawl analysed with a title limit of
+    70 says 70. A check with no plain words has its technical texts instead.
+  - **A check reported once for the whole site** (`reportedOnce`: one row, on the home page, however many pages are
+    at fault) says "Checked once, for the whole site" where another says "5 of 265 pages": in its section's first
+    line, in "Fix these first", and in the workbook's "Of what" (with "Out of" and "Share" left empty). In the score's
+    table, a fault of the whole site (`siteWide`) reads "The whole site", and a check reported once that isn't one
+    (`sitemap-error` is the only such error) reads "Checked once, for the whole site (counts as a few)", since its
+    points are those of "a few". That last wording is the engine's own: the design has no line for the case.
+- **In print**, a problem's heading stays with its text and its examples stay whole; "What to fix" starts a page; the
+  score's table repeats its header on each page it runs to, and its sum is printed once, at its end. Nothing names a
+  paper size, so the printer's own is used: the garden crawl's report is 12 pages of A4 and 13 of Letter.
 
 **What a site sends can't become markup.** Every string from the crawl is escaped where it's written, as text and
 inside an attribute alike; control characters, and the marks that reverse the text after them, are left out. A URL is
@@ -1761,11 +1850,35 @@ form-action 'none'">`: nothing may be loaded or run, and the only style is its o
 isn't a script, a style attribute, an image or a form in it.
 
 **Showing it.** The answer carries the API's own headers like every other, so its address is nothing a browser could
-open as a page: the UI reads the document as text and gives it to a sandboxed frame (`srcdoc`, scripts off). A frame's
-document also answers to the policy of the page that holds it, so **the app's own Content-Security-Policy must allow
-the report's inline style sheet** (its hash is in the document's policy and is the same for every report an engine
-makes, or `'unsafe-inline'` for styles in that frame); with `sandbox` and no `allow-popups`, the report's links do
-nothing in the app, and work in the saved file.
+open as a page: the UI reads the document as text (`api.report`) and gives it to a sandboxed frame, as its `srcdoc`.
+What that frame needs was tried in Chromium 156 (what WebView2 is built on), WebKit and Firefox, with the garden
+crawl's report in a `srcdoc` frame of a page served under each policy below:
+
+- **A `srcdoc` frame answers to two policies**: the document's own (its `<meta>`), and **the policy of the page that
+  holds it**, which a `srcdoc` document inherits. Both must allow the report's one inline style sheet, or the report
+  shows unstyled: its text in the browser's default look.
+- **The app's policy must allow that sheet in `style-src`**, by one of:
+  - `'unsafe-inline'`, with **no nonce and no hash in the same directive**. The app's policy today (`style-src 'self'
+    'unsafe-inline'` in `app/src-tauri/tauri.conf.json`) is this, and the report shows styled under it, as that
+    policy stands.
+  - the sheet's hash, `'sha256-…'`, which is in the document's own policy (read it from there, or from the engine:
+    `ReportDocument.ContentSecurityPolicy`). It is the same for every report one build of the engine makes, and
+    changes whenever the sheet does, so it is copied at build time, not typed.
+  - **Not** a nonce beside `'unsafe-inline'`: a browser ignores `'unsafe-inline'` as soon as the directive holds a
+    nonce or a hash, and the report then shows unstyled (tried: `style-src 'self' 'nonce-…' 'unsafe-inline'`). Tauri
+    can add nonces and hashes to a policy when it builds the app; if it adds one to `style-src`, the report's hash
+    must be listed too, which works beside a nonce (tried). **Not tried in the built shell**: what the built app's
+    `style-src` holds has to be looked at there.
+- **Nothing else is needed.** The report loads nothing, so `default-src`, `img-src`, `font-src` and `connect-src` don't
+  matter to it, and `frame-src` doesn't govern a `srcdoc` frame (tried with `frame-src 'none'`).
+- **`sandbox`** with no tokens is enough to show it: no script runs (there is none), and the report's links do
+  nothing, as they open a new window and the frame may not (`allow-popups` would let them; in the saved file they
+  work). **To print the frame from the app** (`frame.contentWindow.print()`), the frame needs
+  `sandbox="allow-same-origin allow-modals"`: without the first the page may not reach into the frame (a
+  `SecurityError`), and without the second a sandboxed document may not open the print dialog. Scripts stay off
+  either way. Reaching `print` was tried; the dialog itself, and printing in the built shell on each OS, were not.
+- The frame's text is the string the app was given, so the page that holds the frame must itself be read as UTF-8
+  (the app's is).
 
 ## Engine changes E1 needs
 
@@ -2547,7 +2660,9 @@ and 87 checks' words held once). `si readbench --gate` wasn't run again: no read
 Export, the workbook and the report. Each has its own tests. Measured on a copy of the 100k benchmark crawl (112,577
 URLs, 5,053,909 links, an 879 MB file) and of the garden crawl (6,286 URLs found, 4,521 checked, 21,914 links), each
 analysed by this engine, with `si export` on a 32-core Windows machine that other work was sharing; times are two
-runs, memory is the process's peak working set, with its private bytes beside it.
+or three runs, memory is the process's peak working set, with its private bytes beside it. The report, the workbook
+and the four whole-grid exports were measured again once the score and the plain words were merged in (the 100k
+crawl then scores 0 with 75 checks finding something and 2 that couldn't run; the garden crawl 85 with 19 and 4).
 
 - **An export is the grid's own read, a page at a time** (`Export/CrawlExporter`, `Storage/GridExportReader`). It asks
   the grid's reader for a page, writes it, and reads on by the grid's own cursor: the same query, compiled and run by
@@ -2562,23 +2677,26 @@ runs, memory is the process's peak working set, with its private bytes beside it
   | Export | Rows | Time | Peak memory (private) | File |
   | --- | ---: | --- | --- | ---: |
   | 100k: URLs, 9 columns, CSV | 112,577 | 0.7 to 1.7 s | 70 to 75 MB (42 to 45) | 10.9 MB |
-  | 100k: URLs, 9 columns, Excel | 112,577 | 1.0 to 1.1 s | 88 to 92 MB (59 to 63) | 8.3 MB |
+  | 100k: URLs, 9 columns, Excel | 112,577 | 0.8 to 1.1 s | 87 to 92 MB (58 to 63) | 8.3 MB |
   | 100k: URLs sorted by inlinks (no index), Excel | 112,471 | 1.4 s | 111 MB (57) | 4.0 MB |
-  | 100k: every link, CSV | 5,053,909 | 28.6 to 32.8 s | 75 to 76 MB (42) | 402 MB |
-  | 100k: every link, Excel (5 sheets) | 5,053,909 | 30.3 to 37.1 s | 91 to 92 MB (55 to 57) | 159 MB |
+  | 100k: every link, CSV | 5,053,909 | 18.7 to 32.8 s | 75 to 76 MB (41 to 42) | 402 MB |
+  | 100k: every link, Excel (5 sheets) | 5,053,909 | 20.4 to 37.1 s | 91 to 93 MB (55 to 58) | 159 MB |
   | 100k: every link by its target's URL, CSV | 5,053,909 | 39.2 s | 88 MB (52) | 402 MB |
   | 100k: links whose text contains a word, CSV | 2,200,717 | 22.0 s | 243 MB (48) | 184 MB |
-  | 100k: the workbook (76 sheets) | 32,402 | 1.1 s | 97 to 98 MB (44 to 46) | 1.3 MB |
-  | 100k: the report | | 0.5 to 0.6 s | 96 MB (32) | 203 KB |
+  | 100k: the workbook (76 sheets) | 32,402 | 0.9 to 1.1 s | 97 to 98 MB (44 to 47) | 1.3 MB |
+  | 100k: the report | | 0.5 s | 97 MB (34) | 210 KB |
+  | 100k: the report's summary cut | | 0.4 to 0.5 s | 97 MB (32 to 34) | 38 KB |
   | Garden: URLs, CSV and Excel | 6,286 | 0.3 s | 41 and 44 MB | 0.72 and 0.37 MB |
   | Garden: every link, CSV and Excel | 21,914 | 0.4 s | 58 MB | 3.6 and 0.63 MB |
-  | Garden: the workbook (20 sheets) | 933 | 0.4 s | 49 MB | 60 KB |
-  | Garden: the report | | 0.3 s | 42 MB | 92 KB |
+  | Garden: the workbook (20 sheets) | 933 | 0.3 to 0.4 s | 46 to 55 MB | 61 KB |
+  | Garden: the report | | 0.3 s | 42 to 45 MB | 94 KB |
+  | Garden: the report's summary cut | | 0.3 s | 45 to 46 MB | 18 KB |
 
   **Memory is flat**: five million links are exported in the memory 112,577 URLs are, and the working set sampled
-  through the links export read 70, 63, 64 and 64 MB at a quarter, half, three quarters and the end. The 243 MB is the
-  one pass over the links a text filter makes, as it makes it for the grid: the crawl file's own pages, mapped and
-  read once, not memory the export holds (its private bytes stay at 48 MB).
+  through the links export read 70, 63, 64 and 64 MB at a quarter, half, three quarters and the end (71, 63, 63 and
+  63 when measured again; the links' times vary with what else the machine is doing, their memory doesn't). The
+  243 MB is the one pass over the links a text filter makes, as it makes it for the grid: the crawl file's own pages,
+  mapped and read once, not memory the export holds (its private bytes stay at 48 MB).
 - **Excel files are written by the engine, with no package** (`Export/Xlsx/`, some 550 lines over the
   framework's `ZipArchive`): a row at a time, straight into the ZIP. The alternatives hold the workbook (ClosedXML, in
   the old app) or write text inline in each cell, which the format allows and not every reader of it reads
@@ -2617,11 +2735,29 @@ runs, memory is the process's peak working set, with its private bytes beside it
   counts and skipped checks, the crawl's headline numbers and options, and each problem's first rows and largest
   group), `ReportDocument` writes the HTML, and the workbook's summary sheet is written from the same model. The
   score, the order problems are numbered in and each check's words reach both through one seam (`ReportSources`).
-  - Its size follows the checks that found something: the garden crawl's 19 make a 92 KB document of 13 pages on A4
-    (14 on Letter) with the checks' technical texts standing in for plain words; the 100k crawl's 75 make 203 KB and
-    34 pages (38 on Letter). The summary cut is 18 KB and one page of A4 for the garden crawl (two of Letter, which
-    is 18 mm shorter), and 37 KB and 3 pages for the 100k crawl, whose score has 45 lines.
-  - It takes 0.3 s for the garden crawl and 0.5 to 0.6 s for the 100k crawl, most of it the crawl's headline numbers
+  - Its size follows the checks that found something, never the site's size. Printed by headless Chromium (Edge,
+    and the app's own Playwright build: the same counts from both), which uses the paper it is told as the report
+    names none:
+
+    | Report | File | A4 | Letter |
+    | --- | ---: | ---: | ---: |
+    | Garden (19 checks found something), full | 94 KB | 12 pages | 13 |
+    | Garden, summary cut | 18 KB | 1 | 2 |
+    | 100k (75 checks found something), full | 210 KB | 33 | 34 |
+    | 100k, summary cut (its score has 45 lines) | 38 KB | 3 | 3 |
+    | The design's `report.html`, printed the same way | 82 KB | 11 | 13 |
+
+  - **Against the design's 11 pages and 84 KB**, the garden report is a page and 12 KB more, with the same look page
+    for page (each of its 12 pages was set beside the design's). The page breaks are the same through page 8; the
+    catalog's plain words are about 5% longer than the mock-up's (24,859 characters of text against 23,717), and
+    "About this check", which is kept whole, needs 41% of a page where 35% was left. Of the 12 KB, 10.4 KB is link
+    markup (the design links nothing; here every http or https address is a link), 0.6 KB the larger sheet, the rest
+    words. On Letter, 18 mm shorter, the first page's last two lines (the note under the score) go over to a page
+    of their own, in the design's file as in the engine's: that is why the summary cut is two pages there.
+  - Two things the pages showed were put right. The score's table said its sum at the foot of every page it ran to,
+    under part of its lines (three times on the 100k crawl's): in print the sum is now the table's last row. A score
+    of 0 drew a dot at the top of its ring: an arc of no length with round ends.
+  - It takes 0.3 s for the garden crawl and 0.5 s for the 100k crawl, most of it the crawl's headline numbers
     (`/stats`'s one pass), which the sidecar keeps.
 - **Each column has its words** (`Storage/ColumnWords`): a title, a unit, and its values' words, on `UrlColumnInfo`
   and on the two column lists. They are the words the app's screens already use, the unmerged Links and
@@ -2632,6 +2768,10 @@ runs, memory is the process's peak working set, with its private bytes beside it
   sheet (1,100,000 rows: "Links" with 1,048,576 rows and "Links (2)" with the rest) and the CSVs all opened with no
   repair, the header frozen, bold and filtering; a workbook broken on purpose (a cell naming a string that isn't
   there) was refused, so the check can tell. Hostile titles came through as text in both files, no cell a formula:
-  the workbook's formula-like ones with Excel's own text mark, the CSV's with their apostrophe. The 5-million-row
-  workbook (159 MB) was not opened in Excel, for the memory that takes; it was read part by part instead (every part
-  reads back, 5 sheets, 5,053,909 rows). **Not opened in LibreOffice or Numbers**: neither is on this machine.
+  the workbook's formula-like ones with Excel's own text mark, the CSV's with their apostrophe. Opened again once the
+  score was merged in (both workbooks of everything, a check's sheet, the garden's URLs and links, the hostile
+  crawl's workbook, URLs and CSV): no repair; the summary sheet's two dates are dates and its counts numbers, a
+  check's share a percentage, the score a number with its word beside it; the 23 hostile titles text as before. The
+  5-million-row workbook (159 MB) was not opened in Excel, for the memory that takes; it was read part by part
+  instead (every part reads back, 5 sheets, 5,053,909 rows). **Not opened in LibreOffice or Numbers**: neither is on
+  this machine.
