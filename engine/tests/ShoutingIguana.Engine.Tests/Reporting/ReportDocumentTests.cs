@@ -178,6 +178,20 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         var changed = Parse(ReportExport.Build(other, settings: SETTINGS));
         Assert.Equal($"Score {said} out of 100", changed.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
         Assert.Equal($"{said}", changed.QuerySelector("table.score-table tfoot td.num")!.TextContent);
+
+        // A score above 0 has its arc on the ring's track. A score of 0 has the track alone: an arc of no length with
+        // round ends is drawn as a dot.
+        Assert.Equal(2, changed.QuerySelectorAll("svg.ring circle").Length);
+        var nought = crawl.Copy();
+        Change(nought, $"UPDATE analysis SET score = 0, score_json = replace(score_json, '\"value\":{score.Value},', '\"value\":0,')");
+        var none = Parse(ReportExport.Build(nought, settings: SETTINGS));
+        Assert.Equal("Score 0 out of 100", none.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
+        Assert.Single(none.QuerySelectorAll("svg.ring circle"));
+        Assert.Empty(none.QuerySelectorAll("svg.ring path"));
+
+        // The sum is printed once, under the last line: a table's foot is printed again at the bottom of every page a
+        // long table runs to, which would put the whole sum under part of the list.
+        Assert.Contains(".score-table tfoot { display: table-row-group; }", document.QuerySelector("style")!.TextContent, StringComparison.Ordinal);
     }
 
     /// <summary>

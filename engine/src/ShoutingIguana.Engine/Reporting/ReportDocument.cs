@@ -137,6 +137,7 @@ internal static class ReportDocument
             .summary, .first, .problem--compact, .keep, .passed, .plain-list li, tr, .onefix, .facts, .note { break-inside: avoid; }
             .new-page { break-before: page; }
             .new-page > h2:first-child { margin-top: 0; padding-top: 2px; }
+            .score-table tfoot { display: table-row-group; }
             a:hover { text-decoration: none; }
           }
 
@@ -838,7 +839,8 @@ internal static class ReportDocument
 
     /// <summary>
     /// The score as a ring: an arc of the accent blue on a neutral track, the number inside. Never a severity's colour. A
-    /// crawl that didn't finish has a dashed arc and "so far"; a crawl with no score has the track alone.
+    /// crawl that didn't finish has a dashed arc and "so far"; a crawl with no score has the track alone, and so has a
+    /// score of 0, whose arc of no length a round end would draw as a dot.
     /// </summary>
     private static void Ring(StringBuilder html, SiteScore? score)
     {
@@ -847,7 +849,7 @@ internal static class ReportDocument
         var label = score is null ? "No score" : $"Score {score.Value} out of 100{(score.Partial ? ", so far" : string.Empty)}";
         html.Append("<svg class=\"ring\" width=\"112\" height=\"112\" viewBox=\"0 0 100 100\" role=\"img\" aria-label=\"").Append(label).Append("\">")
             .Append("<circle cx=\"50\" cy=\"50\" r=\"44\" fill=\"none\" stroke=\"#EEEEF1\" stroke-width=\"7\"/>");
-        if (score is { Partial: false })
+        if (score is { Partial: false, Value: > 0 })
         {
             html.Append("<circle cx=\"50\" cy=\"50\" r=\"44\" fill=\"none\" stroke=\"#1F86F5\" stroke-width=\"7\" stroke-linecap=\"round\" stroke-dasharray=\"")
                 .Append(Fixed(circumference * score.Value / 100)).Append(' ').Append(Fixed(circumference)).Append("\" transform=\"rotate(-90 50 50)\"/>");
