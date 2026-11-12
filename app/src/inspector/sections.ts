@@ -54,7 +54,8 @@ export function splitHidden<Issue extends { checkId: string }>(
 
 /** `hiddenChecks`: the checks hidden from the Issues list (settings), left out of the Issues tab's count. */
 export function sectionCounts(
-  detail: Pick<UrlDetail, 'issues' | 'links' | 'redirects' | 'headers' | 'structuredData' | 'hreflang'>,
+  detail: Pick<UrlDetail, 'issues' | 'links' | 'redirects' | 'headers' | 'structuredData' | 'hreflang'> &
+    Partial<Pick<UrlDetail, 'linkTotals'>>,
   hiddenChecks: readonly string[] = [],
 ): Partial<Record<SectionId, number>> {
   const counts: Partial<Record<SectionId, number>> = {};
@@ -62,8 +63,10 @@ export function sectionCounts(
     if (value !== null && value !== undefined && value > 0) counts[id] = value;
   };
   set('issues', detail.issues ? splitHidden(detail.issues, hiddenChecks).counted.length : null);
-  set('inlinks', detail.links?.inlinks);
-  set('outlinks', detail.links?.outlinks);
+  // Every kind of link, as the sections list them (E3c's `linkTotals`); before E3c, the summary's hyperlinks, which the
+  // inspector replaces with the link lists' own totals.
+  set('inlinks', detail.linkTotals ? detail.linkTotals.inlinks : detail.links?.inlinks);
+  set('outlinks', detail.linkTotals ? detail.linkTotals.outlinks : detail.links?.outlinks);
   set('redirects', detail.redirects.hops.length);
   set('headers', detail.headers.length);
   set('structuredData', detail.structuredData.length);

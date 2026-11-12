@@ -169,9 +169,18 @@ for (const colorScheme of ['light', 'dark'] as const) {
     expect(contrast(highlight.color ?? '', highlight['background-color'] ?? '')).toBeGreaterThanOrEqual(4.5);
     await page.keyboard.press('Escape');
 
-    // The windowed grid's thumb isn't there for 40 rows; the native one is the app's colour.
-    const thumb = (await style(grid, 'scrollbar-color'))['scrollbar-color'] ?? '';
-    expect(contrast(shadowColour(thumb), await shownBackground(grid))).toBeGreaterThanOrEqual(3);
+    // The windowed grid's thumb isn't there for 40 rows; the native one is the app's colour: Chromium draws it by its
+    // ::-webkit-scrollbar parts (base.css), which apply only while the element sets no scrollbar-color.
+    expect((await style(grid, 'scrollbar-color'))['scrollbar-color']).toBe('auto');
+    const thumb = await grid.evaluate((element) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--color-border-control)';
+      element.append(probe);
+      const colour = getComputedStyle(probe).color;
+      probe.remove();
+      return colour;
+    });
+    expect(contrast(thumb, await shownBackground(grid))).toBeGreaterThanOrEqual(3);
     await expectNoViolations(page);
   });
 }
@@ -469,7 +478,7 @@ test.describe('the design system’s states', () => {
     expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   });
 
-  test('tabs past the edge show a scrollbar, and the list never scrolls up and down', async ({ page }) => {
+  test('tabs past the edge scroll without a bar, and the list never scrolls up and down', async ({ page }) => {
     const tabs = ['Overview', 'Response', 'Headers', 'Links', 'Images', 'Structured data', 'Hreflang', 'Source'];
     const markup = (id: string) =>
       `<div class="si-tabs" role="tablist" id="${id}">${tabs
@@ -485,13 +494,13 @@ test.describe('the design system’s states', () => {
     const measure = (locator: Locator) =>
       locator.evaluate((element) => ({
         overflowing: element.scrollWidth > element.clientWidth,
-        // A scrollbar shows what's past the edge to the pointer. (Headless Chromium hides scrollbars, so this is the
-        // style that asks for one.)
+        // No bar under a strip of tabs, which read as a broken layout in the real shell: the wheel, a touchpad and the
+        // arrow keys scroll it, and the chosen tab is scrolled into view (ui/Tabs.tsx).
         scrollbar: getComputedStyle(element).scrollbarWidth,
         scrollsUpAndDown: element.scrollHeight > element.clientHeight,
       }));
     const narrow = await measure(host.locator('#narrow'));
-    expect(narrow).toEqual({ overflowing: true, scrollbar: 'thin', scrollsUpAndDown: false });
+    expect(narrow).toEqual({ overflowing: true, scrollbar: 'none', scrollsUpAndDown: false });
     expect((await measure(host.locator('#wide'))).scrollsUpAndDown).toBe(false);
     // The chosen tab's rule is drawn in full, at the list's very bottom, over its hairline.
     const rule = await host.locator('#wide [aria-selected="true"]').evaluate((element) => ({

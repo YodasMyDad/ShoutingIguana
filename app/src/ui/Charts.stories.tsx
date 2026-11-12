@@ -94,6 +94,30 @@ export const FoundAndCrawled: Story = {
           </Legend>
         </CardBody>
       </Card>
+      <StorySection title="A crawl continued twice: every run on one axis of time spent crawling, each start marked">
+        <Card>
+          <CardBody>
+            <LineChart
+              label="Found and crawled URLs of the site over 22 min 26 s of crawling, in 3 runs, continued at 8 min and 15 min of it: 5,722 found, 2,713 crawled"
+              series={[
+                { key: 'found', tone: 'secondary', points: FOUND },
+                { key: 'crawled', tone: 'primary', points: CRAWLED },
+              ]}
+              xMax={minutes(22.4)}
+              yMax={6_000}
+              xTicks={[0, 5, 10, 15, 20].map((value) => ({
+                value: minutes(value),
+                label: value === 0 ? '0' : `${value} min`,
+              }))}
+              yTicks={[0, 2_000, 4_000, 6_000].map((value) => ({ value, label: value.toLocaleString('en-GB') }))}
+              markers={[
+                { key: 'run-2', x: minutes(8) },
+                { key: 'run-3', x: minutes(15) },
+              ]}
+            />
+          </CardBody>
+        </Card>
+      </StorySection>
       <StorySection title="Just started: one point each, no line yet">
         <Card>
           <CardBody>

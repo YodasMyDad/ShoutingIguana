@@ -183,6 +183,47 @@ const ALL_PASSED: Analysis = {
 };
 
 /** No issues at all: every check passed, said plainly, and the crawl's breakdowns below. */
+/** The crawl's line says how long it spent crawling (E3c's `crawlingMs`), pauses and the time between runs left out. */
+export const DoneCrawlTime: Story = {
+  loaders: [() => own({ item: { crawlingMs: 2_475_000 } })],
+  render: () => <OverviewApp />,
+};
+
+/** A crawl an earlier version made, which didn't keep its time: the line says it isn't known, never a guess. */
+export const DoneCrawlTimeUnknown: Story = {
+  loaders: [() => own({ item: { crawlingMs: null } })],
+  render: () => <OverviewApp />,
+};
+
+/**
+ * Done, with the probes of the site's other versions read from their rows in the URL grid: the same status codes as
+ * live, the site's own, and the line saying the probes apart.
+ */
+export const DoneWithProbes: Story = {
+  loaders: [
+    () =>
+      own({
+        probes: [
+          {
+            id: 9_001,
+            url: 'http://example.com/',
+            outcome: 'robotsDisallowed',
+            statusClass: 'noResponse',
+            statusCode: null,
+          },
+          {
+            id: 9_002,
+            url: 'http://www.example.com/',
+            outcome: 'robotsDisallowed',
+            statusClass: 'noResponse',
+            statusCode: null,
+          },
+        ],
+      }),
+  ],
+  render: () => <OverviewApp />,
+};
+
 export const NoIssues: Story = {
   loaders: [() => own({ analysis: ALL_PASSED, item: { issues: { error: 0, warning: 0, notice: 0 } } })],
   render: () => <OverviewApp />,
@@ -364,6 +405,117 @@ export const LiveContinued: Story = {
     },
   ],
   render: () => <OverviewApp stream={{ script: POLITE, from: CONTINUED_AFTER + CONTINUED_FOR }} />,
+};
+
+/** The probes of an http-only site's other versions: in no class, said apart under the status codes, opening them. */
+const PROBES = {
+  fetched: 2,
+  statusClasses: { '2xx': 0, '3xx': 1, '4xx': 0, '5xx': 0, other: 0, noResponse: 1, blocked: 0 },
+  statusCodes: { '301': 1 },
+  noResponse: { robotsDisallowed: 0, timeout: 0, networkError: 1, notChecked: 0, processingError: 0 },
+};
+
+/**
+ * An http-only site: its https probe got no answer and its www probe redirected. They're the crawler's own questions,
+ * not the site's URLs: the status codes are the site's own, with no "Network error", and a line says the two apart.
+ */
+export const LiveHttpOnly: Story = {
+  loaders: [
+    () => {
+      running(1_346, POLITE);
+      const event = progressAt(1_346, POLITE);
+      const classes = event.statusClasses ?? {
+        '2xx': 0,
+        '3xx': 0,
+        '4xx': 0,
+        '5xx': 0,
+        other: 0,
+        noResponse: 0,
+        blocked: 0,
+      };
+      liveStore.ingest(
+        message('progress', {
+          ...event,
+          fetched: event.fetched + 2,
+          crawled: event.fetched + 2,
+          statusClasses: { ...classes, '3xx': classes['3xx'] + 1, noResponse: classes.noResponse + 1 },
+          statusCodes: { ...event.statusCodes, '301': (event.statusCodes?.['301'] ?? 0) + 1 },
+          noResponse: { ...PROBES.noResponse, robotsDisallowed: event.noResponse?.robotsDisallowed ?? 0 },
+          siteVersions: PROBES,
+        }),
+      );
+    },
+  ],
+  render: () => <OverviewApp />,
+};
+
+/**
+ * Continued twice, with the runs' times (E3c's `/history.runs`): the chart is of the whole crawl on the time it spent
+ * crawling, the days between runs and a pause closed up, each later run's start a dashed rule; Elapsed is the
+ * engine's own time spent crawling, every run's.
+ */
+export const LiveContinuedWithRuns: Story = {
+  loaders: [
+    () => {
+      const runStart = Date.parse(progressAt(CONTINUED_AFTER, POLITE).at ?? '');
+      const firstStart = runStart - 3 * 86_400_000;
+      const secondStart = runStart - 86_400_000;
+      const iso = (ms: number) => new Date(ms).toISOString();
+      // The first run crawled 300 s, the second 300 s with a minute's pause in it; this run carries on from both.
+      const points = historyUntil(CONTINUED_AFTER, POLITE).points;
+      const half = points.length / 2;
+      const earlier = points.map(({ elapsedMs: _run, ...point }, index) => ({
+        ...point,
+        at: iso(index < half ? firstStart + (index / half) * 300_000 : secondStart + ((index - half) / half) * 360_000),
+      }));
+      const event = (seconds: number) => ({
+        ...progressAt(CONTINUED_AFTER + seconds, POLITE),
+        elapsedMs: seconds * 1_000,
+        crawlingMs: (CONTINUED_AFTER + seconds) * 1_000,
+      });
+      const now = event(CONTINUED_FOR);
+      own({
+        analysis: null,
+        item: {
+          status: 'running',
+          finishedAt: null,
+          analyzedAt: null,
+          issues: null,
+          fetchedUrlCount: now.fetched,
+          pageCount: now.htmlPages,
+        },
+        history: {
+          crawlId: TEST_CRAWL_ID,
+          startedAt: iso(firstStart),
+          liveFrom: iso(runStart),
+          points: earlier,
+          crawlingMs: CONTINUED_AFTER * 1_000,
+          runs: [
+            {
+              startedAt: iso(firstStart),
+              endedAt: iso(firstStart + 300_000),
+              crawlingMs: 300_000,
+              crawling: [{ from: iso(firstStart), to: iso(firstStart + 300_000) }],
+            },
+            {
+              startedAt: iso(secondStart),
+              endedAt: iso(secondStart + 360_000),
+              crawlingMs: 300_000,
+              crawling: [
+                { from: iso(secondStart), to: iso(secondStart + 120_000) },
+                { from: iso(secondStart + 180_000), to: iso(secondStart + 360_000) },
+              ],
+            },
+            { startedAt: iso(runStart + 50), endedAt: null, crawlingMs: 0, crawling: [] },
+          ],
+        },
+      });
+      for (let seconds = 0; seconds <= CONTINUED_FOR; seconds += 0.5) {
+        liveStore.ingest(message('progress', event(seconds)));
+      }
+    },
+  ],
+  render: () => <OverviewApp />,
 };
 
 /**

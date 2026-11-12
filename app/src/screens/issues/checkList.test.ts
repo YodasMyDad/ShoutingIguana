@@ -144,6 +144,12 @@ describe('the answer', () => {
       'No check found an issue on this crawl. 3 were skipped.',
     );
   });
+
+  it('words one check that passed in the singular: every other one hidden', () => {
+    expect(answerSentence({ found: 0, issues: 0, passed: 1, skipped: 0 })).toBe(
+      'No check found an issue on this crawl. The 1 check counted passed.',
+    );
+  });
 });
 
 describe('the first check to fix', () => {
@@ -192,6 +198,41 @@ describe('the order to fix checks in', () => {
       'title-too-long',
     ]);
     expect(firstCheckToFix(entries)).toBe(ranked[0]);
+  });
+
+  it('is the engine’s (the analysis’s fixFirst) when it sends one: a site-wide fault leads its severity, however few', () => {
+    // The engine ranks the warning first among warnings (a fault of the whole site), and the errors by its own rules.
+    const entries = checkEntries(CHECKS, {
+      ...ANALYSIS,
+      counts: [...ANALYSIS.counts.filter((entry) => entry.checkId !== 'title-duplicate')].concat([
+        { checkId: 'title-duplicate', count: 1 },
+      ]),
+    });
+    const order = [
+      'broken-internal-links',
+      'internal-client-error',
+      'title-duplicate',
+      'empty-anchor-text',
+      'title-too-long',
+    ];
+    expect(ids(rankChecksToFix(entries, order))).toEqual(order);
+    expect(firstCheckToFix(entries, order)?.check.id).toBe('broken-internal-links');
+    // Never sorted again by count: by count the warning of 1 would still lead its severity here, but the errors
+    // would swap.
+    expect(ids(rankChecksToFix(entries)).slice(0, 2)).toEqual(['internal-client-error', 'broken-internal-links']);
+  });
+
+  it('leaves hidden checks out of the engine’s order too, and puts a check it doesn’t rank after the rest', () => {
+    const hidden = new Set(['broken-internal-links']);
+    const entries = checkEntries(CHECKS, ANALYSIS, hidden);
+    expect(ids(rankChecksToFix(entries, ['title-too-long', 'broken-internal-links', 'internal-client-error']))).toEqual(
+      [
+        'title-too-long',
+        'internal-client-error',
+        // Not in the order the engine sent (a newer catalog's check, say): after it, by the app's own rule.
+        'empty-anchor-text',
+      ],
+    );
   });
 
   it('leaves out passed, skipped and hidden checks', () => {

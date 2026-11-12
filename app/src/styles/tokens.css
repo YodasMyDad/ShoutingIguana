@@ -146,6 +146,12 @@
   */
   --container-topbar-keys: 800px;
   --container-topbar-words: 640px;
+  /*
+    Home's library in a card narrower than this (200% zoom at 1280 px): Pages and Started join the URLs and status
+    cells as second lines, and the checks with issues stack, so the Site column keeps its room and nothing scrolls
+    sideways.
+  */
+  --container-library: 760px;
 
   /* --------------------------------------------------------------- Motion */
   /* 150-200 ms, easing out; for orientation, not decoration. Reduced motion turns it off (base.css). */
@@ -367,6 +373,8 @@
   --underline-offset: 3px;
   --scrollbar-size: 10px;
   --scrollbar-thumb-min: 24px;
+  --tabs-fade: var(--space-8); /* how far in a strip of tabs fades where more tabs are past its end */
+  --scrollbar-inset: 2px; /* the clear edge around a thumb, so a 10px bar draws a 6px thumb */
 
   /* Component sizes */
   --segment-height: 26px;
@@ -415,6 +423,7 @@
   --search-width-filter: 160px;
   --search-width-library: 260px;
   --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
+  --library-site-min: 144px; /* Home's Site column never gives up more of its room than this */
   --settings-nav-width: 192px;
   --detail-max-height: 192px; /* an error's technical detail, before it scrolls */
   --palette-width: 640px;

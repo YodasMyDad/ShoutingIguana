@@ -8,7 +8,7 @@ import { libraryQuery, queryKeys } from '../api/queries';
 import type { CrawlListItem } from '../api/types';
 import { isLive } from '../api/types';
 import { startCrawl } from '../crawl/actions';
-import { crawlName, effectiveStatus } from '../crawl/status';
+import { crawlName, crawledUrls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyError, notifyUndo } from '../feedback/notify';
 import { SkeletonRows } from '../feedback/Skeleton';
@@ -126,7 +126,13 @@ function Library() {
   const clearSearch = () => void navigate({ search: {}, replace: true });
 
   return (
-    <Card as="section" aria-labelledby="library-title" aria-busy={library.isFetching} className="relative">
+    // A container: a narrow card (200% zoom) folds two columns into others (--container-library).
+    <Card
+      as="section"
+      aria-labelledby="library-title"
+      aria-busy={library.isFetching}
+      className="@container/library relative min-w-0"
+    >
       {library.isFetching && !library.isPending ? <RefreshLine label="Refreshing the library" /> : null}
       <CardHeader
         title="Library"
@@ -134,7 +140,9 @@ function Library() {
         meta={
           library.data ? `${formatCount(library.data.length)} ${library.data.length === 1 ? 'crawl' : 'crawls'}` : null
         }
-        className="pb-4"
+        // A narrow card (the sidebar open at 200% zoom) puts the search on a line of its own rather than push the card
+        // past the window.
+        className="pb-4 @max-library/library:flex-wrap"
         actions={
           <SearchField
             label="Search the library"
@@ -144,7 +152,7 @@ function Library() {
               void navigate({ search: event.target.value ? { q: event.target.value } : {}, replace: true })
             }
             onClear={clearSearch}
-            className="w-(--search-width-library)"
+            className="w-(--search-width-library) max-w-full"
           />
         }
       />
@@ -167,27 +175,34 @@ function Library() {
       ) : ordered.length === 0 ? (
         <FilteredEmptyState title={`No crawls match “${q}”.`} clearLabel="Clear the search" onClear={clearSearch} />
       ) : (
-        <table className="w-full border-separate border-spacing-0 text-13">
-          <caption className="sr-only">Crawls in the library, running ones first</caption>
-          <thead>
-            <tr className="text-left text-12 text-text-secondary">
-              <LibraryHeader fill>Site</LibraryHeader>
-              <LibraryHeader>Status</LibraryHeader>
-              <LibraryHeader numeric>URLs</LibraryHeader>
-              <LibraryHeader numeric>Pages</LibraryHeader>
-              <LibraryHeader>Checks with issues</LibraryHeader>
-              <LibraryHeader>Started</LibraryHeader>
-              <LibraryHeader>
-                <span className="sr-only">Actions</span>
-              </LibraryHeader>
-            </tr>
-          </thead>
-          <tbody>
-            {ordered.map((item) => (
-              <LibraryRow key={item.id} item={item} />
-            ))}
-          </tbody>
-        </table>
+        // Should the card ever be narrower than its columns (the sidebar open at 200% zoom), the table scrolls in it,
+        // never the page. Positioned, so what's placed absolutely inside it (the Actions header's hidden words) is
+        // held in it too, not by the card, past the window's edge.
+        <div className="relative overflow-x-auto">
+          <table className="w-full border-separate border-spacing-0 text-13">
+            <caption className="sr-only">Crawls in the library, running ones first</caption>
+            <thead>
+              <tr className="text-left text-12 text-text-secondary">
+                <LibraryHeader fill>Site</LibraryHeader>
+                <LibraryHeader>Status</LibraryHeader>
+                <LibraryHeader numeric>URLs</LibraryHeader>
+                <LibraryHeader numeric folds>
+                  Pages
+                </LibraryHeader>
+                <LibraryHeader>Checks with issues</LibraryHeader>
+                <LibraryHeader folds>Started</LibraryHeader>
+                <LibraryHeader>
+                  <span className="sr-only">Actions</span>
+                </LibraryHeader>
+              </tr>
+            </thead>
+            <tbody>
+              {ordered.map((item) => (
+                <LibraryRow key={item.id} item={item} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Card>
   );
@@ -197,9 +212,12 @@ function LibraryHeader({
   children,
   numeric = false,
   fill = false,
+  folds = false,
 }: {
   children: ReactNode;
   numeric?: boolean;
+  /** A narrow library (200% zoom) has no column for it: its value is a second line in another cell. */
+  folds?: boolean;
   /** Takes the room the other columns leave, its content truncating in it. */
   fill?: boolean;
 }) {
@@ -207,9 +225,10 @@ function LibraryHeader({
     <th
       scope="col"
       className={clsx(
-        'h-(--grid-header-height) border-y border-border px-3 font-medium whitespace-nowrap first:pl-5 last:pr-5',
+        'h-(--grid-header-height) border-y border-border px-3 font-medium whitespace-nowrap first:pl-5 last:pr-5 @max-library/library:px-2 @max-library/library:whitespace-normal',
         numeric && 'text-right',
         fill && 'w-full',
+        folds && FOLDS,
       )}
     >
       {children}
@@ -217,7 +236,12 @@ function LibraryHeader({
   );
 }
 
-const CELL_BOX = 'h-(--row-height-tall) border-b border-border-subtle px-3 first:pl-5 last:pr-5';
+const CELL_BOX =
+  'h-(--row-height-tall) border-b border-border-subtle px-3 first:pl-5 last:pr-5 @max-library/library:px-2';
+/** A column a narrow library (200% zoom) folds into another cell: hidden there, its value a second line. */
+const FOLDS = '@max-library/library:hidden';
+/** That second line: only in a narrow library. */
+const FOLDED = 'hidden text-12 text-text-muted @max-library/library:block';
 const CELL = `${CELL_BOX} whitespace-nowrap`;
 
 function LibraryRow({ item }: { item: CrawlListItem }) {
@@ -226,7 +250,9 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
   const status = effectiveStatus(item, live) ?? item.status;
   // A file that couldn't be read says nothing about its counts: they show as "–", never 0.
   const unreadable = status === 'unreadable';
-  const fetched = live?.progress && isLive(status) ? live.progress.fetched : unreadable ? null : item.fetchedUrlCount;
+  // "N URLs" as the URL grid lists them, here as in the top bar and the toasts.
+  const fetched =
+    live?.progress && isLive(status) ? crawledUrls(item, live.progress) : unreadable ? null : crawledUrls(item);
   const pages = live?.progress && isLive(status) ? live.progress.htmlPages : unreadable ? null : item.pageCount;
 
   const remove = async () => {
@@ -246,8 +272,9 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
 
   return (
     <tr className="hover:bg-surface-hover">
-      {/* No width of its own (max-w-0), so the site's names truncate instead of pushing the table wider. */}
-      <td className={clsx('max-w-0', CELL)}>
+      {/* No width of its own (max-w-0), so the site's names truncate instead of pushing the table wider; never less
+          than its least (min-w), so a narrow window's other columns can't squeeze it out. */}
+      <td className={clsx('max-w-0 min-w-(--library-site-min)', CELL)}>
         <div className="flex min-w-0 items-center gap-3">
           <Favicon site={item.site ?? crawlName(item)} size="md" />
           <div className="flex min-w-0 flex-col">
@@ -272,20 +299,34 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
           <StatusPill status={status} fetched={null} variant="plain" />
           {item.outOfDate ? <span className="block text-12 text-text-muted">Analysis out of date</span> : null}
           {item.error ? <span className="block text-12 text-text-muted">{item.error}</span> : null}
+          {item.startedAt ? (
+            <span className={FOLDED}>
+              Started <RelativeTime iso={item.startedAt} />
+            </span>
+          ) : null}
         </div>
       </td>
-      <td className={clsx('figures text-right', CELL)}>{formatCount(fetched)}</td>
-      <td className={clsx('figures text-right', CELL)}>{formatCount(pages)}</td>
-      <td className={CELL}>
+      <td className={clsx('figures text-right', CELL)}>
+        {formatCount(fetched)}
+        <span className={FOLDED}>
+          {pages === null ? '–' : `${formatCount(pages)} ${pages === 1 ? 'page' : 'pages'}`}
+        </span>
+      </td>
+      <td className={clsx('figures text-right', CELL, FOLDS)}>{formatCount(pages)}</td>
+      <td className={CELL_BOX}>
         {unreadable ? (
           <span className="text-text-muted">–</span>
         ) : item.issues ? (
-          <SeverityCounts counts={item.issues} />
+          // One severity a line in a narrow library, so the column is as wide as its widest count, not all three.
+          <SeverityCounts
+            counts={item.issues}
+            className="@max-library/library:flex @max-library/library:flex-col @max-library/library:items-start @max-library/library:gap-1"
+          />
         ) : (
           <span className="text-text-muted">Not analysed yet</span>
         )}
       </td>
-      <td className={CELL}>
+      <td className={clsx(CELL, FOLDS)}>
         <RelativeTime iso={item.startedAt} />
       </td>
       <td className={clsx('text-right', CELL)}>

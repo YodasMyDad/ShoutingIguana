@@ -776,9 +776,11 @@
 
   /* ------------------------------------------------------------------ Tabs */
   /*
-    Tabs past the edge (a narrow inspector, 200% zoom) scroll sideways, with a thin scrollbar that says so to the
-    pointer. The hairline under them is an inset shadow, so the chosen tab's rule sits on it inside the list rather
-    than below it, where the list would clip it and scroll a pixel up and down.
+    Tabs past the edge (a narrow inspector, 200% zoom) scroll sideways without a bar: the arrow keys move along them,
+    a touchpad, Shift and the wheel, or the plain wheel (Tabs.tsx turns it sideways) scroll them, and the chosen tab
+    is scrolled into view. An end with more tabs past it fades out (`data-more-start`, `data-more-end`), so a mouse can
+    see there are more. A bar under a strip of tabs reads as a broken layout (the real shell showed one). The hairline under them is an inset shadow, so the chosen tab's
+    rule sits on it inside the list rather than below it, where the list would clip it and scroll a pixel up and down.
   */
   .si-tabs {
     display: flex;
@@ -786,7 +788,25 @@
     padding: 0 var(--space-5);
     box-shadow: inset 0 calc(var(--hairline) * -1) 0 var(--color-border-subtle);
     overflow-x: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+  }
+
+  .si-tabs[data-more-start] {
+    mask-image: linear-gradient(to right, transparent, black var(--tabs-fade));
+  }
+
+  .si-tabs[data-more-end] {
+    mask-image: linear-gradient(to left, transparent, black var(--tabs-fade));
+  }
+
+  .si-tabs[data-more-start][data-more-end] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--tabs-fade),
+      black calc(100% - var(--tabs-fade)),
+      transparent
+    );
   }
 
   /* Flush with the panel's own padding: the list keeps room for the first tab's focus ring. */
@@ -2570,6 +2590,14 @@
   .si-chart__grid {
     stroke: var(--color-chart-grid);
     stroke-width: var(--hairline);
+    shape-rendering: crispEdges;
+  }
+
+  /* A moment on the time axis (a crawl continued): a dashed upright, quieter than the lines and above the grid. */
+  .si-chart__marker {
+    stroke: var(--color-chart-secondary);
+    stroke-width: var(--hairline);
+    stroke-dasharray: 3 3;
     shape-rendering: crispEdges;
   }
 

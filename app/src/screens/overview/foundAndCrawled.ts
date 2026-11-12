@@ -1,12 +1,14 @@
 // The "found and crawled" chart's data (docs/v2-sidecar-api.md, History): the run's history from the sidecar, carried
 // on by the live store's trail of progress events, and the axes' ticks. Pure.
 //
-// The chart is of the run being watched, on the run's clock (the store's `RunClock`): the time it has spent crawling,
-// which is also what Elapsed shows and what the pace is read over. A crawl that was continued has earlier runs in its
-// history, counted back from its file, but the file doesn't keep when each run began and ended, so the time between
-// them (seconds or days) can't be told from crawling: on one axis with this run it would be most of the chart. They
-// are left out, and the chart starts where this run did, at the counts it started with.
-import type { CrawlHistory } from '../../api/types';
+// The chart's axis is time spent crawling: the run being watched on the run's clock (the store's `RunClock`), which is
+// also what the pace is read over. A crawl that was continued has earlier runs in its history, counted back from its
+// file. From E3c the history says when each run was crawling (`runs`, each with its stretches), so the earlier runs are
+// drawn on the same axis, their points placed by the crawling time up to them: the time between runs (seconds or days)
+// and the pauses close up, and each later run's start is marked. From an earlier engine, which kept no such times, the
+// time between runs can't be told from crawling, and on one axis with this run it would be most of the chart: the
+// earlier runs are left out, and the chart starts where this run did, at the counts it started with.
+import type { CrawlHistory, CrawlRun } from '../../api/types';
 import type { TrailPoint } from '../../live/liveStore';
 
 export interface ProgressPoint {
@@ -24,8 +26,47 @@ export interface ProgressSeries {
   /** The latest counts. */
   found: number;
   crawled: number;
-  /** The run continued an earlier one, whose progress isn't drawn: the chart starts at this run's first counts. */
+  /**
+   * The run continued an earlier one. Without `runs` (an earlier engine), its progress isn't drawn: the chart starts
+   * at this run's first counts.
+   */
   continued: boolean;
+  /**
+   * E3c: the chart is of the whole crawl, every run on one axis of time spent crawling: where each run after the first
+   * began on it, oldest first. Null when the runs' times aren't known, and the chart is of this run alone.
+   */
+  runStarts: number[] | null;
+  /**
+   * Where the run being watched starts on the axis: the earlier runs' time spent crawling, which the run's own clock
+   * adds to; 0 when the chart is of this run alone.
+   */
+  offsetMs: number;
+}
+
+/** How long the stretches had been crawling at `at`: every stretch that ended by then, and the part of the one it's in. */
+export function crawlingAt(at: number, runs: readonly CrawlRun[]): number {
+  let total = 0;
+  for (const run of runs) {
+    for (const stretch of run.crawling) {
+      const from = Date.parse(stretch.from);
+      const to = Date.parse(stretch.to);
+      if (Number.isNaN(from) || Number.isNaN(to) || at <= from) continue;
+      total += Math.min(at, to) - from;
+    }
+  }
+  return total;
+}
+
+/**
+ * The runs before the one being watched, and where the one being watched starts on the crawled-time axis: their time
+ * spent crawling. The run being watched is the one this sidecar started (`liveFrom`), which the engine's own start of
+ * it follows by a moment: a run that began before it is an earlier one, though it never ended (its process died), and
+ * the run being watched may not be in the file yet when the history is read. A crawl the page sees at rest has no
+ * run being watched (`liveFrom` null): every run is an earlier one.
+ */
+function earlierRuns(runs: readonly CrawlRun[], liveFrom: number): { earlier: readonly CrawlRun[]; offset: number } {
+  const earlier = Number.isNaN(liveFrom) ? runs : runs.filter((run) => !(Date.parse(run.startedAt) >= liveFrom));
+  return { earlier, offset: earlier.reduce((sum, run) => sum + run.crawlingMs, 0) };
 }
 
 /**
@@ -38,6 +79,9 @@ export function progressSeries(history: CrawlHistory | undefined, trail: readonl
   const points: ProgressPoint[] = [];
   const liveFrom = history?.liveFrom ? Date.parse(history.liveFrom) : Number.NaN;
   const takeover = trail[0];
+  // E3c: the runs' times, so the earlier runs go on the same axis as this one.
+  const runs = history?.runs ?? null;
+  const { earlier, offset } = runs ? earlierRuns(runs, liveFrom) : { earlier: [], offset: 0 };
   let continued = false;
   for (const point of history?.points ?? []) {
     const at = Date.parse(point.at);
@@ -45,20 +89,40 @@ export function progressSeries(history: CrawlHistory | undefined, trail: readonl
     // Counted back from the file: an earlier run's (or, for a crawl not live here, all of it).
     if (Number.isNaN(liveFrom) || at < liveFrom) {
       continued ||= point.internalFetched > 0;
+      if (runs) {
+        // Where the earlier runs' crawling had got to by then, never past where this run starts.
+        const elapsedMs = Math.min(offset, crawlingAt(at, earlier));
+        points.push({ elapsedMs, found: point.internalFound, crawled: point.internalFetched });
+      }
       continue;
     }
     if (takeover && at >= takeover.at) break;
     const elapsedMs = point.elapsedMs ?? at - liveFrom;
     // Never past where the trail takes over, which may know of a pause the history can't tell.
     if (takeover && elapsedMs >= takeover.runMs) continue;
-    points.push({ elapsedMs, found: point.internalFound, crawled: point.internalFetched });
+    points.push({ elapsedMs: offset + elapsedMs, found: point.internalFound, crawled: point.internalFetched });
   }
   for (const point of trail) {
-    points.push({ elapsedMs: point.runMs, found: point.internalFound, crawled: point.internalFetched });
+    points.push({ elapsedMs: offset + point.runMs, found: point.internalFound, crawled: point.internalFetched });
   }
   const last = points.at(-1);
   if (!last) return null;
-  return { points, spanMs: last.elapsedMs, found: last.found, crawled: last.crawled, continued };
+  // Each later run's start: the crawling time of the runs before it. Every run is one: the earlier ones, and the one
+  // being watched, which starts at the offset.
+  const watching = runs !== null && (runs.length > earlier.length || !Number.isNaN(liveFrom));
+  const all = runs ? [...earlier, ...(watching ? [null] : [])] : [];
+  const runStarts = runs
+    ? all.slice(1).map((_, index) => earlier.slice(0, index + 1).reduce((sum, run) => sum + run.crawlingMs, 0))
+    : null;
+  return {
+    points,
+    spanMs: last.elapsedMs,
+    found: last.found,
+    crawled: last.crawled,
+    continued: continued || all.length > 1,
+    runStarts,
+    offsetMs: offset,
+  };
 }
 
 const COUNT_STEPS = [1, 2, 5] as const;

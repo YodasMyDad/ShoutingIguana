@@ -55,6 +55,7 @@ export function HreflangSection({ detail }: { detail: UrlDetail }) {
                       id={entry.target.id}
                       url={entry.target.url}
                       statusCode={entry.target.statusCode}
+                      outcome={entry.target.outcome}
                       showStatus
                     />
                   ) : (

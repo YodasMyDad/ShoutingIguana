@@ -17,6 +17,7 @@ import type {
   NoResponseCounts,
   ProgressEvent,
   SidecarEvent,
+  SiteVersionCounts,
   StatusClassCounts,
 } from '../api/types';
 import type { SseMessage, StreamState } from './sse';
@@ -75,6 +76,18 @@ export interface LiveProgressDetail {
   waits: readonly CrawlWait[];
   /** How many more waits there are than `waits` lists, by reason. */
   moreWaits: Readonly<Partial<Record<CrawlWaitReason, number>>>;
+  /** E3c: the URLs crawled so far, as the URL grid counts them (`fetched` is true). Null from an earlier engine. */
+  crawled: number | null;
+  /**
+   * E3c: the part of the figures that is the crawler's own probes of the site's other versions. Null when the stream
+   * didn't say (an earlier engine) or said it malformed: then nothing is taken out, as nothing is known to be a probe.
+   */
+  siteVersions: SiteVersionCounts | null;
+  /**
+   * E3c: the time spent crawling over every run, standing still while paused. Null when an earlier run's time wasn't
+   * kept; undefined when the stream didn't say (an earlier engine).
+   */
+  crawlingMs: number | null | undefined;
 }
 
 /** A progress event as the store keeps it: a count the stream sent malformed is null, shown as "–", never 0. */
@@ -458,7 +471,20 @@ function progressDetail(record: Record<string, unknown>): LiveProgressDetail {
     noResponse: countsOf(record.noResponse, NO_RESPONSE_KEYS),
     waits: waitsOf(record.waits),
     moreWaits: moreWaitsOf(record.moreWaits),
+    crawled: isCount(record.crawled) ? record.crawled : null,
+    siteVersions: siteVersionsOf(record.siteVersions),
+    crawlingMs: record.crawlingMs === null ? null : isCount(record.crawlingMs) ? record.crawlingMs : undefined,
   };
+}
+
+/** The probes' part of the figures, whole or not at all: a part missing would take too little out. */
+function siteVersionsOf(value: unknown): SiteVersionCounts | null {
+  if (!isRecord(value) || !isCount(value.fetched)) return null;
+  const statusClasses = countsOf(value.statusClasses, STATUS_CLASS_KEYS);
+  const statusCodes = statusCodesOf(value.statusCodes);
+  const noResponse = countsOf(value.noResponse, NO_RESPONSE_KEYS);
+  if (!statusClasses || !statusCodes || !noResponse) return null;
+  return { fetched: value.fetched, statusClasses, statusCodes, noResponse };
 }
 
 /** An alert's facts: only the contract's fields, each of its own type; null when it has none. */

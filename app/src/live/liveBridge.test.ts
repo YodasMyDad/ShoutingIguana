@@ -158,6 +158,20 @@ describe('the live bridge’s toasts', () => {
     stop();
   });
 
+  it('says "N URLs" in its toasts as the URL grid lists them: the URLs that weren’t checked aren’t crawled', async () => {
+    const { stop, status } = setup();
+    status('running');
+    status('stopping');
+    item = { ...item, status: 'stopped', fetchedUrlCount: 6_914, crawledUrlCount: 6_909 };
+    status('stopped');
+    await settle();
+    expect(notifyResult).toHaveBeenCalledWith(
+      'Crawl stopped',
+      expect.objectContaining({ description: 'example.com: 6,909 URLs. You can continue it later.' }),
+    );
+    stop();
+  });
+
   it('gives each crawl’s news one toast, and takes Continue away once the crawl runs again', async () => {
     const { stop, status } = setup();
     status('running');
@@ -204,6 +218,22 @@ describe('what the live bridge refreshes', () => {
     const stale = (key: QueryKey) => queryClient.getQueryState(key)?.isInvalidated === true;
     return { queryClient, stale };
   }
+
+  it('reads a crawl’s history again when it starts or is continued, as it has a new run, and not on a pause', () => {
+    const { queryClient, stale } = cachedClient();
+    queryClient.setQueryData(queryKeys.history(ID), { crawlId: ID, startedAt: '', liveFrom: null, points: [] });
+    const { stop, status } = setup(queryClient);
+    status('stopped');
+    queryClient.setQueryData(queryKeys.history(ID), { crawlId: ID, startedAt: '', liveFrom: null, points: [] });
+    expect(stale(queryKeys.history(ID))).toBe(false);
+    status('running');
+    expect(stale(queryKeys.history(ID))).toBe(true);
+    queryClient.setQueryData(queryKeys.history(ID), { crawlId: ID, startedAt: '', liveFrom: null, points: [] });
+    status('paused');
+    status('running');
+    expect(stale(queryKeys.history(ID))).toBe(false);
+    stop();
+  });
 
   it('fetches the library again when the sidecar says it changed', () => {
     const { queryClient, stale } = cachedClient();

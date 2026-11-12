@@ -85,6 +85,24 @@ describe('the Issues screen', () => {
     expect(screen.getByText('Why Internal URL returns 4xx matters.')).toBeVisible();
   });
 
+  it('selects the first check in the engine’s order to fix them (fixFirst) when the analysis sends one', async () => {
+    sidecar({
+      analysis: { ...ISSUES_ANALYSIS, fixFirst: ['empty-anchor-text', 'internal-client-error', 'title-too-long'] },
+    });
+    const { router } = await open(ISSUES);
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+  });
+
+  it('says the one check that passed in the singular when every other is hidden', async () => {
+    updateSettings({ hiddenChecks: ['internal-client-error', 'empty-anchor-text', 'title-too-long', 'orphan-page'] });
+    sidecar();
+    await open(ISSUES);
+    expect(
+      await screen.findByText(/^No check found an issue on this crawl\. The 1 check counted passed\./),
+    ).toBeVisible();
+    expect(screen.queryByText(/All 1 check passed/)).toBeNull();
+  });
+
   it('lists checks by category, a skipped one with its reason, and the passed ones only when asked', async () => {
     sidecar();
     await open(`${ISSUES}/internal-client-error`);

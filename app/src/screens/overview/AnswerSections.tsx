@@ -80,19 +80,26 @@ export function FixFirst({
   crawlId,
   entries,
   hiddenFound = 0,
+  order,
 }: {
   crawlId: string;
   entries: readonly CheckEntry[];
   /** Hidden checks that found issues: with nothing else to fix, the card says they're why it's empty. */
   hiddenFound?: number;
+  /** The analysis's `fixFirst`: the engine's order. Absent from an earlier engine's analysis: then the app's. */
+  order?: readonly string[] | undefined;
 }) {
-  const list = fixFirst(entries);
+  const list = fixFirst(entries, undefined, order);
   return (
     <Card as="section" aria-labelledby="overview-fix-title">
       <CardHeader
         title="Fix first"
         titleId="overview-fix-title"
-        meta="The most severe first, then the most pages or URLs affected"
+        meta={
+          order
+            ? 'Most severe first, site-wide faults ahead, then most URLs'
+            : 'The most severe first, then the most pages or URLs affected'
+        }
       />
       <CardBody tight>
         {list.checks.length === 0 ? (

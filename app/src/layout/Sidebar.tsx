@@ -19,7 +19,7 @@ import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/que
 import type { IssueCounts } from '../api/types';
 import { CRAWL_SECTIONS, type CrawlSection } from '../app/sections';
 import logoUrl from '../assets/iguana-64.png';
-import { crawlName } from '../crawl/status';
+import { crawlName, crawledUrls } from '../crawl/status';
 import { formatExactTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useSettings } from '../settings/settingsStore';
@@ -265,7 +265,7 @@ function RunningCrawls({ collapsed }: { collapsed: boolean }) {
 
 function RunningCrawl({ id, name, collapsed }: { id: string; name: string; collapsed: boolean }) {
   const crawl = useLiveCrawl(id);
-  const fetched = crawl?.progress?.fetched ?? null;
+  const fetched = crawledUrls(undefined, crawl?.progress);
   return (
     <li>
       <NavItem

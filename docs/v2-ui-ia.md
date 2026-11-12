@@ -92,6 +92,9 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 - Crawls running now are pinned at the top, with live progress.
 - Each crawl shows its status, pages, issues by severity and when it ran. Its actions: Open, Continue, Crawl again,
   Analyse again, Show in folder, Remove from library (undo), Delete file….
+- "N URLs" is the URLs crawled, as the URL grid lists them, here and everywhere else. In a narrow window (200% zoom)
+  the library keeps its Site column: Pages and when it ran become second lines of the URLs and status cells, and
+  nothing scrolls sideways.
 - Ctrl+O and drag-and-drop open a `.sicrawl` from anywhere.
 
 **New crawl.**
@@ -105,10 +108,12 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 **Overview (live).**
 
 - Crawled, found and queued, pages per second with a sparkline, elapsed time, and an ETA when a URL limit makes one
-  meaningful. Elapsed is the time this run has spent crawling: it stands still while the crawl is paused, and starts
-  again when a crawl is continued.
-- Found and crawled over that same time, and what was found split into crawled, queued and not followed.
-- The status-code breakdown as the magnified bar, where each class opens its URLs.
+  meaningful. Elapsed is the time the crawl has spent crawling: it stands still while the crawl is paused, and a crawl
+  continued adds this run to its earlier runs' time (from an engine that doesn't keep that, this run's alone).
+- Found and crawled over that same time, a crawl continued drawn whole with each run's start marked, and what was
+  found split into crawled, queued and not followed.
+- The status-code breakdown as the magnified bar, where each class opens its URLs: the site's own URLs, the
+  crawler's tries of the site's other versions (http or https, www or not) said apart beneath it.
 - Alerts, each with what to do and a link to where it's done: the crawl's settings (continue more slowly, add
   headers, another user agent), Sitemaps, or a new crawl from where the start URL leads. What holds the crawl up
   right now (a Crawl-delay, a site that isn't answering) is listed apart, as it comes and goes.
@@ -117,8 +122,11 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 
 **Overview (done).**
 
-- Issues by severity, and "Fix first": severity, then pages or URLs affected (a check counts pages only when
-  pages are all it flags).
+- Issues by severity, and "Fix first" in the engine's order: severity, a fault of the whole site before the rest of
+  its severity, then URLs affected (a check counts pages only when pages are all it flags). An earlier engine's
+  analysis keeps the app's order: severity, then pages or URLs affected.
+- The crawl in a line: URLs crawled, pages read, when it started and how long it spent crawling, pauses and the time
+  between runs left out (or that it isn't known, for a crawl an earlier version made).
 - Issues by category, status codes, indexability with its reasons, depth, and response times.
 - Every number opens its URLs.
 - Skipped checks and analysis notes, in plain words.

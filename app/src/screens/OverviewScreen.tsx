@@ -11,7 +11,7 @@ import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { useElementWidth } from '../grid/useElementWidth';
 import { useCommands } from '../keyboard/registry';
-import { formatCount, formatCountOf, formatExactTime } from '../lib/format';
+import { formatCount, formatCountOf, formatDuration, formatExactTime } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { useSettings } from '../settings/settingsStore';
 import { Banner } from '../ui/Banner';
@@ -87,9 +87,11 @@ export function OverviewScreen() {
   // moves (to its Cancel), which the hook above makes.
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => control.titleRef.current);
-  // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the status breakdown's
-  // total. The library's count has the URLs that weren't checked in it, so it stands only until the breakdown is read.
-  const crawled = facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0);
+  // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the library's
+  // `crawledUrlCount` (E3c). From an earlier engine, the status breakdown's total; its `fetchedUrlCount` has the URLs
+  // that weren't checked in it, so it stands only until the breakdown is read.
+  const crawled =
+    item?.crawledUrlCount ?? (facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0));
 
   const hiddenIds = useSettings((settings) => settings.hiddenChecks);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
@@ -102,7 +104,8 @@ export function OverviewScreen() {
   const counted = useMemo(() => (entries ? countedEntries(entries) : null), [entries]);
   const totals = counted ? analysisTotals(counted) : null;
   const hiddenChecks = entries ? hiddenTotals(entries) : null;
-  const first = entries ? firstCheckToFix(entries) : null;
+  // The engine's order to fix them in (the analysis's `fixFirst`), the app's own for an earlier engine's analysis.
+  const first = entries ? firstCheckToFix(entries, analysis.data?.fixFirst) : null;
   const firstId = first?.check.id;
   const empty =
     !crawling && item !== undefined && isEmptyCrawl({ pageCount: item.pageCount, status: status ?? item.status });
@@ -237,6 +240,7 @@ export function OverviewScreen() {
             entries={counted}
             totals={totals}
             hiddenFound={hiddenChecks?.found ?? 0}
+            order={analysis.data?.fixFirst}
           />
         )}
 
@@ -308,6 +312,7 @@ function Answer({
   entries,
   totals,
   hiddenFound,
+  order,
 }: {
   crawlId: string;
   checks: Checks;
@@ -315,6 +320,8 @@ function Answer({
   entries: readonly CheckEntry[];
   totals: AnalysisTotals;
   hiddenFound: number;
+  /** The analysis's `fixFirst`: the engine's order to fix them in. */
+  order: readonly string[] | undefined;
 }) {
   const [widthRef, width] = useElementWidth();
   return (
@@ -326,7 +333,7 @@ function Answer({
         columns={width !== null && width > 0 && width < TWO_COLUMNS_BELOW ? 2 : 4}
       />
       <div className="grid grid-cols-(--overview-columns) gap-4 @max-split:grid-cols-1">
-        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} />
+        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} order={order} />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
           <Categories crawlId={crawlId} checks={checks} entries={entries} />
@@ -496,9 +503,11 @@ function EmptyAction({ crawlId, item, reason }: { crawlId: string; item: CrawlLi
 }
 
 /**
- * The crawl in a line: what it fetched (opening its URLs), its pages and when it started. Not how long it took: from
- * when it started to when it finished has every pause in it, and the hours or days between stopping it and continuing
- * it, and nothing the engine keeps says how long it spent crawling.
+ * The crawl in a line: what it crawled (opening its URLs), its pages, when it started, and how long it spent crawling
+ * (E3c's `crawlingMs`): every run's time, each from its start to its end less its pauses, so neither a pause nor the
+ * days between stopping it and continuing it are in it, which the words say. Not from when it started to when it
+ * finished, which has all of that in it. A crawl an earlier engine made, or made a run of, didn't keep the time: it
+ * says so rather than guess.
  */
 function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlListItem; crawled: number }) {
   return (
@@ -510,9 +519,18 @@ function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlLi
         {formatCountOf(crawled, 'URL')}
       </TextLink>{' '}
       crawled, {formatCountOf(item.pageCount, 'page')} read
-      {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.
+      {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.{crawlingWords(item.crawlingMs)}
     </p>
   );
+}
+
+/** The time spent crawling, in words that say which clock it is; nothing from a sidecar that doesn't say. */
+function crawlingWords(crawlingMs: number | null | undefined): string {
+  if (crawlingMs === undefined) return '';
+  if (crawlingMs === null) {
+    return ' How long it spent crawling isn’t known: an earlier version of Shouting Iguana crawled it, or part of it, and didn’t keep the time.';
+  }
+  return ` It spent ${formatDuration(crawlingMs)} crawling, not counting pauses or the time between runs.`;
 }
 
 /** The crawl's alerts, from its file and from this session, when it has any: they explain what's missing. */

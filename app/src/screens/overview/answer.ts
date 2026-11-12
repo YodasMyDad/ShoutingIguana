@@ -39,7 +39,7 @@ export function severityFigures(entries: readonly CheckEntry[]): SeverityFigure[
 export const FIX_FIRST_LIMIT = 8;
 
 export interface FixFirst {
-  /** The checks to fix first, in order: the most severe, then the most pages or URLs affected. */
+  /** The checks to fix first, in order: the engine's (`fixFirst`), or the most severe then the most affected. */
   checks: { entry: CheckEntry; link: IssuesLink }[];
   /** Checks with issues that aren't listed. */
   more: number;
@@ -50,8 +50,16 @@ export interface FixFirst {
  * to list: Issues still opens on one of them (it has to open on something), but here they'd sit beside figures that
  * say no check found an issue.
  */
-export function fixFirst(entries: readonly CheckEntry[], limit: number = FIX_FIRST_LIMIT): FixFirst {
-  const ranked = rankChecksToFix(entries.filter((entry) => !entry.hidden));
+export function fixFirst(
+  entries: readonly CheckEntry[],
+  limit: number = FIX_FIRST_LIMIT,
+  order?: readonly string[] | null,
+): FixFirst {
+  // The engine's order (the analysis's `fixFirst`) when the analysis sends it.
+  const ranked = rankChecksToFix(
+    entries.filter((entry) => !entry.hidden),
+    order,
+  );
   return {
     checks: ranked.slice(0, limit).map((entry) => ({ entry, link: { to: 'issues', check: entry.check.id } })),
     more: Math.max(0, ranked.length - limit),

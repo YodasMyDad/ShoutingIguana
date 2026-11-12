@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import type { LinkRow, UrlDetail } from '../api/inspector';
+import type { LinkRow, RedirectHop, UrlDetail } from '../api/inspector';
 import { queryKeys } from '../api/queries';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
@@ -82,6 +82,8 @@ const inspect = (urlId: number) => <InspectorApp path={`${URLS}?inspect=${urlId}
 
 const HOME = testUrlDetail({ id: 1, url: 'https://example.com/', issues: [] });
 const PAGE = testUrlDetail({
+  // E3c: the URL's length by the check's measure, drawn on its limit.
+  urlLength: 21,
   issues: [
     {
       checkId: 'internal-client-error',
@@ -336,6 +338,7 @@ export const LongValues: Story = {
         urls: {
           2: testUrlDetail({
             url: LONG_URL,
+            urlLength: LONG_URL.length,
             content: {
               ...PAGE.content!,
               titles: [{ text: LONG_TEXT, length: LONG_TEXT.length }],
@@ -609,7 +612,7 @@ const hop = (id: number, statusCode: number | null, via: 'http' | 'metaRefresh' 
   via,
 });
 
-const redirecting = (hops: ReturnType<typeof hop>[], flags: { loop?: boolean; tooLong?: boolean } = {}) =>
+const redirecting = (hops: RedirectHop[], flags: { loop?: boolean; tooLong?: boolean } = {}) =>
   testUrlDetail({
     url: 'https://example.com/old/',
     response: testResponse({ outcome: 'redirect', statusCode: 301 }),
@@ -869,6 +872,126 @@ export const Hreflang: Story = {
                   href: 'javascript:void(0)',
                   url: null,
                   target: null,
+                  inHead: true,
+                  fromHttpHeader: false,
+                },
+              ],
+            }),
+          },
+        },
+        { section: 'hreflang' },
+      ),
+  ],
+  render: () => inspect(2),
+};
+
+/**
+ * What became of the URLs the inspector names with no status code (E3c's `outcome`): an outlink robots.txt refused,
+ * one never checked as its host had stopped answering, one not fetched (queued or left alone: a named URL doesn't say
+ * which), one that timed out.
+ */
+export const OutlinkOutcomes: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          ...SITE,
+          outlinks: {
+            2: [
+              testLinkRow({
+                id: 3,
+                url: 'https://example.com/private/',
+                statusCode: null,
+                fetched: true,
+                outcome: 'robotsDisallowed',
+              }),
+              testLinkRow({
+                id: 4,
+                url: 'https://shop.example.com/',
+                statusCode: null,
+                fetched: false,
+                outcome: 'notChecked',
+              }),
+              testLinkRow({
+                id: 5,
+                url: 'https://example.com/page/9/',
+                statusCode: null,
+                fetched: false,
+                outcome: null,
+              }),
+              testLinkRow({
+                id: 6,
+                url: 'https://slow.example.org/',
+                statusCode: null,
+                fetched: true,
+                outcome: 'timeout',
+              }),
+              testLinkRow({ id: 7, url: 'https://example.com/b', statusCode: 200, fetched: true, outcome: 'success' }),
+            ],
+          },
+        },
+        { section: 'outlinks' },
+      ),
+  ],
+  render: () => inspect(2),
+};
+
+/** A redirect chain ending at a URL robots.txt refused: the end says so, in the inspector's words, not "No status". */
+export const RedirectsEndRefused: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          urls: {
+            2: redirecting([
+              hop(8, 301),
+              {
+                id: 9,
+                url: 'https://example.com/private/',
+                statusCode: null,
+                outcome: 'robotsDisallowed',
+                via: 'http',
+              },
+            ]),
+          },
+        },
+        { section: 'redirects' },
+      ),
+  ],
+  render: () => inspect(2),
+};
+
+/** Hreflang targets with no status, each saying what became of it (E3c's `outcome`). */
+export const HreflangOutcomes: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          urls: {
+            1: HOME,
+            2: testUrlDetail({
+              hreflang: [
+                {
+                  language: 'fr',
+                  href: '/fr/',
+                  url: 'https://example.com/fr/',
+                  target: { id: 3, url: 'https://example.com/fr/', statusCode: null, outcome: 'robotsDisallowed' },
+                  inHead: true,
+                  fromHttpHeader: false,
+                },
+                {
+                  language: 'de',
+                  href: 'https://de.example.com/',
+                  url: 'https://de.example.com/',
+                  target: { id: 4, url: 'https://de.example.com/', statusCode: null, outcome: 'notChecked' },
+                  inHead: true,
+                  fromHttpHeader: false,
+                },
+                {
+                  language: 'es',
+                  href: '/es/',
+                  url: 'https://example.com/es/',
+                  target: { id: 5, url: 'https://example.com/es/', statusCode: null, outcome: null },
                   inHead: true,
                   fromHttpHeader: false,
                 },

@@ -123,7 +123,11 @@ export function activityWords(status: CrawlStatus | null, phase: CrawlPhase | nu
  * stored an outcome for, and that includes the ones it never asked because their host had stopped answering
  * (`noResponse.notChecked`), which the grid has as not fetched: they come out. Null when `fetched` isn't known.
  */
-export function crawledSoFar(progress: Pick<LiveProgress, 'fetched' | 'noResponse'> | null): number | null {
+export function crawledSoFar(
+  progress: (Pick<LiveProgress, 'fetched' | 'noResponse'> & Partial<Pick<LiveProgress, 'crawled'>>) | null,
+): number | null {
+  // E3c's own count, the same subtraction made by the engine; worked out here for an engine that doesn't send it.
+  if (typeof progress?.crawled === 'number') return progress.crawled;
   const fetched = progress?.fetched ?? null;
   return fetched === null ? null : fetched - notCheckedSoFar(progress);
 }
@@ -148,7 +152,10 @@ export interface FoundSplit {
 
 /** What was found, split by what became of it. Null unless every part is known, as the parts wouldn't add up. */
 export function foundSplit(
-  progress: Pick<LiveProgress, 'discovered' | 'fetched' | 'queued' | 'inFlight' | 'skipped' | 'noResponse'> | null,
+  progress:
+    | (Pick<LiveProgress, 'discovered' | 'fetched' | 'queued' | 'inFlight' | 'skipped' | 'noResponse'> &
+        Partial<Pick<LiveProgress, 'crawled'>>)
+    | null,
 ): FoundSplit | null {
   if (!progress) return null;
   const { discovered, fetched, queued, inFlight, skipped } = progress;
@@ -156,7 +163,7 @@ export function foundSplit(
   const notChecked = notCheckedSoFar(progress);
   return {
     found: discovered,
-    crawled: fetched - notChecked,
+    crawled: crawledSoFar(progress) ?? fetched - notChecked,
     queued: queued + (inFlight ?? 0),
     notFollowed: skipped,
     notChecked,

@@ -6,7 +6,7 @@ import { crawlQuery } from '../api/queries';
 import { CRAWL_SECTIONS, sectionOf } from '../app/sections';
 import { setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
-import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { crawlControls, crawlName, crawledUrls, effectiveStatus } from '../crawl/status';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
 import { formatExactTime } from '../lib/format';
@@ -119,7 +119,7 @@ export function TopBar() {
       {crawlId && status ? (
         // Short of room (200% zoom with a running crawl's Pause and Stop), the controls' keys go, then their words.
         <div ref={controlsRef} className="flex shrink-0 items-center gap-2 @max-topbar-keys/topbar:[&_kbd]:hidden">
-          <StatusPill status={status} fetched={live?.progress?.fetched ?? crawl?.fetchedUrlCount ?? null} />
+          <StatusPill status={status} fetched={crawledUrls(crawl, live?.progress)} />
           {controls.canPause ? (
             <Button
               size="sm"

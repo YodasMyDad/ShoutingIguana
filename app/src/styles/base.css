@@ -55,9 +55,44 @@
     font-size: var(--mono-scale);
   }
 
-  /* Scrollbar thumbs are where you are in a list: border-control, 3:1 against what's behind them. */
-  * {
-    scrollbar-color: var(--color-border-control) transparent;
+  /*
+    Scroll bars, thin and quiet in both themes: a thumb in border-control (3:1 against what's behind it) on no track,
+    with no arrow buttons. Left to itself, WebView2 on Windows draws the system's bars, arrows and all, and with
+    `scrollbar-width: thin` still draws small arrows; headless Chromium shows none, so no test sees them. Chromium
+    draws a scroll bar given ::-webkit-scrollbar parts by those parts, which have no buttons unless asked, and only
+    while the element sets no `scrollbar-width` or `scrollbar-color` (either makes it ignore the parts): so Chromium
+    gets the parts, and a browser without them the standard properties. Under forced colours, neither: the system's
+    own bars, in its colours. A strip of tabs sets `scrollbar-width: none`, which hides its bar in both.
+  */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-border-control) transparent;
+    }
+  }
+
+  @media not (forced-colors: active) {
+    ::-webkit-scrollbar {
+      width: var(--scrollbar-size);
+      height: var(--scrollbar-size);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      min-height: var(--scrollbar-thumb-min);
+      min-width: var(--scrollbar-thumb-min);
+      border: var(--scrollbar-inset) solid transparent;
+      border-radius: var(--radius-full);
+      background: var(--color-border-control) padding-box;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--color-text-muted) padding-box;
+    }
+
+    ::-webkit-scrollbar-track,
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
   }
 
   @media (forced-colors: active) {
@@ -324,8 +359,9 @@
     height: var(--scrollbar-size);
   }
 
+  /* Drawn as every other thumb: within the bar's clear edge (padding-box), where the shorthand alone filled all 10px. */
   .si-grid--windowed::-webkit-scrollbar-thumb {
-    background: var(--color-border-control);
+    background: var(--color-border-control) padding-box;
     border-radius: var(--radius-full);
   }
 

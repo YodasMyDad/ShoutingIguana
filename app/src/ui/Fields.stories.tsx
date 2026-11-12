@@ -352,11 +352,27 @@ export const SelectAndTabs: Story = {
             { value: 'source', label: 'Source', disabled: true, content: null },
           ]}
         />
-        {/* In a narrow panel: the tabs past the edge scroll, with a thin scrollbar that says so. */}
+        {/* In a narrow panel: the tabs past the edge scroll without a bar, the end with more tabs past it faded. */}
         <div className="w-(--checks-width)">
           <Tabs
             label="Inspector sections, narrow"
             flush
+            tabs={[
+              { value: 'summary', label: 'Summary', content: null },
+              { value: 'issues', label: 'Issues', count: 5, content: null },
+              { value: 'inlinks', label: 'Inlinks', count: 1_204, content: null },
+              { value: 'outlinks', label: 'Outlinks', count: 86, content: null },
+              { value: 'headers', label: 'Headers', content: null },
+              { value: 'source', label: 'Source', content: null },
+            ]}
+          />
+        </div>
+        {/* The same, chosen at its last tab: scrolled into view, the start faded where tabs are past it. */}
+        <div className="w-(--checks-width)">
+          <Tabs
+            label="Inspector sections, narrow, at the end"
+            flush
+            value="source"
             tabs={[
               { value: 'summary', label: 'Summary', content: null },
               { value: 'issues', label: 'Issues', count: 5, content: null },

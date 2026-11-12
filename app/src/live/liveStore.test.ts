@@ -603,3 +603,35 @@ describe('what the store keeps, so memory stays flat over a long crawl', () => {
     expect(store.getState().crawls.a?.history).toEqual([1]);
   });
 });
+
+describe('E3c’s progress, read at the boundary', () => {
+  const read = (extra: Record<string, unknown>) => {
+    const event = parseSidecarEvent({
+      event: 'progress',
+      id: '',
+      data: JSON.stringify({ crawlId: 'a', status: 'running', fetched: 10, ...extra }),
+    });
+    return event?.type === 'progress' ? event.data : null;
+  };
+  const siteVersions = {
+    fetched: 1,
+    statusClasses: { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, other: 0, noResponse: 1, blocked: 0 },
+    statusCodes: {},
+    noResponse: { robotsDisallowed: 0, timeout: 0, networkError: 1, notChecked: 0, processingError: 0 },
+  };
+
+  it('keeps the URLs crawled, the probes’ part and the time spent crawling', () => {
+    const progress = read({ crawled: 9, siteVersions, crawlingMs: 41_250 });
+    expect(progress?.crawled).toBe(9);
+    expect(progress?.siteVersions).toEqual(siteVersions);
+    expect(progress?.crawlingMs).toBe(41_250);
+  });
+
+  it('reads them as unknown from an earlier engine, a time not kept as null, and a probes’ part with a hole as none', () => {
+    expect(read({})).toMatchObject({ crawled: null, siteVersions: null, crawlingMs: undefined });
+    expect(read({ crawlingMs: null })?.crawlingMs).toBeNull();
+    const { noResponse: _left, ...holed } = siteVersions;
+    expect(read({ siteVersions: holed })?.siteVersions).toBeNull();
+    expect(read({ crawled: 'many', crawlingMs: -1 })).toMatchObject({ crawled: null, crawlingMs: undefined });
+  });
+});

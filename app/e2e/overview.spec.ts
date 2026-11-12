@@ -186,6 +186,82 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   await expectNoViolations(page);
 });
 
+/** The URL grid's count for a link opened from the live Overview, then back to the Overview. */
+async function landsOn(page: Page, link: Locator): Promise<number> {
+  await link.click();
+  await expect(page).toHaveURL(/\/urls\?filter=/);
+  await expect(page.getByRole('heading', { name: 'URLs', level: 1 })).toBeVisible();
+  // The grid's count settles once its read has answered.
+  let last = -1;
+  await expect
+    .poll(async () => {
+      const now = count(await page.locator('.si-result-count__n').innerText());
+      const settled = now === last;
+      last = now;
+      return settled;
+    })
+    .toBe(true);
+  await page.goBack();
+  await expect(main(page).getByText('Live', { exact: true })).toBeVisible();
+  return last;
+}
+
+test('while a crawl is paused, every live figure lands on exactly its count in the URL grid', async ({ page }) => {
+  test.setTimeout(180_000);
+  await startCrawl(page);
+  await expect.poll(() => crawled(page)).toBeGreaterThan(200);
+  await page.keyboard.press('F7');
+  await expect(main(page).getByText('The crawl is paused.', { exact: false })).toBeVisible();
+  // The requests on their way when it paused land: then nothing moves.
+  let before = -1;
+  await expect
+    .poll(
+      async () => {
+        const now = await crawled(page);
+        const still = now === before;
+        before = now;
+        return still;
+      },
+      { intervals: [2_000] },
+    )
+    .toBe(true);
+
+  const progress = page.getByRole('region', { name: 'Progress' });
+  const crawledLink = progress.getByRole('link', { name: /^Crawled/ });
+  expect(await landsOn(page, crawledLink)).toBe(await crawled(page));
+  const pagesLink = progress.getByRole('link', { name: /^Pages/ });
+  const pages = count(/Pages\s*([\d,]+)/.exec(await pagesLink.innerText())?.[1] ?? null);
+  expect(await landsOn(page, pagesLink)).toBe(pages);
+
+  // Every class of the status codes, by its part of the bars, which says its number: the site's own URLs.
+  const status = page.getByRole('region', { name: 'Status codes' });
+  const names = new Set<string>();
+  for (const part of await status.getByRole('link', { name: /^[^:]+: [\d,]+ URLs?$/ }).all()) {
+    names.add((await part.getAttribute('aria-label')) ?? (await part.innerText()));
+  }
+  expect(names.size).toBeGreaterThan(0);
+  for (const name of names) {
+    const figure = count(name.split(':')[1] ?? '');
+    expect(await landsOn(page, status.getByRole('link', { name, exact: true }).first()), name).toBe(figure);
+  }
+  // The total the classes add up to: the site's own URLs crawled, and the probes of its other versions apart, which
+  // together are what Crawled counts.
+  const total = count(/([\d,]+) URLs? so far/.exec(await status.getByText(/URLs? so far/).innerText())?.[1] ?? null);
+  const probeLine = status
+    .locator('p', { hasText: 'the crawler tried for the site’s other versions' })
+    .getByRole('link');
+  const probes = (await probeLine.count()) > 0 ? count(await probeLine.innerText()) : 0;
+  if (probes > 0) expect(await landsOn(page, probeLine)).toBe(probes);
+  const notCheckedLine = status.locator('p', { hasText: /checked because/ }).getByRole('link');
+  const notChecked = (await notCheckedLine.count()) > 0 ? count(await notCheckedLine.innerText()) : 0;
+  if (notChecked > 0) expect(await landsOn(page, notCheckedLine)).toBe(notChecked);
+  expect(total + probes).toBe(await crawled(page));
+  test.info().annotations.push({
+    type: 'figures',
+    description: `crawled ${await crawled(page)}, pages ${pages}, classes ${[...names].join(' | ')}, probes ${probes}, not checked ${notChecked}`,
+  });
+});
+
 test('a stopped crawl says how far it got, and continues from there', async ({ page }) => {
   test.setTimeout(120_000);
   await startCrawl(page);
