@@ -175,6 +175,15 @@ export const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'settings/{-$section}',
   validateSearch: validateNoSearch,
+  // A section there's no file for (Analysis until its slice) is General, in the address too: nothing turns Advanced
+  // on, or lands, on a section that isn't there. Its list comes with the screen's chunk.
+  beforeLoad: async ({ params }) => {
+    if (params.section === undefined) return;
+    const { SETTINGS_SECTIONS } = await import('../screens/settings/registry');
+    if (!SETTINGS_SECTIONS.some((entry) => entry.id === params.section)) {
+      throw redirect({ to: '/settings/{-$section}', params: { section: undefined }, replace: true });
+    }
+  },
   component: lazyRouteComponent(() => import('../screens/SettingsScreen'), 'SettingsScreen'),
 });
 

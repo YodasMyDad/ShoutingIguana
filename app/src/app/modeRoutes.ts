@@ -35,6 +35,11 @@ function crawlPlace(pathname: string): { crawl: string; section: string | null }
   return { crawl: match[1], section: match[2] ?? null };
 }
 
+/** The crawl a path is in, by its id, or null outside a crawl. */
+export function crawlIdOf(pathname: string): string | null {
+  return crawlPlace(pathname)?.crawl ?? null;
+}
+
 /** The Advanced-only screen a path is, by name ("URLs", "Crawl defaults"), or null when Simple has it. */
 export function advancedOnlyScreen(pathname: string): string | null {
   const crawl = crawlPlace(pathname);

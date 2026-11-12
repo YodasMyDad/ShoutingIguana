@@ -10,7 +10,7 @@ import { onAnnounce } from '../feedback/announce';
 import { installKeyboard } from '../keyboard/registry';
 import { DEFAULT_SETTINGS, readSettings } from '../settings/schema';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, problem, standardRoutes } from '../test/fakeSidecar';
 import { issuesRoutes } from '../test/issuesSidecar';
 import type { Mode } from './mode';
 
@@ -111,6 +111,38 @@ describe('arriving at an Advanced-only screen in Simple', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to Simple' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`${CRAWL}/overview`));
     expect(getSettings().mode).toBe('simple');
+  });
+
+  it('leaves Simple as it is for a section of Settings there isn’t, which opens General', async () => {
+    const router = await open('/settings/analysis', 'simple');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(getSettings().mode).toBe('simple');
+    expect(screen.queryByText('Advanced is on')).toBeNull();
+  });
+
+  it('leaves Simple as it is for a crawl the library doesn’t have', async () => {
+    setTransport(
+      fakeSidecar([
+        [
+          'GET',
+          /^\/api\/crawls\/f{16}$/,
+          () => problem({ type: 'crawl-not-found', title: 'No crawl has this id.', status: 404 }),
+        ],
+        ...issuesRoutes(),
+        ...standardRoutes(),
+      ]),
+    );
+    replaceSettings({ mode: 'simple' });
+    const router = createAppRouter(
+      createQueryClient(),
+      createMemoryHistory({ initialEntries: ['/crawls/ffffffffffffffff/urls'] }),
+    );
+    render(<App router={router} queryClient={createQueryClient()} />);
+    await act(() => router.load());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 100)));
+    expect(getSettings().mode).toBe('simple');
+    expect(screen.queryByText('Advanced is on')).toBeNull();
   });
 
   it('leaves Simple as it is on a screen Simple has', async () => {
