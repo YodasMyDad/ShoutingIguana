@@ -85,23 +85,28 @@ test('the list: an index with its sitemaps under it, what became of each, and th
   await expect(row(page, index).getByText(`Index of ${under.length}`, { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(row(page, index).getByText('Index', { exact: true })).toBeVisible();
-  // A sitemap that was read: listed and not crawled always; crawled and blocked where the engine counts what
-  // robots.txt refused, else a dash that says why, never `fetched` under the name "Crawled".
-  const whole = under.find((sitemap) => sitemap.state === 'read' && sitemap.urls.listed > 0);
-  expect(whole, 'the synthetic site has a sitemap that lists URLs').toBeTruthy();
+  // A sitemap that was read has all five as numbers: the engine counts, for the list, what robots.txt refused, so
+  // "Crawled" is what the crawl requested (`fetched` less those) and never `fetched` under that name. The synthetic
+  // site lists one URL its robots.txt disallows (/private/listed): that sitemap says 1 blocked.
+  const whole = under.find((sitemap) => sitemap.state === 'read' && (sitemap.urls.robotsDisallowed ?? 0) > 0);
+  expect(whole, 'the synthetic site has a sitemap that lists a URL robots.txt refuses').toBeTruthy();
   if (!whole) return;
+  const refused = whole.urls.robotsDisallowed ?? 0;
+  expect(refused).toBe(1);
   const cells = row(page, whole).getByRole('gridcell');
   await expect(cells.nth(3)).toHaveText(whole.urls.listed.toLocaleString('en-GB'));
+  await expect(cells.nth(4)).toHaveText((whole.urls.fetched - refused).toLocaleString('en-GB'));
+  await expect(cells.nth(5)).toHaveText('1');
   await expect(cells.nth(6)).toHaveText((whole.urls.listed - whole.urls.fetched).toLocaleString('en-GB'));
-  if (whole.urls.robotsDisallowed === undefined) {
-    for (const at of [4, 5]) {
-      await expect(cells.nth(at)).toHaveText('–');
-      await expect(cells.nth(at).locator('[title]')).toHaveAttribute('title', /doesn’t count, for each sitemap/);
-    }
-  } else {
-    await expect(cells.nth(4)).toHaveText((whole.urls.fetched - whole.urls.robotsDisallowed).toLocaleString('en-GB'));
-    await expect(cells.nth(5)).toHaveText(whole.urls.robotsDisallowed.toLocaleString('en-GB'));
-  }
+  await expect(row(page, whole).getByText('–')).toHaveCount(0);
+  // The blocked count opens exactly that URL, which says what kept the crawl from it.
+  await cells.nth(5).getByRole('link', { name: '1 URL blocked by robots.txt' }).click();
+  await expect(shown(page)).toHaveText('1');
+  const urls = main(page).getByRole('grid', { name: `URLs listed by ${whole.url}` });
+  await expect(urls.getByRole('row')).toHaveCount(2);
+  await expect(urls.getByRole('row').nth(1)).toContainText('/private/listed');
+  await page.goBack();
+  await expect(tree(page).getByRole('row').nth(1)).toBeVisible();
   // The site's pages no sitemap lists, as a link to exactly them.
   await expect(main(page).getByText(/of the site’s [\d,]+ pages (aren’t|isn’t) in any sitemap\./)).toBeVisible();
 });
