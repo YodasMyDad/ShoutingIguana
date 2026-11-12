@@ -134,6 +134,34 @@ test('opens a row’s menu with Shift+F10, gives the keyboard back to the row, a
   await expectShown(page, links.matching);
 });
 
+test('opens a row’s menu with Shift+F10 at its row, when the grid had scrolled the row out of view', async ({
+  page,
+}) => {
+  await openUrls(page);
+  await grid(page).focus();
+  await page.keyboard.press('ArrowDown');
+  // The rows scroll on under the pointer; the cursor stays on its row, now out of view.
+  await grid(page).hover();
+  await page.mouse.wheel(0, 4_000);
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Shift+F10');
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  const box = await grid(page).boundingBox();
+  const cell = await page.evaluate(() => {
+    const element = document.querySelector('[role="grid"][aria-label="URLs"]');
+    const id = element?.getAttribute('aria-activedescendant') ?? '';
+    return document.getElementById(id)?.getBoundingClientRect().toJSON() as { bottom: number } | undefined;
+  });
+  const at = await menu.boundingBox();
+  // The keys brought the row back into view, and the menu opened at it: under its cell, inside the grid.
+  expect(box && at && cell).toBeTruthy();
+  expect(at!.y).toBeGreaterThanOrEqual(box!.y);
+  expect(at!.y).toBeLessThanOrEqual(box!.y + box!.height);
+  expect(Math.abs(at!.y - cell!.bottom)).toBeLessThanOrEqual(8);
+  await page.keyboard.press('Escape');
+});
+
 test('saves a view under a name, which outlives a reload and opens from the menu', async ({ page }) => {
   await openUrls(page, `?sort=${encodeURIComponent(JSON.stringify([{ column: 'depth', desc: true }]))}`);
   await main(page).getByRole('button', { name: 'Saved views' }).click();
