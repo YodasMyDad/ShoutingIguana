@@ -61,6 +61,12 @@ describe('the switch', () => {
     expect(within(modeSwitch()).getByRole('radio', { name: 'Advanced' })).toHaveAttribute('aria-checked', 'false');
   });
 
+  it('says what it does and its keys to a screen reader, not only in a tooltip', async () => {
+    await open('/', 'simple');
+    expect(modeSwitch()).toHaveAttribute('aria-keyshortcuts', 'Control+Shift+A');
+    expect(modeSwitch()).toHaveAccessibleDescription('Switch between Simple and Advanced (Ctrl+Shift+A)');
+  });
+
   it('switches on a click, keeps focus on itself, the screen where it is, and says so once', async () => {
     const heard: string[] = [];
     const stop = onAnnounce((message) => heard.push(message));

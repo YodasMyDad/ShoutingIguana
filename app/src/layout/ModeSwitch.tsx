@@ -1,4 +1,5 @@
 import { useRouter } from '@tanstack/react-router';
+import { useAriaShortcut, useShortcut } from '../keyboard/registry';
 import { MODE_NAMES, MODES, useMode, type Mode } from '../mode/mode';
 import { switchMode } from '../mode/switchMode';
 import { SegmentedControl } from '../ui/SegmentedControl';
@@ -18,6 +19,9 @@ const MODE_HINTS: Record<Mode, string> = {
 export function ModeSwitch() {
   const router = useRouter();
   const mode = useMode();
+  // The tooltip is for the pointer; a screen reader hears the same from the group itself.
+  const keys = useShortcut('app.mode');
+  const ariaKeys = useAriaShortcut('app.mode');
   return (
     <Tooltip content="Switch between Simple and Advanced" command="app.mode" triggerName="Mode">
       <div className="flex shrink-0" data-mode-switch="">
@@ -26,6 +30,8 @@ export function ModeSwitch() {
           value={mode}
           options={MODES.map((value) => ({ value, label: MODE_NAMES[value], description: MODE_HINTS[value] }))}
           onValueChange={(next) => switchMode(router, next)}
+          ariaKeyShortcuts={ariaKeys ?? undefined}
+          groupDescription={`Switch between Simple and Advanced${keys ? ` (${keys})` : ''}`}
         />
       </div>
     </Tooltip>
