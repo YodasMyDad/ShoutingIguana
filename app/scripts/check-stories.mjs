@@ -14,6 +14,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
+import { whenAxeIsFree } from './lib/axe.mjs';
 
 const appDir = path.resolve(import.meta.dirname, '..');
 const root = path.join(appDir, 'storybook-static');
@@ -93,10 +94,13 @@ try {
       // A story has rendered once its root has content, or its dialog or menu has opened in a portal.
       await page.waitForFunction(RENDERED, undefined, { timeout: 15_000 }).catch(() => undefined);
       await page.waitForTimeout(wait);
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-        .exclude('#storybook-docs')
-        .analyze();
+      // The a11y addon checks the story too, as it renders, with the page's one axe: ours waits for it to be free.
+      const results = await whenAxeIsFree(() =>
+        new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+          .exclude('#storybook-docs')
+          .analyze(),
+      );
       for (const violation of results.violations) {
         const where = violation.nodes.map((node) => node.target.join(' ')).join('; ');
         problems.push(`${theme} ${story.id}: ${violation.id} (${violation.help}): ${where}`);
