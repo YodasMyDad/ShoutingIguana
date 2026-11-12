@@ -10,6 +10,7 @@ import {
   frameStats,
   parseOptions,
   shellEnvironment,
+  shellMemory,
   verdict,
   withDebuggingPort,
 } from './shell.mjs';
@@ -55,6 +56,42 @@ test('options: paths are made absolute, numbers checked, steps to skip named', (
   assert.equal(options.pages, 500);
   assert.equal(options.keep, true);
   assert.deepEqual([...options.skip], ['tray', 'keys']);
+});
+
+test('options: how long the window stays in the tray, in whole seconds', () => {
+  assert.equal(parseOptions(['--tray-stay', '180']).trayStay, 180);
+  assert.equal(parseOptions([]).trayStay, undefined);
+  assert.throws(() => parseOptions(['--tray-stay', '0']), /--tray-stay must be a whole number of seconds/);
+  assert.throws(() => parseOptions(['--tray-stay', '1.5']), /--tray-stay must be a whole number of seconds/);
+});
+
+test('the shell’s memory is the shell and what it started, never its engine or what the engine started', () => {
+  const MB = 1024 * 1024;
+  const row = (pid, parent, name, workingSet, privateBytes, privateWorkingSet) => ({
+    pid,
+    parent,
+    name,
+    workingSet: workingSet * MB,
+    privateBytes: privateBytes * MB,
+    privateWorkingSet: privateWorkingSet === null ? null : privateWorkingSet * MB,
+  });
+  const processes = [
+    row(10, 1, 'shouting-iguana.exe', 20, 8, 5),
+    row(11, 10, 'msedgewebview2.exe', 30, 12, 6),
+    row(12, 11, 'msedgewebview2.exe', 16, 10, 7),
+    row(13, 10, 'si-sidecar.exe', 200, 180, 150),
+    row(14, 13, 'conhost.exe', 5, 1, 1),
+    row(15, 1, 'explorer.exe', 90, 40, 30),
+  ];
+  assert.deepEqual(shellMemory(processes, 10), {
+    processes: 3,
+    workingSetMb: 66,
+    privateWorkingSetMb: 18,
+    privateBytesMb: 30,
+  });
+  // A process whose private working set Windows didn't give: that measure isn't summed, never half summed.
+  assert.equal(shellMemory([row(10, 1, 'shouting-iguana.exe', 20, 8, null)], 10).privateWorkingSetMb, null);
+  assert.equal(shellMemory(processes, 99).processes, 0);
 });
 
 test('options: what can’t be meant is refused, by name', () => {

@@ -19,7 +19,16 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { chromium } from '@playwright/test';
 import { appRoot, buildCli, copyCrawl, makeSyntheticCrawl } from './lib/engine.mjs';
-import { VIRTUAL_KEYS, Walk, appPage, builtApp, parseOptions, shellEnvironment, verdict } from './lib/shell.mjs';
+import {
+  VIRTUAL_KEYS,
+  Walk,
+  appPage,
+  builtApp,
+  parseOptions,
+  shellEnvironment,
+  shellMemory,
+  verdict,
+} from './lib/shell.mjs';
 
 if (process.platform !== 'win32') throw new Error('smoke-shell walks the Windows shell (WebView2): run it on Windows');
 const options = parseOptions(process.argv.slice(2));
@@ -62,6 +71,23 @@ const until = async (what, check, timeoutMs = 15_000) => {
   }
 };
 const alive = () => app.exitCode === null && app.signalCode === null;
+/** What the shell and its WebView2 hold now, three ways (shellMemory): one read of every process, from outside. */
+const memory = () => {
+  const rows = JSON.parse(
+    execFileSync('powershell', [
+      '-NoProfile',
+      '-Command',
+      [
+        '$private = @{}',
+        'Get-CimInstance Win32_PerfRawData_PerfProc_Process | ForEach-Object { $private[[int]$_.IDProcess] = [double]$_.WorkingSetPrivate }',
+        'Get-CimInstance Win32_Process | ForEach-Object { [pscustomobject]@{ pid = [int]$_.ProcessId; parent = [int]$_.ParentProcessId; name = $_.Name; workingSet = [double]$_.WorkingSetSize; privateBytes = [double]$_.PrivatePageCount; privateWorkingSet = $private[[int]$_.ProcessId] } } | ConvertTo-Json -Compress',
+      ].join('; '),
+    ]).toString(),
+  );
+  return shellMemory(rows, app.pid);
+};
+const memoryWords = (sample) =>
+  `${sample.workingSetMb} MB working set, ${sample.privateWorkingSetMb ?? '–'} MB private working set, ${sample.privateBytesMb} MB private bytes (${sample.processes} processes)`;
 const sidecars = () =>
   Number(
     execFileSync('powershell', [
@@ -101,13 +127,19 @@ try {
     { needed: true },
   );
   const errors = [];
-  page?.on('pageerror', (error) => errors.push(error.message));
-  const main = page?.getByRole('main');
-  const nav = page?.getByRole('navigation', { name: 'Main' });
-  const grid = page?.getByRole('grid', { name: 'URLs' });
-  const inspector = page?.getByRole('complementary', { name: 'Inspector' });
-  const palette = page?.getByRole('dialog', { name: 'Command palette' });
-  const library = page?.getByRole('region', { name: 'Library' });
+  let main, nav, grid, inspector, palette, library;
+  /** The page the walk drives, and its parts: again after a reconnect (see the tray). */
+  const attach = (next) => {
+    page = next;
+    page?.on('pageerror', (error) => errors.push(error.message));
+    main = page?.getByRole('main');
+    nav = page?.getByRole('navigation', { name: 'Main' });
+    grid = page?.getByRole('grid', { name: 'URLs' });
+    inspector = page?.getByRole('complementary', { name: 'Inspector' });
+    palette = page?.getByRole('dialog', { name: 'Command palette' });
+    library = page?.getByRole('region', { name: 'Library' });
+  };
+  attach(page);
   const heading = () => inspector.getByRole('heading', { level: 2 }).innerText();
   const count = (text) => Number((text ?? '').replace(/[^\d]/g, ''));
   const picture = async (name) => {
@@ -362,16 +394,54 @@ try {
         await until('the window hiding', () => !shellWindow('state').window);
         expectThat(alive(), 'the app quit instead of hiding');
         const before = await fetched();
-        await sleep(1500);
+        // --tray-stay: the window stays hidden that long, the shell's memory read every 30 s (shellMemory).
+        const stayMs = (options.trayStay ?? 1.5) * 1000;
+        const hiddenAt = Date.now();
+        const samples = [];
+        if (options.trayStay) {
+          for (let at = 30_000; at <= stayMs; at += 30_000) {
+            await sleep(hiddenAt + at - Date.now());
+            // Asked from here: the page is suspended while hidden.
+            const now = await fetch(`http://127.0.0.1:${state.port}/api/crawls/${crawlId}`, {
+              headers: { Authorization: `Bearer ${state.token}` },
+            });
+            const sample = { seconds: at / 1000, crawling: (await now.json()).status === 'running', ...memory() };
+            samples.push(sample);
+            console.log(
+              `  in the tray ${sample.seconds} s${sample.crawling ? ', crawling' : ''}: ${memoryWords(sample)}`,
+            );
+          }
+        }
+        await sleep(Math.max(0, hiddenAt + stayMs - Date.now()));
         const after = await fetched();
         expectThat(after > before, `the crawl stood still at ${after} URLs`);
+        const last = samples.at(-1);
         shellWindow('tray-click');
         await until('the window coming back', () => shellWindow('state').window);
+        // A long stay hidden (--tray-stay) can outlast the DevTools connection, not the page: then it's attached
+        // again, and the page is checked as it is, not reloaded.
+        let reattached = false;
+        if (page.isClosed() || !browser.isConnected()) {
+          await browser.close().catch(() => undefined);
+          browser = await until('the DevTools port again', () =>
+            chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => null),
+          );
+          attach(
+            await until('the app’s page again', () =>
+              appPage(browser.contexts().flatMap((context) => context.pages())),
+            ),
+          );
+          await page.emulateMedia({ colorScheme: null, reducedMotion: null, forcedColors: null });
+          page.setDefaultTimeout(10_000);
+          reattached = true;
+        }
         await until('the page answering', () =>
           Promise.race([page.evaluate(() => document.visibilityState === 'visible'), sleep(1000).then(() => false)]),
         );
         await main.waitFor();
-        return `hidden with the crawl at ${before} URLs, ${after} URLs 1.5 s later, back from the tray`;
+        return `hidden with the crawl at ${before} URLs, ${after} URLs ${stayMs / 1000} s later, back from the tray${
+          reattached ? ' (DevTools attached again: its connection had dropped while hidden)' : ''
+        }${last ? `; after ${last.seconds} s hidden: ${memoryWords(last)}` : ''}`;
       },
     );
 

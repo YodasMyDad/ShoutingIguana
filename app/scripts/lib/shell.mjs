@@ -41,11 +41,12 @@ export const SKIPPABLE = ['keys', 'live', 'tray', 'restart'];
 
 /**
  * The script's options: `--exe <path>`, `--crawl <file>`, `--port <n>`, `--shots <folder>`, `--pages <n>` (the test
- * site's), `--skip keys,live,tray,restart`, `--keep` (leave the run's folder behind). Anything else is refused.
+ * site's), `--skip keys,live,tray,restart`, `--keep` (leave the run's folder behind), `--tray-stay <s>` (how long the
+ * window stays in the tray, its memory measured every 30 s). Anything else is refused.
  * @param {string[]} argv
  */
 export function parseOptions(argv) {
-  /** @type {{ exe?: string, crawl?: string, port?: number, shots?: string, pages: number, keep: boolean, skip: Set<string> }} */
+  /** @type {{ exe?: string, crawl?: string, port?: number, shots?: string, pages: number, keep: boolean, skip: Set<string>, trayStay?: number }} */
   const options = { pages: 20_000, keep: false, skip: new Set() };
   for (let index = 0; index < argv.length; index++) {
     const name = argv[index];
@@ -54,11 +55,16 @@ export function parseOptions(argv) {
       continue;
     }
     const value = argv[index + 1];
-    if (!['--exe', '--crawl', '--port', '--shots', '--pages', '--skip'].includes(name))
+    if (!['--exe', '--crawl', '--port', '--shots', '--pages', '--skip', '--tray-stay'].includes(name))
       throw new Error(`Unknown option '${name}'`);
     if (value === undefined || value.startsWith('--')) throw new Error(`${name} needs a value`);
     index++;
-    if (name === '--port' || name === '--pages') {
+    if (name === '--tray-stay') {
+      const seconds = Number(value);
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > 3_600)
+        throw new Error(`--tray-stay must be a whole number of seconds from 1 to 3600, not '${value}'`);
+      options.trayStay = seconds;
+    } else if (name === '--port' || name === '--pages') {
       const number = Number(value);
       const limit = name === '--port' ? 65_535 : 1_000_000;
       if (!Number.isInteger(number) || number < 1 || number > limit)
@@ -74,6 +80,43 @@ export function parseOptions(argv) {
     }
   }
   return options;
+}
+
+/**
+ * What the shell holds in memory: the shell and every process it started, its WebView2 ones among them, but not its
+ * engine (`si-sidecar.exe`) or anything the engine started, whose memory is the crawl's. Three measures, in MB, as
+ * Windows keeps them per process: the working set (every page in RAM, the pages shared with other processes, such as
+ * the system's DLLs, counted in each), the private working set (only the pages in RAM no other process shares: Task
+ * Manager's "Memory" column, and its process group's sum), and the private bytes (memory committed to the process
+ * alone, in RAM or paged out).
+ * @param {{ pid: number, parent: number, name: string, workingSet: number, privateBytes: number, privateWorkingSet: number | null }[]} processes
+ * @param {number} shellPid
+ */
+export function shellMemory(processes, shellPid) {
+  const children = new Map();
+  for (const process of processes) {
+    const siblings = children.get(process.parent) ?? [];
+    siblings.push(process);
+    children.set(process.parent, siblings);
+  }
+  const counted = [];
+  const visit = (process) => {
+    if (process.name.toLowerCase() === 'si-sidecar.exe') return;
+    counted.push(process);
+    for (const child of children.get(process.pid) ?? []) if (child.pid !== process.pid) visit(child);
+  };
+  const shell = processes.find((process) => process.pid === shellPid);
+  if (shell) visit(shell);
+  const mb = (bytes) => Math.round((bytes / 1024 / 1024) * 10) / 10;
+  const sum = (pick) => counted.reduce((total, process) => total + (pick(process) ?? 0), 0);
+  return {
+    processes: counted.length,
+    workingSetMb: mb(sum((process) => process.workingSet)),
+    privateWorkingSetMb: counted.every((process) => process.privateWorkingSet !== null)
+      ? mb(sum((process) => process.privateWorkingSet))
+      : null,
+    privateBytesMb: mb(sum((process) => process.privateBytes)),
+  };
 }
 
 /**
