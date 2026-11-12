@@ -132,6 +132,32 @@ describe('the URL grid’s columns', () => {
   });
 });
 
+describe('a sort of several keys when one key’s column is hidden', () => {
+  it('drops that key alone, keeping the others in their order', async () => {
+    sidecar();
+    const sort = [
+      { column: 'depth', desc: false },
+      { column: 'inlinks', desc: true },
+    ];
+    const { router, user } = await open(`${URLS}?sort=${encodeURIComponent(JSON.stringify(sort))}`);
+    act(() => void commands.run('urls.columns'));
+    const chooser = await screen.findByRole('dialog', { name: 'Columns' });
+    await user.click(within(chooser).getByRole('checkbox', { name: 'Depth' }));
+    await waitFor(() => expect(router.state.location.search.sort).toEqual([{ column: 'inlinks', desc: true }]));
+  });
+
+  it('keeps the shown keys of a view that arrives sorted by a hidden column too', async () => {
+    sidecar();
+    const sort = [
+      { column: 'inlinks', desc: true },
+      { column: 'outlinks', desc: false },
+    ];
+    const { router } = await open(`${URLS}?sort=${encodeURIComponent(JSON.stringify(sort))}`);
+    await waitFor(() => expect(router.state.location.search.sort).toEqual([{ column: 'inlinks', desc: true }]));
+    expect(await screen.findByRole('columnheader', { name: /^Inlinks/ })).toHaveAttribute('aria-sort', 'descending');
+  });
+});
+
 describe('sorting the URL grid from its headers', () => {
   it('sorts by a column alone on a click, and adds a key with Shift, showing each key’s place', async () => {
     const { transport } = sidecar();

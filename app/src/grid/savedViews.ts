@@ -31,10 +31,19 @@ export interface SavedView {
 export const MAX_SAVED_VIEWS = 24;
 export const MAX_VIEW_NAME = 60;
 /**
- * A view's route as text is at most this long: the preferences file is at most 64 KB, and 24 views of this size leave
- * room for the rest. A view of 20 long filters can be longer: it says so instead of being cut.
+ * A view's route as JSON is at most this many bytes of UTF-8, and all the saved views together at most
+ * MAX_VIEWS_BYTES: the shell keeps a preferences file of at most 64 KB, and the views must leave room for the rest
+ * whatever script their text is in (a character of Japanese is three bytes). A view or a set of views over either says
+ * so instead of being cut.
  */
-export const MAX_VIEW_LENGTH = 1_500;
+export const MAX_VIEW_LENGTH = 4_096;
+export const MAX_VIEWS_BYTES = 32 * 1024;
+
+const encoder = new TextEncoder();
+/** The bytes a value takes as JSON in UTF-8: what the preferences file holds of it. */
+export function jsonBytes(value: unknown): number {
+  return encoder.encode(JSON.stringify(value)).length;
+}
 
 const ID = /^[a-z0-9-]{1,64}$/;
 
@@ -90,13 +99,31 @@ export function viewNameProblem(
   return taken ? `A view is called “${taken.name}” already. Choose another name.` : null;
 }
 
+/** What of a view takes the most room, in words for "This view is too long to keep: …". */
+function biggestPart(search: SavedViewSearch): string {
+  const parts: [string, number][] = [
+    ['its filters take', search.filter ? jsonBytes(search.filter) : 0],
+    ['its search takes', search.q ? jsonBytes(search.q) : 0],
+    ['its columns take', search.cols ? jsonBytes(search.cols) : 0],
+    ['its sort takes', search.sort ? jsonBytes(search.sort) : 0],
+  ];
+  const [words] = parts.reduce((most, part) => (part[1] > most[1] ? part : most));
+  return words;
+}
+
 /** Why the view can't be saved as it is, or null: there's room for it, and it isn't too long to keep. */
 export function saveProblem(views: readonly SavedView[], search: SavedViewSearch): string | null {
   if (views.length >= MAX_SAVED_VIEWS) {
     return `${MAX_SAVED_VIEWS} views are saved, as many as the app keeps. Delete one to save another.`;
   }
-  if (JSON.stringify(viewSearchOf(search)).length > MAX_VIEW_LENGTH) {
-    return 'This view is too long to keep: its filters take more room than a saved view has. Remove one or shorten it.';
+  const view = viewSearchOf(search);
+  if (jsonBytes(view) > MAX_VIEW_LENGTH) {
+    return `This view is too long to keep: ${biggestPart(view)} more room than a saved view has. Shorten it, or remove some.`;
+  }
+  // The new view with a name of the longest kind, beside the ones there are.
+  const added: SavedView = { id: 'v-00000000', grid: 'urls', name: 'x'.repeat(MAX_VIEW_NAME), search: view };
+  if (jsonBytes([...views, added]) > MAX_VIEWS_BYTES) {
+    return 'The saved views take all the room the app keeps for them. Delete one, or a long one, to save this view.';
   }
   return null;
 }
@@ -127,12 +154,15 @@ export function readSavedViews(value: unknown): SavedView[] {
     if (views.some((view) => view.id === id || view.name.toLowerCase() === name.toLowerCase())) continue;
     const raw = typeof record.search === 'object' && record.search !== null ? record.search : {};
     const checked = validateGridSearch(raw as Record<string, unknown>);
-    views.push({
+    const view: SavedView = {
       id,
       grid: 'urls',
       name,
       search: viewSearchOf({ filter: checked.filter, sort: checked.sort, cols: checked.cols, q: checked.q }),
-    });
+    };
+    // Only what the app could have saved: within a view's room, and the views' room all together.
+    if (jsonBytes(view.search) > MAX_VIEW_LENGTH || jsonBytes([...views, view]) > MAX_VIEWS_BYTES) continue;
+    views.push(view);
   }
   return views;
 }

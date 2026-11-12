@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { FacetsPage, UrlRow } from '../../api/grids';
+import type { FacetsPage, GridFilter, UrlRow } from '../../api/grids';
+import { answerFacets, answerGridQuery } from '../../api/mock/gridQuery';
 import { URL_COLUMNS } from '../../api/mock/urlColumns';
 import { nextMultiSort } from '../../grid/sort';
+import { testUrlRows } from '../../test/urlsSidecar';
+import { withFacetValue } from '../links/facets';
 import {
   DEFAULT_URL_COLUMNS,
   URL_MIN_WIDTH,
@@ -274,5 +277,49 @@ describe('a sort of up to three keys', () => {
   it('says it’s full rather than drop a key', () => {
     const three = [a, { column: 'b', desc: false }, { column: 'c', desc: false }];
     expect(nextMultiSort(three, 'd', true, 3)).toEqual({ sort: three, full: true });
+  });
+});
+
+describe('a facet’s value chosen on a view already filtered on its column', () => {
+  it('lands on the count the menu showed: a range the view has stays, beside the value', () => {
+    const rows = testUrlRows(48);
+    const summary = { available: true, reason: null };
+    for (const filters of [
+      [{ column: 'responseMs', op: 'gt', value: 300 }],
+      [{ column: 'depth', op: 'gte', value: 2 }],
+      [{ column: 'statusClass', op: 'in', values: ['2xx', '4xx'] }],
+    ] as GridFilter[][]) {
+      const facets = answerFacets(rows, { filters }, summary);
+      if (!facets.ok) throw new Error('facets');
+      for (const facet of buildUrlFacets(facets.page, filters)) {
+        for (const value of facet.values.filter((candidate) => !candidate.applied)) {
+          const landed = answerGridQuery(
+            rows,
+            { filters: withFacetValue(filters, value.filter), sort: [], limit: 1 },
+            summary,
+          );
+          if (!landed.ok) throw new Error('rows');
+          expect(landed.page.matching, `${JSON.stringify(filters)}: ${facet.title} ${value.words}`).toBe(value.count);
+        }
+      }
+    }
+  });
+
+  it('takes the place only of a list the value is one of', () => {
+    expect(
+      withFacetValue([{ column: 'statusClass', op: 'in', values: ['2xx', '4xx'] }], {
+        column: 'statusClass',
+        op: 'in',
+        values: ['4xx'],
+      }),
+    ).toEqual([{ column: 'statusClass', op: 'in', values: ['4xx'] }]);
+    expect(
+      withFacetValue([{ column: 'responseMs', op: 'gt', value: 300 }], {
+        column: 'responseMs',
+        op: 'between',
+        min: 250,
+        max: 499,
+      }),
+    ).toHaveLength(2);
   });
 });

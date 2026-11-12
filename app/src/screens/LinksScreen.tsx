@@ -212,10 +212,12 @@ export function LinksScreen() {
   };
   // The same of a view that arrives sorted by a column it doesn't show (a link made by hand, or by a version with
   // other columns): the sort is dropped from the route, in place, and never read for.
-  const hiddenSort = sortShown(sort, shown) === undefined && sort.length > 0;
+  const hiddenSort = (sortShown(sort, shown)?.length ?? 0) !== sort.length;
   useEffect(() => {
-    if (hiddenSort) void navigate({ search: (previous) => ({ ...previous, sort: undefined }), replace: true });
-  }, [hiddenSort, navigate]);
+    if (hiddenSort) {
+      void navigate({ search: (previous) => ({ ...previous, sort: sortShown(previous.sort, shown) }), replace: true });
+    }
+  }, [hiddenSort, navigate, shown]);
 
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();

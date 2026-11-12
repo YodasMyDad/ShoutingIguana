@@ -50,6 +50,7 @@ import { GridHeader, ResultCount } from '../ui/PageHeader';
 import { SearchField } from '../ui/SearchField';
 import { Tooltip } from '../ui/Tooltip';
 import { siteOriginOf, urlDisplay } from '../ui/urlText';
+import { withFacetValue } from './links/facets';
 import { linksOfUrl } from './links/linkPlaces';
 import { sortShown } from './links/presets';
 import { SavedViewsMenu, ViewNameDialog } from './urls/SavedViews';
@@ -222,10 +223,12 @@ export function UrlsScreen() {
   );
   // The same of a view that arrives sorted by a column it doesn't show (a link made by hand, a saved view of another
   // version): the sort is dropped from the route, in place, and never read for.
-  const hiddenSort = sortShown(sort, shown) === undefined && sort.length > 0;
+  const hiddenSort = (sortShown(sort, shown)?.length ?? 0) !== sort.length;
   useEffect(() => {
-    if (hiddenSort) void navigate({ search: (previous) => ({ ...previous, sort: undefined }), replace: true });
-  }, [hiddenSort, navigate]);
+    if (hiddenSort) {
+      void navigate({ search: (previous) => ({ ...previous, sort: sortShown(previous.sort, shown) }), replace: true });
+    }
+  }, [hiddenSort, navigate, shown]);
 
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();
@@ -515,8 +518,8 @@ export function UrlsScreen() {
     analysing && summary?.reason !== 'crawling'
       ? UNAVAILABLE_WHILE_ANALYSING
       : UNAVAILABLE_BECAUSE[summary?.reason ?? 'notAnalyzed'];
-  const chooseFacet = (value: UrlFacetValue) =>
-    setFilters([...filters.filter((filter) => filter.column !== value.filter.column), value.filter]);
+  // The value's filter beside the view's: what the menu counted, so the grid lands on its count.
+  const chooseFacet = (value: UrlFacetValue) => setFilters(withFacetValue(filters, value.filter));
 
   return (
     <GridScreen ref={frame}>

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readSettings } from '../settings/schema';
 import {
   MAX_SAVED_VIEWS,
+  MAX_VIEWS_BYTES,
+  jsonBytes,
   currentSavedView,
   newViewId,
   readSavedViews,
@@ -80,9 +82,9 @@ describe('a saved view', () => {
     const long = Array.from({ length: 20 }, () => ({
       column: 'title',
       op: 'contains' as const,
-      value: 'x'.repeat(100),
+      value: 'x'.repeat(220),
     }));
-    expect(saveProblem([], { filter: long })).toMatch(/too long to keep/);
+    expect(saveProblem([], { filter: long })).toMatch(/^This view is too long to keep: its filters take more room/);
     expect(saveProblem([], broken.search)).toBeNull();
   });
 
@@ -136,5 +138,37 @@ describe('saved views as stored', () => {
     expect(settings.savedViews).toEqual([broken]);
     expect(settings.showFullUrls).toBe(true);
     expect(readSettings({ showFullUrls: 'yes' }).showFullUrls).toBe(false);
+  });
+});
+
+describe('the room saved views take', () => {
+  it('names what makes a view too long: a search and columns, with no filter at all', () => {
+    const cols = Array.from({ length: 120 }, (_, index) => `column${index}`);
+    expect(saveProblem([], { q: '日'.repeat(1_000), cols })).toMatch(
+      /^This view is too long to keep: its search takes/,
+    );
+  });
+
+  it('counts bytes, not characters, and all the views together: the preferences file stays under the shell’s 64 KB', () => {
+    // Each view as long as a view may be, in a script of three bytes a character.
+    const search = { q: '日'.repeat(1_300) };
+    const views: SavedView[] = [];
+    for (let index = 0; index < MAX_SAVED_VIEWS && saveProblem(views, search) === null; index++) {
+      views.push({
+        id: `v-${String(index).padStart(8, '0')}`,
+        grid: 'urls',
+        name: String(index).padEnd(60, 'x'),
+        search,
+      });
+    }
+    expect(views.length).toBeLessThan(MAX_SAVED_VIEWS);
+    expect(saveProblem(views, search)).toMatch(/^The saved views take all the room/);
+    expect(jsonBytes(views)).toBeLessThanOrEqual(MAX_VIEWS_BYTES);
+    // As the shell stores it, pretty or not, beside the rest of the preferences: well under 64 KB.
+    const file = JSON.stringify({ settings: { ...readSettings({}), savedViews: views } }, null, 2);
+    expect(new TextEncoder().encode(file).length).toBeLessThan(48 * 1024);
+    // And what's read back is only what could have been saved.
+    const twice = [...views, ...views.map((view) => ({ ...view, id: `${view.id}-2`, name: `${view.name}2` }))];
+    expect(readSavedViews(twice)).toHaveLength(views.length);
   });
 });
