@@ -150,12 +150,9 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
         header: 'Status',
         width: STATUS_WIDTH,
         cell: (row) => (
-          <StatusCode
-            code={row.statusCode}
-            reason={row.statusCode === null ? linkStatusWords(row, crawling) : undefined}
-          />
+          <StatusCode code={row.statusCode} reason={row.statusCode === null ? linkStatusWords(row) : undefined} />
         ),
-        text: (row) => linkStatusWords(row, crawling),
+        text: linkStatusWords,
       },
       {
         id: 'text',
@@ -187,7 +184,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
         text: followWords,
       },
     ],
-    [words.url, urlWidth, siteOrigin, walk, crawling],
+    [words.url, urlWidth, siteOrigin, walk],
   );
 
   const chooseKind = (next: KindChoice) => {

@@ -821,7 +821,8 @@ is what it shows. What it settled:
   row, a redirect's hop and end, a canonical's, a meta refresh's or an hreflang's target) says what became of it from
   its `outcome` (E3c), in the words the inspector uses for the URL itself (`noStatusWords` in `words.ts`, held to
   `fetchState`'s titles by a test): Blocked by robots.txt, Blocked by the server, Not checked, Timed out, Couldn't be
-  reached, Couldn't be read, No response, and Not fetched, or Not fetched yet while the crawl runs. From an earlier
+  reached, Couldn't be read, No response, and Not fetched: never "yet", as a named URL with no outcome may be queued
+  or left alone (not followed, past a limit), and it comes without its state to tell which. From an earlier
   engine, which sends only the code, it reads "No status": the crawl may never have asked (robots.txt), so "No
   response" and "Not fetched" would be guesses.
 - **The tabs' link counts come with the URL** (E3c's `linkTotals`): a running crawl's tick reads the URL shown once,

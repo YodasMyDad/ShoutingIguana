@@ -21,20 +21,20 @@ describe('a named URL with no status code', () => {
   it('says what became of it in the words the inspector says of the URL itself', () => {
     for (const outcome of NO_CODE) {
       const own = fetchState(testUrlDetail({ response: testResponse({ outcome, statusCode: null }) }), false);
-      expect(noStatusWords(outcome, true, false)).toBe(own.title);
+      expect(noStatusWords(outcome, true)).toBe(own.title);
     }
   });
 
-  it('says it wasn’t fetched, or not yet while the crawl runs, rather than “No status”', () => {
-    expect(noStatusWords(null, false, false)).toBe('Not fetched');
-    expect(noStatusWords(null, false, true)).toBe('Not fetched yet');
+  it('says it wasn’t fetched, whatever the crawl is doing: queued or left alone, a named URL doesn’t say which', () => {
+    expect(noStatusWords(null, false)).toBe('Not fetched');
+    expect(noStatusWords(null)).toBe('Not fetched');
     // An outcome that comes with a code, stored without one: no answer to speak of.
-    expect(noStatusWords('success', true, false)).toBe('No response');
+    expect(noStatusWords('success', true)).toBe('No response');
   });
 
   it('says no more than an earlier engine did when the engine doesn’t say', () => {
-    expect(noStatusWords(undefined, true, false)).toBe('No status');
-    expect(noStatusWords(undefined, false, true)).toBe('Not fetched');
+    expect(noStatusWords(undefined, true)).toBe('No status');
+    expect(noStatusWords(undefined, false)).toBe('Not fetched');
   });
 });
 
@@ -44,8 +44,8 @@ describe('an inlink’s or outlink’s other end', () => {
       'Blocked by robots.txt',
     );
     expect(linkStatusWords({ statusCode: null, fetched: false, outcome: 'notChecked' })).toBe('Not checked');
-    expect(linkStatusWords({ statusCode: null, fetched: false, outcome: null }, true)).toBe('Not fetched yet');
-    expect(linkStatusWords({ statusCode: null, fetched: false, outcome: null }, false)).toBe('Not fetched');
+    // Never "yet": a URL left alone (not followed, past a limit) has no outcome either, and never will.
+    expect(linkStatusWords({ statusCode: null, fetched: false, outcome: null })).toBe('Not fetched');
     expect(linkStatusWords({ statusCode: 404, fetched: true, outcome: 'clientError' })).toBe('404');
     // An earlier engine's row: whether fetched, and no more.
     expect(linkStatusWords({ statusCode: null, fetched: true })).toBe('No status');
@@ -70,7 +70,7 @@ describe('an hreflang’s target', () => {
   it('says what became of it where it has no status', () => {
     expect(hreflangProblem(entry('robotsDisallowed'))).toBe('Blocked by robots.txt');
     expect(hreflangProblem(entry('timeout'))).toBe('Timed out');
-    expect(hreflangProblem(entry(null), true)).toBe('Not fetched yet');
+    expect(hreflangProblem(entry(null))).toBe('Not fetched');
     expect(hreflangProblem(entry(undefined))).toBe('No status in this crawl');
   });
 });

@@ -167,8 +167,9 @@ describe('redirectChainLayout', () => {
     // No outcome: never fetched (the contract's null), and while the crawl runs, not yet.
     expect(end(null).summary).toBe('The chain ends at a URL the crawl didn’t fetch.');
     expect(end(null).steps[1]?.noCode).toBe('Not fetched');
+    // While the crawl runs too: a hop with no outcome may be queued, or left alone and never fetched.
     const live = redirectChainLayout(redirecting([hop(6, null, { outcome: null })]), true);
-    expect(live.summary).toBe('The chain ends at a URL the crawl hasn’t fetched yet.');
-    expect(live.steps[1]?.noCode).toBe('Not fetched yet');
+    expect(live.summary).toBe('The chain ends at a URL the crawl didn’t fetch.');
+    expect(live.steps[1]?.noCode).toBe('Not fetched');
   });
 });

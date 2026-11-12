@@ -129,17 +129,15 @@ export const NO_STATUS = 'No status';
 
 /**
  * A named URL's state where it has no status code, from its `outcome` (E3c), as the inspector words the URL's own:
- * not fetched (yet, while the crawl runs: it's in the queue or on its way), refused by robots.txt, blocked, not
- * checked, or no response. `outcome` undefined is an engine that doesn't say: then only whether it was fetched
+ * refused by robots.txt, blocked, not checked, no response, or not fetched. No outcome is "Not fetched" whatever the
+ * crawl is doing: the URL may be queued, but it may as well have been left alone (not followed, past a limit), which
+ * a running crawl never fetches, and a named URL comes without its state to tell the two apart (the URL itself
+ * has one: fetchState). `outcome` undefined is an engine that doesn't say: then only whether it was fetched
  * (`fetched`, where the row has it), never a guess at why there's no code.
  */
-export function noStatusWords(
-  outcome: UrlOutcome | null | undefined,
-  fetched: boolean | undefined,
-  crawling: boolean,
-): string {
+export function noStatusWords(outcome: UrlOutcome | null | undefined, fetched?: boolean): string {
   if (outcome === undefined) return fetched === false ? 'Not fetched' : NO_STATUS;
-  if (outcome === null) return crawling ? 'Not fetched yet' : 'Not fetched';
+  if (outcome === null) return 'Not fetched';
   return NO_CODE_TITLES[outcome] ?? 'No response';
 }
 

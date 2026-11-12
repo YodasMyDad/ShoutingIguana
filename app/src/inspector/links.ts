@@ -64,13 +64,11 @@ export { NO_STATUS };
 
 /**
  * The other end's status as text: its code, or what became of it (E3c's `outcome` on the row: refused by robots.txt,
- * blocked, not checked, no response, or not fetched, yet while the crawl runs), in the inspector's words for the URL
- * itself. An earlier engine's row says only whether the crawl has an outcome for it (`fetched`), not which, so
+ * blocked, not checked, no response, or not fetched), in the inspector's words for the URL itself. An earlier engine's row says only whether the crawl has an outcome for it (`fetched`), not which, so
  * "No response" would be a guess (robots.txt never let the request be made): it says "No status".
  */
 export function linkStatusWords(
   row: Pick<LinkRow, 'statusCode' | 'fetched'> & Partial<Pick<LinkRow, 'outcome'>>,
-  crawling = false,
 ): string {
-  return row.statusCode === null ? noStatusWords(row.outcome, row.fetched, crawling) : String(row.statusCode);
+  return row.statusCode === null ? noStatusWords(row.outcome, row.fetched) : String(row.statusCode);
 }

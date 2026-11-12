@@ -1280,6 +1280,17 @@ describe('walking the site', () => {
     expect(within(grid).queryByText('No status')).toBeNull();
   });
 
+  it('says a link’s URL with no outcome wasn’t fetched, never “yet”, while the crawl runs: it may have been left alone', async () => {
+    const skipped = testLinkRow({ id: 3, url: OTHER.url, statusCode: null, fetched: false, outcome: null });
+    const { inspector, user } = await open(`${URLS}?inspect=2`, { ...SITE, outlinks: { 2: [skipped] } }, undefined, {
+      item: { status: 'running' },
+    });
+    await user.click(await within(inspector).findByRole('tab', { name: /^Outlinks/ }));
+    const grid = await within(inspector).findByRole('grid', { name: 'Outlinks' });
+    expect(await within(grid).findByText('Not fetched')).toBeVisible();
+    expect(within(grid).queryByText('Not fetched yet')).toBeNull();
+  });
+
   it('says so when a URL has no inlinks', async () => {
     const { inspector, user } = await open(`${URLS}?inspect=3`);
     await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));

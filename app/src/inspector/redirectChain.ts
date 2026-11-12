@@ -42,11 +42,11 @@ export interface ChainLayout {
 type Subject = Pick<UrlDetail, 'id' | 'url' | 'type' | 'discovery' | 'response' | 'content' | 'redirects'>;
 
 /** A step without a status code: what became of it, in the inspector's words for the URL itself (words.ts). */
-const noCodeWords = (statusCode: number | null, outcome: UrlOutcome | null, crawling: boolean) =>
-  statusCode !== null ? null : noStatusWords(outcome, undefined, crawling);
+const noCodeWords = (statusCode: number | null, outcome: UrlOutcome | null) =>
+  statusCode !== null ? null : noStatusWords(outcome);
 
 /** Where a chain ends when its last URL has no status: only what its outcome says, never a guess. */
-function endWithoutCode(outcome: UrlOutcome | null, crawling: boolean): string {
+function endWithoutCode(outcome: UrlOutcome | null): string {
   if (outcome === 'robotsDisallowed') {
     return 'The chain ends at a URL robots.txt disallows, so the crawl didn’t request it.';
   }
@@ -55,11 +55,8 @@ function endWithoutCode(outcome: UrlOutcome | null, crawling: boolean): string {
   if (outcome === 'notChecked') {
     return 'The chain ends at a URL the crawl didn’t request: its host had stopped answering.';
   }
-  if (outcome === null) {
-    return crawling
-      ? 'The chain ends at a URL the crawl hasn’t fetched yet.'
-      : 'The chain ends at a URL the crawl didn’t fetch.';
-  }
+  // Queued or left alone: a hop comes without its state, so only that it wasn't fetched.
+  if (outcome === null) return 'The chain ends at a URL the crawl didn’t fetch.';
   return 'The chain ends at a URL the crawl has no answer from.';
 }
 
@@ -81,13 +78,13 @@ export function redirectChainLayout(subject: Subject, crawling: boolean): ChainL
       url: subject.url,
       statusCode: ownCode,
       outcome: ownOutcome,
-      // The URL itself: no response stored is not fetched, whatever its outcome would say.
+      // The URL itself: no response stored is not fetched, and its own state says whether yet (fetchState).
       noCode:
         ownCode !== null
           ? null
           : subject.response === null
-            ? noStatusWords(null, false, crawling)
-            : noCodeWords(ownCode, ownOutcome, crawling),
+            ? (fetchState(subject, crawling).title ?? 'Not fetched')
+            : noCodeWords(ownCode, ownOutcome),
       via: null,
       role: hops.length === 0 ? 'end' : 'start',
       current: true,
@@ -104,7 +101,7 @@ export function redirectChainLayout(subject: Subject, crawling: boolean): ChainL
       statusCode: hop.statusCode,
       outcome: hop.outcome,
       // A hop comes with its status and outcome: with neither, it wasn't fetched (yet, while the crawl runs).
-      noCode: noCodeWords(hop.statusCode, hop.outcome, crawling),
+      noCode: noCodeWords(hop.statusCode, hop.outcome),
       via: hop.via,
       // A chain too long to follow has no end the crawl saw: its last hop is only as far as the crawl went.
       role: index === hops.length - 1 && !tooLong ? 'end' : 'hop',
@@ -146,7 +143,7 @@ export function redirectChainLayout(subject: Subject, crawling: boolean): ChainL
   let summary: string;
   if (loop) summary = 'The redirects come back on themselves, so they never reach a page.';
   else if (tooLong) summary = `The chain goes on past ${count} hops, further than the crawl follows.`;
-  else if (endCode === null) summary = endWithoutCode(end?.outcome ?? null, crawling);
+  else if (endCode === null) summary = endWithoutCode(end?.outcome ?? null);
   else if (endCode >= 300 && endCode < 400) summary = 'The chain stops at a redirect the crawl couldn’t follow.';
   else if (!resolves) summary = `The chain ends at a URL that answers ${endCode}.`;
   else if (count > 1) summary = `It reaches a working page after ${count} hops: link straight to the last one.`;

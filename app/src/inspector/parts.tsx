@@ -81,7 +81,7 @@ export function WalkUrl({
   truncate?: 'middle' | 'wrap' | undefined;
   className?: string | undefined;
 }) {
-  const { urlId, siteOrigin, walk, crawling } = useInspectorContext();
+  const { urlId, siteOrigin, walk } = useInspectorContext();
   const walkable = id !== null && id !== urlId;
   return (
     <span className={clsx('flex min-w-0 items-center gap-2', className)}>
@@ -98,7 +98,7 @@ export function WalkUrl({
         <StatusCode
           code={statusCode}
           // Where it has no code, what became of it (E3c's `outcome`), in the inspector's words for the URL itself.
-          reason={statusCode === null ? noStatusWords(outcome, undefined, crawling) : reasonPhrase(statusCode)}
+          reason={statusCode === null ? noStatusWords(outcome) : reasonPhrase(statusCode)}
           className="shrink-0 text-12"
         />
       ) : null}

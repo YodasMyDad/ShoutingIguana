@@ -4,7 +4,7 @@ import type { HreflangEntry } from '../api/inspector';
 import { noStatusWords } from './words';
 
 /** What's wrong with one annotation, from what the crawl knows of where it points. Null when nothing is. */
-export function hreflangProblem(entry: HreflangEntry, crawling = false): string | null {
+export function hreflangProblem(entry: HreflangEntry): string | null {
   if (entry.url === null) return 'Its address isn’t a URL';
   if (!entry.inHead && !entry.fromHttpHeader) return 'Outside the head, where search engines ignore it';
   if (entry.target === null) return 'Not in this crawl';
@@ -12,9 +12,7 @@ export function hreflangProblem(entry: HreflangEntry, crawling = false): string 
   // What became of it (E3c's `outcome`), in the inspector's words; an earlier engine's target comes with its status
   // alone, so whether it was never fetched, blocked or unreachable isn't said.
   if (code === null) {
-    return entry.target.outcome === undefined
-      ? 'No status in this crawl'
-      : noStatusWords(entry.target.outcome, undefined, crawling);
+    return entry.target.outcome === undefined ? 'No status in this crawl' : noStatusWords(entry.target.outcome);
   }
   if (code < 200 || code >= 300) return `Answers ${code}`;
   return null;
