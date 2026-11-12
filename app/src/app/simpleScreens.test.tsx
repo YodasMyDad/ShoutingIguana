@@ -59,7 +59,8 @@ describe('a route with its Simple screen in the table', () => {
     const router = await open(`${CRAWL}/overview`, 'simple');
     expect(await screen.findByRole('heading', { level: 1, name: 'A Simple Summary' })).toBeVisible();
     fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Advanced' }));
-    expect(await screen.findByRole('heading', { level: 1, name: /Overview/ })).toBeVisible();
+    // A screen's own chunk, loaded the first time: cold, it can take a while.
+    expect(await screen.findByRole('heading', { level: 1, name: /Overview/ }, { timeout: 10_000 })).toBeVisible();
     expect(router.state.location.pathname).toBe(`${CRAWL}/overview`);
   });
 
@@ -70,7 +71,7 @@ describe('a route with its Simple screen in the table', () => {
     expect(router.state.location.search).toMatchObject({ severity: ['error'], inspect: 1 });
 
     fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Advanced' }));
-    expect(await screen.findByRole('complementary', { name: 'Inspector' })).toBeVisible();
+    expect(await screen.findByRole('complementary', { name: 'Inspector' }, { timeout: 10_000 })).toBeVisible();
     expect(router.state.location.search).toMatchObject({ severity: ['error'], inspect: 1 });
   });
 });

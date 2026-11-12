@@ -105,7 +105,7 @@ function Page({ mode, children }: { mode: Mode; children: React.ReactNode }) {
 function FormSkeleton() {
   const show = useDelayedLoading(true);
   return (
-    <div aria-busy="true" aria-label="Loading the settings" className="flex flex-col gap-4">
+    <div role="status" aria-busy="true" aria-label="Loading the settings" className="flex flex-col gap-4">
       {show ? (
         <>
           <Skeleton className="h-(--control-height-lg)" />

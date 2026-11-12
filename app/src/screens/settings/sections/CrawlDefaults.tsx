@@ -51,7 +51,7 @@ export function Section() {
       ) : defaults.data ? (
         <DefaultsForm defaults={defaults.data} />
       ) : (
-        <div aria-busy="true" aria-label="Loading your defaults" className="flex flex-col gap-4">
+        <div role="status" aria-busy="true" aria-label="Loading your defaults" className="flex flex-col gap-4">
           {loading ? (
             <>
               <Skeleton className="h-(--skeleton-card-height)" />

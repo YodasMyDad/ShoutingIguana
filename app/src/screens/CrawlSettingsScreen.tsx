@@ -13,6 +13,7 @@ import {
   formFromOptions,
   speedOf,
   withSpeed,
+  withoutCredentials,
   type CrawlForm,
   type CrawlFormField,
   type FormSection,
@@ -116,7 +117,7 @@ export function CrawlSettingsScreen() {
           <UsedSettings stored={options.data} />
         </>
       ) : (
-        <div aria-busy="true" aria-label="Loading the crawl’s settings" className="flex flex-col gap-4">
+        <div role="status" aria-busy="true" aria-label="Loading the crawl’s settings" className="flex flex-col gap-4">
           {loading ? (
             <>
               <Skeleton className="h-(--skeleton-card-height)" />
@@ -350,7 +351,7 @@ function ContinuePanel({
             }
             mono
             spellCheck={false}
-            placeholder={stored.proxyUrl ?? 'http://proxy.example.com:8080'}
+            placeholder={stored.proxyUrl ? withoutCredentials(stored.proxyUrl) : 'http://proxy.example.com:8080'}
             value={form.proxyUrl}
             error={message('proxyUrl')}
             onChange={(event) => setForm({ ...form, proxyUrl: event.target.value })}

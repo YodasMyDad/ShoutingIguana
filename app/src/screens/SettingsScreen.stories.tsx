@@ -32,7 +32,7 @@ export const DataFolderFailed = at('/settings/data', 'advanced', () =>
     [
       'GET',
       /^\/api\/health$/,
-      () => problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 }),
+      () => problem({ type: 'file-error', title: 'The engine couldn’t read its folders.', status: 400 }),
     ],
     ...standardRoutes(),
   ]),

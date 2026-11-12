@@ -69,6 +69,18 @@ function sidecar(saved: CrawlOptions = ENGINE_DEFAULTS, extra: FakeRoute[] = [])
   ]);
 }
 
+/** Presses a button once the screen has drawn it (its settings are read first). */
+async function pressWhenThere(root: HTMLElement, which: (button: HTMLButtonElement) => boolean) {
+  for (let tries = 0; tries < 50; tries++) {
+    const button = [...root.querySelectorAll('button')].find(which);
+    if (button) {
+      button.click();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 const at = (path: string, mode: Mode, setup: () => void = () => sidecar(), at200 = false): Story => ({
   loaders: [setup],
   render: () => <ScreenApp path={path} mode={mode} size={at200 ? AT_200_PERCENT : undefined} />,
@@ -91,11 +103,7 @@ export const SimpleWithAdvancedChanged = at('/new', 'simple', () =>
 export const AdvancedInvalid: Story = {
   ...at('/new?url=example', 'advanced', () => sidecar({ ...ENGINE_DEFAULTS, requestTimeoutSeconds: 900 })),
   play: async ({ canvasElement }) => {
-    const button = [...canvasElement.querySelectorAll('button')].find((each) =>
-      each.textContent.startsWith('Start crawl'),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    button?.click();
+    await pressWhenThere(canvasElement, (button) => button.textContent.startsWith('Start crawl'));
   },
 };
 /** The form's frame while the settings load. */
@@ -109,7 +117,7 @@ export const Failed = at('/new', 'simple', () =>
       'GET',
       /^\/api\/crawl-options\/defaults$/,
       () =>
-        problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500, detail: 'IOException' }),
+        problem({ type: 'file-error', title: 'Your defaults couldn’t be read.', status: 400, detail: 'IOException' }),
     ],
   ]),
 );
@@ -123,8 +131,7 @@ export const CrawlSettingsStopped = at(`/crawls/${TEST_CRAWL_ID}/settings`, 'adv
 export const CrawlSettingsNeedsSecrets: Story = {
   ...at(`/crawls/${TEST_CRAWL_ID}/settings?focus=headers`, 'advanced'),
   play: async ({ canvasElement }) => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    [...canvasElement.querySelectorAll('button')].find((each) => each.textContent === 'Continue the crawl')?.click();
+    await pressWhenThere(canvasElement, (button) => button.textContent === 'Continue the crawl');
   },
 };
 /** A crawl that ended (the design fixtures' garden crawl): nothing to continue, Crawl again with these. */
