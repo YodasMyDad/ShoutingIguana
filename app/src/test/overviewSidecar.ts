@@ -134,7 +134,7 @@ export const OVERVIEW_STATS: CrawlStats = {
  * errors, and says how many they are.
  */
 export const DEAD_TWIN = {
-  item: { fetchedUrlCount: 6_914, pageCount: 6_172 },
+  item: { fetchedUrlCount: 6_914, crawledUrlCount: 6_909, pageCount: 6_172 },
   notChecked: 5,
   status: page(7_053, 7_054, {
     statusClass: [
@@ -183,7 +183,7 @@ export const DEAD_TWIN = {
 } as const;
 
 /** The figures a done crawl's item has in these tests and stories: the garden crawl's. */
-export const OVERVIEW_ITEM = { fetchedUrlCount: 4_521, pageCount: 265 } as const;
+export const OVERVIEW_ITEM = { fetchedUrlCount: 4_521, crawledUrlCount: 4_521, pageCount: 265 } as const;
 
 const START = Date.parse('2026-11-01T10:15:00.000Z');
 
@@ -318,6 +318,8 @@ export interface OverviewSidecarOptions extends IssuesSidecarOptions {
   stats?: CrawlStats | 'pending';
   /** The start URL's row; null for a crawl that has none. */
   startUrl?: UrlRow | null;
+  /** E3c: the crawler's probes of the site's other versions, as the URL grid lists them (`source` in `siteVersion`). */
+  probes?: UrlRow[];
   onPause?: () => void;
   onResume?: () => void;
   onStop?: () => void;
@@ -366,9 +368,14 @@ export function overviewRoutes(options: OverviewSidecarOptions = {}): FakeRoute[
       /^\/api\/crawls\/[0-9a-f]{16}\/urls$/,
       (request) => {
         const query = request.body as GridQuery;
-        const seed = query.filters.some((filter) => filter.column === 'source');
+        const source = query.filters.find((filter) => filter.column === 'source');
+        // The crawler's probes of the site's other versions: none unless said.
+        if (source && 'values' in source && source.values.includes('siteVersion')) {
+          const probes = options.probes ?? [];
+          return json(testUrlPage({ rows: probes, matching: probes.length }));
+        }
         return json(
-          seed ? testUrlPage({ rows: startUrl ? [startUrl] : [], matching: startUrl ? 1 : 0 }) : testUrlPage(),
+          source ? testUrlPage({ rows: startUrl ? [startUrl] : [], matching: startUrl ? 1 : 0 }) : testUrlPage(),
         );
       },
     ],

@@ -97,9 +97,11 @@ export function LiveOverview({
   const statusClasses = progress?.statusClasses ?? null;
   const statusCodes = progress?.statusCodes ?? null;
   const noResponse = progress?.noResponse ?? null;
+  const siteVersions = progress?.siteVersions ?? null;
+  // The site's own status codes, the crawler's probes of its other versions said apart (E3c's `siteVersions`).
   const split = useMemo(
-    () => (statusClasses ? statusSplit(statusClasses, statusCodes, noResponse) : null),
-    [statusClasses, statusCodes, noResponse],
+    () => (statusClasses ? statusSplit(statusClasses, statusCodes, noResponse, null, siteVersions) : null),
+    [statusClasses, statusCodes, noResponse, siteVersions],
   );
   const found = foundSplit(progress);
   const alerts = useMemo(() => alertEntries(liveAlerts, fileAlerts), [liveAlerts, fileAlerts]);

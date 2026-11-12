@@ -36,6 +36,21 @@ export const NOT_CHECKED: GridFilter = { column: 'outcome', op: 'in', values: ['
 export const NO_OUTCOME: GridFilter = { column: 'outcome', op: 'isEmpty' };
 
 /**
+ * The site's own URLs: not the crawler's probes of the site's other versions (http or https, www or not), which nothing
+ * on the site leads to. A probe the site comes to lead to is one of its own URLs from then on.
+ */
+export const NOT_PROBE: GridFilter = { column: 'source', op: 'notIn', values: ['siteVersion'] };
+
+/**
+ * The crawler's probes of the site's other versions that have an outcome: the progress event's `siteVersions.fetched`,
+ * and `/stats`'s, which count the ones that weren't checked among them, as `fetched` does.
+ */
+export const PROBES_WITH_AN_OUTCOME: readonly GridFilter[] = [
+  { column: 'source', op: 'in', values: ['siteVersion'] },
+  { column: 'outcome', op: 'isNotEmpty' },
+];
+
+/**
  * The site's own URLs that are pages, by their content type or, without one, their extension. Not the crawler's own
  * probes of the site's other versions (http or https, www or not), which nothing on the site leads to: they're on the
  * site and look like pages, but the engine leaves them out of every count of the site's pages (`/stats`'s

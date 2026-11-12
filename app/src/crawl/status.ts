@@ -1,6 +1,6 @@
 // How a crawl's status reads, everywhere: the top bar's pill, the library, announcements. UK English, one word each.
 import { isCrawling, isLive, type CrawlListItem, type CrawlStatus } from '../api/types';
-import type { LiveCrawl } from '../live/liveStore';
+import type { LiveCrawl, LiveProgress } from '../live/liveStore';
 
 const LABELS: Record<CrawlStatus, string> = {
   running: 'Running',
@@ -44,6 +44,24 @@ export function effectiveStatus(
 ): CrawlStatus | null {
   if (live?.status && isLive(live.status)) return live.status;
   return item?.status ?? live?.status ?? null;
+}
+
+/**
+ * The crawl's "N URLs", the same number everywhere: the URLs crawled as the URL grid lists them (`fetched` is true),
+ * which is E3c's `crawledUrlCount` at rest and the progress event's `crawled` while it runs. An earlier engine sends
+ * neither: its `fetchedUrlCount`, and `fetched` less the URLs that weren't checked, are the nearest it has.
+ */
+export function crawledUrls(
+  item: Pick<CrawlListItem, 'fetchedUrlCount' | 'crawledUrlCount'> | undefined,
+  progress?: Pick<LiveProgress, 'fetched' | 'crawled' | 'noResponse'> | null,
+): number | null {
+  if (progress) {
+    if (progress.crawled !== null) return progress.crawled;
+    if (progress.fetched !== null)
+      return progress.fetched - Math.min(progress.noResponse?.notChecked ?? 0, progress.fetched);
+    return null;
+  }
+  return item ? (item.crawledUrlCount ?? item.fetchedUrlCount) : null;
 }
 
 /** The crawl's name in lists and announcements: its site, or its file name when it has none. */

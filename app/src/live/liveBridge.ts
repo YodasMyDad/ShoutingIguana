@@ -10,7 +10,7 @@ import { getTransport } from '../api/transport';
 import type { CrawlEvent, CrawlListItem, CrawlStatus } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
 import { analyseCrawl, continueCrawl } from '../crawl/actions';
-import { crawlName, statusAnnouncement } from '../crawl/status';
+import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback/notify';
 import { formatCountOf } from '../lib/format';
@@ -265,7 +265,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         : checks === 0
           ? 'no checks found issues'
           : `${formatCountOf(checks, 'check')} found issues`;
-    const urls = crawled && item ? formatCountOf(item.fetchedUrlCount, 'URL') : null;
+    const urls = crawled && item ? formatCountOf(crawledUrls(item) ?? 0, 'URL') : null;
     notifyResult(crawled ? 'Crawl finished' : 'Analysis finished', {
       id: crawlToast(crawlId, 'finished'),
       description: [name, [urls, found].filter(Boolean).join(', ')].filter(Boolean).join(': '),
@@ -278,7 +278,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     const name = crawlName(item);
     notifyResult('Crawl stopped', {
       id: crawlToast(crawlId, 'stopped'),
-      description: item ? `${name}: ${formatCountOf(item.fetchedUrlCount, 'URL')}. You can continue it later.` : name,
+      description: item ? `${name}: ${formatCountOf(crawledUrls(item) ?? 0, 'URL')}. You can continue it later.` : name,
       action: { label: 'Continue', onClick: () => void continueCrawl(crawlId) },
     });
   }

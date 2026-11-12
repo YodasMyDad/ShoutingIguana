@@ -11,6 +11,7 @@ import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { PUBLISH_INTERVAL_MS, liveStore } from '../live/liveStore';
+import { formatCount } from '../lib/format';
 import { updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
 import { ISSUES_ANALYSIS, ISSUES_CHECKS_WITHOUT_SUBJECTS } from '../test/issuesSidecar';
@@ -262,6 +263,44 @@ describe('the Overview of an analysed crawl', () => {
     ]);
     // The crawl's stats say why there was no response.
     expect(await rows.findByText('Refused by robots.txt × 2')).toBeVisible();
+  });
+
+  it('leaves the probes of the site’s other versions out of its status codes once done, as it did live', async () => {
+    // The garden crawl's two URLs with no response are its probes: refused by robots.txt (the twin's own file).
+    sidecar({
+      probes: [
+        {
+          id: 9_001,
+          url: 'http://example.com/',
+          outcome: 'robotsDisallowed',
+          statusClass: 'noResponse',
+          statusCode: null,
+        },
+        {
+          id: 9_002,
+          url: 'http://www.example.com/',
+          outcome: 'robotsDisallowed',
+          statusClass: 'noResponse',
+          statusCode: null,
+        },
+      ],
+    });
+    await open();
+    const status = region('Status codes');
+    const rows = within(await status.findByRole('list', { name: 'Status codes by class' }));
+    expect(rows.getByText('No response').closest('li')).toHaveTextContent('None');
+    expect(filtersOf(rows.getByRole('link', { name: /^3xx/ }))).toEqual([
+      { column: 'statusClass', op: 'in', values: ['3xx'] },
+      NOT_BLOCKED,
+      { column: 'source', op: 'notIn', values: ['siteVersion'] },
+    ]);
+    expect(status.getByText('4,519 URLs')).toBeVisible();
+    const probes = status.getByRole('link', { name: '2 URLs' });
+    expect(probes.closest('p')).toHaveTextContent(/^2 URLs the crawler tried for the site’s other versions/);
+    // The stats' reasons are the site's own too: the probes' refusals come out.
+    await waitFor(() => expect(status.queryByText(/Refused by robots.txt/)).toBeNull());
+    // "N URLs crawled" is every URL crawled, as the grid's `fetched` lists them, the probes among them.
+    expect(main().getByRole('link', { name: '4,521 URLs' })).toBeVisible();
   });
 
   it('doesn’t wait for the crawl’s stats, which are slow on a big crawl', async () => {
@@ -743,6 +782,59 @@ describe('the Overview while the crawl runs', () => {
         name: 'Of 7,054 URLs found: 6,909 crawled, 0 queued, 140 not followed, 5 not checked',
       }),
     ).toBeVisible();
+  });
+
+  it('leaves the probes of the site’s other versions out of its status codes: an http-only site has no network error', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    // Three seconds into a crawl of an http-only site: the https probe got no answer, the www probe redirected.
+    const event = progressAt(3, POLITE);
+    const classes = event.statusClasses!;
+    await heard(
+      message('progress', {
+        ...event,
+        fetched: event.fetched + 2,
+        crawled: event.fetched + 2,
+        statusClasses: { ...classes, '3xx': classes['3xx'] + 1, noResponse: classes.noResponse + 1 },
+        statusCodes: { ...event.statusCodes, '301': (event.statusCodes?.['301'] ?? 0) + 1 },
+        noResponse: { ...event.noResponse!, networkError: 1 },
+        siteVersions: {
+          fetched: 2,
+          statusClasses: { '2xx': 0, '3xx': 1, '4xx': 0, '5xx': 0, other: 0, noResponse: 1, blocked: 0 },
+          statusCodes: { '301': 1 },
+          noResponse: { robotsDisallowed: 0, timeout: 0, networkError: 1, notChecked: 0, processingError: 0 },
+        },
+      }),
+    );
+    // Crawled is every URL the grid has as fetched, the probes among them.
+    expect(figure('Crawled')).toHaveTextContent(formatCount(event.fetched + 2));
+    const status = region('Status codes');
+    expect(status.getByText(`${formatCount(event.fetched)} URLs so far`)).toBeVisible();
+    expect(status.queryByText(/Network error/)).toBeNull();
+    const list = within(status.getByRole('list', { name: 'Status codes by class' }));
+    expect(list.getByText('No response').closest('li')).toHaveTextContent('None so far');
+    const probes = status.getByRole('link', { name: '2 URLs' });
+    expect(probes.closest('p')).toHaveTextContent(
+      '2 URLs the crawler tried for the site’s other versions (http or https, www or not) aren’t counted here: nothing on the site leads to them.',
+    );
+    expect(filtersOf(probes)).toEqual([
+      { column: 'source', op: 'in', values: ['siteVersion'] },
+      { column: 'outcome', op: 'isNotEmpty' },
+    ]);
+    expect(filtersOf(list.getByRole('link', { name: /^2xx/ }))).toEqual([
+      { column: 'statusClass', op: 'in', values: ['2xx'] },
+      NOT_BLOCKED,
+      { column: 'source', op: 'notIn', values: ['siteVersion'] },
+    ]);
+  });
+
+  it('keeps the probes’ line’s room from the start, so nothing below the status codes moves when they answer', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    await heard(progress(1));
+    const room = region('Status codes').getByText(/the crawler tried for the site’s other versions/);
+    expect(room).toHaveAttribute('aria-hidden', 'true');
+    expect(room).toHaveClass('invisible');
   });
 
   // A progress event `wall` seconds after the run began, with the counts the crawl has `crawling` seconds in.

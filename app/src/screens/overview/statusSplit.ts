@@ -5,8 +5,17 @@
 // status, and the other classes leave it out. A URL that wasn't checked (never asked, its host having stopped
 // answering) is in no class, live or done: the grid has it as not fetched, and the breakdown says it apart.
 import type { FacetsPage, GridFilter } from '../../api/grids';
-import type { CrawlStats, NoResponseCounts, StatusClassCounts } from '../../api/types';
-import { BLOCKED, NOT_BLOCKED, NOT_CHECKED, NO_OUTCOME, urlsLink, type UrlsLink } from './links';
+import type { CrawlStats, NoResponseCounts, SiteVersionCounts, StatusClassCounts } from '../../api/types';
+import {
+  BLOCKED,
+  NOT_BLOCKED,
+  NOT_CHECKED,
+  NOT_PROBE,
+  NO_OUTCOME,
+  PROBES_WITH_AN_OUTCOME,
+  urlsLink,
+  type UrlsLink,
+} from './links';
 
 export type SplitClass = keyof StatusClassCounts;
 
@@ -106,11 +115,80 @@ export interface StatusSplit {
    * they're in no class and not in the total. Null when there are none.
    */
   notChecked: { count: number; link: UrlsLink } | null;
+  /**
+   * The crawler's probes of the site's other versions (http or https, www or not) that have an outcome, with their
+   * link. Nothing on the site leads to them, and that the https version of an http site doesn't answer says nothing of
+   * the site, so they're in no class, not in the total and not among the URLs that weren't checked: said apart. Null
+   * when there are none, or nothing says which URLs they are (an engine from before E3c).
+   */
+  probes: { count: number; link: UrlsLink } | null;
 }
 
-/** The URL grid's filters for one class: exactly the URLs it counts. */
-export function splitFilters(key: SplitClass): GridFilter[] {
-  return key === 'blocked' ? [BLOCKED] : [{ column: 'statusClass', op: 'in', values: [key] }, NOT_BLOCKED];
+/**
+ * The URL grid's filters for one class: exactly the URLs it counts. `ownOnly`: the site's own, the probes of its
+ * other versions left out, as the breakdown counts them when there are any.
+ */
+export function splitFilters(key: SplitClass, ownOnly = false): GridFilter[] {
+  const filters: GridFilter[] =
+    key === 'blocked' ? [BLOCKED] : [{ column: 'statusClass', op: 'in', values: [key] }, NOT_BLOCKED];
+  return ownOnly ? [...filters, NOT_PROBE] : filters;
+}
+
+/** The probes' part of a breakdown, shaped as the progress event's `siteVersions`. */
+export type ProbeCounts = SiteVersionCounts;
+
+const ZERO_CLASSES: StatusClassCounts = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, other: 0, noResponse: 0, blocked: 0 };
+const ZERO_REASONS: NoResponseCounts = {
+  robotsDisallowed: 0,
+  timeout: 0,
+  networkError: 0,
+  notChecked: 0,
+  processingError: 0,
+};
+
+/** Each count less its part in `less`, never below 0. */
+function minus<Counts extends object>(counts: Counts, less: object): Counts {
+  const taken = less as Readonly<Record<string, number | undefined>>;
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(counts)) {
+    if (typeof value === 'number') result[key] = Math.max(0, value - (taken[key] ?? 0));
+  }
+  return result as Counts;
+}
+
+/**
+ * The probes' part from their own rows in the URL grid (`source` in `siteVersion`), counted as the progress event
+ * counts it: a block page is blocked whatever its status, a URL that wasn't checked is under no response, and a probe
+ * with no outcome (still queued, past a limit) isn't counted.
+ */
+export function probeCountsOf(
+  rows: readonly { outcome?: string | null; statusClass?: string | null; statusCode?: number | null }[],
+): ProbeCounts {
+  const statusClasses = { ...ZERO_CLASSES };
+  const noResponse = { ...ZERO_REASONS };
+  const statusCodes: Record<string, number> = {};
+  let fetched = 0;
+  for (const row of rows) {
+    const outcome = row.outcome ?? null;
+    if (outcome === null) continue;
+    fetched++;
+    if (outcome === 'blocked') {
+      statusClasses.blocked++;
+      continue;
+    }
+    if (outcome in noResponse) {
+      statusClasses.noResponse++;
+      noResponse[outcome as keyof NoResponseCounts]++;
+      continue;
+    }
+    const key = SPLIT_CLASSES.find((candidate) => candidate === row.statusClass);
+    if (key) statusClasses[key]++;
+    if (typeof row.statusCode === 'number') {
+      const code = String(row.statusCode);
+      statusCodes[code] = (statusCodes[code] ?? 0) + 1;
+    }
+  }
+  return { fetched, statusClasses, statusCodes, noResponse };
 }
 
 /**
@@ -162,23 +240,37 @@ export function statusSplit(
   codes: Readonly<Record<string, number>> | null,
   noResponse: Partial<NoResponseCounts> | null,
   notFetched: number | null = null,
+  probes: ProbeCounts | null = null,
 ): StatusSplit {
-  const notChecked = Math.max(0, Math.min(noResponse?.notChecked ?? 0, counted.noResponse));
-  const classes = { ...counted, noResponse: counted.noResponse - notChecked };
-  return splitOf(classes, codes, noResponse, notChecked, notFetched);
+  // The site's own: each figure less the probes' part of it (E3c's `siteVersions`), when the stream says what it is.
+  const own = probes ? minus(counted, probes.statusClasses) : counted;
+  const ownCodes = codes && probes ? minus(codes, probes.statusCodes) : codes;
+  const ownReasons = noResponse && probes ? minus(noResponse, probes.noResponse) : noResponse;
+  const notChecked = Math.max(0, Math.min(ownReasons?.notChecked ?? 0, own.noResponse));
+  const classes = { ...own, noResponse: own.noResponse - notChecked };
+  return splitOf(classes, ownCodes, ownReasons, notChecked, notFetched, probes?.fetched ?? 0);
 }
 
-/** The breakdown of the URLs crawled (`classes`, the ones that weren't checked already left out), and those apart. */
+/**
+ * The breakdown of the site's URLs crawled (`classes`, the ones that weren't checked and the probes already left out),
+ * and those apart. `probes` is how many probes of the site's other versions have an outcome: when there are any, every
+ * figure's link leaves them out too. `allNotChecked` is the URLs that weren't checked, probes and all, which have no
+ * status class in the grid either, for the URLs only found.
+ */
 function splitOf(
   classes: StatusClassCounts,
   codes: Readonly<Record<string, number>> | null,
   noResponse: Partial<Record<NoResponseReason, number>> | null,
   notChecked: number,
   notFetched: number | null,
+  probes: number,
+  allNotChecked: number = notChecked,
 ): StatusSplit {
+  const ownOnly = probes > 0;
   const total = SPLIT_CLASSES.reduce((sum, key) => sum + classes[key], 0);
-  // What has no status class in the grid, less the URLs that weren't checked, which the breakdown says apart.
-  const onlyFound = notFetched === null ? null : Math.max(0, notFetched - notChecked);
+  // What has no status class in the grid, less the URLs that weren't checked, which the breakdown says apart. Probes
+  // with no outcome are among them: only found, as the rest are.
+  const onlyFound = notFetched === null ? null : Math.max(0, notFetched - allNotChecked);
   const ok = classes['2xx'];
   const rest = total - ok;
   const segments = SPLIT_CLASSES.filter((key) => ALWAYS_LISTED.includes(key) || classes[key] > 0).map((key) => ({
@@ -187,7 +279,7 @@ function splitOf(
     meaning: MEANINGS[key],
     count: classes[key],
     parts: key === 'noResponse' ? noResponseParts(noResponse) : key === 'blocked' ? [] : codeParts(key, codes),
-    link: urlsLink(splitFilters(key)),
+    link: urlsLink(splitFilters(key, ownOnly)),
   }));
   const [okPercent = 0, restPercent = 0] = sharePercents([ok, rest], MIN_REST_PERCENT);
   const others = SPLIT_CLASSES.filter((key) => key !== '2xx' && classes[key] > 0);
@@ -207,10 +299,12 @@ function splitOf(
         ? {
             count: onlyFound,
             // No status class, and where some weren't checked (they have none either), no outcome.
-            link: urlsLink([{ column: 'statusClass', op: 'isEmpty' }, ...(notChecked > 0 ? [NO_OUTCOME] : [])]),
+            link: urlsLink([{ column: 'statusClass', op: 'isEmpty' }, ...(allNotChecked > 0 ? [NO_OUTCOME] : [])]),
           }
         : null,
-    notChecked: notChecked > 0 ? { count: notChecked, link: urlsLink([NOT_CHECKED]) } : null,
+    notChecked:
+      notChecked > 0 ? { count: notChecked, link: urlsLink(ownOnly ? [NOT_CHECKED, NOT_PROBE] : [NOT_CHECKED]) } : null,
+    probes: ownOnly ? { count: probes, link: urlsLink(PROBES_WITH_AN_OUTCOME) } : null,
   };
 }
 
@@ -234,9 +328,24 @@ export const STATUS_FACETS = { filters: [NOT_BLOCKED], facets: ['statusClass', '
  */
 export const NOT_CHECKED_FACETS = { filters: [NOT_CHECKED], facets: ['statusClass'] as const };
 
-/** A finished crawl's status facets with how many of its URLs weren't checked: the breakdown's two reads as one. */
+/**
+ * The read of the probes of the site's other versions: their rows in the URL grid, few on any site (one for each of
+ * its other versions), with what the breakdown needs of each.
+ */
+export const PROBE_ROWS = {
+  filters: [{ column: 'source', op: 'in', values: ['siteVersion'] }] satisfies GridFilter[],
+  columns: ['outcome', 'statusClass', 'statusCode'],
+  limit: 1_000,
+};
+
+/**
+ * A finished crawl's status facets with how many of its URLs weren't checked, and the probes' part: the breakdown's
+ * reads as one. `probes` is null when they can't be told apart (more than one page of them, or an engine whose grid
+ * has no `source`): then nothing is taken out.
+ */
 export interface StatusFacets extends FacetsPage {
   notChecked: number;
+  probes?: ProbeCounts | null;
 }
 
 /**
@@ -266,11 +375,29 @@ export function statusSplitFromFacets(
     ? {
         robotsDisallowed: outcomes.robotsDisallowed ?? 0,
         timeout: outcomes.timeout ?? 0,
+        // The stats store a URL that wasn't checked as a network error, and count them apart.
         networkError: Math.max(0, (outcomes.networkError ?? 0) - stats.notCheckedCount),
         processingError: outcomes.processingError ?? 0,
       }
     : null;
-  return splitOf(classes, codes, reasons, Math.max(0, facets.notChecked), notFetched);
+  const allNotChecked = Math.max(0, facets.notChecked);
+  const probes = facets.probes;
+  if (!probes || probes.fetched === 0) return splitOf(classes, codes, reasons, allNotChecked, notFetched, 0);
+  // The site's own, as live: each figure less the probes' part. The grid's classes have the URLs that weren't checked
+  // in none, where the probes' part counts them under no response.
+  const own = minus(classes, {
+    ...probes.statusClasses,
+    noResponse: probes.statusClasses.noResponse - probes.noResponse.notChecked,
+  });
+  return splitOf(
+    own,
+    minus(codes, probes.statusCodes),
+    reasons ? minus(reasons, probes.noResponse) : null,
+    Math.max(0, allNotChecked - probes.noResponse.notChecked),
+    notFetched,
+    probes.fetched,
+    allNotChecked,
+  );
 }
 
 /**
@@ -278,7 +405,9 @@ export function statusSplitFromFacets(
  * leads: the breakdown's total. The library's `fetchedUrlCount` is every URL with a stored outcome, the ones that
  * weren't checked among them, so it says more than the grid shows whenever a site stopped answering.
  */
-export const crawledCount = (facets: StatusFacets): number => statusSplitFromFacets(facets).total;
+export const crawledCount = (facets: StatusFacets): number =>
+  // Every URL crawled, the probes of the site's other versions among them, as the grid's `fetched` lists them.
+  statusSplitFromFacets({ ...facets, probes: null }).total;
 
 /**
  * How many URLs a finished crawl found, crawled or not: the URL grid's count with no filter, and what the breakdown's

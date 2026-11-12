@@ -2,7 +2,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { queryKeys, urlFacetsQuery } from '../../api/queries';
 import { INDEXABILITY_FACETS, PAGE_FACETS } from './answer';
-import { NOT_CHECKED_FACETS, STATUS_FACETS, type StatusFacets } from './statusSplit';
+import { NOT_CHECKED_FACETS, PROBE_ROWS, STATUS_FACETS, probeCountsOf, type StatusFacets } from './statusSplit';
 
 /**
  * The status breakdown's two reads as one: the classes of what wasn't blocked, and how many URLs weren't checked. One
@@ -16,11 +16,18 @@ export const statusFacetsQuery = (crawlId: string) => {
   return queryOptions({
     queryKey: [...queryKeys.urlFacets(crawlId, status), notChecked] as const,
     queryFn: async ({ signal }): Promise<StatusFacets> => {
-      const [facets, apart] = await Promise.all([
+      const [facets, apart, probes] = await Promise.all([
         api.urlFacets(crawlId, status, signal),
         api.urlFacets(crawlId, notChecked, signal),
+        api.urls(
+          crawlId,
+          { ...PROBE_ROWS, filters: [...PROBE_ROWS.filters], columns: [...PROBE_ROWS.columns], sort: [] },
+          signal,
+        ),
       ]);
-      return { ...facets, notChecked: apart.matching };
+      // The probes are a handful on any site; more than a page of them, and they're left in rather than half taken out.
+      const told = probes.matching !== null && probes.matching <= probes.rows.length;
+      return { ...facets, notChecked: apart.matching, probes: told ? probeCountsOf(probes.rows) : null };
     },
     staleTime: Infinity,
   });

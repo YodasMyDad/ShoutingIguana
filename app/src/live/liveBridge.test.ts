@@ -158,6 +158,20 @@ describe('the live bridge’s toasts', () => {
     stop();
   });
 
+  it('says "N URLs" in its toasts as the URL grid lists them: the URLs that weren’t checked aren’t crawled', async () => {
+    const { stop, status } = setup();
+    status('running');
+    status('stopping');
+    item = { ...item, status: 'stopped', fetchedUrlCount: 6_914, crawledUrlCount: 6_909 };
+    status('stopped');
+    await settle();
+    expect(notifyResult).toHaveBeenCalledWith(
+      'Crawl stopped',
+      expect.objectContaining({ description: 'example.com: 6,909 URLs. You can continue it later.' }),
+    );
+    stop();
+  });
+
   it('gives each crawl’s news one toast, and takes Continue away once the crawl runs again', async () => {
     const { stop, status } = setup();
     status('running');

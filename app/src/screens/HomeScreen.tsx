@@ -8,7 +8,7 @@ import { libraryQuery, queryKeys } from '../api/queries';
 import type { CrawlListItem } from '../api/types';
 import { isLive } from '../api/types';
 import { startCrawl } from '../crawl/actions';
-import { crawlName, effectiveStatus } from '../crawl/status';
+import { crawlName, crawledUrls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyError, notifyUndo } from '../feedback/notify';
 import { SkeletonRows } from '../feedback/Skeleton';
@@ -226,7 +226,9 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
   const status = effectiveStatus(item, live) ?? item.status;
   // A file that couldn't be read says nothing about its counts: they show as "–", never 0.
   const unreadable = status === 'unreadable';
-  const fetched = live?.progress && isLive(status) ? live.progress.fetched : unreadable ? null : item.fetchedUrlCount;
+  // "N URLs" as the URL grid lists them, here as in the top bar and the toasts.
+  const fetched =
+    live?.progress && isLive(status) ? crawledUrls(item, live.progress) : unreadable ? null : crawledUrls(item);
   const pages = live?.progress && isLive(status) ? live.progress.htmlPages : unreadable ? null : item.pageCount;
 
   const remove = async () => {

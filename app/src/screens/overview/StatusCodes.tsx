@@ -20,6 +20,10 @@ const TONES: Record<SplitClass, SplitTone> = {
 const nameOf = (segment: Pick<SplitSegment, 'label' | 'count'>) =>
   `${segment.label}: ${formatCountOf(segment.count, 'URL')}`;
 
+/** What follows the count of the probes of the site's other versions. */
+const probesWords = (count: number) =>
+  `the crawler tried for the site’s other versions (http or https, www or not) ${count === 1 ? 'isn’t' : 'aren’t'} counted here: nothing on the site leads to ${count === 1 ? 'it' : 'them'}.`;
+
 /** The breakdown in words, for the figure's name: what the two bars draw. */
 function splitWords(split: StatusSplit): string {
   if (split.total === 0) return 'Status codes: no URLs crawled yet.';
@@ -170,6 +174,22 @@ export const StatusCodes = memo(function StatusCodes({
           {split.notChecked.count === 1
             ? 'wasn’t checked because its site had stopped answering.'
             : 'weren’t checked because their sites had stopped answering.'}
+        </p>
+      ) : null}
+      {split.probes ? (
+        // The crawler's own questions, not the site's URLs: that the https version of an http site doesn't answer
+        // says nothing of the site, so they're in no class above.
+        <p className="text-13 text-text-secondary">
+          <TextLink {...linkProps(crawlId, split.probes.link)} variant="inline">
+            {formatCountOf(split.probes.count, 'URL')}
+          </TextLink>{' '}
+          {probesWords(split.probes.count)}
+        </p>
+      ) : live ? (
+        // Its room, kept from the start: the probes answer in a crawl's first seconds, and the cards below don't move
+        // when they do.
+        <p aria-hidden="true" className="invisible text-13">
+          1 URL {probesWords(1)}
         </p>
       ) : null}
       {split.notFetched ? (

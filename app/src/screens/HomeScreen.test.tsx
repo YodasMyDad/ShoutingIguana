@@ -56,6 +56,13 @@ describe('Home’s library', () => {
     expect(within(row).getByText('Another program has the file locked.')).toBeVisible();
   });
 
+  it('says "N URLs" as the URL grid lists them: the URLs that weren’t checked aren’t crawled', async () => {
+    // 6,914 outcomes stored, 5 of them never asked as their host had stopped answering: the grid's `fetched` has 6,909.
+    await open(() => json([testCrawlItem({ fetchedUrlCount: 6_914, crawledUrlCount: 6_909 })]));
+    const cells = within(await rowOf('example.com')).getAllByRole('cell');
+    expect(cells[2]).toHaveTextContent('6,909');
+  });
+
   it('counts each severity in good English', async () => {
     await open(() => json([testCrawlItem({ issues: { error: 1, warning: 2, notice: 1 } })]));
     const row = await rowOf('example.com');

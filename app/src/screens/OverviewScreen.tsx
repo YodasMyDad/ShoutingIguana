@@ -87,9 +87,11 @@ export function OverviewScreen() {
   // moves (to its Cancel), which the hook above makes.
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => control.titleRef.current);
-  // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the status breakdown's
-  // total. The library's count has the URLs that weren't checked in it, so it stands only until the breakdown is read.
-  const crawled = facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0);
+  // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the library's
+  // `crawledUrlCount` (E3c). From an earlier engine, the status breakdown's total; its `fetchedUrlCount` has the URLs
+  // that weren't checked in it, so it stands only until the breakdown is read.
+  const crawled =
+    item?.crawledUrlCount ?? (facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0));
 
   const hiddenIds = useSettings((settings) => settings.hiddenChecks);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
