@@ -59,6 +59,10 @@ public static class PlainWords
             """This site check was set not to load images and other files.""",
             """Check the site again, with "Images and other files" ticked."""),
 
+        [SkippedCheckReasons.ROBOTS_TXT_IGNORED] = new(
+            """This site check was set to ignore your site's rules file for search engines, so it can't show which addresses that file puts off limits.""",
+            """Set the check to follow the rules file again in its Advanced settings, then check the site again."""),
+
         [SkippedCheckReasons.SITE_VERSIONS_UNCHECKED] = new(
             """The site's other addresses (with and without www, http and https) couldn't all be tried.""",
             """Check the site again to include it."""),

@@ -39,6 +39,9 @@ public static class SkippedCheckReasons
     /// <summary>The crawl was told not to fetch images and other files.</summary>
     public const string RESOURCES_OFF = "resources-off";
 
+    /// <summary>The crawl was told to ignore robots.txt, so it asked for every URL and none was refused.</summary>
+    public const string ROBOTS_TXT_IGNORED = "robots-txt-ignored";
+
     /// <summary>
     /// The site's other versions (www or not, http or https) weren't all checked: the crawl stopped before they answered,
     /// it predates the crawler's probes, or the home page isn't a page.

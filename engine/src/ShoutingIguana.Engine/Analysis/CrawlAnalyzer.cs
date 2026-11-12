@@ -155,6 +155,15 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE);
             }
 
+            // A crawl told to ignore robots.txt asks for every URL, so none is refused, and the check has nothing to find:
+            // that isn't finding that robots.txt blocks nothing.
+            if (!options.RespectRobotsTxt)
+            {
+                Skip(notes, skipped, "robots.txt was ignored in this crawl, so the URLs it blocks weren't looked for.",
+                    SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl.",
+                    IssueCatalog.BLOCKED_BY_ROBOTS);
+            }
+
             // The crawler probes the site's other versions first thing, but a crawl stopped before then, or one from before
             // it did, doesn't know how they answer; nor is there a main version without a home page.
             var siteVersions = new SiteVersionRules(urls, new Uri(startUrl), reader.ReadUrlId, reader.ReadUrl);

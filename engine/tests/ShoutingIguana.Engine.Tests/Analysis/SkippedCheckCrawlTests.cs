@@ -87,6 +87,41 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A crawl told to ignore robots.txt asks for every URL, so none is refused, and the check of what robots.txt blocks has
+    /// nothing to find. That isn't finding that nothing is blocked: the check is skipped, saying why, and has no count,
+    /// where the same site crawled by its rules has its blocked URLs flagged.
+    /// </summary>
+    [Fact]
+    public async Task WhatRobotsTxtBlocksIsSkippedWhenTheCrawlIgnoredRobotsTxt()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 70 });
+        var options = new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 };
+
+        // By the rules: a product links the private area and a sitemap lists a URL in it, and both are flagged.
+        var obeying = await CrawlAndAnalyseAsync(options);
+        Assert.Empty(obeying.Skipped);
+        Assert.Equal(2, obeying.Issues.Single(issue => issue.Issue == IssueCatalog.BLOCKED_BY_ROBOTS).Count);
+        foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })
+        {
+            File.Delete(path);
+        }
+
+        var ignoring = await CrawlAndAnalyseAsync(options with { RespectRobotsTxt = false });
+
+        Assert.True(ignoring.IsPartial);
+        Assert.Equal(new SkippedCheck(IssueCatalog.BLOCKED_BY_ROBOTS.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl."),
+            Assert.Single(ignoring.Skipped));
+        Assert.Contains("robots.txt was ignored in this crawl, so the URLs it blocks weren't looked for.", ignoring.Notes);
+        Assert.Equal(IssueCatalog.All.Except([IssueCatalog.BLOCKED_BY_ROBOTS]), ignoring.Issues.Select(issue => issue.Issue));
+
+        // As stored: the reason is read back with the analysis, the check has no count (never 0), and the score says one check couldn't run.
+        Assert.Equal(ignoring.Skipped, IssueReader.ReadSkippedChecks(_path));
+        Assert.False(IssueReader.ReadCounts(_path).ContainsKey(IssueCatalog.BLOCKED_BY_ROBOTS.Id));
+        Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.BLOCKED_BY_ROBOTS.Id));
+        Assert.Equal(1, IssueReader.ReadResults(_path)!.Score!.Covers.ChecksSkipped);
+    }
+
+    /// <summary>
     /// The near-duplicate check compares 256-bit fingerprints, of which an earlier version recorded only the first 64: a
     /// crawl it made has no columns for the rest, and pages it fetched while continuing a crawl have none in them. Either way
     /// the check is skipped, saying why, and nothing is stored for it, while exact duplicates are still found. The crawl's
