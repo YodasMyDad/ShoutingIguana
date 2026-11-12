@@ -97,7 +97,7 @@ export function FixFirst({
         titleId="overview-fix-title"
         meta={
           order
-            ? 'The most severe first, a fault of the whole site before the rest, then the most URLs affected'
+            ? 'Most severe first, site-wide faults ahead, then most URLs'
             : 'The most severe first, then the most pages or URLs affected'
         }
       />

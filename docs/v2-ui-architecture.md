@@ -660,7 +660,7 @@ answer. What it settled:
   flagged, catalog order), taken as it comes and never sorted again by count, the hidden checks left out of what's
   listed; the app's own (severity, then count, then catalog order) only for an earlier engine's analysis, which has
   no `fixFirst`. Fix first counts each check in what it flags ("3 pages", "4 URLs": `crawl/checkSubject.ts`), and says
-  which order it is: "a fault of the whole site before the rest, then the most URLs affected", or the app's "then the
+  which order it is: "Most severe first, site-wide faults ahead, then most URLs", or the app's "then the
   most pages or URLs affected".
   Analysing from a screen is one hook, `issues/useAnalysisControl.ts`, and what the analysis's read says of a crawl is
   another, `issues/useAnalysisAnswer.ts`: "not analysed" is an answer that comes as an error, which the query forgets

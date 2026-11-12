@@ -289,7 +289,8 @@ test('Fix first counts each check in what it flags, and says its order in words 
   await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/crawls/${item.id}/overview$`));
   const fix = page.getByRole('main').getByRole('region', { name: 'Fix first' });
-  const order = fix.getByText('The most severe first, then the most pages or URLs affected');
+  // The engine's order (the analysis's fixFirst), in its words.
+  const order = fix.getByText('Most severe first, site-wide faults ahead, then most URLs');
   await expect(order).toBeVisible();
   const rows = fix.getByRole('listitem').getByRole('link');
   await expect(rows.first()).toBeVisible();

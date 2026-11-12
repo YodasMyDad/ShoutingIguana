@@ -198,9 +198,7 @@ describe('the Overview of an analysed crawl', () => {
       expect.stringContaining('Notice: Title too long'),
       expect.stringContaining('Error: Internal URL returns 4xx'),
     ]);
-    expect(
-      fix.getByText('The most severe first, a fault of the whole site before the rest, then the most URLs affected'),
-    ).toBeVisible();
+    expect(fix.getByText('Most severe first, site-wide faults ahead, then most URLs')).toBeVisible();
   });
 
   it('counts URLs in Fix first for checks that don’t say what they flag', async () => {
