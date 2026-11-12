@@ -373,6 +373,7 @@
   --underline-offset: 3px;
   --scrollbar-size: 10px;
   --scrollbar-thumb-min: 24px;
+  --scrollbar-inset: 2px; /* the clear edge around a thumb, so a 10px bar draws a 6px thumb */
 
   /* Component sizes */
   --segment-height: 26px;
@@ -421,7 +422,7 @@
   --search-width-filter: 160px;
   --search-width-library: 260px;
   --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
-  --library-site-min: 160px; /* Home's Site column never gives up more of its room than this */
+  --library-site-min: 144px; /* Home's Site column never gives up more of its room than this */
   --settings-nav-width: 192px;
   --detail-max-height: 192px; /* an error's technical detail, before it scrolls */
   --palette-width: 640px;

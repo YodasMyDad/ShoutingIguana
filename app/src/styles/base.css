@@ -57,22 +57,45 @@
 
   /*
     Scroll bars, thin and quiet in both themes: a thumb in border-control (3:1 against what's behind it) on no track,
-    and no arrow buttons. Without these, WebView2 on Windows draws the system's classic bars with arrows (headless
-    Chromium shows none, so no test sees them). The standard properties are what WebView2 (Chromium 121 on) draws by;
-    a part that sets them leaves its ::-webkit-scrollbar rules unused, so the windowed grid sets them back to auto for
-    its own. Under forced colours, the system's bars, in its colours.
+    with no arrow buttons. Left to itself, WebView2 on Windows draws the system's bars, arrows and all, and with
+    `scrollbar-width: thin` still draws small arrows; headless Chromium shows none, so no test sees them. Chromium
+    draws a scroll bar given ::-webkit-scrollbar parts by those parts, which have no buttons unless asked, and only
+    while the element sets no `scrollbar-width` or `scrollbar-color` (either makes it ignore the parts): so Chromium
+    gets the parts, and a browser without them the standard properties. Under forced colours, neither: the system's
+    own bars, in its colours. A strip of tabs sets `scrollbar-width: none`, which hides its bar in both.
   */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-border-control) transparent;
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-border-control) transparent;
+    }
+  }
+
+  @media not (forced-colors: active) {
+    ::-webkit-scrollbar {
+      width: var(--scrollbar-size);
+      height: var(--scrollbar-size);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      min-height: var(--scrollbar-thumb-min);
+      min-width: var(--scrollbar-thumb-min);
+      border: var(--scrollbar-inset) solid transparent;
+      border-radius: var(--radius-full);
+      background: var(--color-border-control) padding-box;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--color-text-muted) padding-box;
+    }
+
+    ::-webkit-scrollbar-track,
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
   }
 
   @media (forced-colors: active) {
-    * {
-      scrollbar-width: auto;
-      scrollbar-color: auto;
-    }
-
     ::selection {
       background: Highlight;
       color: HighlightText;

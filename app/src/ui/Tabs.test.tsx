@@ -37,16 +37,18 @@ describe('a strip of tabs wider than its room', () => {
     expect(list.scrollLeft).toBe(0);
   });
 
-  it('scrolls without a bar: the tab strip asks for none, where every other part asks for a thin one', () => {
+  it('scrolls without a bar: the tab strip asks for none, where every other part has a thin one without arrows', () => {
     const styles = (file: string) => readFileSync(path.join(__dirname, '..', 'styles', file), 'utf8');
     const tabs = /\.si-tabs \{[^}]*\}/.exec(styles('components.css'))?.[0] ?? '';
     expect(tabs).toContain('scrollbar-width: none;');
-    expect(styles('base.css')).toMatch(
-      /\* \{\s*scrollbar-width: thin;\s*scrollbar-color: var\(--color-border-control\) transparent;/,
+    const base = styles('base.css');
+    // Chromium (WebView2) by its scroll bar parts, which have no arrow buttons, outside forced colours only.
+    expect(base).toMatch(
+      /@media not \(forced-colors: active\) \{\s*::-webkit-scrollbar \{\s*width: var\(--scrollbar-size\);/,
     );
-    // Forced colours: the system's own bars.
-    expect(styles('base.css')).toMatch(
-      /@media \(forced-colors: active\) \{\s*\* \{\s*scrollbar-width: auto;\s*scrollbar-color: auto;/,
-    );
+    expect(base).toMatch(/::-webkit-scrollbar-thumb \{[^}]*background: var\(--color-border-control\) padding-box;/);
+    // A browser without them by the standard properties; never both, as either property makes Chromium ignore the parts.
+    expect(base).toMatch(/@supports not selector\(::-webkit-scrollbar\) \{\s*\* \{\s*scrollbar-width: thin;/);
+    expect(base).not.toMatch(/^\s{2}\* \{\s*scrollbar-width: thin;/m);
   });
 });

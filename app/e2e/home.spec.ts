@@ -81,7 +81,7 @@ test('at 200% zoom (640x360) the library keeps its Site column and nothing scrol
   // Neither the page, nor the screen, nor the library's own box scrolls sideways at this width.
   expect(widths).toMatchObject({ page: 0, main: 0, table: 0 });
   // The Site column holds its least: room for the favicon and a name.
-  expect(widths.site).toBeGreaterThanOrEqual(160);
+  expect(widths.site).toBeGreaterThanOrEqual(144);
   // Pages and Started are second lines now, not columns: still said.
   await expect(library.getByRole('columnheader', { name: 'Pages' })).toBeHidden();
   await expect(library.getByText(/ pages?$/).first()).toBeVisible();
