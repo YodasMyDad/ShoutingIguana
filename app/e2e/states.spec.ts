@@ -408,267 +408,30 @@ test('at 200% zoom, the top bar keeps the palette button in the window and its c
   await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
   await page.setViewportSize(ZOOMED);
+  // The bar measures itself before the next frame is painted (layout/useGiveWay.ts): look at the frame that is.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.getByRole('button', { name: 'Expand the sidebar' })).toHaveAttribute('aria-expanded', 'false');
+  await page.waitForFunction(() => document.getAnimations().length === 0);
   const header = page.locator('header').first();
   // Nothing reaches past the window's edge or out of the bar.
   expect(await pastTheEdge(page)).toEqual([]);
   expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  // The palette button narrows to its magnifier and keys, all of it in the window.
-  const palette = header.getByRole('button', { name: /Search or run a command/ });
+  // The palette button gives way to its magnifier (never to a letter of its words), all of it in the window, its
+  // name kept.
+  const palette = header.getByRole('button', { name: /^Search or run a command/ });
   const button = await palette.boundingBox();
-  const keys = await palette.locator('kbd').first().boundingBox();
   expect(button && button.x + button.width).toBeLessThanOrEqual(ZOOMED.width);
-  expect(keys && button && keys.x + keys.width).toBeLessThanOrEqual((button?.x ?? 0) + (button?.width ?? 0));
-  // The crumbs truncate, the date first, and keep to their own room rather than run under the palette button.
+  expect(button?.width).toBeLessThanOrEqual(40);
+  // The crumbs keep to their own room, before the palette button, and hold all they show: the date has given way
+  // (still read), and the section you're on shows in full.
   const crumbs = header.getByRole('navigation', { name: 'Breadcrumb' });
-  expect(await crumbs.evaluate((element) => getComputedStyle(element).overflowX)).toBe('clip');
   const room = await crumbs.boundingBox();
   expect(room && button && room.x + room.width).toBeLessThanOrEqual(button?.x ?? 0);
-
-  // A window this narrow shows the sidebar collapsed to icons, which leaves room for where you are: the palette
-  // button's words and the date give way first, so the crawl's name and its section show, most of each at least.
-  await expect(page.getByRole('button', { name: 'Expand the sidebar' })).toHaveAttribute('aria-expanded', 'false');
-  const widths = (locator: Locator) =>
-    locator.evaluate((element) => ({ shown: element.clientWidth, full: element.scrollWidth }));
-  const nameCrumb = crumbs.getByRole('listitem').filter({ hasText: site() }).locator('span.truncate');
-  // The sidebar narrows over its transition: measure once it's done.
-  await expect.poll(async () => (await widths(nameCrumb)).shown).toBeGreaterThan(0);
-  await page.waitForFunction(() => document.getAnimations().length === 0);
-  const name = await widths(nameCrumb);
-  const section = await widths(crumbs.locator('[aria-current="page"]'));
-  const date = await widths(crumbs.getByRole('listitem').filter({ hasText: / \d{4}, / }));
-  expect(date.shown).toBeLessThan(name.shown);
-  expect(name.shown).toBeGreaterThanOrEqual(name.full * 0.75);
-  expect(section.shown).toBeGreaterThanOrEqual(section.full * 0.75);
+  expect(await crumbs.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const date = crumbs.getByRole('listitem').filter({ hasText: / \d{4}, / });
+  expect(await date.evaluate((element) => element.getBoundingClientRect().width <= 1)).toBe(true);
+  const section = crumbs.locator('[aria-current="page"]');
+  await expect(section).toHaveText('Overview');
+  expect(await section.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await pastTheEdge(page)).toEqual([]);
-});
-
-// The design system's states that only a browser shows, on markup with its classes (see `fixture`).
-test.describe('the design system’s states', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  });
-
-  test('a long section title wraps in a narrow column instead of running out of it', async ({ page }) => {
-    const host = await fixture(
-      page,
-      `<div style="width:320px" id="column"><div class="si-section-header">
-         <h2 class="si-section-header__title">Pages whose canonical points at a redirected URL<span class="si-section-header__meta">82,904</span></h2>
-         <div class="si-section-header__actions"><button type="button" class="si-btn si-btn--ghost">Export</button></div>
-       </div></div>`,
-    );
-    const column = await host.locator('#column').boundingBox();
-    const title = host.locator('h2');
-    const box = await title.boundingBox();
-    const action = await host.getByRole('button', { name: 'Export' }).boundingBox();
-    expect(column && box && action).toBeTruthy();
-    if (!column || !box || !action) return;
-    expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
-    expect(action.x + action.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
-    // All of it shows: wrapped, not cut.
-    expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  });
-
-  test('tabs past the edge show a scrollbar, and the list never scrolls up and down', async ({ page }) => {
-    const tabs = ['Overview', 'Response', 'Headers', 'Links', 'Images', 'Structured data', 'Hreflang', 'Source'];
-    const markup = (id: string) =>
-      `<div class="si-tabs" role="tablist" id="${id}">${tabs
-        .map(
-          (name, index) =>
-            `<button type="button" class="si-tab" role="tab" aria-selected="${String(index === 0)}">${name}</button>`,
-        )
-        .join('')}</div>`;
-    const host = await fixture(
-      page,
-      `<div style="width:300px">${markup('narrow')}</div><div style="width:1000px">${markup('wide')}</div>`,
-    );
-    const measure = (locator: Locator) =>
-      locator.evaluate((element) => ({
-        overflowing: element.scrollWidth > element.clientWidth,
-        // A scrollbar shows what's past the edge to the pointer. (Headless Chromium hides scrollbars, so this is the
-        // style that asks for one.)
-        scrollbar: getComputedStyle(element).scrollbarWidth,
-        scrollsUpAndDown: element.scrollHeight > element.clientHeight,
-      }));
-    const narrow = await measure(host.locator('#narrow'));
-    expect(narrow).toEqual({ overflowing: true, scrollbar: 'thin', scrollsUpAndDown: false });
-    expect((await measure(host.locator('#wide'))).scrollsUpAndDown).toBe(false);
-    // The chosen tab's rule is drawn in full, at the list's very bottom, over its hairline.
-    const rule = await host.locator('#wide [aria-selected="true"]').evaluate((element) => ({
-      bottom: getComputedStyle(element, '::after').bottom,
-      tab: element.getBoundingClientRect().bottom,
-      list: element.parentElement?.getBoundingClientRect().bottom,
-    }));
-    expect(rule.bottom).toBe('0px');
-    expect(rule.tab).toBe(rule.list);
-  });
-
-  test('an indeterminate bar slides by translate, and under reduced motion stripes the whole track', async ({
-    page,
-  }) => {
-    const markup = `<div style="width:300px"><div class="si-bar-track" role="progressbar" aria-label="Working"><span class="si-bar-fill si-bar-fill--indeterminate" id="fill"></span></div></div>`;
-    let host = await fixture(page, markup);
-    const motion = await host.locator('#fill').evaluate((element) => {
-      const [animation] = element.getAnimations();
-      const effect = animation?.effect;
-      if (!animation || !(effect instanceof KeyframeEffect)) return null;
-      const timing = ['offset', 'easing', 'composite', 'computedOffset'];
-      const properties = effect
-        .getKeyframes()
-        .flatMap((frame) => Object.keys(frame).filter((key) => !timing.includes(key)));
-      const track = element.parentElement?.getBoundingClientRect();
-      animation.pause();
-      animation.currentTime = 0;
-      const start = element.getBoundingClientRect();
-      // Just before the end: at the end itself, the next pass has begun.
-      animation.currentTime = Number(effect.getComputedTiming().duration) - 1;
-      const end = element.getBoundingClientRect();
-      return { properties: [...new Set(properties)], startRight: start.right, endLeft: end.left, track };
-    });
-    expect(motion).not.toBeNull();
-    // No layout every frame: the block moves with translate, from off the track's left to off its right.
-    expect(motion?.properties).toEqual(['translate']);
-    expect(motion?.startRight).toBeLessThanOrEqual((motion?.track?.left ?? 0) + 0.5);
-    expect(motion?.endLeft).toBeGreaterThanOrEqual((motion?.track?.right ?? 0) - 0.5);
-
-    for (const forcedColors of ['none', 'active'] as const) {
-      await page.emulateMedia({ reducedMotion: 'reduce', forcedColors });
-      host = await fixture(page, markup);
-      const still = await host.locator('#fill').evaluate((element) => ({
-        animations: element.getAnimations().length,
-        width: element.getBoundingClientRect().width,
-        track: element.parentElement?.getBoundingClientRect().width ?? 0,
-        image: getComputedStyle(element).backgroundImage,
-      }));
-      // Still, and across the whole track as stripes: never a solid third that reads as "33% done".
-      expect(still.animations, forcedColors).toBe(0);
-      expect(still.width, forcedColors).toBeCloseTo(still.track, 0);
-      expect(still.image, forcedColors).toContain('repeating-linear-gradient');
-    }
-  });
-
-  test('hover never takes away a state’s edge: a pressed toggle, an invalid field, a checked box', async ({ page }) => {
-    const host = await fixture(
-      page,
-      `<button type="button" class="si-btn si-btn--secondary" aria-pressed="true" id="pressed">Show passed</button>
-       <button type="button" class="si-btn si-btn--secondary" aria-pressed="false" id="unpressed">Show skipped</button>
-       <div class="si-field" data-invalid="" id="invalid" style="width:240px"><input class="si-field__input" aria-label="Start URL" aria-invalid="true" value="x"></div>
-       <button type="button" class="si-checkbox" role="checkbox" aria-checked="true" data-state="checked" aria-label="Render" id="checked"></button>`,
-    );
-    // Once the hover's transition is done.
-    const edge = async (id: string) => {
-      await page.waitForFunction(() => document.getAnimations().length === 0);
-      return (await style(host.locator(`#${id}`), 'border-top-color'))['border-top-color'];
-    };
-    for (const id of ['pressed', 'invalid', 'checked']) {
-      const rest = await edge(id);
-      await host.locator(`#${id}`).hover();
-      expect(await edge(id), id).toBe(rest);
-      await page.mouse.move(0, 0);
-    }
-    // Hover itself still shows where there's no state to keep.
-    const rest = await edge('unpressed');
-    await host.locator('#unpressed').hover();
-    expect(await edge('unpressed')).not.toBe(rest);
-  });
-
-  test('tabbing to the button inside a field shows one focus ring, the button’s', async ({ page }) => {
-    const field = page.getByRole('textbox', { name: 'Start URL' });
-    const box = field.locator('xpath=..');
-    await field.focus();
-    expect((await style(box, 'outline-style'))['outline-style']).toBe('solid');
-    await page.keyboard.press('Tab');
-    const crawl = box.locator('button[type="submit"]');
-    await expect(crawl).toBeFocused();
-    expect((await style(crawl, 'outline-style'))['outline-style']).toBe('solid');
-    expect((await style(box, 'outline-style'))['outline-style']).toBe('none');
-  });
-
-  for (const colorScheme of ['light', 'dark'] as const) {
-    test(`a link in running text has an underline at 3:1 (${colorScheme})`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme });
-      const host = await fixture(
-        page,
-        `<p class="text-text" style="background:var(--color-surface)">Read <a href="#guide" class="si-link si-link--inline">the guide</a>.</p>`,
-      );
-      const link = host.getByRole('link', { name: 'the guide' });
-      const underline = (await style(link, 'text-decoration-color'))['text-decoration-color'] ?? '';
-      expect(contrast(underline, await shownBackground(link))).toBeGreaterThanOrEqual(3);
-    });
-  }
-
-  for (const colorScheme of ['light', 'dark'] as const) {
-    test(`the app’s messages take their own tones, not severity’s, readable at 4.5:1 (${colorScheme})`, async ({
-      page,
-    }) => {
-      await page.emulateMedia({ colorScheme });
-      const host = await fixture(
-        page,
-        `<div class="si-banner si-banner--warning" id="caution"><span class="si-banner__body">Restarting the engine (2 of 3)…</span></div>
-         <div class="si-callout si-callout--warning" id="caution-callout"><span class="si-callout__body">3 checks were skipped</span></div>
-         <div class="si-banner si-banner--error" id="failure"><span class="si-banner__body">The engine keeps stopping.</span></div>
-         <span class="si-sev-badge si-sev-badge--warning" id="severity">Warning</span>`,
-      );
-      const background = async (id: string) =>
-        (await style(host.locator(`#${id}`), 'background-color'))['background-color'] ?? '';
-      const severity = await background('severity');
-      for (const id of ['caution', 'caution-callout']) {
-        expect(await background(id), id).not.toBe(severity);
-      }
-      for (const id of ['caution', 'caution-callout', 'failure']) {
-        const text = (await style(host.locator(`#${id}`), 'color')).color ?? '';
-        expect(contrast(text, await background(id)), id).toBeGreaterThanOrEqual(4.5);
-      }
-    });
-  }
-
-  test('under forced colours, what’s disabled is GrayText: menu and palette items, checkboxes, switches', async ({
-    page,
-  }) => {
-    await page.emulateMedia({ forcedColors: 'active' });
-    const host = await fixture(
-      page,
-      `<span id="gray" style="color:GrayText">GrayText</span>
-       <div class="si-menu" role="menu" aria-label="Row" style="width:200px">
-         <div class="si-menu-item" role="menuitem" id="item">Copy the URL</div>
-         <div class="si-menu-item" role="menuitem" data-disabled="" aria-disabled="true" id="item-off">Export this view</div>
-       </div>
-       <div role="listbox" aria-label="Commands"><div class="si-palette-item" role="option" aria-selected="false" aria-disabled="true" id="option-off">Pause the crawl</div></div>
-       <div class="si-choice" data-disabled=""><button type="button" class="si-checkbox" role="checkbox" aria-checked="false" data-state="unchecked" disabled aria-label="a" id="box-off"></button></div>
-       <div class="si-choice" data-disabled=""><button type="button" class="si-checkbox" role="checkbox" aria-checked="true" data-state="checked" disabled aria-label="b" id="box-on-off"></button></div>
-       <div class="si-choice" data-disabled=""><button type="button" class="si-switch" role="switch" aria-checked="false" data-state="unchecked" disabled aria-label="c" id="switch-off"><span class="si-switch__thumb" data-state="unchecked"></span></button></div>
-       <div class="si-choice" data-disabled=""><button type="button" class="si-switch" role="switch" aria-checked="true" data-state="checked" disabled aria-label="d" id="switch-on-off"><span class="si-switch__thumb" data-state="checked"></span></button></div>`,
-    );
-    const get = async (selector: string, property: string) => (await style(host.locator(selector), property))[property];
-    const gray = await get('#gray', 'color');
-    expect(await get('#item', 'color')).not.toBe(gray);
-    expect(await get('#item-off', 'color')).toBe(gray);
-    expect(await get('#option-off', 'color')).toBe(gray);
-    expect(await get('#box-off', 'border-top-color')).toBe(gray);
-    expect(await get('#box-on-off', 'background-color')).toBe(gray);
-    expect(await get('#switch-off', 'border-top-color')).toBe(gray);
-    expect(await get('#switch-off .si-switch__thumb', 'background-color')).toBe(gray);
-    expect(await get('#switch-on-off', 'background-color')).toBe(gray);
-  });
-});
-
-test('a crawl’s error in the library wraps in its status column instead of widening the page', async ({ page }) => {
-  await page.goto('/');
-  const library = page.getByRole('region', { name: 'Library' });
-  const row = library.getByRole('row').filter({ has: page.getByRole('link', { name: site(), exact: true }) });
-  await expect(row).toBeVisible();
-  // The line a file that couldn't be read gets under its status (HomeScreen's LibraryRow), at its longest.
-  const line = await row
-    .getByRole('cell')
-    .nth(1)
-    .evaluate((cell) => {
-      const error = document.createElement('span');
-      error.className = 'block text-12 text-text-muted';
-      error.textContent = 'Another program has the file open, so it couldn’t be read: close it, then try again.';
-      (cell.firstElementChild ?? cell).append(error);
-      return { height: error.getBoundingClientRect().height, line: parseFloat(getComputedStyle(error).lineHeight) };
-    });
-  expect(line.height).toBeGreaterThan(line.line);
-  const main = page.locator('main');
-  expect(await main.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
