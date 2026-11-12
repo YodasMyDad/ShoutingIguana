@@ -52,7 +52,8 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// 1,592, a filter on the source's depth 210 to 228 for 819 to 1,536). Their worst p95 was 489 ms on eight and 532
     /// on four, with one of 1,295 as the machine was busiest. Held to 1,500 ms: CI's 4-core runner has three helpers to
     /// lend and is taken as twice as slow a core, so over twice the worst on four connections, and above the busy run.
-    /// <b>No CI run has yet confirmed it.</b></item>
+    /// <b>No CI run has yet confirmed it.</b> As every one of these passes takes less than that on one connection too, a
+    /// pass that stopped splitting would pass it: <see cref="SplitGate"/> holds each to being split, and faster for it.</item>
     /// <item>Search as it's typed (<c>search</c>) passes over the crawl's URLs and titles in memory: 1.3 to 4.5 ms at 100k
     /// on the desktop whatever is typed, against the palette's 50 ms, and held to 25 ms: a search that read the file
     /// again (the text no longer kept) takes 50 to 70 ms on the desktop and would fail it, where a gate of 50 might not.
@@ -92,6 +93,13 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     private static readonly string[] COLUMNS = ["url", "statusCode", "indexability", "issues", "title", "wordCount", "responseMs", "depth", "inlinks", "sizeBytes"];
 
     private readonly List<ReaderBenchCase> _cases = [];
+    private readonly Dictionary<string, IReadOnlyList<int>> _connections = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The connections each pass of each case read split over several reported, by case name (<see cref="SplitGate"/>):
+    /// one entry a pass over every link, from <c>LinkGridReader.Split</c>.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<int>> Connections => _connections;
 
     public IReadOnlyList<ReaderBenchCase> Run()
     {
@@ -574,15 +582,26 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             return;
         }
 
-        var first = Time(() => read(0));
-        (double P50, double P95)? half = null, pastHalf = null;
-        if (rows > UrlGridReader.DEFAULT_LIMIT)
+        var watched = Watch(name);
+        try
         {
-            half = Time(() => read((int)(rows / 2)));
-            pastHalf = Time(() => read((int)(rows / 2) + 1));
-        }
+            var first = Time(() => read(0));
+            (double P50, double P95)? half = null, pastHalf = null;
+            if (rows > UrlGridReader.DEFAULT_LIMIT)
+            {
+                half = Time(() => read((int)(rows / 2)));
+                pastHalf = Time(() => read((int)(rows / 2) + 1));
+            }
 
-        Add(new ReaderBenchCase(name, kind, readClass, rows, first.P50, first.P95, half?.P50, half?.P95, pastHalf?.P50, pastHalf?.P95));
+            Add(new ReaderBenchCase(name, kind, readClass, rows, first.P50, first.P95, half?.P50, half?.P95, pastHalf?.P50, pastHalf?.P95));
+        }
+        finally
+        {
+            if (watched)
+            {
+                LinkGridReader.Split = null;
+            }
+        }
     }
 
     private void Timed(string name, string kind, string readClass, long? rows, Func<object?> read)
@@ -592,8 +611,39 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             return;
         }
 
-        var (p50, p95) = Time(() => read());
-        Add(new ReaderBenchCase(name, kind, readClass, rows, p50, p95, null, null, null, null));
+        var watched = Watch(name);
+        try
+        {
+            var (p50, p95) = Time(() => read());
+            Add(new ReaderBenchCase(name, kind, readClass, rows, p50, p95, null, null, null, null));
+        }
+        finally
+        {
+            if (watched)
+            {
+                LinkGridReader.Split = null;
+            }
+        }
+    }
+
+    /// <summary>For a case read split over several connections: hears how many each of its passes was split over.</summary>
+    private bool Watch(string name)
+    {
+        if (!name.Contains(SplitGate.SPLIT, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        List<int> reported = [];
+        _connections[name] = reported;
+        LinkGridReader.Split = connections =>
+        {
+            lock (reported)
+            {
+                reported.Add(connections);
+            }
+        };
+        return true;
     }
 
     private bool Wanted(string name) => only is null || name.Contains(only, StringComparison.OrdinalIgnoreCase);

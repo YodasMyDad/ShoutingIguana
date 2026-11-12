@@ -957,7 +957,12 @@ one connection a pass takes what it took (a common text filter 665 to 934 ms at 
 to 228 ms, from 819 to 1,536) and a pattern over every link's text (146 to 161, from 853 to 1,284) included. Their
 worst p95 over the rounds was 489 ms on eight connections and 532 on four (1,295 once, as the machine was busiest).
 The gate is 1,500 ms: CI's 4-core runner has three helpers to lend and is taken as twice as slow a core, so the gate
-is over twice the worst with four connections, and above the one busy run. No CI run has yet confirmed it. `link-pass` holds
+is over twice the worst with four connections, and above the one busy run. No CI run has yet confirmed it. That gate
+alone would let a pass that stopped splitting through, as every one of them takes less on one connection, so `--gate`
+also holds each split case to what it is for (`SplitGate`), on a crawl of 500,000 links or more: every pass it read
+was split (`LinkGridReader.Split` reports the connections), and, on 4 cores or more, its slowest page took at most
+60% of its one-connection twin's at p50, in the same run. With splitting switched off, the 100k crawl's read gate
+fails on every split case. `link-pass` holds
 the same reads on one connection to the 2.5 s it had. A view's ends are timed with them: its targets from the link
 summary in 20 to 58 ms (`link-grid`), the pages its links are on in a pass (475 to 740 ms on one connection, 148 to
 157 at p50 on eight).

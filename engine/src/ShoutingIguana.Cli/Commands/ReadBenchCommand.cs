@@ -45,7 +45,8 @@ internal static class ReadBenchCommand
                 Console.WriteLine($"  The crawl has no URL summary, as {Why(first.Summary.Reason!.Value)}, so the reads that need one are skipped. Analyse it first for the full run.");
             }
 
-            var cases = new ReaderBenchmark(path, runCount, Console.WriteLine, parse.GetValue(only)).Run();
+            var benchmark = new ReaderBenchmark(path, runCount, Console.WriteLine, parse.GetValue(only));
+            var cases = benchmark.Run();
             if (cases.Count == 0)
             {
                 Console.Error.WriteLine($"No read's name contains '{parse.GetValue(only)}', so nothing was timed.");
@@ -61,6 +62,17 @@ internal static class ReadBenchCommand
             if (gated)
             {
                 failures.AddRange(Over(cases, read => ReaderBenchmark.GATE_MS[read.Class], $"over its class's gate of"));
+
+                // The passes a host with cores to spare splits: split, and faster for it, where a crawl is big enough to split.
+                var links = LinkGridReader.Query(path, new UrlQuery { Limit = 1 }).Total;
+                if (links >= LinkGridReader.SplitFrom && Environment.ProcessorCount >= 2)
+                {
+                    failures.AddRange(SplitGate.Check(cases, benchmark.Connections, Environment.ProcessorCount));
+                }
+                else if (cases.Any(read => read.Name.Contains(SplitGate.SPLIT, StringComparison.Ordinal)))
+                {
+                    Console.WriteLine($"  The split passes aren't held to being split: the crawl has {links:N0} links (a pass is split from {LinkGridReader.SplitFrom:N0}) on {Environment.ProcessorCount} cores.");
+                }
             }
 
             if ((budget > 0 || gated) && !first.Summary.Available)
