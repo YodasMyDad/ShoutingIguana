@@ -15,5 +15,26 @@ internal sealed class ReadSlots(SidecarOptions options)
     public SemaphoreSlim Free { get; } = new(options.GridReads, options.GridReads);
 
     /// <summary>The slots a read may take beside its own, as the engine's readers ask for them.</summary>
-    public ReadHelpers Helpers => new(() => Free.CurrentCount > 1 && Free.Wait(0), () => Free.Release());
+    public ReadHelpers Helpers => new(TryTakeHelper, () => Free.Release());
+
+    /// <summary>
+    /// Takes a slot for a read that has its own already, if that leaves one free: true when it did. It never waits. Reads
+    /// arrive, and other passes ask, at the same moment, so having taken one it looks again: if that was the last after
+    /// all (a read took the one it counted on leaving), it gives the slot back and goes without.
+    /// </summary>
+    internal bool TryTakeHelper()
+    {
+        if (Free.CurrentCount <= 1 || !Free.Wait(0))
+        {
+            return false;
+        }
+
+        if (Free.CurrentCount > 0)
+        {
+            return true;
+        }
+
+        Free.Release();
+        return false;
+    }
 }
