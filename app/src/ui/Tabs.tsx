@@ -1,7 +1,8 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { formatCount } from '../lib/format';
+import { revealOffset } from '../lib/scroll';
 
 export interface TabItem<T extends string> {
   value: T;
@@ -27,7 +28,9 @@ export interface TabsProps<T extends string> {
 
 /**
  * Tabs: the selected one has the accent underline (3:1). The arrow keys move between tabs and show each as they go;
- * Tab moves into the panel.
+ * Tab moves into the panel. A strip wider than its room scrolls sideways without a bar, and the chosen tab is
+ * scrolled into view whenever it changes (a section remembered from the last URL, a palette command), so it's never
+ * chosen out of sight.
  */
 export function Tabs<T extends string>({
   label,
@@ -39,6 +42,15 @@ export function Tabs<T extends string>({
   className,
   panelClassName,
 }: TabsProps<T>) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
+    if (!list || !active) return;
+    const left = active.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft;
+    const next = revealOffset(left, active.getBoundingClientRect().width, list.scrollLeft, list.clientWidth);
+    if (next !== null) list.scrollLeft = next;
+  }, [value]);
   return (
     <TabsPrimitive.Root
       {...(value === undefined ? {} : { value })}
@@ -49,7 +61,7 @@ export function Tabs<T extends string>({
       }}
       className={className}
     >
-      <TabsPrimitive.List aria-label={label} className={clsx('si-tabs', flush && 'si-tabs--flush')}>
+      <TabsPrimitive.List ref={listRef} aria-label={label} className={clsx('si-tabs', flush && 'si-tabs--flush')}>
         {tabs.map((tab) => (
           <TabsPrimitive.Trigger key={tab.value} value={tab.value} disabled={tab.disabled} className="si-tab">
             {tab.label}
