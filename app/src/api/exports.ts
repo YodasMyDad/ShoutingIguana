@@ -69,7 +69,7 @@ export interface ExportResult {
   sheets: number;
   /** Columns asked for that are in the file with no values: the crawl has no URL summary to read them from. */
   unavailableColumns: string[];
-  /** An Excel file's cells cut to the 32,767 characters a cell holds. */
+  /** Cells cut to what a spreadsheet takes: 32,767 characters in an Excel file, 32,758 in CSV (what Excel reads of a field). */
   truncatedCells: number;
   /** The crawl was running: the file holds what it had when the export began. */
   crawlWasRunning: boolean;
@@ -85,7 +85,10 @@ export interface ExportJob {
   path: string;
   status: ExportStatus;
   rowsWritten: number;
-  /** Null until counted, and for the report. A running crawl's is its count when the export began. */
+  /**
+   * Null until counted, and for the report. A running crawl's is its count when the export began; never less than
+   * `rowsWritten`.
+   */
   rowsExpected: number | null;
   startedAt: string;
   finishedAt: string | null;

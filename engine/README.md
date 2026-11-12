@@ -900,7 +900,11 @@ si report example.sicrawl --out report.html                         # the report
 
 The format comes from the file's name unless `--format` gives it. A grid takes the grid's own query: `--columns` (by
 id; the grid's own when left out), `--filter column:operator[:value]` any number of times (`in` and `notIn` take
-`a,b,c`, `between` takes `min..max`, `isEmpty` takes nothing), `--search`, and `--sort column[:desc]`.
+`a,b,c`, `between` takes `min..max`, `isEmpty` takes nothing), `--search`, and `--sort column[:desc]`. A filter's
+value is of its column's type, not of what it looks like: `title:eq:404` is the text "404", `statusCode:eq:404` the
+number, `isInternal:is:false` a boolean. An option that belongs to another kind (`--check` for `urls`, `--cut` for
+anything but the report) is refused, never ignored, by the same list the API refuses a field of another kind by
+(`Export/ExportFields`).
 
 **How an export reads.** A page of rows at a time, each page the grid's own read (`Storage/GridExportReader` calls
 the readers the grids call, with the grid's cursor), on a snapshot it lets go of before the next:
@@ -910,8 +914,9 @@ the readers the grids call, with the grid's cursor), on a snapshot it lets go of
   76 MB (CSV) and 91 MB (Excel), as its 112,577 URLs are in 70 and 88;
 - nothing is held between two pages: a writer here (an analysis, a continue) waits no longer than for a grid's read,
   and a running crawl's write-ahead log can be folded into the file between any two pages;
-- a crawl that changes under it (analysed again, continued, paused, finished) ends the export, which says so
-  (`ExportFailure.CrawlChanged`) rather than write the rows of two crawls into one file;
+- a crawl that changes under it (analysed again, continued or finished) ends the export, which says so
+  (`ExportFailure.CrawlChanged`) rather than write the rows of two crawls into one file; a crawl paused or resumed is
+  the same crawl, and the export goes on;
 - a crawl that's running is exported as it stood when the export began (its highest URL and link ids are the bounds),
   in crawl order or by URL only;
 - what the grid's reads count is kept between the pages (the sidecar's own `ReadCache`, or the export's): without it
@@ -919,10 +924,17 @@ the readers the grids call, with the grid's cursor), on a snapshot it lets go of
 
 **The file** is written beside its target under another name and moved into place once whole (`Export/ExportTarget`),
 so an export that's cancelled or fails leaves nothing, and a file it was to replace is as it was. Its name must end in
-the format's extension. A place that can't be written to, a disk that fills up and a file open in another program (as
-Excel holds a workbook it's showing: found out before anything is read) are each told apart.
+the format's extension, and hold no character a file's name can't (on Windows `\ / : * ? " < > |`). A place that
+can't be written to, a disk that fills up and a file open in another program (as Excel holds a workbook it's showing:
+found out before anything is read) are each told apart. An `IExportJournal` in `ExportSettings` is told of each part
+file before it's created and once it has gone: the sidecar keeps that note in its state folder and, when it next
+starts, deletes the part files a killed run left (those it names, and no others). `si export` keeps none: Ctrl+C
+deletes its part file, and one that is killed leaves it.
 
-**CSV** is RFC 4180: UTF-8 with a byte-order mark, CRLF rows, quotes doubled. **Excel** files are written by the
+**CSV** is RFC 4180: UTF-8 with a byte-order mark, CRLF rows, quotes doubled, and no field longer than the 32,758
+characters Excel reads as one cell (a longer one ends the row in Excel, and its rest starts a new row in column A,
+unguarded): longer text is cut, and counted in `TruncatedCells`, as `si issues --csv` cuts and counts it too.
+**Excel** files are written by the
 engine itself (`Export/Xlsx/XlsxWriter`), a row at a time into the ZIP, with no package: shared strings (streamed to a
 file beside the workbook as the sheets are written, a repeat naming the item it already has), every cell named by its
 place, numbers as numbers, a bold header row that stays in view and filters, and column widths from the first 200

@@ -183,7 +183,7 @@ Built in stages:
     | `export-not-writable` | 400 | The file can't be written there: the folder isn't there, the user may not write to it, or the file is read-only (E5) |
     | `export-file-in-use` | 409 | A file of that name is open in another program, as Excel holds a workbook it's showing (E5) |
     | `export-disk-full` | 507 | The disk filled up while the file was written; nothing is left behind (E5) |
-    | `export-crawl-changed` | 409 | The crawl changed under the export: analysed again, continued, paused, resumed or finished (E5) |
+    | `export-crawl-changed` | 409 | The crawl changed under the export: analysed again, continued or finished (E5). A pause doesn't |
     | `export-too-large` | 422 | More rows than an Excel file holds here (16 sheets of 1,048,575); CSV has no limit (E5) |
     | `check-skipped` | 409 | The last analysis didn't run the check, so it has no rows to export (E5) |
     | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
@@ -630,7 +630,7 @@ there (a value not yet known is `null`, never left out). Nothing else is in it, 
 | `path` | string | The file it writes, as the sidecar resolved the path it was given |
 | `status` | string | `running`, then once `done`, `cancelled` or `failed` |
 | `rowsWritten` | number | Rows of data written so far, headers apart. 0 for the report throughout |
-| `rowsExpected` | number or null | The rows it will write: null until its first page is read, and for the report throughout |
+| `rowsExpected` | number or null | The rows it will write: null until its first page is read, and for the report throughout. Never less than `rowsWritten` |
 | `startedAt` | string | When it started: ISO 8601, UTC |
 | `finishedAt` | string or null | When it ended; null while it runs |
 | `result` | object or null | Once `done`: `{ rows, bytes, sheets, unavailableColumns, truncatedCells, crawlWasRunning }`, three numbers, an array of column ids, a number and a boolean. `sheets` is 0 for a file that isn't Excel's |
@@ -661,8 +661,8 @@ there (a value not yet known is `null`, never left out). Nothing else is in it, 
   follows. An export that ended while no stream was connected is in neither: the UI reads it once with
   `GET /api/exports/{exportId}`, which knows the last 64 that ended. `export-not-found` then means that 64 others
   have ended since, or that the sidecar that ran it has gone: a sidecar that is shut down cancels its exports, and
-  one that dies leaves an export's file unwritten or, at worst, a part-written file under another name beside it,
-  never a short file under the name asked for.
+  one that dies leaves an export's file unwritten, never a short file under the name asked for. Its part files are
+  deleted by the next sidecar to start (see **The job**, "A sidecar that is killed").
 - **In the app**, the event is one of `SidecarEvent` (`app/src/api/types.ts`), its data an `ExportJob`
   (`app/src/api/exports.ts`). The live store reads it at the boundary (`parseExportJob`: an event that isn't an
   export is dropped), and hands it to its listeners (`onEvent`). It keeps none of it: showing an export's progress is
@@ -1681,9 +1681,11 @@ An export only reads the crawl.
   when asked for (`id`: "Crawl order"). A column that needs the URL summary, on a crawl that has none, is in the file
   with no values, and the result names it in `unavailableColumns`, as the grid lists it in `unavailable`.
 - **`path`** is the file to write: a full path on this computer, whose name ends in the format's extension (`.csv`,
-  `.xlsx`, `.html` or `.htm`), so an export can't be made to write a program or a script. A path to another computer
-  (`\\server\share\…`, a device path) is refused, as a crawl's is; a mapped drive letter stays allowed. The crawl's own
-  file is never one. A file already there is replaced, once the new one is whole.
+  `.xlsx`, `.html` or `.htm`), so an export can't be made to write a program or a script. A name holding a character
+  no file's name may have is refused (`invalid-export` on `path`): on Windows `\ / : * ? " < > |`, so `d.txt:x.csv`,
+  which Windows would take for another stream of `d.txt`, is refused rather than written there. A path to another
+  computer (`\\server\share\…`, a device path) is refused, as a crawl's is; a mapped drive letter stays allowed. The
+  crawl's own file is never one. A file already there is replaced, once the new one is whole.
 
 **The words are the engine's.** A file's header row is each column's `title`, with its `unit` in brackets where it has
 one ("Response time (ms)", "Size (bytes)"), and an enum's value is written as its `valueTitles` say it ("Client
@@ -1705,7 +1707,13 @@ was found" and "Other address".
 #### The files
 
 - **CSV** is RFC 4180 as Excel reads it: UTF-8 with a byte-order mark, rows ended CRLF, a field holding a comma, a
-  quote or a line break in quotes with its quotes doubled. Numbers are written as their digits.
+  quote or a line break in quotes with its quotes doubled. Numbers are written as their digits. **No field is longer
+  than Excel reads as one cell: 32,758 characters**, nine short of the 32,767 a cell holds. Excel ends the row where
+  a field passes that, and starts a new row with the rest of the line, in column A, where nothing guards it: a formula
+  at the end of a site's long URL (nothing caps a URL's length) would run. Longer text is cut to 32,758 characters,
+  its guarding apostrophe among them, and the result counts the fields cut (`truncatedCells`). The limit was found by
+  opening fields of every length around it in Excel 16: 32,758 is read whole in any column and any alphabet; 32,759
+  isn't.
 - **Excel** (`.xlsx`) is written a row at a time, never held in memory. Numbers are numbers and dates are dates; the
   header row is bold, stays in view and filters; a column is as wide as its first 200 rows need, within 9 to 80
   characters. A sheet holds 1,048,576 rows, so **an export of more rows goes on to further sheets** ("Links", "Links
@@ -1726,7 +1734,7 @@ was found" and "Other address".
     report says it and as the checks call it, its plain title and its technical one, its id and category, its count,
     what that's a count out of, its share, and the points it takes off the score.
   - *A check's sheet* is named by the check's number in the report and the start of its title, in the 31 characters a
-    sheet's name holds ("3 Large images that slow pag…"), and holds every URL the check flagged, in crawl order: the
+    sheet's name holds ("3 Large images that slow pages…"), and holds every URL the check flagged, in crawl order: the
     address, the page's title, what was found, and the other address involved.
   - `check` writes one of those sheets as a file of its own (a check that found nothing: its header alone).
 
@@ -1736,8 +1744,10 @@ was found" and "Other address".
   beside its target under another name and moved into place once whole, so a cancelled or failed export leaves
   nothing, and a file it was to replace is as it was.
 - **`rowsWritten`** of **`rowsExpected`** is how far it has got: rows of data, headers apart. `rowsExpected` is null
-  until the first page is read, and for the report; the workbook's is its checks' rows.
+  until the first page is read, and for the report; the workbook's is its checks' rows. It is never less than
+  `rowsWritten` (see **While a crawl runs**).
 - **`result`**, once done: `{ rows, bytes, sheets, unavailableColumns, truncatedCells, crawlWasRunning }`.
+  `truncatedCells` counts the cells cut to what a spreadsheet takes: 32,767 characters in a workbook, 32,758 in CSV.
 - **`error`**, once failed, is the problem a call would have been answered with: `{ type, title, status, detail?,
   errors? }`. Its `title` is a plain sentence to show as it is.
 - **Events.** An `export` event carries the export, whole, as above: when it starts, at most every 250 ms while rows
@@ -1761,21 +1771,32 @@ was found" and "Other address".
   with the file once it's being written: `export-disk-full`, `export-not-writable`, `export-file-in-use`.
 - **At most 4 exports run at once**, each on a thread of its own; a fifth is `export-busy`. They don't take the
   grids' read slots.
-- **Shutdown** cancels every export as it begins, with the crawls and analyses, and nothing new starts.
+- **Shutdown** cancels every export as it begins, with the crawls and analyses, and nothing new starts: an export
+  part-way through its file stops within a page and deletes what it wrote.
+- **A sidecar that is killed** (the shell ends it, or it crashes) has no chance to delete an export's part file, which
+  would stay in the user's folder (`.links.xlsx.<32 hex digits>.tmp`, and `….strings` beside a workbook's). So the
+  sidecar notes each part file's full path in its own state folder (`exports-in-progress.json`) before it creates the
+  file, and takes it out once the file has gone. A sidecar that starts with that state folder deletes each file the
+  note names that is still there, and only those (the user's folder is never searched for files that look like one),
+  then empties the note, before it serves anything. A file it can't delete is left, and logged. `si export` keeps no
+  note: Ctrl+C cancels its export, which deletes its part file; a `si export` that is killed leaves its part file.
 
 **While a crawl runs**, an export is of the crawl **as it stood when the export began**: nothing the crawl finds
 after that is written, and `crawlWasRunning` says so. Each row is read, and tested against the filters, as its page is
 read, so a URL shows the status it had then (as the links grid's pages do). Its rows are in crawl order, or by URL: a
 `sort` by anything a running crawl changes (a status, a count) is refused with `invalid-query` on `sort`, as rows
-would change places between two pages. `rowsExpected` is the count when the export began, so `rowsWritten` can end a
-little short of it.
+would change places between two pages. `rowsExpected` is the grid's count as the export began, which can be a moment
+older than the rows the export reads: where more rows turn up than were counted, `rowsExpected` rises with
+`rowsWritten`, and never stands below it. It can also end a little above it, where the count had rows the export's
+bound leaves out.
 
 **An export never holds the file.** Each page is a read of its own, on a snapshot it lets go of before the next, as a
 grid's page is: an analysis or a continue starting here is kept waiting no longer than by a grid, and a running
 crawl's write-ahead log is never held open across two pages, so the log can be folded into the file and started again
 however long the export takes. In return, **a crawl that changes under an export ends it** (`export-crawl-changed`):
-analysed again, continued, paused, resumed or finished, its pages would be of two different crawls. The export says
-so and leaves no file; exporting again exports the crawl as it now is.
+analysed again, continued or finished, its pages would be of two different crawls. The export says so and leaves no
+file; exporting again exports the crawl as it now is. A crawl that is paused, or resumed, is the same crawl, and the
+export goes on to its end, of the crawl as it stood when it began.
 
 ### Report (E5)
 
@@ -1788,8 +1809,10 @@ UTF-8. `not-analyzed` (404) for a crawl never analysed: it has no report. The ex
 path (`kind` `report`), and `si report` writes it from the command line.
 
 - **`cut`** is `full` (the default), or `summary`: the report's first page alone (its head, the summary, what to fix
-  first, how the score is worked out, and the foot). The summary is the full report's own opening, so the two can't
-  differ.
+  first, how the score is worked out, and the foot). The first list says where each problem is explained by its
+  section ("under the same number in “What to fix”"), never by a page: which page that starts on depends on the paper
+  and on how long the score's table is (page 4 for the 100k crawl's 45 lines). The summary is the full report's own
+  opening, so the two can't differ.
 - **`examples`** and **`lookExamples`** are how many of its first pages, in crawl order, each problem to fix and each
   thing worth a look lists: 5 and 3 by default, 0 to 50. The rest are in the workbook, on the sheet with the problem's
   number. A value out of range, another `cut` or another parameter is `invalid-export`, by field.
@@ -1819,7 +1842,14 @@ path (`kind` `report`), and `si report` writes it from the command line.
     or its plain title) with the reason's plain text and what to do about it (`plainText`, `plainAction`); a reason a
     later engine wrote, which this one has no words for, is said in its stored text.
   - *Results that no longer stand* (the crawl went on, or the checks changed) are said to be out of date under the
-    site, with their date.
+    site, with their date. That the crawl went on since is said whoever asks for the report (the CLI too); that the
+    checks or their thresholds changed, when the sidecar asks (it knows the thresholds an analysis would run with
+    now). **A crawl that went on** leaves out what could only be read from the crawl as it now stands, which would sit
+    beside figures of the results ("Pages that can appear in search: 4,064 of 3,113"): the pages that can appear in
+    search, what wasn't read, the note of what is still to check; "Finished?" says it isn't known from these results.
+  - *What robots.txt kept out* is the site's own addresses its robots.txt refused, as the analysis counted them for
+    the score (`covers.blockedByRobots`, or the `blocked-by-robots` check's count where there is no score): an address
+    on another website that its own robots.txt refuses is no part of "the site's rules file".
 - **The score, the order and the words are the analysis's and the catalog's**; the document works out none of its
   own.
   - The score, its lines, "so far", the ceiling and "Fixing these five takes the score from 85 to 98" are the score
@@ -2775,3 +2805,39 @@ crawl then scores 0 with 75 checks finding something and 2 that couldn't run; th
   5-million-row workbook (159 MB) was not opened in Excel, for the memory that takes; it was read part by part
   instead (every part reads back, 5 sheets, 5,053,909 rows). **Not opened in LibreOffice or Numbers**: neither is on
   this machine.
+
+## Engine changes from the E5 review
+
+Sixteen findings, each fixed with a test that was seen to fail without its fix (by writing the test first, or by
+putting the old code back for a run). No endpoint, field, event or command was added or renamed; what an existing one
+says changed where noted.
+
+- **A CSV field is never longer than Excel reads as one cell** (`Tables/CsvTableWriter.MAX_FIELD_CHARS`, 32,758).
+  Excel 16 ends the row where a field passes 32,758 characters and starts a new row with the rest, in column A,
+  unguarded: a URL of 40,000 characters ending `=1+1`, exported as CSV, opened as 6,306 rows for 6,286 with `A24` a
+  live formula. Every text field is now cut to 32,758 characters (the apostrophe that guards a formula among them,
+  never half an emoji) and counted in `truncatedCells`; `si issues --csv` cuts and counts the same. Opened in Excel
+  again, the URL grid's CSV, a check's CSV and `si issues --csv` of that crawl read as one row a URL with no formula.
+- **The report** says where a problem is explained by its section ("under the same number in “What to fix”"), not
+  "from page 2", which was false whenever page 1 ran over (the 100k crawl's "What to fix" starts on page 4); counts
+  what the site's own robots.txt kept out, as the analysis did, not every refused address of every website (the
+  garden crawl's "2 addresses the site's rules file keeps search engines out of" were two other sites'); says that a
+  crawl that went on since its results is out of date whoever asks, and leaves out the figures of the crawl as it now
+  stands ("4,064 of 3,113"); wraps a site's unbroken text in its cell (a 300-character detail widened its table to
+  2,589 px on a 680 px page); says "1 address, which wasn't read"; and a check of addresses' "One fix" counts
+  addresses, which "all lead to" the address they share. **The report's style sheet changed** (one rule), so the hash
+  its policy names did too; it is still the one hash every report of a build carries.
+- **An export** never says it has written more rows than it expects (a running crawl's count can be older than its
+  rows: "30,770 of 30,757"); isn't ended by a pause, and no longer says it is; refuses a file name no file can have
+  (`d.txt:x.csv`) as an invalid path; and tells an `IExportJournal` of its part files, which **the sidecar keeps in
+  its state folder** (`exports-in-progress.json`) and clears at its next start, deleting what a killed run left noted.
+- **`si export`** types a filter's value by its column (`--filter title:eq:404` is text), and refuses an option of
+  another kind, by the list the API refuses a field by (`Export/ExportFields`).
+- **Tests the review found missing**: a query with filters, a search and a sort together, row for row with the grid's
+  read, on both grids; every column's title and value word written out in the test; an export ended by a crawl
+  really continued and really finishing, and one not ended by a crawl paused and resumed; the too-large refusal and
+  its promise of no file; in the sidecar, `export-crawl-changed` (an analysis between two pages), `export-disk-full`,
+  `export-too-large`, progress at most every 250 ms, the last 64 ended exports, and shutdown cancelling an export whose
+  file is open and part-written; the report's examples by order.
+- **The workbook's sheet name** in this document read "3 Large images that slow pag…"; the engine writes "3 Large
+  images that slow pages…", as its test always said. The document was wrong.
