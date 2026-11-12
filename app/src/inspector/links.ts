@@ -23,6 +23,15 @@ export function resetLinkKinds(): void {
   chosenKinds.outlinks = 'all';
 }
 
+/**
+ * A link's identity among a URL's links, which the engine gives no id of its own here: the other end, and what tells
+ * two links to it apart (kind, position, text, fragment, flags). Two links alike in all of these are the same to the
+ * cursor.
+ */
+export function linkRowKey(row: LinkRow): string {
+  return JSON.stringify([row.id, row.kind, row.position, row.text, row.fragment, row.flags]);
+}
+
 /** A session's walk can be long: the rows remembered are the latest of this many grids. */
 const REMEMBERED_GRIDS = 500;
 

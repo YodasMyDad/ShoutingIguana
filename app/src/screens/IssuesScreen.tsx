@@ -20,6 +20,7 @@ import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyUndo } from '../feedback/notify';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
+import { searchCommand } from '../grid/searchCommand';
 import { useCommands } from '../keyboard/registry';
 import { formatCountOf } from '../lib/format';
 import { useLive } from '../live/liveStore';
@@ -329,17 +330,7 @@ export function IssuesScreen() {
 
   useCommands(
     () => [
-      {
-        id: 'issues.filter',
-        title: 'Filter the checks',
-        group: 'Issues',
-        keys: ['mod+f'],
-        inInputs: true,
-        run: () => {
-          filterRef.current?.focus();
-          filterRef.current?.select();
-        },
-      },
+      searchCommand({ id: 'issues.filter', title: 'Filter the checks', group: 'Issues', field: filterRef }),
       {
         id: 'issues.next',
         title: 'Next check',

@@ -19,6 +19,7 @@ import { notifyResult } from '../../feedback/notify';
 import { NO_DETAIL } from '../../grid/filterSentence';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
+import { useRowMenu } from '../../grid/rowMenuState';
 import type { RowWindowModel } from '../../grid/rowWindow';
 import type { GridColumn, GridRange, GridTree, RowFetcher } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
@@ -34,6 +35,7 @@ import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { FIRST_GROUP_ROWS, childRows, groupFilter, groupRefOf, treeLayout, type OpenGroup } from './groupTree';
+import { IssuePageMenu } from './IssuePageMenu';
 
 /** A row of the tree: a group, one of the open group's first pages or URLs, or its link to all of them. */
 type TreeRow =
@@ -45,6 +47,21 @@ type TreeRow =
 const groupRows = new WeakMap<IssueGroup, TreeRow>();
 const pageRows = new WeakMap<IssueRow, TreeRow>();
 const moreRows = new WeakMap<IssueGroup, TreeRow>();
+
+/** A group's identity: its detail and its related URL, as the engine keys it. */
+const groupKey = (group: IssueGroup) => `${group.detail ?? ''}|${group.relatedUrlId ?? ''}`;
+
+/** A row's identity in the tree, so the cursor stays on it when the rows are read again (an analysis). */
+function treeRowKey(row: TreeRow): string {
+  switch (row.kind) {
+    case 'group':
+      return `g|${groupKey(row.group)}`;
+    case 'page':
+      return `p|${groupKey(row.group)}|${row.row.id}|${row.row.detail ?? ''}|${row.row.relatedUrlId ?? ''}`;
+    case 'more':
+      return `m|${groupKey(row.group)}`;
+  }
+}
 
 function wrap<K extends object>(cache: WeakMap<K, TreeRow>, key: K, make: () => TreeRow): TreeRow {
   let row = cache.get(key);
@@ -191,6 +208,7 @@ export function IssueGroups({
   }, [groupCount, openIndex, openChildren]);
   const getGroup = groups.getRow;
 
+  const rowMenu = useRowMenu<TreeRow>();
   const getRow = useCallback(
     (index: number): TreeRow | undefined => {
       const place = layout.place(index);
@@ -437,6 +455,7 @@ export function IssueGroups({
       : (groups.firstPage?.rows.find((group) => group.likelyTemplate) ?? null);
 
   const rows = layout.rowCount;
+  const menuRow = rowMenu.state ? getRow(rowMenu.state.index) : undefined;
   const shown = groupCount === null ? Math.min(Math.max(total, 1), 6) : Math.max(rows, 1);
   const height = shown * rowHeight + headerHeight + 2;
 
@@ -473,10 +492,29 @@ export function IssueGroups({
             const row = onFollow && index !== null ? getRow(index) : undefined;
             if (row?.kind === 'page') onFollow?.(row.row.id);
           }}
+          rowKey={treeRowKey}
+          onContextMenu={rowMenu.onContextMenu}
           busy={groups.isRefreshing}
           className="flex-1 rounded-md border border-border"
         />
       </div>
+      <IssuePageMenu<TreeRow>
+        crawlId={crawlId}
+        state={rowMenu.state}
+        onOpenChange={rowMenu.onOpenChange}
+        siteOrigin={siteOrigin}
+        page={menuRow?.kind === 'page' && menuRow.row.url ? { id: menuRow.row.id, url: menuRow.row.url } : null}
+        group={
+          menuRow && menuRow.kind !== 'page'
+            ? {
+                words: showInUrlsWords(check, menuRow.group.pages),
+                filter: groupFilter(check.id, groupRefOf(menuRow.group)),
+              }
+            : null
+        }
+        urlOf={(row) => (row.kind === 'page' ? row.row.url : null)}
+        onInspect={onInspect}
+      />
     </div>
   );
 }

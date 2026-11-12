@@ -25,6 +25,7 @@ import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridSc
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { RefusedFilter } from '../grid/RefusedFilter';
+import { searchCommand } from '../grid/searchCommand';
 import { RowMenu, UrlRowItems } from '../grid/RowMenu';
 import { copyRowUrls, rowMenuLabel, useRowMenu } from '../grid/rowMenuState';
 import type { SavedView } from '../grid/savedViews';
@@ -372,18 +373,7 @@ export function UrlsScreen() {
 
   useCommands(
     (): Command[] => [
-      {
-        id: 'urls.search',
-        title: 'Search URLs and titles',
-        group: 'URLs',
-        keys: ['mod+f'],
-        inInputs: true,
-        keywords: ['find', 'filter this grid', 'search'],
-        run: () => {
-          searchRef.current?.focus();
-          searchRef.current?.select();
-        },
-      },
+      searchCommand({ id: 'urls.search', title: 'Search URLs and titles', group: 'URLs', field: searchRef }),
       {
         id: 'urls.addFilter',
         title: 'Add a filter to the URLs',

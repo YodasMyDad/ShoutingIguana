@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { ArrowLeft, Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Copy, ExternalLink, ListFilter, RefreshCw } from 'lucide-react';
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import { isProblem, missingPlaceWords } from '../../api/errors';
@@ -16,6 +16,9 @@ import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { GridCore, type GridCopyResult } from '../../grid/GridCore';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
+import { searchCommand } from '../../grid/searchCommand';
+import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
+import { copyRowUrls, rowMenuLabel, useRowMenu } from '../../grid/rowMenuState';
 import { nextSort, useHeaderHandoff } from '../../grid/sort';
 import { UNAVAILABLE_WHILE_ANALYSING, analyseWords } from '../../grid/summaryWords';
 import { MAX_COPY_ROWS } from '../../grid/tsv';
@@ -34,11 +37,14 @@ import { EmptyState, FilteredEmptyState } from '../../ui/EmptyState';
 import { Icon } from '../../ui/Icon';
 import { IconButton } from '../../ui/IconButton';
 import { LiveBadge } from '../../ui/LiveBadge';
+import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { GridHeader, ResultCount } from '../../ui/PageHeader';
 import { SearchField } from '../../ui/SearchField';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
+import { urlDisplay } from '../../ui/urlText';
+import { oneUrlFilter } from '../urls/urlPlaces';
 import {
   URL_COLUMNS_UNAVAILABLE_BECAUSE,
   URL_GRID_COLUMNS,
@@ -121,6 +127,8 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   );
   const rows = usePagedRows<UrlRow>({ queryKey, fetchPage, rowHeight, enabled });
   const inspector = useInspector();
+  const rowMenu = useRowMenu<UrlRow>();
+  const menuRow = rowMenu.state ? rows.getRow(rowMenu.state.index) : undefined;
   const inspecting = search.inspect !== undefined;
   const handoff = useHeaderHandoff(sort);
   // Which columns the engine sorts by: its own word for it, never a list kept here.
@@ -204,18 +212,13 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
 
   useCommands(
     () => [
-      {
+      searchCommand({
         id: 'sitemaps.search',
         title: 'Search this sitemap’s URLs',
         group: 'Sitemaps',
-        keys: ['mod+f'],
-        inInputs: true,
+        field: searchField,
         enabled: () => !stale,
-        run: () => {
-          searchField.current?.focus();
-          searchField.current?.select();
-        },
-      },
+      }),
       { id: 'sitemaps.list', title: 'Show every sitemap', group: 'Sitemaps', run: toList },
       {
         id: 'sitemaps.copyUrl',
@@ -478,6 +481,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
               const row = inspecting && index !== null ? rows.getRow(index) : undefined;
               if (row) inspector.open(row.id);
             }}
+            onContextMenu={rowMenu.onContextMenu}
             // Live refreshes update in place: the progress line is for a refresh the user asked for.
             busy={rows.isRefreshing && !crawl.crawling}
             emptyState={
@@ -496,6 +500,42 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
           />
         </GridScreenBody>
       )}
+      <RowMenu
+        state={rowMenu.state}
+        onOpenChange={rowMenu.onOpenChange}
+        label={rowMenuLabel(
+          rowMenu.state?.menu.indices.length ?? 1,
+          menuRow?.url ? urlDisplay(menuRow.url, crawl.siteOrigin).shown : undefined,
+          ['URL', 'URLs'],
+        )}
+      >
+        <UrlRowItems
+          count={rowMenu.state?.menu.indices.length ?? 1}
+          url={menuRow?.url}
+          onInspect={() => {
+            if (menuRow) inspector.open(menuRow.id);
+          }}
+          onCopyUrls={() => {
+            if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row.url);
+          }}
+          onCopyRows={() => void rowMenu.state?.menu.copy()}
+        />
+        <MenuSeparator />
+        <MenuItem
+          icon={ListFilter}
+          disabled={!menuRow?.url}
+          onSelect={() => {
+            if (!menuRow?.url) return;
+            void navigate({
+              to: '/crawls/$crawl/urls',
+              params: { crawl: crawlId },
+              search: { filter: oneUrlFilter(menuRow.url), inspect: menuRow.id },
+            });
+          }}
+        >
+          Show the URL in URLs
+        </MenuItem>
+      </RowMenu>
     </GridScreen>
   );
 }
