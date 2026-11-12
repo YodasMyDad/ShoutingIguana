@@ -192,6 +192,16 @@ public sealed class CrawlEngineTests : IAsyncLifetime
             CrawlStatsReader.ReadSlowPages(path, new AnalysisSettings().SlowResponseMs));
         Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
 
+        // A canonical that redirects is reported with the URL its redirects end at, which is what the canonical should
+        // name: read from the crawl's own URLs, after one redirect or several. One that leads back to its page says so.
+        var plants = new Uri(server.BaseUri, SyntheticSite.PLANTS_PATH).AbsoluteUri;
+        Assert.Equal(
+        [
+            ($"{plants}canonical-chain", $"The canonical URL redirects (301 Moved Permanently) and, after 2 redirects, ends at {plants}thin", $"{plants}moved-twice"),
+            ($"{plants}canonical-redirect", $"The canonical URL redirects (301 Moved Permanently) to {plants}thin", $"{plants}moved"),
+            ($"{plants}self-canonical/", "The canonical URL redirects back to this page", $"{plants}self-canonical")
+        ], rows.Where(row => row.Issue == IssueCatalog.CANONICAL_TO_REDIRECT.Id).Select(row => (row.Url, row.Detail!, row.RelatedUrl!)).Order());
+
         // The per-issue totals the summary shows agree with the flagged rows.
         var flaggedPerIssue = rows.GroupBy(row => row.Issue).ToDictionary(group => group.Key, group => (long)group.Count());
         var counts = IssueReader.ReadCounts(path);

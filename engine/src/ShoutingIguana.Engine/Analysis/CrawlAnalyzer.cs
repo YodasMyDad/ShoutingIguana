@@ -190,7 +190,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls), indexability, hreflang,
+                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl), indexability, hreflang,
                 new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings),
                 new HtmlRules()
             ];

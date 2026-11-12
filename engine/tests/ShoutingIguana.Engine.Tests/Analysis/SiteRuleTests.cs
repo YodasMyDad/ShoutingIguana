@@ -409,7 +409,7 @@ public sealed class SiteRuleTests
         AnalyzedPage[] pages = [backHere, toGone, toGoneLater, toPage, toRedirect];
         var urls = site.Table(canonicals: pages.Select(page => (page.UrlId, page.Links.Single(link => link.Kind == LinkKind.Canonical).ToId)));
         var analysed = pages.Select(page => RuleHarness.AsAnalysed(page, urls)).ToList();
-        var canonicalRules = new CanonicalRules(urls);
+        var canonicalRules = new CanonicalRules(urls, site.UrlOf);
         List<IssueHit> Hits(AnalyzedPage page) => canonicalRules.Check(page).ToList();
 
         Assert.Equal([(backHere.UrlId, IndexabilityReason.None), (toGone.UrlId, IndexabilityReason.None), (toGoneLater.UrlId, IndexabilityReason.None)],
@@ -425,6 +425,45 @@ public sealed class SiteRuleTests
         Assert.Equal("The canonical URL redirects to a URL that returns 404 Not Found", Hits(analysed[2]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_BROKEN).Detail);
         Assert.Equal([IssueCatalog.CANONICALISED_PAGE], Hits(analysed[3]).Select(hit => hit.Issue));
         Assert.Equal([IssueCatalog.CANONICALISED_PAGE, IssueCatalog.CANONICAL_TO_REDIRECT], Hits(analysed[4]).Select(hit => hit.Issue));
+    }
+
+    /// <summary>
+    /// A canonical to a redirect is fixed by naming where the redirect ends, so the detail gives that URL: after one
+    /// redirect or several, whatever kind they are, and a URL the crawl knows but didn't fetch included. The related URL
+    /// stays the canonical itself. One that comes back to the page needs no URL: it is the page's own.
+    /// </summary>
+    [Fact]
+    public void ACanonicalToARedirectNamesWhereTheRedirectEnds()
+    {
+        var site = new RuleHarness();
+        AnalyzedPage Page(string path, string canonical) => site.Page($"{site.Site}{path}",
+            RuleHarness.Html($"<link rel=\"canonical\" href=\"{canonical}\">"), IndexabilityReason.Canonicalised);
+
+        var once = Page("/once", $"{site.Site}/old");
+        var old = site.Fetched($"{site.Site}/old", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/new");
+        site.Ok($"{site.Site}/new");
+        var thrice = Page("/thrice", $"{site.Site}/first");
+        var first = site.Fetched($"{site.Site}/first", FetchOutcome.Redirect, 302, redirectTo: $"{site.Site}/second");
+        site.Fetched($"{site.Site}/second", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/third");
+        site.Fetched($"{site.Site}/third", FetchOutcome.Redirect, 308, redirectTo: $"{site.Site}/new");
+        var away = Page("/away", $"{site.Site}/out");
+        var leaving = site.Fetched($"{site.Site}/out", FetchOutcome.Redirect, 301, redirectTo: "https://partner.example/landing");
+        var back = Page("/back/", $"{site.Site}/back");
+        var toBack = site.Fetched($"{site.Site}/back", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/back/");
+        AnalyzedPage[] pages = [once, thrice, away, back];
+        var urls = site.Table(canonicals: pages.Select(page => (page.UrlId, page.Links.Single(link => link.Kind == LinkKind.Canonical).ToId)));
+        var rules = new CanonicalRules(urls, site.UrlOf);
+        IssueHit Hit(AnalyzedPage page) => rules.Check(RuleHarness.AsAnalysed(page, urls)).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_REDIRECT);
+
+        Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, once.UrlId, "The canonical URL redirects (301 Moved Permanently) to https://example.com/new", old), Hit(once));
+        Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, thrice.UrlId,
+            "The canonical URL redirects (302 Found) and, after 3 redirects, ends at https://example.com/new", first), Hit(thrice));
+
+        // The partner's page was never asked for: it is still where the redirect goes.
+        Assert.False(urls[site.Find("https://partner.example/landing")].Fetched);
+        Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, away.UrlId,
+            "The canonical URL redirects (301 Moved Permanently) to https://partner.example/landing", leaving), Hit(away));
+        Assert.Equal(new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, back.UrlId, "The canonical URL redirects back to this page", toBack), Hit(back));
     }
 
     /// <summary>noindex with a canonical elsewhere is a contradiction; with one that comes back here or leads nowhere, it isn't.</summary>
@@ -443,7 +482,7 @@ public sealed class SiteRuleTests
         var elsewhere = Page("/b", "/c");
         site.Ok($"{site.Site}/c");
         var urls = site.Table();
-        var rules = new CanonicalRules(urls);
+        var rules = new CanonicalRules(urls, site.UrlOf);
         List<IssueDefinition> Issues(AnalyzedPage page) => [.. rules.Check(RuleHarness.AsAnalysed(page, urls)).Select(hit => hit.Issue)];
 
         Assert.DoesNotContain(IssueCatalog.NOINDEX_WITH_CANONICAL, Issues(backHere));
@@ -478,8 +517,8 @@ public sealed class SiteRuleTests
 
         // The noindex on a stub nobody sees doesn't matter; the refresh does.
         Assert.Equal([IssueCatalog.META_REFRESH], new IndexabilityRules().Check(RuleHarness.AsAnalysed(stub, urls)).Select(hit => hit.Issue));
-        Assert.Equal("The canonical URL redirects with an instant meta refresh",
-            new CanonicalRules(urls).Check(site.Page($"{site.Site}/x", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/old\">"),
+        Assert.Equal($"The canonical URL redirects with an instant meta refresh to {site.Site}/new",
+            new CanonicalRules(urls, site.UrlOf).Check(site.Page($"{site.Site}/x", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/old\">"),
                 IndexabilityReason.Canonicalised)).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_REDIRECT).Detail);
     }
 

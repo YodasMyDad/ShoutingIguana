@@ -353,7 +353,7 @@ public sealed class PageRuleTests
         var invalid = site.Page($"{site.Site}/d", RuleHarness.Html("<link rel=\"canonical\" href=\"http://[nope\">"));
         var none = site.Page($"{site.Site}/e", RuleHarness.Html());
         var noneButNoindex = site.Page($"{site.Site}/f", RuleHarness.Html(), IndexabilityReason.Noindex);
-        var rules = new CanonicalRules(site.Table());
+        var rules = new CanonicalRules(site.Table(), site.UrlOf);
 
         Assert.Empty(Issues(rules, sameTwice));
         Assert.Equal([IssueCatalog.CANONICAL_MULTIPLE], Issues(rules, conflicting));
@@ -375,7 +375,7 @@ public sealed class PageRuleTests
         var selfCanonical = site.Page($"{site.Site}/c", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/c\"><meta name=\"robots\" content=\"noindex\">"),
             IndexabilityReason.Noindex);
         var canonicalOnly = site.Page($"{site.Site}/d", RuleHarness.Html(other), IndexabilityReason.Canonicalised);
-        var rules = new CanonicalRules(site.Table());
+        var rules = new CanonicalRules(site.Table(), site.UrlOf);
 
         Assert.Equal(new IssueHit(IssueCatalog.NOINDEX_WITH_CANONICAL, conflict.UrlId, null, site.Id($"{site.Site}/other")), rules.Check(conflict).Single());
         Assert.Equal([IssueCatalog.NOINDEX_WITH_CANONICAL], Issues(rules, fromHeaders));
