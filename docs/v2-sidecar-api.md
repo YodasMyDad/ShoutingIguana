@@ -33,6 +33,11 @@ Built in stages:
   the crawler's own probes said apart in the counts; the URLs crawled counted as the grid counts them; the time spent
   crawling; the inspector's totals of every kind of link, the URL's length, and what became of each link's other end.
   [Engine changes E3c made](#engine-changes-e3c-made) has what changed and what was measured.
+- **E6** is marked below where it adds, each addition a new field or a new call: search as it's typed, the site's
+  icon, the analysis's limits read and changed, a links view's ends and the URL grid narrowed to them, robots.txt's
+  origins searched and filtered, the inspector's exact links to a sitemap and a robots.txt line, and a pass over the
+  links split over connections. [Engine changes E6 made](#engine-changes-e6-made) has what changed and what was
+  measured.
 - **The score** is marked below too, each addition a new field: what Simple mode needs of the engine that isn't export
   ([the Simple design](v2-ui-simple.md#what-the-engine-needs)). A site's score, worked out and stored by the analysis;
   the checks' plain words; which checks are a fault of the whole site, and which are reported once; and a status
@@ -302,7 +307,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
  "crawlingMs":41250,"fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
- "analyzedAt":"…","score":{"value":85,"band":"good","partial":false},"outOfDate":false,"sizeBytes":18276352,"missing":false}
+ "analyzedAt":"…","score":{"value":85,"band":"good","partial":false},"outOfDate":false,"sizeBytes":18276352,"hasFavicon":true,"missing":false}
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
@@ -359,6 +364,9 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
     ([Analysis settings](#analysis-settings-e6)).
 
   `GET /api/crawls/{id}/analysis` gives the reasons.
+- **`hasFavicon`** (E6) is true when the crawl kept the site's icon, which [`/favicon`](#favicon-e6) then gives; false
+  for a site with no icon the engine keeps, for a crawl made before E6, and for a running crawl until its icon has
+  arrived, a few requests after its first page. It is one lookup as the summary is read, and kept with it.
 - **Caching.** Each file's summary is read once and kept until the file's size or modified time changes, so the list
   stays cheap with many crawls. The cache is persisted in the state folder (`summaries.json`, keyed by the file's
   stamp, the engine version and the cache's own format, which changes whenever a summary keeps more), so a restart
@@ -897,6 +905,8 @@ the checks or thresholds changed keeps its summary, shown behind the out-of-date
 - `/sitemaps` and `/sitemaps/urls` (E3b);
 - `/robots`, `/robots/file` and `/robots/blocked` (E3b);
 - `/search` (E6);
+- `/links/ends`, and `linkEnds` on the URL grids (E6);
+- `/favicon` (E6);
 - `/export` (E5).
 
 The GET issues endpoint above stays as it is, for scripts and the design fixtures; the Issues screen uses `/rows`.
@@ -1544,23 +1554,49 @@ So a page in crawl order is read:
   one pass over the links and kept (a bit per link). That pass is over budget, as the next paragraph's are.
 
 **A pass over every link is split over several connections** (E6) where the sidecar has read slots free: the links
-are divided by id into as many stretches as there are connections (four at most: the read's own and up to three
+are divided by id into as many stretches as there are connections (eight at most: the read's own and up to seven
 more), each read on a thread of its own, and what each kept and counted is put together. The answer is the one
-connection's, to the link. Measured on the 100k crawl on a machine other work was loading, the first read of a view
-took about a third of the time: a text filter 294 ms where one connection took 870, rare text 175 for 478, a pattern
-396 for 1,253, a search 294 for 897, a filter on the source's depth 333 to 476 for 934 to 1,478. So those reads come
-inside or near the 300 ms budget when cores are free, and are as they were when none is.
+connection's, to the link.
+
+Measured on the 100k crawl's 5 million links, the first read of a view, the same read timed in turn by the engine
+from before E6 and by this one, on one connection, on four and on eight (three rounds of ten runs; other work was
+loading the machine throughout, which is why one connection takes half as long again as on a quiet one). First
+page, p50 over the rounds, in ms:
+
+| The view's filter | Before E6 | One connection | Four | Eight |
+| --- | --- | --- | --- | --- |
+| Text contains a common word (2.2 million links) | 778 to 914 | 665 to 934 | 172 to 187 | 113 to 123 |
+| Text contains rare text (28 links) | 268 to 283 | 273 to 281 | 98 to 101 | 64 to 66 |
+| A search (7,609 links) | 1,301 to 1,615 | 1,233 to 1,592 | 289 to 297 | 183 to 211 |
+| The facets of a text filter | 847 to 1,156 | 815 to 968 | 191 to 196 | 127 to 145 |
+| Text matches a pattern | | 853 to 1,284 | 240 to 249 | 146 to 161 |
+| From pages four clicks from the start (3.6 million links) | | 819 to 1,536 | 357 to 606 | 210 to 228 |
+
+So a pass on one connection takes what it took, a pass on four a quarter of it, and a pass on eight a sixth: **with
+eight, each of these reads' first page is inside the 300 ms budget at p50**, where four left the search at it and the
+filter on the source's depth over it. That is why a pass takes up to seven helpers and not three: twice the cores,
+for a fraction of a second. At p95 the worst of the eight-connection reads (first page, half way down or just past
+it) was 86 to 489 ms over the three rounds, and of the four-connection ones 139 to 532, with one of 1,295 as the
+machine was busiest; so they are **inside or near the budget when cores are free, not always inside it**, and as
+they were when none is. A page half way down takes some 50 to 100 ms more than the first on several connections
+(the rows it shows aren't ones the read's own connection has just passed over). Not measured: a quiet machine, and
+a crawl of a million URLs.
 
 - **No more read slots than the rule allows.** A connection more is a read slot more, taken only from those free at
   that moment, never waited for, and never the last one free, so a read arriving meanwhile starts at once; with none
-  free the pass runs on its own connection. On a two-core machine it never splits.
+  free the pass runs on its own connection. On a two-core machine it never splits, and on four cores it takes two
+  helpers at most. A pass having taken a slot looks again, and gives it back if that was the last after all (a read
+  or another pass took the one it counted on leaving). Two requests for the same view (its page and its facets)
+  share one pass: the second waits for the first's.
+- **What it holds while it runs**: each connection keeps its own ids and counts until they are put together, about a
+  megabyte a connection for 5 million links (so some 10 MB a connection, briefly, for a crawl of a million pages).
 - **A running crawl's pass is never split.** It stays on the read's one connection and one snapshot, which is the
   moment it answers for, so the time a running crawl's log goes unfolded is what it was.
 - **Only for crawls worth it**: from 500,000 links. Nothing is stored for it, in the file or by the analysis.
 - **A writer still never waits.** Each connection is a read like any other to an analysis or a continue starting:
   all are stopped together, and the read runs again after.
 - A regular expression's time limit (3 s for a read's matches) is each connection's own, so a pattern near the limit
-  on one connection may pass on four.
+  on one connection may pass on several.
 
 **Without the link summary, or beyond it, every link is read once per filter set.** That is: a crawl that's running,
 never analysed, continued since it was last analysed, or last analysed by an engine from before E3b (whose analysis
@@ -1827,6 +1863,59 @@ title contains the text, on every keystroke. A `POST` with the text in the body,
   typed (one letter that every URL matches, forty characters that none does); the first search of a crawl, which reads
   the text, 61 to 72 ms (48 to 55 ms at p50). That first read is the one over the palette's 50 ms: the empty search
   as the palette opens is what keeps it off the first keystroke.
+
+### Favicon (E6)
+
+`GET /api/crawls/{id}/favicon` gives the site's icon as the crawl kept it, for the library, the top bar and the
+sidebar: **the image's bytes, under the media type they are**, `200`. A crawl that has none answers `204` with no
+body, and the app draws the site's first letter. A crawl's item says which to expect: `hasFavicon`
+([Library](#library-e1)). Like every call it needs the token, so the app fetches it and shows the bytes; an
+`<img src>` can't ask for it.
+
+- **Where the crawl looks.** The first page of the site that a run parses names the icons: in a new crawl that is the
+  start URL's page, or the page it redirects to. Its `<link rel="icon">` elements are the candidates (`rel="shortcut
+  icon"` is one; a touch icon and a mask icon aren't), then `/favicon.ico` at that page's origin, where browsers look
+  when a page names none.
+- **Which is kept.** The app shows the icon in a tile of 16 to 32 px, twice that on a dense screen, so the best is the
+  smallest icon the page declares (`sizes`) as 64 px or more; failing that, the largest it declares below 64; then the
+  icons with no size, in page order. They are tried in that order, three of the page's at most, then `/favicon.ico`,
+  and the first that turns out to be an image the engine keeps is the icon. So a crawl asks a site for its icon one to
+  four times, and usually once.
+- **What is kept is told by its bytes, never by what the site calls it.** The icon is content from the site, so it is
+  hostile until shown otherwise: a site can send a page, a script or an SVG under any name and any `Content-Type`.
+  Kept: **PNG, ICO, GIF, JPEG and WebP**, each known by its signature, with its size read from its header (an ICO's
+  directory must hold up too: every image it lists inside the file, the largest a PNG or a bitmap). Not kept:
+  **anything else, SVG above all** (it can carry script; one is never even asked for, by its declared type or its
+  file name), anything over **512 KB** (it is read no further than that), and any image whose size can't be read or
+  is over **1,024 px** a side (a few hundred kilobytes can declare a picture that takes gigabytes to draw).
+- **Politely.** Each request waits for its origin's robots.txt and obeys it when the crawl does, takes its turn at
+  the host's gate as any request to that host does (its concurrency, its rate, a crawl delay, a backoff), stops while
+  the crawl is paused, and has the crawl's request timeout. A redirect is followed three hops at most, each held to
+  the same rules. An icon on another site is asked for only when the crawl checks other sites' links.
+- **It is no URL of the crawl.** Nothing is discovered, stored or counted for the fetch: it is in no grid, no count,
+  no progress figure and no byte total, and a host that fails it is not a site that is down. (An icon the page links
+  is, as before, also a link of kind `icon` and a URL the crawl checks: that check and this fetch are two requests.
+  And if the icon's origin is one whose robots.txt the crawl hadn't read yet, that robots.txt is kept and listed as
+  any the crawl reads is.)
+- **It never fails a crawl or holds one up.** It runs beside the crawl, which hears of none of its failures. A crawl
+  that completes while its icon is still on its way gives it 5 s, by the wall clock, then goes on without (a crawl
+  of a handful of pages is over before its icon arrives; a request's own timeout is 20 s). A crawl that is stopped,
+  or fails, doesn't wait at all.
+- **Once.** A crawl that has its icon keeps it: a run that continues it asks for none, and the first kept stands. A
+  crawl that has none (its site had none the engine keeps, its first page never answered, or an engine from before
+  E6 made it) looks once more when it is continued, from the first page that run parses, by the same rules.
+- **Where it is kept.** In the crawl file, in a table of its own (`favicon`, one row: the bytes, where they came
+  from, when), written only by the crawl's writer. A crawl file can come from anywhere, so the file is trusted no
+  more than the site was: as the icon is read, its bytes are told to be an image again, more than 512 KB of them are
+  never read, and what is served is the type the bytes are, whatever the file calls them. A file whose "icon" is a
+  page, an SVG or anything else answers `204`.
+- **The headers that keep it an image** are those every answer has: `X-Content-Type-Options: nosniff`, so a browser
+  never guesses another type from the bytes; `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`,
+  so nothing would run or load were it ever opened as a document; and `Cache-Control: no-store`. The `Content-Type`
+  is one of `image/png`, `image/x-icon`, `image/gif`, `image/jpeg` and `image/webp`, and no other.
+- **While a crawl runs** it answers `204` until the icon is kept, a few requests after the first page, and the image
+  from then on; `hasFavicon` turns true on the crawl's item the next time its file is read.
+- Errors: `crawl-not-found` (404), `unauthorized` (401).
 
 ## Engine changes E1 needs
 
@@ -2602,3 +2691,82 @@ machine, crawled its 100,000 pages in 56.8 s (1,779 pages/s), peaked at 193 MB w
 analysed in 19.6 s, and found every planted issue and nothing else. The analysis's working set peaked at 331 MB, against 253 to 327 MB in
 the runs before it: one run, not repeated, and nothing these changes add is of that size (three counters in a rule,
 and 87 checks' words held once). `si readbench --gate` wasn't run again: no read changed.
+
+## Engine changes E6 made
+
+Fast search and the site's icon, and what the Links, Sitemaps and robots.txt screens and their reviews found the
+engine couldn't answer. Every addition to the API is a new field or a new call; nothing was renamed or taken away.
+Each has its own tests, the reads are among those made while a crawl grows, and for each behaviour a test was seen
+to fail with the behaviour taken out.
+
+- **Search: no index, and what was measured before deciding.** The brief took the URL grid's `search` for a scan
+  that missed its budget. It doesn't: on the 100k crawl a first page takes 26 to 50 ms at p95 for one letter, two,
+  forty characters or text nothing matches, and it stayed the scan it is, with four `si readbench` cases added to
+  hold it there. For the palette, an FTS5 index with a trigram tokenizer was built on a copy of that crawl and
+  timed. With its content it adds 44 to 48 MB to a 479 MB file (9 to 10%) and takes 2.0 s to build, 17% of an
+  11.8 s analysis, or 2.7 s spread over the crawl; contentless, 9.4 MB (2%) and 1.4 s. It answers rare text of three
+  characters or more in 0.1 to 2 ms, but a common word in 28 ms (81 ms with each match's text, which ranking needs),
+  and one or two characters not at all, which is where typing starts. So nothing is stored: `UrlSearchReader` reads
+  a crawl's URLs and titles into memory once ([Search](#search-e6)), and a keystroke is a pass over that text. It
+  costs the file nothing, the crawl nothing and the analysis nothing; it costs the sidecar about 95 bytes a URL
+  (10 MB at 100k), for two crawls at most. A keystroke takes 1.5 to 2.8 ms at p95 whatever is typed; the first
+  search of a crawl, which reads the text, 61 to 72 ms (48 to 55 at p50), over the palette's 50, which the empty
+  search as the palette opens keeps off the first keystroke. A crawl made by any engine is searched the same way.
+  **Not done: letting the kept text go when a crawl sits idle.** A crawl of a million URLs holds about 100 MB in
+  the sidecar until two other crawls are searched or it restarts. Nor was a search of a million URLs measured: the
+  pass grows with the text, so some 20 to 30 ms a keystroke is to be expected, not known.
+- **A pass over every link, split over connections** ([How the links are read](#how-the-links-are-read) has the
+  table). `LinkGridReader`'s pass over the links is divided by link id over the read's own connection and up to
+  seven more that the host lends (`ReadHelpers`; in the sidecar, read slots free at that moment, never the last:
+  `ReadSlots`), for a crawl that stands still and has 500,000 links or more. Timed in turn with the engine from
+  before E6: on one connection a pass takes what it took, on four a quarter, on eight a sixth, which puts the first
+  page of a text filter, a search, a pattern and a filter on the source's depth inside the 300 ms budget at p50
+  (113 to 228 ms where one connection takes 665 to 1,592), and near it at p95 (86 to 489 ms at worst over three
+  rounds on a loaded machine). Nothing is stored for it; a running crawl's pass is never split, so its log goes
+  unfolded no longer than it did; with no slot free a pass is as it was. It was built with three helpers and is
+  shipped with seven, on that measurement. The race it had is closed: two passes, or a pass and a read, asking at
+  the same moment could each count on the slot the other took, so a pass now looks again once it has a slot and
+  gives it back if it was the last.
+- **The site's icon** ([Favicon](#favicon-e6)). The parser keeps a page's `<link rel="icon">` elements as facts that
+  aren't stored (`PageFacts.Icons`); the first page a run parses starts `FaviconFetcher`, a job beside the crawl that
+  asks for one to four candidates by the crawl's own rules of politeness and has `CrawlWriter` keep the first that
+  is an image by its bytes. **The crawl file gains a table**, `favicon`, created whenever the writer opens a file, as
+  `notices` and `run_time` are. `FaviconReader` tells the bytes to be an image again as it reads, so neither a site
+  nor a crafted file can have anything but a raster image served. The synthetic site serves `/favicon.ico`, which no
+  page links, so the benchmark crawl keeps an icon and has no URL more than it had.
+- **From a links view to its URLs** ([Link ends](#link-ends-e6)). `LinkGridReader.Ends` lists a view's targets, or
+  the pages its links are on; `UrlQuery.LinkEnds` narrows the URL grids to them, to the list's own count. The
+  targets cost what the view's count costs (20 to 58 ms from the link summary); the pages take a pass (475 to 740 ms
+  on one connection, 148 to 157 at p50 on eight), as nothing stored counts links by the page they're on. **Not
+  done:** a view of a few thousand links still takes that pass for its pages, where reading just those links would
+  do; it is correct, and slower than it need be.
+- **robots.txt and sitemaps.** The origins are searched and filtered, with the counts a filter bar shows
+  (`RobotsOriginQuery`); `/robots/file` says whether the crawl obeyed robots.txt; `/robots/blocked` answers for one
+  URL; the inspector's robots.txt test names the origin and the line that refused the URL, and the inspector names
+  the sitemaps that list it; and a sitemap says how many sitemaps its own file lists. **The crawl file gains a
+  column** for that last, `sitemaps.listed_sitemaps`, added by the writer as it opens a file, null for every sitemap
+  an earlier engine read. They are small reads, each in `si readbench` under its screen's class.
+- **A check's count has a true name**: `urls` beside `pages` on each group ([Issue groups](#issue-groups-e3a)).
+- **The analysis's `inlinks` and the stored links.** The reviews found the two apart by one or two for about a tenth
+  of URLs. On the 100k crawl they differ for exactly 24 of 112,590 URLs (the tenth was a sample's: 24 of 200), and
+  for none on the garden crawl. The cause: the analysis counts the hyperlinks on the pages it audits, and it doesn't
+  audit Cloudflare's own pages (a URL with `/cdn-cgi/` in it), which the crawl fetches, parses and stores the links
+  of. The 24 are the 25 hyperlinks of `/cdn-cgi/l/email-protection`: a menu's targets, and the home page twice. The
+  stored links are right, so the fix is in what's read: `linkTotals.hyperlinkInlinks`, which is the links grid's
+  count ([the inspector](#the-inspector-e3a)). **Left for the owner:** whether the analysis should count links on
+  pages it doesn't audit. It would move `inlinks`, `linkingPages` and the followed and nofollow counts for those
+  URLs, and could clear an orphan result for a page linked only from such a page.
+- **The analysis's limits** ([Analysis settings](#analysis-settings-e6)) are read, saved, checked and reset through
+  the sidecar, kept in its state folder, and each described by `AnalysisLimits`: a test holds that every setting the
+  engine has is described there. Nothing in the engine changed for it: an analysis already stored the limits it ran
+  with, and one that ran with others was already out of date.
+- **The crawl file.** One table and one column more, both added as a file is opened for writing; the schema version
+  is as it was, and either engine reads and continues either file. The benchmark's file is the size it was but for
+  the icon (160 bytes).
+- **In the app's API module**: typed calls and types for all of it (`api.search`, `api.favicon`, `api.linkEnds`,
+  the analysis settings, `linkEnds` on a grid query), each new field optional on the answers that gained it. No
+  screen uses them yet.
+
+Not verified: anything on a crawl of a million URLs; any of the timings on a quiet machine (other agents' builds and
+benchmarks loaded this one throughout, so each was repeated, and the passes were timed in turn with the engine from
+before); the `link-pass-split` gate on CI's runner, as nothing was pushed.
