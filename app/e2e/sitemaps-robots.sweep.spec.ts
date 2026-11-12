@@ -6,6 +6,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { ANSWERED_SITE_PAGES } from '../src/screens/overview/links';
 import { COUNT_FILTERS, type SitemapCount } from '../src/screens/sitemaps/sitemapLinks';
+import { gridInView, scrollToFoot } from './gridView';
 import { countOf, crawlTestSite, read, removeCrawl, seededCrawl, type SeededCrawl } from './support';
 
 // On a crawl named by SI_E2E_CRAWL the sweep is of that crawl. Otherwise the seeded crawl of 40 pages is too small to
@@ -112,6 +113,17 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
   test.setTimeout(600_000);
   const crawl = await sweptCrawl();
   const list = await read<{ discovery: string; sitemaps: Sitemap[] }>(`/api/crawls/${crawl.id}/sitemaps`);
+  // The engine the app is built with counts, for the list, the URLs robots.txt refused and those that redirect or
+  // are broken: "Crawled" and "Blocked by robots.txt" are numbers on every sitemap whose counts are known, and a dash
+  // below is only ever one of those that aren't. (A dash for want of the count is an earlier engine's.)
+  for (const sitemap of list.sitemaps) {
+    expect(sitemap.urls.robotsDisallowed, `${sitemap.url}: robotsDisallowed`).toEqual(expect.any(Number));
+    expect(sitemap.urls.redirectingOrBroken, `${sitemap.url}: redirectingOrBroken`).toEqual(expect.any(Number));
+  }
+  // The test site lists one URL its robots.txt disallows (/private/listed): a crawl of all of it was kept from it.
+  if (made) {
+    expect(list.sitemaps.reduce((most, sitemap) => Math.max(most, sitemap.urls.robotsDisallowed ?? 0), 0)).toBe(1);
+  }
   const matching = async (sitemapId: number, filters: readonly unknown[]) =>
     (
       await read<{ matching: number }>(`/api/crawls/${crawl.id}/sitemaps/urls`, {
@@ -203,7 +215,14 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
     const show = main(page).getByRole('radiogroup', { name: 'Show' });
     await expect(shownIn(main(page))).toHaveText(number(sitemap.urls.listed));
     const saidOf: Record<string, number> = {};
-    for (const name of ['All', 'Crawled', 'Blocked by robots.txt', 'Not crawled', 'Non-indexable']) {
+    for (const name of [
+      'All',
+      'Crawled',
+      'Blocked by robots.txt',
+      'Not crawled',
+      'Non-indexable',
+      'Redirecting or broken',
+    ]) {
       const option = show.getByRole('radio', { name: new RegExp(`^${name.replace('.', '\\.')}`) });
       // A count the page reads for itself comes a moment after the page.
       await expect(option.locator('.si-segment__count'), `${sitemap.url}: ${name}`).toBeVisible();
@@ -226,6 +245,16 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
       (await matching(sitemap.id, [{ column: 'fetched', op: 'is', value: true }])) -
         (saidOf['Blocked by robots.txt'] ?? 0),
     );
+    // Each is the list's own number for the sitemap (the engine's two counts), not one the page worked out again.
+    if (known(sitemap)) {
+      expect(saidOf.Crawled, `${sitemap.url}: crawled, by the list`).toBe(expectedCount(sitemap, 'crawled'));
+      expect(saidOf['Blocked by robots.txt'], `${sitemap.url}: blocked, by the list`).toBe(
+        sitemap.urls.robotsDisallowed,
+      );
+      expect(saidOf['Redirecting or broken'], `${sitemap.url}: redirecting or broken, by the list`).toBe(
+        sitemap.urls.redirectingOrBroken,
+      );
+    }
   }
 
   // The site's pages no sitemap lists: said once a sitemap was read. What the sentence must say is the engine's own
@@ -381,4 +410,115 @@ test('sweep: every count on robots.txt lands on exactly its URLs, and the lines 
     }
   }
   report(`robots.txt sweep: ${first.total} origins, ${landings} origins opened, ${lines} lines and reasons followed`);
+});
+
+// 200% zoom of a 1280x720 window is 640x360 CSS pixels. Each list keeps five rows there (all of them, when it has
+// five or fewer) and the screen scrolls for the rest; the counts each list is for start inside the window, though
+// not every column fits; one sitemap's grid and an origin's blocked URLs keep room for five rows; and nothing runs
+// out of the window sideways. Every size is polled for: nothing here waits for a time.
+test('sweep: at 200% zoom the lists keep five rows, their counts start in the window, and nothing runs out sideways', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 640, height: 360 });
+  const crawl = await sweptCrawl();
+  const list = await read<{ sitemaps: Sitemap[] }>(`/api/crawls/${crawl.id}/sitemaps`);
+  const origins = await read<{ total: number; origins: Origin[] }>(`/api/crawls/${crawl.id}/robots`, {
+    offset: 0,
+    limit: 100,
+  });
+
+  /** The columns named, by how much of each is outside the window: none of any. */
+  const outside = (grid: Locator, names: readonly string[]) =>
+    grid.evaluate(
+      (element, wanted) =>
+        [...element.querySelectorAll('[role="columnheader"]')]
+          .filter((header) => wanted.includes(header.textContent.trim()))
+          .map((header) => {
+            const box = header.getBoundingClientRect();
+            return {
+              name: header.textContent.trim(),
+              out: Math.max(0, -box.left) + Math.max(0, box.right - window.innerWidth),
+            };
+          }),
+      names,
+    );
+  const whole = (names: readonly string[]) => names.map((name) => ({ name, out: 0 }));
+  /** How far the screen can be scrolled sideways: not at all. */
+  const sideways = () => main(page).evaluate((element) => element.scrollWidth - element.clientWidth);
+  /** A list as tall as its rows keeps five of them, or all it has. */
+  const keepsItsRows = async (grid: Locator, rows: number, where: string) => {
+    const kept = Math.min(rows, 5);
+    // Scrolled to, that many are whole in the window.
+    await grid.evaluate((element) => element.scrollIntoView({ block: 'end' }));
+    await expect.poll(async () => (await gridInView(grid)).rowsInView, where).toBeGreaterThanOrEqual(kept);
+  };
+  /**
+   * A grid that fills what its screen leaves keeps room for five rows, however few it has. Scrolled to first: a row's
+   * height is measured from one that's whole in the window.
+   */
+  const keepsRoomForFive = async (grid: Locator, where: string) => {
+    await expect(grid.getByRole('row').nth(1), where).toBeAttached();
+    await grid.evaluate((element) => element.scrollIntoView({ block: 'end' }));
+    await expect
+      .poll(async () => {
+        const view = await gridInView(grid);
+        return view.row > 0 ? view.height - (view.header + 5 * view.row) : -1;
+      }, where)
+      .toBeGreaterThanOrEqual(0);
+  };
+
+  let measured = 0;
+  if (list.sitemaps.length > 0) {
+    await page.goto(`/crawls/${crawl.id}/sitemaps`);
+    const tree = page.getByRole('treegrid', { name: 'Sitemaps' });
+    await expect(tree.getByRole('row').nth(1)).toBeVisible();
+    // The first three counts are whole in the window: the address, then what the list is for.
+    const counts = ['Listed', 'Crawled', 'Blocked by robots.txt'];
+    await expect.poll(() => outside(tree, counts), 'the sitemaps’ counts').toEqual(whole(counts));
+    expect(await sideways(), 'the list of sitemaps').toBeLessThanOrEqual(1);
+    await keepsItsRows(tree, list.sitemaps.length, 'the list of sitemaps');
+    measured++;
+
+    const listing = list.sitemaps.find((sitemap) => sitemap.urls.listed >= 5);
+    if (listing) {
+      await page.goto(`/crawls/${crawl.id}/sitemaps/${listing.id}`);
+      const grid = page.getByRole('grid', { name: `URLs listed by ${listing.url}` });
+      await expect(grid.getByRole('row').nth(1), listing.url).toBeAttached();
+      // Six filters with their counts take a second line there, rather than run out of the window.
+      const show = main(page).getByRole('radiogroup', { name: 'Show' });
+      await expect(show.getByRole('radio')).toHaveCount(6);
+      for (const option of await show.getByRole('radio').all()) await expect(option).toBeInViewport({ ratio: 1 });
+      expect(await sideways(), listing.url).toBeLessThanOrEqual(1);
+      await keepsRoomForFive(grid, listing.url);
+      await scrollToFoot(page);
+      await expect.poll(async () => (await gridInView(grid)).rowsInView, listing.url).toBeGreaterThanOrEqual(5);
+      measured++;
+    }
+  }
+
+  if (origins.total > 0) {
+    await page.goto(`/crawls/${crawl.id}/robots`);
+    const grid = main(page).getByRole('grid', { name: 'Origins' });
+    await expect(grid.getByRole('row').nth(1)).toBeVisible();
+    // What each origin blocked is whole in the window, straight after the origin.
+    await expect
+      .poll(() => outside(grid, ['Origin', 'Blocked URLs']), 'the origins’ counts')
+      .toEqual(whole(['Origin', 'Blocked URLs']));
+    expect(await sideways(), 'the list of origins').toBeLessThanOrEqual(1);
+    await keepsItsRows(grid, origins.total, 'the list of origins');
+    measured++;
+
+    const blocking = origins.origins.find((origin) => origin.blocked > 0);
+    if (blocking) {
+      await page.goto(`/crawls/${crawl.id}/robots/${encodeURIComponent(blocking.origin)}`);
+      const blocked = main(page).getByRole('grid', { name: 'Blocked URLs' });
+      await keepsRoomForFive(blocked, blocking.origin);
+      expect(await sideways(), blocking.origin).toBeLessThanOrEqual(1);
+      measured++;
+    }
+  }
+  report(
+    `200% zoom: ${measured} of the four views measured (${list.sitemaps.length} sitemaps, ${origins.total} origins)`,
+  );
 });
