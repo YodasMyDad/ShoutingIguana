@@ -498,7 +498,7 @@ describe('robots.txt: an origin without a file to show', () => {
       reason: 'unreachable' as const,
       line: null,
       rule: null,
-      error: 'HTTP 503',
+      error: '503 Service Unavailable',
     },
     {
       id: 32,
@@ -506,7 +506,7 @@ describe('robots.txt: an origin without a file to show', () => {
       reason: 'unreachable' as const,
       line: null,
       rule: null,
-      error: 'HTTP 503',
+      error: '503 Service Unavailable',
     },
   ];
   const options: SitemapsRobotsOptions = {
@@ -519,8 +519,11 @@ describe('robots.txt: an origin without a file to show', () => {
     sidecar(options);
     await open(at('https://cdn.example.net'));
     expect(
-      (await screen.findAllByText(/robots\.txt couldn’t be read \(HTTP 503\), so the crawl refused this origin’s URLs/))
-        .length,
+      (
+        await screen.findAllByText(
+          /robots\.txt couldn’t be read \(503 Service Unavailable\), so the crawl refused this origin’s URLs/,
+        )
+      ).length,
     ).toBeGreaterThan(0);
     expect(await screen.findByRole('heading', { name: 'No file to show' })).toBeVisible();
     const row = await waitFor(() => rowOf('https://cdn.example.net/a.js'));
@@ -611,8 +614,11 @@ describe('robots.txt: an origin without a file to show', () => {
     sidecar(options);
     await open(at('https://partner.example.org'));
     expect(
-      (await screen.findAllByText(/There’s no robots\.txt here \(HTTP 404\), so nothing on this origin is refused\./))
-        .length,
+      (
+        await screen.findAllByText(
+          /There’s no robots\.txt here \(404 Not Found\), so nothing on this origin is refused\./,
+        )
+      ).length,
     ).toBeGreaterThan(0);
     expect(await screen.findByText('There’s no robots.txt here, so nothing is refused.')).toBeVisible();
   });
