@@ -116,9 +116,12 @@ internal static class GridExport
     /// <summary>What an export of what an analysis found says of a crawl that has none.</summary>
     public const string NOT_ANALYZED = "This crawl hasn't been analysed yet, so there's nothing of this kind to export.";
 
-    /// <summary>What an export that found its crawl changed says.</summary>
+    /// <summary>
+    /// What an export that found its crawl changed says. It names what ends one: a crawl paused or resumed under an
+    /// export is the same crawl still, and the export goes on.
+    /// </summary>
     public const string CRAWL_CHANGED =
-        "The crawl changed while it was being exported: it was analysed again, continued, paused or it finished. Export it again.";
+        "The crawl changed while it was being exported: it was analysed again, continued or it finished. Export it again.";
 
     /// <summary>A column's header: its title, and the unit its numbers are in.</summary>
     public static string Title(UrlColumnInfo column) => column.Unit is null ? column.Title : $"{column.Title} ({column.Unit})";
@@ -142,10 +145,10 @@ internal static class GridExport
                 $"This crawl is still running, so its rows can be exported in crawl order or by URL only: '{moving.Column}' changes as it runs. Remove the sort, or export once the crawl has finished.");
         }
 
-        if (run.Request.Format == ExportFormat.Xlsx && page.Matching > CrawlExporter.MAX_XLSX_ROWS)
+        if (run.Request.Format == ExportFormat.Xlsx && page.Matching > run.Settings.MaxXlsxRows)
         {
             throw new ExportException(ExportFailure.TooLarge, string.Create(CultureInfo.InvariantCulture,
-                $"These {page.Matching:N0} rows are more than an Excel file can hold here ({CrawlExporter.MAX_XLSX_ROWS:N0}). Export them as CSV, which has no limit, or narrow them with a filter."));
+                $"These {page.Matching:N0} rows are more than an Excel file can hold here ({run.Settings.MaxXlsxRows:N0}). Export them as CSV, which has no limit, or narrow them with a filter."));
         }
 
         run.CrawlWasRunning = page.Moment.Live;
@@ -205,7 +208,7 @@ internal static class GridExport
             if (expected is null)
             {
                 expected = page.Matching;
-                if (request.Format == ExportFormat.Xlsx && expected > CrawlExporter.MAX_XLSX_ROWS)
+                if (request.Format == ExportFormat.Xlsx && expected > run.Settings.MaxXlsxRows)
                 {
                     throw new ExportException(ExportFailure.TooLarge, XlsxTableWriter.TooLarge(CrawlExporter.MAX_SHEETS));
                 }

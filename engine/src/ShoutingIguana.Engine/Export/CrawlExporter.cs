@@ -22,8 +22,9 @@ namespace ShoutingIguana.Engine.Export;
 /// refused, as rows would change places between two pages.
 /// </para>
 /// <para>
-/// <b>A crawl that changes under an export</b> (analysed again, continued, paused or finished) ends it with
-/// <see cref="ExportFailure.CrawlChanged"/> and no file: its pages would be of two different crawls.
+/// <b>A crawl that changes under an export</b> (analysed again, continued or finished) ends it with
+/// <see cref="ExportFailure.CrawlChanged"/> and no file: its pages would be of two different crawls. A pause changes
+/// nothing of the crawl, and doesn't.
 /// </para>
 /// </summary>
 public static class CrawlExporter
@@ -123,7 +124,7 @@ public static class CrawlExporter
         cancellationToken.ThrowIfCancellationRequested();
 
         var run = new ExportRun(crawlPath, request, settings, cancellationToken);
-        using var target = ExportTarget.Open(path);
+        using var target = ExportTarget.Open(path, settings.Journal);
         ITableWriter? table = null;
         try
         {

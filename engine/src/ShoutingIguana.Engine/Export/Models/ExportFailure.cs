@@ -15,7 +15,7 @@ public enum ExportFailure
     /// <summary>A file of that name is open in another program, such as Excel, which keeps it from being replaced.</summary>
     FileInUse,
 
-    /// <summary>The crawl changed while it was being exported: analysed again, continued, paused, resumed or finished.</summary>
+    /// <summary>The crawl changed while it was being exported: analysed again, continued or finished. A pause does not change it.</summary>
     CrawlChanged,
 
     /// <summary>More rows than an Excel workbook is given sheets for.</summary>

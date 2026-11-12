@@ -25,4 +25,13 @@ public sealed record ExportSettings
     /// crawl went on, or the checks changed); without them it doesn't judge.
     /// </summary>
     public Analysis.Models.AnalysisSettings? OutOfDateBy { get; init; }
+
+    /// <summary>
+    /// Told of each file the export is part-way through writing, before it's created and once it's gone, so that whoever
+    /// runs exports can clear up after a process that was killed mid-export. Without one, nothing is noted.
+    /// </summary>
+    public IExportJournal? Journal { get; init; }
+
+    /// <summary>Tests only: the rows of data an Excel export may hold, in place of <see cref="CrawlExporter.MAX_XLSX_ROWS"/>.</summary>
+    internal long MaxXlsxRows { get; init; } = CrawlExporter.MAX_XLSX_ROWS;
 }

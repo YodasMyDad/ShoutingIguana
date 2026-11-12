@@ -16,7 +16,10 @@ internal sealed class ExportRun(string crawlPath, ExportRequest request, ExportS
     /// <summary>Rows of data written so far.</summary>
     public long Rows { get; private set; }
 
-    /// <summary>The rows it will write, once counted.</summary>
+    /// <summary>
+    /// The rows it will write, once counted. Never fewer than it has written: a running crawl's count is of a moment
+    /// before its rows are read, and a count the grid kept can be older, so more rows can turn up than were counted.
+    /// </summary>
     public long? Expected { get; set; }
 
     /// <summary>Columns asked for that the crawl has no values for.</summary>
@@ -32,6 +35,11 @@ internal sealed class ExportRun(string crawlPath, ExportRequest request, ExportS
     public void Wrote(long rows)
     {
         Rows += rows;
+        if (Expected < Rows)
+        {
+            Expected = Rows;
+        }
+
         settings.Progress?.Report(new ExportProgress(Rows, Expected));
     }
 

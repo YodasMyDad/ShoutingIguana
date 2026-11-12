@@ -116,6 +116,35 @@ public sealed class RunningCrawlExportTests : IDisposable
         Assert.True(grown >= before.Count + pages * 10, $"{grown} rows after, {before.Count} before, {pages} pages.");
     }
 
+    /// <summary>
+    /// A running crawl's rows are counted a moment before they are read, and a count the grid keeps can be older still:
+    /// the crawl has more rows by the time the export begins than were counted. An export never says it has written more
+    /// rows than it expects: what it expects rises with what it has written.
+    /// </summary>
+    [Fact]
+    public void AnExportOfARunningCrawlNeverWritesMoreRowsThanItSaysItExpects()
+    {
+        var (path, writer, held) = Running();
+        using var releaseLock = held;
+        using var closeWriter = writer;
+        var cache = new ReadCache();
+        var query = new UrlQuery { Columns = ["id", "url"], Sort = [new UrlSort("url")] };
+
+        // The grid counts its rows, and keeps the count; the crawl then goes on.
+        var counted = UrlGridReader.Query(path, query with { Limit = 1 }, cache).Matching;
+        Grow(writer);
+        Grow(writer);
+
+        List<ExportProgress> heard = [];
+        var result = CrawlExporter.Export(path, new ExportRequest { Kind = ExportKind.Urls, Format = ExportFormat.Csv, Query = query }, Path.Combine(_folder, "out.csv"),
+            new ExportSettings { Cache = cache, Progress = new Heard(heard.Add) });
+
+        Assert.Equal(counted + 20, result.Rows);
+        Assert.Equal(counted, heard[0].RowsExpected);
+        Assert.All(heard, progress => Assert.True(progress.RowsWritten <= progress.RowsExpected, $"{progress.RowsWritten} of {progress.RowsExpected}."));
+        Assert.Equal(new ExportProgress(result.Rows, result.Rows), heard[^1]);
+    }
+
     [Fact]
     public void ARunningCrawlIsExportedInCrawlOrderOrByUrlOnly()
     {

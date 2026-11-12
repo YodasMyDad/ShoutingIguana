@@ -183,8 +183,89 @@ public sealed class ExportFileTests : IDisposable
         var settings = new ExportSettings { Progress = new Heard(_ => { if (++pages == 3) { Stamp(copy); } }) };
         var failure = Assert.Throws<ExportException>(() => CrawlExporter.Export(copy, new ExportRequest { Kind = ExportKind.Urls, Format = ExportFormat.Csv }, path, settings));
         Assert.Equal(ExportFailure.CrawlChanged, failure.Failure);
+
+        // It names what ends an export, and no more: a crawl paused or resumed under one is the same crawl, and doesn't.
+        Assert.Equal("The crawl changed while it was being exported: it was analysed again, continued or it finished. Export it again.", failure.Message);
         Assert.Equal(3, pages);
         AssertUntouched(path);
+    }
+
+    /// <summary>
+    /// A name a file can't have is refused as the path it is, before anything is written. On Windows a colon in a
+    /// file's name is another stream of the file before it: "d.txt:x.csv" ends in .csv, and writing it left an empty
+    /// "d.txt" (the part file's name begins with a dot: ".d.txt") behind a message from the system.
+    /// </summary>
+    [Fact]
+    public void AFileNameWithACharacterAFileCannotHaveIsRefusedBeforeAnythingIsWritten()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            // Elsewhere a file's name may hold any character but a slash and a null, which no path gets this far with.
+            return;
+        }
+
+        foreach (var name in new[] { "d.txt:x.csv", "what?.csv", "a*b.csv", "say \"hi\".csv", "a<b>.csv", "pipe|d.csv" })
+        {
+            var failure = Assert.Throws<ExportException>(() => CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Urls, Format = ExportFormat.Csv },
+                Path.Combine(_folder, name)));
+            Assert.Equal(ExportFailure.InvalidPath, failure.Failure);
+            Assert.Equal("A file’s name can’t have any of these in it: \\ / : * ? \" < > |. Choose another name.", failure.Message);
+            Assert.Empty(Directory.GetFileSystemEntries(_folder));
+            Assert.Equal(ExportFailure.InvalidPath, Assert.Throws<ExportException>(() => CrawlExporter.CheckPath(Path.Combine(_folder, name), ExportFormat.Csv, _crawl.Path)).Failure);
+        }
+    }
+
+    /// <summary>
+    /// Whoever runs exports is told of each file one is part-way through writing, before the file is there and once it
+    /// has gone, however the export ends: a workbook's two (its sheets, and the strings it sets aside), a CSV's one.
+    /// </summary>
+    [Theory]
+    [InlineData(ExportFormat.Csv, 1, false)]
+    [InlineData(ExportFormat.Xlsx, 2, false)]
+    [InlineData(ExportFormat.Csv, 1, true)]
+    [InlineData(ExportFormat.Xlsx, 2, true)]
+    public void EveryPartFileIsNotedBeforeItIsThereAndOnceItHasGone(ExportFormat format, int parts, bool cancelled)
+    {
+        var journal = new Journal();
+        using var cancel = new CancellationTokenSource();
+        var pages = 0;
+        var settings = new ExportSettings
+        {
+            Journal = journal,
+            Progress = new Heard(_ =>
+            {
+                if (++pages == 3)
+                {
+                    // Part-way: each part file is noted, and there.
+                    Assert.Equal(parts, journal.Open.Count);
+                    Assert.All(journal.Open, part => Assert.True(File.Exists(part), part));
+                    if (cancelled)
+                    {
+                        cancel.Cancel();
+                    }
+                }
+            })
+        };
+        var path = Path.Combine(_folder, format == ExportFormat.Csv ? "noted.csv" : "noted.xlsx");
+        var request = new ExportRequest { Kind = ExportKind.Urls, Format = format };
+        if (cancelled)
+        {
+            Assert.Throws<OperationCanceledException>(() => CrawlExporter.Export(_crawl.Path, request, path, settings, cancel.Token));
+            Assert.Empty(Directory.GetFiles(_folder));
+        }
+        else
+        {
+            CrawlExporter.Export(_crawl.Path, request, path, settings, cancel.Token);
+            Assert.Equal([path], Directory.GetFiles(_folder));
+        }
+
+        Assert.True(pages >= 3, $"{pages} pages.");
+        Assert.Equal(parts, journal.Opened.Count);
+        Assert.All(journal.Opened, part => Assert.Equal(_folder, Path.GetDirectoryName(part)));
+        Assert.All(journal.Opened, part => Assert.StartsWith("." + Path.GetFileName(path) + ".", Path.GetFileName(part), StringComparison.Ordinal));
+        Assert.Empty(journal.ThereWhenNoted);
+        Assert.Empty(journal.Open);
+        Assert.Equal(journal.Opened.Order(StringComparer.Ordinal), journal.ClosedParts.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -207,6 +288,36 @@ public sealed class ExportFileTests : IDisposable
     private sealed class Heard(Action<ExportProgress> heard) : IProgress<ExportProgress>
     {
         public void Report(ExportProgress value) => heard(value);
+    }
+
+    /// <summary>A journal that remembers what it was told, and whether a part file was already there when it was noted.</summary>
+    private sealed class Journal : IExportJournal
+    {
+        public List<string> Opened { get; } = [];
+
+        public List<string> ClosedParts { get; } = [];
+
+        public List<string> ThereWhenNoted { get; } = [];
+
+        public HashSet<string> Open { get; } = new(StringComparer.Ordinal);
+
+        public void Opening(string partFile)
+        {
+            if (File.Exists(partFile))
+            {
+                ThereWhenNoted.Add(partFile);
+            }
+
+            Opened.Add(partFile);
+            Open.Add(partFile);
+        }
+
+        public void Closed(string partFile)
+        {
+            Assert.False(File.Exists(partFile), $"{partFile} is still there.");
+            ClosedParts.Add(partFile);
+            Open.Remove(partFile);
+        }
     }
 
     /// <summary>A file on a disk with room for only so many bytes more: writing past them fails as Windows, or Linux, fails it.</summary>

@@ -26,15 +26,20 @@ internal sealed class ExportTarget : IDisposable
 
     private static readonly AsyncLocal<Func<Stream, Stream>?> WRAP = new();
 
+    /// <summary>The characters this system lets no file's name have.</summary>
+    private static readonly System.Buffers.SearchValues<char> INVALID_NAME_CHARS = System.Buffers.SearchValues.Create(System.IO.Path.GetInvalidFileNameChars());
+
     private readonly string _temporary;
+    private readonly IExportJournal? _journal;
     private readonly List<string> _beside = [];
     private readonly List<Stream> _open = [];
     private bool _committed;
 
-    private ExportTarget(string path, string temporary, Stream stream)
+    private ExportTarget(string path, string temporary, Stream stream, IExportJournal? journal)
     {
         Path = path;
         _temporary = temporary;
+        _journal = journal;
         Stream = stream;
         _open.Add(stream);
     }
@@ -83,6 +88,15 @@ internal sealed class ExportTarget : IDisposable
             throw new ExportException(ExportFailure.InvalidPath, $"The file's name must end in {extensions[0]}, as that is what will be written.");
         }
 
+        // A name the system gives no file: found here, not by the system as the file is opened. On Windows a colon in a
+        // name is another stream of the file named before it, so "d.txt:x.csv" ends in .csv and would write into "d.txt".
+        if (System.IO.Path.GetFileName(full).AsSpan().ContainsAny(INVALID_NAME_CHARS))
+        {
+            throw new ExportException(ExportFailure.InvalidPath, OperatingSystem.IsWindows()
+                ? "A file’s name can’t have any of these in it: \\ / : * ? \" < > |. Choose another name."
+                : "This isn’t a name a file can have. Choose another name.");
+        }
+
         if (Directory.Exists(full))
         {
             throw new ExportException(ExportFailure.InvalidPath, "That is a folder: give a file's name in it.");
@@ -110,18 +124,21 @@ internal sealed class ExportTarget : IDisposable
     /// Opens the file an export writes to, beside <paramref name="path"/> (which <see cref="Check"/> gave). Says at once,
     /// before anything is read or written, when the place can't be written to or a file of that name is open elsewhere.
     /// </summary>
+    /// <param name="journal">Told of the part file before it's created, and once it's gone (see <see cref="IExportJournal"/>).</param>
     /// <exception cref="ExportException">The file can't be written there, with why.</exception>
-    public static ExportTarget Open(string path)
+    public static ExportTarget Open(string path, IExportJournal? journal = null)
     {
         var folder = CheckWritable(path);
         var temporary = System.IO.Path.Combine(folder, $".{System.IO.Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        journal?.Opening(temporary);
         try
         {
             var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, BUFFER_BYTES);
-            return new ExportTarget(path, temporary, new GuardedStream(Wrap?.Invoke(file) ?? file, path));
+            return new ExportTarget(path, temporary, new GuardedStream(Wrap?.Invoke(file) ?? file, path), journal);
         }
         catch (Exception exception) when (IsFileError(exception) || exception is NotSupportedException)
         {
+            Gone(journal, temporary);
             throw Failed(exception, path);
         }
     }
@@ -147,10 +164,11 @@ internal sealed class ExportTarget : IDisposable
     public Stream OpenBeside(string purpose)
     {
         var beside = $"{_temporary}.{purpose}";
+        _journal?.Opening(beside);
+        _beside.Add(beside);
         try
         {
             var file = new FileStream(beside, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, BUFFER_BYTES, FileOptions.DeleteOnClose);
-            _beside.Add(beside);
             var stream = new GuardedStream(Wrap?.Invoke(file) ?? file, Path);
             _open.Add(stream);
             return stream;
@@ -176,6 +194,7 @@ internal sealed class ExportTarget : IDisposable
             Stream.Dispose();
             File.Move(_temporary, Path, overwrite: true);
             _committed = true;
+            Gone(_journal, _temporary);
             return new FileInfo(Path).Length;
         }
         catch (Exception exception) when (IsFileError(exception))
@@ -207,10 +226,27 @@ internal sealed class ExportTarget : IDisposable
         if (!_committed)
         {
             Delete(_temporary);
+            Gone(_journal, _temporary);
         }
 
         // Each goes as its stream closes; this is for one a platform left behind.
-        _beside.ForEach(Delete);
+        foreach (var beside in _beside)
+        {
+            Delete(beside);
+            Gone(_journal, beside);
+        }
+    }
+
+    /// <summary>
+    /// Tells the journal a part file is gone, once it is. One that couldn't be deleted (something else holds it) stays
+    /// noted, for whoever keeps the journal to try again.
+    /// </summary>
+    private static void Gone(IExportJournal? journal, string partFile)
+    {
+        if (journal is not null && !File.Exists(partFile))
+        {
+            journal.Closed(partFile);
+        }
     }
 
     /// <summary>What went wrong with the file, in plain words.</summary>
