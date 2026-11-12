@@ -874,6 +874,10 @@ public static class LinkGridReader
         LinkIdSet? NewIds() => ids ? new LinkIdSet(largest, total) : null;
         var nofollow = tally ? NofollowPages(context) : null;
 
+        // What a part's tally is sized by, read here, on the read's own thread: a part runs on a thread and a connection
+        // of its own, and never touches the read's context, which isn't made to be shared.
+        var (largestUrl, urls) = tally ? (LargestUrlId(context), UrlCount(context)) : (0L, 0L);
+
         // With nothing to count, the id is all that's passed on.
         var each = tally
             ? $"{ReaderFunctions.LINK}(l.rowid, {(bySource ? "l.from_id" : "l.to_id")}, l.from_id, l.kind, l.position, l.flags)"
@@ -885,7 +889,7 @@ public static class LinkGridReader
         // and counted by that read.
         (LinkIdSet? Ids, LinkTally? Tally) Part(GridReadContext read, string? bounds)
         {
-            var (found, counted) = (NewIds(), tally ? NewTally(context) : null);
+            var (found, counted) = (NewIds(), tally ? new LinkTally(largestUrl, urls) : null);
             (read.LinkIds, read.LinkTally, read.NofollowPages) = (found, counted, nofollow);
             try
             {

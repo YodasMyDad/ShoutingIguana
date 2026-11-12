@@ -70,6 +70,7 @@ internal sealed class GridReadContext : IDisposable
     private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _once = new(StringComparer.Ordinal);
+    private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     private readonly Dictionary<int, Dictionary<long, long>> _talliesBySlot = [];
     private (long Links, long MaxLinkId, int BlockShift)? _linkSummary;
     private bool _linkSummaryRead;
@@ -193,13 +194,24 @@ internal sealed class GridReadContext : IDisposable
     /// them: it sees this read's sets of URL ids in the same slots, so the same SQL runs on either, and has its own
     /// functions, its own patterns and their time. It's a read as any other to a writer here that wants the file: stopped
     /// with this one, and gone before the writer has it. Null when the file it opened isn't the file as this read has it
-    /// (another program changed it in between): the pass is then this read's alone.
+    /// (another program changed it in between), or when it couldn't be opened at all (the file locked by another program,
+    /// a handle refused): the pass is then this read's alone, which was opened, and the read answers all the same.
     /// </summary>
     /// <param name="stop">Stops it: this read's own token, or one cancelled with it.</param>
     /// <exception cref="OperationCanceledException">The token was cancelled before it opened.</exception>
     public Alongside? OpenAlongside(CancellationToken stop)
     {
-        var lease = CrawlReadGate.Enter(Path, stop);
+        CrawlReadGate.ReadLease lease;
+        try
+        {
+            OpeningAlongside?.Invoke();
+            lease = CrawlReadGate.Enter(Path, stop);
+        }
+        catch (Exception) when (!stop.IsCancellationRequested)
+        {
+            return null;
+        }
+
         GridReadContext? helper = null;
         try
         {
@@ -214,11 +226,16 @@ internal sealed class GridReadContext : IDisposable
             helper._sets.AddRange(_sets);
             return new Alongside(helper, lease);
         }
-        catch
+        catch (Exception exception)
         {
             helper?.Dispose();
             lease.Dispose();
-            throw;
+            if (exception is OperationCanceledException || stop.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            return null;
         }
     }
 
@@ -347,12 +364,33 @@ internal sealed class GridReadContext : IDisposable
     /// </summary>
     public T Once<T>(string key, Func<T> read) where T : notnull
     {
+        Owned("held " + key);
         if (!_once.TryGetValue(key, out var held))
         {
             _once[key] = held = read();
         }
 
         return (T)held;
+    }
+
+    /// <summary>
+    /// Tests only: told of a use of a read's context (what it holds, a statement on its connection) from a thread other
+    /// than the one that opened it. Neither is made to be shared, so a pass split over threads must never do it.
+    /// </summary>
+    internal static Action<string>? UsedFromAnotherThread { get; set; }
+
+    /// <summary>
+    /// Tests only: runs as a read alongside another opens, on the thread that opens it: one that throws stands for a
+    /// connection that can't be opened.
+    /// </summary>
+    internal static Action? OpeningAlongside { get; set; }
+
+    private void Owned(string what)
+    {
+        if (UsedFromAnotherThread is { } told && Environment.CurrentManagedThreadId != _ownerThread)
+        {
+            told(what);
+        }
     }
 
     /// <summary>Holds on to a value this read read some other way, as <see cref="Once"/> would have.</summary>
@@ -390,6 +428,7 @@ internal sealed class GridReadContext : IDisposable
 
     public SqliteCommand Command(string sql, IEnumerable<KeyValuePair<string, object>> parameters)
     {
+        Owned("statement " + sql);
         // Between statements, where an interrupt has nothing to stop.
         Token.ThrowIfCancellationRequested();
         var command = Connection.CreateCommand();

@@ -23,6 +23,7 @@ public sealed class LinkPassSplitTests(GridCrawl crawl) : IDisposable
     public void Dispose()
     {
         (LinkGridReader.SplitFrom, LinkGridReader.PassHelpers, LinkGridReader.Split, LinkGridReader.Ran) = (_splitFrom, _passHelpers, null, null);
+        (GridReadContext.UsedFromAnotherThread, GridReadContext.OpeningAlongside) = (null, null);
         GridReadContext.RegexBudget = _regexBudget;
     }
 
@@ -189,6 +190,68 @@ public sealed class LinkPassSplitTests(GridCrawl crawl) : IDisposable
         LinkGridReader.Ran = null;
         Assert.Equal((taken, 3), (released, free));
         Assert.True(taken >= 6);
+    }
+
+    /// <summary>
+    /// The parts of a split pass run on threads and connections of their own and never touch the read's context, which
+    /// isn't made to be shared: neither what it holds nor its connection, whatever the read has or hasn't read before
+    /// the pass (here, a read of a view's pages, whose pass is the first thing it does, on a cache with nothing kept).
+    /// </summary>
+    [Fact]
+    public void ThePartsOfAPassNeverUseTheReadsOwnContext()
+    {
+        LinkGridReader.SplitFrom = 1;
+        ConcurrentQueue<string> used = new();
+        GridReadContext.UsedFromAnotherThread = used.Enqueue;
+        List<int> split = [];
+        LinkGridReader.Split = split.Add;
+        foreach (var (name, filters, search) in PASSES)
+        {
+            LinkGridReader.Query(crawl.Path, new UrlQuery { Filters = filters, Search = search, Limit = 5 }, new ReadCache { Helpers = ReadHelpers.UpTo(3) });
+            LinkGridReader.Facets(crawl.Path, new UrlFacetQuery { Filters = filters, Search = search }, new ReadCache { Helpers = ReadHelpers.UpTo(3) });
+            LinkGridReader.Ends(crawl.Path, new LinkEndQuery { End = LinkEnd.From, Filters = filters, Search = search }, new ReadCache { Helpers = ReadHelpers.UpTo(3) });
+            Assert.True(used.IsEmpty, $"{name}: the parts used the read's own context: {string.Join("; ", used.Take(5))}");
+        }
+
+        Assert.Contains(4, split);
+    }
+
+    /// <summary>
+    /// A helper connection that can't be opened (the file locked by another program, a handle refused) costs the pass
+    /// its split, never the read: it runs again on the read's own connection, to the same answer.
+    /// </summary>
+    [Fact]
+    public void AHelperThatCantBeOpenedLeavesThePassToTheReadsOwnConnection()
+    {
+        LinkGridReader.SplitFrom = 1;
+        var query = new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "product")], Limit = 5 };
+        var expected = LinkGridReader.Query(crawl.Path, query).Matching;
+        List<int> split = [];
+        LinkGridReader.Split = split.Add;
+        var opened = 0;
+        GridReadContext.OpeningAlongside = () =>
+        {
+            if (Interlocked.Increment(ref opened) == 2)
+            {
+                throw new IOException("The process cannot access the file because it is being used by another process.");
+            }
+        };
+
+        int taken = 0, released = 0;
+        ReadHelpers helpers = new(() => Interlocked.Increment(ref taken) <= 3, () => Interlocked.Increment(ref released));
+        Assert.Equal(expected, LinkGridReader.Query(crawl.Path, query, new ReadCache { Helpers = helpers }).Matching);
+        Assert.Equal([1], split);
+        Assert.Equal(3, opened);
+        Assert.Equal(3, released);
+
+        // A read stopped meanwhile is stopped, not answered on one connection.
+        using var cancel = new CancellationTokenSource();
+        GridReadContext.OpeningAlongside = () =>
+        {
+            cancel.Cancel();
+            throw new IOException("Stopped as it opened.");
+        };
+        Assert.ThrowsAny<OperationCanceledException>(() => LinkGridReader.Query(crawl.Path, query, new ReadCache { Helpers = ReadHelpers.UpTo(3) }, cancel.Token));
     }
 
     /// <summary>
