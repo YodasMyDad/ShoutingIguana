@@ -27,7 +27,7 @@ namespace ShoutingIguana.Sidecar.Exports;
 /// <item>The exports that ended are kept (the last <see cref="KEPT"/>), so a UI that missed an event can still ask.</item>
 /// </list>
 /// </summary>
-internal sealed class ExportManager(CrawlManager crawls, ReadCache cache, EventHub events, ILogger<ExportManager> logger)
+internal sealed class ExportManager(CrawlManager crawls, ReadCache cache, EventHub events, ExportJournal journal, ILogger<ExportManager> logger)
 {
     /// <summary>The exports that run at once: each keeps a core and a disk busy.</summary>
     public const int MAX_RUNNING = 4;
@@ -47,6 +47,15 @@ internal sealed class ExportManager(CrawlManager crawls, ReadCache cache, EventH
 
     /// <summary>Tests only: called on an export's thread as it starts, before it reads or writes anything.</summary>
     internal Action<ExportJob>? Starting { get; set; }
+
+    /// <summary>
+    /// Tests only: called on an export's thread each time it says how far it has got, before anyone is told: its file is
+    /// open by then, and its first page read.
+    /// </summary>
+    internal Action<ExportJob, ExportProgress>? Writing { get; set; }
+
+    /// <summary>Tests only: the rows of data an Excel export may hold here, in place of the engine's own.</summary>
+    internal long? MaxXlsxRows { get; set; }
 
     /// <summary>Starts an export of a crawl and returns it, running.</summary>
     public ExportDto Start(string crawlId, ExportRequestDto body)
@@ -161,7 +170,8 @@ internal sealed class ExportManager(CrawlManager crawls, ReadCache cache, EventH
         try
         {
             Starting?.Invoke(job);
-            var settings = new ExportSettings { Cache = cache, Progress = new JobProgress(this, job), OutOfDateBy = crawls.AnalysisSettings };
+            var settings = new ExportSettings { Cache = cache, Progress = new JobProgress(this, job), OutOfDateBy = crawls.AnalysisSettings, Journal = journal };
+            settings = MaxXlsxRows is { } rows ? settings with { MaxXlsxRows = rows } : settings;
             var result = CrawlExporter.Export(crawlPath, job.Request, job.Path, settings, job.Cancel.Token);
             End(job, ExportStatus.Done, result, null);
             logger.LogInformation("Exported {Kind} of {Crawl} to {Path}: {Rows} rows, {Bytes} bytes", job.Request.Kind, crawlPath, job.Path, result.Rows, result.Bytes);
@@ -241,6 +251,10 @@ internal sealed class ExportManager(CrawlManager crawls, ReadCache cache, EventH
     /// <summary>Hands one export's progress to the manager, straight from the export's thread, so its events keep their order.</summary>
     private sealed class JobProgress(ExportManager manager, ExportJob job) : IProgress<ExportProgress>
     {
-        public void Report(ExportProgress value) => manager.OnProgress(job, value);
+        public void Report(ExportProgress value)
+        {
+            manager.Writing?.Invoke(job, value);
+            manager.OnProgress(job, value);
+        }
     }
 }

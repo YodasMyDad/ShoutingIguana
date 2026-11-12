@@ -32,6 +32,15 @@ public sealed record ExportSettings
     /// </summary>
     public IExportJournal? Journal { get; init; }
 
-    /// <summary>Tests only: the rows of data an Excel export may hold, in place of <see cref="CrawlExporter.MAX_XLSX_ROWS"/>.</summary>
-    internal long MaxXlsxRows { get; init; } = CrawlExporter.MAX_XLSX_ROWS;
+    /// <summary>
+    /// The rows of data an Excel export may hold: more are refused before anything is written. At most, and unless set,
+    /// what the workbook's sheets hold (<see cref="CrawlExporter.MAX_XLSX_ROWS"/>).
+    /// </summary>
+    public long MaxXlsxRows
+    {
+        get => _maxXlsxRows;
+        init => _maxXlsxRows = Math.Clamp(value, 0, CrawlExporter.MAX_XLSX_ROWS);
+    }
+
+    private readonly long _maxXlsxRows = CrawlExporter.MAX_XLSX_ROWS;
 }

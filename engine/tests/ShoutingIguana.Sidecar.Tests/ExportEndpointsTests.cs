@@ -2,8 +2,10 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Sidecar.Exports;
+using ShoutingIguana.Sidecar.Library;
 using ShoutingIguana.Sidecar.Tests.Support;
 
 namespace ShoutingIguana.Sidecar.Tests;
@@ -24,6 +26,8 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     public void Dispose()
     {
         Exports.Starting = null;
+        Exports.Writing = null;
+        Exports.MaxXlsxRows = null;
         TestSidecar.DeleteRoot(_folder);
     }
 
@@ -366,6 +370,269 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
         await sidecar.PostAsync($"api/crawls/{id}/stop");
     }
 
+    /// <summary>
+    /// A sidecar that is killed mid-export leaves the export's part files in the user's folder, and its note of them in
+    /// its own. The next sidecar to start with that state folder deletes the files the note names, and those alone, and
+    /// starts with an empty note. Nothing is killed here: the start state is written by hand.
+    /// </summary>
+    [Fact]
+    public async Task AStartDeletesThePartFilesAnEarlierSidecarLeftNotedAndEmptiesTheNote()
+    {
+        var root = TestSidecar.NewRoot();
+        try
+        {
+            var state = Path.Combine(root, "state");
+            Directory.CreateDirectory(state);
+            var part = Path.Combine(_folder, $".links.xlsx.{Guid.NewGuid():N}.tmp");
+            var strings = part + ".strings";
+            var gone = Path.Combine(_folder, $".urls.csv.{Guid.NewGuid():N}.tmp");
+            var notOne = Path.Combine(_folder, "notes.tmp");
+            var notNoted = Path.Combine(_folder, $".mine.csv.{Guid.NewGuid():N}.tmp");
+            var whole = Path.Combine(_folder, "links.xlsx");
+            foreach (var file in new[] { part, strings, notOne, notNoted, whole })
+            {
+                await File.WriteAllTextAsync(file, "written before the sidecar was killed");
+            }
+
+            // The note names the two part files, one that has gone since, a file that isn't a part file's name (a note
+            // changed by hand), and nothing of the folder's other files.
+            var note = Path.Combine(state, ExportJournal.FILE_NAME);
+            await File.WriteAllTextAsync(note, new JsonArray(part, strings, gone, notOne, whole).ToJsonString());
+
+            await using var sidecar = await TestSidecar.StartAsync(root);
+            Assert.False(File.Exists(part), "The part file is still there.");
+            Assert.False(File.Exists(strings), "The file set aside beside it is still there.");
+            Assert.Equal(new[] { "links.xlsx", "notes.tmp", Path.GetFileName(notNoted) }.Order(StringComparer.Ordinal), Directory.GetFiles(_folder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+            Assert.Empty(JsonNode.Parse(await File.ReadAllTextAsync(note))!.AsArray());
+            Assert.Empty(sidecar.Host.Services.GetRequiredService<ExportJournal>().Parts);
+        }
+        finally
+        {
+            TestSidecar.DeleteRoot(root);
+        }
+    }
+
+    /// <summary>While an export writes, the note in the state folder names its part files; once it has ended, it names none.</summary>
+    [Fact]
+    public async Task AnExportsPartFilesAreNotedWhileItWritesAndNotOnceItHasEnded()
+    {
+        var journal = Sidecar.Host.Services.GetRequiredService<ExportJournal>();
+        var note = Path.Combine(Sidecar.Options.StateDirectory, ExportJournal.FILE_NAME);
+        List<string> noted = [];
+        List<string?> written = [];
+        List<bool> there = [];
+        Exports.Writing = (_, _) =>
+        {
+            if (noted.Count == 0)
+            {
+                noted.AddRange(journal.Parts);
+                written.AddRange(JsonNode.Parse(File.ReadAllText(note))!.AsArray().Select(entry => (string?)entry));
+                there.AddRange(noted.Select(File.Exists));
+            }
+        };
+        var path = Path.Combine(_folder, "noted.xlsx");
+        var done = await ExportAsync(grid.Id, """{"kind":"links","format":"xlsx"}""", path);
+        Assert.Equal("done", (string?)done["status"]);
+
+        Assert.Equal(2, noted.Count);
+        Assert.All(noted, part => Assert.StartsWith(Path.Combine(_folder, ".noted.xlsx."), part, StringComparison.Ordinal));
+        Assert.Equal([true, true], there);
+        Assert.Equal(noted.Order(StringComparer.Ordinal), written.Order(StringComparer.Ordinal));
+        Assert.Empty(journal.Parts);
+        Assert.Empty(JsonNode.Parse(await File.ReadAllTextAsync(note))!.AsArray());
+        Assert.Equal([path], Directory.GetFiles(_folder));
+    }
+
+    /// <summary>
+    /// Shutdown cancels an export that is writing: its file is open and part-written when the sidecar is told to stop,
+    /// and nothing of it is left, in the folder or in the note.
+    /// </summary>
+    [Fact]
+    public async Task ShutdownCancelsAnExportThatIsWritingItsFileAndLeavesNoPartOfIt()
+    {
+        await using var sidecar = await TestSidecar.StartAsync();
+        var crawl = Path.Combine(sidecar.DataDirectory, "grid.sicrawl");
+        Directory.CreateDirectory(sidecar.DataDirectory);
+        File.Copy(grid.Path, crawl);
+        var exports = sidecar.Host.Services.GetRequiredService<ExportManager>();
+        var journal = sidecar.Host.Services.GetRequiredService<ExportJournal>();
+
+        // The export has read pages and written rows when it waits here, until it is cancelled.
+        using var writing = new ManualResetEventSlim();
+        exports.Writing = (job, progress) =>
+        {
+            if (progress.RowsWritten > 5_000)
+            {
+                writing.Set();
+                job.Cancel.Token.WaitHandle.WaitOne(EventStreamReader.TIMEOUT);
+            }
+        };
+        var path = Path.Combine(_folder, "stopped.csv");
+        var started = await sidecar.PostAsync($"api/crawls/{CrawlIds.For(crawl)}/export", new JsonObject { ["kind"] = "links", ["format"] = "csv", ["path"] = path });
+        Assert.True(started.Status == HttpStatusCode.Created, started.Body?.ToJsonString());
+        Assert.True(writing.Wait(EventStreamReader.TIMEOUT), "The export never wrote 5,000 rows.");
+
+        // Its file is open, and part-written (5,000 links are more than its buffer holds): there, beside where the file
+        // would be, held by the export, and noted.
+        var part = Assert.Single(Directory.GetFiles(_folder));
+        Assert.StartsWith(".stopped.csv.", Path.GetFileName(part), StringComparison.Ordinal);
+        Assert.True(new FileInfo(part).Length > 64 * 1_024, $"{new FileInfo(part).Length} bytes written yet.");
+        Assert.ThrowsAny<IOException>(() => new FileStream(part, FileMode.Open, FileAccess.ReadWrite, FileShare.None).Dispose());
+        var parts = new[] { part };
+        Assert.Equal(parts.Order(StringComparer.Ordinal), journal.Parts.Order(StringComparer.Ordinal));
+
+        await exports.StopAllAsync(CancellationToken.None).WaitAsync(EventStreamReader.TIMEOUT);
+        Assert.Equal("cancelled", (string?)(await sidecar.GetJsonAsync($"api/exports/{(string)started.Body!["exportId"]!}"))["status"]);
+        Assert.Empty(Directory.GetFiles(_folder));
+        Assert.Empty(journal.Parts);
+    }
+
+    /// <summary>A crawl analysed again while it's exported ends the export with its own problem, and no file.</summary>
+    [Fact]
+    public async Task ACrawlAnalysedAgainUnderAnExportEndsItAsAProblemOfItsOwn()
+    {
+        var id = grid.Copy(_ => { });
+        using var analysed = new ManualResetEventSlim();
+        using var reading = new ManualResetEventSlim();
+        var pages = 0;
+        Exports.Writing = (_, progress) =>
+        {
+            if (progress.RowsWritten > 0 && ++pages == 1)
+            {
+                reading.Set();
+                analysed.Wait(EventStreamReader.TIMEOUT);
+            }
+        };
+        await using var events = await EventStreamReader.ConnectAsync(Sidecar.Client);
+        var started = await Sidecar.PostAsync($"api/crawls/{id}/export", new JsonObject { ["kind"] = "links", ["format"] = "csv", ["path"] = Path.Combine(_folder, "changed.csv") });
+        Assert.True(started.Status == HttpStatusCode.Created, started.Body?.ToJsonString());
+        Assert.True(reading.Wait(EventStreamReader.TIMEOUT), "The export never wrote its first page.");
+
+        // Between two of its pages the export holds nothing of the file: the analysis runs, and ends.
+        Assert.Equal(HttpStatusCode.Accepted, (await Sidecar.PostAsync($"api/crawls/{id}/analyze")).Status);
+        await events.CrawlStatusAsync(id, "analyzing");
+        await events.CrawlStatusAsync(id, "completed");
+        analysed.Set();
+
+        var ended = await EndedAsync((string)started.Body!["exportId"]!);
+        Assert.Equal("failed", (string?)ended["status"]);
+        Assert.Null(ended["result"]);
+        Assert.Equal(("export-crawl-changed", 409), ((string?)ended["error"]!["type"], (int)ended["error"]!["status"]!));
+        Assert.Equal("The crawl changed while it was being exported: it was analysed again, continued or it finished. Export it again.", (string?)ended["error"]!["title"]);
+        Assert.Empty(Directory.GetFiles(_folder));
+    }
+
+    /// <summary>A disk that fills up under an export ends it with its own problem, and nothing is left of the file.</summary>
+    [Theory]
+    [InlineData("csv")]
+    [InlineData("xlsx")]
+    public async Task ADiskThatFillsUpEndsAnExportAsAProblemOfItsOwn(string format)
+    {
+        // On the export's own thread, before it opens its file: every file it writes has room for 4,000 bytes more.
+        Exports.Starting = _ => ExportTarget.Wrap = file => new FullDisk(file, 4_000);
+        var failed = await ExportAsync(grid.Id, $$"""{"kind":"links","format":"{{format}}"}""", Path.Combine(_folder, $"full.{format}"));
+        Assert.Equal("failed", (string?)failed["status"]);
+        Assert.Null(failed["result"]);
+        Assert.Equal(("export-disk-full", 507), ((string?)failed["error"]!["type"], (int)failed["error"]!["status"]!));
+        Assert.StartsWith("The disk is full", (string?)failed["error"]!["title"], StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(_folder));
+        Assert.Empty(Sidecar.Host.Services.GetRequiredService<ExportJournal>().Parts);
+    }
+
+    /// <summary>More rows than a workbook holds end the export with its own problem before anything is written; CSV takes them.</summary>
+    [Fact]
+    public async Task MoreRowsThanAWorkbookHoldsEndAnExportAsAProblemOfItsOwn()
+    {
+        Exports.MaxXlsxRows = 100;
+        var failed = await ExportAsync(grid.Id, """{"kind":"links","format":"xlsx"}""", Path.Combine(_folder, "large.xlsx"));
+        Assert.Equal("failed", (string?)failed["status"]);
+        Assert.Equal(("export-too-large", 422), ((string?)failed["error"]!["type"], (int)failed["error"]!["status"]!));
+        Assert.Contains("more than an Excel file can hold here (100)", (string?)failed["error"]!["title"], StringComparison.Ordinal);
+        Assert.Contains("CSV, which has no limit", (string?)failed["error"]!["title"], StringComparison.Ordinal);
+        Assert.Equal(0, (long)failed["rowsWritten"]!);
+        Assert.Empty(Directory.GetFiles(_folder));
+
+        var csv = await ExportAsync(grid.Id, """{"kind":"links","format":"csv"}""", Path.Combine(_folder, "large.csv"));
+        Assert.Equal("done", (string?)csv["status"]);
+        Assert.True((long)csv["result"]!["rows"]! > 100);
+    }
+
+    /// <summary>
+    /// An export's progress is told at most four times a second, however many pages it reads: its first event, one as
+    /// its rows are counted, then no more than one for every 250 ms it runs, and its last. None is merged or dropped.
+    /// </summary>
+    [Fact]
+    public async Task AnExportsProgressIsToldAtMostEveryQuarterSecond()
+    {
+        var rows = GridExportReader.LinkPageRows;
+        try
+        {
+            // Many small pages, each a little slow: hundreds of steps of progress over a second or more.
+            GridExportReader.LinkPageRows = 25;
+            var pages = 0;
+            Exports.Writing = (_, progress) =>
+            {
+                if (progress.RowsWritten > 0)
+                {
+                    pages++;
+                    Thread.Sleep(5);
+                }
+            };
+            await using var events = await EventStreamReader.ConnectAsync(Sidecar.Client);
+            var started = await Sidecar.PostAsync($"api/crawls/{grid.Id}/export", new JsonObject { ["kind"] = "links", ["format"] = "csv", ["path"] = Path.Combine(_folder, "paced.csv") });
+            var id = (string)started.Body!["exportId"]!;
+            List<JsonNode> told = [];
+            do
+            {
+                told.Add(await events.NextAsync("export", data => (string?)data["exportId"] == id));
+            }
+            while ((string?)told[^1]["status"] == "running");
+
+            var last = told[^1];
+            Assert.Equal("done", (string?)last["status"]);
+            var took = DateTimeOffset.Parse((string)last["finishedAt"]!, System.Globalization.CultureInfo.InvariantCulture)
+                       - DateTimeOffset.Parse((string)last["startedAt"]!, System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(pages > 100, $"{pages} pages.");
+            Assert.True(took > TimeSpan.FromMilliseconds(600), $"It took {took.TotalMilliseconds:N0} ms.");
+
+            // The first (nothing written, nothing counted), the count, one each 250 ms at most, and the end.
+            Assert.Equal((0L, (long?)null), ((long)told[0]["rowsWritten"]!, (long?)told[0]["rowsExpected"]));
+            Assert.Equal((long)last["result"]!["rows"]!, (long?)told[1]["rowsExpected"]);
+            Assert.True(told.Count >= 4, $"{told.Count} events.");
+            Assert.True(told.Count <= (took.TotalMilliseconds / 250) + 3, $"{told.Count} events in {took.TotalMilliseconds:N0} ms, for {pages} pages.");
+            Assert.All(told.Zip(told.Skip(1)), pair => Assert.True((long)pair.First["rowsWritten"]! <= (long)pair.Second["rowsWritten"]!));
+            Assert.Equal((long)last["result"]!["rows"]!, (long)last["rowsWritten"]!);
+        }
+        finally
+        {
+            GridExportReader.LinkPageRows = rows;
+        }
+    }
+
+    /// <summary>The last 64 exports that ended can be read by their ids; the one before them is no longer there.</summary>
+    [Fact]
+    public async Task TheLastSixtyFourExportsThatEndedCanStillBeRead()
+    {
+        const string ONE_ROW = """{"kind":"urls","format":"csv","filters":[{"column":"id","op":"eq","value":1}]}""";
+        var path = Path.Combine(_folder, "one.csv");
+        List<string> ids = [];
+        for (var export = 0; export < 66; export++)
+        {
+            var ended = await ExportAsync(grid.Id, ONE_ROW, path);
+            Assert.Equal("done", (string?)ended["status"]);
+            ids.Add((string)ended["exportId"]!);
+        }
+
+        // 66 ended: the first two have gone, and the 64 after them are all there, as they ended.
+        TestSidecar.AssertProblem(await Sidecar.SendAsync(HttpMethod.Get, $"api/exports/{ids[0]}"), HttpStatusCode.NotFound, "export-not-found");
+        TestSidecar.AssertProblem(await Sidecar.SendAsync(HttpMethod.Get, $"api/exports/{ids[1]}"), HttpStatusCode.NotFound, "export-not-found");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/exports/{ids[1]}/cancel"), HttpStatusCode.NotFound, "export-not-found");
+        foreach (var id in ids.Skip(2))
+        {
+            Assert.Equal("done", (string?)(await Sidecar.GetJsonAsync($"api/exports/{id}"))["status"]);
+        }
+    }
+
     [Fact]
     public async Task OnlySoManyExportsRunAtOnce()
     {
@@ -427,6 +694,57 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
         var started = await Sidecar.PostAsync($"api/crawls/{crawlId}/export", request);
         Assert.True(started.Status == HttpStatusCode.Created, $"{(int)started.Status} {started.Body?.ToJsonString()}");
         return await EndedAsync((string)started.Body!["exportId"]!);
+    }
+
+    /// <summary>A file on a disk with room for only so many bytes more: writing past them fails as Windows, or Linux, fails it.</summary>
+    private sealed class FullDisk(Stream file, long roomBytes) : Stream
+    {
+        private long _written;
+
+        public override bool CanRead => file.CanRead;
+
+        public override bool CanSeek => file.CanSeek;
+
+        public override bool CanWrite => file.CanWrite;
+
+        public override long Length => file.Length;
+
+        public override long Position
+        {
+            get => file.Position;
+            set => file.Position = value;
+        }
+
+        public override void Flush() => file.Flush();
+
+        public override int Read(byte[] buffer, int offset, int count) => file.Read(buffer, offset, count);
+
+        public override long Seek(long offset, SeekOrigin origin) => file.Seek(offset, origin);
+
+        public override void SetLength(long value) => file.SetLength(value);
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            _written += count;
+            if (_written > roomBytes)
+            {
+                throw OperatingSystem.IsWindows()
+                    ? new IOException("There is not enough space on the disk.", unchecked((int)0x80070070))
+                    : new IOException("No space left on device", 28);
+            }
+
+            file.Write(buffer, offset, count);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                file.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
     }
 
     private async Task<JsonNode> EndedAsync(string exportId)
