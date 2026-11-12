@@ -19,9 +19,12 @@ const SIZES = [
 
 let seeded: string[] = [];
 let running = '';
+/** The tests' own crawl, ended: taken before the running one starts, which has the same site's name. */
+let idle = '';
 
 test.beforeAll(async () => {
   seeded = await libraryIds();
+  idle = (await seededCrawl()).id;
   // A crawl of the engine's synthetic site, slow enough to stay running for the whole spec.
   const started = await read<{ id: string }>('/api/crawls', {
     options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
@@ -80,8 +83,8 @@ async function expectNeverGone(page: Page, live: boolean) {
   await expect(bar.getByRole('radio', { name: 'Simple' })).toBeVisible();
   await expect(bar.getByRole('radio', { name: 'Advanced' })).toBeVisible();
   if (live) {
-    await expect(bar.getByRole('button', { name: 'Pause' })).toBeVisible();
-    await expect(bar.getByRole('button', { name: 'Stop' })).toBeVisible();
+    await expect(bar.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+    await expect(bar.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
     await expect(bar.getByText(/^(Running|Checking)/)).toBeVisible();
   }
 }
@@ -92,7 +95,7 @@ for (const mode of ['simple', 'advanced'] as const) {
       test(`${mode}, ${live ? 'a crawl running' : 'idle'}, at ${size.name}: nothing overprints, nothing that stays goes`, async ({
         page,
       }) => {
-        const crawl = live ? running : (await seededCrawl()).id;
+        const crawl = live ? running : idle;
         await openIn(page, mode, `/crawls/${crawl}/overview`, size);
         await expectNeverGone(page, live);
         expectLaidOut(await barLayout(page));
@@ -102,33 +105,111 @@ for (const mode of ['simple', 'advanced'] as const) {
   }
 }
 
-test('the steps, as the bar narrows, in each mode with a crawl running: the widths each part gives way at', async ({
-  page,
-}) => {
-  test.setTimeout(240_000);
-  const table: Record<string, Record<string, number>> = {};
-  for (const mode of ['simple', 'advanced'] as const) {
-    await openIn(page, mode, `/crawls/${running}/overview`, { width: 1700, height: 720 });
-    await expectNeverGone(page, true);
-    const firstAt: Record<string, number> = {};
-    for (let width = 1700; width >= 600; width -= 10) {
-      await page.setViewportSize({ width, height: 720 });
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      const layout = await barLayout(page);
-      expectLaidOut(layout);
-      for (let step = 1; step <= layout.step; step++) firstAt[`step ${step}`] ??= layout.width;
+/**
+ * What a sweep checks at each width: the bar holds its parts, and the crumbs theirs; the switch is whole and in the
+ * window; and no text the bar shows is cut to a letter or two (a shortened part keeps 40 px at least).
+ */
+async function sweepState(page: Page) {
+  return page.evaluate(() => {
+    const bar = document.querySelector<HTMLElement>('header[data-mode]');
+    if (!bar) throw new Error('no top bar');
+    const box = bar.getBoundingClientRect();
+    const radios = [...bar.querySelectorAll<HTMLElement>('[role="radiogroup"] [role="radio"]')].map((radio) => {
+      const rect = radio.getBoundingClientRect();
+      return {
+        name: radio.textContent,
+        whole: radio.scrollWidth <= radio.clientWidth + 0.5,
+        inside: rect.left >= box.left - 0.5 && rect.right <= Math.min(box.right, window.innerWidth) + 0.5,
+        shown: rect.width > 1,
+      };
+    });
+    const cut = [...bar.querySelectorAll<HTMLElement>('*')]
+      .filter((element) => {
+        const own = [...element.childNodes].some((node) => node.nodeType === 3 && (node.textContent ?? '').trim());
+        if (!own) return false;
+        const rect = element.getBoundingClientRect();
+        // Shown (not read-only), and narrower than its words.
+        return rect.width > 1 && element.scrollWidth > element.clientWidth + 1 && element.clientWidth < 40;
+      })
+      .map((element) => `${element.textContent}: ${element.clientWidth}px`);
+    const crumbs = bar.querySelector('nav');
+    return {
+      step: Number(bar.dataset.give ?? 0),
+      width: Math.round(box.width),
+      overflow: bar.scrollWidth > bar.clientWidth,
+      clipped: crumbs ? crumbs.scrollWidth > crumbs.clientWidth : false,
+      radios,
+      cut,
+    };
+  });
+}
+
+for (const zoom of [1, 2] as const) {
+  test(`the steps, every 10 px from 1440 to 400, in both modes, idle and running, at ${zoom * 100}%`, async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const context = await browser.newContext({ deviceScaleFactor: zoom });
+    const page = await context.newPage();
+    const table: Record<string, Record<string, number>> = {};
+    for (const mode of ['simple', 'advanced'] as const) {
+      for (const live of [false, true]) {
+        await openIn(page, mode, `/crawls/${live ? running : idle}/overview`, { width: 1440, height: 720 });
+        await expectNeverGone(page, live);
+        const firstAt: Record<string, number> = {};
+        for (let width = 1440; width >= 400; width -= 10) {
+          await page.setViewportSize({ width, height: 720 });
+          await page.evaluate(
+            () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+          );
+          const state = await sweepState(page);
+          const at = `${mode}, ${live ? 'running' : 'idle'}, ${width} px`;
+          expect(state.overflow, `${at}: the bar holds its parts`).toBe(false);
+          expect(state.clipped, `${at}: the crumbs hold theirs`).toBe(false);
+          expect(state.radios, `${at}: the switch`).toEqual([
+            { name: 'Simple', whole: true, inside: true, shown: true },
+            { name: 'Advanced', whole: true, inside: true, shown: true },
+          ]);
+          expect(state.cut, `${at}: nothing cut to a letter`).toEqual([]);
+          for (let step = 1; step <= state.step; step++) firstAt[`step ${step}`] ??= state.width;
+        }
+        table[`${mode}, ${live ? 'running' : 'idle'}`] = firstAt;
+      }
     }
-    table[mode] = firstAt;
-  }
-  mkdirSync(SHOTS, { recursive: true });
-  writeFileSync(path.join(SHOTS, 'give-way.json'), JSON.stringify(table, null, 2));
-  console.warn(`top bar widths each step first applies at, with a crawl running: ${JSON.stringify(table)}`);
+    await context.close();
+    mkdirSync(SHOTS, { recursive: true });
+    writeFileSync(path.join(SHOTS, `give-way-${zoom * 100}.json`), JSON.stringify(table, null, 2));
+    console.warn(`top bar widths each step first applies at, ${zoom * 100}%: ${JSON.stringify(table)}`);
+  });
+}
+
+test('at the bar’s narrowest, the crawl’s controls and search are in More, each with its key', async ({ page }) => {
+  await openIn(page, 'advanced', `/crawls/${running}/overview`, { width: 470, height: 720 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const bar = page.getByRole('banner');
+  const more = bar.getByRole('button', { name: 'More: Pause, Stop, Search' });
+  await expect(more).toBeVisible();
+  await expect(bar.getByRole('button', { name: 'Pause', exact: true })).toBeHidden();
+  // Home and Forward have given way, and are still there for a screen reader (and shown when they have focus).
+  await expect(bar.getByRole('button', { name: 'Forward' })).toHaveCount(1);
+  await expect(bar.getByRole('link', { name: 'Home' })).toHaveCount(1);
+  await bar.getByRole('button', { name: 'Forward' }).focus();
+  expect(
+    await bar.getByRole('button', { name: 'Forward' }).evaluate((element) => element.getBoundingClientRect().width),
+  ).toBeGreaterThan(1);
+  await more.click();
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem', { name: 'Pause' })).toHaveAttribute('aria-keyshortcuts', 'F7');
+  await expect(menu.getByRole('menuitem', { name: 'Stop' })).toHaveAttribute('aria-keyshortcuts', 'F8');
+  await menu.getByRole('menuitem', { name: 'Search or run a command' }).click();
+  await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
+  await expectNoViolations(page);
 });
 
 test('the screenshots: this slice’s screens, at 1280x720 in both themes and at 200% zoom', async ({ page }) => {
   test.setTimeout(240_000);
   mkdirSync(SHOTS, { recursive: true });
-  const crawl = (await seededCrawl()).id;
+  const crawl = idle;
   const screens: [name: string, route: string, mode: Mode][] = [
     ['home-simple', '/', 'simple'],
     ['new-simple', `/new?url=${encodeURIComponent('https://www.example.co.uk/')}`, 'simple'],

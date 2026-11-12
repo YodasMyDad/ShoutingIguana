@@ -109,12 +109,22 @@ the order holds whatever the sidebar is doing.
 4. Home.
 5. The count in the status pill.
 6. Pause, Stop and Continue become icons, with their names as tooltips and accessible names.
-7. The site.
-8. Forward.
+7. The site, shortened (never to a letter)…
+8. …then gone.
+9. Forward.
+10. Pause, Resume, Stop, Continue and the search icon go into one **More** menu button, named for what's in it, each
+    item with its key.
+11. The status pill shows only its dot or icon, its words kept for a screen reader and in its tooltip.
+12. The section you are on, shortened with an ellipsis to a least width (never to a letter), its whole name in its
+    tooltip and accessible name…
+13. …then gone, as a whole.
 
-Never: Back, the section you are on, the status word, the controls, search (as its icon) and the switch. At 200%
-zoom on a 1280 px window (584 px of bar) a running crawl shows exactly those. This also settles the shell pass's
-open finding, the search field shrinking to one letter beside Pause and Stop.
+Never: Back and the switch. Whatever gives way stays reachable: Home and Forward stay for a screen reader (and show
+when they have focus), the date, the site, the count, the controls' words and the section stay read. At 200% zoom on
+a 1280 px window (584 px of bar) a running crawl shows Back, the section, the status word, the controls as icons,
+search and the switch; at the smallest window, 960 px at 200% (424 px of bar), it shows More and the status dot too.
+This also settles the shell pass's open finding, the search field shrinking to one letter beside Pause and Stop.
+*Steps 10 to 13 decided 2026-11-12 in the round 3 review: before them, the switch was cut at the smallest window.*
 
 ## Simple's words
 

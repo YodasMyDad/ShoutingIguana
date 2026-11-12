@@ -2,9 +2,9 @@
 // window's, so the order holds whatever the sidebar is doing, in either mode, idle or with a crawl running.
 //
 // The bar's parts never shrink: each step makes one give way, in order, and the bar takes the fewest steps that let
-// everything fit. The steps are marked on the bar as `data-give-1` … `data-give-9`, cumulatively (step 3 sets 1, 2
-// and 3), and each part hides or narrows itself on its own step's mark (`group-data-give-3/topbar:…`). The site is
-// the one part that narrows before it goes: shortened (step 7), then gone (step 8). The measure is
+// everything fit. The steps are marked on the bar as `data-give-1` … `data-give-13`, cumulatively (step 3 sets 1, 2
+// and 3), and each part hides or narrows itself on its own step's mark (`group-data-give-3/topbar:…`). The site and
+// the section you're on narrow before they go: shortened, never to a letter, then gone. The switch never gives way. The measure is
 // taken before the browser paints, so no in-between state is ever seen: when the bar is resized, and when what it holds
 // changes (a crawl's count, a crumb, a control coming or going).
 import { useLayoutEffect, type RefObject } from 'react';
@@ -20,6 +20,10 @@ export const GIVE_WAY_STEPS = [
   'site-short', // 7: the site is shortened, as far as its least width…
   'site', // 8: …then goes
   'forward', // 9: Forward
+  'more', // 10: Pause, Resume, Stop, Continue and the search icon go into one More menu
+  'status', // 11: the status pill shows only its dot or icon
+  'section-short', // 12: the section you're on is shortened, as far as its least width…
+  'section', // 13: …then goes
 ] as const;
 
 const MAX_STEP = GIVE_WAY_STEPS.length;

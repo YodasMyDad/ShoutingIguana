@@ -55,7 +55,7 @@ export function StatusPill({
       )}
     >
       {live ? <LiveDot pulse={status !== 'stopping'} /> : <Icon icon={icon} size="sm" />}
-      {statusLabel(status, words)}
+      <span className="si-status-pill__word">{statusLabel(status, words)}</span>
       {fetched !== null && COUNTED.has(status) ? (
         <>
           {' '}

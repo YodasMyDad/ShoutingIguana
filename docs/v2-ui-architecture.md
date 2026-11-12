@@ -1376,14 +1376,18 @@ touch the same lines:
 - **The order of giving way** (`layout/useGiveWay.ts`), measured on the bar's own width, so it holds whatever the
   sidebar is doing. The bar's parts never shrink. Steps: 1 the keys in buttons, 2 the crawl's date, 3 the search
   field to its icon, 4 Home, 5 the status pill's count, 6 the controls' words (to icons), 7 the site shortened (to
-  `--topbar-site-min`), 8 the site gone, 9 Forward. The bar takes the fewest steps that let everything fit: each step
+  `--topbar-site-min`), 8 the site gone, 9 Forward, 10 the controls and search into one More menu (named for what's
+  in it, its items with their keys), 11 the status pill to its dot, 12 the section shortened (to
+  `--topbar-section-min`), 13 the section gone. The bar takes the fewest steps that let everything fit: each step
   is marked on the bar as `data-give-N` (cumulatively), each part hides or narrows on its own step's mark
   (`group-data-give-3/topbar:…`), and the measure runs before paint (a ResizeObserver on the bar, a MutationObserver
   on its content, the fonts arriving), usually in one or two reads. What gives way keeps its name: the date, the
-  site, the count and the controls' and search's words become `sr-only`, Home and Forward (both reachable otherwise)
-  go, and the breadcrumb's tooltip has the whole trail. Never: Back, the section, the status word, the controls,
-  search and the switch. `e2e/topbar.spec.ts` sweeps the window from 1700 to 600 px in both modes with a crawl
-  running, and checks the three sizes idle and running: nothing overprints or runs out of the bar.
+  site, the count, the pill's words, the section and the controls' and search's words become `sr-only`; Home and
+  Forward become `sr-only` too, and show while they have focus; the pill and the section have their whole words in
+  a tooltip, and the breadcrumb's tooltip has the whole trail. Never: Back and the switch. `e2e/topbar.spec.ts`
+  sweeps the window every 10 px from 1440 to 400 CSS px in both modes, idle and running, at 100% and 200%: the bar
+  and the crumbs hold their parts, the switch is whole and in the window, and nothing the bar shows is cut narrower
+  than 40 px.
 
 ### Settings
 

@@ -1,16 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useParams, useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Search, Square } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Ellipsis, Pause, Play, RefreshCw, Search, Square } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 import { crawlQuery } from '../api/queries';
 import { crawlSectionEntry, sectionOf } from '../app/sections';
 import { setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
-import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { crawlControls, crawlName, effectiveStatus, statusLabel } from '../crawl/status';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
-import { formatExactTime } from '../lib/format';
+import { formatCount, formatCountOf, formatExactTime } from '../lib/format';
 import { isMac } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
 import { useMode, type Mode } from '../mode/mode';
@@ -19,6 +19,7 @@ import { Favicon } from '../ui/Favicon';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
 import { Kbd } from '../ui/Kbd';
+import { DropdownMenu, MenuItem } from '../ui/Menu';
 import { StatusPill } from '../ui/StatusPill';
 import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
@@ -80,13 +81,29 @@ export function TopBar() {
   const controlsRef = useRef<HTMLDivElement>(null);
   useFocusRescue(
     controlsRef,
-    () => controlsRef.current?.querySelector<HTMLElement>('button') ?? document.getElementById('main'),
+    () =>
+      [...(controlsRef.current?.querySelectorAll<HTMLElement>('button') ?? [])].find(
+        (button) => button.getClientRects().length > 0,
+      ) ?? document.getElementById('main'),
   );
 
   const date = crawl?.startedAt ? formatExactTime(crawl.startedAt) : null;
   const site = crawlId ? crawlName(crawl) : null;
   // The whole trail, for the tooltip, whatever has given way.
   const trail = ['Home', site, date, here ?? page].filter(Boolean).join(' › ');
+  const fetched = live?.progress?.fetched ?? crawl?.fetchedUrlCount ?? null;
+  // The pill's words, for its tooltip once it's only its dot (step 11).
+  const pillWords = status
+    ? `${statusLabel(status, mode)}${fetched !== null && (status === 'running' || status === 'paused' || status === 'stopping') ? `, ${mode === 'simple' ? `${formatCount(fetched)} checked` : formatCountOf(fetched, 'URL')}` : ''}`
+    : '';
+  const crawlButtons = crawlId && status ? crawlControlList(controls, crawl?.outOfDate === true, mode) : [];
+  const run = (id: ControlId) => {
+    if (!crawlId || !status) return;
+    if (id === 'pause' || id === 'resume') void pauseOrResume(crawlId, status);
+    else if (id === 'stop') void stopCrawl(crawlId);
+    else if (id === 'continue') void continueCrawl(crawlId);
+    else void analyseCrawl(crawlId);
+  };
 
   return (
     <header
@@ -102,7 +119,7 @@ export function TopBar() {
           command="nav.back"
           onClick={() => router.history.back()}
         />
-        <span className="flex group-data-give-9/topbar:hidden">
+        <span className="flex group-data-give-9/topbar:sr-only group-data-give-9/topbar:focus-within:not-sr-only">
           <IconButton
             label="Forward"
             icon={ChevronRight}
@@ -127,7 +144,7 @@ export function TopBar() {
               Home
             </li>
           ) : (
-            <li className="group-data-give-4/topbar:hidden">
+            <li className="group-data-give-4/topbar:sr-only group-data-give-4/topbar:focus-within:not-sr-only">
               <TextLink variant="subtle" to="/" search={{}} className="rounded-sm px-1.5 py-1 hover:bg-surface-hover">
                 Home
               </TextLink>
@@ -152,18 +169,14 @@ export function TopBar() {
               {here ? (
                 <>
                   <Separator className="group-data-give-8/topbar:hidden" />
-                  <li aria-current="page" className="px-1.5 font-medium text-text">
-                    {here}
-                  </li>
+                  <Here name={here} />
                 </>
               ) : null}
             </>
           ) : page ? (
             <>
               <Separator className="group-data-give-4/topbar:hidden" />
-              <li aria-current="page" className="px-1.5 font-medium text-text">
-                {page}
-              </li>
+              <Here name={page} />
             </>
           ) : null}
         </ol>
@@ -172,62 +185,66 @@ export function TopBar() {
       {crawlId && status ? (
         <div
           ref={controlsRef}
-          className="flex items-center gap-2 group-data-give-5/topbar:[&_.si-status-pill\_\_count]:sr-only group-data-give-1/topbar:[&_kbd]:hidden"
+          className="flex items-center gap-2 group-data-give-5/topbar:[&_.si-status-pill\_\_count]:sr-only group-data-give-11/topbar:[&_.si-status-pill\_\_word]:sr-only group-data-give-1/topbar:[&_kbd]:hidden"
         >
-          <StatusPill
-            status={status}
-            fetched={live?.progress?.fetched ?? crawl?.fetchedUrlCount ?? null}
-            words={mode}
-          />
-          {controls.canPause ? (
-            <ControlButton
-              title="Pause"
-              icon={Pause}
-              command="crawl.pauseResume"
-              keys
-              onClick={() => void pauseOrResume(crawlId, status)}
-            />
-          ) : null}
-          {controls.canResume ? (
-            <ControlButton
-              title="Resume"
-              icon={Play}
-              command="crawl.pauseResume"
-              keys
-              onClick={() => void pauseOrResume(crawlId, status)}
-            />
-          ) : null}
-          {controls.canStop ? (
-            <ControlButton
-              title="Stop"
-              icon={Square}
-              command="crawl.stop"
-              keys
-              onClick={() => void stopCrawl(crawlId)}
-            />
-          ) : null}
-          {controls.canContinue ? (
-            <ControlButton
-              title="Continue"
-              icon={Play}
-              command="crawl.continue"
-              onClick={() => void continueCrawl(crawlId)}
-            />
-          ) : null}
-          {controls.canAnalyse && crawl?.outOfDate ? (
-            <ControlButton
-              title={mode === 'simple' ? 'Work out the results again' : 'Analyse again'}
-              icon={RefreshCw}
-              command="crawl.analyse"
-              onClick={() => void analyseCrawl(crawlId)}
-            />
-          ) : null}
+          <span className="flex" title={pillWords}>
+            <StatusPill status={status} fetched={fetched} words={mode} />
+          </span>
+          <span className="flex items-center gap-2 group-data-give-10/topbar:hidden">
+            {controls.canPause ? (
+              <ControlButton
+                title="Pause"
+                icon={Pause}
+                command="crawl.pauseResume"
+                keys
+                onClick={() => void pauseOrResume(crawlId, status)}
+              />
+            ) : null}
+            {controls.canResume ? (
+              <ControlButton
+                title="Resume"
+                icon={Play}
+                command="crawl.pauseResume"
+                keys
+                onClick={() => void pauseOrResume(crawlId, status)}
+              />
+            ) : null}
+            {controls.canStop ? (
+              <ControlButton
+                title="Stop"
+                icon={Square}
+                command="crawl.stop"
+                keys
+                onClick={() => void stopCrawl(crawlId)}
+              />
+            ) : null}
+            {controls.canContinue ? (
+              <ControlButton
+                title="Continue"
+                icon={Play}
+                command="crawl.continue"
+                onClick={() => void continueCrawl(crawlId)}
+              />
+            ) : null}
+            {controls.canAnalyse && crawl?.outOfDate ? (
+              <ControlButton
+                title={mode === 'simple' ? 'Work out the results again' : 'Analyse again'}
+                icon={RefreshCw}
+                command="crawl.analyse"
+                onClick={() => void analyseCrawl(crawlId)}
+              />
+            ) : null}
+          </span>
+          {crawlButtons.length > 0 ? <MoreMenu controls={crawlButtons} onRun={run} /> : null}
         </div>
       ) : null}
 
       <span aria-hidden="true" className="flex-1" />
 
-      <SearchButton iconOnly={mode === 'simple'} />
+      {/* With the crawl's controls, search joins them in More (step 10); without, its icon stays. */}
+      <span className={clsx('flex', crawlButtons.length > 0 && 'group-data-give-10/topbar:hidden')}>
+        <SearchButton iconOnly={mode === 'simple'} />
+      </span>
       <ModeSwitch />
     </header>
   );
@@ -300,4 +317,74 @@ function SearchButton({ iconOnly }: { iconOnly: boolean }) {
       </button>
     </Tooltip>
   );
+}
+
+/**
+ * Where you are: the section, or the page. Short of room it's shortened (step 12), never to a letter, its whole name
+ * in its tooltip and read in full; then it goes (step 13), still read.
+ */
+function Here({ name }: { name: string }) {
+  return (
+    <li
+      aria-current="page"
+      title={name}
+      className="flex px-1.5 font-medium text-text group-data-give-12/topbar:min-w-(--topbar-section-min) group-data-give-12/topbar:shrink group-data-give-13/topbar:sr-only"
+    >
+      <span className="min-w-0 truncate">{name}</span>
+    </li>
+  );
+}
+
+type ControlId = 'pause' | 'resume' | 'stop' | 'continue' | 'analyse';
+
+interface ControlEntry {
+  id: ControlId;
+  title: string;
+  command: string;
+}
+
+/** The crawl's controls that show now, in the bar's order. */
+function crawlControlList(controls: ReturnType<typeof crawlControls>, outOfDate: boolean, mode: Mode): ControlEntry[] {
+  return [
+    ...(controls.canPause ? [{ id: 'pause', title: 'Pause', command: 'crawl.pauseResume' } as const] : []),
+    ...(controls.canResume ? [{ id: 'resume', title: 'Resume', command: 'crawl.pauseResume' } as const] : []),
+    ...(controls.canStop ? [{ id: 'stop', title: 'Stop', command: 'crawl.stop' } as const] : []),
+    ...(controls.canContinue ? [{ id: 'continue', title: 'Continue', command: 'crawl.continue' } as const] : []),
+    ...(controls.canAnalyse && outOfDate
+      ? [
+          {
+            id: 'analyse',
+            title: mode === 'simple' ? 'Work out the results again' : 'Analyse again',
+            command: 'crawl.analyse',
+          } as const,
+        ]
+      : []),
+  ];
+}
+
+/**
+ * The bar at its narrowest (step 10): the crawl's controls and search in one menu, named for what's in it, each item
+ * with its key.
+ */
+function MoreMenu({ controls, onRun }: { controls: ControlEntry[]; onRun: (id: ControlId) => void }) {
+  const label = `More: ${[...controls.map((control) => control.title), 'Search'].join(', ')}`;
+  return (
+    <span className="hidden group-data-give-10/topbar:flex">
+      <DropdownMenu align="end" trigger={<IconButton label={label} icon={Ellipsis} size="sm" variant="secondary" />}>
+        {controls.map((control) => (
+          <MenuItem key={control.id} shortcut={commandChord(control.command)} onSelect={() => onRun(control.id)}>
+            {control.title}
+          </MenuItem>
+        ))}
+        <MenuItem shortcut="mod+k" onSelect={() => requestAnimationFrame(() => setOverlay('palette'))}>
+          Search or run a command
+        </MenuItem>
+      </DropdownMenu>
+    </span>
+  );
+}
+
+/** The key a control's command has, shown in its menu item. */
+function commandChord(command: string): string | undefined {
+  return command === 'crawl.pauseResume' ? 'f7' : command === 'crawl.stop' ? 'f8' : undefined;
 }
