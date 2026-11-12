@@ -40,7 +40,7 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         Assert.Equal([$"{Site}/sitemaps/pages-0.xml", $"{Site}/sitemaps/extra.xml", $"{Site}/sitemaps/missing.xml"], list.Sitemaps.Skip(1).Select(sitemap => sitemap.Url));
         Assert.All(list.Sitemaps.Skip(1), sitemap => Assert.Equal((index.Id, SitemapSource.Index, 0, false), (sitemap.ParentId, sitemap.FoundVia, sitemap.Sitemaps, sitemap.IsIndex)));
         var (pages, extra, missing) = (list.Sitemaps[1], list.Sitemaps[2], list.Sitemaps[3]);
-        Assert.Equal((SitemapState.Failed, 404, "HTTP 404", new SitemapUrlCounts(0, 0, 0, 0)), (missing.State, missing.StatusCode, missing.Error, missing.Urls));
+        Assert.Equal((SitemapState.Failed, 404, "404 Not Found", new SitemapUrlCounts(0, 0, 0, 0)), (missing.State, missing.StatusCode, missing.Error, missing.Urls));
         Assert.Equal((SitemapState.Read, 200, null, GridCrawl.PAGES), (pages.State, pages.StatusCode, pages.Error, pages.Entries));
         Assert.Equal((SitemapState.Read, TestCrawls.Count(crawl.Path, $"SELECT url_count FROM sitemaps WHERE id = {extra.Id}")), (extra.State, extra.Entries));
         Assert.True(extra.Entries >= Planted.GetExpectations().Orphans + 3);
@@ -367,7 +367,7 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         var unreachable = With("UPDATE robots SET status_code = 503, content = NULL WHERE origin = $site");
         var failed = RobotsReader.ReadFile(unreachable, Site)!;
         Assert.Equal((RobotsState.Unreachable, 503, null, 0, new RobotsUnmatched(blocked.Count, 0)), (failed.Origin.State, failed.Origin.StatusCode, failed.Origin.Bytes, failed.Lines.Count, failed.Unmatched));
-        Assert.All(RobotsReader.ReadBlocked(unreachable, Site, limit: 1_000)!.Rows, row => Assert.Equal((RobotsBlockReason.Unreachable, "HTTP 503"), (row.Reason, row.Error)));
+        Assert.All(RobotsReader.ReadBlocked(unreachable, Site, limit: 1_000)!.Rows, row => Assert.Equal((RobotsBlockReason.Unreachable, "503 Service Unavailable"), (row.Reason, row.Error)));
         var unanswered = RobotsReader.ReadOrigins(With("UPDATE robots SET status_code = NULL, content = NULL, error = 'Timed out' WHERE origin = $site")).Origins[0];
         Assert.Equal((RobotsState.Unreachable, "Timed out"), (unanswered.State, unanswered.Error));
         Assert.Equal(RobotsState.Missing, RobotsReader.ReadOrigins(With("UPDATE robots SET status_code = NULL, content = NULL, error = 'More than 5 redirects' WHERE origin = $site")).Origins[0].State);

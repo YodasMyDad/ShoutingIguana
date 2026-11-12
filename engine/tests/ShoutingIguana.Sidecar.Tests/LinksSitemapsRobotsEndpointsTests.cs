@@ -220,7 +220,7 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         Assert.Equal(["listed", "fetched", "indexable", "nonIndexable", "robotsDisallowed", "redirectingOrBroken"], index["urls"]!.AsObject().Select(property => property.Key));
         Assert.Equal((1, 2), ((long)index["urls"]!["robotsDisallowed"]!, (long)index["urls"]!["redirectingOrBroken"]!));
         var missing = sitemaps[^1]!;
-        Assert.Equal((grid.Url("/sitemaps/missing.xml"), "index", "failed", 404, "HTTP 404", (int)index["id"]!),
+        Assert.Equal((grid.Url("/sitemaps/missing.xml"), "index", "failed", 404, "404 Not Found", (int)index["id"]!),
             ((string?)missing["url"], (string?)missing["foundVia"], (string?)missing["state"], (int)missing["statusCode"]!, (string?)missing["error"], (int)missing["parentId"]!));
 
         // Each count opens its URLs in the sitemap's grid, which is the URL grid: its columns, filters, sorts and paging.

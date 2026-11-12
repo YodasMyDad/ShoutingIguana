@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Robots.Models;
@@ -318,7 +319,7 @@ public static class RobotsReader
         // An engine from before the error was stored with the URL: the origin's own answer says robots.txt couldn't be read.
         return origin.State == RobotsState.Unreachable
             ? new RobotsBlockedUrl(id, url, RobotsBlockReason.Unreachable, null, null,
-                origin.StatusCode is { } status ? string.Create(CultureInfo.InvariantCulture, $"HTTP {status}") : origin.Error)
+                origin.StatusCode is { } status ? HttpStatusNames.Describe(status) : origin.Error)
             : new RobotsBlockedUrl(id, url, RobotsBlockReason.Unknown, null, null, null);
     }
 }

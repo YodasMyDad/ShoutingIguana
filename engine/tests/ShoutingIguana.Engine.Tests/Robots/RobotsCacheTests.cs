@@ -55,7 +55,7 @@ public sealed class RobotsCacheTests : IAsyncLifetime
         var robots = await harness.GetAsync(_server.BaseUri);
 
         Assert.False(robots.IsAllowed("/"));
-        Assert.Equal($"HTTP {status}", robots.UnreachableReason);
+        Assert.Equal(status switch { 429 => "429 Too Many Requests", 500 => "500 Internal Server Error", _ => "503 Service Unavailable" }, robots.UnreachableReason);
         Assert.Equal(requests, _requests.Count);
         Assert.Equal(1, harness.Observer.Count("robots-unreachable"));
         Assert.Equal(status, Assert.Single(await harness.ReadRecordsAsync()).StatusCode);
@@ -155,7 +155,7 @@ public sealed class RobotsCacheTests : IAsyncLifetime
         Assert.Empty(harness.Observer.Notices);
         var record = Assert.Single(await harness.ReadRecordsAsync());
         Assert.Null(record.StatusCode);
-        Assert.Equal("HTTP 301 redirects to no http or https URL", record.Error);
+        Assert.Equal("301 Moved Permanently redirects to no http or https URL", record.Error);
     }
 
     [Fact]

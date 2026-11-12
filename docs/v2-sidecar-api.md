@@ -604,7 +604,7 @@ An alert is a `CrawlNotice`, kept in the crawl file as the engine raises it (the
   | `blocked` | warning | `host`, `reason` (the firewall or challenge, "Cloudflare challenge"), `count`: the host's responses blocked, 1 on the live event (the one that raised it), and read with `GET /alerts`, the host's blocked responses in the whole crawl so far, every run's. A crawl continued while still blocked has a `blocked` alert for the host in each run, each with that same count, so the UI shows it once, on the latest | Continue more slowly, add headers, another user agent |
   | `mostly-forbidden` | warning | `host`, `count` (the 403s), `sampled` (of the site's first 20 URLs) | As for `blocked` |
   | `start-redirects-away` | warning | `url`: where the start URL leads | Crawl from there instead |
-  | `robots-unreachable` | warning | `origin`, `reason` (`HTTP 503`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
+  | `robots-unreachable` | warning | `origin`, `reason` (`503 Service Unavailable`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
   | `site-unreachable` | warning | `origin`, `reason` (the last error), `durationMs`: the pause between tries | Wait, or stop and continue later |
   | `site-down` | error | `origin`, `durationMs`: how long it hadn't answered | Continue once the site is back |
   | `sitemaps` | info | `count` (sitemaps read), `urlCount` (URLs they list) | Open Sitemaps |
@@ -1714,7 +1714,7 @@ runs (a crawl that fetched a page again has gaps in its link ids: without a link
               "urls":{"listed":265,"fetched":262,"indexable":250,"nonIndexable":12,"robotsDisallowed":1,"redirectingOrBroken":4},
               "listedSitemaps":3},
              {"id":4,"url":"https://www.example.com/sitemaps/missing.xml","parentId":1,"foundVia":"index","state":"failed",
-              "statusCode":404,"isIndex":false,"entries":0,"sitemaps":0,"error":"HTTP 404",
+              "statusCode":404,"isIndex":false,"entries":0,"sitemaps":0,"error":"404 Not Found",
               "urls":{"listed":0,"fetched":0,"indexable":0,"nonIndexable":0,"robotsDisallowed":0,"redirectingOrBroken":0},
               "listedSitemaps":null}]}
 ```
@@ -1727,7 +1727,7 @@ runs (a crawl that fetched a page again has gaps in its link ids: without a link
   (a sitemap index lists it: `parentId` is that index). It's worked out when read, from the stored robots.txt and the
   crawl's options, so it's null for a sitemap neither names any more (robots.txt was read again by a later run, and
   had changed).
-- **`state`** is `read`; `failed` (it couldn't be read, or not to its end: `error` says why, "HTTP 404", "Timed out",
+- **`state`** is `read`; `failed` (it couldn't be read, or not to its end: `error` says why, "404 Not Found", "Timed out",
   the XML parser's message, and the URLs read before the failure are still listed); `notRead` (left unread at the
   crawler's limits of 1,000 sitemaps and 3 levels of index: `error` says which, and there may be more like it); or
   `pending` (found, not read yet: the crawl is running, or stopped first).
@@ -3450,3 +3450,15 @@ its own agreed. All six are fixed, each with a test seen failing without its fix
   query, which refuses it; `invalid-settings` is said to be keyed by a limit's name, `settings` or `limits[n]`; and
   the mock transport answers every E6 call (search, a links view's ends and `linkEnds`, the analysis's limits,
   robots.txt's origins searched and filtered, the synthetic crawl's icon), each a pure answer with tests of its own.
+- **A status in the crawl's own words carries its name** (asked for after the review, for the Simple design's
+  "404 Not Found" in both modes). The sentences the crawl stores with a status in them are now made by the helper an
+  issue's detail uses (`HttpStatusNames.Describe`): a sitemap's `error` ("404 Not Found"), robots.txt's when it
+  couldn't be read (the `robots-unreachable` alert's `reason` "503 Service Unavailable", and each URL it refused
+  "robots.txt unreachable: 503 Service Unavailable", so `/robots/blocked`'s `error`), a robots.txt redirect that
+  can't be followed ("301 Moved Permanently redirects to no http or https URL"), and a firewall's block reason
+  ("Rate limited (429 Too Many Requests)"). A status with no standard name stays as it was: "HTTP 520". **Only crawls
+  made from now on read the new way**: what an earlier engine stored keeps its words ("HTTP 404") in the file and
+  in these answers, which serve what was stored; an issue's detail names it all the same, as before. One answer is
+  worded when read, and so changes for every crawl: `/robots/blocked`'s `error` for a URL refused by an origin whose
+  robots.txt couldn't be read, where the crawl stored no reason with the URL (an earlier engine's), now
+  "503 Service Unavailable" from the origin's stored status.

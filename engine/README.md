@@ -296,8 +296,10 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   previous results.
 - **Details name their status codes.** Where a rule writes a status into a detail it carries its standard name: "404
   Not Found", "301 Moved Permanently" (`Rules/HttpStatusNames`, RFC 9110's reason phrases). A code with no standard
-  name stays "HTTP 599". What the crawl stored with a status in it (a firewall's "Rate limited (HTTP 429)", a
-  sitemap's "HTTP 500") is named the same way when a detail quotes it; the crawl file keeps its own words.
+  name stays "HTTP 599". The crawl stores its own sentences the same way, through the same helper: a sitemap's
+  "404 Not Found", a robots.txt's "503 Service Unavailable" (as the reason of its alert and of the URLs it refused),
+  a firewall's "Rate limited (429 Too Many Requests)". A crawl an earlier engine stored keeps its words ("HTTP 404"),
+  which a detail still names when it quotes them; the crawl file is never rewritten.
 - **What an issue names.** An issue is one check on one URL, with a short detail and the other URL involved. Where a
   page has several (it links to three broken URLs, shows two large images), `issues` keeps the first and
   `issue_targets` every one, so the Issues screen puts the page in the group of each and the inspector counts each as

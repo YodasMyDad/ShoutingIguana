@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Xml;
 using Microsoft.Extensions.Logging;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -159,7 +160,8 @@ internal sealed class SitemapDiscoverer(
             statusCode = (int)response.StatusCode;
             if (statusCode is < 200 or >= 300)
             {
-                error = $"HTTP {statusCode}";
+                // The status by its name, as an issue's detail names it: "404 Not Found" ("HTTP 520" for one with none).
+                error = HttpStatusNames.Describe(statusCode.Value);
             }
             else
             {
