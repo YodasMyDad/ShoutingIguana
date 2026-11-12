@@ -1308,7 +1308,8 @@ giving way, Settings, New crawl in both modes and the crawl's own settings.
 ### The mode
 
 - **One preference**, `settings.mode` (`simple` | `advanced`), kept with the others (`settings.json` in the shell,
-  `localStorage` in a browser). Nothing stored, or an unknown value, reads as `simple`: a first start is Simple.
+  `localStorage` in a browser). A first start, with nothing stored, is Simple; preferences stored before the mode
+  existed (or with a mode this app doesn't know) read as Advanced: that's someone who has used the app as it was.
 - **Read** through `useMode()` (or `getMode()` outside React), in `mode/mode.ts`. **Changed** through
   `switchMode(router, mode)` (`mode/switchMode.ts`), which the switch, Ctrl+Shift+A (`app.mode`), the palette's
   "Switch to …", Settings > General > Mode, "Show them in Advanced" and "Back to Simple" all call. A change the user
@@ -1321,16 +1322,20 @@ giving way, Settings, New crawl in both modes and the crawl's own settings.
 - **Arriving at an Advanced-only screen in Simple** (a link, Back or Forward, a reopened session) turns Advanced on,
   with the toast "Advanced is on" and **Back to Simple** (`mode/useModeGuard.ts`). The guard looks at where each
   navigation lands (`onResolved`) and at the place the app opens on, never at a change of mode, so switching to Simple
-  on such a screen (which then leaves it) isn't undone. A link in Simple to an Advanced-only screen says so in its
-  words ("See it in Advanced").
+  on such a screen (which then leaves it) isn't undone. It turns Advanced on only for a screen that's there: a crawl
+  the library has, and a section of Settings with a file (the route sends any other to General). New crawl does the
+  same, with the same toast, for a setting Simple doesn't show (`focus=userAgent` in Simple). A link in Simple to an
+  Advanced-only screen says so in its words ("See it in Advanced").
 - **`/crawls/:crawl`** opens the crawl's last view in the current mode: in Simple, a last view Simple doesn't have
   opens the Summary.
 - **No inspector in Simple**: the shell leaves the inspector's slot out while a Simple screen is shown
   (`useSimpleScreenShown`). A route still showing its Advanced screen in Simple works as it does in Advanced.
 - **The palette and the `?` sheet** list what's registered, and `useAppCommands` registers each mode's own: in Simple
   its sections (Summary, What to fix, the Report once it exists) on Ctrl+1 to Ctrl+3, its words ("Check a website",
-  "Pause the check", "Work out the results again"), and no Advanced-only command (Go to URLs, Go to URL…, Density)
-  but "Switch to Advanced". A check is found by either of its titles, and shows the mode's own.
+  "Pause the check", "Work out the results again", "Open a site check file…"), and no Advanced-only command (Go to
+  URLs, Go to URL…, Density) but "Switch to Advanced". Both list their groups in the mode's words ("Site check", "Your
+  sites") and, in Simple, none of the grids' or the inspector's keys (`keyboard/modeWords.ts`). A check is found by
+  either of its titles, and shows the mode's own.
 - **Tests, stories and the e2e start in Advanced**, which every screen built before Simple was written for:
   `test/setup.ts` puts `mode: 'advanced'` in place before each test (`replaceSettings`, which doesn't save),
   `.storybook/preview.tsx` before each story, and the e2e's browsers start with it stored (`e2e/storage.ts`,
@@ -1374,8 +1379,8 @@ touch the same lines:
 - **The sidebar** in Simple: Home; the open site; **Summary**, **What to fix** (counting the checks with issues that
   are Serious or Worth fixing, Errors and Warnings, from the same entries as Issues) and **Report** (once it exists);
   "Checking now"; Settings. Advanced's is as built, with Report after a rule once it exists.
-- **The top bar**: the switch at its end (`layout/ModeSwitch.tsx`, a segmented control in words, its tooltip with
-  Ctrl+Shift+A), Simple's section names in the crumbs, the status pill in Simple's words (`StatusPill words`:
+- **The top bar**: the switch at its end (`layout/ModeSwitch.tsx`, a segmented control in words; what it does and
+  Ctrl+Shift+A are on the group, as its description and `aria-keyshortcuts`, and in its tooltip), Simple's section names in the crumbs, the status pill in Simple's words (`StatusPill words`:
   Checking, Stopped early, Working out the results, "2,713 checked"), and search as its icon in Simple. Outside a crawl
   the crumbs name the page (New crawl or Check a website, Settings).
 - **The order of giving way** (`layout/useGiveWay.ts`), measured on the bar's own width, so it holds whatever the
@@ -1410,7 +1415,7 @@ touch the same lines:
   Every new crawl starts from them, and so does Home's Enter: `startCrawl` sends the saved defaults, since a setting
   left out of `POST /api/crawls` takes the engine's default, not the user's.
 - **Data folder**, **Diagnostics** (Copy diagnostics: versions, folders, mode, theme, zoom, page, browser; nothing
-  from a crawl), **Updates**, **About** (with Copy diagnostics in Simple) and **Shortcuts** (the registry's list) show
+  from a crawl, the home folder as `%USERPROFILE%` or `~` and the account name nowhere), **Updates**, **About** (with Copy diagnostics in Simple) and **Shortcuts** (the registry's list) show
   what is true today. Neither the shell nor the sidecar can move the data folder or look for updates, so there's no
   control for either (below).
 
@@ -1427,26 +1432,30 @@ touch the same lines:
   about a setting Simple doesn't show, and settings changed from the engine's defaults, are said above the buttons
   with "Show it in Advanced" or "Show them in Advanced".
 - **Start** is the form's submit and `crawl.start` (Ctrl+Enter, from any control: the form takes the key before a
-  checkbox, which keeps Enter for itself). "Use these choices every time" (Simple) and "Save as my defaults"
-  (Advanced) save the form's options without a start URL or a secret.
+  checkbox, which keeps Enter for itself), one start at a time however it's asked for. A header goes with its value
+  only: a name saved or copied without one is never sent (`sendableHeaders`, which Home's Enter uses too). An HTML
+  limit keeps its bytes unless it's changed. "Use these choices every time" (Simple) saves the form's options once
+  the crawl has started, and "Save as my defaults" (Advanced) at once, each without a start URL or a secret. In
+  Simple, a message about one of its questions is tied to it and in Simple's words.
 - **Secrets** (header values, a proxy's user name and password) live only in the form's state while the app runs:
   never in saved defaults (the app strips them before the sidecar does), never in a crawl file. The OS credential
   store the brief offers, with the user's consent, needs a shell command the shell doesn't have (below), so nothing is
   remembered between runs.
 - **`/new` params**: `url` (the start URL), `from` (a crawl's id: "Crawl again with these", its options and start
-  URL, with a note that header values and a proxy password must be given again), `focus` (`speed`, `headers`,
-  `userAgent`, `robots`: that setting's section open and focus on it; `robots` arrives with robots.txt ignored; in
+  URL, with a note that header values and a proxy password must be given again; a crawl the library no longer has
+  gives the saved defaults, with a note), `focus` (`speed`, `headers`, `proxy`, `userAgent`, `robots`: that setting's section open and focus on it; `robots` arrives with robots.txt ignored; in
   Simple, a setting only Advanced has turns Advanced on). The engine's own defaults, for "changed from the default",
   are a copy in `crawl/options/engineDefaults.ts`, which `e2e/new-crawl.spec.ts` checks against a sidecar with none
   saved.
 - **The crawl's settings** (`/crawls/:crawl/settings?focus=`): what it used, by section, as words, from
   `GET /api/crawls/{id}/options`; "Crawl again with these"; and Continue, for a stopped crawl, with what a continue
-  may change (the speed, the timeout, the headers with their values, the proxy). `needs-secrets` is answered in
-  place: the headers whose values must be given again, the proxy's, and "Continue without" for headers. A running
+  may change (the speed, the timeout, the headers with their values, the proxy), each checked as it's typed (a value
+  that isn't a number is never sent, as the engine would read it as unchanged). It lists the proxy it used by its
+  address, without the credentials. `needs-secrets` is answered in place: the headers whose values must be given again, the proxy's, and "Continue without" for headers. A running
   crawl's card says to stop it first; an ended one has nothing to continue. Overview's alerts lead here: a blocked
   crawl's "Continue more slowly" (`focus=speed`) and "Add headers" (`focus=headers`), and to New crawl for "Crawl as
   another user agent" and "Crawl again with robots.txt ignored" (`from` this crawl). Continue's toast, when a proxy
-  password is needed again, opens this screen.
+  password is needed again, opens this screen on the proxy (`focus=proxy`).
 
 ### What the shell and the engine don't give
 

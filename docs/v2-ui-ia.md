@@ -66,15 +66,15 @@ links and "reopen where I left off" all work.
 | Route | Screen |
 | --- | --- |
 | `/` | Home: the crawl library. Params: `q` (search) |
-| `/new?url=` | New crawl settings, pre-filled. Params: `url` (the start URL), `from` (a crawl's id: its settings, "Crawl again with these"), `focus` (`speed`, `headers`, `userAgent` or `robots`: that setting open and in focus) |
+| `/new?url=` | New crawl settings, pre-filled. Params: `url` (the start URL), `from` (a crawl's id: its settings, "Crawl again with these"), `focus` (`speed`, `headers`, `proxy`, `userAgent` or `robots`: that setting open and in focus) |
 | `/crawls/:crawl` | Goes to the crawl's last view: Overview the first time |
-| `/crawls/:crawl/overview` | Live crawl, then the answer |
+| `/crawls/:crawl/overview` | Live crawl, then the answer. Params: `score` (`1`: the score's breakdown, open) |
 | `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `category` (one category's checks, by its id in the catalog: where Overview's category counts lead), `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
 | `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
 | `/crawls/:crawl/links` | Links. Params: `filter`, `sort` (one key: crawl order, or a column of the target), `cols`, `q`, `inspect`, over the links' columns, either end's included (`to.statusClass`, `from.depth`); `end=from` with `inspect` when the URL inspected is the page a link is on (a target, the default, has no word) |
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps: the list, and one sitemap's URLs (its id in the path). Params on one sitemap: `filter`, `sort`, `q`, `inspect`, as URLs. On the list: `url`, a sitemap's address, which goes on to that sitemap |
 | `/crawls/:crawl/robots/:origin?` | robots.txt: the origins, and one origin's file with the URLs it blocked (the origin in the path). Params on one origin: `line` (the line chosen), `reason` (`unreachable` or `unknown`: the blocked URLs no line accounts for), `inspect` |
-| `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them. Params: `focus` (`speed` or `headers`: what Continue may change, in focus) |
+| `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them. Params: `focus` (`speed`, `headers` or `proxy`: what Continue may change, in focus) |
 | `/crawls/:crawl/report` | Report (Simple): the engine's report in a frame, in both modes. Params: `cut` (`full` or `summary`). There once its screen is (round 4), not found until then |
 | `/settings/:section?` | App settings: `general` (none), `crawl-defaults`, `analysis`, `data`, `shortcuts`, `diagnostics`, `updates`, `about`. Analysis is listed once it can be set; a section there's none of opens General |
 
