@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, Link2, RefreshCw } from 'lucide-react';
+import { Copy, Globe, Link2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
@@ -43,7 +43,7 @@ import { updateSettings, useSettings } from '../settings/settingsStore';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
-import { FilteredEmptyState } from '../ui/EmptyState';
+import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
 import { LiveBadge } from '../ui/LiveBadge';
 import { DropdownMenu, MenuItem, MenuSeparator } from '../ui/Menu';
 import { GridHeader, ResultCount } from '../ui/PageHeader';
@@ -54,6 +54,7 @@ import { linksOfUrl } from './links/linkPlaces';
 import { sortShown } from './links/presets';
 import { SavedViewsMenu, ViewNameDialog } from './urls/SavedViews';
 import { useSavedViews } from './urls/useSavedViews';
+import { noUrlsMatchWords, noUrlsWords } from './urls/urlPlaces';
 import { ANALYSIS_FACETS, URL_FACET_IDS, URL_FACET_TITLES, buildUrlFacets, type UrlFacetValue } from './urls/urlFacets';
 import { UrlFilterChips } from './urls/UrlFilterChips';
 import { FIXED_URL_COLUMNS, FIXED_URL_QUERY_COLUMNS, fixedColumnNames } from './urls/urlGridParts';
@@ -366,6 +367,7 @@ export function UrlsScreen() {
   };
 
   const hasRows = rowCount !== null && rowCount > 0;
+  const noUrls = noUrlsWords(crawling);
   const preset = activeUrlPreset(shown);
   const rowMenu = useRowMenu<UrlRow>();
   const menuRow = rowMenu.state ? rows.getRow(rowMenu.state.index) : undefined;
@@ -723,16 +725,22 @@ export function UrlsScreen() {
             // Live refreshes update in place: the progress line is for a refresh the user asked for.
             busy={rows.isRefreshing && !crawling}
             emptyState={
-              <FilteredEmptyState
-                title={filters.length === 0 && !q ? 'No URLs yet.' : 'No URLs match these filters.'}
-                level="none"
-                filters={
-                  filters.length > 0 ? (
-                    <FilterChips filters={filters} onChange={setFilters} words={words} relatedUrl={relatedUrl} />
-                  ) : undefined
-                }
-                onClear={clearView}
-              />
+              filters.length === 0 && !q ? (
+                <EmptyState title={noUrls.title} icon={Globe} level="none">
+                  {noUrls.why}
+                </EmptyState>
+              ) : (
+                <FilteredEmptyState
+                  title={noUrlsMatchWords(q, filters.length > 0)}
+                  level="none"
+                  filters={
+                    filters.length > 0 ? (
+                      <FilterChips filters={filters} onChange={setFilters} words={words} relatedUrl={relatedUrl} />
+                    ) : undefined
+                  }
+                  onClear={clearView}
+                />
+              )
             }
             className="flex-1 rounded-lg border border-border shadow-1"
           />

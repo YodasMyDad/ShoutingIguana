@@ -72,7 +72,7 @@ describe('the columns shown', () => {
   it('give the URL the room the others leave, never less than its least, so a narrow grid scrolls sideways', () => {
     const shown = ['url', 'statusCode', 'title'];
     expect(urlColumnWidth(shown, URL_COLUMNS, null)).toBeUndefined();
-    expect(urlColumnWidth(shown, URL_COLUMNS, 1000)).toBe(1000 - 88 - 240);
+    expect(urlColumnWidth(shown, URL_COLUMNS, 1000)).toBe(1000 - 104 - 240);
     expect(urlColumnWidth(shown, URL_COLUMNS, 400)).toBe(URL_MIN_WIDTH);
     expect(urlColumnWidth(['title'], URL_COLUMNS, 1000)).toBeUndefined();
   });

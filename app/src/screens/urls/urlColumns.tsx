@@ -279,7 +279,7 @@ function numberWords(column: string, value: number): string {
 
 const TYPE_WIDTHS: Record<UrlColumnType, number> = { number: 96, boolean: 96, enum: 136, text: 240 };
 const WIDTHS: Record<string, number> = {
-  statusCode: 88,
+  statusCode: 104,
   statusClass: 96,
   outcome: 168,
   indexability: 132,

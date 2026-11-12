@@ -9,6 +9,7 @@ import { IconButton } from './IconButton';
 import {
   ContextMenu,
   DropdownMenu,
+  MenuAt,
   MenuCheckboxItem,
   MenuItem,
   MenuLabel,
@@ -121,6 +122,29 @@ export const ContextMenuOnARow: Story = {
               /harpswell-metal-patio-set/
             </div>
           </ContextMenu>
+        </div>
+      </StoryFrame>
+    );
+  },
+};
+
+/**
+ * A menu at a point, opened by something other than a button of its own: a grid row's menu from Shift+F10 or the menu
+ * key, at the corner of the cursor's cell. Esc closes it and the keyboard goes back to the grid.
+ */
+export const MenuAtAPoint: Story = {
+  render: function MenuAtAPoint() {
+    useGridKeys();
+    const [open, setOpen] = useState(true);
+    return (
+      <StoryFrame>
+        <div className="h-(--dialog-width)">
+          <div className="si-card flex h-(--control-height) items-center px-3 font-mono text-12">
+            /harpswell-metal-patio-set/
+          </div>
+          <MenuAt at={{ x: 48, y: 64 }} open={open} onOpenChange={setOpen} label="Menu for /harpswell-metal-patio-set/">
+            <RowMenuItems />
+          </MenuAt>
         </div>
       </StoryFrame>
     );
