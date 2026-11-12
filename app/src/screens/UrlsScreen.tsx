@@ -174,8 +174,16 @@ export function UrlsScreen() {
   const facetsQuery = useMemo(() => ({ filters: [...filters], ...(q ? { search: q } : {}) }), [filters, q]);
   const facetsRead = useQuery({ ...urlGridFacetsQuery(crawlId, facetsQuery), enabled: openFacet !== null });
   const facets = useMemo(
-    () => (facetsRead.data ? buildUrlFacets(facetsRead.data, filters, crawling) : null),
-    [facetsRead.data, filters, crawling],
+    () =>
+      facetsRead.data
+        ? buildUrlFacets(
+            facetsRead.data,
+            filters,
+            crawling,
+            (column) => catalogue.data?.find((entry) => entry.id === column)?.valueTitles,
+          )
+        : null,
+    [facetsRead.data, filters, crawling, catalogue.data],
   );
   const facetsUnavailable = (id: FacetId) => {
     const reason = facetsRead.data?.unavailable.includes(id)

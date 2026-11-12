@@ -223,8 +223,8 @@ export function LinksScreen() {
   const [measure, width] = useElementWidth();
   const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK);
   const columns = useMemo(
-    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth }),
-    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth],
+    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling }),
+    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling],
   );
 
   const summary = first?.summary;

@@ -112,7 +112,8 @@ describe('the Links grid', () => {
     expect(within(refused).getByText('nofollow, sponsored')).toBeVisible();
     // The never-fetched target of a link with no text.
     const hidden = within(table).getByText('/hidden').closest<HTMLElement>('[role="row"]')!;
-    expect(within(hidden).getByText('Not fetched')).toBeVisible();
+    // In the URL grid's words for the same URL.
+    expect(within(hidden).getByText('Not crawled')).toBeVisible();
     expect(within(hidden).getByText('None')).toBeVisible();
     expect(within(hidden).getByText('nofollow')).toBeVisible();
     // A kind that isn't followed or not has no word for it, and no status of 0.

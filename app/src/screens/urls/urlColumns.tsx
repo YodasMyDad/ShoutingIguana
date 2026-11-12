@@ -232,7 +232,10 @@ export function urlColumnHeader(id: string): string {
   return SHORT_HEADERS[id] ?? urlColumnName(id);
 }
 
-/** An enum value as a cell shows it: "Client error", "PDF", "Start URL". */
+/**
+ * An enum value as a cell shows it where the engine gives no words for it (`valueTitles`, which win): the engine's own
+ * words as this version knew them, so the grid, its facets, its chips and the export say the same.
+ */
 const CELL_VALUES: Record<string, Record<string, string>> = {
   indexability: {
     none: 'Indexable',
@@ -251,18 +254,23 @@ const CELL_VALUES: Record<string, Record<string, string>> = {
     script: 'Script',
     stylesheet: 'Stylesheet',
     font: 'Font',
-    media: 'Media',
+    media: 'Media file',
     pdf: 'PDF',
-    other: 'Other',
+    other: 'File',
   },
-  source: { seed: 'Start URL', link: 'Link', sitemap: 'Sitemap', siteVersion: 'Site version check' },
+  source: {
+    seed: 'The start URL',
+    link: 'A link',
+    sitemap: 'A sitemap',
+    siteVersion: 'A probe of the site’s other versions',
+  },
   statusClass: { other: 'Another code', noResponse: 'No response' },
   outcome: OUTCOME_WORDS,
 };
 
-/** An enum value in a cell's words, or the value itself where this version has none (`2xx`). */
-export function urlCellValue(column: string, value: string): string {
-  return CELL_VALUES[column]?.[value] ?? value;
+/** An enum value in a cell's words: the engine's (`titles`, its `valueTitles`), else this version's, else the value. */
+export function urlCellValue(column: string, value: string, titles?: Readonly<Record<string, string>>): string {
+  return titles?.[value] ?? CELL_VALUES[column]?.[value] ?? value;
 }
 
 /** Columns that hold a URL: drawn in the URL's face, a path where it's on the crawl's own site. */
@@ -469,7 +477,7 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
     case 'enum': {
       const words = (row: UrlRow) => {
         const raw = valueOf(row, id);
-        return typeof raw === 'string' ? urlCellValue(id, raw) : '';
+        return typeof raw === 'string' ? urlCellValue(id, raw, column?.valueTitles) : '';
       };
       return {
         ...base,
@@ -539,11 +547,6 @@ export const URL_FILTER_GROUPS: readonly FilterGroup[] = GROUPS.map((group) => (
   title: GROUP_TITLES[group],
 }));
 
-/** An enum value as a filter's sentence has it, in a list of choices: capitalised as the cell shows it. */
-function choiceWords(column: string, value: string): string {
-  return urlCellValue(column, value);
-}
-
 /**
  * What a filter can be on: every column the engine filters by but a URL's id (a filter on one comes from a link, not
  * from typing a number) and a check's own. A column the analysis fills is listed, and can't be chosen without one.
@@ -558,7 +561,7 @@ export function urlFilterColumns(catalogue: readonly UrlColumn[], summaryAvailab
       name: urlColumnName(column.id),
       group: urlColumnGroup(column.id),
       type: column.type,
-      values: column.values.map((value) => ({ value, label: choiceWords(column.id, value) })),
+      values: column.values.map((value) => ({ value, label: urlCellValue(column.id, value, column.valueTitles) })),
       ...(column.needsAnalysis && !summaryAvailable ? { unavailable: NEEDS_ANALYSIS } : {}),
     }));
 }

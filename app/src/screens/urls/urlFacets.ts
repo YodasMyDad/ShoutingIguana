@@ -65,14 +65,19 @@ const SEVERITY: Record<string, string> = {
 };
 
 /** A facet's value in words: "4xx", "404", "Client error", "PDF", "Depth 3", "250–499 ms", "With errors". */
-export function urlFacetValueWords(facet: FacetId, bucket: FacetBucket, crawling = false): string {
+export function urlFacetValueWords(
+  facet: FacetId,
+  bucket: FacetBucket,
+  crawling = false,
+  titles?: Readonly<Record<string, string>>,
+): string {
   const value = bucket.value;
   if (value === null) return noValueWords(facet, crawling);
   switch (facet) {
     case 'statusClass':
     case 'indexability':
     case 'type':
-      return urlCellValue(facet, String(value));
+      return urlCellValue(facet, String(value), titles);
     case 'depth':
       return `Depth ${String(value)}`;
     case 'responseTime':
@@ -107,7 +112,13 @@ export interface UrlFacet {
  * The facets as lists, in the engine's order of values (a column's own order, the unknown last). `filters` are the
  * view's: a value whose filter the view already has is marked, as its count is every URL in view.
  */
-export function buildUrlFacets(page: FacetsPage, filters: readonly GridFilter[], crawling = false): UrlFacet[] {
+export function buildUrlFacets(
+  page: FacetsPage,
+  filters: readonly GridFilter[],
+  crawling = false,
+  /** The engine's words for a column's values (`valueTitles`), by the column's id: the facet's are its column's. */
+  titles: (column: string) => Readonly<Record<string, string>> | undefined = () => undefined,
+): UrlFacet[] {
   return URL_FACET_IDS.flatMap((id) => {
     const buckets = page.facets[id];
     if (!buckets) return [];
@@ -117,7 +128,7 @@ export function buildUrlFacets(page: FacetsPage, filters: readonly GridFilter[],
         title: URL_FACET_TITLES[id],
         values: buckets.map((bucket) => ({
           key: String(bucket.value),
-          words: urlFacetValueWords(id, bucket, crawling),
+          words: urlFacetValueWords(id, bucket, crawling, titles(id)),
           count: bucket.count,
           filter: bucket.filter,
           applied: filters.some((filter) => sameFilters([filter], [bucket.filter])),

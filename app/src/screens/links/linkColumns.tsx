@@ -1,12 +1,13 @@
 // The Links grid's columns, from the engine's list (`GET /api/link-columns`): which are shown, what the query asks
 // for to draw them, and how each cell reads. A column the engine adds appears in the chooser with no work here: its
 // type says how it's drawn, and its name is worded from its id until this file has better words for it.
-import type { GridSort, LinkColumn, LinkRow, UrlColumnType, UrlOutcome } from '../../api/grids';
+import type { GridSort, LinkColumn, LinkRow, StatusClass, UrlColumnType, UrlOutcome } from '../../api/grids';
 import type { ChooserGroup } from '../../grid/ColumnChooser';
 import type { FilterColumn, FilterGroup } from '../../grid/filterEditing';
 import type { GridColumn } from '../../grid/types';
 import { midPhrase } from '../../grid/urlFilterWords';
-import { FLAG_WORDS, OUTCOME_WORDS } from '../../inspector/words';
+import { FLAG_WORDS } from '../../inspector/words';
+import { urlStatusWords } from '../urls/urlColumns';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
@@ -63,12 +64,14 @@ export function shownLinkColumns(
 }
 
 /**
- * What the query asks for, to draw these columns: each end's id always (a URL opens the inspector by it), the four
+ * What the query asks for, to draw these columns: each end's id and URL always (a URL opens the inspector by its id,
+ * and a row's menu opens and copies it), the four
  * columns the follow column is made of, and, with an end's status, how it answered, so no status reads as what
  * happened ("Blocked by robots.txt") and never as a guess.
  */
 export function linkQueryColumns(shown: readonly string[]): string[] {
-  const asked = new Set<string>(['from.id', 'to.id']);
+  // Each end's URL too, shown or not: a row's menu opens and copies the URL of the end it was opened in.
+  const asked = new Set<string>(['from.id', 'to.id', 'from.url', 'to.url']);
   for (const id of shown) {
     if (id === FOLLOW_COLUMN) FOLLOW_PARTS.forEach((part) => asked.add(part));
     else asked.add(id);
@@ -76,26 +79,31 @@ export function linkQueryColumns(shown: readonly string[]): string[] {
     if (end?.column === 'statusCode') {
       asked.add(`${end.end}.outcome`);
       asked.add(`${end.end}.fetched`);
+      asked.add(`${end.end}.statusClass`);
     }
   }
   return [...asked];
 }
 
-/** A URL the crawl has an outcome for that this version has no words for. */
-const NO_STATUS = 'No status';
-/** A URL the crawl has no answer from: queued, never reached, not followed. Which, only the inspector can say. */
-const NOT_FETCHED = 'Not fetched';
-
 /**
- * An end's status as text: its code, or what happened instead. With no code the crawl's own outcome says why
- * ("Blocked by robots.txt", "Timed out", "Not checked"); with no outcome either, the URL was never fetched.
+ * An end's status as text: its code, or what happened instead, in the URL grid's words for the same URL (one helper,
+ * `urlStatusWords`): the crawl's own outcome ("Blocked by robots.txt", "Timed out", "Not checked"); with none, "Not
+ * crawled", or "Not crawled so far" while the crawl runs. Never a guess, and never 0.
  */
-export function endStatusWords(row: LinkRow, end: 'from' | 'to'): string {
-  const code = row[`${end}.statusCode`];
-  if (typeof code === 'number') return String(code);
-  const outcome = row[`${end}.outcome`];
-  if (typeof outcome === 'string' && outcome in OUTCOME_WORDS) return OUTCOME_WORDS[outcome as UrlOutcome];
-  return row[`${end}.fetched`] === true ? NO_STATUS : NOT_FETCHED;
+export function endStatusWords(row: LinkRow, end: 'from' | 'to', crawling = false): string {
+  const field = (column: string) => row[`${end}.${column}`] ?? null;
+  const code = field('statusCode');
+  const fetched = field('fetched');
+  return urlStatusWords(
+    {
+      id: 0,
+      statusCode: typeof code === 'number' ? code : null,
+      statusClass: field('statusClass') as StatusClass | null,
+      outcome: field('outcome') as UrlOutcome | null,
+      fetched: typeof fetched === 'boolean' ? fetched : null,
+    },
+    crawling,
+  );
 }
 
 /**
@@ -170,6 +178,8 @@ export interface LinkColumnContext {
   /** Opens the inspector on one of a link's ends. */
   onOpen: (urlId: number, end: 'from' | 'to') => void;
   sort: readonly GridSort[];
+  /** The crawl is running: an end not crawled yet may still be. */
+  crawling?: boolean | undefined;
   /** A width for each URL column, when the grid has room to share between them. */
   urlWidth?: number | undefined;
 }
@@ -235,14 +245,14 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
         const code = row[`${end.end}.statusCode`];
         if (typeof code === 'number') return <StatusCode code={code} />;
         // What happened instead of a status can be longer than the column: whole in its tooltip.
-        const words = endStatusWords(row, end.end);
+        const words = endStatusWords(row, end.end, context.crawling);
         return (
           <span className="flex min-w-0" title={words}>
             <StatusCode code={null} reason={words} />
           </span>
         );
       },
-      text: (row) => endStatusWords(row, end.end),
+      text: (row) => endStatusWords(row, end.end, context.crawling),
     };
   }
   const value = (row: LinkRow) => (row as unknown as Record<string, CellValue>)[id];

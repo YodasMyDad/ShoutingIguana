@@ -323,3 +323,15 @@ describe('a facet’s value chosen on a view already filtered on its column', ()
     ).toHaveLength(2);
   });
 });
+
+describe('the engine’s words for a value', () => {
+  it('are the filter editor’s choices', () => {
+    const columns = URL_COLUMNS.map((column) =>
+      column.id === 'type' ? { ...column, valueTitles: { media: 'Audio or video' } } : column,
+    );
+    const type = urlFilterColumns(columns, true).find((column) => column.id === 'type');
+    expect(type?.values.find((value) => value.value === 'media')?.label).toBe('Audio or video');
+    // Where the engine gives none, this version's words, which are the engine's as it knew them.
+    expect(type?.values.find((value) => value.value === 'other')?.label).toBe('File');
+  });
+});

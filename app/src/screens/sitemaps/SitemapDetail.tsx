@@ -530,7 +530,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
             void navigate({
               to: '/crawls/$crawl/urls',
               params: { crawl: crawlId },
-              search: { filter: oneUrlFilter(menuRow.url), inspect: menuRow.id },
+              search: { filter: oneUrlFilter(menuRow.url, menuRow.id), inspect: menuRow.id },
             });
           }}
         >

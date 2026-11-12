@@ -5,7 +5,7 @@ import { createMemoryHistory } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FacetsQuery, GridQuery, SummaryState, UrlRow } from '../api/grids';
+import type { FacetsQuery, GridQuery, SummaryState, UrlColumn, UrlRow } from '../api/grids';
 import { answerFacets, answerGridQuery } from '../api/mock/gridQuery';
 import { URL_COLUMNS } from '../api/mock/urlColumns';
 import { gridPagesOf } from '../api/queries';
@@ -32,7 +32,9 @@ import { URL_PRESETS } from './urls/urlColumns';
 const URLS = `/crawls/${TEST_CRAWL_ID}/urls`;
 const ANALYSED: SummaryState = { available: true, reason: null };
 
-function sidecar(options: { status?: CrawlStatus; summary?: SummaryState; rows?: UrlRow[] } = {}) {
+function sidecar(
+  options: { status?: CrawlStatus; summary?: SummaryState; rows?: UrlRow[]; columns?: UrlColumn[] } = {},
+) {
   const summary = options.summary ?? ANALYSED;
   const item = testCrawlItem({ status: options.status ?? 'completed', analyzedAt: '2026-11-01T10:21:00Z' });
   const state = { rows: options.rows ?? TEST_URL_ROWS };
@@ -54,7 +56,7 @@ function sidecar(options: { status?: CrawlStatus; summary?: SummaryState; rows?:
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
-    ['GET', /^\/api\/url-columns$/, () => json(URL_COLUMNS)],
+    ['GET', /^\/api\/url-columns$/, () => json(options.columns ?? URL_COLUMNS)],
     ['GET', /^\/api\/checks$/, () => json(ISSUES_CHECKS)],
     ...routes,
   ]);
@@ -327,5 +329,23 @@ describe('saved views', () => {
     // The toast's own pointer handling needs a real pointer: a click is what a press gives it.
     fireEvent.click(within(toast.closest('li')!).getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(getSettings().savedViews).toHaveLength(1));
+  });
+});
+
+describe('the words for an enum’s values', () => {
+  it('are the engine’s, in the cell, the facet, the filter editor and the chip alike', async () => {
+    const columns = URL_COLUMNS.map((column) =>
+      column.id === 'type' ? { ...column, valueTitles: { page: 'Web page', media: 'Audio or video' } } : column,
+    );
+    sidecar({ columns, rows: [{ id: 1, url: 'https://example.com/clip.mp4', type: 'media' }] });
+    const filter = [{ column: 'type', op: 'in', values: ['media'] }];
+    const { user, grid } = await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    await within(grid).findByText('Audio or video');
+    const chips = screen.getByRole('group', { name: 'Filters' });
+    expect(within(chips).getByRole('button', { name: 'Remove the filter Type is audio or video' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Filter by type' }));
+    expect(
+      await within(await screen.findByRole('menu')).findByRole('menuitem', { name: /^Audio or video/ }),
+    ).toBeVisible();
   });
 });

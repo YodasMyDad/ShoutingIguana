@@ -1,4 +1,4 @@
-// Review proof: the Links grid asks the engine only for the columns it shows (linkQueryColumns: from.id, to.id and the
+// the Links grid asks the engine only for the columns it shows (linkQueryColumns: from.id, to.id and the
 // shown ones), and the engine answers with only those (LinkGridReader.Shown). The row menu reads `${end}.url` from the
 // row, so with the Target URL column hidden its URL items are dead. The fake sidecar here answers with the asked
 // columns only, as the engine does.
@@ -37,7 +37,7 @@ function projecting(routes: FakeRoute[]): FakeRoute[] {
   });
 }
 
-describe('review: the Links row menu with the Target URL column hidden', () => {
+describe('the Links row menu with the Target URL column hidden', () => {
   async function menuOn(cols: string) {
     const { routes } = linksRoutes();
     setTransport(fakeSidecar(projecting(routes)));

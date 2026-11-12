@@ -1,10 +1,12 @@
 // The URL grid's words for its filters' chips: a column's name, an enum's value, a check's title, a URL named by its
 // id. Names, never ids: a check or a URL being read reads "Loading…", and one that can't be read says so in words.
+import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { urlColumnsQuery } from '../../api/queries';
 import type { GridFilter } from '../../api/grids';
 import type { FilterWords } from '../../grid/filterSentence';
 import { useCheckWords } from '../../grid/useCheckWords';
-import { urlEmptyWords, urlValueWords } from '../../grid/urlFilterWords';
+import { midPhrase, urlEmptyWords, urlValueWords } from '../../grid/urlFilterWords';
 import { useUrlWords } from '../../grid/useUrlWords';
 import { urlColumnName } from './urlColumns';
 
@@ -27,6 +29,9 @@ export function useUrlFilterWords(
   siteOrigin: string | null,
 ): { words: FilterWords; relatedUrl: (urlId: number) => string } {
   const checkWords = useCheckWords(filters.some((filter) => filter.column === 'check'));
+  // The engine's list of columns, read once for the app: its words for each enum's values.
+  const catalogue = useQuery(urlColumnsQuery()).data;
+  const titles = (column: string) => catalogue?.find((entry) => entry.id === column)?.valueTitles;
   const ids = useMemo(() => urlIdsOf(filters), [filters]);
   const relatedUrl = useUrlWords(crawlId, ids, siteOrigin);
   const words: FilterWords = {
@@ -35,8 +40,10 @@ export function useUrlFilterWords(
       if (column === 'check') return checkWords(value);
       // A URL named by its id reads as the URL, as the grid shows it.
       if (column === 'id' && typeof value === 'number') return relatedUrl(value);
-      // A number this list has no words for reads with its thousands separators (the sentence's default).
-      return urlValueWords(column, value);
+      // The engine's words for an enum's value, as the cell and the facet say it, inside a sentence ("Type is media
+      // file"); else this version's; a number with no words reads with its thousands separators (the default).
+      const title = typeof value === 'string' ? titles(column)?.[value] : undefined;
+      return title !== undefined ? midPhrase(title) : urlValueWords(column, value);
     },
     empty: urlEmptyWords,
   };

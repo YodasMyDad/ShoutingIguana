@@ -63,7 +63,7 @@ export function IssuePageMenu<Row>({
               void navigate({
                 to: '/crawls/$crawl/urls',
                 params: { crawl: crawlId },
-                search: { filter: oneUrlFilter(page.url), inspect: page.id },
+                search: { filter: oneUrlFilter(page.url, page.id), inspect: page.id },
               })
             }
           >
