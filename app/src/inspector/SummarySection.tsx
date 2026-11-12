@@ -102,6 +102,7 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
                 detail={detail}
               />
               <PlainTexts name="H1" none="The page has no H1." texts={detail.content.h1s} />
+              {measures.url ? <ScaleMeter measure={measures.url} detail={detail} /> : null}
             </div>
           </Block>
           <ContentFacts detail={detail} wordsMeasure={measures.words} />

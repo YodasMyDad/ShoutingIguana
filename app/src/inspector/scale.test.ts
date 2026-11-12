@@ -197,12 +197,30 @@ describe('measuresOf', () => {
       response: null,
       htmlSize: null,
       imageSize: null,
+      url: null,
     });
 
     const noTimes = measuresOf(testUrlDetail({ response: testResponse({ responseMs: null, bodyBytes: null }) }));
     expect(noTimes.response).toBeNull();
     expect(noTimes.htmlSize).toBeNull();
     expect(noTimes.words).not.toBeNull();
+  });
+
+  it('draws a page’s URL length on its limit by the check’s own measure, and flags it past the limit', () => {
+    const within = measuresOf(testUrlDetail({ urlLength: 115 })).url;
+    expect(within).toMatchObject({ state: 'within', valueText: '115 characters', limitText: 'Limit 115 characters' });
+    expect(within?.checkId).toBeNull();
+    const over = measuresOf(testUrlDetail({ urlLength: 130 })).url;
+    expect(over).toMatchObject({
+      state: 'over',
+      note: '15 over the 115 limit',
+      checkId: 'url-too-long',
+      label: 'URL length',
+    });
+    // Not for what isn't a page (the check judges pages), nor from an engine that doesn't send it.
+    expect(measuresOf(testUrlDetail({ urlLength: 130, type: 'image', content: null })).url).toBeNull();
+    expect(measuresOf(testUrlDetail({ urlLength: null })).url).toBeNull();
+    expect(measuresOf(testUrlDetail()).url).toBeNull();
   });
 
   it('doesn’t read a file’s size as a page’s', () => {

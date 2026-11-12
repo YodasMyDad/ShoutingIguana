@@ -82,6 +82,8 @@ const inspect = (urlId: number) => <InspectorApp path={`${URLS}?inspect=${urlId}
 
 const HOME = testUrlDetail({ id: 1, url: 'https://example.com/', issues: [] });
 const PAGE = testUrlDetail({
+  // E3c: the URL's length by the check's measure, drawn on its limit.
+  urlLength: 21,
   issues: [
     {
       checkId: 'internal-client-error',
@@ -336,6 +338,7 @@ export const LongValues: Story = {
         urls: {
           2: testUrlDetail({
             url: LONG_URL,
+            urlLength: LONG_URL.length,
             content: {
               ...PAGE.content!,
               titles: [{ text: LONG_TEXT, length: LONG_TEXT.length }],

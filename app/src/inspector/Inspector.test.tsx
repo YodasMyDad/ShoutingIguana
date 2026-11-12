@@ -172,6 +172,16 @@ describe('the summary', () => {
     );
   });
 
+  it('draws the URL’s length on its limit, by the check’s own measure (urlLength)', async () => {
+    const { inspector } = await open(`${URLS}?inspect=2`, {
+      ...SITE,
+      urls: { 1: HOME, 2: { ...PAGE, urlLength: 130 }, 3: OTHER },
+    });
+    const meter = await within(inspector).findByRole('meter', { name: 'URL length' });
+    expect(meter).toHaveAttribute('aria-valuetext', '130 characters, Limit 115 characters, over the limit');
+    expect(within(inspector).getByText('15 over the 115 limit')).toBeVisible();
+  });
+
   it('says a title of full-width characters in characters and in the width the limit counts', async () => {
     const title = '庭の家具とパティオセットの専門店'.repeat(3);
     const wide = testUrlDetail({
@@ -1329,6 +1339,41 @@ describe('loading, failing and not there', () => {
     expect(await within(inspector).findByRole('tab', { name: 'Inlinks 2' })).toBeVisible();
     expect(within(inspector).queryByRole('status', { name: 'Loading the summary' })).toBeNull();
     expect(within(inspector).queryByRole('progressbar', { name: 'Reading this URL again' })).toBeNull();
+  });
+});
+
+describe('the tabs’ link counts while a crawl runs', () => {
+  /** The reads one tick of the crawl makes for the URL shown, on its Summary: the URL's own, and the link counts'. */
+  async function readsPerTick(detail: UrlDetail) {
+    const linking = [testLinkRow({ id: 1, url: HOME.url }), testLinkRow({ id: 3, url: OTHER.url })];
+    sidecar = fakeSidecar([
+      ...inspectorRoutes({ urls: { 2: detail }, inlinks: { 2: linking } }),
+      ...issuesRoutes({ item: { status: 'running' } }),
+    ]);
+    setTransport(sidecar);
+    const queryClient = createQueryClient();
+    const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [`${URLS}?inspect=2`] }));
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
+    expect(await within(inspector).findByRole('tab', { name: 'Inlinks 2' })).toBeVisible();
+    const reads = () =>
+      sidecar.requests.filter((request) => /\/urls\/(inspect|inlinks|outlinks)$/.test(request.path)).length;
+    // Once the inspector has settled, a tick: what the live bridge does, everything read about the URLs inspected.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+    const before = reads();
+    await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.urlDetails(TEST_CRAWL_ID) }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 100)));
+    expect(within(inspector).getByRole('tab', { name: 'Inlinks 2' })).toBeVisible();
+    return reads() - before;
+  }
+
+  it('come with the URL’s own read (linkTotals): one read a tick for the URL shown', async () => {
+    expect(await readsPerTick({ ...PAGE, linkTotals: { inlinks: 2, outlinks: 0 } })).toBe(1);
+  });
+
+  it('are read from the link lists from an earlier engine, which doesn’t send them: three reads a tick', async () => {
+    expect(await readsPerTick(PAGE)).toBe(3);
   });
 });
 

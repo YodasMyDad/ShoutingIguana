@@ -91,9 +91,10 @@ function useSettled<T>(value: T, delayMs: number): T | undefined {
 }
 
 /**
- * How many links the Inlinks or Outlinks section lists, for its tab: every kind, as the section shows them. Live: the
- * key is under the URL's own read on purpose, so a crawl's tick refreshes the counts with the summary, never behind
- * it. That's two more small reads a tick for the URL shown: only the link endpoints know these totals.
+ * How many links the Inlinks or Outlinks section lists, for its tab, from an engine before E3c, whose `/urls/inspect`
+ * doesn't give them (`linkTotals`): every kind, as the section shows them. Live: the key is under the URL's own read
+ * on purpose, so a crawl's tick refreshes the counts with the summary, never behind it. That's two more small reads a
+ * tick for the URL shown, which E3c's `linkTotals` makes none.
  */
 function useLinkCount(crawlId: string, urlId: number, direction: 'inlinks' | 'outlinks', enabled: boolean) {
   return useQuery({
@@ -287,18 +288,22 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
     'app',
   );
 
-  // Counted once the inspector settles on the URL, and only for a URL the crawl has.
-  const settled = useSettled(urlId, LINK_COUNT_DELAY_MS) === urlId && !notFound;
-  const inlinks = useLinkCount(crawlId, urlId, 'inlinks', settled);
-  const outlinks = useLinkCount(crawlId, urlId, 'outlinks', settled);
+  // The tabs' link counts come with the URL's own read (E3c's `linkTotals`). From an earlier engine they're read from the
+  // link lists, once the inspector settles on the URL, and only for a URL the crawl has.
+  const totalsKnown = state.status === 'ready' && state.detail.linkTotals !== undefined;
+  const settled = useSettled(urlId, LINK_COUNT_DELAY_MS) === urlId && !notFound && state.status === 'ready';
+  const inlinks = useLinkCount(crawlId, urlId, 'inlinks', settled && !totalsKnown);
+  const outlinks = useLinkCount(crawlId, urlId, 'outlinks', settled && !totalsKnown);
 
   const tabs = useMemo<TabItem<SectionId>[]>(() => {
     const counts: Partial<Record<SectionId, number>> =
       state.status === 'ready' ? sectionCounts(state.detail, hiddenChecks) : {};
-    if (inlinks !== undefined && inlinks > 0) counts.inlinks = inlinks;
-    else delete counts.inlinks;
-    if (outlinks !== undefined && outlinks > 0) counts.outlinks = outlinks;
-    else delete counts.outlinks;
+    if (!totalsKnown) {
+      if (inlinks !== undefined && inlinks > 0) counts.inlinks = inlinks;
+      else delete counts.inlinks;
+      if (outlinks !== undefined && outlinks > 0) counts.outlinks = outlinks;
+      else delete counts.outlinks;
+    }
     const fromDetail = (id: SectionId, render: (detail: UrlDetail) => ReactNode): ReactNode => {
       if (state.status === 'ready') {
         return (
@@ -335,7 +340,7 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
       ),
     };
     return SECTION_IDS.map((id) => ({ value: id, label: SECTION_TITLES[id], count: counts[id], content: content[id] }));
-  }, [state, inlinks, outlinks, choose, urlId, searchRequest, searchFocused, hiddenChecks]);
+  }, [state, totalsKnown, inlinks, outlinks, choose, urlId, searchRequest, searchFocused, hiddenChecks]);
 
   const refreshing = query.isFetching && !waiting && !crawling;
   const compact = dock === 'bottom';

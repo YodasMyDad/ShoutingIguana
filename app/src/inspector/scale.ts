@@ -25,7 +25,7 @@ export function readOnScale(value: number, range: ScaleRange): ScaleReading {
   return { state: 'within', by: 0 };
 }
 
-export type MeasureId = 'title' | 'description' | 'words' | 'response' | 'htmlSize' | 'imageSize';
+export type MeasureId = 'title' | 'description' | 'words' | 'response' | 'htmlSize' | 'imageSize' | 'url';
 
 /** A value drawn on its scale, with its words. */
 export interface Measure extends ScaleRange, ScaleReading {
@@ -228,6 +228,25 @@ export function imageSizeMeasure(sizeBytes: number, limits: ContentLimits): Meas
   );
 }
 
+/**
+ * A page's URL length against the analysis's limit, by the check's own measure (E3c's `urlLength`: the URL as people
+ * read it, escapes decoded and the host in its own script, in characters as a reader counts them).
+ */
+export function urlLengthMeasure(length: number, limits: ContentLimits): Measure {
+  return measure(
+    {
+      id: 'url',
+      label: 'URL length',
+      max: limits.maxUrlLength,
+      format: characters,
+      formatAmount: formatCount,
+      limitText: `Limit ${characters(limits.maxUrlLength)}`,
+      over: 'url-too-long',
+    },
+    length,
+  );
+}
+
 export interface UrlMeasures {
   /** One per title on the page, in page order. */
   titles: Measure[];
@@ -237,10 +256,14 @@ export interface UrlMeasures {
   htmlSize: Measure | null;
   /** For an image that answered: its size against the limit for images. */
   imageSize: Measure | null;
+  /** A page's URL length, as the check measures it; null from an engine that doesn't send it (before E3c). */
+  url: Measure | null;
 }
 
 /** Every value of a URL that has a limit. A value the crawl doesn't have has no measure, never one of 0. */
-export function measuresOf(detail: Pick<UrlDetail, 'type' | 'content' | 'response' | 'limits'>): UrlMeasures {
+export function measuresOf(
+  detail: Pick<UrlDetail, 'type' | 'content' | 'response' | 'limits'> & Partial<Pick<UrlDetail, 'urlLength'>>,
+): UrlMeasures {
   const { content, response, limits } = detail;
   const number = (value: number | null | undefined) =>
     value !== null && value !== undefined && Number.isFinite(value) ? value : null;
@@ -257,6 +280,8 @@ export function measuresOf(detail: Pick<UrlDetail, 'type' | 'content' | 'respons
     response: responseMs === null ? null : responseMeasure(responseMs, limits),
     htmlSize: bodyBytes === null || content === null ? null : htmlSizeMeasure(bodyBytes, limits),
     imageSize: image && sizeBytes !== null ? imageSizeMeasure(sizeBytes, limits) : null,
+    // The check judges pages: a URL's length is drawn on its limit where it's a page's.
+    url: content && number(detail.urlLength) !== null ? urlLengthMeasure(number(detail.urlLength) ?? 0, limits) : null,
   };
 }
 
