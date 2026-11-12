@@ -185,6 +185,15 @@ export function validateNewCrawlSearch(search: Record<string, unknown>): NewCraw
   });
 }
 
+export interface OverviewSearch {
+  /** The score's breakdown, open over the Summary (Simple) or Overview: "How the score is worked out". */
+  score?: 1 | undefined;
+}
+
+export function validateOverviewSearch(search: Record<string, unknown>): OverviewSearch {
+  return strictSearch(search, { score: search.score === 1 || search.score === '1' ? 1 : undefined });
+}
+
 export interface CrawlSettingsSearch {
   /** The setting to put focus on: what Continue may change (`speed`, `headers`). */
   focus?: SettingFocus | undefined;

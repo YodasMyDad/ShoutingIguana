@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { createMemoryHistory } from '@tanstack/react-router';
+import { validateReportSearch } from '../routing/search';
 import { advancedOnlyScreen, simpleLanding } from './modeRoutes';
+import { createQueryClient } from './queryClient';
+import { createAppRouter } from './router';
 
 const CRAWL = '/crawls/0123456789abcdef';
 
@@ -52,5 +56,22 @@ describe('where switching to Simple lands', () => {
       to: '/settings/{-$section}',
       params: { section: undefined },
     });
+  });
+});
+
+describe('the search params round 4’s screens read', () => {
+  it.each([
+    [`${CRAWL}/overview?score=1`, { score: 1 }],
+    [`${CRAWL}/issues/title-too-long?severity=error&q=title`, { severity: ['error'], q: 'title' }],
+  ])('%s keeps them, before any Simple screen exists', async (path, search) => {
+    const router = createAppRouter(createQueryClient(), createMemoryHistory({ initialEntries: [path] }));
+    await router.load();
+    // The search as the route validated it: what its screen reads.
+    expect(router.state.matches.at(-1)?.search).toMatchObject(search);
+  });
+
+  it('keeps the Report’s cut, which its route checks while the Report has no screen yet', () => {
+    expect(validateReportSearch({ cut: 'summary' })).toMatchObject({ cut: 'summary' });
+    expect(validateReportSearch({ cut: 'everything' }).cut).toBeUndefined();
   });
 });

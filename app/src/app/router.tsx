@@ -28,6 +28,7 @@ import {
   validateLinksSearch,
   validateNewCrawlSearch,
   validateNoSearch,
+  validateOverviewSearch,
   validateReportSearch,
   validateRobotsSearch,
   validateSitemapsSearch,
@@ -107,7 +108,7 @@ const crawlIndexRoute = createRoute({
 const overviewRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'overview',
-  validateSearch: validateNoSearch,
+  validateSearch: validateOverviewSearch,
   component: modeScreen(
     'overview',
     lazyRouteComponent(() => import('../screens/OverviewScreen'), 'OverviewScreen'),

@@ -5,6 +5,7 @@ import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { onAnnounce } from '../feedback/announce';
 import { installKeyboard } from '../keyboard/registry';
 import { DEFAULT_SETTINGS, readSettings } from '../settings/schema';
@@ -121,13 +122,14 @@ describe('the shell in Simple', () => {
     // One check found Errors; the two that found Notices are things worth a look, not on the count.
     const toFix = sidebar().getByRole('link', { name: /^What to fix/ });
     await waitFor(() => expect(toFix).toHaveTextContent(/^What to fix\s*1$/));
-    // No Advanced-only section, and no Report until its screen exists.
-    for (const name of [/URLs/, /Links/, /Sitemaps/, /robots\.txt/, /Report/, /Errors/]) {
+    // No Advanced-only section; Report once its screen exists (app/simpleScreens.ts), third.
+    for (const name of [/URLs/, /Links/, /Sitemaps/, /robots\.txt/, /Errors/]) {
       expect(sidebar().queryByRole('link', { name })).toBeNull();
     }
+    expect(sidebar().queryAllByRole('link', { name: /Report/ })).toHaveLength(SIMPLE_SCREENS.report ? 1 : 0);
     // The top bar: the section by Simple's name, and search as its icon.
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(crumbs).getByText('Summary')).toHaveAttribute('aria-current', 'page');
+    expect(within(crumbs).getByText('Summary').closest('li')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'Search or run a command' })).toHaveAttribute('data-icon-only');
   });
 
@@ -138,6 +140,7 @@ describe('the shell in Simple', () => {
     for (const name of [/Overview/, /URLs/, /Links/, /Sitemaps/, /robots\.txt/, /Errors/]) {
       expect(sidebar().getAllByRole('link', { name })[0]).toBeVisible();
     }
-    expect(sidebar().queryByRole('link', { name: /Report/ })).toBeNull();
+    // Report joins as the eighth once its screen exists.
+    expect(sidebar().queryAllByRole('link', { name: /Report/ })).toHaveLength(SIMPLE_SCREENS.report ? 1 : 0);
   });
 });

@@ -79,13 +79,14 @@ export function TopBar() {
   // A control pressed goes once it has worked (Pause becomes Resume, Stop goes while the crawl stops): focus goes to
   // the control that took its place, or to the view when none did, never to the page.
   const controlsRef = useRef<HTMLDivElement>(null);
-  useFocusRescue(
-    controlsRef,
-    () =>
-      [...(controlsRef.current?.querySelectorAll<HTMLElement>('button') ?? [])].find(
-        (button) => button.getClientRects().length > 0,
-      ) ?? document.getElementById('main'),
-  );
+  // At the bar's narrowest (step 10) the controls are in More: focus goes to More.
+  useFocusRescue(controlsRef, () => {
+    const inMore = barRef.current?.hasAttribute('data-give-10') === true;
+    return (
+      controlsRef.current?.querySelector<HTMLElement>(inMore ? '[data-more] button' : '[data-controls] button') ??
+      document.getElementById('main')
+    );
+  });
 
   const date = crawl?.startedAt ? formatExactTime(crawl.startedAt) : null;
   const site = crawlId ? crawlName(crawl) : null;
@@ -190,7 +191,7 @@ export function TopBar() {
           <span className="flex" title={pillWords}>
             <StatusPill status={status} fetched={fetched} words={mode} />
           </span>
-          <span className="flex items-center gap-2 group-data-give-10/topbar:hidden">
+          <span data-controls="" className="flex items-center gap-2 group-data-give-10/topbar:hidden">
             {controls.canPause ? (
               <ControlButton
                 title="Pause"
@@ -369,7 +370,7 @@ function crawlControlList(controls: ReturnType<typeof crawlControls>, outOfDate:
 function MoreMenu({ controls, onRun }: { controls: ControlEntry[]; onRun: (id: ControlId) => void }) {
   const label = `More: ${[...controls.map((control) => control.title), 'Search'].join(', ')}`;
   return (
-    <span className="hidden group-data-give-10/topbar:flex">
+    <span data-more="" className="hidden group-data-give-10/topbar:flex">
       <DropdownMenu align="end" trigger={<IconButton label={label} icon={Ellipsis} size="sm" variant="secondary" />}>
         {controls.map((control) => (
           <MenuItem key={control.id} shortcut={commandChord(control.command)} onSelect={() => onRun(control.id)}>

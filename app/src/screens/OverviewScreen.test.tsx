@@ -882,14 +882,15 @@ describe('the Overview while the crawl runs', () => {
     const { queryClient } = await open();
     await heard(message('progress', progressAt(100, POLITE)));
     const bar = within(document.querySelector('header')!);
-    const pause = bar.getByRole('button', { name: /Pause/ });
+    // By its own name: More (the bar at its narrowest) names Pause and Stop too.
+    const pause = bar.getByRole('button', { name: /^Pause/ });
     act(() => pause.focus());
     fireEvent.click(pause);
     await heard(message('progress', progressAt(100.5, { ...POLITE, status: 'paused' })));
     expect(pause.isConnected).toBe(false);
-    expect(document.activeElement).toBe(bar.getByRole('button', { name: /Resume/ }));
+    expect(document.activeElement).toBe(bar.getByRole('button', { name: /^Resume/ }));
     // Stop: while the crawl is stopping the bar has no control at all.
-    const stop = bar.getByRole('button', { name: /Stop/ });
+    const stop = bar.getByRole('button', { name: /^Stop/ });
     act(() => stop.focus());
     fireEvent.click(stop);
     setStatus(queryClient, 'stopping');

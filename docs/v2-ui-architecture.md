@@ -1358,11 +1358,16 @@ touch the same lines:
 - The router preloads the screen the mode shows, and the other mode's once the app is idle, so a switch never waits
   for a chunk.
 - New crawl and Settings aren't rows: each is one screen that reads the mode itself.
-- A Simple screen's own search params go into its route's validator in `routing/search.ts` (Overview's `score`): a
-  route's validator serves both views.
-- `src/app/simpleScreens.test.tsx` fills the table as round 4 will (a stub a row) and holds the frame to it: the
-  Simple screen in Simple and the Advanced one in Advanced on the same route, the inspector left out, the Report's
-  sidebar item, keys and route.
+- Every search param the design's Routes table names for round 4's screens is accepted already: Overview's `score`
+  (`validateOverviewSearch`), the Report's `cut`, and Issues' own for What to fix and one problem. A route's
+  validator serves both views.
+- **The frame is tested with every row set.** The unit suite runs twice (`vitest.config.ts`): as the app is (`app`),
+  and with the table served by `src/test/simpleScreens.filled.tsx`, a stub screen in every row (`filled`, through
+  `scripts/filled-table.mjs`). `npm run e2e:filled` runs the mode's, the top bar's and New crawl's end-to-end tests the
+  same way. A test that depends on whether a row is set reads the table (`SIMPLE_SCREENS.report ? 1 : 0`), so both
+  pass whichever rows are set. `src/app/simpleScreens.test.tsx` holds the frame to a filled table too: the Simple
+  screen in Simple and the Advanced one in Advanced on the same route, the inspector left out, the Report's sidebar
+  item, keys and route.
 
 ### The shell in Simple, and the top bar
 
