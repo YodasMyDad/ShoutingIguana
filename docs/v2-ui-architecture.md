@@ -385,8 +385,13 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   copied with the header.
 - **The row menu**: `onContextMenu(index, column, anchor, menu)` on a right-click, Shift+F10 or the menu key. `menu`
   is the rows it acts on (the selection when the row is in it, else the row; a right-click outside the selection first
-  makes that row the selection), reads them where they aren't loaded, copies them as Ctrl+C does, and gives the
-  keyboard back to the grid. The browser's own menu, which the same keys ask for on the focused grid, is kept away.
+  makes that row the selection, one inside it moves the cursor there and keeps it), held as they were when it opened
+  (`menu.row`, and `rows()`, read at once where they weren't loaded): a running crawl that moves the rows while it's
+  open never turns it onto another row, so a screen never reads its row again by number. It copies them as Ctrl+C
+  does and gives the keyboard back to the grid, with the cursor on the row (never left on the header). From the keys
+  it opens at the row's own place, worked out from the scroll space (its one cell's for a row drawn as one), where
+  the keys have just scrolled it into view. The browser's own menu, which the same keys ask for on the focused grid,
+  is kept away.
   `grid/RowMenu.tsx` is the menu (`MenuAt`, at the point) and the items every grid of URLs shares; see
   [The URL grid](#the-url-grid).
 
@@ -890,8 +895,10 @@ full grid's pieces, which are any grid's (below). What it settled:
 - **Follow is one column** made of the engine's four (`followed`, `noFollow`, `sponsored`, `ugc`), in the words the
   inspector's link grids use ("Followed", "nofollow, sponsored", "Not followed"). Filters are on the four.
 - **A target with no status says what happened**, from the crawl's own outcome, which the query asks for with the
-  status: "Blocked by robots.txt", "Timed out", "Not checked", and "Not fetched" only for a URL the crawl has no
-  outcome for. Never a guess, and never 0.
+  status: "Blocked by robots.txt", "Timed out", "Not checked", and "Not crawled" ("so far" while the crawl runs) only
+  for a URL the crawl has no outcome for, in the URL grid's words for the same URL (`urlStatusWords`, one helper for
+  both). Never a guess, and never 0. Each end's URL is asked for whether its column shows or not: a row's menu opens
+  and copies it.
 - **Presets are only filters.** Broken links (`to.statusClass` in 4xx, 5xx), Links to redirects (3xx), Nofollow
   links (`noFollow` is yes), No anchor text (hyperlinks whose `text` is empty) and External links (`to.isInternal`
   is no) put their filters in the route, where they show as chips; a preset reads as chosen exactly while the
@@ -1044,26 +1051,39 @@ What it settled:
   has (a check's own and the id left out) in six groups, with "Show full URLs" under them.
 - **The host named once**: URLs on the crawl's own origin show their path, and the URL column's header says "on
   example.com" (`headerDetail`). "Show full URLs" (a preference, `settings.showFullUrls`, and a palette command) shows
-  them whole. A URL is always copied whole.
+  them whole. A URL is always copied whole. An enum's values are the engine's words (`valueTitles` of
+  `/api/url-columns`) in the cell, the facet, the filter editor and the chip alike, this version's only where the
+  engine gives none, so the grid says what the export says.
 - **A URL with no status says what happened**, from its outcome (`urlStatusWords`): "Blocked by robots.txt", "Not
   checked", and "Not crawled" (or "so far" while the crawl runs) only for a URL with neither a code nor an outcome.
-- **A sort goes with its column**, as on Links (`sortShown`), and a header that can't sort says why: text "would read
-  every page", a column read from each response "would read every one", with "filter by it instead".
+- **A sort goes with its column**, as on Links (`sortShown`): hiding a column drops its key alone, the others kept in
+  their order, and a view that arrives sorted by a hidden column keeps its shown keys. A header that can't sort says
+  why: text "would read every page", a column read from each response "would read every one", with "filter by it
+  instead".
 - **Facets** (status, status code, indexability, type, depth, response time, sitemaps, issues) are read only while a
   menu is open (`['grid', 'urlFacets', …]`, among the grids' keys, so an open menu stays fresh on a running crawl), and
-  a value replaces any filter on its column. The two the analysis counts say why they can't be, in the menu, on a
+  a value's filter goes beside the view's (`withFacetValue`), taking the place only of a list its value is one of: the
+  counts are of the view as filtered, so a range the view has (Response time over 300 ms) stays, and the grid lands
+  on the count the menu showed. The two the analysis counts say why they can't be, in the menu, on a
   crawl without one. A URL counts once in every facet but Issues, where it counts once for each severity it has.
-- **Saved views** are preferences (`settings.savedViews`, checked as a route is when read back, 24 at most and none
-  over 1,500 characters, each saying so rather than being cut): a name and the route's filters, search, sort and
-  columns. The menu's button names the view the grid is on; save (a dialog, the name checked under its field), open
-  (the menu, and a palette command per view), rename and delete with Undo. A saved view opens on any crawl.
+- **Saved views** are preferences (`settings.savedViews`, checked as a route is when read back): 24 at most, each at
+  most 4 KB and all together at most 32 KB of UTF-8, so the preferences file stays inside the 64 KB the shell keeps
+  whatever script their text is in. What's too long says what takes the room (its filters, its search, its columns),
+  rather than being cut. A view is a name and the route's filters, search, sort and columns. The menu's button names
+  the view the grid is on; save (a dialog, the name checked under its field), open (the menu, and a palette command
+  per view), rename and delete with Undo; an Undo that would cost another view (one of its name saved since, or no
+  room) says why instead. A saved view opens on any crawl.
+- **Preferences are never lost in silence**: a write the shell refuses is said once in a toast, until a write works
+  again, and fields a later version stored are written back as they were. The shell writes the file compact and
+  refuses a write whose file would be over the size it reads (`src-tauri/src/settings.rs`).
 - **Copies**: the URLs of the whole view (Ctrl+Shift+C) and the column the cursor is in, read by cursor as far as
   10,000 rows, named "the first 10,000" on a bigger view.
 - **The row menu**: inspect, open in the browser, copy the URL (or the selection's URLs, each once), copy the row (or
   rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). The same piece on
   Links (each end: the end the menu was opened in, and Inspect the source page, Inspect the target), Issues' pages
-  ("Show the page in URLs": the URL grid filtered to its URL, `url eq`, with the inspector on it) and groups ("Show all
-  N pages in URLs"), one sitemap's URLs ("Show the URL in URLs") and an origin's blocked URLs ("List what line N
+  ("Show the page in URLs": the URL grid filtered to its URL, `url eq`, or by its id for a URL longer than a filter's
+  1,000 characters, with the inspector on it) and groups (the group's URLs copied, its row, "Show all N pages in
+  URLs"), one sitemap's URLs ("Show the URL in URLs") and an origin's blocked URLs ("List what line N
   blocked"). Its accessible name says what it's of ("Menu for /about/", "Menu for 12 URLs").
 - **The cursor follows its row** (`rowKey`) on the URL grid, Links, Issues' flat rows (a URL's issue, by detail and
   related URL) and groups, and the inspector's link lists (a link by its other end, kind, position, text, fragment
