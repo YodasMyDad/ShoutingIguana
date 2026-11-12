@@ -992,10 +992,10 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CHARSET_MISSING = new("charset-missing", IssueCategory.Html, IssueSeverity.Notice,
         "Missing character encoding",
-        """Neither a meta tag (<meta charset> or http-equiv Content-Type) nor the Content-Type header's charset declares the page's character encoding.""",
+        """Nothing declares the page's character encoding: no byte-order mark at the start of the file, no meta tag (<meta charset> or http-equiv Content-Type) and no charset in the Content-Type header.""",
         """Add <meta charset="utf-8"> as the first element in the <head>, within the first 1024 bytes of the file, or send Content-Type: text/html; charset=utf-8 from the server.""")
     {
-        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A UTF-8 byte-order mark at the start of the file also declares it, though this check doesn't look for one.""",
+        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again.""",
         LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None

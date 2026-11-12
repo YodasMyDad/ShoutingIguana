@@ -1,3 +1,4 @@
+using System.Text;
 using ShoutingIguana.TestSite.Models;
 
 namespace ShoutingIguana.TestSite;
@@ -30,13 +31,15 @@ public sealed partial class SyntheticSite
     {
         List<Plant> plants = [];
 
+        // With an encoding, the page is sent as bytes in it, after its byte-order mark (the encoding's preamble).
         void Page(string slug, string name, string[] issues, Func<PageSpec, PageSpec>? change = null, bool inSitemap = true,
-            string contentType = HTML, bool linked = true)
+            string contentType = HTML, bool linked = true, Encoding? markedAs = null)
         {
             var page = PlantPage(slug, name);
             page = change?.Invoke(page) ?? page;
-            plants.Add(new Plant(page.Path, 200, linked, inSitemap, issues,
-                () => new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)));
+            plants.Add(new Plant(page.Path, 200, linked, inSitemap, issues, () => markedAs is null
+                ? new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)
+                : new SyntheticResponse(200, contentType, null, [.. markedAs.GetPreamble(), .. markedAs.GetBytes(Render(page))], null, SECURITY_HEADERS)));
         }
 
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
@@ -350,6 +353,12 @@ public sealed partial class SyntheticSite
         Page("meta-name-and-property", "Shared description tag", [], page => page with
         {
             Description = null, OpenGraph = false,
+
+        // A byte-order mark at the start of the file declares the encoding, with no meta tag and no charset in the
+        // header: neither page is missing its character encoding.
+        Page("charset-bom", "Byte-order mark", [], page => page with { Charset = false }, contentType: "text/html", markedAs: Encoding.UTF8);
+        Page("charset-bom-utf16", "UTF-16 byte-order mark", [], page => page with { Charset = false }, contentType: "text/html",
+            markedAs: Encoding.Unicode);
             ExtraHead = $"<meta name=\"description\" property=\"og:description\" content=\"{page.Description}\">" +
                         $"<meta property=\"og:title\" content=\"{page.Title}\"><meta property=\"og:image\" content=\"{_base}/img/0.jpg\">"
         });

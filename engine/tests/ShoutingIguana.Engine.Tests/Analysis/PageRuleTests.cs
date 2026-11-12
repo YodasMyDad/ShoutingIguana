@@ -291,6 +291,27 @@ public sealed class PageRuleTests
         Assert.Contains(IssueCatalog.LANG_MISSING, Issues(rules, site.Page($"{site.Site}/c", RuleHarness.Html(lang: string.Empty), IndexabilityReason.Noindex)));
     }
 
+    /// <summary>
+    /// A byte-order mark at the start of the file declares the encoding, and beats a meta tag and the header: a page with
+    /// one, UTF-8 or UTF-16, isn't missing its character encoding, though it has no meta tag and no charset in its header.
+    /// </summary>
+    [Theory]
+    [InlineData("utf-8")]
+    [InlineData("utf-16le")]
+    [InlineData("utf-16be")]
+    public void AByteOrderMarkDeclaresTheCharacterEncoding(string byteOrderMark)
+    {
+        var site = new RuleHarness();
+        var html = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width\"></head><body></body></html>";
+        var rules = new HtmlRules();
+
+        var marked = Issues(rules, site.Page($"{site.Site}/marked", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html")], byteOrderMark: byteOrderMark));
+        var unmarked = Issues(rules, site.Page($"{site.Site}/unmarked", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html")]));
+
+        Assert.Empty(marked);
+        Assert.Equal([IssueCatalog.CHARSET_MISSING], unmarked);
+    }
+
     [Fact]
     public void StructuredDataRequiresValidJsonAndThePropertiesGoogleStillRequires()
     {

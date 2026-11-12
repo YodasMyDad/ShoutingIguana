@@ -21,7 +21,9 @@ internal sealed class HtmlRules : IPageRule
             yield return new IssueHit(IssueCatalog.LANG_MISSING, page.UrlId);
         }
 
-        if (facts.DeclaredCharset is null && page.Header("content-type")?.Contains("charset=", StringComparison.OrdinalIgnoreCase) != true)
+        // A byte-order mark declares the encoding too, and beats the other two.
+        if (facts.DeclaredCharset is null && facts.ByteOrderMark is null &&
+            page.Header("content-type")?.Contains("charset=", StringComparison.OrdinalIgnoreCase) != true)
         {
             yield return new IssueHit(IssueCatalog.CHARSET_MISSING, page.UrlId);
         }
