@@ -94,7 +94,9 @@ describe('the Issues screen', () => {
         .getAllByRole('group')
         .map((group) => group.getAttribute('aria-labelledby') !== null),
     ).toEqual([true, true, true]);
-    expect(within(list).getByRole('option', { name: 'Orphan page Skipped No sitemap could be read.' })).toBeVisible();
+    expect(
+      within(list).getByRole('option', { name: 'Orphan page in a sitemap Skipped No sitemap could be read.' }),
+    ).toBeVisible();
     expect(within(list).queryByRole('option', { name: /Internal URL returns 5xx/ })).toBeNull();
     fireEvent.click(screen.getByRole('switch', { name: 'Show the check that passed' }));
     expect(within(list).getByRole('option', { name: 'Internal URL returns 5xx Passed' })).toBeVisible();
@@ -147,7 +149,7 @@ describe('the Issues screen', () => {
     fireEvent.keyDown(all, { key: 'j' });
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
     expect(all).toHaveFocus();
-    expect(heard).toContain('Orphan page, skipped');
+    expect(heard).toContain('Orphan page in a sitemap, skipped');
     fireEvent.keyDown(all, { key: 'j' });
     // A check that flags only pages counts pages; one that can flag any URL counts URLs.
     await waitFor(() => expect(heard).toContain('Title too long, 3 pages'));
@@ -621,13 +623,15 @@ describe('the Issues screen', () => {
     sidecar({ analysis: { ...ISSUES_ANALYSIS, skipped: [], counts } });
     await open(`${ISSUES}/internal-client-error`);
     expect(
-      await screen.findByRole('option', { name: 'Orphan page Skipped Skipped: the analysis notes above say why.' }),
+      await screen.findByRole('option', {
+        name: 'Orphan page in a sitemap Skipped Skipped: the analysis notes above say why.',
+      }),
     ).toBeVisible();
     cleanup();
     sidecar({ analysis: { ...ISSUES_ANALYSIS, skipped: [], counts, notes: [], isPartial: true } });
     await open(`${ISSUES}/internal-client-error`);
     expect(
-      await screen.findByRole('option', { name: 'Orphan page Skipped The analysis didn’t say why.' }),
+      await screen.findByRole('option', { name: 'Orphan page in a sitemap Skipped The analysis didn’t say why.' }),
     ).toBeVisible();
   });
 
