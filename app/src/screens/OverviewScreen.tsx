@@ -104,7 +104,8 @@ export function OverviewScreen() {
   const counted = useMemo(() => (entries ? countedEntries(entries) : null), [entries]);
   const totals = counted ? analysisTotals(counted) : null;
   const hiddenChecks = entries ? hiddenTotals(entries) : null;
-  const first = entries ? firstCheckToFix(entries) : null;
+  // The engine's order to fix them in (the analysis's `fixFirst`), the app's own for an earlier engine's analysis.
+  const first = entries ? firstCheckToFix(entries, analysis.data?.fixFirst) : null;
   const firstId = first?.check.id;
   const empty =
     !crawling && item !== undefined && isEmptyCrawl({ pageCount: item.pageCount, status: status ?? item.status });
@@ -239,6 +240,7 @@ export function OverviewScreen() {
             entries={counted}
             totals={totals}
             hiddenFound={hiddenChecks?.found ?? 0}
+            order={analysis.data?.fixFirst}
           />
         )}
 
@@ -310,6 +312,7 @@ function Answer({
   entries,
   totals,
   hiddenFound,
+  order,
 }: {
   crawlId: string;
   checks: Checks;
@@ -317,6 +320,8 @@ function Answer({
   entries: readonly CheckEntry[];
   totals: AnalysisTotals;
   hiddenFound: number;
+  /** The analysis's `fixFirst`: the engine's order to fix them in. */
+  order: readonly string[] | undefined;
 }) {
   const [widthRef, width] = useElementWidth();
   return (
@@ -328,7 +333,7 @@ function Answer({
         columns={width !== null && width > 0 && width < TWO_COLUMNS_BELOW ? 2 : 4}
       />
       <div className="grid grid-cols-(--overview-columns) gap-4 @max-split:grid-cols-1">
-        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} />
+        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} order={order} />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
           <Categories crawlId={crawlId} checks={checks} entries={entries} />

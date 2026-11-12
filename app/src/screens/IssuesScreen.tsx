@@ -139,7 +139,8 @@ export function IssuesScreen() {
   const totals = entries ? analysisTotals(countedEntries(entries)) : null;
   const hiddenChecks = entries ? hiddenTotals(entries) : null;
   // The first to fix among the checks the filters keep: landing on Errors picks an error.
-  const first = list ? firstCheckToFix(list.matching) : null;
+  // In the engine's order to fix them (the analysis's `fixFirst`), the app's own for an earlier engine's analysis.
+  const first = list ? firstCheckToFix(list.matching, analysis.data?.fixFirst) : null;
   const selected = entries?.find((entry) => entry.check.id === checkId) ?? null;
   const found = selected !== null && selected.outcome !== 'passed' && selected.outcome !== 'skipped';
   // Arriving on a check that's hidden (a link from the inspector, the palette) shows the hidden checks, so the

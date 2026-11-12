@@ -190,7 +190,9 @@ export function answerSentence({ found, issues, passed, skipped }: AnalysisTotal
       ? `${formatCount(passed)} passed and ${formatCount(skipped)} ${were(skipped)} skipped.`
       : passed > 0
         ? found === 0
-          ? `All ${formatCountOf(passed, 'check')} passed.`
+          ? passed === 1
+            ? 'The 1 check counted passed.'
+            : `All ${formatCountOf(passed, 'check')} passed.`
           : `${formatCount(passed)} passed.`
         : skipped > 0
           ? `${formatCount(skipped)} ${were(skipped)} skipped.`
@@ -219,25 +221,35 @@ export function foundBySeverity(
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, notice: 2 };
 
 /**
- * The checks that found issues, in the order to fix them: the most severe, then the most pages or URLs affected (each
- * check's count, whichever it is of), then catalog order. Hidden checks are left out, unless every check with issues
- * is hidden. Overview's "Fix first" is this list, and Issues opens on its first.
+ * The checks that found issues, in the order to fix them. `order` is the analysis's `fixFirst`, the engine's order
+ * (docs/v2-sidecar-api.md, The score): the most severe, a fault of the whole site before any other of its severity,
+ * then the most URLs flagged, then catalog order; every host takes it as it is, never sorted again by count, which
+ * would put a site-wide fault last of its severity. Without it (an earlier engine's analysis), the app's own: the most
+ * severe, then the most pages or URLs affected (each check's count, whichever it is of), then catalog order. Hidden
+ * checks are left out, unless every check with issues is hidden. Overview's "Fix first" is this list, and Issues
+ * opens on its first.
  */
-export function rankChecksToFix(entries: readonly CheckEntry[]): CheckEntry[] {
+export function rankChecksToFix(entries: readonly CheckEntry[], order?: readonly string[] | null): CheckEntry[] {
   const found = entries.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
   const candidates = found.some((entry) => !entry.hidden) ? found.filter((entry) => !entry.hidden) : found;
   // A stable sort, so checks level on severity and count keep catalog order.
-  return [...candidates].sort(
+  const own = [...candidates].sort(
     (a, b) => SEVERITY_RANK[a.check.severity] - SEVERITY_RANK[b.check.severity] || (b.count ?? 0) - (a.count ?? 0),
   );
+  if (!order) return own;
+  // The engine's order; a check it doesn't rank (it knows every check that found something) goes after, as the app's.
+  const place = new Map(order.map((checkId, index) => [checkId, index]));
+  const ranked = own.filter((entry) => place.has(entry.check.id));
+  ranked.sort((a, b) => (place.get(a.check.id) ?? 0) - (place.get(b.check.id) ?? 0));
+  return [...ranked, ...own.filter((entry) => !place.has(entry.check.id))];
 }
 
 /**
- * The check to fix first: the most severe, then the most pages or URLs affected, then catalog order. Hidden checks
- * are left out, unless every check with issues is hidden. Null when no check found an issue.
+ * The check to fix first, in the engine's order (`order`, the analysis's `fixFirst`) or, without it, the app's.
+ * Hidden checks are left out, unless every check with issues is hidden. Null when no check found an issue.
  */
-export function firstCheckToFix(entries: readonly CheckEntry[]): CheckEntry | null {
-  return rankChecksToFix(entries)[0] ?? null;
+export function firstCheckToFix(entries: readonly CheckEntry[], order?: readonly string[] | null): CheckEntry | null {
+  return rankChecksToFix(entries, order)[0] ?? null;
 }
 
 /** The title every category the catalog doesn't name (a newer engine's) is listed under, rather than its id. */

@@ -185,6 +185,24 @@ describe('the Overview of an analysed crawl', () => {
     expect(fix.queryByText(/most pages affected/)).toBeNull();
   });
 
+  it('lists what to fix first in the engine’s order when the analysis sends one (fixFirst), hidden checks left out', async () => {
+    // The engine leads with the title check (as a fault of the whole site would), then the error, then the anchors.
+    updateSettings({ hiddenChecks: ['empty-anchor-text'] });
+    sidecar({
+      analysis: { ...ISSUES_ANALYSIS, fixFirst: ['title-too-long', 'internal-client-error', 'empty-anchor-text'] },
+    });
+    await open();
+    const fix = region('Fix first');
+    const rows = await fix.findAllByRole('listitem');
+    expect(rows.map((row) => within(row).getByRole('link').textContent)).toEqual([
+      expect.stringContaining('Notice: Title too long'),
+      expect.stringContaining('Error: Internal URL returns 4xx'),
+    ]);
+    expect(
+      fix.getByText('The most severe first, a fault of the whole site before the rest, then the most URLs affected'),
+    ).toBeVisible();
+  });
+
   it('counts URLs in Fix first for checks that don’t say what they flag', async () => {
     sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
     await open();
