@@ -110,5 +110,9 @@ describe('a strip of tabs wider than its room', () => {
     // A browser without them by the standard properties; never both, as either property makes Chromium ignore the parts.
     expect(base).toMatch(/@supports not selector\(::-webkit-scrollbar\) \{\s*\* \{\s*scrollbar-width: thin;/);
     expect(base).not.toMatch(/^\s{2}\* \{\s*scrollbar-width: thin;/m);
+    // The windowed grid's own thumb too: inside the clear edge every thumb has, never the bar's full height.
+    expect(base).toMatch(
+      /\.si-grid--windowed::-webkit-scrollbar-thumb \{\s*background: var\(--color-border-control\) padding-box;/,
+    );
   });
 });

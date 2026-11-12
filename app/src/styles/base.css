@@ -359,8 +359,9 @@
     height: var(--scrollbar-size);
   }
 
+  /* Drawn as every other thumb: within the bar's clear edge (padding-box), where the shorthand alone filled all 10px. */
   .si-grid--windowed::-webkit-scrollbar-thumb {
-    background: var(--color-border-control);
+    background: var(--color-border-control) padding-box;
     border-radius: var(--radius-full);
   }
 
