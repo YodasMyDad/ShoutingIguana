@@ -65,19 +65,15 @@ const say = (line: string) => {
 
 /** Runs `act` in the page and waits, frame by frame, for `done`: the time from the act to the frame after. */
 async function timed(page: Page, act: string, done: string): Promise<number> {
-  return page.evaluate(
-    async ({ act, done }) => {
-      const check = new Function(`return (${done});`) as () => boolean;
-      const start = performance.now();
-      (new Function(act) as () => void)();
-      for (let frames = 0; frames < 2000 && !check(); frames++) {
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-      }
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      return performance.now() - start;
-    },
-    { act, done },
-  );
+  // The page runs it as written: the act and the condition are this spec's own text.
+  return page.evaluate<number>(`(async () => {
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const start = performance.now();
+    ${act};
+    for (let frames = 0; frames < 2000 && !(${done}); frames++) await frame();
+    await frame();
+    return performance.now() - start;
+  })()`);
 }
 
 const FIRST_ROW = `!!document.querySelector('[role="grid"][aria-label="URLs"] [role="row"][aria-rowindex="2"] [role="gridcell"]')`;
