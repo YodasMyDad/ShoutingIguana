@@ -6,11 +6,21 @@ using ShoutingIguana.Engine.Urls;
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
-/// Whether the site as a whole asks to stay out of search results: more than half of the pages that stand for themselves
-/// are noindex. One fault of the whole site, reported once, on the home page (on the start URL when the crawl read no
-/// home page). A noindex page is a notice, as it is often meant; without this, a site whose every page is noindex would
-/// pass as clean.
+/// Whether the site as a whole asks to stay out of search results: its home page is noindex, and so are more than half
+/// of the pages that stand for themselves. One fault of the whole site, reported once, on the home page. A noindex page
+/// is a notice, as it is often meant; without this, a site whose every page is noindex would pass as clean.
 /// <list type="bullet">
+/// <item>
+/// The home page is the page the start URL ends on, after its redirects (<see cref="UrlTable.HomeId"/>), and it must be
+/// noindex itself, as the noindex check counts it. A shop that keeps its many filtered listings out of search and its
+/// home page in isn't hiding itself, however many those listings are. Where the crawl read no home page (the start URL
+/// failed, or was refused, and a sitemap led to the rest) nothing says the site hides itself, and nothing is reported.
+/// </item>
+/// <item>
+/// The rule takes the start URL to be the site's root. A crawl started anywhere else (a section, a page) has no home
+/// page to judge the site by, and the analysis skips the check for it (<see cref="SkippedCheckReasons.START_NOT_ROOT"/>),
+/// so what this rule would say of a section's first page is never stored.
+/// </item>
 /// <item>
 /// A page is one the page pass audits, as the analysis counts its pages (<see cref="AnalysisSummary.PagesAnalyzed"/>):
 /// an internal HTML page the crawler parsed. One that moves on with an instant meta refresh is read, and never hidden:
@@ -42,6 +52,7 @@ internal sealed class SiteVisibilityRules(UrlTable urls) : ISiteRule
     private int _pages;
     private int _noindex;
     private int _variants;
+    private bool _homeIsNoindex;
 
     public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.SITE_HIDDEN_FROM_SEARCH];
 
@@ -56,6 +67,7 @@ internal sealed class SiteVisibilityRules(UrlTable urls) : ISiteRule
         if (page.Facts.Robots.NoIndex)
         {
             _noindex++;
+            _homeIsNoindex |= page.UrlId == urls.HomeId;
         }
         else if (page.IndexabilityReason == IndexabilityReason.Canonicalised && !NamesItselfOnAnotherVersion(page))
         {
@@ -66,8 +78,9 @@ internal sealed class SiteVisibilityRules(UrlTable urls) : ISiteRule
     public IEnumerable<IssueHit> Finish()
     {
         // The pages that stand for themselves. A noindex page is always one of them, so with none there is none noindex.
+        // A home page seen noindex is a page that was read, so there is a home page to report on.
         var standing = _pages - _variants;
-        if (urls.HomeId == 0 || _noindex * 2L <= standing)
+        if (!_homeIsNoindex || _noindex * 2L <= standing)
         {
             yield break;
         }

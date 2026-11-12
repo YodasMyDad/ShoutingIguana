@@ -9,6 +9,7 @@ using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -179,6 +180,191 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal("issue,severity,category,title,url,detail,related_url", lines[0].TrimStart((char)0xFEFF));
         Assert.Equal(IssueReader.ReadAll(crawl).Count() + 1, lines.Length);
         Assert.Empty(Directory.GetFiles(_folder, "*.tmp"));
+    }
+
+    /// <summary>
+    /// <c>si issues --csv</c> cuts a field to what Excel reads as one cell from a CSV file (32,758 characters), as
+    /// <c>si export</c> does, and says how many it cut: a longer one would be split by Excel, its end starting a row.
+    /// </summary>
+    [Fact]
+    public async Task TheIssuesCsvCutsAFieldLongerThanExcelReadsAsOneCell()
+    {
+        var crawl = await CrawlAsync();
+        var url = "https://other.example/?q=" + new string('L', 40_000) + "=1+1";
+        using (var connection = new SqliteConnection($"Data Source={crawl};Pooling=False"))
+        {
+            connection.Open();
+            using var update = connection.CreateCommand();
+            update.CommandText = "UPDATE urls SET url = $url WHERE id = (SELECT MAX(url_id) FROM issues)";
+            update.Parameters.AddWithValue("$url", url);
+            Assert.Equal(1, update.ExecuteNonQuery());
+        }
+
+        var flagged = IssueReader.ReadAll(crawl).Sum(row => (row.Url == url ? 1 : 0) + (row.RelatedUrl == url ? 1 : 0));
+        Assert.True(flagged > 0);
+        var csv = Path.Combine(_folder, "long.csv");
+        var export = await RunAsync("issues", crawl, "--csv", csv);
+        Assert.True(export.ExitCode == 0, export.Error);
+        var text = (await File.ReadAllTextAsync(csv)).TrimStart((char)0xFEFF);
+        Assert.Equal(flagged, Regex.Matches(text, Regex.Escape(url[..32_758]) + "(,|\r\n)").Count);
+        Assert.DoesNotContain(url[..32_759], text, StringComparison.Ordinal);
+        Assert.Contains($"{flagged:N0} {(flagged == 1 ? "field was" : "fields were")} cut to the 32,758 characters", export.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>si export and si report write what the app's Export writes, by the same code: here, that each kind reaches its file.</summary>
+    [Fact]
+    public async Task ExportsAGridTheWorkbookAndTheReport()
+    {
+        var crawl = await CrawlAsync();
+
+        // A grid, with the grid's own columns, filters and sort.
+        var csv = Path.Combine(_folder, "pages.csv");
+        var pages = await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--columns", "url,statusCode,title", "--filter", "type:in:page",
+            "--filter", "statusCode:between:200..299", "--sort", "url:desc");
+        Assert.True(pages.ExitCode == 0, pages.Error);
+        var expected = UrlGridReader.Query(crawl, new UrlQuery
+        {
+            Columns = ["url"],
+            Filters =
+            [
+                new UrlFilter("type", FilterOperator.In) { Values = [FilterValue.Of("page")] },
+                new UrlFilter("statusCode", FilterOperator.Between) { Min = 200, Max = 299 }
+            ],
+            Sort = [new UrlSort("url", Descending: true)],
+            Limit = 1_000
+        });
+        var lines = await File.ReadAllLinesAsync(csv);
+        Assert.Equal("URL,Status,Title", lines[0].TrimStart((char)0xFEFF));
+        Assert.Equal(expected.Matching, lines.Length - 1);
+        Assert.StartsWith((string)expected.Rows[0].Values[1]! + ",200,", lines[1], StringComparison.Ordinal);
+        Assert.Contains($"Wrote {expected.Matching:N0} rows to {csv}", pages.Output);
+
+        // The format comes from the file's name; a kind with one format needs none.
+        var links = Path.Combine(_folder, "links.xlsx");
+        var linked = await RunAsync("export", crawl, "--kind", "links", "--out", links, "--filter", "kind:in:hyperlink", "--sort", "to.url");
+        Assert.True(linked.ExitCode == 0, linked.Error);
+        Assert.Equal("PK"u8.ToArray(), (await File.ReadAllBytesAsync(links))[..2]);
+
+        var workbook = Path.Combine(_folder, "everything.xlsx");
+        var everything = await RunAsync("export", crawl, "--kind", "workbook", "--out", workbook);
+        Assert.True(everything.ExitCode == 0, everything.Error);
+        Assert.Contains($"Wrote {IssueReader.ReadCounts(crawl).Values.Sum():N0} rows to {workbook}", everything.Output);
+        Assert.Contains("sheets)", everything.Output);
+
+        var check = Path.Combine(_folder, "check.csv");
+        Assert.Equal(0, (await RunAsync("export", crawl, "--kind", "check", "--check", "title-too-long", "--out", check)).ExitCode);
+        Assert.Equal("Address,Page title,What was found,Other address", (await File.ReadAllLinesAsync(check))[0].TrimStart((char)0xFEFF));
+        Assert.Equal(0, (await RunAsync("export", crawl, "--kind", "issueRows", "--check", "title-too-long", "--out", check, "--columns", "url,detail")).ExitCode);
+        Assert.Equal("URL,Detail", (await File.ReadAllLinesAsync(check))[0].TrimStart((char)0xFEFF));
+
+        // The report, both ways of asking for it, and its first page alone.
+        var report = Path.Combine(_folder, "report.html");
+        var summary = Path.Combine(_folder, "summary.html");
+        Assert.Equal(0, (await RunAsync("report", crawl, "--out", report)).ExitCode);
+        Assert.Equal(0, (await RunAsync("export", crawl, "--kind", "report", "--out", summary, "--cut", "summary")).ExitCode);
+        var document = await File.ReadAllTextAsync(report);
+        Assert.StartsWith("<!doctype html>", document, StringComparison.Ordinal);
+        Assert.Contains("<h2>What to fix</h2>", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("<h2>What to fix</h2>", await File.ReadAllTextAsync(summary), StringComparison.Ordinal);
+        Assert.Equal(0, (await RunAsync("report", crawl, "--out", summary, "--cut", "summary", "--examples", "2", "--look-examples", "0")).ExitCode);
+        Assert.Empty(Directory.GetFiles(_folder, "*.tmp*"));
+    }
+
+    /// <summary>
+    /// A filter's value is of its column's type, not of what it looks like: a title is text though it reads "404" or
+    /// "true", a status is a number, and a column of yes and no takes true and false.
+    /// </summary>
+    [Fact]
+    public async Task AFiltersValueIsOfItsColumnsType()
+    {
+        var crawl = await CrawlAsync();
+        var csv = Path.Combine(_folder, "typed.csv");
+        async Task<long> RowsAsync(string kind, params string[] filters)
+        {
+            var export = await RunAsync(["export", crawl, "--kind", kind, "--out", csv, .. filters.SelectMany(filter => new[] { "--filter", filter })]);
+            Assert.True(export.ExitCode == 0, $"{string.Join(" ", filters)}: {export.Error}");
+            return (await File.ReadAllLinesAsync(csv)).Length - 1;
+        }
+
+        long Matching(params UrlFilter[] filters) => UrlGridReader.Query(crawl, new UrlQuery { Filters = filters, Limit = 1 }).Matching;
+
+        // Text that reads as a number or as true is text for a column of text: no page has such a title, and that is the answer.
+        Assert.Equal(0, await RowsAsync("urls", "title:eq:404"));
+        Assert.Equal(0, await RowsAsync("urls", "title:eq:true"));
+        Assert.Equal(0, await RowsAsync("urls", "title:eq:1e3"));
+        Assert.Equal(0, await RowsAsync("links", "text:eq:404", "to.title:ne:true", "from.url:eq:12"));
+        Assert.Equal(Matching(new UrlFilter("title", FilterOperator.Ne) { Value = FilterValue.Of("404") }), await RowsAsync("urls", "title:ne:404"));
+
+        // A number for a column of numbers, and true or false for one of them.
+        var notFound = Matching(new UrlFilter("statusCode", FilterOperator.Eq) { Value = FilterValue.Of(404) });
+        Assert.True(notFound > 0);
+        Assert.Equal(notFound, await RowsAsync("urls", "statusCode:eq:404"));
+        Assert.Equal(notFound, await RowsAsync("urls", "statusCode:in:404"));
+        var external = Matching(new UrlFilter("isInternal", FilterOperator.Is) { Value = FilterValue.Of(false) });
+        Assert.True(external > 0);
+        Assert.Equal(external, await RowsAsync("urls", "isInternal:is:false"));
+
+        // What isn't of the column's type is for the engine to refuse, in its words.
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--filter", "statusCode:eq:many"), "filters[0]");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--filter", "isInternal:is:404"), "filters[0]");
+    }
+
+    [Fact]
+    public async Task ExportMistakesGetOneLineMessages()
+    {
+        var crawl = await CrawlAsync();
+        var csv = Path.Combine(_folder, "out.csv");
+
+        AssertFails(await RunAsync("export", crawl, "--kind", "everything", "--out", csv), "There's no kind of export called 'everything'");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", Path.Combine(_folder, "out.txt"), "--format", "csv"), "must end in .csv");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--format", "pdf"), "--format must be csv, xlsx or html");
+        AssertFails(await RunAsync("export", crawl, "--kind", "workbook", "--out", csv), "an Excel workbook, not as CSV");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--columns", "url,nope"), "columns[1]: There's no column called 'nope'");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--filter", "statusCode"), "isn't column:operator[:value]");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--filter", "statusCode:contains:4"), "filters[0].op");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--sort", "title"), "sort[0].column");
+        AssertFails(await RunAsync("export", crawl, "--kind", "issueRows", "--out", csv), "Give the check's id");
+        AssertFails(await RunAsync("export", crawl, "--kind", "check", "--check", "no-such-check", "--out", csv), "There's no check called 'no-such-check'");
+        AssertFails(await RunAsync("export", crawl, "--kind", "sitemapUrls", "--sitemap", "9999", "--out", csv), "no sitemap with that id");
+        AssertFails(await RunAsync("export", crawl, "--kind", "robotsBlocked", "--origin", "https://nowhere.example", "--reason", "because", "--out", csv), "--reason must be");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", Path.Combine(_folder, "missing", "out.csv")), "folder for this file isn't there");
+        AssertFails(await RunAsync("report", crawl, "--out", Path.Combine(_folder, "report.html"), "--cut", "half"), "--cut must be full or summary");
+        AssertFails(await RunAsync("report", crawl, "--out", Path.Combine(_folder, "report.html"), "--examples", "51"), "examples must be from 0 to 50");
+        AssertFails(await RunAsync("export", Path.Combine(_folder, "nothing.sicrawl"), "--kind", "urls", "--out", csv), "No crawl file at");
+
+        // An option that belongs to another kind is refused, as the API refuses its field: it is never left out in silence.
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--check", "title-too-long"), "--check isn't for an export of urls: it belongs to issueRows and check.");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--cut", "summary"), "--cut isn't for an export of urls: it belongs to report.");
+        AssertFails(await RunAsync("export", crawl, "--kind", "report", "--out", Path.Combine(_folder, "r.html"), "--columns", "url"),
+            "--columns isn't for an export of report: it belongs to urls and links and sitemapUrls and issueRows.");
+        AssertFails(await RunAsync("export", crawl, "--kind", "robotsBlocked", "--origin", _server.BaseUri.GetLeftPart(UriPartial.Authority), "--out", csv, "--sort", "url"),
+            "--sort isn't for an export of robotsBlocked");
+        AssertFails(await RunAsync("export", crawl, "--kind", "workbook", "--out", Path.Combine(_folder, "w.xlsx"), "--examples", "2"), "--examples isn't for an export of workbook: it belongs to report.");
+        AssertFails(await RunAsync("export", crawl, "--kind", "check", "--check", "title-too-long", "--out", csv, "--filter", "depth:eq:1"), "--filter isn't for an export of check");
+        Assert.False(File.Exists(csv));
+
+        // The crawl itself is never an export's file, whatever it's called.
+        var named = Path.Combine(_folder, "crawl.csv");
+        File.Copy(crawl, named);
+        var size = new FileInfo(named).Length;
+        AssertFails(await RunAsync("export", named, "--kind", "urls", "--out", named), "the crawl's own file");
+        Assert.Equal(size, new FileInfo(named).Length);
+
+        // A crawl never analysed has no report and no workbook, and says how to get one.
+        var fresh = Path.Combine(_folder, "fresh.sicrawl");
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", fresh, "-q", "--no-analyze", "--max-urls", "10")).ExitCode);
+        AssertFails(await RunAsync("report", fresh, "--out", Path.Combine(_folder, "report.html")), "si analyze");
+        AssertFails(await RunAsync("export", fresh, "--kind", "workbook", "--out", Path.Combine(_folder, "everything.xlsx")), "si analyze");
+        AssertFails(await RunAsync("export", fresh, "--kind", "urls", "--out", csv, "--sort", "inlinks:desc"), "needs an analysis");
+
+        // Ctrl+C as an export starts: 130, and nothing is left.
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        var stopped = await RunAsync(cancelled.Token, "export", crawl, "--kind", "links", "--out", csv);
+        Assert.Equal(130, stopped.ExitCode);
+        Assert.Contains("nothing was written", stopped.Error);
+        Assert.False(File.Exists(csv));
+        Assert.Empty(Directory.GetFiles(_folder, "*.tmp*"));
     }
 
     [Fact]

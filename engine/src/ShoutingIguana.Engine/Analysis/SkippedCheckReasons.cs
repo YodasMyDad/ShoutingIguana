@@ -33,11 +33,24 @@ public static class SkippedCheckReasons
     /// <summary>The crawl stayed in its start folder, so links from the rest of the site weren't read.</summary>
     public const string START_FOLDER = "start-folder";
 
+    /// <summary>
+    /// The crawl didn't start at the site's root (its start URL has a path other than <c>/</c>), so its first page isn't
+    /// known to be the site's home page, which a check of the site as a whole is judged by.
+    /// </summary>
+    public const string START_NOT_ROOT = "start-not-root";
+
     /// <summary>The crawl was told not to check links to other sites.</summary>
     public const string EXTERNAL_LINKS_OFF = "external-links-off";
 
     /// <summary>The crawl was told not to fetch images and other files.</summary>
     public const string RESOURCES_OFF = "resources-off";
+
+    /// <summary>
+    /// The crawl was told to ignore robots.txt: it asked for every URL, so none was refused, and it read robots.txt only
+    /// where sitemap discovery asked for it (the start URL's origin, with sitemaps on). What robots.txt blocks, and
+    /// whether it answers where the crawl never read it, can't be judged.
+    /// </summary>
+    public const string ROBOTS_TXT_IGNORED = "robots-txt-ignored";
 
     /// <summary>
     /// The site's other versions (www or not, http or https) weren't all checked: the crawl stopped before they answered,

@@ -22,6 +22,12 @@ internal sealed record FetchResponse
 
     /// <summary>The decoded body, when one was requested and the response qualified.</summary>
     public string? Body { get; init; }
+
+    /// <summary>
+    /// The encoding a byte-order mark at the start of <see cref="Body"/>'s bytes declared (<c>utf-8</c>, <c>utf-16be</c>,
+    /// <c>utf-16le</c>), or null with none. The decoded body no longer has the mark.
+    /// </summary>
+    public string? ByteOrderMark { get; init; }
     public bool BodyTruncated { get; init; }
 
     /// <summary>Absolute redirect target from the Location header.</summary>

@@ -13,25 +13,42 @@ internal static partial class CharsetDecoder
 
     static CharsetDecoder() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-    public static string Decode(ReadOnlySpan<byte> bytes, string? headerCharset)
+    /// <summary>The label of UTF-8, as <see cref="ByteOrderMarkOf"/> gives it.</summary>
+    public const string UTF_8 = "utf-8";
+
+    /// <summary>The label of big-endian UTF-16, as <see cref="ByteOrderMarkOf"/> gives it.</summary>
+    public const string UTF_16BE = "utf-16be";
+
+    /// <summary>The label of little-endian UTF-16, as <see cref="ByteOrderMarkOf"/> gives it.</summary>
+    public const string UTF_16LE = "utf-16le";
+
+    public static string Decode(ReadOnlySpan<byte> bytes, string? headerCharset) => ByteOrderMarkOf(bytes) switch
+    {
+        UTF_8 => Encoding.UTF8.GetString(bytes[3..]),
+        UTF_16BE => Encoding.BigEndianUnicode.GetString(bytes[2..]),
+        UTF_16LE => Encoding.Unicode.GetString(bytes[2..]),
+        _ => (Resolve(headerCharset) ?? Resolve(Prescan(bytes)) ?? Encoding.UTF8).GetString(bytes)
+    };
+
+    /// <summary>
+    /// The encoding a byte-order mark at the start of the bytes declares, by its label (<see cref="UTF_8"/>,
+    /// <see cref="UTF_16BE"/>, <see cref="UTF_16LE"/>: the three the HTML standard sniffs for), or null with none. The mark
+    /// beats every other declaration, and <see cref="Decode"/> leaves it out of the text, so this is the only place it
+    /// can be seen.
+    /// </summary>
+    public static string? ByteOrderMarkOf(ReadOnlySpan<byte> bytes)
     {
         if (bytes.StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]))
         {
-            return Encoding.UTF8.GetString(bytes[3..]);
+            return UTF_8;
         }
 
         if (bytes.StartsWith((ReadOnlySpan<byte>)[0xFE, 0xFF]))
         {
-            return Encoding.BigEndianUnicode.GetString(bytes[2..]);
+            return UTF_16BE;
         }
 
-        if (bytes.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xFE]))
-        {
-            return Encoding.Unicode.GetString(bytes[2..]);
-        }
-
-        var encoding = Resolve(headerCharset) ?? Resolve(Prescan(bytes)) ?? Encoding.UTF8;
-        return encoding.GetString(bytes);
+        return bytes.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xFE]) ? UTF_16LE : null;
     }
 
     private static string? Prescan(ReadOnlySpan<byte> bytes)

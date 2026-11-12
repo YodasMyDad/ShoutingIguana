@@ -288,7 +288,34 @@ public sealed class PageRuleTests
 
         Assert.Equal([IssueCatalog.CHARSET_MISSING], withoutHeader);
         Assert.Empty(withHeader);
+
+        // A header that names the parameter and gives it no value declares nothing, as the fetch reads it.
+        Assert.All(new[] { "text/html; charset=", "text/html; charset=\"\"", "text/html; x-charset=utf-8", "text/html;" }, (contentType, index) =>
+            Assert.Equal([IssueCatalog.CHARSET_MISSING],
+                Issues(rules, site.Page($"{site.Site}/empty-{index}", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", contentType)]))));
+        Assert.Empty(Issues(rules, site.Page($"{site.Site}/quoted", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html;charset=\"utf-8\"")])));
         Assert.Contains(IssueCatalog.LANG_MISSING, Issues(rules, site.Page($"{site.Site}/c", RuleHarness.Html(lang: string.Empty), IndexabilityReason.Noindex)));
+    }
+
+    /// <summary>
+    /// A byte-order mark at the start of the file declares the encoding, and beats a meta tag and the header: a page with
+    /// one, UTF-8 or UTF-16, isn't missing its character encoding, though it has no meta tag and no charset in its header.
+    /// </summary>
+    [Theory]
+    [InlineData("utf-8")]
+    [InlineData("utf-16le")]
+    [InlineData("utf-16be")]
+    public void AByteOrderMarkDeclaresTheCharacterEncoding(string byteOrderMark)
+    {
+        var site = new RuleHarness();
+        var html = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width\"></head><body></body></html>";
+        var rules = new HtmlRules();
+
+        var marked = Issues(rules, site.Page($"{site.Site}/marked", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html")], byteOrderMark: byteOrderMark));
+        var unmarked = Issues(rules, site.Page($"{site.Site}/unmarked", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html")]));
+
+        Assert.Empty(marked);
+        Assert.Equal([IssueCatalog.CHARSET_MISSING], unmarked);
     }
 
     [Fact]
@@ -332,7 +359,7 @@ public sealed class PageRuleTests
         var invalid = site.Page($"{site.Site}/d", RuleHarness.Html("<link rel=\"canonical\" href=\"http://[nope\">"));
         var none = site.Page($"{site.Site}/e", RuleHarness.Html());
         var noneButNoindex = site.Page($"{site.Site}/f", RuleHarness.Html(), IndexabilityReason.Noindex);
-        var rules = new CanonicalRules(site.Table());
+        var rules = new CanonicalRules(site.Table(), site.UrlOf);
 
         Assert.Empty(Issues(rules, sameTwice));
         Assert.Equal([IssueCatalog.CANONICAL_MULTIPLE], Issues(rules, conflicting));
@@ -354,7 +381,7 @@ public sealed class PageRuleTests
         var selfCanonical = site.Page($"{site.Site}/c", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/c\"><meta name=\"robots\" content=\"noindex\">"),
             IndexabilityReason.Noindex);
         var canonicalOnly = site.Page($"{site.Site}/d", RuleHarness.Html(other), IndexabilityReason.Canonicalised);
-        var rules = new CanonicalRules(site.Table());
+        var rules = new CanonicalRules(site.Table(), site.UrlOf);
 
         Assert.Equal(new IssueHit(IssueCatalog.NOINDEX_WITH_CANONICAL, conflict.UrlId, null, site.Id($"{site.Site}/other")), rules.Check(conflict).Single());
         Assert.Equal([IssueCatalog.NOINDEX_WITH_CANONICAL], Issues(rules, fromHeaders));

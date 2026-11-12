@@ -39,7 +39,7 @@ const CHECKS: Checks = {
     check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx'),
     check('broken-internal-links', 'links', 'error', 'Links to broken internal URLs'),
     check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text'),
-    check('orphan-page', 'links', 'notice', 'Orphan page'),
+    check('orphan-page', 'links', 'notice', 'Orphan page in a sitemap'),
     check('title-too-long', 'titles', 'notice', 'Title too long'),
     check('title-duplicate', 'titles', 'warning', 'Duplicate title'),
     check('not-in-sitemap', 'sitemaps', 'notice', 'Indexable page not in a sitemap'),
@@ -237,7 +237,7 @@ describe('skipped checks', () => {
       {
         reason: 'No sitemap could be read.',
         checks: [
-          { id: 'orphan-page', title: 'Orphan page', link: { to: 'issues', check: 'orphan-page' } },
+          { id: 'orphan-page', title: 'Orphan page in a sitemap', link: { to: 'issues', check: 'orphan-page' } },
           {
             id: 'not-in-sitemap',
             title: 'Indexable page not in a sitemap',

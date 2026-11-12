@@ -82,12 +82,15 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 410, inSitemap: true);
         site.Fetched("https://partner.example/listed", FetchOutcome.Success, 200, inSitemap: true);
 
-        // The one page the crawl read (a sitemap led to it) is noindex, so the site is hidden: reported on the start URL.
+        // The one page the crawl read (a sitemap led to it) is noindex. A site hidden from search is one whose home page
+        // is noindex, and this one has no home page, so that check reports nothing here: what it flags is always a page.
         var hidden = site.Page($"{site.Site}/listed", RuleHarness.Html("<meta name=\"robots\" content=\"noindex\">"), IndexabilityReason.Noindex);
         var urls = site.Table();
         Assert.Equal(start, urls.HomeId);
         var visibility = new SiteVisibilityRules(urls);
         visibility.Observe(hidden);
+        Assert.Empty(visibility.Finish());
+        Assert.Equal(IssueSubject.Page, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Subject);
 
         var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: false, stayInStartFolder: false);
         var options = new CrawlOptions { StartUrl = site.Site };
@@ -100,8 +103,7 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
             .. new RobotsTxtRules(urls, [new("https://example.com", 404, null, null, 0)], scope, new HashSet<string> { "https://example.com" }).Finish(),
             .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 200, false, 2, null), new($"{site.Site}/old.xml", 500, false, 0, "HTTP 500")], options,
                 crawlComplete: true).Finish(),
-            .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)], options, crawlComplete: true).Finish(),
-            .. visibility.Finish()
+            .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)], options, crawlComplete: true).Finish()
         ];
 
         var onNonPages = hits.Where(hit => !urls[hit.UrlId].IsPage).Select(hit => hit.Issue).Distinct().ToList();

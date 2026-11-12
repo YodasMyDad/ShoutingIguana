@@ -1,3 +1,4 @@
+using System.Text;
 using ShoutingIguana.TestSite.Models;
 
 namespace ShoutingIguana.TestSite;
@@ -30,13 +31,15 @@ public sealed partial class SyntheticSite
     {
         List<Plant> plants = [];
 
+        // With an encoding, the page is sent as bytes in it, after its byte-order mark (the encoding's preamble).
         void Page(string slug, string name, string[] issues, Func<PageSpec, PageSpec>? change = null, bool inSitemap = true,
-            string contentType = HTML, bool linked = true)
+            string contentType = HTML, bool linked = true, Encoding? markedAs = null)
         {
             var page = PlantPage(slug, name);
             page = change?.Invoke(page) ?? page;
-            plants.Add(new Plant(page.Path, 200, linked, inSitemap, issues,
-                () => new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)));
+            plants.Add(new Plant(page.Path, 200, linked, inSitemap, issues, () => markedAs is null
+                ? new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)
+                : new SyntheticResponse(200, contentType, null, [.. markedAs.GetPreamble(), .. markedAs.GetBytes(Render(page))], null, SECURITY_HEADERS)));
         }
 
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
@@ -158,6 +161,12 @@ public sealed partial class SyntheticSite
         Page("canonical-broken", "Canonical to a 404", ["canonical-broken"], page => page with { Canonical = $"{_base}{PLANTS_PATH}gone" });
         Page("canonical-redirect", "Canonical to a redirect", ["canonicalised-page", "canonical-to-redirect"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}moved" }, inSitemap: false);
+
+        // A canonical to a URL two redirects from where it ends: the canonical is a way into that chain, so the chain is
+        // reported at the URL it names.
+        Page("canonical-chain", "Canonical to a redirect chain", ["canonicalised-page", "canonical-to-redirect"],
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}moved-twice" }, inSitemap: false);
+        Other("moved-twice", 301, linked: false, ["redirect-chain"], () => Redirect(301, PLANTS_PATH + "moved"));
 
         // /self-canonical/ names /self-canonical, which redirects back to it. The redirect is the stronger signal, so the
         // page is indexed and audited: its short title is reported, and it isn't canonicalised or out of place in the sitemap.
@@ -344,6 +353,12 @@ public sealed partial class SyntheticSite
         Page("no-viewport", "Missing viewport", ["viewport-missing"], page => page with { Viewport = false });
         Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
+
+        // A byte-order mark at the start of the file declares the encoding, with no meta tag and no charset in the
+        // header: neither page is missing its character encoding.
+        Page("charset-bom", "Byte-order mark", [], page => page with { Charset = false }, contentType: "text/html", markedAs: Encoding.UTF8);
+        Page("charset-bom-utf16", "UTF-16 byte-order mark", [], page => page with { Charset = false }, contentType: "text/html",
+            markedAs: Encoding.Unicode);
         Page("no-open-graph", "Missing Open Graph", ["open-graph-missing"], page => page with { OpenGraph = false });
 
         // One meta tag serving as both the description and og:description is both.

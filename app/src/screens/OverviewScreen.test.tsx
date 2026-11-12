@@ -232,7 +232,7 @@ describe('the Overview of an analysed crawl', () => {
     expect(searchOf(links).get('category')).toBe('links');
     expect(searchOf(links).get('q')).toBeNull();
     const skipped = region('Not checked on this crawl');
-    expect(skipped.getByRole('link', { name: 'Orphan page' })).toBeVisible();
+    expect(skipped.getByRole('link', { name: 'Orphan page in a sitemap' })).toBeVisible();
     expect(skipped.getByText('No sitemap could be read.')).toBeVisible();
   });
 
