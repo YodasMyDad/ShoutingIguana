@@ -68,6 +68,41 @@ public sealed class FaviconSnifferTests
         ];
         Assert.All(refused, image => Assert.True(FaviconSniffer.Sniff(image.Bytes) is null, $"{image.What} was taken for an image."));
 
+        // A header with nothing a browser could draw behind it, or with a page behind it, is no image either; nor is an
+        // icon file whose image is bigger than its directory says, or than an icon may be.
+        var png = TestImages.Png(32, 32);
+        var header = png[..33];
+        (string What, byte[] Bytes)[] hollow =
+        [
+            ("a PNG's header alone", header),
+            ("a PNG's header and a page", [.. header, .. "<html><script>alert(1)</script></html>"u8.ToArray()]),
+            ("a PNG with no image data", [.. header, .. TestImages.PngChunk("IEND", [])]),
+            ("a PNG with no end", png[..^12]),
+            ("a PNG whose header's checksum is wrong", Flipped(TestImages.Png(32, 32), 29)),
+            ("a PNG whose data runs past its end", Changed(TestImages.Png(32, 32), 36, 0x7F)),
+            ("a GIF with no trailer", TestImages.Gif(16, 16)[..^1]),
+            ("a GIF with no image", [.. TestImages.Gif(16, 16)[..13], 0x3B]),
+            ("a GIF whose image data runs past its end", [.. TestImages.Gif(16, 16)[..^3]]),
+            ("a JPEG with no scan", [.. TestImages.Jpeg(64, 48)[..39], 0xFF, 0xD9]),
+            ("a JPEG whose scan has no end", TestImages.Jpeg(64, 48)[..^2]),
+            ("a WebP longer than its file", Changed(TestImages.WebPLossless(32, 32), 5, 0x10)),
+            ("a WebP whose chunk runs past it", Changed(TestImages.WebPLossless(32, 32), 17, 0x10)),
+            ("an extended WebP with no image", Fixed(TestImages.WebPExtended(32, 32)[..30])),
+            ("an icon file holding a huge PNG", IcoHolding(TestImages.Png(60_000, 60_000), 16, 16)),
+            ("an icon file holding a PNG of another size", IcoHolding(TestImages.Png(64, 64), 16, 16)),
+            ("an icon file holding a PNG's header alone", IcoHolding(header, 32, 32)),
+            ("an icon file saying 256 of a 128 PNG", IcoHolding(TestImages.Png(128, 128), 0, 0)),
+            ("an icon file holding a bitmap of another size", IcoHolding(TestImages.Bitmap(64, 64), 32, 32)),
+            ("an icon file holding a bitmap with too few pixels", IcoHolding(TestImages.Bitmap(32, 32)[..1_000], 32, 32)),
+            ("an icon file holding a bitmap too big", IcoHolding(Changed(Changed(TestImages.Bitmap(4, 4), 5, 0x40), 9, 0x40), 0, 0))
+        ];
+        Assert.All(hollow, image => Assert.True(FaviconSniffer.Sniff(image.Bytes) is null, $"{image.What} was taken for an image."));
+
+        // While what holds up as an image, its data whole, is one.
+        Assert.Equal(new FaviconImage("image/x-icon", 512, 512), FaviconSniffer.Sniff(IcoHolding(TestImages.Png(512, 512), 0, 0)));
+        Assert.Equal(new FaviconImage("image/x-icon", 32, 32), FaviconSniffer.Sniff(IcoHolding(TestImages.Bitmap(32, 32), 32, 32)));
+        Assert.Equal(new FaviconImage("image/png", 32, 32), FaviconSniffer.Sniff([.. png, .. "trailing bytes after the end"u8.ToArray()]));
+
         // An image of the most bytes an icon may be is one; a byte more and it isn't.
         Assert.NotNull(FaviconSniffer.Sniff(TestImages.Png(64, 64, FaviconSniffer.MAX_BYTES)));
         Assert.Null(FaviconSniffer.Sniff(TestImages.Png(64, 64, FaviconSniffer.MAX_BYTES + 1)));
@@ -84,5 +119,29 @@ public sealed class FaviconSnifferTests
     {
         image[at] = value;
         return image;
+    }
+
+    private static byte[] Flipped(byte[] image, int at)
+    {
+        image[at] ^= 0xFF;
+        return image;
+    }
+
+    /// <summary>A RIFF file cut short, its length said again to be what's left: what's in it is all there is.</summary>
+    private static byte[] Fixed(byte[] riff)
+    {
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(riff.AsSpan(4), (uint)(riff.Length - 8));
+        return riff;
+    }
+
+    /// <summary>An icon file holding one image, whatever it is, under the size its directory gives.</summary>
+    private static byte[] IcoHolding(byte[] image, byte width, byte height)
+    {
+        var ico = new byte[6 + 16 + image.Length];
+        (ico[2], ico[4], ico[6], ico[7]) = (1, 1, width, height);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(ico.AsSpan(6 + 8), (uint)image.Length);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(ico.AsSpan(6 + 12), 22);
+        image.CopyTo(ico, 22);
+        return ico;
     }
 }
