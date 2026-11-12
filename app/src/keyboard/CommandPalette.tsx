@@ -6,6 +6,7 @@ import { checksQuery, libraryQuery } from '../api/queries';
 import { afterFocusReturns, restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatRelativeTime } from '../lib/format';
+import { useMode } from '../mode/mode';
 import { Kbd } from '../ui/Kbd';
 import { GoToUrl } from './GoToUrl';
 import { setPaletteMode, usePaletteMode } from './paletteMode';
@@ -43,6 +44,7 @@ export function CommandPalette() {
   const { crawl: crawlId } = useParams({ strict: false });
   const library = useQuery({ ...libraryQuery(), enabled: open }).data;
   const checks = useQuery({ ...checksQuery(), enabled: open && crawlId !== undefined }).data;
+  const appMode = useMode();
 
   const entries = useMemo<PaletteItem[]>(() => {
     const list: PaletteItem[] = commands
@@ -59,11 +61,13 @@ export function CommandPalette() {
       }));
     if (crawlId && checks) {
       for (const check of checks.checks) {
+        // A check is found by either of its titles in both modes, and shows the mode's own.
+        const plain = check.plainTitle ?? null;
         list.push({
           id: `check:${check.id}`,
           group: 'Checks',
-          title: check.title,
-          keywords: [check.id, check.severity, check.category],
+          title: appMode === 'simple' && plain ? plain : check.title,
+          keywords: [check.id, check.severity, check.category, ...(plain ? [plain, check.title] : [])],
           run: () => navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl: crawlId, check: check.id } }),
         });
       }
@@ -79,7 +83,7 @@ export function CommandPalette() {
       });
     }
     return list;
-  }, [crawlId, checks, library, navigate]);
+  }, [crawlId, checks, library, navigate, appMode]);
 
   // However it closes (Esc, a click outside, the key that opens it, a command's own doing), it opens on the commands
   // next time: "Go to URL…" is asked for each time it's wanted.

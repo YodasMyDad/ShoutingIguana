@@ -44,11 +44,26 @@ export interface ScreenAppProps {
   crawlId?: string | undefined;
   /** The mode the app is in: Advanced unless the story is of Simple. */
   mode?: Mode | undefined;
+  /**
+   * The window, in CSS px, when it isn't the story's: 640x360 is a 1280x720 window at 200% zoom (the sidebar is
+   * collapsed, as a window that narrow starts it).
+   */
+  size?: { width: number; height: number } | undefined;
 }
 
-export function ScreenApp({ path, live, refreshAfterMs, crawlId = TEST_CRAWL_ID, mode = 'advanced' }: ScreenAppProps) {
+/** A 1280x720 window at 200% zoom, in CSS px. */
+export const AT_200_PERCENT = { width: 640, height: 360 } as const;
+
+export function ScreenApp({
+  path,
+  live,
+  refreshAfterMs,
+  crawlId = TEST_CRAWL_ID,
+  mode = 'advanced',
+  size,
+}: ScreenAppProps) {
   const [app] = useState(() => {
-    replaceSettings({ mode });
+    replaceSettings({ mode, ...(size ? { sidebarCollapsed: size.width < 1024 } : {}) });
     const queryClient: QueryClient = createQueryClient();
     return { queryClient, router: createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] })) };
   });
@@ -69,7 +84,7 @@ export function ScreenApp({ path, live, refreshAfterMs, crawlId = TEST_CRAWL_ID,
     return () => clearTimeout(timer);
   }, [app, refreshAfterMs, crawlId]);
   return (
-    <div className="h-screen">
+    <div className={size ? 'overflow-hidden border border-border' : 'h-screen'} style={size}>
       <App router={app.router} queryClient={app.queryClient} />
     </div>
   );
