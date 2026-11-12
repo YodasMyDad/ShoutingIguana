@@ -71,6 +71,7 @@ internal static class UrlQueryCompiler
         }
 
         ValidateFilters(query.Filters, query.Search, scope, errors);
+        LinkGridReader.ValidateEnds(query.LinkEnds, errors);
         if (query.Sort.Count > MAX_SORT)
         {
             Add(errors, "sort", $"Sort by at most {MAX_SORT} columns.");
@@ -179,6 +180,11 @@ internal static class UrlQueryCompiler
         if (scope.SitemapId is { } sitemap)
         {
             predicates.Insert(0, Sitemap(sitemap, mode));
+        }
+
+        if (query.LinkEnds is { } ends)
+        {
+            predicates.Add(LinkEnds(ends));
         }
 
         var sort = query.Sort.Select(key => SortKey(key, mode, scope, reason)).ToList();
@@ -712,6 +718,19 @@ internal static class UrlQueryCompiler
 
         var sql = $"s.url_id IN ({subquery})";
         return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters)) { Ids = subquery, Source = source };
+    }
+
+    /// <summary>
+    /// The URLs at one end of the links some link filters match: a condition to be read from the links grid, which gives
+    /// the set of those URLs, once the rest is compiled (<see cref="UrlGridReader.WithLinkEnds"/>). Its key is the filters
+    /// as asked, so the query's hash, and what's kept for it, tell one set of links from another.
+    /// </summary>
+    public static GridPredicate LinkEnds(UrlLinkEnds ends)
+    {
+        var filters = ends.Filters.Select(filter => string.Join(" ", filter.Column, filter.Operator, Describe(filter.Value),
+            $"[{string.Join(",", (filter.Values ?? []).Select(value => Describe(value)))}]", Describe(filter.Min), Describe(filter.Max),
+            filter.Group is { } group ? $"{Describe(group.Detail)}/{Describe(group.RelatedUrlId)}" : string.Empty));
+        return new GridPredicate("1", "1", [], Driving: false, $"linkends|{ends.End}|{string.Join("&", filters)}|{Describe(ends.Search)}") { LinkEnds = ends };
     }
 
     /// <summary>The URL or the title contains the text.</summary>

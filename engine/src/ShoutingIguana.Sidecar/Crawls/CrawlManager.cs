@@ -15,6 +15,7 @@ using ShoutingIguana.Sidecar.Events;
 using ShoutingIguana.Sidecar.Events.Models;
 using ShoutingIguana.Sidecar.Library;
 using ShoutingIguana.Sidecar.Models;
+using ShoutingIguana.Sidecar.Options;
 
 namespace ShoutingIguana.Sidecar.Crawls;
 
@@ -31,6 +32,7 @@ internal sealed class CrawlManager(
     CrawlSummaryCache summaries,
     EventHub events,
     AlertLog alerts,
+    AnalysisSettingsStore analysisSettings,
     ILoggerFactory loggerFactory)
 {
     private const string RUNNING_HERE = "This crawl is running. Stop it first.";
@@ -52,14 +54,18 @@ internal sealed class CrawlManager(
     /// <summary>Tests only: starts a crawl in place of the engine.</summary>
     internal Func<CrawlRequest, ICrawlObserver, CrawlJob>? StartJob { get; set; }
 
+    /// <summary>Tests only: called with the crawl's id as its analysis is about to run, the limits it runs with already taken.</summary>
+    internal Action<string>? AnalysisStarting { get; set; }
+
     /// <summary>Tests only: called with the crawl's id once <see cref="Alerts"/> has read the file, before it adds the unstored ones.</summary>
     internal Action<string>? AlertsFileRead { get; set; }
 
     /// <summary>
-    /// The thresholds every analysis here runs with, and so what an analysis must have used to be up to date. The
-    /// engine's defaults until Settings can change them.
+    /// The thresholds every analysis here runs with, and so what an analysis must have used to be up to date: the engine's,
+    /// with what Settings has changed over them (<see cref="AnalysisSettingsStore"/>). Each read gives the set in force
+    /// then, whole and unchanging: an analysis takes it once, as it starts.
     /// </summary>
-    public AnalysisSettings AnalysisSettings { get; } = new();
+    public AnalysisSettings AnalysisSettings => analysisSettings.Current;
 
     /// <summary>Every crawl in the library, newest first.</summary>
     public IReadOnlyList<CrawlListItem> List()
@@ -687,8 +693,12 @@ internal sealed class CrawlManager(
         string? errorType = null;
         try
         {
+            // The limits in force as it starts are the ones it runs with to its end, and stores: saved again meanwhile, the
+            // analysis is out of date the moment it's done, and says so.
+            var settings = AnalysisSettings;
+            AnalysisStarting?.Invoke(crawl.Id);
             var summary = await new CrawlAnalyzer(loggerFactory)
-                .AnalyzeAsync(crawl.Path, AnalysisSettings, new SidecarAnalysisProgress(this, crawl), cancellation.Token).ConfigureAwait(false);
+                .AnalyzeAsync(crawl.Path, settings, new SidecarAnalysisProgress(this, crawl), cancellation.Token).ConfigureAwait(false);
             _logger.LogInformation("Analysed {Pages} pages of {Path} in {Duration}", summary.PagesAnalyzed, crawl.Path, summary.Duration);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -853,6 +863,7 @@ internal sealed class CrawlManager(
             // A crawl running here changes its file as it goes; otherwise the file says whether its analysis still stands.
             OutOfDate = analyzedAt is not null && (crawling || summary!.OutOfDate(AnalysisSettings).Count > 0),
             SizeBytes = cached.Stamp?.SizeBytes ?? 0,
+            HasFavicon = summary?.HasFavicon ?? false,
 
             // A crawl starting here may not have created its file yet.
             Missing = live is null && !cached.Exists

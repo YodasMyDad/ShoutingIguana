@@ -28,6 +28,10 @@ internal static class GridEndpoints
             TypedResults.Json(await data.LookupAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlLookupRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlLookup));
 
+        api.MapPost("/api/crawls/{id}/search", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.SearchAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.SearchRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlSearchResults));
+
         api.MapPost("/api/crawls/{id}/urls/inspect", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.UrlAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlDetailDto));
@@ -44,6 +48,13 @@ internal static class GridEndpoints
             await data.SourceAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlRequest).ConfigureAwait(false), cancellationToken)
                 .ConfigureAwait(false));
 
+        // The site's icon: an image and nothing else. Its media type is the one the engine read from its bytes, and every
+        // answer already forbids a browser to guess another, or to run or load anything from it (RequestGuard).
+        api.MapGet("/api/crawls/{id}/favicon", async (string id, GridData data, CancellationToken cancellationToken) =>
+            await data.FaviconAsync(id, cancellationToken).ConfigureAwait(false) is { } favicon
+                ? Results.Bytes(favicon.Bytes, favicon.ContentType)
+                : Results.NoContent());
+
         api.MapGet("/api/link-columns", () => TypedResults.Json(GridData.LinkColumns, SidecarJsonContext.Default.IReadOnlyListLinkColumnDto));
 
         api.MapPost("/api/crawls/{id}/links", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
@@ -54,6 +65,10 @@ internal static class GridEndpoints
             TypedResults.Json(await data.LinkFacetsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.FacetsRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.FacetsDto));
 
+        api.MapPost("/api/crawls/{id}/links/ends", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.LinkEndsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.LinkEndsRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.LinkEndPage));
+
         api.MapGet("/api/crawls/{id}/sitemaps", async (string id, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.SitemapsAsync(id, cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.SitemapList));
 
@@ -62,7 +77,7 @@ internal static class GridEndpoints
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlPageDto));
 
         api.MapPost("/api/crawls/{id}/robots", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
-            TypedResults.Json(await data.RobotsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GroupsRequest).ConfigureAwait(false),
+            TypedResults.Json(await data.RobotsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.RobotsOriginsRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.RobotsOriginPageDto));
 
         api.MapPost("/api/crawls/{id}/robots/file", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>

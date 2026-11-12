@@ -32,6 +32,12 @@ public sealed record CrawlFileSummary
     public TimeSpan? TimeCrawling { get; init; }
 
     /// <summary>
+    /// The crawl kept the site's icon (<see cref="FaviconReader"/>). A running crawl gains it a few requests after its
+    /// start page; a crawl made before icons were kept has none.
+    /// </summary>
+    public bool HasFavicon { get; init; }
+
+    /// <summary>
     /// URLs with a stored outcome, whatever it was, as <see cref="Crawling.Models.CrawlProgress.Fetched"/> counts them:
     /// those the crawl requested, those robots.txt kept it from requesting, which are stored as disallowed, and those it
     /// never asked because their host had stopped answering, which <see cref="CrawledUrlCount"/> leaves out. URLs it only

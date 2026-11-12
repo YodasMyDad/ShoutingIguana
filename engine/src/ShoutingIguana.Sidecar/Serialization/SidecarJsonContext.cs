@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -59,6 +60,11 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<RobotsLineKind>),
         typeof(CamelCaseEnumConverter<RobotsLineProblem>),
         typeof(CamelCaseEnumConverter<RobotsBlockReason>),
+
+        // Search and the favicon (E6).
+        typeof(CamelCaseEnumConverter<UrlSearchRank>),
+        typeof(CamelCaseEnumConverter<UrlSearchField>),
+        typeof(CamelCaseEnumConverter<LinkEnd>),
 
         // Export (E5).
         typeof(CamelCaseEnumConverter<ExportKind>),
@@ -124,6 +130,17 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(RobotsFileDto))]
 [JsonSerializable(typeof(RobotsBlockedRequest))]
 [JsonSerializable(typeof(RobotsBlockedPage))]
+
+// Search and the favicon (E6).
+[JsonSerializable(typeof(SearchRequest))]
+[JsonSerializable(typeof(RobotsOriginsRequest))]
+[JsonSerializable(typeof(LinkEndsRequest))]
+[JsonSerializable(typeof(LinkEndPage))]
+[JsonSerializable(typeof(AnalysisSettingsDto))]
+[JsonSerializable(typeof(ResetAnalysisSettingsRequest))]
+[JsonSerializable(typeof(Dictionary<string, JsonElement>))]
+[JsonSerializable(typeof(Dictionary<string, long>))]
+[JsonSerializable(typeof(UrlSearchResults))]
 
 // Export (E5).
 [JsonSerializable(typeof(ExportRequestDto))]

@@ -25,4 +25,5 @@ internal sealed record UrlDetailDto(
     IReadOnlyList<UrlIssue>? Issues,
     NamedByIssues? NamedBy,
     SummaryState Summary,
-    SourceStateDto Source);
+    SourceStateDto Source,
+    UrlSitemaps ListedIn);

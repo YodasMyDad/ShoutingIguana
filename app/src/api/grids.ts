@@ -88,6 +88,31 @@ export interface GridQuery {
   group?: CheckGroupRef;
 }
 
+/** A query of one of the URL grids (`/urls`, a check's `/rows`, `/sitemaps/urls`): the grid query, and E6's `linkEnds`. */
+export interface UrlGridQuery extends GridQuery {
+  /**
+   * E6: only the URLs at one end of the links a view of the links grid matches. `matching` under it alone is `total`
+   * of `/links/ends` for the same links. Its errors are keyed under it (`linkEnds.end`, `linkEnds.filters[0].column`).
+   * The links grid doesn't take it (`bad-request`), which is why it isn't on `GridQuery`.
+   */
+  linkEnds?: LinkEnds;
+}
+
+/** Which end of a link: `from` is the page it's on, `to` the URL it leads to. */
+export type LinkEnd = 'from' | 'to';
+
+/**
+ * E6: the URLs at one end of the links a view of the links grid matches: the pages those links are on (`from`), or the
+ * URLs they lead to (`to`). `filters` and `search` are the links grid's own; none of either is every link.
+ */
+export interface LinkEnds {
+  end: LinkEnd;
+  /** The links grid's filters (`kind`, `text`, `from.<column>`, `to.<column>`...). At most 20. */
+  filters?: GridFilter[];
+  /** The links grid's search: the link's text, or either end's URL, contains. */
+  search?: string;
+}
+
 /** Why the URL summary isn't there to read (`summary.reason`, and `needs-analysis`'s `reason`). */
 export type SummaryReason = 'crawling' | 'notAnalyzed' | 'engineChanged' | 'crawlChanged';
 
@@ -235,6 +260,8 @@ export interface FacetsQuery {
   search?: string;
   /** Every facet when left out. */
   facets?: FacetId[];
+  /** E6: only the URLs at one end of the links a links view matches, as the grid's `linkEnds`. */
+  linkEnds?: LinkEnds;
 }
 
 /**
@@ -285,7 +312,10 @@ export interface IssueGroup {
   detail: string | null;
   relatedUrlId: number | null;
   relatedUrl: string | null;
+  /** How many URLs the group holds. Kept for older callers: `urls` is the same number under a name true of every check. */
   pages: number;
+  /** E6: how many URLs the group holds, pages or not: the name to read. Absent from a sidecar built before E6. */
+  urls?: number;
   /** The group's part of the check's flagged URLs, 0 to 1, unrounded. */
   share: number;
   /** One fix probably clears it: it's in the site's template. */
@@ -385,6 +415,39 @@ export interface LinkFacetsPage {
   facets: Partial<Record<LinkFacetId, FacetBucket[]>>;
 }
 
+/** E6, `POST /crawls/{id}/links/ends`: one page of the URLs at one end of the links a view matches. */
+export interface LinkEndsQuery {
+  end: LinkEnd;
+  /** The links grid's filters; none is every link. */
+  filters?: GridFilter[];
+  /** The links grid's search. */
+  search?: string;
+  offset?: number;
+  /** 1 to 1,000; 100 when left out. */
+  limit?: number;
+}
+
+/** A URL at one end of a view's links, with how many of those links have it at that end. */
+export interface LinkEndRow extends UrlRef {
+  links: number;
+}
+
+/**
+ * The ends of a links view, each URL once, in the order the crawl found the URLs: its targets, or the pages its links
+ * are on. The targets are read from what the link summary counts; the pages take a pass over every link, once per set
+ * of filters (inside the budget where the sidecar has read slots free, over it on one connection).
+ */
+export interface LinkEndsPage {
+  end: LinkEnd;
+  /** How many URLs there are at that end: the URL grid's `matching` under the same `linkEnds`. */
+  total: number;
+  /** The links the view matches: the links grid's `matching`. The rows' `links` add up to it. */
+  links: number;
+  offset: number;
+  rows: LinkEndRow[];
+  summary: SummaryState;
+}
+
 // --------------------------------------------------------------------------------------------------- Sitemaps (E3b)
 
 /** How far the crawl got with its sitemaps: `unfinished` means the list isn't all there is. */
@@ -411,6 +474,12 @@ export interface Sitemap {
   entries: number;
   /** The sitemaps an index lists that the crawl has. */
   sitemaps: number;
+  /**
+   * E6: how many sitemaps the file itself lists, as the crawl read it (every `<sitemap>` entry, repeats included), so
+   * an index says how many it names beside how many the crawl has; 0 for a sitemap that lists only URLs. Null when the
+   * file's body was never read, and for a crawl made before E6. Absent from a sidecar built before E6.
+   */
+  listedSitemaps?: number | null;
   error: string | null;
   /**
    * The URLs it lists, each once (an index: those of every sitemap under it), as the URL grid's `fetched` and
@@ -477,9 +546,28 @@ export interface RobotsOrigin {
   blocked: number;
 }
 
+/** E6, `POST /crawls/{id}/robots`: a page of origins, searched and filtered. Every field is optional. */
+export interface RobotsOriginsQuery {
+  offset?: number;
+  /** 1 to 1,000; 100 when left out. */
+  limit?: number;
+  /** Text in the origin's name, case ignored. At most 1,000 characters. */
+  search?: string;
+  /** True for only the origins that blocked something, false for only those that blocked nothing. */
+  blocked?: boolean;
+}
+
 /** `POST /crawls/{id}/robots`: the site's own origins first, then the rest by the URLs they blocked. */
 export interface RobotsOriginPage {
+  /** Every origin of the crawl, whatever is searched or filtered. */
   total: number;
+  /** E6: the origins the search and the filter match, which the page is of. Absent from a sidecar built before E6. */
+  matching?: number;
+  /**
+   * E6: what a filter bar shows, of the origins the `search` finds: all of them, those that blocked something, and
+   * those that blocked nothing. Each is `matching` under that filter. Absent from a sidecar built before E6.
+   */
+  counts?: { all: number; blocked: number; notBlocked: number };
   offset: number;
   /** False for a crawl told to ignore robots.txt, which blocks nothing. */
   respected: boolean;
@@ -510,6 +598,8 @@ export interface RobotsLine {
 
 /** `POST /crawls/{id}/robots/file`: one origin's file, line by line; `lines` is empty unless `state` is `read`. */
 export interface RobotsFile extends RobotsOrigin {
+  /** E6: false for a crawl told to ignore robots.txt, which blocked nothing. Absent from a sidecar built before E6. */
+  respected?: boolean;
   userAgent: string;
   lines: RobotsLine[];
   /** Blocked URLs no line accounts for: with the lines' `blocked`, they add up to the origin's. */
@@ -533,6 +623,8 @@ export interface RobotsBlockedQuery {
   /** Only the URLs this line refused. */
   line?: number;
   reason?: RobotsBlockReason;
+  /** E6: only this URL: its row and `matching` 1, or no rows and `matching` 0 for a URL the origin didn't block. */
+  urlId?: number;
   offset?: number;
   /** 1 to 1,000. */
   limit?: number;
@@ -547,6 +639,42 @@ export interface RobotsBlockedPage {
   matching: number;
   offset: number;
   rows: RobotsBlockedUrl[];
+}
+
+// ---------------------------------------------------------------------------------------------------- Search (E6)
+
+/**
+ * How well a search result matches, best first. `exact`: the text is the URL (with or without its scheme) or its path.
+ * `start`: it starts a segment of the path, the host name, or a word of the title. `anywhere`: it's somewhere else.
+ */
+export type SearchRank = 'exact' | 'start' | 'anywhere';
+
+/** One URL a search found: what a list of results shows, and its `id` to open it by. */
+export interface SearchResult extends UrlRef {
+  /** The page's first title; null without one. */
+  title: string | null;
+  isInternal: boolean;
+  /** As the URL grid's columns have them, read as they now stand: null when not fetched (a status also with no answer). */
+  statusCode: number | null;
+  outcome: UrlOutcome | null;
+  rank: SearchRank;
+  /** Where the text was found: the match the rank is for, the URL's when both match as well. */
+  matchedIn: 'url' | 'title';
+}
+
+/**
+ * `POST /crawls/{id}/search`: search as it's typed, for the palette. The best few of the crawl's URLs whose URL or title
+ * contains the text, the page a person means first. A keystroke takes a few milliseconds once a crawl's text is read,
+ * which its first search does (tens of milliseconds): ask an empty text as the palette opens, and the first letter
+ * typed is answered as fast as the rest.
+ */
+export interface SearchResults {
+  /** Empty for an empty text. */
+  results: SearchResult[];
+  /** The URL grid's `matching` under `{ search: text }`; equal to `total` for an empty text. */
+  matching: number;
+  /** Every URL in the crawl. */
+  total: number;
 }
 
 /** Rows a page of the grids asks for: two screenfuls of 1M-row scrolling per request, as the spike measured. */

@@ -117,9 +117,10 @@ internal sealed class WriterStatements : IDisposable
             RETURNING id
             """, "$url", "$parent");
         _updateSitemap = Prepare(connection, """
-            UPDATE sitemaps SET status_code = $status, is_index = $isIndex, url_count = $count, error = $error, is_probe = $isProbe
+            UPDATE sitemaps SET status_code = $status, is_index = $isIndex, url_count = $count, error = $error, is_probe = $isProbe,
+                                listed_sitemaps = $listed
             WHERE id = $id
-            """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$id");
+            """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$listed", "$id");
         _insertSitemapUrl = Prepare(connection,
             "INSERT OR IGNORE INTO sitemap_urls (sitemap_id, url_id) VALUES ($sitemap, $url)", "$sitemap", "$url");
         // The stamp only ever moves forward, even when the clock went back (or two runs fell in one millisecond): an
@@ -257,7 +258,7 @@ internal sealed class WriterStatements : IDisposable
     }
 
     public void UpdateSitemap(SitemapRecord record) =>
-        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.IsProbe, record.Id);
+        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.IsProbe, record.ListedSitemaps, record.Id);
 
     public void InsertSitemapUrl(int sitemapId, int urlId) => Run(_insertSitemapUrl, sitemapId, urlId);
 

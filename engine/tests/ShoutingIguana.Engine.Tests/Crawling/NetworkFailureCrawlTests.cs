@@ -90,7 +90,7 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(FetchOutcome.RobotsDisallowed, Outcome(path, _server.BaseUri.AbsoluteUri));
-        Assert.Equal($"{RobotsTxt.UNREACHABLE_ERROR}: HTTP 503", Error(path, _server.BaseUri.AbsoluteUri));
+        Assert.Equal($"{RobotsTxt.UNREACHABLE_ERROR}: 503 Service Unavailable", Error(path, _server.BaseUri.AbsoluteUri));
         Assert.Equal(1, observer.Count("robots-unreachable"));
 
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);

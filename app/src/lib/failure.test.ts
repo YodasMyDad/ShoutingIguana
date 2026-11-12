@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { failureOf, withRecorded } from './failure';
+import { failureOf, statusWords, withRecorded } from './failure';
 
 describe('how a request failed, in plain words', () => {
   it('reads the engine’s own text for the kind of failure, and keeps that text for behind the words', () => {
@@ -55,8 +55,23 @@ describe('how a request failed, in plain words', () => {
     expect(failureOf('NetworkError')?.recorded).toBeNull();
   });
 
-  it('passes a status on as it is, and has nothing to say of nothing', () => {
-    expect(failureOf('HTTP 503')).toEqual({ kind: 'status', words: 'HTTP 503', recorded: null });
+  it('says a status by its name, an earlier engine’s "HTTP 503" too, and has nothing to say of nothing', () => {
+    // The engine names a status as an issue's detail does; a crawl an earlier engine stored says "HTTP 503".
+    expect(failureOf('503 Service Unavailable')).toEqual({
+      kind: 'status',
+      words: '503 Service Unavailable',
+      recorded: null,
+    });
+    expect(failureOf('HTTP 503')).toEqual({ kind: 'status', words: '503 Service Unavailable', recorded: null });
+    expect(failureOf('422 Unprocessable Content')).toEqual({
+      kind: 'status',
+      words: '422 Unprocessable Content',
+      recorded: null,
+    });
+    // A status with no name is its number, as the engine says it.
+    expect(failureOf('HTTP 520')).toEqual({ kind: 'status', words: 'HTTP 520', recorded: null });
+    expect(statusWords(404)).toBe('404 Not Found');
+    expect(statusWords(520)).toBe('HTTP 520');
     expect(failureOf(null)).toBeNull();
     expect(failureOf('  ')).toBeNull();
   });

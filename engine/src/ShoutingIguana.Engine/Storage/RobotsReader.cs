@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Robots.Models;
@@ -29,14 +30,42 @@ public static class RobotsReader
     /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
     public static RobotsOriginPage ReadOrigins(string databasePath, int offset = 0, int limit = UrlGridReader.DEFAULT_LIMIT, ReadCache? cache = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ReadOrigins(databasePath, new RobotsOriginQuery { Offset = offset, Limit = limit }, cache, cancellationToken);
+
+    /// <summary>
+    /// One page of the origins a search and a filter match, in the list's order: those whose name contains a text, and
+    /// those that blocked something (or nothing). <see cref="RobotsOriginPage.Total"/> and <see cref="RobotsOriginPage.Blocked"/>
+    /// stay the crawl's; <see cref="RobotsOriginPage.Matching"/> is what the page is of, and
+    /// <see cref="RobotsOriginPage.Counts"/> what the search matches by whether it blocked anything, for a filter bar.
+    /// </summary>
+    /// <exception cref="UrlQueryException">The paging is out of range, or the text too long.</exception>
+    /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static RobotsOriginPage ReadOrigins(string databasePath, RobotsOriginQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
     {
-        ThrowIfInvalid(offset, limit);
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, after: null, errors);
+        if (query.Search is { Length: > UrlQueryCompiler.MAX_TEXT })
+        {
+            UrlQueryCompiler.Add(errors, "search", $"Search for at most {UrlQueryCompiler.MAX_TEXT:N0} characters.");
+        }
+
+        UrlGridReader.ThrowIfInvalid(errors);
         return GridReadContext.Read(databasePath, cache, cancellationToken, context =>
         {
             var origins = Origins(context);
-            return new RobotsOriginPage(origins.Count, offset, context.Options.RespectRobotsTxt, context.RobotsToken, origins.Sum(origin => origin.Blocked),
-                [.. origins.Skip(offset).Take(limit)]);
+            var searched = string.IsNullOrEmpty(query.Search)
+                ? origins
+                : [.. origins.Where(origin => origin.Origin.Contains(query.Search, StringComparison.OrdinalIgnoreCase))];
+            var blocking = searched.LongCount(origin => origin.Blocked > 0);
+            var matching = query.Blocked is { } blocked ? [.. searched.Where(origin => origin.Blocked > 0 == blocked)] : searched;
+            return new RobotsOriginPage(origins.Count, query.Offset, context.Options.RespectRobotsTxt, context.RobotsToken, origins.Sum(origin => origin.Blocked),
+                [.. matching.Skip(query.Offset).Take(query.Limit)])
+            {
+                Matching = matching.Count,
+                Counts = new RobotsOriginCounts(searched.Count, blocking, searched.Count - blocking)
+            };
         });
     }
 
@@ -44,7 +73,7 @@ public static class RobotsReader
     /// One origin's robots.txt, line by line: what each line is, whether it's part of the group the crawl obeyed, and how
     /// many of the origin's blocked URLs each disallow line refused. Null when the crawl has no robots.txt for the origin.
     /// </summary>
-    /// <inheritdoc cref="ReadOrigins" path="/exception"/>
+    /// <inheritdoc cref="ReadOrigins(string, RobotsOriginQuery, ReadCache?, CancellationToken)" path="/exception"/>
     public static RobotsFile? ReadFile(string databasePath, string origin, ReadCache? cache = null, CancellationToken cancellationToken = default) =>
         GridReadContext.Read(databasePath, cache, cancellationToken, context =>
         {
@@ -60,7 +89,10 @@ public static class RobotsReader
                     .. read.Lines.Select(line => new RobotsFileLine(line.Number, line.Text, line.Kind, line.Applies,
                         line is { Kind: RobotsLineKind.Disallow, Applies: true } ? blocked.GetValueOrDefault(line.Number) : null, line.Problem))
                 ],
-                new RobotsUnmatched(read.Blocked.LongCount(url => url.Reason == RobotsBlockReason.Unreachable), read.Blocked.LongCount(url => url.Reason == RobotsBlockReason.Unknown)));
+                new RobotsUnmatched(read.Blocked.LongCount(url => url.Reason == RobotsBlockReason.Unreachable), read.Blocked.LongCount(url => url.Reason == RobotsBlockReason.Unknown)))
+            {
+                Respected = context.Options.RespectRobotsTxt
+            };
         });
 
     /// <summary>
@@ -70,9 +102,10 @@ public static class RobotsReader
     /// </summary>
     /// <param name="line">Only the URLs this line refused.</param>
     /// <param name="reason">Only the URLs refused for this reason.</param>
-    /// <inheritdoc cref="ReadOrigins" path="/exception"/>
+    /// <param name="urlId">Only this URL: the page then holds it, with why it was refused, or nothing when the origin didn't block it.</param>
+    /// <inheritdoc cref="ReadOrigins(string, RobotsOriginQuery, ReadCache?, CancellationToken)" path="/exception"/>
     public static RobotsBlockedPage? ReadBlocked(string databasePath, string origin, int? line = null, RobotsBlockReason? reason = null, int offset = 0,
-        int limit = UrlGridReader.DEFAULT_LIMIT, ReadCache? cache = null, CancellationToken cancellationToken = default)
+        int limit = UrlGridReader.DEFAULT_LIMIT, ReadCache? cache = null, CancellationToken cancellationToken = default, int? urlId = null)
     {
         ThrowIfInvalid(offset, limit);
         return GridReadContext.Read(databasePath, cache, cancellationToken, context =>
@@ -83,7 +116,7 @@ public static class RobotsReader
             }
 
             var blocked = Read(context, origin).Blocked;
-            var matching = blocked.Where(url => (line is null || url.Line == line) && (reason is null || url.Reason == reason)).ToList();
+            var matching = blocked.Where(url => (line is null || url.Line == line) && (reason is null || url.Reason == reason) && (urlId is null || url.Id == urlId)).ToList();
             return new RobotsBlockedPage(origin, blocked.Count, matching.Count, offset, [.. matching.Skip(offset).Take(limit)]);
         });
     }
@@ -103,6 +136,54 @@ public static class RobotsReader
         null when !onStartOrigin => RobotsState.Unanswered,
         _ => RobotsState.Unreachable
     };
+
+    /// <summary>The origin of a stored URL as the list of origins names it: all that comes before the first "/" after its "://".</summary>
+    internal static string? OriginOf(string url)
+    {
+        var scheme = url.IndexOf("://", StringComparison.Ordinal);
+        if (scheme < 0)
+        {
+            return null;
+        }
+
+        var path = url.IndexOf('/', scheme + 3);
+        return path < 0 ? url : url[..path];
+    }
+
+    /// <summary>Whether the crawl kept a robots.txt answer for the origin, so its file can be asked for.</summary>
+    internal static bool HasAnswer(GridReadContext context, string origin) =>
+        context.Scalar("SELECT COUNT(*) FROM robots WHERE origin = $origin", [new("$origin", origin)]) > 0;
+
+    /// <summary>
+    /// Why robots.txt kept the crawl from one URL, as the origin's list of blocked URLs says it (<see cref="ReadBlocked"/>),
+    /// worked out for this URL alone: the origin's stored file is parsed, once per origin while the crawl stands still,
+    /// and this URL matched against it, so inspecting one refused URL of an origin that refused a hundred thousand
+    /// matches one.
+    /// </summary>
+    /// <param name="error">What the crawl stored with the URL's refusal.</param>
+    internal static RobotsBlockedUrl WhyRefused(GridReadContext context, int urlId, string url, string? error)
+    {
+        var name = OriginOf(url) ?? string.Empty;
+        var (origin, lines, rules) = context.Cached("robots|rules|" + name, () =>
+        {
+            List<RobotsLine> parsed = [];
+            RobotsTxt? read = null;
+            var answered = new RobotsOrigin(name, IsInternal(name, Site(context).Scope), null, null, null, null, null, 0);
+            using var file = context.Command($"SELECT content, {ANSWER} FROM robots WHERE origin = $origin", [new("$origin", name)]);
+            using var answer = file.ExecuteReader();
+            if (answer.Read())
+            {
+                answered = Answered(name, Site(context).Scope, answer, first: 1, blocked: 0);
+                if (answered.State == RobotsState.Read)
+                {
+                    read = RobotsTxtParser.Parse(answer.GetValue(0) as string ?? string.Empty, context.RobotsToken, parsed);
+                }
+            }
+
+            return (answered, parsed, read);
+        });
+        return Why(urlId, url, error, origin, rules, lines);
+    }
 
     private static void ThrowIfInvalid(int offset, int limit)
     {
@@ -238,7 +319,7 @@ public static class RobotsReader
         // An engine from before the error was stored with the URL: the origin's own answer says robots.txt couldn't be read.
         return origin.State == RobotsState.Unreachable
             ? new RobotsBlockedUrl(id, url, RobotsBlockReason.Unreachable, null, null,
-                origin.StatusCode is { } status ? string.Create(CultureInfo.InvariantCulture, $"HTTP {status}") : origin.Error)
+                origin.StatusCode is { } status ? HttpStatusNames.Describe(status) : origin.Error)
             : new RobotsBlockedUrl(id, url, RobotsBlockReason.Unknown, null, null, null);
     }
 }

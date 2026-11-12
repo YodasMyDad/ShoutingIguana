@@ -54,6 +54,12 @@ public sealed record UrlDetail
     /// <summary>The issues on other URLs that name this one as the other URL involved; null before the first analysis.</summary>
     public NamedByIssues? NamedBy { get; init; }
 
+    /// <summary>
+    /// The sitemaps that list the URL, read from the crawl's own tables: there with or without a URL summary, where
+    /// <see cref="UrlLinkCounts.InSitemap"/> is the analysis's.
+    /// </summary>
+    public UrlSitemaps ListedIn { get; init; } = new(0, []);
+
     public required SummaryState Summary { get; init; }
 
     /// <summary>The crawl stored this URL's HTML (<see cref="UrlInspectorReader.ReadSource"/>).</summary>

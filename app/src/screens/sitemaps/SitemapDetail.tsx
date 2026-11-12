@@ -24,7 +24,7 @@ import { usePagedRows } from '../../grid/usePagedRows';
 import { useSearchText } from '../../grid/useSearchText';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
-import { withRecorded } from '../../lib/failure';
+import { statusWords, withRecorded } from '../../lib/failure';
 import { formatCount, formatCountOf, formatShownOf } from '../../lib/format';
 import { useInspector } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
@@ -580,7 +580,7 @@ function SitemapFacts({
         <Fact label="Status">
           <span title={withRecorded(state.sentence, state.recorded)}>
             {state.short}
-            {sitemap.statusCode !== null && sitemap.state === 'read' ? ` (HTTP ${sitemap.statusCode})` : ''}
+            {sitemap.statusCode !== null && sitemap.state === 'read' ? ` (${statusWords(sitemap.statusCode)})` : ''}
           </span>
         </Fact>
         <Fact label="In the file">

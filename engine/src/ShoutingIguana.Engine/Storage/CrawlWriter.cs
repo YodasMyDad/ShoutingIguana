@@ -15,6 +15,7 @@ using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Urls;
+using SQLitePCL;
 
 namespace ShoutingIguana.Engine.Storage;
 
@@ -63,6 +64,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
     private readonly ConcurrentQueue<RunStretch> _runTime = new();
     private readonly Dictionary<int, long> _stretchRows = [];
     private bool _keepsRunTime;
+
+    // The file holds the site's icon, or has no table of this engine's to keep one in: either way none is wanted.
+    private volatile bool _hasFavicon;
     private long _run = 1;
     private bool _crawlStamped;
 
@@ -105,6 +109,12 @@ internal sealed class CrawlWriter : IAsyncDisposable
     public bool SitemapsDone { get; private set; }
 
     /// <summary>
+    /// The file holds the site's icon, or can't keep one (its table is another program's): either way there's none to
+    /// fetch. Read from any thread.
+    /// </summary>
+    public bool HasFavicon => _hasFavicon;
+
+    /// <summary>
     /// The time the crawl's earlier runs spent crawling; none for a new crawl. Null when it isn't all known: a run before
     /// this one wasn't timed (an earlier engine's), or the file keeps its time in a table this engine can't use.
     /// </summary>
@@ -140,8 +150,15 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
             // The columns for lanes 1 to 3 of the content fingerprint are added here, to a new file as to one an earlier engine
             // made, whose pages so far have none.
-            AddMissingResponseColumns(connection);
+            AddMissingColumns(connection, "responses", CrawlSchema.RESPONSE_COLUMNS);
+
+            // And the count of the sitemaps an index's file lists.
+            AddMissingColumns(connection, "sitemaps", CrawlSchema.SITEMAP_COLUMNS);
+
+            // And the table for the site's icon: a continued crawl keeps the one it has.
+            CrawlDatabase.Execute(connection, CrawlSchema.FAVICON);
             var writer = new CrawlWriter(connection, fileLock, options, counters, logger);
+            writer.RestoreFavicon();
             if (created)
             {
                 writer.InsertCrawlRow();
@@ -204,13 +221,16 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
     }
 
-    /// <summary>Adds the <c>responses</c> columns a file made by an earlier engine lacks (<see cref="CrawlSchema.RESPONSE_COLUMNS"/>).</summary>
-    private static void AddMissingResponseColumns(SqliteConnection connection)
+    /// <summary>
+    /// Adds the columns of a crawl-time table that a file made by an earlier engine lacks (<see cref="CrawlSchema.RESPONSE_COLUMNS"/>,
+    /// <see cref="CrawlSchema.SITEMAP_COLUMNS"/>): each may be null, so the rows the file has keep none.
+    /// </summary>
+    private static void AddMissingColumns(SqliteConnection connection, string table, (string Name, string Type)[] columns)
     {
         HashSet<string> existing = new(StringComparer.OrdinalIgnoreCase);
         using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT name FROM pragma_table_info('responses')";
+            command.CommandText = $"SELECT name FROM pragma_table_info('{table}')";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -218,9 +238,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
             }
         }
 
-        foreach (var (name, type) in CrawlSchema.RESPONSE_COLUMNS.Where(column => !existing.Contains(column.Name)))
+        foreach (var (name, type) in columns.Where(column => !existing.Contains(column.Name)))
         {
-            CrawlDatabase.Execute(connection, $"ALTER TABLE responses ADD COLUMN {name} {type}");
+            CrawlDatabase.Execute(connection, $"ALTER TABLE {table} ADD COLUMN {name} {type}");
         }
     }
 
@@ -239,6 +259,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
     public ValueTask RecordRobotsAsync(RobotsRecord record, CancellationToken cancellationToken) =>
         _commands.Writer.WriteAsync(new RecordRobotsCommand(record), cancellationToken);
+
+    /// <summary>Keeps the site's icon with the crawl, unless it has one already: the first kept stands.</summary>
+    public ValueTask RecordFaviconAsync(FaviconRecord record, CancellationToken cancellationToken) =>
+        _commands.Writer.WriteAsync(new RecordFaviconCommand(record), cancellationToken);
 
     public async Task<int> RegisterSitemapAsync(string url, int? parentId, CancellationToken cancellationToken)
     {
@@ -383,6 +407,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
                     break;
                 case RecordRobotsCommand robots:
                     _statements.UpsertRobots(robots.Record);
+                    break;
+                case RecordFaviconCommand favicon:
+                    ApplyFavicon(favicon.Record);
                     break;
                 case RegisterSitemapCommand register:
                     register.Reply.TrySetResult(_statements.RegisterSitemap(register.Url, register.ParentId));
@@ -1067,6 +1094,47 @@ internal sealed class CrawlWriter : IAsyncDisposable
         {
             _logger.LogWarning(exception, "Could not store the crawl's last notices and the time it spent crawling");
             RollBackTransaction();
+        }
+    }
+
+    /// <summary>
+    /// Whether the favicon table is this engine's, and holds an icon. A table of another shape is another program's
+    /// (CREATE TABLE IF NOT EXISTS keeps whatever is there): no icon is kept in it, and none is fetched.
+    /// </summary>
+    private void RestoreFavicon()
+    {
+        var isOurs = RunTime("SELECT group_concat(name, ',') FROM (SELECT name FROM pragma_table_info('favicon') ORDER BY cid)", transaction: null) as string
+                     == CrawlSchema.FAVICON_COLUMNS;
+        if (!isOurs)
+        {
+            _logger.LogWarning("Another program changed the table the site's icon is kept in (favicon), so none is fetched");
+        }
+
+        _hasFavicon = !isOurs || RunTime("SELECT 1 FROM favicon LIMIT 1", transaction: null) is not null;
+    }
+
+    /// <summary>
+    /// Stores the site's icon in the batch under way: the first one offered, and only into a table of this engine's shape.
+    /// A table that has the engine's columns and still refuses the row (a constraint of another program's) costs the
+    /// crawl its icon, never the crawl: the statement alone is undone, and the batch goes on.
+    /// </summary>
+    private void ApplyFavicon(FaviconRecord record)
+    {
+        if (_hasFavicon)
+        {
+            return;
+        }
+
+        _hasFavicon = true;
+        try
+        {
+            RunTime("INSERT INTO favicon (id, url, content_type, width, height, fetched_at, body) VALUES (1, $url, $type, $width, $height, $fetchedAt, $body)", _transaction,
+                ("$url", record.Url), ("$type", record.ContentType), ("$width", record.Width), ("$height", record.Height), ("$fetchedAt", record.FetchedAt),
+                ("$body", record.Body));
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode is raw.SQLITE_CONSTRAINT or raw.SQLITE_MISMATCH)
+        {
+            _logger.LogWarning(exception, "The site's icon couldn't be kept in the crawl file");
         }
     }
 

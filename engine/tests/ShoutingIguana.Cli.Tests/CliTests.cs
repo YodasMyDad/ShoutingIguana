@@ -479,8 +479,16 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True((bool?)result["summaryAvailable"]);
         Assert.Equal(2, (int?)result["runs"]);
         Assert.Empty(result["failures"]!.AsArray());
-        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps", "stats"],
+        Assert.Equal(["facets", "grid", "groups", "inspector", "link-ends", "links", "links-grid", "lookup", "robots", "rows", "search", "sitemaps", "stats"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
+
+        // Search as it's typed: a keystroke with the crawl's text kept, held to the palette's budget, and the first one,
+        // which reads the text and has a gate of its own; and the grid's search, for one letter and for text nothing holds.
+        Assert.Equal(["search", "search-first"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "search").Select(read => (string)read!["class"]!).Distinct());
+        Assert.InRange(ReaderBenchmark.GATE_MS["search"], 1, 50);
+        Assert.InRange(ReaderBenchmark.GATE_MS["search-first"], ReaderBenchmark.GATE_MS["search"], 300);
+        Assert.All(new[] { "Search for one letter", "Search that matches nothing", "Search as typed: 'p'", "Search as typed: the first keystroke" }, name =>
+            Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith(name, StringComparison.Ordinal)));
 
         // The crawl's headline numbers: read, read again from what was kept, and without the link summary, each held to
         // a gate of its own: the kept read to a few milliseconds, which numbers read all over again would miss.
@@ -491,9 +499,24 @@ public sealed class CliTests : IAsyncLifetime
         // The links grid is timed with its link summary and without, and so are the sitemaps and robots.txt.
         Assert.All(new[] { "Links grid: ", "Without the link summary: ", "Sitemaps: ", "robots.txt: " }, name =>
             Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith(name, StringComparison.Ordinal)));
-        Assert.Equal(["link-grid", "link-pass", "link-targets"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "links-grid" || ((string)read["name"]!).StartsWith("Links grid: facets", StringComparison.Ordinal))
+        Assert.Equal(["link-grid", "link-pass", "link-pass-split", "link-targets"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "links-grid" || ((string)read["name"]!).StartsWith("Links grid: facets", StringComparison.Ordinal))
             .Select(read => (string)read!["class"]!).Distinct().Order(StringComparer.Ordinal));
         Assert.All(result["cases"]!.AsArray(), read => Assert.True((double?)read!["firstP95Ms"] >= (double?)read["firstP50Ms"]));
+
+        // A view's ends, as a list and as the URL grid narrowed to them: the targets the link summary counts, and the
+        // pages, which take a pass, on one connection and on several. And what the inspector links by.
+        Assert.Equal(["link-grid", "link-pass", "link-pass-split"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "link-ends")
+            .Select(read => (string)read!["class"]!).Distinct().Order(StringComparer.Ordinal));
+        // The cases of a blocked URL need the crawl to have one: say what it has, should it not.
+        var origins = RobotsReader.ReadOrigins(crawl, limit: 1_000);
+        Assert.True(origins.Blocked > 0, $"The crawl blocked no URL: {string.Join("; ", origins.Origins.Select(origin => $"{origin.Origin} {origin.State} {origin.StatusCode} {origin.Error} {origin.Blocked}"))}");
+        Assert.All(new[]
+            {
+                "Link ends: the targets of every link", "Link ends: the pages of every link (every link read)",
+                "Link ends: the pages of every link (every link read): the URL grid narrowed to them", "robots.txt: the origins that blocked something, found by text",
+                "robots.txt: one blocked URL's row", "Inspect a URL robots.txt refused", "Inspect a URL sitemaps list"
+            }, name =>
+            Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith(name, StringComparison.Ordinal)));
 
         // Every read has a class, each class its gate; the reads without the summary are timed too, and so is the page
         // just past half way, which is read from the far end.

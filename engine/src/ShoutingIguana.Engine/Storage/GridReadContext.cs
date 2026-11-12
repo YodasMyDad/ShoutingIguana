@@ -70,6 +70,7 @@ internal sealed class GridReadContext : IDisposable
     private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _once = new(StringComparer.Ordinal);
+    private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     private readonly Dictionary<int, Dictionary<long, long>> _talliesBySlot = [];
     private (long Links, long MaxLinkId, int BlockShift)? _linkSummary;
     private bool _linkSummaryRead;
@@ -181,6 +182,75 @@ internal sealed class GridReadContext : IDisposable
         }
     }
 
+    /// <summary>
+    /// The helpers this read may use for a pass split over several connections: as many of <paramref name="most"/> as the
+    /// host has free right now (<see cref="ReadCache.Helpers"/>), given back when the result is disposed. None for a read
+    /// with no cache, or whose host gives none.
+    /// </summary>
+    public ReadHelpers.Borrowed? BorrowHelpers(int most) => most > 0 && _cache?.Helpers is { } helpers ? helpers.Borrow(most) : null;
+
+    /// <summary>
+    /// Another read of the same file alongside this one, on a connection of its own, for one part of a pass split between
+    /// them: it sees this read's sets of URL ids in the same slots, so the same SQL runs on either, and has its own
+    /// functions, its own patterns and their time. It's a read as any other to a writer here that wants the file: stopped
+    /// with this one, and gone before the writer has it. Null when the file it opened isn't the file as this read has it
+    /// (another program changed it in between), or when it couldn't be opened at all (the file locked by another program,
+    /// a handle refused): the pass is then this read's alone, which was opened, and the read answers all the same.
+    /// </summary>
+    /// <param name="stop">Stops it: this read's own token, or one cancelled with it.</param>
+    /// <exception cref="OperationCanceledException">The token was cancelled before it opened.</exception>
+    public Alongside? OpenAlongside(CancellationToken stop)
+    {
+        CrawlReadGate.ReadLease lease;
+        try
+        {
+            OpeningAlongside?.Invoke();
+            lease = CrawlReadGate.Enter(Path, stop);
+        }
+        catch (Exception) when (!stop.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        GridReadContext? helper = null;
+        try
+        {
+            helper = Open(Path, _cache, stop);
+            if (helper.Stamp != Stamp)
+            {
+                helper.Dispose();
+                lease.Dispose();
+                return null;
+            }
+
+            helper._sets.AddRange(_sets);
+            return new Alongside(helper, lease);
+        }
+        catch (Exception exception)
+        {
+            helper?.Dispose();
+            lease.Dispose();
+            if (exception is OperationCanceledException || stop.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>A read alongside another (<see cref="OpenAlongside"/>): closed, and its place among the file's reads given up, when disposed.</summary>
+    public sealed class Alongside(GridReadContext context, CrawlReadGate.ReadLease lease) : IDisposable
+    {
+        public GridReadContext Context { get; } = context;
+
+        public void Dispose()
+        {
+            Context.Dispose();
+            lease.Dispose();
+        }
+    }
+
     private static GridReadContext Open(string path, ReadCache? cache, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -260,6 +330,16 @@ internal sealed class GridReadContext : IDisposable
         return (T)kept;
     }
 
+    /// <summary>
+    /// As <see cref="Cached{T}"/>, for a crawl's URLs and titles held in memory for searching (<see cref="Models.SearchText"/>):
+    /// megabytes for a large crawl, so only <see cref="ReadCache.TEXT_CAPACITY"/> are kept. Without a cache, it's read each time.
+    /// </summary>
+    public T CachedText<T>(string key, Func<T> read) where T : notnull =>
+        Stamp is { } stamp && _cache is { } cache ? cache.GetOrAddText($"{stamp}|{key}", read, MaxAge(stamp), Token) : read();
+
+    /// <summary>Whether one of those is kept for the crawl as it stands (<see cref="CachedText{T}"/> would give it without reading).</summary>
+    public bool HasText(string key) => Stamp is { } stamp && _cache is { } cache && cache.HasText($"{stamp}|{key}", MaxAge(stamp));
+
     /// <summary>Whether one of those is kept already, read by an earlier read, or earlier in this one.</summary>
     public bool HasHuge(string key) =>
         Stamp is { } stamp && _cache is { } cache ? cache.HasHuge($"{stamp}|{key}", MaxAge(stamp)) : _huge.ContainsKey(key);
@@ -284,12 +364,33 @@ internal sealed class GridReadContext : IDisposable
     /// </summary>
     public T Once<T>(string key, Func<T> read) where T : notnull
     {
+        Owned("held " + key);
         if (!_once.TryGetValue(key, out var held))
         {
             _once[key] = held = read();
         }
 
         return (T)held;
+    }
+
+    /// <summary>
+    /// Tests only: told of a use of a read's context (what it holds, a statement on its connection) from a thread other
+    /// than the one that opened it. Neither is made to be shared, so a pass split over threads must never do it.
+    /// </summary>
+    internal static Action<string>? UsedFromAnotherThread { get; set; }
+
+    /// <summary>
+    /// Tests only: runs as a read alongside another opens, on the thread that opens it: one that throws stands for a
+    /// connection that can't be opened.
+    /// </summary>
+    internal static Action? OpeningAlongside { get; set; }
+
+    private void Owned(string what)
+    {
+        if (UsedFromAnotherThread is { } told && Environment.CurrentManagedThreadId != _ownerThread)
+        {
+            told(what);
+        }
     }
 
     /// <summary>Holds on to a value this read read some other way, as <see cref="Once"/> would have.</summary>
@@ -327,6 +428,7 @@ internal sealed class GridReadContext : IDisposable
 
     public SqliteCommand Command(string sql, IEnumerable<KeyValuePair<string, object>> parameters)
     {
+        Owned("statement " + sql);
         // Between statements, where an interrupt has nothing to stop.
         Token.ThrowIfCancellationRequested();
         var command = Connection.CreateCommand();
@@ -457,6 +559,9 @@ internal sealed class GridReadContext : IDisposable
 
     /// <summary>The links a statement is counting by target and shape (<c>si_link</c>, <c>si_links</c>).</summary>
     public LinkTally? LinkTally { get; set; }
+
+    /// <summary>The URLs and titles a statement is reading for searching (<c>si_search_url</c>, <c>si_search_title</c>).</summary>
+    public SearchText? SearchText { get; set; }
 
     /// <summary>The pages whose robots directives say nofollow, which a link read from the links themselves is judged followed by.</summary>
     public UrlIdSet? NofollowPages { get; set; }

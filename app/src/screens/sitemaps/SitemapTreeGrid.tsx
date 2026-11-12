@@ -29,7 +29,7 @@ const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'n
 // Each count's column is as wide as a count in the millions (1,234,567) and its name need; "Blocked by robots.txt"
 // takes two lines over its count (`TWO_LINE_HEAD`), which keeps its column as narrow as the others.
 const FOUND_WIDTH = 112;
-/** "Couldn’t be read: HTTP 404", "Read, 11 of its 12 sitemaps", whole. */
+/** "Couldn’t be read: 404 Not Found", "Read, 11 of its 12 sitemaps", whole. */
 const STATE_WIDTH = 198;
 const COUNT_WIDTHS: Record<SitemapCount, number> = {
   listed: 88,

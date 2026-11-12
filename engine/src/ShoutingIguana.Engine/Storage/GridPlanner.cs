@@ -201,6 +201,31 @@ internal static class GridPlanner
     private static string SetKey(GridPredicate predicate) => "ids|" + predicate.Key;
 
     /// <summary>
+    /// A condition as a set of the rows it matches, read by someone else (the URLs at one end of some links), with or
+    /// without a URL summary: a few ids drive the query through them where there's a summary to drive, and each row is
+    /// otherwise tested against the set. Its count is the set's.
+    /// </summary>
+    public static GridPredicate InSet(GridReadContext context, GridMode mode, GridPredicate predicate, UrlIdSet set)
+    {
+        var slot = context.Use(set).ToString(CultureInfo.InvariantCulture);
+        var test = $"{ReaderFunctions.IN_SET}({slot}, {(mode == GridMode.Summary ? ROW : "u.id")})";
+        if (mode == GridMode.Summary && set.Json is { } json)
+        {
+            var name = "$ids" + slot;
+            return predicate with
+            {
+                Sql = $"{ROW} IN (SELECT value FROM json_each({name}))", Disabled = test, Parameters = [.. predicate.Parameters, new(name, json)],
+                Driving = true, KnownCount = set.Count, Matched = set, LinkEnds = null
+            };
+        }
+
+        return predicate with { Sql = test, Disabled = test, Driving = false, KnownCount = set.Count, Matched = set, LinkEnds = null };
+    }
+
+    /// <summary>The URL summary row's own URL id.</summary>
+    private const string ROW = "s.url_id";
+
+    /// <summary>
     /// The sort key values of the row with this URL id, as a page reads them for its cursor, so a cursor need carry only
     /// the id; null when the crawl has no such row.
     /// </summary>
