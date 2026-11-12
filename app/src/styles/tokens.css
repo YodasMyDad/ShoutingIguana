@@ -393,6 +393,9 @@
   --switch-inset: 3px;
   --icon-box: 28px; /* round icon holders in the inspector */
   --icon-box-lg: 36px; /* empty-state icons */
+  --ring-lg: 136px; /* the score ring: the Summary's score */
+  --ring-md: 72px; /* the score ring in a dialog or the report's toolbar */
+  --ring-sm: 36px; /* the score ring in a list (Home's rows) */
   --button-height-lg: 40px;
   --grid-foot-height: 36px;
   --row-height-child: 34px; /* a group's rows, inside a grouped grid */
