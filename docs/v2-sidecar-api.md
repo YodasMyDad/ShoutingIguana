@@ -2247,8 +2247,14 @@ body, and the app draws the site's first letter. A crawl's item says which to ex
   four times, and usually once.
 - **What is kept is told by its bytes, never by what the site calls it.** The icon is content from the site, so it is
   hostile until shown otherwise: a site can send a page, a script or an SVG under any name and any `Content-Type`.
-  Kept: **PNG, ICO, GIF, JPEG and WebP**, each known by its signature, with its size read from its header (an ICO's
-  directory must hold up too: every image it lists inside the file, the largest a PNG or a bitmap). Not kept:
+  Kept: **PNG, ICO, GIF, JPEG and WebP**, each known by its signature, its size read from its header, and its
+  structure whole to the end of its image data: a PNG's chunks and their checksums to its header, its image data
+  and its end; a GIF's blocks to an image and its trailer; a JPEG's segments to its scan and its end; a WebP's
+  chunks inside its length. So a header with nothing after it, or with a page after it, isn't kept. An ICO's
+  directory must hold up too: every image it lists inside the file, each a PNG that holds up as one or a bitmap whose
+  header and pixels do, of the size the directory gives it and no more than 1,024 px a side; the icon's size is its
+  largest image's. The pixels aren't decoded, so an image whose compressed data is damaged can still be kept: the app
+  then shows a broken image, and nothing in it can run. Not kept:
   **anything else, SVG above all** (it can carry script; one is never even asked for, by its declared type or its
   file name), anything over **512 KB** (it is read no further than that), and any image whose size can't be read or
   is over **1,024 px** a side (a few hundred kilobytes can declare a picture that takes gigabytes to draw).
@@ -3416,3 +3422,31 @@ links grid from the link summary 96 against 200, `robots` 59 against 200, `inspe
 Not verified: anything on a crawl of a million URLs; any of the timings on a quiet machine (other agents' builds and
 benchmarks loaded this one throughout, so each was repeated, and the passes were timed in turn with the engine from
 before); the `link-pass-split` gate on CI's runner, as nothing was pushed.
+
+## Engine changes from the E6 review
+
+The review found no defect of high severity, one of medium and five of low; every number it checked against SQL of
+its own agreed. All six are fixed, each with a test seen failing without its fix.
+
+- **The read gate holds the split passes to being split** (medium). The `link-pass-split` gate (1,500 ms) passed a
+  pass that had silently stopped splitting, as every one of them takes less than that on one connection too. With
+  `--gate`, on a crawl of 500,000 links or more, each split case must now have had every pass reported split over
+  more than one connection, and on 4 cores or more take at most 60% of its one-connection twin's time at p50, in the
+  same run. On the 100k crawl with splitting switched off the gate failed on all 17 split cases; with it on it passed.
+- **An icon is kept only when its structure holds to the end of its image data** (low): see [Favicon](#favicon-e6).
+  The review's three proofs (a PNG header alone, a PNG header before a page, an ICO whose 16 px entry holds a PNG of
+  60,000 px a side) and eighteen more hollow images are refused; a crawl file's icon is checked the same way as it's
+  read.
+- **A split pass's parts never use the read's own context** (low, latent). Each part sized its tally through the
+  read's context from its own thread; it only ever read values already held, but the context isn't made to be
+  shared. The sizes are now read first, on the read's thread, and a test hook says of any use from another thread.
+- **A helper connection that can't be opened costs the pass its split, not the read** (low): the pass runs on the
+  read's own connection, as for a file that changed under it. A read stopped meanwhile is still stopped.
+- **Search's `start` rank is what the doc says** (low): never the scheme (`http` started every URL), never inside the
+  query string or the fragment (text after a slash there did), and in a title after any character that isn't a
+  letter or a digit, whatever the text begins with. The doc's figures are the review's and this branch's: about 106
+  bytes a URL kept (11.4 MB at 100k, measured twice), and a first search of 55 to 89 ms at p95 over five runs.
+- **The app's types and the mock** (low): `linkEnds` is on `UrlGridQuery` (the URL grids'), not on the links grid's
+  query, which refuses it; `invalid-settings` is said to be keyed by a limit's name, `settings` or `limits[n]`; and
+  the mock transport answers every E6 call (search, a links view's ends and `linkEnds`, the analysis's limits,
+  robots.txt's origins searched and filtered, the synthetic crawl's icon), each a pure answer with tests of its own.
