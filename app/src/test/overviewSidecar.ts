@@ -312,7 +312,8 @@ export interface OverviewSidecarOptions extends IssuesSidecarOptions {
    * `notChecked`. The status facets count them among the URLs with no status class. None unless said.
    */
   notChecked?: number;
-  history?: CrawlHistory;
+  /** `pending` never answers. */
+  history?: CrawlHistory | 'pending';
   alerts?: AlertEvent[];
   /** `pending` never answers: the breakdowns mustn't wait for it. */
   stats?: CrawlStats | 'pending';
@@ -383,15 +384,17 @@ export function overviewRoutes(options: OverviewSidecarOptions = {}): FakeRoute[
       'GET',
       /^\/api\/crawls\/[0-9a-f]{16}\/history$/,
       () =>
-        json(
-          options.history ??
-            ({
-              crawlId: TEST_CRAWL_ID,
-              startedAt: new Date(START).toISOString(),
-              liveFrom: null,
-              points: [],
-            } satisfies CrawlHistory),
-        ),
+        options.history === 'pending'
+          ? new Promise<Response>(() => undefined)
+          : json(
+              options.history ??
+                ({
+                  crawlId: TEST_CRAWL_ID,
+                  startedAt: new Date(START).toISOString(),
+                  liveFrom: null,
+                  points: [],
+                } satisfies CrawlHistory),
+            ),
     ],
     ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/alerts$/, () => json(options.alerts ?? [])],
     [

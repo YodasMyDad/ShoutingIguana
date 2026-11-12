@@ -81,6 +81,46 @@ describe('the chart of a continued crawl', () => {
     expect(series?.continued).toBe(true);
   });
 
+  it('counts a run whose process died among the earlier ones: the run being watched is the one begun from liveFrom', () => {
+    // A run of 100 s that ended, one of 60 s cut short (its end never stored), then this run, continued a day later.
+    const cut: CrawlHistory = {
+      crawlId: 'a',
+      startedAt: iso(T0),
+      liveFrom: iso(T0 + 2 * DAY),
+      points: [point(T0 + 2 * DAY, 300)],
+      crawlingMs: 160_000,
+      runs: [
+        {
+          startedAt: iso(T0),
+          endedAt: iso(T0 + 100_000),
+          crawlingMs: 100_000,
+          crawling: [{ from: iso(T0), to: iso(T0 + 100_000) }],
+        },
+        {
+          startedAt: iso(T0 + DAY),
+          endedAt: null,
+          crawlingMs: 60_000,
+          crawling: [{ from: iso(T0 + DAY), to: iso(T0 + DAY + 60_000) }],
+        },
+      ],
+    };
+    const series = progressSeries(cut, [
+      { at: T0 + 2 * DAY + 1_000, runMs: 1_000, fetched: 301, internalFetched: 301, internalFound: 500 },
+    ]);
+    expect(series?.offsetMs).toBe(160_000);
+    expect(series?.runStarts).toEqual([100_000, 160_000]);
+    expect(series?.spanMs).toBe(161_000);
+    // Once the engine has stored the run being watched (it began a moment after liveFrom), the same.
+    const stored = progressSeries(
+      {
+        ...cut,
+        runs: [...(cut.runs ?? []), { startedAt: iso(T0 + 2 * DAY + 50), endedAt: null, crawlingMs: 0, crawling: [] }],
+      },
+      [{ at: T0 + 2 * DAY + 1_000, runMs: 1_000, fetched: 301, internalFetched: 301, internalFound: 500 }],
+    );
+    expect([stored?.offsetMs, stored?.runStarts]).toEqual([160_000, [100_000, 160_000]]);
+  });
+
   it('draws only the run being watched for an earlier engine, which kept no run times', () => {
     const { runs: _runs, crawlingMs: _ms, ...older } = history;
     const live = { ...older, liveFrom: iso(T0 + DAY) };

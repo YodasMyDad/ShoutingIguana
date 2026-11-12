@@ -59,12 +59,13 @@ export function crawlingAt(at: number, runs: readonly CrawlRun[]): number {
 
 /**
  * The runs before the one being watched, and where the one being watched starts on the crawled-time axis: their time
- * spent crawling. The run being watched is the last, when it hasn't ended (the one going now); a crawl the page sees
- * at rest has none.
+ * spent crawling. The run being watched is the one this sidecar started (`liveFrom`), which the engine's own start of
+ * it follows by a moment: a run that began before it is an earlier one, though it never ended (its process died), and
+ * the run being watched may not be in the file yet when the history is read. A crawl the page sees at rest has no
+ * run being watched (`liveFrom` null): every run is an earlier one.
  */
-function earlierRuns(runs: readonly CrawlRun[]): { earlier: readonly CrawlRun[]; offset: number } {
-  const last = runs.at(-1);
-  const earlier = last?.endedAt === null ? runs.slice(0, -1) : runs;
+function earlierRuns(runs: readonly CrawlRun[], liveFrom: number): { earlier: readonly CrawlRun[]; offset: number } {
+  const earlier = Number.isNaN(liveFrom) ? runs : runs.filter((run) => !(Date.parse(run.startedAt) >= liveFrom));
   return { earlier, offset: earlier.reduce((sum, run) => sum + run.crawlingMs, 0) };
 }
 
@@ -80,7 +81,7 @@ export function progressSeries(history: CrawlHistory | undefined, trail: readonl
   const takeover = trail[0];
   // E3c: the runs' times, so the earlier runs go on the same axis as this one.
   const runs = history?.runs ?? null;
-  const { earlier, offset } = runs ? earlierRuns(runs) : { earlier: [], offset: 0 };
+  const { earlier, offset } = runs ? earlierRuns(runs, liveFrom) : { earlier: [], offset: 0 };
   let continued = false;
   for (const point of history?.points ?? []) {
     const at = Date.parse(point.at);

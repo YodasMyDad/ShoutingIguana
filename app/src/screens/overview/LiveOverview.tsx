@@ -54,9 +54,11 @@ const NO_TICKS: readonly LineChartTick[] = [];
  * size as the numbers grow. Pause, Resume and Stop are the top bar's, on every screen; this screen's banners carry the
  * next action for the state it's in.
  *
- * Its times are one clock: how long the run being watched has spent crawling (the store's `RunClock`). Elapsed shows
- * it, the chart's time axis is it, and the pace behind the time left is read over the last minute of it. It stands
- * still while the crawl is paused, and starts again when a crawl is continued.
+ * Its times are one clock: how long the crawl has spent crawling, standing still while it's paused. Elapsed is the
+ * engine's count of it (E3c's `crawlingMs`, every run's time), so a continued crawl's Elapsed takes in its earlier
+ * runs from its first figure, whether or not its history has been read. The chart's axis is the same time: the earlier
+ * runs' (from the history), then this run's on the store's `RunClock`, over the last minute of which the pace behind
+ * the time left is read. From an engine without `crawlingMs`, Elapsed is the run clock and the earlier runs' time.
  */
 export function LiveOverview({
   crawlId,
@@ -85,11 +87,17 @@ export function LiveOverview({
   const series = useMemo(() => progressSeries(history, trail ?? []), [history, trail]);
   const spark = useMemo(() => sparkOf(rates ?? []), [rates]);
   const left = timeLeft(status, progress, live?.pace ?? []);
-  // The time spent crawling: the run's, on its clock, after the earlier runs' when the history says what they were
-  // (E3c), so Elapsed and the chart's axis are one clock. The engine's own count of the run (which runs on through a
-  // pause) only for an engine whose progress doesn't say when it was taken.
+  // The time spent crawling: the engine's own (E3c's `crawlingMs`, every run's, standing still while paused), which a
+  // live client takes; else the run's, on its clock, after the earlier runs' when the history says what they were,
+  // and the engine's count of the run (which runs on through a pause) only for an engine whose progress doesn't say
+  // when it was taken.
   const runMs = live?.clock?.runMs ?? progress?.elapsedMs;
-  const elapsedMs = runMs == null ? runMs : runMs + (series?.offsetMs ?? 0);
+  const elapsedMs =
+    typeof progress?.crawlingMs === 'number'
+      ? progress.crawlingMs
+      : runMs == null
+        ? runMs
+        : runMs + (series?.offsetMs ?? 0);
   // "over 4 s"; for a crawl continued, "over 1 h 4 min of crawling, in 2 runs" when the runs' times are known, and
   // "over the 4 s since it was continued", of which only this run is drawn, when they aren't.
   const runCount = (series?.runStarts?.length ?? 0) + 1;

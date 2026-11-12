@@ -939,6 +939,18 @@ describe('the Overview while the crawl runs', () => {
     expect(main().queryByText(/72 h|3 days|10 min/)).toBeNull();
   });
 
+  it('says the time the crawl has spent crawling, every run’s, from the engine’s own count: never jumps for the history', async () => {
+    // A crawl continued 4 s ago after ten minutes of crawling; its history never answers.
+    sidecar({ analysis: null, item: LIVE_ITEM, history: 'pending' });
+    await open();
+    await heard(
+      ...Array.from({ length: 9 }, (_, index) =>
+        at(index / 2, 0, { fetched: 1_200 + index, crawlingMs: 600_000 + index * 500 }),
+      ),
+    );
+    expect(cell('Elapsed')).toHaveTextContent('10 min 4 s');
+  });
+
   it('draws a continued crawl whole on the time it spent crawling, the days between runs closed, each start marked', async () => {
     // Ten minutes of crawling three days ago, with a minute's pause in it, counted back from the file; then this run.
     const first = Date.parse('2026-10-29T10:15:00.000Z');

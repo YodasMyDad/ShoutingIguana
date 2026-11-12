@@ -157,6 +157,11 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       void queryClient.invalidateQueries(gridPagesOf(crawlId));
     } else {
       void queryClient.invalidateQueries({ queryKey: queryKeys.crawlItem(crawlId) });
+      // A crawl started or continued here: its history has a new run (and `liveFrom`), which a copy read before
+      // doesn't, so its chart would place this run after the wrong runs.
+      if (isCrawling(status) && (previous === undefined || !isCrawling(previous))) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.history(crawlId) });
+      }
     }
     void announceStatus(crawlId, status);
     decideToast(event, previous);

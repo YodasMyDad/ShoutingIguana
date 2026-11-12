@@ -219,6 +219,22 @@ describe('what the live bridge refreshes', () => {
     return { queryClient, stale };
   }
 
+  it('reads a crawl’s history again when it starts or is continued, as it has a new run, and not on a pause', () => {
+    const { queryClient, stale } = cachedClient();
+    queryClient.setQueryData(queryKeys.history(ID), { crawlId: ID, startedAt: '', liveFrom: null, points: [] });
+    const { stop, status } = setup(queryClient);
+    status('stopped');
+    queryClient.setQueryData(queryKeys.history(ID), { crawlId: ID, startedAt: '', liveFrom: null, points: [] });
+    expect(stale(queryKeys.history(ID))).toBe(false);
+    status('running');
+    expect(stale(queryKeys.history(ID))).toBe(true);
+    queryClient.setQueryData(queryKeys.history(ID), { crawlId: ID, startedAt: '', liveFrom: null, points: [] });
+    status('paused');
+    status('running');
+    expect(stale(queryKeys.history(ID))).toBe(false);
+    stop();
+  });
+
   it('fetches the library again when the sidecar says it changed', () => {
     const { queryClient, stale } = cachedClient();
     const { stop, send } = setup(queryClient);
