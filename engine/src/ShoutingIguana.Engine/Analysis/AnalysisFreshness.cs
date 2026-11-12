@@ -25,9 +25,12 @@ public static class AnalysisFreshness
     /// regions, parses JSON-LD strictly, requires a JobPosting location or <c>jobLocationType</c>, flags HTML past
     /// Googlebot's crawl limit, and changes the severity of <c>blocked-by-robots</c>, <c>description-missing</c>,
     /// <c>h1-missing</c> and <c>duplicate-site-version</c>. 7 gives a status code its name in details ("404 Not Found" where
-    /// 6 wrote "HTTP 404"), and stores the URLs crawled and the site's score with the analysis.
+    /// 6 wrote "HTTP 404"), and stores the URLs crawled and the site's score with the analysis. 8 reports
+    /// <c>site-hidden-from-search</c> only when the home page is noindex too, skips <c>blocked-by-robots</c> on a crawl
+    /// that ignored robots.txt, names the URL a redirecting canonical ends at in <c>canonical-to-redirect</c>'s detail, and
+    /// passes a page that declares its encoding with a byte-order mark (which only a crawl that recorded the mark shows).
     /// </summary>
-    public const int VERSION = 7;
+    public const int VERSION = 8;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and
