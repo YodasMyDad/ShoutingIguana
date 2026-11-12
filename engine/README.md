@@ -203,7 +203,7 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   `Analysis/IssuePlainTexts.cs`, by check id (a title, what's wrong as sentences, how to fix it as steps, who fixes
   it, the good news when nothing is found, and optionally what a template fault usually is and what the check looks
   for), and `Analysis/PlainWords.cs` (a plain title for each category; a sentence and what would let the check run for
-  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 87 checks, the 17 categories and the 16
+  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 87 checks, the 17 categories and the 17
   skip reasons have theirs. No analysis goes out of date when one changes, as the words are no part of the
   fingerprint.
   - **Both files are generated: don't edit them.** The words are written in
@@ -239,8 +239,13 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     neither failure counts as a sitemap error.
   - Checks of what the crawl was told not to fetch are skipped: broken external links with `--no-external`, broken
     and oversized images with `--no-resources`, and every sitemap check with `--no-sitemaps`.
-  - What robots.txt blocks is skipped with `--ignore-robots` (`robots-txt-ignored`): the crawl asked for every URL,
-    so none was refused, which isn't finding that robots.txt blocks nothing.
+  - What robots.txt decides is skipped with `--ignore-robots` wherever the crawl couldn't judge it
+    (`robots-txt-ignored`). It asked for every URL, so none was refused: what robots.txt blocks is skipped. It read
+    no other origin's robots.txt: that check is skipped. And it read the site's own only for sitemap discovery, so
+    with `--no-sitemaps` as well, whether robots.txt is missing or unavailable is skipped too.
+  - Whether the site as a whole is hidden from search is judged by its home page, so a crawl that didn't start at
+    the site's root (a start URL with a path other than `/`) skips it (`start-not-root`): a section's first page
+    isn't the site's.
   - The duplicate site version check needs to know how every version answered, and a home page to redirect to. A
     crawl stopped before the probes were answered, a crawl file from before the crawler probed, or a home page that
     isn't a page skips it.

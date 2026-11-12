@@ -37,8 +37,8 @@ Built in stages:
   ([the Simple design](v2-ui-simple.md#what-the-engine-needs)). A site's score, worked out and stored by the analysis;
   the checks' plain words; which checks are a fault of the whole site, and which are reported once; and a status
   code's name in an issue's detail. [Engine changes the score made](#engine-changes-the-score-made) has what changed.
-- **The catalog's fixes** change no shape: one check's rule, what three checks do, a new skip reason
-  (`robots-txt-ignored`), one check's `subject`, and texts.
+- **The catalog's fixes** change no shape: one check's rule, what three checks do, two new skip reasons
+  (`robots-txt-ignored`, `start-not-root`), one check's `subject`, what the inspector's `charset` holds, and texts.
   [Engine changes the catalog's fixes made](#engine-changes-the-catalogs-fixes-made) has them.
 
 ## Process (E1)
@@ -782,9 +782,10 @@ one moment is never set against a total from another, and the app, the report an
 | `sitemaps-not-read` | Sitemaps were left unread at the crawler's limits |
 | `depth-limit`, `url-limit` | The limit kept internal URLs out of the crawl, so pages linked only from them would look orphaned |
 | `start-folder` | The crawl stayed in its start folder, so links from the rest of the site weren't read |
+| `start-not-root` | The crawl didn't start at the site's root (its start URL has a path other than `/`), so its first page isn't known to be the site's home page: `site-hidden-from-search` can't be judged |
 | `external-links-off` | The crawl was told not to check links to other sites |
 | `resources-off` | The crawl was told not to fetch images and other files |
-| `robots-txt-ignored` | The crawl was told to ignore robots.txt, so it asked for every URL and none was refused: `blocked-by-robots` has nothing to find |
+| `robots-txt-ignored` | The crawl was told to ignore robots.txt. It asked for every URL, so none was refused (`blocked-by-robots`); it read no other origin's robots.txt (`robots-txt-unreachable-other-origin`); and it read the site's own only for sitemap discovery, so with sitemaps off `robots-txt-unreachable` and `robots-txt-missing` are skipped too |
 | `site-versions-unchecked` | The site's other versions (www or not, http or https) weren't all checked |
 | `rule-failed` | The check's rule failed once every page was read, so it has no results (the log says why) |
 | `earlier-version` | The crawl, or some of the pages the check needs, was made by an earlier version, which didn't record what the check compares (for near-duplicate content, the 256-bit fingerprint). Crawling again mends it |
@@ -1106,6 +1107,8 @@ below, or past what an id holds), and `invalid-query` without one.
 - **`content`** is null for anything that isn't a parsed page. Titles, descriptions and H1s are each listed in page
   order with their `length` as the checks measure it; `headings` counts H1 to H6, `images` the images and
   `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the crawler or to Googlebot;
+  `charset` is the character set the page declares: its meta tag's, or with no meta tag the encoding its byte-order
+  mark declares (`utf-8`, `utf-16le`, `utf-16be`), else null (the header's is in `headers`);
   `metaRefresh` is `{ delaySeconds, url }` for a page with a meta refresh, else null.
   **`limits`** are what the analysis judged the URL against: its stored settings (`fromAnalysis: true`), or the engine's
   defaults before the first analysis (`fromAnalysis: false`). They include an image's (`largeImageBytes`, which
@@ -2212,7 +2215,7 @@ a new field; nothing is taken away. Each has its own tests.
   | --- | --- | --- | --- |
   | `robots-txt-unreachable` | One issue on the home page; the detail lists the main origins failing | yes | yes |
   | `no-https` | One issue on the home page, when it is served over plain HTTP | yes | yes |
-  | `site-hidden-from-search` | One issue on the home page (on the start URL without one, until [the catalog's fixes](#engine-changes-the-catalogs-fixes-made)) | yes | yes |
+  | `site-hidden-from-search` | One issue on the home page | yes | yes |
   | `duplicate-site-version` | One issue for each other version of the site that answers (three at most), on that version's URL, not on the home page | yes | yes |
   | `robots-txt-unreachable-other-origin` | One issue on the home page; the detail lists the origins. It is a fault of another origin of the site, not of the main one: the design counts it as site-wide, at a warning's 4 points | yes | yes |
   | `robots-txt-missing` | One issue on the home page; the detail lists the origins | no | yes |
@@ -2251,8 +2254,9 @@ a new field; nothing is taken away. Each has its own tests.
   - **A crawl stopped early** is judged on the pages it read, as every page check is; its score is partial.
   - **URLs robots.txt blocked** weren't read, so they are neither pages nor hidden. A site blocked whole reads no
     page, and has no score.
-  - **Where**: the home page, or the start URL when no home page was read (it refused the crawler, and a sitemap led
-    to the pages), so its `subject` is `url`.
+  - **Where**: the home page, which is a page, so its `subject` is `page`. (As first built it was reported on the
+    start URL when no home page was read, and its `subject` was `url`:
+    [the catalog's fixes](#engine-changes-the-catalogs-fixes-made) changed both.)
   - Tests, one an edge: a majority reported once on the home page with a variant left out of the total; exactly
     half; one page; **40 variants with indexable targets beside 3 pages: nothing**; **3 of 5 own pages noindex
     beside 40 variants: reported, "3 of 5 pages are noindex"**; nothing but variants; a noindex page that names
@@ -2266,7 +2270,7 @@ a new field; nothing is taken away. Each has its own tests.
   fingerprint has changed and every earlier analysis is out of date (`engineChanged`).
 - **Plain words.** A check's, a category's and a skip reason's, in files of their own beside the catalog
   (`IssuePlainTexts`, by check id; `PlainWords`), so words change without touching the catalog or a rule. **All 87
-  checks, the 17 categories and the 15 skip reasons have theirs.**
+  checks, the 17 categories and the 17 skip reasons have theirs** (15 reasons then; [the catalog's fixes](#engine-changes-the-catalogs-fixes-made) added two).
   - **One data file, and a generator.** The words are written in
     `engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/plain-words.json`, in the API's own shapes
     (`plainTitle`, `plainWhat` and `plainFix` as lists, `fixer`, `plainPassed`, `plainOneFix`, `plainLooksFor`; a
@@ -2354,7 +2358,14 @@ that fails without it, and a planted case on the synthetic site where the rule n
 
   With no home page read (the start URL failed or was refused, and a sitemap led to the pages) nothing says the site
   hides itself, and nothing is reported. So what it flags is always a page, and **its `subject` is `page`** (it was
-  `url`): that changes no score, as a site-wide check is the whole site whatever its subject. Its detail is
+  `url`): that changes no score, as a site-wide check is the whole site whatever its subject.
+
+  **A crawl that didn't start at the site's root skips the check**, with a new reason, **`start-not-root`**: when the
+  start URL has a path other than `/` (a section, `/shop/`; a page, `/home`), its first page isn't known to be the
+  site's home page, and a crawl of a section whose pages are noindex (an account area) would have been called a site
+  hidden from search. Not passed, and not fired: like every skipped check it has no count, and the analysis is
+  partial. A start URL at the root is still the root with a query (`/?lang=en`) and where it redirects (to `/en/`,
+  to the www host): the home page is the page it ends on, as above. Its detail is
   unchanged ("212 of 240 pages are noindex"). The synthetic site plants both states: `HiddenFromSearch` (`si testsite
   --hidden-from-search`) makes the home page and every product noindex, and must be reported; `NoindexProducts`
   makes every product noindex and leaves the home page alone, and must not be.
@@ -2364,18 +2375,37 @@ that fails without it, and a planted case on the synthetic site where the rule n
   (`PageFacts.ByteOrderMark`: `utf-8`, `utf-16be` or `utf-16le`), beside the declared charset, from the one parse.
   **A crawl already on disk has no such fact**, and nothing left to work it out from: a marked page in one is still
   reported until the page is crawled again, and the check's `why` says so. The fact is one more optional member of a
-  page's stored facts, so the crawl's schema version is as it was, and an earlier engine reads such a file. The
-  inspector's `charset` is still the meta tag's.
-- **`blocked-by-robots` is skipped on a crawl that ignored robots.txt.** Such a crawl asks for every URL, so none is
-  refused and the check had nothing to find: it read as passed. It is skipped with a new reason,
-  **`robots-txt-ignored`**, with its note, its text and its plain words; like every skipped check it has no count
-  (`total` is null, never 0) and stores no rows. There are **16 skip reasons**.
+  page's stored facts, so the crawl's schema version is as it was, and an earlier engine reads such a file. **The
+  inspector's `charset`** is the meta tag's, or with no meta tag the mark's encoding, so a page that passes on its
+  mark alone says which it is. The check also reads the header as the fetch does: **a `Content-Type` whose charset is
+  empty (`text/html; charset=`) declares nothing**, and is reported, where the rule had looked only for "charset=".
+- **The four checks that robots.txt decides are skipped where a crawl that ignored it couldn't judge them.** Such a
+  crawl asks for every URL, so none is refused, and it reads robots.txt only where sitemap discovery asks: the start
+  URL's origin, with sitemaps on. Each check read as passed on what was never read. Each is skipped exactly then,
+  with a new reason, **`robots-txt-ignored`**:
+
+  | Crawl | `blocked-by-robots` | `robots-txt-unreachable` | `robots-txt-missing` | `robots-txt-unreachable-other-origin` |
+  | --- | --- | --- | --- | --- |
+  | Obeying robots.txt | Runs | Runs | Runs, every origin of the site | Runs |
+  | Ignoring it, sitemaps on | Skipped | Runs: the start origin's was read | Runs, for the start origin alone | Skipped |
+  | Ignoring it, sitemaps off | Skipped | Skipped | Skipped | Skipped |
+
+  The middle row's two checks are skipped as well when no robots.txt of a main origin (the start URL's, or the home
+  page's) is on file, as on a crawl stopped before sitemap discovery asked. One note on the analysis says which
+  ("robots.txt was ignored in this crawl and never read, so the URLs it blocks, and whether it is missing or
+  unavailable, weren't looked for."), each check's reason has its own text, and the reason's plain words are true of
+  all four. Like every skipped check they have no count (`total` is null, never 0) and store no rows. There are
+  **17 skip reasons**, these two new.
 - **`canonical-to-redirect` names where the redirect ends.** The fix is to name the redirect's final URL, and
   neither the detail nor the related URL gave it. The detail does now: "The canonical URL redirects (301 Moved
   Permanently) to https://example.com/page" after one redirect, "The canonical URL redirects (302 Found) and, after
-  3 redirects, ends at https://example.com/page" after more, a URL the crawl knows but didn't fetch included. "The
-  canonical URL redirects back to this page" is as it was, and the related URL is still the canonical itself, which
-  the check groups by.
+  3 redirects, ends at https://example.com/page" after more. **Only a URL that answered is called the end.** One the
+  crawl never asked for (links to other sites off, a limit, a stopped crawl) or was kept out of may redirect again,
+  so the detail says where the redirects lead and why no more is known: "… to https://partner.example/landing, which
+  wasn't checked", "… and, after 2 redirects, leads to https://partner.example/landing, which wasn't checked", "… to
+  https://example.com/private/page, which is blocked by robots.txt". "The canonical URL redirects back to this page"
+  is as it was, and the related URL is still the canonical itself, which the check groups by. The lookup of that URL
+  is one statement compiled once (1.2 µs a lookup in the page pass, 2.1 µs before).
 - **Texts that said other than their rules do.** Titles, descriptions, a fix and a why:
 
   | Check | It said | It says | Because the rule |
@@ -2392,9 +2422,15 @@ that fails without it, and a planted case on the synthetic site where the rule n
   | `canonical-to-redirect` | Description: "The detail says when the redirect leads back to this page" | "The detail gives the URL the redirects end at, or says that they lead back to this page" | Names the final URL now |
   | `site-hidden-from-search` | Description: more than half of the pages are noindex; a page whose canonical names another URL counts neither way; reported on the start URL without a home page | The home page is noindex, and so are more than half; a canonicalised page is one that isn't noindex; reported on the home page | Needs the home page; counts a noindex page with a canonical as noindex; reports nowhere else |
 
+  The descriptions also say when a check isn't made: `site-hidden-from-search` on a crawl that didn't start at the
+  site's root; `robots-txt-unreachable`, `robots-txt-unreachable-other-origin` and `robots-txt-missing` on a crawl
+  told to ignore robots.txt, each as the table above has it. `canonical-to-redirect`'s description and fix say that
+  a URL the crawl didn't check, or was refused at, may not be where the redirects end.
+
   A title is no part of the checks' fingerprint, and no text is stored with an analysis. The plain words that had to
   follow did: `site-hidden-from-search` (sentence 1 names the home page, and its good news and what it looks for
-  no longer speak of "most of its pages" alone), and `canonical-to-redirect` (step 1 reads the final address off the
-  list again).
+  no longer speak of "most of its pages" alone), and `canonical-to-redirect` (step 1 reads the address off the list
+  again, which says when it couldn't be checked).
 - **The analysis version is 8.** What an analysis stores differs for the first, third and fourth of these, so an
-  analysis by an earlier engine is out of date (`engineChanged`) until it is run again.
+  analysis by an earlier engine is out of date (`engineChanged`) until it is run again. Nothing shipped at 8 before
+  the review's fixes, which are part of it.
