@@ -60,3 +60,31 @@ test('opening a crawl shows its overview with the sidebar sections', async ({ pa
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Issues/ })).toBeVisible();
   await expectNoViolations(page);
 });
+
+test('at 200% zoom (640x360) the library keeps its Site column and nothing scrolls sideways', async ({ page }) => {
+  await page.setViewportSize({ width: 640, height: 360 });
+  await page.goto('/');
+  const library = page.getByRole('region', { name: 'Library' });
+  const name = library.getByRole('link', { name: site(), exact: true });
+  await expect(name).toBeVisible();
+  const widths = await page.evaluate(() => {
+    const main = document.querySelector('main');
+    const table = document.querySelector('main table');
+    const site = document.querySelector('main table tbody td');
+    return {
+      page: document.scrollingElement!.scrollWidth - document.scrollingElement!.clientWidth,
+      main: main ? main.scrollWidth - main.clientWidth : -1,
+      table: table?.parentElement ? table.parentElement.scrollWidth - table.parentElement.clientWidth : -1,
+      site: site?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  // Neither the page, nor the screen, nor the library's own box scrolls sideways at this width.
+  expect(widths).toMatchObject({ page: 0, main: 0, table: 0 });
+  // The Site column holds its least: room for the favicon and a name.
+  expect(widths.site).toBeGreaterThanOrEqual(160);
+  // Pages and Started are second lines now, not columns: still said.
+  await expect(library.getByRole('columnheader', { name: 'Pages' })).toBeHidden();
+  await expect(library.getByText(/ pages?$/).first()).toBeVisible();
+  await expect(library.getByText(/^Started /).first()).toBeVisible();
+  await expectNoViolations(page);
+});
