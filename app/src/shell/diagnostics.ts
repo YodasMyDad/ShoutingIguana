@@ -47,16 +47,46 @@ export async function appDiagnostics(
         new Promise<null>((resolve) => setTimeout(() => resolve(null), SHELL_INFO_TIMEOUT_MS)),
       ])
     : null;
-  return [
-    'Shouting Iguana diagnostics',
-    `Time: ${new Date().toISOString()}`,
-    `App: ${info ? `${info.appVersion} (${info.platform}${info.debug ? ', debug' : ''})` : 'running in a browser'}`,
-    `Engine: ${engine ? `${engine.engineVersion} (sidecar ${engine.version}, process ${engine.pid})` : 'not connected'}`,
-    `Data folder: ${engine?.dataDir ?? 'unknown'}`,
-    `State folder: ${engine?.stateDir ?? 'unknown'}`,
-    `Log folder: ${info?.logDir ?? 'unknown'}`,
-    `Mode: ${settings.mode}, theme: ${settings.theme}, density: ${settings.density}, zoom: ${Math.round(settings.zoom * 100)}%`,
-    `Page: ${window.location.pathname}`,
-    `Browser: ${navigator.userAgent}`,
-  ].join('\n');
+  return withoutAccountName(
+    [
+      'Shouting Iguana diagnostics',
+      `Time: ${new Date().toISOString()}`,
+      `App: ${info ? `${info.appVersion} (${info.platform}${info.debug ? ', debug' : ''})` : 'running in a browser'}`,
+      `Engine: ${engine ? `${engine.engineVersion} (sidecar ${engine.version}, process ${engine.pid})` : 'not connected'}`,
+      `Data folder: ${engine?.dataDir ?? 'unknown'}`,
+      `State folder: ${engine?.stateDir ?? 'unknown'}`,
+      `Log folder: ${info?.logDir ?? 'unknown'}`,
+      `Mode: ${settings.mode}, theme: ${settings.theme}, density: ${settings.density}, zoom: ${Math.round(settings.zoom * 100)}%`,
+      `Page: ${window.location.pathname}`,
+      `Browser: ${navigator.userAgent}`,
+    ].join('\n'),
+  );
+}
+
+/** A home folder in a path, by its system's shape (Windows', macOS's, Linux's), and what stands for it. */
+const HOME_FOLDERS: readonly { home: RegExp; stand: string }[] = [
+  { home: /[A-Za-z]:\\(?:Users|Documents and Settings)\\([^\\\r\n]+)/i, stand: '%USERPROFILE%' },
+  { home: /\/Users\/([^/\r\n]+)/, stand: '~' },
+  { home: /\/home\/([^/\r\n]+)/, stand: '~' },
+];
+
+const escapeForPattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Diagnostics as they can be sent (review finding 17): the user's home folder stands as `%USERPROFILE%` (or `~`), and
+ * their account name appears nowhere else either. A report needs where the files are, not whose they are.
+ */
+export function withoutAccountName(text: string): string {
+  let result = text;
+  for (const { home, stand } of HOME_FOLDERS) {
+    const found = home.exec(result);
+    const account = found?.[1];
+    if (!found || !account) continue;
+    // Every path into that home folder, however it's cased.
+    const prefix = found[0].slice(0, found[0].length - account.length);
+    result = result.replace(new RegExp(escapeForPattern(prefix + account), 'gi'), stand);
+    // The name anywhere else, as a word.
+    result = result.replace(new RegExp(`(?<![\\w.-])${escapeForPattern(account)}(?![\\w-])`, 'gi'), '<user>');
+  }
+  return result;
 }

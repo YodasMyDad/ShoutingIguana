@@ -1,6 +1,6 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
 import { filledTable } from './scripts/filled-table.mjs';
-import viteConfig from './vite.config';
+import viteConfig from './vite.config.ts';
 
 // Unit and component tests: jsdom, the app's own source only (never the spike or the design work). Two projects: the
 // app as it is, and the app with every row of the routes' table set to a stub screen (`filled`), so a Simple screen
