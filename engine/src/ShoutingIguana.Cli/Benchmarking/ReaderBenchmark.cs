@@ -242,12 +242,15 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Timed("robots.txt: the site's file, with what each line blocked", "robots", "robots", site.Blocked, () => RobotsReader.ReadFile(path, site.Origin));
             Paged("robots.txt: the site's blocked URLs", "robots", "robots", site.Blocked, offset => RobotsReader.ReadBlocked(path, site.Origin, offset: offset));
 
-            // What the inspector links by: one blocked URL's row, and the URL inspected, with the line that refused it.
-            if (RobotsReader.ReadBlocked(path, site.Origin, limit: 1)?.Rows.FirstOrDefault() is { } blocked)
-            {
-                Timed("robots.txt: one blocked URL's row", "robots", "robots", 1, () => RobotsReader.ReadBlocked(path, site.Origin, urlId: blocked.Id));
-                Timed("Inspect a URL robots.txt refused (its origin and line)", "inspector", "inspector", null, () => UrlInspectorReader.Read(path, blocked.Id));
-            }
+        }
+
+        // What the inspector links by: one blocked URL's row, and the URL inspected, with the line that refused it. Of the
+        // origin that blocked the most, which needn't be the site's own.
+        if (Wanted("robots.txt: ") && RobotsReader.ReadOrigins(path, new RobotsOriginQuery { Blocked = true, Limit = 1_000 }).Origins.MaxBy(origin => origin.Blocked) is { } blocking &&
+            RobotsReader.ReadBlocked(path, blocking.Origin, limit: 1)?.Rows.FirstOrDefault() is { } blocked)
+        {
+            Timed("robots.txt: one blocked URL's row", "robots", "robots", 1, () => RobotsReader.ReadBlocked(path, blocking.Origin, urlId: blocked.Id));
+            Timed("Inspect a URL robots.txt refused (its origin and line)", "inspector", "inspector", null, () => UrlInspectorReader.Read(path, blocked.Id));
         }
 
         if (Wanted("Inspect a URL sitemaps list") && First(new UrlQuery { Filters = [Boolean("inSitemap", true)], Limit = 1 }) is { } listed)

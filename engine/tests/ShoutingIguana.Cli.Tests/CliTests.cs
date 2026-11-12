@@ -507,6 +507,9 @@ public sealed class CliTests : IAsyncLifetime
         // pages, which take a pass, on one connection and on several. And what the inspector links by.
         Assert.Equal(["link-grid", "link-pass", "link-pass-split"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "link-ends")
             .Select(read => (string)read!["class"]!).Distinct().Order(StringComparer.Ordinal));
+        // The cases of a blocked URL need the crawl to have one: say what it has, should it not.
+        var origins = RobotsReader.ReadOrigins(crawl, limit: 1_000);
+        Assert.True(origins.Blocked > 0, $"The crawl blocked no URL: {string.Join("; ", origins.Origins.Select(origin => $"{origin.Origin} {origin.State} {origin.StatusCode} {origin.Error} {origin.Blocked}"))}");
         Assert.All(new[]
             {
                 "Link ends: the targets of every link", "Link ends: the pages of every link (every link read)",
