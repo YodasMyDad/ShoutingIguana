@@ -23,7 +23,9 @@
         <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     </ItemGroup>
 
+    <!-- DocumentFormat.OpenXml is in the tests only: it reads back the workbooks an export writes, and validates them against the format's schema. -->
     <ItemGroup Label="Tests">
+        <PackageVersion Include="DocumentFormat.OpenXml" Version="3.1.1" />
         <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageVersion Include="xunit" Version="2.9.3" />

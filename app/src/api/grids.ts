@@ -217,6 +217,12 @@ export interface UrlColumn {
   values: string[];
   /** A check's own columns (`detail`, `relatedUrl`...): only its rows have them. */
   issueRowsOnly: boolean;
+  /** E5: the column's name in words ("Status", "Target status"), as a header shows it and an export writes it. */
+  title?: string;
+  /** E5: the unit of its numbers (`ms`, `bytes`), which an export's header carries after the title. */
+  unit?: string | null;
+  /** E5: an enum's values in words, by value (`clientError` is "Client error"); empty otherwise. */
+  valueTitles?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------------------------------------- Facets

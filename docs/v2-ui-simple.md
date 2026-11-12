@@ -694,7 +694,7 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 The full lists go in an Excel workbook beside the report, which the export work (E5) builds: a summary sheet (the
 score, the counts, every check with its severity, plain and technical titles, count and share), then a sheet a
 check that found something, with every URL, its title, its detail and the other URL involved. A sheet is named by
-the problem's number in the report and the start of its plain title ("3 Large images that slow pag…"), as Excel
+the problem's number in the report and the start of its plain title ("3 Large images that slow pages…"), as Excel
 allows 31 characters, and the summary sheet lists each number with its full title. Header rows are frozen and
 formatted.
 
