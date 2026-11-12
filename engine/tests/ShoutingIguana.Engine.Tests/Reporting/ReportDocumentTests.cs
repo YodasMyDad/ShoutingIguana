@@ -11,6 +11,7 @@ using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Export.Models;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Reporting;
 using ShoutingIguana.Engine.Reporting.Models;
 using ShoutingIguana.Engine.Serialization;
@@ -102,6 +103,11 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             var listed = problems[index].QuerySelectorAll(".examples tbody tr").Length;
             var most = check.Severity == IssueSeverity.Notice ? ReportOptions.DEFAULT_LOOK_EXAMPLES : ReportOptions.DEFAULT_EXAMPLES;
             Assert.Equal((int)Math.Min(most, results.Counts[check.Id]), listed);
+
+            // They are the check's first rows, in the order its list has them (crawl order), each linked to its own address.
+            Assert.Equal(
+                IssueReader.ReadIssues(crawl.Path, check.Id, most).Select(row => row.Url),
+                problems[index].QuerySelectorAll(".examples tbody tr").Select(row => row.QuerySelector("td .mono a")!.GetAttribute("href")));
             if (results.Counts[check.Id] > most)
             {
                 Assert.Equal($"And {results.Counts[check.Id] - most:N0} more: the full list is on sheet {index + 1} of the spreadsheet.", problems[index].QuerySelector(".more")!.TextContent);
@@ -341,7 +347,9 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         }
 
         Assert.Contains("in the full report under the same number", summary.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
-        Assert.Contains("from page 2 under the same number", full.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
+        // Where each is explained is said by its section's name: which page that starts on depends on the paper and the score's length.
+        Assert.EndsWith("Each is explained under the same number in “What to fix”, with the first pages it’s on.", full.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("page 2", full.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
 
         // Checks that couldn't run are listed near the full report's end, which the summary can only point to.
         var stopped = await EndedEarlyAsync(CrawlStatus.Stopped);
@@ -493,7 +501,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         Assert.Equal("Score 100 out of 100", document.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
         Assert.Equal($"This site is in very good shape. Nothing needs fixing, and there are {notices} things worth a look.", document.QuerySelector(".summary__sentence")!.TextContent);
         Assert.Equal(
-            $"No serious problem was found, and nothing worth fixing. {notices} things are worth a look: they are explained from page 2. Often they’re fine as they are, and they don’t change the score.",
+            $"No serious problem was found, and nothing worth fixing. {notices} things are worth a look: they are explained under “What to fix”. Often they’re fine as they are, and they don’t change the score.",
             document.QuerySelector("h2 + p.lead")!.TextContent);
         Assert.Equal(notices, document.QuerySelectorAll("article.problem").Length);
     }
@@ -527,6 +535,120 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
 
         // The workbook says the same.
         Assert.Equal("No score: no page could be read", SummaryFact(none, "Score"));
+
+        // A start URL the site's robots.txt refuses: no page either, and the report says what kept it out, counting the
+        // site's own addresses as the analysis did (one here: "wasn’t", not "weren’t").
+        var refused = await CrawlAsync("refused", options => options with { StartUrl = new Uri(crawl.Server.BaseUri, "/private/1").AbsoluteUri, DiscoverSitemaps = false });
+        Assert.Equal((NoScoreReason?)NoScoreReason.NoPages, IssueReader.ReadResults(refused)!.NoScoreReason);
+        Assert.Equal(1, IssueReader.ReadResults(refused)!.Counts["blocked-by-robots"]);
+        Assert.EndsWith(
+            "and got no page it could read. The site’s rules file (robots.txt) keeps search engines out of 1 address, which wasn’t read.",
+            Parse(ReportExport.Build(refused, settings: SETTINGS)).QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What robots.txt kept the check out of is the site's own addresses, as the analysis counted them for the score:
+    /// an address on another website that its robots.txt refuses is no part of "the site’s rules file".
+    /// </summary>
+    [Fact]
+    public void WhatTheSitesRobotsTxtKeptOutIsTheSitesOwnAddresses()
+    {
+        var covers = IssueReader.ReadResults(crawl.Path)!.Score!.Covers;
+        Assert.True(covers.BlockedByRobots > 1);
+        var copy = crawl.Copy();
+        Change(copy, $"UPDATE responses SET outcome = {(int)FetchOutcome.RobotsDisallowed} WHERE url_id IN (SELECT url_id FROM responses JOIN urls ON urls.id = url_id WHERE is_internal = 0 AND outcome = 0 LIMIT 3)");
+        Assert.Equal(covers.BlockedByRobots + 3, CrawlStatsReader.Read(copy).Outcomes[FetchOutcome.RobotsDisallowed]);
+
+        var document = Parse(ReportExport.Build(copy, settings: SETTINGS));
+        var notRead = document.QuerySelectorAll(".facts dt").Single(term => term.TextContent == "Not read").NextElementSibling!.TextContent;
+        Assert.Contains($"{covers.BlockedByRobots} addresses the site’s rules file (robots.txt) keeps search engines out of", notRead, StringComparison.Ordinal);
+        Assert.EndsWith($"robots.txt keeps search engines out of {covers.BlockedByRobots} addresses, which weren’t read.", document.QuerySelector(".summary__covers")!.TextContent,
+            StringComparison.Ordinal);
+
+        // One address "wasn’t" read.
+        Change(copy, $"UPDATE analysis SET score_json = replace(score_json, '\"blockedByRobots\":{covers.BlockedByRobots}', '\"blockedByRobots\":1')");
+        Assert.Equal(1, IssueReader.ReadResults(copy)!.Score!.Covers.BlockedByRobots);
+        document = Parse(ReportExport.Build(copy, settings: SETTINGS));
+        Assert.EndsWith("robots.txt keeps search engines out of 1 address, which wasn’t read.", document.QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("1 address the site’s rules file (robots.txt) keeps search engines out of", document.QuerySelector(".facts")!.TextContent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A crawl that went on after its results were worked out (stopped, analysed, continued): the report is of the
+    /// results, so it says they are out of date whoever asks, and leaves out what it could only read from the crawl as it
+    /// now stands. "Pages that can appear in search: 4,064 of 3,113" set a figure of now beside one of then.
+    /// </summary>
+    [Fact]
+    public async Task ACrawlThatWentOnAfterItsResultsLeavesOutWhatIsOfTheCrawlNow()
+    {
+        var stopped = await EndedEarlyAsync(CrawlStatus.Stopped);
+        var before = Parse(ReportExport.Build(stopped, settings: SETTINGS));
+        string[] ofNow = ["Pages that can appear in search", "Not read"];
+        Assert.Contains("Pages that can appear in search", before.QuerySelectorAll(".facts dt").Select(term => term.TextContent));
+        Assert.Contains("still to check", before.QuerySelector("header .note")!.TextContent, StringComparison.Ordinal);
+
+        // It goes on: more is found and queued, and the crawl's row says it changed. Nobody says how to judge the results.
+        Change(stopped, "UPDATE urls SET state = 0 WHERE id IN (SELECT id FROM urls WHERE id NOT IN (SELECT url_id FROM responses) LIMIT 40)");
+        Stamp(stopped);
+        var document = Parse(ReportExport.Build(stopped, settings: SETTINGS));
+        var note = Assert.Single(document.QuerySelectorAll("header .note")).TextContent;
+        Assert.StartsWith("These results were worked out on ", note, StringComparison.Ordinal);
+        Assert.Contains("the site check has gone on since", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("still to check", document.Body!.TextContent, StringComparison.Ordinal);
+        var facts = document.QuerySelectorAll(".facts dt").Select(term => term.TextContent).ToList();
+        Assert.DoesNotContain(facts, fact => ofNow.Contains(fact));
+        Assert.Equal(
+            "Not known from these results: the check has gone on since they were worked out.",
+            document.QuerySelectorAll(".facts dt").Single(term => term.TextContent == "Finished?").NextElementSibling!.TextContent);
+
+        // The score is still the results': so far, as they were of a check stopped early.
+        Assert.EndsWith(", so far", document.QuerySelector(".summary__word")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("The check has gone on since these results were worked out", SummaryFact(stopped, "Finished?"));
+    }
+
+    /// <summary>
+    /// "One fix" speaks of what the check flags: pages for a check of pages, addresses for a check of addresses (a chain
+    /// of forwards that all end at one address), which lead to the address they share rather than name it.
+    /// </summary>
+    [Fact]
+    public void OneFixCountsAddressesForACheckOfAddresses()
+    {
+        var copy = crawl.Copy();
+        var results = IssueReader.ReadResults(copy)!;
+        Assert.Equal(IssueSubject.Url, IssueCatalog.Find("redirect-chain")!.Subject);
+        Assert.True(results.Counts["redirect-chain"] > 0);
+
+        // Twelve more addresses flagged, all forwarding on to the start URL: most of the check's rows share one end.
+        Change(copy, """
+            UPDATE issues SET issue = 'redirect-chain', related_url_id = 1, detail = NULL
+            WHERE (issue, url_id) IN (SELECT MIN(issue), url_id FROM issues WHERE url_id NOT IN (SELECT url_id FROM issues WHERE issue = 'redirect-chain') GROUP BY url_id LIMIT 12)
+            """);
+        Change(copy, "UPDATE issue_types SET url_count = (SELECT COUNT(*) FROM issues WHERE issue = issue_types.id) WHERE url_count > 0");
+        Change(copy, "UPDATE issues SET related_url_id = 1 WHERE issue = 'redirect-chain'");
+        Change(copy, "DELETE FROM issue_targets WHERE issue = 'redirect-chain'");
+        Change(copy, "INSERT INTO issue_targets (issue, url_id, related_url_id) SELECT issue, url_id, 1 FROM issues WHERE issue = 'redirect-chain'");
+        var count = IssueReader.ReadResults(copy)!.Counts["redirect-chain"];
+        Assert.True(count >= 12, $"{count} flagged.");
+
+        var document = Parse(ReportExport.Build(copy, settings: SETTINGS));
+        var problem = document.QuerySelectorAll("article.problem").Single(article => article.QuerySelector(".problem__tech")!.TextContent.StartsWith(IssueCatalog.Find("redirect-chain")!.Title + " ·", StringComparison.Ordinal));
+        var oneFix = problem.QuerySelector(".onefix")!.TextContent;
+        Assert.True(oneFix.StartsWith($"One fix clears {count} of these {count} addresses. They all lead to the same address, /, so ", StringComparison.Ordinal), oneFix);
+
+        // A check of pages still counts pages, which name the address they share.
+        var pages = document.QuerySelectorAll(".onefix").Select(fix => fix.TextContent).Where(text => text != oneFix).ToList();
+        Assert.All(pages, text => Assert.Matches("^One fix clears [0-9,]+ of these [0-9,]+ pages?\\. ", text));
+    }
+
+    /// <summary>
+    /// What a site wrote can be one unbroken run of any length (a detail, a fault's text): it wraps inside its cell, where
+    /// it would otherwise widen its table past the edge of the page and be cut off in print.
+    /// </summary>
+    [Fact]
+    public void ASitesUnbrokenTextWrapsWhereItIsPrinted()
+    {
+        var sheet = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS)).QuerySelector("style")!.TextContent;
+        Assert.Contains(".examples td, .examples--one .found, .problem .onefix { overflow-wrap: anywhere; }", sheet, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -553,7 +675,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         // The list follows the engine's order, and each problem says how many it's on: there is no total stored to give a share of.
         var order = results.FixFirst;
         Assert.Equal(order.Take(5).Select(id => IssueCatalog.Find(id)!.Plain!.Title), document.QuerySelectorAll("ol.first .first__title").Select(title => title.TextContent));
-        Assert.Equal("Each is explained from page 2 under the same number, with the first pages it’s on.", document.QuerySelector(".first__foot")!.TextContent);
+        Assert.Equal("Each is explained under the same number in “What to fix”, with the first pages it’s on.", document.QuerySelector(".first__foot")!.TextContent);
         var lines = document.QuerySelectorAll(".problem__meta b").Select(line => line.TextContent).ToList();
         for (var index = 0; index < order.Count; index++)
         {

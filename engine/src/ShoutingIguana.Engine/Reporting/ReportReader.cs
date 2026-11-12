@@ -38,7 +38,14 @@ internal static class ReportReader
         var score = results.Score;
         var pages = results.Analysis.PagesAnalyzed;
         var urls = score?.Covers.Urls ?? results.Analysis.CrawledUrlCount ?? summary.CrawledUrlCount ?? stats.Outcomes.Values.Sum();
-        var blocked = stats.Outcomes.GetValueOrDefault(FetchOutcome.RobotsDisallowed);
+
+        // The site's own addresses its robots.txt refused, as the analysis counted them: the score's, or what the check
+        // of them found where there is no score. The crawl's count of the outcome has other websites' among it.
+        var blocked = score?.Covers.BlockedByRobots ?? counts.GetValueOrDefault(IssueCatalog.BLOCKED_BY_ROBOTS.Id);
+
+        // That the crawl went on since the analysis needs no thresholds to tell; the rest is judged only when asked.
+        var judged = results.OutOfDate(outOfDateBy ?? results.Analysis.Settings ?? new AnalysisSettings());
+        IReadOnlyList<OutOfDateReason> outOfDate = outOfDateBy is not null ? judged : judged.Contains(OutOfDateReason.CrawlChanged) ? [OutOfDateReason.CrawlChanged] : [];
         var running = stats.Status is CrawlStatus.Running or CrawlStatus.Paused;
         var ran = IssueCatalog.All.Count(check => counts.ContainsKey(check.Id));
         var fixFirst = ReportSources.FixFirst(results);
@@ -80,7 +87,7 @@ internal static class ReportReader
             TimeCrawling = summary.TimeCrawling,
             AnalyzedAt = results.Analysis.AnalyzedAt,
             AnalysisEngineVersion = results.Analysis.EngineVersion,
-            OutOfDate = outOfDateBy is null ? [] : results.OutOfDate(outOfDateBy),
+            OutOfDate = outOfDate,
             Pages = pages,
             Urls = urls,
             IndexablePages = stats.IndexablePageCount,

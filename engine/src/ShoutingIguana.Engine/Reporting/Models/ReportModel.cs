@@ -36,8 +36,18 @@ internal sealed record ReportModel
     /// <summary>The engine that worked out the results.</summary>
     public required string AnalysisEngineVersion { get; init; }
 
-    /// <summary>Why the results no longer stand, when they don't and the report was told how to judge; empty otherwise.</summary>
+    /// <summary>
+    /// Why the results no longer stand. That the crawl went on since is always said; that the checks or their thresholds
+    /// changed, only when the report was told how to judge.
+    /// </summary>
     public IReadOnlyList<OutOfDateReason> OutOfDate { get; init; } = [];
+
+    /// <summary>
+    /// The crawl went on after the results were worked out: what can only be read from the crawl as it stands now (what
+    /// is queued, what wasn't read, the pages that can appear in search, whether it finished) is no longer of the same
+    /// crawl as the results, and the report leaves it out.
+    /// </summary>
+    public bool CrawlWentOn => OutOfDate.Contains(OutOfDateReason.CrawlChanged);
 
     /// <summary>The pages read.</summary>
     public required long Pages { get; init; }
@@ -54,7 +64,10 @@ internal sealed record ReportModel
     /// <summary>Addresses found and not read, by why.</summary>
     public IReadOnlyDictionary<SkipReason, long> NotRead { get; init; } = new Dictionary<SkipReason, long>();
 
-    /// <summary>Addresses robots.txt kept the crawl out of.</summary>
+    /// <summary>
+    /// The site's own addresses its robots.txt kept the crawl out of, as the analysis counted them. Addresses on other
+    /// websites that their own robots.txt refuses are no part of it.
+    /// </summary>
     public long BlockedByRobots { get; init; }
 
     public required CrawlOptions Options { get; init; }

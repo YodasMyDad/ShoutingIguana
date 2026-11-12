@@ -84,7 +84,8 @@ internal static class WorkbookExport
         Row(Label("Started from"), XlsxCell.Text(model.StartUrl));
         Row(Label("Checked on"), XlsxCell.DateTime(TimeZoneInfo.ConvertTime(model.StartedAt, model.TimeZone).DateTime));
         Row(Label("Results worked out on"), XlsxCell.DateTime(TimeZoneInfo.ConvertTime(model.AnalyzedAt, model.TimeZone).DateTime));
-        Row(Label("Finished?"), XlsxCell.Text(model.Finished ? "Yes" : "No: this covers only what was read"));
+        Row(Label("Finished?"), XlsxCell.Text(
+            model.CrawlWentOn ? "The check has gone on since these results were worked out" : model.Finished ? "Yes" : "No: this covers only what was read"));
         Row(Label("Pages read"), Count(model.Pages));
         Row(Label("Addresses checked"), Count(model.Urls));
         Row(Label("Checks run"), XlsxCell.Text($"{model.ChecksRun} of {model.ChecksInCatalog}"));

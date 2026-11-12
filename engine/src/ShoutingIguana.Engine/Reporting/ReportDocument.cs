@@ -113,6 +113,7 @@ internal static class ReportDocument
           .problem__split .examples { margin-top: 8px; }
           .examples--one td:first-child { width: auto; }
           .examples--one .found { display: block; color: var(--muted); }
+          .examples td, .examples--one .found, .problem .onefix { overflow-wrap: anywhere; }
           .more { margin-top: 4px; font-size: 8.5pt; color: var(--muted); }
 
           .plain-list li { display: grid; grid-template-columns: 16px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--rule-soft); }
@@ -200,7 +201,7 @@ internal static class ReportDocument
         html.Append("  <header>\n    <p class=\"eyebrow\">Website check</p>\n    <h1>").AppendText(model.Site).Append("</h1>\n    <p class=\"meta\">Checked on ").Append(checkedOn)
             .Append(" · ").Append(Plural(model.Pages, "page", "pages")).Append(" read · ").Append(Plural(model.Urls, "address", "addresses")).Append(" checked · ")
             .Append(model.ChecksRun).Append(" of ").Append(model.ChecksInCatalog).Append(" checks run</p>\n");
-        if (!model.Finished)
+        if (!model.Finished && !model.CrawlWentOn)
         {
             html.Append("    <p class=\"note\">").Append(Unfinished(model)).Append(" This report covers only what was read.</p>\n");
         }
@@ -258,7 +259,7 @@ internal static class ReportDocument
                 .Append("        <p class=\"summary__sentence\">No page could be read, so there is nothing to score.</p>\n")
                 .Append("        <p class=\"summary__covers\">The check asked for <span class=\"mono\">").AppendText(HtmlText.Cut(model.StartUrl, SHOWN_URL))
                 .Append("</span> and got no page it could read. ").Append(model.BlockedByRobots > 0
-                    ? $"The site’s rules file (robots.txt) keeps search engines out of {Plural(model.BlockedByRobots, "address", "addresses")}, which weren’t read."
+                    ? $"The site’s rules file (robots.txt) keeps search engines out of {Plural(model.BlockedByRobots, "address", "addresses")}, which {(model.BlockedByRobots == 1 ? "wasn’t" : "weren’t")} read."
                     : "Check that the address is right and that the site is up, then check it again.")
                 .Append("</p>\n");
         }
@@ -321,7 +322,8 @@ internal static class ReportDocument
 
         if (covers.BlockedByRobots > 0)
         {
-            text.Append(" robots.txt keeps search engines out of ").Append(Plural(covers.BlockedByRobots, "address", "addresses")).Append(", which weren’t read.");
+            text.Append(" robots.txt keeps search engines out of ").Append(Plural(covers.BlockedByRobots, "address", "addresses"))
+                .Append(covers.BlockedByRobots == 1 ? ", which wasn’t read." : ", which weren’t read.");
         }
 
         return text.ToString();
@@ -345,7 +347,7 @@ internal static class ReportDocument
             if (notices > 0)
             {
                 html.Append(notices == 1 ? " 1 thing is worth a look: it is" : $" {notices} things are worth a look: they are")
-                    .Append(full ? " explained from page 2." : " explained in the full report.")
+                    .Append(full ? " explained under “What to fix”." : " explained in the full report.")
                     .Append(notices == 1 ? " Often it’s fine as it is, and it doesn’t change the score." : " Often they’re fine as they are, and they don’t change the score.");
             }
 
@@ -373,7 +375,9 @@ internal static class ReportDocument
             html.Append("Fixing ").Append(these).Append(" leaves the score at ").Append(score.Value).Append(" until the others are fixed too. ");
         }
 
-        html.Append(first.Count == 1 ? "It is" : "Each is").Append(full ? " explained from page 2 under the same number, with the first pages it’s on." : " explained in the full report under the same number.")
+        // By its section's name, never by a page: which page that starts on depends on the paper and on how long the score's table is.
+        html.Append(first.Count == 1 ? "It is" : "Each is")
+            .Append(full ? " explained under the same number in “What to fix”, with the first pages it’s on." : " explained in the full report under the same number.")
             .Append("</p>\n\n");
     }
 
@@ -536,7 +540,10 @@ internal static class ReportDocument
         html.Append(compact ? "</div></div>\n    </article>\n" : "</div>\n    </article>\n");
     }
 
-    /// <summary>"One fix clears 264 of these 265 pages", with what they share.</summary>
+    /// <summary>
+    /// "One fix clears 264 of these 265 pages", with what they share. A check of addresses counts addresses, which lead
+    /// to the address they share (a chain of forwards) where a page names it (a link, a canonical).
+    /// </summary>
     private static void OneFix(StringBuilder html, ReportModel model, ReportProblem problem)
     {
         if (problem.OneFix is not { } fix)
@@ -544,11 +551,13 @@ internal static class ReportDocument
             return;
         }
 
-        html.Append("<p class=\"onefix\"><b>One fix clears ").Append(Number(fix.Pages)).Append(" of these ").Append(Plural(problem.Count, "page", "pages")).Append(".</b> ");
+        var ofAddresses = problem.Check.Subject == IssueSubject.Url;
+        html.Append("<p class=\"onefix\"><b>One fix clears ").Append(Number(fix.Pages)).Append(" of these ")
+            .Append(ofAddresses ? Plural(problem.Count, "address", "addresses") : Plural(problem.Count, "page", "pages")).Append(".</b> ");
         var usually = problem.Words.OneFix;
         if (fix.RelatedUrl is { } shared)
         {
-            html.Append("They all name the same address, ");
+            html.Append(ofAddresses ? "They all lead to the same address, " : "They all name the same address, ");
             Url(html, model, shared);
             html.Append(usually is null ? ", so the fault is most likely in the part of the site every page shares." : ".");
         }
@@ -746,17 +755,26 @@ internal static class ReportDocument
         }
 
         html.Append("</dd>\n    <dt>What was read</dt><dd>").Append(Plural(model.Pages, "page", "pages")).Append(", and ")
-            .Append(Number(Math.Max(0, model.Urls - model.Pages))).Append(" images, files and links: ").Append(Plural(model.Urls, "address", "addresses")).Append(" in all</dd>\n")
-            .Append("    <dt>Pages that can appear in search</dt><dd>").Append(Number(model.IndexablePages)).Append(" of ").Append(Number(model.Pages)).Append("</dd>\n");
+            .Append(Number(Math.Max(0, model.Urls - model.Pages))).Append(" images, files and links: ").Append(Plural(model.Urls, "address", "addresses")).Append(" in all</dd>\n");
 
-        var notRead = NotRead(model);
-        if (notRead.Count > 0)
+        // What follows is read from the crawl as it stands. Once the crawl has gone on, that is another crawl than the
+        // one the results are of ("4,064 of 3,113 pages"): it is left out, and the note under the site says why.
+        if (!model.CrawlWentOn)
         {
-            html.Append("    <dt>Not read</dt><dd>").Append(string.Join("; ", notRead)).Append("</dd>\n");
+            html.Append("    <dt>Pages that can appear in search</dt><dd>").Append(Number(model.IndexablePages)).Append(" of ").Append(Number(model.Pages)).Append("</dd>\n");
+            var notRead = NotRead(model);
+            if (notRead.Count > 0)
+            {
+                html.Append("    <dt>Not read</dt><dd>").Append(string.Join("; ", notRead)).Append("</dd>\n");
+            }
         }
 
         html.Append("    <dt>How it was read</dt><dd>").Append(HowItWasRead(model.Options)).Append("</dd>\n")
-            .Append("    <dt>Finished?</dt><dd>").Append(model.Finished ? "Yes: it read every address it found" : "No. " + Unfinished(model) + HowToFinish(model)).Append("</dd>\n")
+            .Append("    <dt>Finished?</dt><dd>")
+            .Append(model.CrawlWentOn ? "Not known from these results: the check has gone on since they were worked out."
+                : model.Finished ? "Yes: it read every address it found"
+                : "No. " + Unfinished(model) + HowToFinish(model))
+            .Append("</dd>\n")
             .Append("    <dt>Results worked out</dt><dd>").Append(Date(model.AnalyzedAt, zone)).Append(", ").Append(Time(model.AnalyzedAt, zone)).Append("</dd>\n")
             .Append("    <dt>The words in this report</dt><dd>Serious is the checks’ “Error”, Worth fixing is “Warning” and Worth a look is “Notice”. An address is a URL.</dd>\n")
             .Append("  </dl>\n\n");
