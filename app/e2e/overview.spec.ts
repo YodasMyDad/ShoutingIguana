@@ -3,10 +3,9 @@
 // continued (docs/v2-ui-ia.md, flows 1 and 2), with axe at zero violations in both themes and under forced colours.
 // Never a real site. Every crawl a test starts is stopped and its file deleted, so the library is as the other tests
 // expect it.
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { colourTweensEnd } from './colourTweens';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
+import { expectNoViolations } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -23,18 +22,7 @@ test.beforeAll(async () => {
 /** Stops and deletes every crawl the tests started: the library is the one seeded crawl again. */
 test.afterEach(() => removeCrawlsNotIn(seeded));
 
-async function expectNoViolations(page: Page) {
-  await colourTweensEnd(page);
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-    .analyze();
-  expect(
-    results.violations.map(
-      (violation) =>
-        `${violation.id}: ${violation.help}: ${violation.nodes.map((node) => `${node.target.join(' ')} ${node.failureSummary ?? ''}`).join('; ')}`,
-    ),
-  ).toEqual([]);
-}
+// axe, with the wait for a theme's colours to settle (`colourTweensEnd`), is the specs' own: e2e/support.ts.
 
 const main = (page: Page) => page.getByRole('main');
 const count = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));

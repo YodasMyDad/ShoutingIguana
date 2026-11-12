@@ -2,13 +2,15 @@
 // (live)). The words and the action are keyed on the alert's stable code; the engine's own message is shown only for a
 // code this app doesn't know. Pure.
 import type { AlertEvent, AlertLevel } from '../../api/types';
+import { failureOf } from '../../lib/failure';
 import { formatCount, formatCountOf, formatDuration } from '../../lib/format';
 
 /** What an alert offers to do about it. The screen turns it into a link or a button. */
 export type AlertAction =
   | { kind: 'crawlSettings'; label: string }
   | { kind: 'newCrawl'; label: string; url: string }
-  | { kind: 'sitemaps'; label: string }
+  /** `url`: the sitemap the alert is about, by its address: the link lands on that sitemap. */
+  | { kind: 'sitemaps'; label: string; url?: string }
   | { kind: 'continue'; label: string };
 
 export interface AlertEntry {
@@ -21,6 +23,11 @@ export interface AlertEntry {
   title: string;
   /** The facts: which host, how many, why. Null when the title says it all. */
   detail: string | null;
+  /**
+   * How a failure in the facts was recorded by the crawl, when that says more than the plain words (lib/failure): for
+   * the facts' tooltip and accessible description, never their sentence.
+   */
+  recorded?: string;
   /**
    * What it came to in the whole crawl, for an alert whose count goes on rising while the crawl runs (a blocked
    * host's responses): "37 responses blocked.". It's the crawl file's count as it was when the alerts were read, and
@@ -42,7 +49,9 @@ const SITEMAPS: AlertAction = { kind: 'sitemaps', label: 'Open Sitemaps' };
 const BLOCKED_ADVICE =
   'Stop the crawl and continue it more slowly, add the headers the site expects, or crawl as another user agent.';
 
-function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice' | 'action'> & { tally?: string } {
+function words(
+  alert: AlertEvent,
+): Pick<AlertEntry, 'title' | 'detail' | 'advice' | 'action'> & { tally?: string; recorded?: string } {
   const data = alert.data ?? {};
   const where = data.host ?? data.origin ?? 'The site';
   switch (alert.code) {
@@ -73,11 +82,19 @@ function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice
         advice: 'Crawl from there instead.',
         action: data.url ? { kind: 'newCrawl', label: 'Crawl from there', url: data.url } : null,
       };
-    case 'robots-unreachable':
+    case 'robots-unreachable': {
+      // A status is an answer; anything else is how the request failed, said by its kind.
+      const failure = failureOf(data.reason);
       return {
         title: 'robots.txt can’t be read',
         detail: [
-          `${where}${data.reason ? ` answered ${data.reason}` : ' didn’t give its robots.txt'}.`,
+          `${where}${
+            failure === null
+              ? ' didn’t give its robots.txt'
+              : failure.kind === 'status'
+                ? ` answered ${failure.words}`
+                : ` didn’t give its robots.txt: ${failure.words}`
+          }.`,
           data.durationMs !== undefined ? `It’s asked again in ${formatDuration(data.durationMs)}.` : '',
           'Its URLs aren’t fetched until it can be read; they get one more try after that.',
         ]
@@ -85,19 +102,24 @@ function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice
           .join(' '),
         advice: 'If it stays unreadable, crawl again with robots.txt ignored.',
         action: SETTINGS,
+        ...(failure?.recorded ? { recorded: failure.recorded } : {}),
       };
-    case 'site-unreachable':
+    }
+    case 'site-unreachable': {
+      const failure = failureOf(data.reason);
       return {
         title: 'The site isn’t answering',
         detail: [
-          `${where}${data.reason ? `: ${data.reason}` : ' stopped answering'}.`,
+          `${where}${failure ? `: ${failure.words}` : ' stopped answering'}.`,
           data.durationMs !== undefined ? `The crawl tries again every ${formatDuration(data.durationMs)}.` : '',
         ]
           .filter(Boolean)
           .join(' '),
         advice: 'Wait for it to come back, or stop the crawl and continue it later.',
         action: null,
+        ...(failure?.recorded ? { recorded: failure.recorded } : {}),
       };
+    }
     case 'site-down':
       return {
         title: 'The site stopped answering, so the crawl stopped',
@@ -123,7 +145,7 @@ function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice
         title: 'A sitemap was left out',
         detail: data.url ? `${data.url}${data.reason ? `: ${data.reason}` : ''}` : (data.reason ?? null),
         advice: 'The checks that compare pages with the sitemaps may be skipped.',
-        action: SITEMAPS,
+        action: data.url ? { kind: 'sitemaps', label: 'Open this sitemap', url: data.url } : SITEMAPS,
       };
     case 'sitemaps-failed':
       return {

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const steps = ['copy-crawls.mjs', 'sidecar-api.mjs', 'urls.mjs', 'inspector.mjs', 'live.mjs', 'brand.mjs', 'summary.mjs'];
+const steps = ['copy-crawls.mjs', 'sidecar-api.mjs', 'urls.mjs', 'sitemaps-robots.mjs', 'inspector.mjs', 'live.mjs', 'brand.mjs', 'summary.mjs'];
 const args = process.argv.slice(2);
 
 for (const step of steps) {

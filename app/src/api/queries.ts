@@ -12,6 +12,11 @@ import type {
   IssueGroup,
   IssueGroupPage,
   IssueRow,
+  RobotsBlockedPage,
+  RobotsBlockedQuery,
+  RobotsBlockedUrl,
+  RobotsOrigin,
+  RobotsOriginPage,
   LinkFacetsQuery,
   UrlRow,
 } from './grids';
@@ -89,11 +94,21 @@ export function gridPagesOf(crawlId: string): QueryFilters {
  */
 export const ANALYSIS_GRIDS: readonly string[] = ['issueGroups', 'issueRows'];
 
-/** The pages of one crawl's grids that a running crawl changes: every grid but the analysis's. */
+/**
+ * The reads a view refreshes itself while a crawl runs, so the once-a-second refresh leaves them be. One origin's
+ * robots.txt is read whole (a file of 512 KB is over 2 MB as lines), and changes only when the origin's answer or
+ * what it blocked does: its view reads it again then (screens/robots/RobotsFileView.tsx), not every second.
+ */
+export const SELF_REFRESHED_GRIDS: readonly string[] = ['robotsFile'];
+
+/** The pages of one crawl's grids that a running crawl changes: every grid but the analysis's and the above. */
 export function liveGridPagesOf(crawlId: string): QueryFilters {
   return {
     queryKey: queryKeys.gridPrefix,
-    predicate: (query) => query.queryKey[2] === crawlId && !ANALYSIS_GRIDS.includes(String(query.queryKey[1])),
+    predicate: (query) =>
+      query.queryKey[2] === crawlId &&
+      !ANALYSIS_GRIDS.includes(String(query.queryKey[1])) &&
+      !SELF_REFRESHED_GRIDS.includes(String(query.queryKey[1])),
   };
 }
 
@@ -296,6 +311,119 @@ export const issueGroupPlaceQuery = (id: string, checkId: string, group: CheckGr
     },
     staleTime: Infinity,
   });
+
+// ---------------------------------------------------------------------------------- Sitemaps and robots.txt (E3b)
+//
+// Their reads are keyed as grids (`['grid', <grid>, <crawl id>, ...]`), the single reads included (the list of
+// sitemaps, one origin's file): a running crawl changes every one of them, and the live bridge refreshes a crawl's
+// grids in place once a second, with nothing blanked. All but an origin's file, which can be megabytes: its view
+// reads it again when what it blocked changes (SELF_REFRESHED_GRIDS).
+
+export const sitemapKeys = {
+  /** The list of sitemaps, with each one's counts. */
+  list: (id: string) => ['grid', 'sitemaps', id] as const,
+  /** One sitemap's URLs, as grid pages. */
+  urls: (id: string, sitemapId: number, query: { sort: readonly GridSort[]; filters: readonly unknown[]; q: string }) =>
+    ['grid', 'sitemapUrls', id, { sitemapId, ...query }] as const,
+  /** How many of one sitemap's URLs a filter selects: a count the list doesn't carry, read by the sitemap's page. */
+  count: (id: string, sitemapId: number, filters: readonly unknown[]) =>
+    ['grid', 'sitemapCount', id, { sitemapId, filters }] as const,
+};
+
+export const robotsKeys = {
+  /** The origins, as grid pages. */
+  origins: (id: string) => ['grid', 'robotsOrigins', id] as const,
+  /** Whether the crawl obeyed robots.txt at all: its settings', which no run of it changes. */
+  respected: (id: string) => ['crawl', id, 'robots', 'respected'] as const,
+  /** One origin's file. */
+  file: (id: string, origin: string) => ['grid', 'robotsFile', id, origin] as const,
+  /** An origin's blocked URLs, narrowed to a line or a reason, as grid pages. */
+  blocked: (id: string, query: Omit<RobotsBlockedQuery, 'offset' | 'limit'>) =>
+    ['grid', 'robotsBlocked', id, query] as const,
+};
+
+/** The URL grid's columns as the engine has them: which sort, which filter. They never change while it runs. */
+export const urlColumnsQuery = () =>
+  queryOptions({
+    queryKey: ['url-columns'] as const,
+    queryFn: ({ signal }) => api.urlColumns(signal),
+    staleTime: Infinity,
+  });
+
+/** Every sitemap the crawl looked for. A crawl with none answers with an empty list, never an error. */
+export const sitemapsQuery = (id: string) =>
+  queryOptions({
+    queryKey: sitemapKeys.list(id),
+    queryFn: ({ signal }) => api.sitemaps(id, signal),
+    staleTime: Infinity,
+  });
+
+/**
+ * How many of a sitemap's URLs a filter selects: the grid's own read, for its count alone. Keyed as a grid, so a
+ * running crawl refreshes it in place with the rows it counts.
+ */
+export const sitemapCountQuery = (id: string, sitemapId: number, filters: readonly GridFilter[]) =>
+  queryOptions({
+    queryKey: sitemapKeys.count(id, sitemapId, filters),
+    queryFn: async ({ signal }) =>
+      (
+        await api.sitemapUrls(
+          id,
+          sitemapId,
+          { columns: ['url'], filters: [...filters], sort: [], offset: 0, limit: 1 },
+          signal,
+        )
+      ).matching,
+    staleTime: Infinity,
+  });
+
+/** One origin's robots.txt, line by line. `origin-not-found` for an origin the crawl has none for. */
+export const robotsFileQuery = (id: string, origin: string) =>
+  queryOptions({
+    queryKey: robotsKeys.file(id, origin),
+    queryFn: ({ signal }) => api.robotsFile(id, origin, signal),
+    staleTime: Infinity,
+  });
+
+/** A page of origins as a grid's page, with what it says of the whole crawl: one read, so they agree. */
+export interface OriginsGridPage extends GridPage<RobotsOrigin> {
+  total: number;
+  respected: boolean;
+  userAgent: string;
+  /** Every URL the crawl stored as refused by robots.txt. */
+  blocked: number;
+}
+
+/** A page of the origins in the grid's shape: an origin is a row, and every origin "matches". */
+export function originsAsGridPage(page: RobotsOriginPage): OriginsGridPage {
+  return {
+    columns: [],
+    rows: page.origins,
+    offset: page.offset,
+    matching: page.total,
+    total: page.total,
+    next: null,
+    summary: { available: true, reason: null },
+    unavailable: [],
+    respected: page.respected,
+    userAgent: page.userAgent,
+    blocked: page.blocked,
+  };
+}
+
+/** A page of an origin's blocked URLs in the grid's shape: `matching` is what the line or reason narrows them to. */
+export function blockedAsGridPage(page: RobotsBlockedPage): GridPage<RobotsBlockedUrl> {
+  return {
+    columns: [],
+    rows: page.rows,
+    offset: page.offset,
+    matching: page.matching,
+    total: page.total,
+    next: null,
+    summary: { available: true, reason: null },
+    unavailable: [],
+  };
+}
 
 export const issuesQuery = (id: string, checkId: string, offset: number, limit: number) =>
   queryOptions({

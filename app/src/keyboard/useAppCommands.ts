@@ -99,9 +99,10 @@ export function useAppCommands(): void {
       case 'links':
         return navigate({ to: '/crawls/$crawl/links', params: { crawl } });
       case 'sitemaps':
-        return navigate({ to: '/crawls/$crawl/sitemaps/{-$sitemap}', params: { crawl } });
+        // The list, from one sitemap's page too: left out, the router keeps the sitemap the page is on.
+        return navigate({ to: '/crawls/$crawl/sitemaps/{-$sitemap}', params: { crawl, sitemap: undefined } });
       case 'robots':
-        return navigate({ to: '/crawls/$crawl/robots/{-$origin}', params: { crawl } });
+        return navigate({ to: '/crawls/$crawl/robots/{-$origin}', params: { crawl, origin: undefined } });
       case 'settings':
         return navigate({ to: '/crawls/$crawl/settings', params: { crawl } });
       default:

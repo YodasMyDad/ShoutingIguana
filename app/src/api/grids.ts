@@ -419,10 +419,19 @@ export interface Sitemap {
    */
   urls: {
     listed: number;
+    /** Every listed URL the crawl is done with: those it requested, and those robots.txt refused. */
     fetched: number;
     indexable: number;
     nonIndexable: number;
+    /**
+     * The listed URLs robots.txt refused (`outcome` `robotsDisallowed`), which `fetched` counts in (the E3c
+     * review). Left out by a sidecar from before it: not known then, never 0.
+     */
     robotsDisallowed?: number;
+    /**
+     * The listed URLs that answered with a redirect or an error, or didn't answer (`outcome` `redirect`,
+     * `clientError`, `serverError`, `timeout` or `networkError`). Left out by a sidecar from before it.
+     */
     redirectingOrBroken?: number;
   };
 }

@@ -12,12 +12,14 @@ import { FigureParts, Num } from '../ui/Num';
 import { SeverityMark } from '../ui/SeverityMark';
 import { MiniStat, MiniStats } from '../ui/Stat';
 import { StatusCode } from '../ui/StatusCode';
+import { TextLink } from '../ui/TextLink';
 import { severityCount, SEVERITIES } from '../ui/severity';
 import { fetchState, type FetchState } from './fetchState';
 import { canonicalFact, indexabilityVerdict, type IndexabilityRow, type IndexabilityVerdict } from './indexability';
 import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
 import { Block, IssueCheckLink, IssueList, PageText, SectionBody, StaleIssues, WalkUrl } from './parts';
+import { robotsOriginOf } from './placeLinks';
 import { measuresOf, scaleEnd, type Measure } from './scale';
 import { splitHidden, type SectionId } from './sections';
 import { KIND_WORDS, SOURCE_WORDS, TYPE_WORDS, depthWords, protocolWords, reasonPhrase, wordFor } from './words';
@@ -43,8 +45,10 @@ export interface SummarySectionProps {
  * the scale the analysis used, its content, timings and size, its issues, and how the crawl found it.
  */
 export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
-  const { crawling } = useInspectorContext();
+  const { crawling, crawlId } = useInspectorContext();
   const state = fetchState(detail, crawling);
+  // Which line refused it is the robots.txt screen's to show: the inspector's read doesn't say.
+  const robotsOrigin = state.kind === 'robots' ? robotsOriginOf(detail.url) : null;
   const measures = measuresOf(detail);
   const verdict = indexabilityVerdict(detail);
   return (
@@ -57,6 +61,18 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
             {state.pending ? ' It’ll show here once the crawl has fetched it.' : null}
             {detail.response?.error ? (
               <span className="mt-1 block font-mono text-12">{detail.response.error}</span>
+            ) : null}
+            {robotsOrigin ? (
+              <span className="mt-1 block">
+                <TextLink
+                  to="/crawls/$crawl/robots/{-$origin}"
+                  params={{ crawl: crawlId, origin: robotsOrigin }}
+                  search={{}}
+                  variant="inline"
+                >
+                  See the robots.txt that blocked it
+                </TextLink>
+              </span>
             ) : null}
           </Callout>
         </Block>
@@ -511,7 +527,7 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
 }
 
 function Discovery({ detail }: { detail: UrlDetail }) {
-  const { crawling } = useInspectorContext();
+  const { crawling, crawlId } = useInspectorContext();
   const { discovery, links, summary } = detail;
   const unknown = (
     <span className="text-text-secondary">
@@ -543,7 +559,26 @@ function Discovery({ detail }: { detail: UrlDetail }) {
           )}
         </Fact>
       ) : null}
-      {links && links.inSitemap !== null ? <Fact label="In a sitemap">{links.inSitemap ? 'Yes' : 'No'}</Fact> : null}
+      {links && links.inSitemap !== null ? (
+        <Fact label="In a sitemap">
+          {links.inSitemap ? (
+            <>
+              Yes.{' '}
+              <TextLink
+                to="/crawls/$crawl/sitemaps/{-$sitemap}"
+                // The list, even from one sitemap's URLs: left out, the router keeps the sitemap the page is on.
+                params={{ crawl: crawlId, sitemap: undefined }}
+                search={{}}
+                variant="inline"
+              >
+                Open Sitemaps
+              </TextLink>
+            </>
+          ) : (
+            'No'
+          )}
+        </Fact>
+      ) : null}
       <Fact label="Depth">{depthWords(discovery)}</Fact>
       <Fact label="Found by">
         {wordFor(SOURCE_WORDS, discovery.source)}

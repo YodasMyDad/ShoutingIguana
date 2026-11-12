@@ -1,0 +1,1070 @@
+import { createMemoryHistory } from '@tanstack/react-router';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { GridQuery, SitemapList } from '../api/grids';
+import { gridPagesOf } from '../api/queries';
+import { setTransport, type TransportRequest } from '../api/transport';
+import { App } from '../app/App';
+import { createQueryClient } from '../app/queryClient';
+import { createAppRouter } from '../app/router';
+import { onAnnounce } from '../feedback/announce';
+import { commands, installKeyboard } from '../keyboard/registry';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
+import { wholeText } from '../test/text';
+import {
+  COVERAGE_PAGE,
+  SITE,
+  TEST_SITEMAPS,
+  TEST_SITEMAP_LIST,
+  sitemapsRobotsRoutes,
+  testSitemap,
+  withoutNewCounts,
+  type SitemapsRobotsOptions,
+} from '../test/sitemapsRobotsSidecar';
+import { resetPlaces } from './listPlace';
+import { ANSWERED_SITE_PAGES } from './overview/links';
+
+const SITEMAPS = `/crawls/${TEST_CRAWL_ID}/sitemaps`;
+
+function sidecar(options: SitemapsRobotsOptions = {}) {
+  const analyse = vi.fn(() => new Response(null, { status: 202 }));
+  const transport = fakeSidecar([
+    ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse],
+    ...sitemapsRobotsRoutes(options),
+  ]);
+  setTransport(transport);
+  return { transport, analyse };
+}
+
+async function open(path: string, queryClient = createQueryClient()) {
+  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
+  render(<App router={router} queryClient={queryClient} />);
+  await act(() => router.load());
+  return { router, queryClient };
+}
+
+const searchOf = (router: Awaited<ReturnType<typeof open>>['router']) =>
+  router.state.location.search as Record<string, unknown>;
+const pathOf = (router: Awaited<ReturnType<typeof open>>['router']) => router.state.location.pathname;
+const rowOf = (text: string) => screen.getByText(text).closest<HTMLElement>('[role="row"]')!;
+const gridRequests = (transport: { requests: TransportRequest[] }) =>
+  transport.requests
+    .filter((request) => request.path.endsWith('/sitemaps/urls'))
+    .map((request) => request.body as GridQuery);
+
+afterEach(() => {
+  setTransport(fakeSidecar([]));
+  resetPlaces();
+});
+
+describe('Sitemaps: the list', () => {
+  it('answers first, then lists every sitemap as a tree with how it was found and what became of it', async () => {
+    sidecar();
+    await open(SITEMAPS);
+    expect(await screen.findByText('The crawl found 6 sitemaps: 5 were read and 1 couldn’t be read.')).toBeVisible();
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    const rows = within(tree).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(6);
+    // The index, open, with its three sitemaps a level under it.
+    expect(rows[0]).toHaveAttribute('aria-expanded', 'true');
+    expect(rows[0]).toHaveAttribute('aria-level', '1');
+    expect(rows.slice(1, 4).map((row) => row.getAttribute('aria-level'))).toEqual(['2', '2', '2']);
+    expect(within(rows[0]!).getByText('Index')).toBeVisible();
+    expect(within(rows[0]!).getByText('robots.txt')).toBeVisible();
+    expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByText('Sitemap index')).toBeVisible();
+    expect(within(rowOf(`${SITE}/news-sitemap.xml`)).getByText('Crawl settings')).toBeVisible();
+    expect(within(rowOf(`${SITE}/sitemaps/missing.xml`)).getByText('Couldn’t be read: HTTP 404')).toBeVisible();
+  });
+
+  it('says plainly when the crawl can’t say how it found a sitemap', async () => {
+    sidecar();
+    await open(SITEMAPS);
+    const cell = within(await waitFor(() => rowOf(`${SITE}/old-sitemap.xml`))).getByText('Not known');
+    expect(cell).toHaveAttribute('title', expect.stringContaining('can’t say how it found this sitemap'));
+  });
+
+  it('shows a sitemap that couldn’t be read with dashes for its counts, never 0', async () => {
+    sidecar();
+    await open(SITEMAPS);
+    const failed = await waitFor(() => rowOf(`${SITE}/sitemaps/missing.xml`));
+    expect(within(failed).getAllByText('–')).toHaveLength(5);
+    expect(within(failed).queryByRole('link')).toBeNull();
+  });
+
+  it('makes every count a link to that sitemap’s URLs under the count’s own filter, and a 0 plain', async () => {
+    sidecar();
+    await open(SITEMAPS);
+    const products = await waitFor(() => rowOf(`${SITE}/sitemaps/products.xml`));
+    const links = within(products).getAllByRole('link');
+    expect(links.map((link) => link.textContent)).toEqual(['3', '2', '1', '1']);
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      '3 URLs listed',
+      '2 URLs crawled',
+      '1 URL not crawled',
+      '1 URL non-indexable',
+    ]);
+    const hrefs = links.map((link) => decodeURIComponent(link.getAttribute('href') ?? ''));
+    expect(hrefs[0]).toBe(`${SITEMAPS}/3`);
+    // Crawled: what the crawl is done with, less what robots.txt refused.
+    expect(hrefs[1]).toContain(`${SITEMAPS}/3?filter=`);
+    expect(hrefs[1]).toContain('"column":"fetched","op":"is","value":true');
+    expect(hrefs[1]).toContain('"column":"outcome","op":"notIn","values":["robotsDisallowed"]');
+    expect(hrefs[2]).toContain('"column":"fetched","op":"is","value":false');
+    expect(hrefs[3]).toContain('"column":"indexable","op":"is","value":false');
+    // The news sitemap's URLs were all crawled: nothing to open behind "blocked", "not crawled" or "non-indexable".
+    const news = rowOf(`${SITE}/news-sitemap.xml`);
+    expect(
+      within(news)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['2', '2']);
+    expect(within(news).getAllByText('0')).toHaveLength(3);
+  });
+
+  it('counts what the crawl requested as crawled, and what robots.txt kept it from apart: the three add up to listed', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(
+      within(tree)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual([
+      'Sitemap',
+      'Found via',
+      'Status',
+      'Listed',
+      'Crawled',
+      'Blocked by robots.txt',
+      'Not crawled',
+      'Non-indexable',
+    ]);
+    // The old sitemap lists three URLs: one that timed out (requested, so crawled), one robots.txt refused (the
+    // engine is done with it, and never requested it) and one never reached.
+    const old = await waitFor(() => rowOf(`${SITE}/old-sitemap.xml`));
+    const links = within(old).getAllByRole('link');
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      '3 URLs listed',
+      '1 URL crawled',
+      '1 URL blocked by robots.txt',
+      '1 URL not crawled',
+      '2 URLs non-indexable',
+    ]);
+    // The engine's `fetched` is 2: it's never shown as "crawled".
+    expect(within(old).queryByRole('link', { name: '2 URLs crawled' })).toBeNull();
+    // What robots.txt blocked lands on exactly that URL, under the filter of that name.
+    fireEvent.click(within(old).getByRole('link', { name: '1 URL blocked by robots.txt' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/6`));
+    expect(searchOf(router).filter).toEqual([{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }]);
+    const show = await screen.findByRole('radiogroup', { name: 'Show' });
+    expect(within(show).getByRole('radio', { name: /^Blocked by robots\.txt/ })).toBeChecked();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '2'));
+    expect(rowOf(`${SITE}/legacy/private`).querySelector('[aria-colindex="2"]')).toHaveTextContent(
+      'Blocked by robots.txt',
+    );
+    // And "crawled" on the one that was requested, which says what became of it: never "Crawled" for an outcome.
+    fireEvent.click(within(show).getByRole('radio', { name: /^Crawled/ }));
+    await waitFor(() =>
+      expect(searchOf(router).filter).toEqual([
+        { column: 'fetched', op: 'is', value: true },
+        { column: 'outcome', op: 'notIn', values: ['robotsDisallowed'] },
+      ]),
+    );
+    await waitFor(() => expect(screen.queryByText(`${SITE}/legacy/private`)).toBeNull());
+    expect(rowOf(`${SITE}/legacy/slow`).querySelector('[aria-colindex="2"]')).toHaveTextContent('Timed out');
+    // Each quick filter carries its count, the list's: all, crawled, blocked, not crawled, non-indexable, broken.
+    expect(
+      within(show)
+        .getAllByRole('radio')
+        .map((radio) => radio.textContent),
+    ).toEqual([
+      'All 3',
+      'Crawled 1',
+      'Blocked by robots.txt 1',
+      'Not crawled 1',
+      'Non-indexable 2',
+      'Redirecting or broken 1',
+    ]);
+  });
+
+  it('shows a dash that says why, never the engine’s “done with” number, where the engine doesn’t count what robots.txt refused', async () => {
+    // An engine from before the list carried the two counts.
+    const { transport } = sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.map(withoutNewCounts) },
+    });
+    const { router } = await open(SITEMAPS);
+    const old = await waitFor(() => rowOf(`${SITE}/old-sitemap.xml`));
+    const cells = [...old.querySelectorAll('[role="gridcell"]')].slice(3).map((cell) => cell.textContent);
+    // Listed, Crawled, Blocked by robots.txt, Not crawled, Non-indexable.
+    expect(cells).toEqual(['3', '–', '–', '1', '2']);
+    for (const dash of within(old).getAllByText('–')) {
+      expect(dash).toHaveAttribute(
+        'title',
+        expect.stringContaining('doesn’t count, for each sitemap, the URLs robots.txt refused'),
+      );
+    }
+    expect(
+      within(old)
+        .queryByRole('link', { name: /crawled$/ })
+        ?.getAttribute('aria-label'),
+    ).toBe('1 URL not crawled');
+    // Its own page counts them, each by a read of its own under that filter.
+    fireEvent.doubleClick(within(old).getByText(`${SITE}/old-sitemap.xml`));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/6`));
+    const show = await screen.findByRole('radiogroup', { name: 'Show' });
+    await waitFor(() =>
+      expect(
+        within(show)
+          .getAllByRole('radio')
+          .map((radio) => radio.textContent),
+      ).toEqual([
+        'All 3',
+        'Crawled 1',
+        'Blocked by robots.txt 1',
+        'Not crawled 1',
+        'Non-indexable 2',
+        'Redirecting or broken',
+      ]),
+    );
+    const counted = gridRequests(transport).filter((request) => request.limit === 1);
+    expect(counted.map((request) => request.filters)).toEqual(
+      expect.arrayContaining([
+        [{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }],
+        [
+          { column: 'fetched', op: 'is', value: true },
+          { column: 'outcome', op: 'notIn', values: ['robotsDisallowed'] },
+        ],
+      ]),
+    );
+  });
+
+  it('asks for no count of its own when the list carries them', async () => {
+    const { transport } = sidecar();
+    await open(`${SITEMAPS}/6`);
+    await screen.findByText(`${SITE}/legacy/slow`);
+    expect(gridRequests(transport).filter((request) => request.limit === 1)).toEqual([]);
+  });
+
+  it('lands each count on exactly its URLs: the grid it opens counts what the list said', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const products = await waitFor(() => rowOf(`${SITE}/sitemaps/products.xml`));
+    fireEvent.click(within(products).getByRole('link', { name: '1 URL non-indexable' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/3`));
+    expect(await screen.findByText('of 3 URLs')).toBeVisible();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '2'));
+    expect(searchOf(router).filter).toEqual([{ column: 'indexable', op: 'is', value: false }]);
+  });
+
+  it('shows an index’s counts only once every sitemap under it was read: dashes, never 0, until then', async () => {
+    // A crawl stopped between its index and the sitemaps it lists: the index was read, the one sitemap of its three
+    // the crawl had taken up never was.
+    const index = testSitemap({ id: 11, url: `${SITE}/sitemap.xml`, isIndex: true, sitemaps: 1 });
+    const child = testSitemap({ id: 12, parentId: 11, foundVia: 'index', state: 'pending', statusCode: null });
+    sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, discovery: 'unfinished', sitemaps: [index, child] },
+      item: { status: 'stopped' },
+    });
+    const { router } = await open(SITEMAPS);
+    const row = await waitFor(() => rowOf(index.url));
+    // Its counts are its sitemaps', which the crawl never read: not known, so not 0.
+    expect(within(row).getAllByText('–')).toHaveLength(5);
+    expect(within(row).queryByRole('link')).toBeNull();
+    expect(within(row).queryByText('0')).toBeNull();
+    // How many sitemaps it lists isn't known either: it's an index, with what the crawl has of it said in words.
+    expect(within(row).getByText('Index')).toBeVisible();
+    expect(within(row).queryByText(/Index of/)).toBeNull();
+    const state = within(row).getByText('Read, has 1 of its sitemaps');
+    expect(state).toHaveAttribute(
+      'title',
+      'The crawl read this index, and has 1 of the sitemaps it lists, none of them read: it didn’t get to them all. What the index lists in all isn’t known, so it has no counts of its own.',
+    );
+    // Its page doesn't say it lists no URLs, or that the file holds one sitemap.
+    fireEvent.doubleClick(within(row).getByText(index.url));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/11`));
+    expect(await screen.findByText('No URLs to show for this sitemap.')).toBeVisible();
+    expect(screen.queryByText('This sitemap lists no URLs.')).toBeNull();
+    expect(screen.getByText('sitemaps: the crawl has 1 of them')).toBeVisible();
+    expect(screen.queryByText('1 sitemap')).toBeNull();
+  });
+
+  it('gives an index its counts, as links, when the crawl has read every sitemap under it', async () => {
+    // The test list's index without the sitemap that couldn't be read.
+    sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.filter((sitemap) => sitemap.id !== 4) },
+    });
+    const { router } = await open(SITEMAPS);
+    const index = await waitFor(() => rowOf(`${SITE}/sitemap.xml`));
+    expect(within(index).getByText('Index')).toBeVisible();
+    expect(within(index).getByText('Read')).toBeVisible();
+    fireEvent.click(within(index).getByRole('link', { name: '2 URLs non-indexable' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/1`));
+    expect(await screen.findByText('of 6 URLs')).toBeVisible();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '3'));
+  });
+
+  it('gives an index no counts while one of its sitemaps couldn’t be read, and says how many were', async () => {
+    sidecar();
+    await open(SITEMAPS);
+    const index = await waitFor(() => rowOf(`${SITE}/sitemap.xml`));
+    expect(within(index).getAllByText('–')).toHaveLength(5);
+    expect(within(index).getByText('Index')).toBeVisible();
+    expect(within(index).getByText('Read, 2 of its 3 sitemaps')).toHaveAttribute(
+      'title',
+      'The crawl read this index, and 2 of the 3 sitemaps it lists. What the other lists isn’t known, so the index has no counts of its own.',
+    );
+    // Each sitemap under it keeps its own.
+    expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByRole('link', { name: '4 URLs listed' })).toBeVisible();
+  });
+
+  it('is one Tab stop: its links are reached with the arrows, and Enter does what a click on one does', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await waitFor(() => expect(within(tree).getAllByRole('link').length).toBeGreaterThan(0));
+    expect(tree).toHaveAttribute('tabindex', '0');
+    for (const link of within(tree).getAllByRole('link')) expect(link).toHaveAttribute('tabindex', '-1');
+    act(() => tree.focus());
+    // Down to pages.xml, along to its "Non-indexable", and in.
+    fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    fireEvent.keyDown(tree, { key: 'End' });
+    fireEvent.keyDown(tree, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/2`));
+    expect(searchOf(router).filter).toEqual([{ column: 'indexable', op: 'is', value: false }]);
+  });
+
+  it('opens an index with Enter, as any sitemap, and closes and opens it with Left and Right', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await screen.findByText(`${SITE}/sitemaps/pages.xml`);
+    act(() => tree.focus());
+    fireEvent.keyDown(tree, { key: 'ArrowLeft' });
+    expect(screen.queryByText(`${SITE}/sitemaps/pages.xml`)).toBeNull();
+    expect(within(tree).getAllByRole('row')[1]).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.keyDown(tree, { key: 'ArrowRight' });
+    expect(screen.getByText(`${SITE}/sitemaps/pages.xml`)).toBeVisible();
+    fireEvent.keyDown(tree, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/1`));
+    expect(searchOf(router).filter).toBeUndefined();
+  });
+
+  it('starts, coming back from a sitemap, on the row it was opened from', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const news = await waitFor(() => rowOf(`${SITE}/news-sitemap.xml`));
+    fireEvent.click(within(news).getByRole('link', { name: '2 URLs listed' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/5`));
+    act(() => router.history.back());
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await screen.findByText(`${SITE}/news-sitemap.xml`);
+    // The cursor is where the list was left: focus arriving finds it there, not on the first row.
+    act(() => tree.focus());
+    const cursor = document.getElementById(tree.getAttribute('aria-activedescendant') ?? '');
+    expect(cursor?.closest('[role="row"]')).toHaveTextContent('/news-sitemap.xml');
+  });
+
+  it('opens the sitemap itself from a count that’s nothing or unknown', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await screen.findByText(`${SITE}/sitemaps/missing.xml`);
+    fireEvent.doubleClick(within(rowOf(`${SITE}/sitemaps/missing.xml`)).getAllByText('–')[0]!);
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/4`));
+    expect(searchOf(router).filter).toBeUndefined();
+    expect(tree).not.toBeInTheDocument();
+  });
+
+  it('says how many of the site’s pages no sitemap lists, as a link to exactly those pages', async () => {
+    sidecar();
+    await open(SITEMAPS);
+    const line = await screen.findByText(wholeText('2 of the site’s 9 pages aren’t in any sitemap.'));
+    // The pages it's "of" are a link too: the site's pages, as Overview counts them.
+    const pages = decodeURIComponent(within(line).getByRole('link', { name: '9 pages' }).getAttribute('href') ?? '');
+    expect(JSON.parse(pages.slice(pages.indexOf('filter=') + 'filter='.length))).toEqual(ANSWERED_SITE_PAGES);
+    const link = within(line).getByRole('link', { name: '2' });
+    const href = decodeURIComponent(link.getAttribute('href') ?? '');
+    expect(href.startsWith(`/crawls/${TEST_CRAWL_ID}/urls?filter=`)).toBe(true);
+    const filter = JSON.parse(href.slice(href.indexOf('filter=') + 'filter='.length)) as unknown;
+    expect(filter).toEqual([...ANSWERED_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }]);
+  });
+
+  it('says the analysis didn’t count them, and why, when the engine can’t place the site’s pages: never “in a sitemap”', async () => {
+    // A crawl stopped before its sitemaps were read, then analysed: the check that compares pages with sitemaps was
+    // skipped, so the engine answers null for every page, never false.
+    sidecar({
+      sitemaps: {
+        ...TEST_SITEMAP_LIST,
+        discovery: 'unfinished',
+        sitemaps: [
+          testSitemap({ id: 1, isIndex: true, sitemaps: 1 }),
+          testSitemap({ id: 2, parentId: 1, foundVia: 'index', state: 'pending', statusCode: null }),
+        ],
+      },
+      coverage: {
+        ...COVERAGE_PAGE,
+        matching: 1,
+        facets: { inSitemap: [{ value: null, count: 1, filter: { column: 'inSitemap', op: 'isEmpty' } }] },
+      },
+      analysis: {
+        skipped: [
+          { checkId: 'not-in-sitemap', reason: { code: 'crawl-unfinished', text: 'The crawl didn’t finish.' } },
+        ],
+      },
+      item: { status: 'stopped' },
+    });
+    await open(SITEMAPS);
+    expect(
+      await screen.findByText('The analysis didn’t count the site’s pages no sitemap lists. The crawl didn’t finish.'),
+    ).toBeVisible();
+    expect(screen.queryByText(/in a sitemap\./)).toBeNull();
+    expect(screen.queryByText(/in any sitemap/)).toBeNull();
+  });
+
+  it('still says the analysis didn’t count them when its reason can’t be read', async () => {
+    sidecar({
+      coverage: {
+        ...COVERAGE_PAGE,
+        facets: { inSitemap: [{ value: null, count: 9, filter: { column: 'inSitemap', op: 'isEmpty' } }] },
+      },
+    });
+    await open(SITEMAPS, createQueryClientWithoutBackoff());
+    expect(
+      await screen.findByText(/The analysis didn’t count the site’s pages no sitemap lists: it couldn’t compare/),
+    ).toBeVisible();
+    expect(screen.queryByText(/in a sitemap\./)).toBeNull();
+  });
+
+  it('keeps the list when the pages no sitemap lists can’t be counted, and says so with Try again', async () => {
+    sidecar({ coverage: problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 }) });
+    await open(SITEMAPS, createQueryClientWithoutBackoff());
+    expect(await screen.findByText('The site’s pages no sitemap lists couldn’t be counted.')).toBeVisible();
+    expect(screen.getByRole('treegrid', { name: 'Sitemaps' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
+  });
+});
+
+describe('Sitemaps: what isn’t there', () => {
+  const none = (discovery: SitemapList['discovery']): SitemapList => ({
+    ...TEST_SITEMAP_LIST,
+    discovery,
+    sitemaps: [],
+  });
+
+  it('says a site has no sitemap, and where the crawl looked', async () => {
+    sidecar({ sitemaps: none('done') });
+    await open(SITEMAPS);
+    expect(await screen.findByRole('heading', { name: 'The crawl found no sitemap.' })).toBeVisible();
+    expect(
+      screen.getByText(/looks in the start URL’s robots.txt and at the sitemaps given in its settings/),
+    ).toBeVisible();
+    expect(screen.queryByRole('treegrid')).toBeNull();
+  });
+
+  it('says a crawl told not to read sitemaps was, and leads to its settings', async () => {
+    sidecar({ sitemaps: none('off') });
+    await open(SITEMAPS);
+    expect(await screen.findByRole('heading', { name: 'This crawl was told not to read sitemaps.' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Open the crawl’s settings' })).toHaveAttribute(
+      'href',
+      `/crawls/${TEST_CRAWL_ID}/settings`,
+    );
+  });
+
+  it('says where the crawl looked when the only sitemap it found couldn’t be read', async () => {
+    const only = testSitemap({
+      id: 1,
+      foundVia: 'defaultLocation',
+      state: 'failed',
+      statusCode: 404,
+      error: 'HTTP 404',
+    });
+    sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: [only] } });
+    await open(SITEMAPS);
+    // The crawl's own try of the default location: no sitemap was found, so none is said to have failed.
+    expect(await screen.findByText('Nothing declared a sitemap, and there’s none at /sitemap.xml.')).toBeVisible();
+    expect(screen.queryByText(/found 1 sitemap/)).toBeNull();
+    expect(await screen.findByText('No sitemap was read')).toBeVisible();
+    expect(within(rowOf(only.url)).getByText('Default location')).toBeVisible();
+    expect(within(rowOf(only.url)).getByText('None there: HTTP 404')).toBeVisible();
+    // No sitemap was read, so there's no count of the pages none lists to make.
+    expect(screen.queryByText(/in any sitemap/)).toBeNull();
+  });
+
+  it('says the list isn’t all there is when the crawl stopped before reading every sitemap, with Continue', async () => {
+    sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, discovery: 'unfinished' }, item: { status: 'stopped' } });
+    await open(SITEMAPS);
+    expect(
+      await screen.findByText(/stopped before it had read every sitemap, so this list isn’t all there is/),
+    ).toBeVisible();
+    // The view's own Continue, beside the top bar's.
+    expect(within(screen.getByRole('main')).getByRole('button', { name: 'Continue' })).toBeVisible();
+  });
+
+  it('says which counts are the crawl’s own judgement without an analysis, and offers to analyse', async () => {
+    const { analyse } = sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, summary: { available: false, reason: 'notAnalyzed' } },
+      coverage: {
+        ...COVERAGE_PAGE,
+        summary: { available: false, reason: 'notAnalyzed' },
+        unavailable: ['inSitemap'],
+        facets: {},
+      },
+      item: { analyzedAt: null },
+    });
+    await open(SITEMAPS);
+    const note = await screen.findByText(
+      /Indexable and non-indexable are the crawl’s own judgement: this crawl hasn’t been analysed yet/,
+    );
+    expect(note).toHaveTextContent('The other counts need no analysis.');
+    expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+    // The counts still show: they need no analysis.
+    expect(
+      within(await waitFor(() => rowOf(`${SITE}/sitemaps/pages.xml`))).getByRole('link', { name: '4 URLs listed' }),
+    ).toBeVisible();
+    expect(await screen.findByText(/counted by the analysis: this crawl hasn’t been analysed yet/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Analyse it' }));
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+  });
+
+  it('says the list couldn’t be read, with Try again, and reads it then', async () => {
+    const failing = problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 });
+    const { transport } = sidecar({ sitemaps: failing });
+    await open(SITEMAPS, createQueryClientWithoutBackoff());
+    expect(await screen.findByText('The sitemaps couldn’t be read.')).toBeVisible();
+    setTransport(fakeSidecar(sitemapsRobotsRoutes()));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('treegrid', { name: 'Sitemaps' })).toBeVisible();
+    expect(transport.requests.filter((request) => request.path.endsWith('/sitemaps')).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('Sitemaps: live and refreshing', () => {
+  it('marks a running crawl’s list live, and words what it hasn’t read as still to come', async () => {
+    const pending = testSitemap({ id: 9, url: `${SITE}/late.xml`, state: 'pending' });
+    sidecar({
+      sitemaps: {
+        discovery: 'running',
+        summary: { available: false, reason: 'crawling' },
+        sitemaps: [...TEST_SITEMAPS, pending],
+      },
+      item: { status: 'running', finishedAt: null },
+    });
+    await open(SITEMAPS);
+    expect(await screen.findByText(/1 is still to be read\. It’s still looking for more\./)).toBeVisible();
+    expect(within(await waitFor(() => rowOf(pending.url))).getByText('Not read yet')).toBeVisible();
+    expect(screen.getByText('Live')).toBeVisible();
+    expect(screen.getByText(/the crawl’s own judgement while it runs/)).toBeVisible();
+    // Nothing offers an analysis while the crawl runs.
+    expect(screen.queryByRole('button', { name: /Analyse/ })).toBeNull();
+  });
+
+  it('has the crawl’s-own-judgement note there with a running crawl’s list from the start, and never as a live region', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const list = (sitemaps: SitemapList['sitemaps']): SitemapList => ({
+      discovery: 'running',
+      summary: { available: false, reason: 'crawling' },
+      sitemaps,
+    });
+    // The crawl has found its sitemaps and read none: no count to show yet.
+    const found = TEST_SITEMAPS.slice(0, 3).map((sitemap) => ({
+      ...sitemap,
+      state: 'pending' as const,
+      statusCode: null,
+      isIndex: false,
+      sitemaps: 0,
+      entries: 0,
+      urls: { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0 },
+    }));
+    sidecar({ sitemaps: list(found), item: running });
+    const { queryClient } = await open(SITEMAPS);
+    await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    // The note is there before the first sitemap is read, so the list doesn't move down when one is.
+    const note = screen.getByText(/the crawl’s own judgement while it runs/);
+    expect(note).toBeVisible();
+    // It's a note on the figures, not news: nothing reads it out when it comes, or as the crawl goes on.
+    expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+    // The crawl reads them: the very same note, still there.
+    sidecar({ sitemaps: list(TEST_SITEMAPS), item: running });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    expect(await screen.findByRole('link', { name: '4 URLs listed' })).toBeVisible();
+    expect(screen.getByText(/the crawl’s own judgement while it runs/)).toBe(note);
+    expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+  });
+
+  it('says nothing of the crawl’s own judgement where there are no counts to qualify', async () => {
+    // A crawl that isn't running, whose only sitemap couldn't be read: no counts, so no note on them.
+    const failed = testSitemap({ id: 1, state: 'failed', statusCode: 503, error: 'HTTP 503' });
+    sidecar({
+      sitemaps: { discovery: 'done', summary: { available: false, reason: 'notAnalyzed' }, sitemaps: [failed] },
+      item: { analyzedAt: null },
+    });
+    await open(SITEMAPS);
+    await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(screen.queryByText(/the crawl’s own judgement/)).toBeNull();
+  });
+
+  it('says nothing of the crawl’s own judgement over a running crawl that has found no sitemap yet', async () => {
+    // There's no list for counts to arrive in: the empty state says where the crawl looks, and no more.
+    sidecar({
+      sitemaps: { discovery: 'running', summary: { available: false, reason: 'crawling' }, sitemaps: [] },
+      item: { status: 'running', finishedAt: null },
+    });
+    await open(SITEMAPS);
+    expect(await screen.findByRole('heading', { name: 'The crawl hasn’t found a sitemap yet.' })).toBeVisible();
+    expect(screen.queryByText(/the crawl’s own judgement/)).toBeNull();
+  });
+
+  it('keeps the cursor on its sitemap when a running crawl finds one under an index above it: Enter opens that sitemap', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const list = (sitemaps: SitemapList['sitemaps']): SitemapList => ({
+      discovery: 'running',
+      summary: { available: false, reason: 'crawling' },
+      sitemaps,
+    });
+    // The index and one of its sitemaps so far, then the sitemap given in the crawl's settings.
+    const sofar = TEST_SITEMAPS.filter((sitemap) => [1, 2, 5].includes(sitemap.id));
+    sidecar({ sitemaps: list(sofar), item: running });
+    const { router, queryClient } = await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await screen.findByText(`${SITE}/news-sitemap.xml`);
+    act(() => tree.focus());
+    fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    const cursorRow = () =>
+      document.getElementById(tree.getAttribute('aria-activedescendant') ?? '')?.closest('[role="row"]')?.textContent ??
+      '';
+    expect(cursorRow()).toContain(`${SITE}/news-sitemap.xml`);
+    // The crawl takes up two more of the index's sitemaps: they go under the index, above the cursor's row.
+    sidecar({ sitemaps: list(TEST_SITEMAPS.filter((sitemap) => sitemap.id !== 6)), item: running });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    await screen.findByText(`${SITE}/sitemaps/products.xml`);
+    expect(cursorRow()).toContain(`${SITE}/news-sitemap.xml`);
+    fireEvent.keyDown(tree, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/5`));
+  });
+
+  it('keeps the list on screen while it’s read again, and never puts the loading frame over it', async () => {
+    let hold: (() => void) | null = null;
+    let calls = 0;
+    const routes = sitemapsRobotsRoutes();
+    setTransport(
+      fakeSidecar([
+        [
+          'GET',
+          /\/sitemaps$/,
+          async () => {
+            calls++;
+            if (calls > 1) await new Promise<void>((resolve) => (hold = resolve));
+            return json(calls > 1 ? { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.slice(0, 5) } : TEST_SITEMAP_LIST);
+          },
+        ],
+        ...routes,
+      ]),
+    );
+    const { queryClient } = await open(SITEMAPS);
+    await screen.findByText(`${SITE}/old-sitemap.xml`);
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    await waitFor(() => expect(hold).not.toBeNull());
+    expect(screen.getByText(`${SITE}/old-sitemap.xml`)).toBeVisible();
+    expect(screen.queryByLabelText('Loading the sitemaps')).toBeNull();
+    await act(async () => {
+      hold?.();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.queryByText(`${SITE}/old-sitemap.xml`)).toBeNull());
+    expect(screen.getByText('The crawl found 5 sitemaps: 4 were read and 1 couldn’t be read.')).toBeVisible();
+  });
+});
+
+describe('Sitemaps: one sitemap', () => {
+  it('shows its facts and its URLs, with what the crawl did with each', async () => {
+    sidecar();
+    await open(`${SITEMAPS}/3`);
+    expect(await screen.findByRole('heading', { level: 1, name: `${SITE}/sitemaps/products.xml` })).toBeVisible();
+    expect(screen.getByText('a sitemap index,')).toBeVisible();
+    expect(screen.getByRole('link', { name: `${SITE}/sitemap.xml` })).toHaveAttribute('href', `${SITEMAPS}/1`);
+    expect(screen.getByText('3 URL entries')).toBeVisible();
+    const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/sitemaps/products.xml` });
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '4'));
+    expect(within(rowOf(`${SITE}/p/unreached`)).getByText('Not crawled')).toBeVisible();
+    const outcome = (url: string) => rowOf(url).querySelector('[aria-colindex="2"]');
+    expect(outcome(`${SITE}/p/gone`)).toHaveTextContent('Client error');
+    // The inspector's word for a URL that answered: "Crawled" is the count's, for what the crawl requested.
+    expect(outcome(`${SITE}/contact`)).toHaveTextContent('Answered');
+  });
+
+  it('narrows to what people come for with a quick filter, says the count once, and keeps it in the route', async () => {
+    const said: string[] = [];
+    const stop = onAnnounce((message) => said.push(message));
+    const { transport } = sidecar();
+    const { router } = await open(`${SITEMAPS}/1`);
+    const show = await screen.findByRole('radiogroup', { name: 'Show' });
+    await screen.findByText(`${SITE}/about`);
+    // The counts on the filters: all it lists, and the two the list of sitemaps counted.
+    expect(within(show).getByRole('radio', { name: /All/ })).toHaveTextContent('6');
+    expect(within(show).getByRole('radio', { name: /Not crawled/ })).toHaveTextContent('1');
+    expect(within(show).getByRole('radio', { name: /Non-indexable/ })).toHaveTextContent('2');
+    fireEvent.click(within(show).getByRole('radio', { name: /Redirecting or broken/ }));
+    await waitFor(() =>
+      expect(searchOf(router).filter).toEqual([
+        { column: 'outcome', op: 'in', values: ['redirect', 'clientError', 'serverError', 'timeout', 'networkError'] },
+      ]),
+    );
+    expect(await screen.findByText('of 6 URLs')).toBeVisible();
+    expect(screen.queryByText(`${SITE}/about`)).toBeNull();
+    expect(screen.getByText(`${SITE}/old`)).toBeVisible();
+    expect(screen.getByText(`${SITE}/p/gone`)).toBeVisible();
+    await waitFor(() => expect(said).toEqual(['2 of 6 URLs']));
+    expect(gridRequests(transport).at(-1)).toMatchObject({ sitemapId: 1, filters: searchOf(router).filter });
+    stop();
+  });
+
+  it('shows a count’s filter that isn’t a quick filter as a chip, and none of the quick filters chosen', async () => {
+    sidecar();
+    const { router } = await open(
+      `${SITEMAPS}/1?filter=${encodeURIComponent(JSON.stringify([{ column: 'fetched', op: 'is', value: true }]))}`,
+    );
+    const filters = await screen.findByRole('group', { name: 'Filters' });
+    expect(filters).toHaveTextContent('Crawled is yes');
+    expect(await screen.findByText('of 6 URLs')).toBeVisible();
+    // One segment is always chosen, so focus arriving on the control chooses nothing for the user: these filters
+    // are a segment of their own while they last, with the count the grid shows.
+    const chosen = screen.getAllByRole('radio').filter((option) => option.getAttribute('aria-checked') === 'true');
+    expect(chosen.map((option) => option.textContent)).toEqual(['Other filters 5']);
+    act(() => chosen[0]?.focus());
+    expect(searchOf(router).filter).toEqual([{ column: 'fetched', op: 'is', value: true }]);
+    // Choosing a quick filter replaces them, and their segment goes.
+    fireEvent.click(screen.getByRole('radio', { name: /All/ }));
+    await waitFor(() => expect(searchOf(router).filter).toBeUndefined());
+    await waitFor(() => expect(screen.queryByRole('radio', { name: /Other filters/ })).toBeNull());
+  });
+
+  it('sorts from a column’s header, by the columns the engine says it sorts', async () => {
+    const { transport } = sidecar();
+    const { router } = await open(`${SITEMAPS}/1`);
+    await screen.findByText(`${SITE}/about`);
+    const header = await screen.findByRole('columnheader', { name: /Status/ });
+    await waitFor(() => expect(within(header).getByRole('button')).toBeInTheDocument());
+    // Title is text: the engine doesn't sort by it, so its header is no button.
+    expect(within(screen.getByRole('columnheader', { name: 'Title' })).queryByRole('button')).toBeNull();
+    fireEvent.click(within(header).getByRole('button'));
+    await waitFor(() => expect(searchOf(router).sort).toEqual([{ column: 'statusCode', desc: false }]));
+    await waitFor(() => expect(gridRequests(transport).at(-1)?.sort).toEqual([{ column: 'statusCode', desc: false }]));
+    await waitFor(() =>
+      expect(screen.getByRole('columnheader', { name: /Status/ })).toHaveAttribute('aria-sort', 'ascending'),
+    );
+  });
+
+  it('searches its URLs from the field, and Ctrl+F goes to it', async () => {
+    const { transport } = sidecar();
+    const { router } = await open(`${SITEMAPS}/1`);
+    const field = await screen.findByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' });
+    fireEvent.change(field, { target: { value: 'contact' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(searchOf(router).q).toBe('contact'));
+    await waitFor(() => expect(gridRequests(transport).at(-1)?.search).toBe('contact'));
+    expect(await screen.findByText('of 6 URLs')).toBeVisible();
+  });
+
+  it('keeps focus in the search field when Enter applies it: the field isn’t made anew', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/1`);
+    const field = await screen.findByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' });
+    act(() => field.focus());
+    fireEvent.change(field, { target: { value: 'contact' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(searchOf(router).q).toBe('contact'));
+    expect(await screen.findByText('of 6 URLs')).toBeVisible();
+    // The very field that was typed in, still there and still focused: not the page's title, not nothing.
+    expect(field).toBeInTheDocument();
+    expect(field).toHaveFocus();
+    expect(screen.getByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' })).toBe(field);
+    expect(field).toHaveValue('contact');
+    // Another search from the same field, without going back to it.
+    fireEvent.change(field, { target: { value: 'about' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(searchOf(router).q).toBe('about'));
+    expect(field).toHaveFocus();
+  });
+
+  it('shows in the search field the search the route holds, when it changes from elsewhere', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/1?q=nothing-like-it`);
+    const field = await screen.findByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' });
+    expect(field).toHaveValue('nothing-like-it');
+    // The empty state's way out clears the search: the field follows.
+    fireEvent.click(await screen.findByRole('button', { name: /Clear/ }));
+    await waitFor(() => expect(searchOf(router).q).toBeUndefined());
+    await waitFor(() => expect(field).toHaveValue(''));
+    // Back brings the search back, and the field with it.
+    act(() => {
+      router.history.back();
+    });
+    await waitFor(() => expect(searchOf(router).q).toBe('nothing-like-it'));
+    await waitFor(() => expect(field).toHaveValue('nothing-like-it'));
+  });
+
+  it('opens the inspector on a URL with Enter, in place', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/5`);
+    const grid = await screen.findByRole('grid');
+    await screen.findByText(`${SITE}/news/a`);
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    await waitFor(() => expect(searchOf(router).inspect).toBe(7));
+    expect(pathOf(router)).toBe(`${SITEMAPS}/5`);
+  });
+
+  it('says a sitemap that couldn’t be read has no URLs to show, and why', async () => {
+    sidecar();
+    await open(`${SITEMAPS}/4`);
+    expect(await screen.findByText('No URLs to show for this sitemap.')).toBeVisible();
+    expect(screen.getByText('The crawl couldn’t read it: HTTP 404.')).toBeVisible();
+    expect(screen.getByText('Not known')).toBeVisible();
+  });
+
+  it('leads back to the list from its own link, the sidebar’s and Ctrl+5: never to the sitemap it’s on', async () => {
+    const uninstall = installKeyboard();
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/3`);
+    const back = await screen.findByRole('link', { name: 'All sitemaps' });
+    expect(back).toHaveAttribute('href', SITEMAPS);
+    const entry = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: /^Sitemaps/ });
+    expect(entry).toHaveAttribute('href', SITEMAPS);
+    // It's still the place the sidebar marks as current.
+    expect(entry).toHaveAttribute('aria-current', 'page');
+    fireEvent.keyDown(document.body, { key: '5', code: 'Digit5', ctrlKey: true });
+    await waitFor(() => expect(pathOf(router)).toBe(SITEMAPS));
+    expect(await screen.findByRole('treegrid', { name: 'Sitemaps' })).toBeVisible();
+    uninstall();
+  });
+
+  it('says a stale id names no sitemap of this crawl, and offers the list', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/999`);
+    expect(await screen.findByRole('heading', { name: 'This sitemap isn’t in this crawl' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Show every sitemap' }));
+    await waitFor(() => expect(pathOf(router)).toBe(SITEMAPS));
+    expect(await screen.findByRole('treegrid', { name: 'Sitemaps' })).toBeVisible();
+  });
+
+  it('says “not so far” of a sitemap a crawl that hasn’t ended doesn’t have, and fills in once it finds it', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const list = (sitemaps: typeof TEST_SITEMAPS): SitemapList => ({
+      discovery: 'running',
+      summary: { available: false, reason: 'crawling' },
+      sitemaps,
+    });
+    sidecar({ sitemaps: list(TEST_SITEMAPS.slice(0, 1)), item: running });
+    const { queryClient } = await open(`${SITEMAPS}/2`);
+    expect(await screen.findByRole('heading', { name: 'The crawl hasn’t found this sitemap so far' })).toBeVisible();
+    expect(screen.getByText(/If it finds it before it ends, it shows here\./)).toBeVisible();
+    // Never "from before the site was crawled again": the crawl is still at it.
+    expect(screen.queryByText(/crawled again/)).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'This sitemap isn’t in this crawl' })).toBeNull();
+    // The crawl finds it: the list is read again with the crawl, and the page is the sitemap's.
+    sidecar({ sitemaps: list(TEST_SITEMAPS), item: running });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    expect(await screen.findByText(`${SITE}/about`)).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'The crawl hasn’t found this sitemap so far' })).toBeNull();
+  });
+
+  it('still says a sitemap isn’t in a running crawl when what the path names can’t be a sitemap’s id', async () => {
+    sidecar({ item: { status: 'running', finishedAt: null } });
+    await open(`${SITEMAPS}/not-a-number`);
+    expect(await screen.findByRole('heading', { name: 'This sitemap isn’t in this crawl' })).toBeVisible();
+  });
+
+  it('offers, on a sitemap the crawl doesn’t have, only the command that can run: the way back to the list', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/999`);
+    await screen.findByRole('heading', { name: 'This sitemap isn’t in this crawl' });
+    const mine = commands.list().filter((command) => command.group === 'Sitemaps');
+    expect(mine.length).toBeGreaterThan(4);
+    // Nothing to search, filter, copy or open: each is greyed in the palette, and its key does nothing.
+    expect(mine.filter((command) => commands.isEnabled(command)).map((command) => command.id)).toEqual([
+      'sitemaps.list',
+    ]);
+    expect(commands.run('sitemaps.search')).toBe(false);
+    expect(commands.run('sitemaps.show.notCrawled')).toBe(false);
+    expect(searchOf(router).filter).toBeUndefined();
+    // On a sitemap the crawl has, they run.
+    act(() => {
+      router.history.push(`${SITEMAPS}/2`);
+    });
+    await screen.findByText(`${SITE}/about`);
+    expect(commands.isEnabled(commands.get('sitemaps.search')!)).toBe(true);
+    expect(commands.isEnabled(commands.get('sitemaps.show.notCrawled')!)).toBe(true);
+  });
+
+  it('says the same of something in the path that can’t be a sitemap’s id, and asks the engine nothing about it', async () => {
+    const { transport } = sidecar();
+    await open(`${SITEMAPS}/not-a-number`);
+    expect(await screen.findByRole('heading', { name: 'This sitemap isn’t in this crawl' })).toBeVisible();
+    expect(gridRequests(transport)).toEqual([]);
+  });
+
+  it('still shows the URLs when the sitemap’s facts can’t be read, and says so', async () => {
+    const failing = problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 });
+    sidecar({ sitemaps: failing });
+    await open(`${SITEMAPS}/2`, createQueryClientWithoutBackoff());
+    expect(await screen.findByText('This sitemap’s facts couldn’t be read.')).toBeVisible();
+    expect(await screen.findByText(`${SITE}/about`)).toBeVisible();
+  });
+
+  it('lands on the sitemap a link names by its address, in place of the list', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}?url=${encodeURIComponent(`${SITE}/sitemaps/missing.xml`)}`);
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/4`));
+    expect(searchOf(router).url).toBeUndefined();
+    expect(await screen.findByText('The crawl couldn’t read it: HTTP 404.')).toBeVisible();
+  });
+
+  it('stays on the list, without the name, when no sitemap has that address', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}?url=${encodeURIComponent(`${SITE}/nope.xml`)}`);
+    expect(await screen.findByRole('treegrid', { name: 'Sitemaps' })).toBeVisible();
+    await waitFor(() => expect(searchOf(router).url).toBeUndefined());
+    expect(pathOf(router)).toBe(SITEMAPS);
+  });
+});
+
+describe('Sitemaps in a short or narrow window', () => {
+  /** jsdom lays nothing out: the width a frame measures itself at, as a real window would give it. */
+  const frameWidth = (width: number) => vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+  const headersOf = (grid: HTMLElement) =>
+    within(grid)
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent);
+
+  it('keeps a long list room for five rows, in the frame every grid screen shares', async () => {
+    // Six sitemaps: one more than the list always shows.
+    sidecar();
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    // Its header takes two lines here ("Blocked by robots.txt"): 12 px over the grid's own.
+    expect(tree.parentElement!.style.minHeight).toBe(`${32 + 12 + 5 * 32 + 12}px`);
+    const frame = tree.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    // The title and the line under the list are the frame's own children: they keep their height, the list gives.
+    expect(screen.getByRole('heading', { name: 'Sitemaps', level: 1 }).closest('.si-grid-screen > *')).not.toBeNull();
+    expect(tree.parentElement!.parentElement).toHaveClass('shrink');
+    expect(tree.parentElement!.parentElement!.parentElement).toBe(frame);
+  });
+
+  it('never squeezes a list of five sitemaps or fewer: it stays as tall as its rows', async () => {
+    const two = TEST_SITEMAPS.filter((sitemap) => sitemap.id === 5 || sitemap.id === 6);
+    sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: two } });
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(within(tree).getAllByRole('row')).toHaveLength(3);
+    const list = tree.parentElement!.parentElement!;
+    expect(list).toHaveClass('shrink-0');
+    expect(list.style.height).toBe(`${2 * 32 + 32 + 12 + 2}px`);
+    expect(tree.parentElement!.style.minHeight).toBe('');
+  });
+
+  it('puts the counts straight after the address in a frame too narrow for every column', async () => {
+    // 200% zoom of a 1280 px window leaves the list 534 px.
+    frameWidth(534);
+    sidecar();
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(headersOf(tree)).toEqual([
+      'Sitemap',
+      'Listed',
+      'Crawled',
+      'Blocked by robots.txt',
+      'Not crawled',
+      'Non-indexable',
+      'Status',
+      'Found via',
+    ]);
+    // Each count still opens exactly its URLs from there.
+    const row = rowOf(`${SITE}/sitemaps/pages.xml`);
+    expect(row.querySelector('[aria-colindex="2"]')).toHaveTextContent('4');
+    expect(within(row).getByRole('link', { name: '4 URLs listed' })).toBeVisible();
+    expect(row.querySelector('[aria-colindex="7"]')).toHaveTextContent('Read');
+  });
+
+  it('keeps how it was found and what became of it before the counts where every column fits', async () => {
+    frameWidth(1_006);
+    sidecar();
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(headersOf(tree)).toEqual([
+      'Sitemap',
+      'Found via',
+      'Status',
+      'Listed',
+      'Crawled',
+      'Blocked by robots.txt',
+      'Not crawled',
+      'Non-indexable',
+    ]);
+  });
+
+  it('keeps one sitemap’s grid room for five rows under whatever is over it, and lets its filters take a second line', async () => {
+    sidecar();
+    await open(`${SITEMAPS}/2`);
+    const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/sitemaps/pages.xml` });
+    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    const frame = grid.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    expect(grid.closest('.si-grid-screen__body')?.parentElement).toBe(frame);
+    const show = screen.getByRole('radiogroup', { name: 'Show' });
+    expect(show).toHaveClass('si-segmented--wrap');
+    expect(show.closest('.si-grid-screen > *')?.parentElement).toBe(frame);
+  });
+});
+
+describe('Sitemaps: one sitemap without the URL summary', () => {
+  const outOfDate = { available: false, reason: 'engineChanged' } as const;
+
+  it('offers to analyse again, in those words, where a sort needs an analysis the crawl once had: never “Analyse it”', async () => {
+    // The engine refuses a sort on a column the analysis fills, and says why: analysed by another version.
+    const analyse = vi.fn(() => new Response(null, { status: 202 }));
+    setTransport(
+      fakeSidecar([
+        ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse],
+        [
+          'POST',
+          /\/sitemaps\/urls$/,
+          () =>
+            problem({
+              type: 'needs-analysis',
+              title:
+                'Filtering or sorting by these columns needs an analysis, and another version of Shouting Iguana analysed this crawl.',
+              status: 409,
+              reason: 'engineChanged',
+              columns: ['issues'],
+            }),
+        ],
+        ...sitemapsRobotsRoutes({ sitemaps: { ...TEST_SITEMAP_LIST, summary: outOfDate } }),
+      ]),
+    );
+    await open(`${SITEMAPS}/2?sort=-issues`);
+    await screen.findByText(/^Filtering or sorting by these columns needs an analysis, /);
+    const main = screen.getByRole('main');
+    const again = within(main).getByRole('button', { name: 'Analyse again' });
+    expect(within(main).queryByRole('button', { name: 'Analyse it' })).toBeNull();
+    fireEvent.click(again);
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+  });
+
+  it('says the analysis that’s running fills the columns, with nothing to press, while the crawl is analysed', async () => {
+    sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, summary: { available: false, reason: 'notAnalyzed' } },
+      item: { status: 'analyzing', analyzedAt: null },
+    });
+    await open(`${SITEMAPS}/2`);
+    const notice = await screen.findByText(/fill in when the analysis that’s running is done/);
+    expect(notice).not.toHaveTextContent('hasn’t been analysed yet');
+    expect(within(screen.getByRole('main')).queryByRole('button', { name: /^Analyse/ })).toBeNull();
+  });
+});

@@ -248,6 +248,24 @@ export const Segmented: Story = {
             ]}
           />
         </StateRow>
+        <StateRow label="Wraps where it doesn’t fit">
+          <div className="w-(--checks-width)">
+            <SegmentedControl
+              label="Show"
+              wrap
+              value="all"
+              onValueChange={() => undefined}
+              options={[
+                { value: 'all', label: 'All', count: 101081 },
+                { value: 'crawled', label: 'Crawled', count: 101071 },
+                { value: 'blocked', label: 'Blocked by robots.txt', count: 10 },
+                { value: 'notCrawled', label: 'Not crawled', count: 0 },
+                { value: 'nonIndexable', label: 'Non-indexable', count: 2348 },
+                { value: 'broken', label: 'Redirecting or broken', count: 2 },
+              ]}
+            />
+          </div>
+        </StateRow>
         <StateRow label="Icons">
           <SegmentedControl
             label="Layout"

@@ -103,13 +103,19 @@ export interface GridHeaderProps {
   /** The search, the view's menu, export. */
   actions?: ReactNode;
   className?: string | undefined;
+  /** For focus to go to the title when what had it went away: the title is then focusable from script only. */
+  titleRef?: Ref<HTMLHeadingElement> | undefined;
+  /** For a title that may be long (a URL): the room it may take and give up. */
+  titleClassName?: string | undefined;
 }
 
 /** A grid screen's one-line header (title, then "264 of 4,521 URLs"), so the rows get the room. */
-export function GridHeader({ title, count, badge, actions, className }: GridHeaderProps) {
+export function GridHeader({ title, count, badge, actions, className, titleRef, titleClassName }: GridHeaderProps) {
   return (
     <header className={clsx('si-grid-header', className)}>
-      <h1 className="si-grid-header__title">{title}</h1>
+      <h1 ref={titleRef} tabIndex={titleRef ? -1 : undefined} className={clsx('si-grid-header__title', titleClassName)}>
+        {title}
+      </h1>
       {count !== undefined ? <span>{count}</span> : null}
       {badge}
       {actions ? <div className="si-grid-header__actions">{actions}</div> : null}

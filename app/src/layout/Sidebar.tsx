@@ -208,13 +208,18 @@ function SectionLink({
     case 'sitemaps':
       return (
         <li>
-          <NavItem to="/crawls/$crawl/sitemaps/{-$sitemap}" params={{ crawl: crawlId }} {...props} />
+          {/* The list, from one sitemap's page too: left out, the router keeps the sitemap the page is on. */}
+          <NavItem
+            to="/crawls/$crawl/sitemaps/{-$sitemap}"
+            params={{ crawl: crawlId, sitemap: undefined }}
+            {...props}
+          />
         </li>
       );
     case 'robots':
       return (
         <li>
-          <NavItem to="/crawls/$crawl/robots/{-$origin}" params={{ crawl: crawlId }} {...props} />
+          <NavItem to="/crawls/$crawl/robots/{-$origin}" params={{ crawl: crawlId, origin: undefined }} {...props} />
         </li>
       );
     case 'settings':

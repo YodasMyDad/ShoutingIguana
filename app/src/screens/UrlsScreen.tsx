@@ -22,6 +22,7 @@ import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
+import { useSearchText } from '../grid/useSearchText';
 import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
 import { urlColumnWords, urlEmptyWords, urlValueWords } from '../grid/urlFilterWords';
@@ -133,6 +134,7 @@ export function UrlsScreen() {
   const sort = useMemo(() => search.sort ?? [], [search.sort]);
   const filters = useMemo(() => search.filter ?? [], [search.filter]);
   const q = search.q;
+  const [searchText, setSearchText] = useSearchText(q);
 
   const item = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
@@ -220,10 +222,11 @@ export function UrlsScreen() {
         className="px-6 pt-2 pb-1"
         actions={
           <SearchField
-            key={q ?? ''}
             label="Search URLs and titles"
             placeholder="Search URLs and titles"
-            defaultValue={q ?? ''}
+            // The same field whatever is searched for: Enter applies its text and focus stays in it.
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return;
               const value = event.currentTarget.value.trim();
@@ -343,3 +346,17 @@ function ActiveFilters({
   };
   return <FilterChips filters={filters} onChange={onChange} words={words} relatedUrl={relatedWords} />;
 }
+
+// The URL grid's pieces, for a view that is the URL grid narrowed to something (a sitemap's URLs): its columns, what its
+// query asks for, why the analysis's columns are empty, and its filter chips. They're exported from here, where they
+// are, rather than moved: the full URL grid's slice gives them their own files.
+/* eslint-disable react-refresh/only-export-components -- shared as they stand; see above */
+export {
+  COLUMNS as URL_GRID_COLUMNS,
+  QUERY_COLUMNS as URL_GRID_QUERY_COLUMNS,
+  UNAVAILABLE_BECAUSE as URL_COLUMNS_UNAVAILABLE_BECAUSE,
+  namesOf as urlColumnNames,
+  NeedsAnalysis as UrlGridNeedsAnalysis,
+  ActiveFilters as UrlGridFilters,
+};
+/* eslint-enable react-refresh/only-export-components */
