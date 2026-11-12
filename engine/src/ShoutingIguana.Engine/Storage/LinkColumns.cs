@@ -88,9 +88,9 @@ internal static class LinkColumns
     /// <summary>The columns for the column chooser and the filter bar: a link's own, then each end's. Only the target's sort.</summary>
     public static IReadOnlyList<UrlColumnInfo> Describe() =>
     [
-        .. OWN.Select(column => new UrlColumnInfo(column.Id, column.Type, false, column.Sortable, column.Filterable, column.Values)),
+        .. OWN.Select(column => ColumnWords.Link(new UrlColumnInfo(column.Id, column.Type, false, column.Sortable, column.Filterable, column.Values))),
         .. new[] { FROM, TO }.SelectMany(prefix => UrlColumns.Describe(issueColumns: false)
-            .Select(column => column with { Id = prefix + column.Id, Sortable = prefix == TO && column.Sortable }))
+            .Select(column => ColumnWords.End(column, target: prefix == TO) with { Id = prefix + column.Id, Sortable = prefix == TO && column.Sortable }))
     ];
 
     /// <summary>A link's own column's value, from the link as stored.</summary>

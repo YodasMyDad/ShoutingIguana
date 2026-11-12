@@ -9,7 +9,7 @@ Analytics / Ads integrations later.
 | Project | What it is |
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `stats`, `testsite`, `bench`, `readbench` |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
 | `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
@@ -27,6 +27,9 @@ dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl           
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl title-too-long            # the URLs for one issue
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl --csv issues.csv          # everything, for Excel
 dotnet run --project src/ShoutingIguana.Cli -- score example.sicrawl                            # the site's score, and how it was worked out
+dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind urls --out urls.xlsx   # any grid, as CSV or Excel
+dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind workbook --out all.xlsx # a sheet for each check
+dotnet run --project src/ShoutingIguana.Cli -- report example.sicrawl --out report.html           # the report
 dotnet run --project src/ShoutingIguana.Cli -- analyze example.sicrawl                          # re-run the checks
 dotnet run --project src/ShoutingIguana.Cli -- stats example.sicrawl
 dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl              # after Ctrl+C
@@ -207,7 +210,7 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   `Analysis/IssuePlainTexts.cs`, by check id (a title, what's wrong as sentences, how to fix it as steps, who fixes
   it, the good news when nothing is found, and optionally what a template fault usually is and what the check looks
   for), and `Analysis/PlainWords.cs` (a plain title for each category; a sentence and what would let the check run for
-  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 87 checks, the 17 categories and the 15
+  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 87 checks, the 17 categories and the 17
   skip reasons have theirs. No analysis goes out of date when one changes, as the words are no part of the
   fingerprint.
   - **Both files are generated: don't edit them.** The words are written in
@@ -243,6 +246,13 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     neither failure counts as a sitemap error.
   - Checks of what the crawl was told not to fetch are skipped: broken external links with `--no-external`, broken
     and oversized images with `--no-resources`, and every sitemap check with `--no-sitemaps`.
+  - What robots.txt decides is skipped with `--ignore-robots` wherever the crawl couldn't judge it
+    (`robots-txt-ignored`). It asked for every URL, so none was refused: what robots.txt blocks is skipped. It read
+    no other origin's robots.txt: that check is skipped. And it read the site's own only for sitemap discovery, so
+    with `--no-sitemaps` as well, whether robots.txt is missing or unavailable is skipped too.
+  - Whether the site as a whole is hidden from search is judged by its home page, so a crawl that didn't start at
+    the site's root (a start URL with a path other than `/`) skips it (`start-not-root`): a section's first page
+    isn't the site's.
   - The duplicate site version check needs to know how every version answered, and a home page to redirect to. A
     crawl stopped before the probes were answered, a crawl file from before the crawler probed, or a home page that
     isn't a page skips it.
@@ -976,6 +986,103 @@ the same 1M crawl, links of one kind half way down take 94–241 ms (they were 1
 a URL 112,000 issues name (it was 35 ms, reading every issue; 100 ms with 3.5M issues). On 4 cores those link rows take
 109, 60 and 139 ms. The gates are unchanged.
 
+## Export and the report
+
+`si export` and `si report` write what the app's Export writes, by the same code (`Export/CrawlExporter`); the
+sidecar runs the same as a job ([the API doc](../docs/v2-sidecar-api.md#export-e5)).
+
+```bash
+si export example.sicrawl --kind urls --out pages.csv --columns url,statusCode,title,inlinks \
+    --filter type:in:page --filter statusCode:between:200..299 --sort inlinks:desc
+si export example.sicrawl --kind links --out broken-links.xlsx --filter to.statusClass:in:4xx,5xx
+si export example.sicrawl --kind issueRows --check title-too-long --out long-titles.csv
+si export example.sicrawl --kind workbook --out everything.xlsx     # a summary sheet, and a sheet for each check
+si report example.sicrawl --out report.html                         # the report; --cut summary for its first page
+```
+
+| `--kind` | Writes | As |
+| --- | --- | --- |
+| `urls`, `links` | The URL grid, the links grid | `.csv`, `.xlsx` |
+| `sitemapUrls` (`--sitemap <id>`) | One sitemap's URLs | `.csv`, `.xlsx` |
+| `robotsBlocked` (`--origin`, with `--line` or `--reason` to narrow) | The URLs robots.txt kept the crawl from on an origin | `.csv`, `.xlsx` |
+| `issueRows` (`--check <id>`) | A check's rows, with any of the grid's columns | `.csv`, `.xlsx` |
+| `check` (`--check <id>`) | One check's sheet of the workbook, as a file of its own | `.xlsx`, `.csv` |
+| `workbook` | The spreadsheet of everything | `.xlsx` |
+| `report` | The report (also `si report`) | `.html` |
+
+The format comes from the file's name unless `--format` gives it. A grid takes the grid's own query: `--columns` (by
+id; the grid's own when left out), `--filter column:operator[:value]` any number of times (`in` and `notIn` take
+`a,b,c`, `between` takes `min..max`, `isEmpty` takes nothing), `--search`, and `--sort column[:desc]`. A filter's
+value is of its column's type, not of what it looks like: `title:eq:404` is the text "404", `statusCode:eq:404` the
+number, `isInternal:is:false` a boolean. An option that belongs to another kind (`--check` for `urls`, `--cut` for
+anything but the report) is refused, never ignored, by the same list the API refuses a field of another kind by
+(`Export/ExportFields`).
+
+**How an export reads.** A page of rows at a time, each page the grid's own read (`Storage/GridExportReader` calls
+the readers the grids call, with the grid's cursor), on a snapshot it lets go of before the next:
+
+- the file holds exactly what the grid shows, in its order, whatever the filters and the sort;
+- memory is a page of rows, whatever the crawl's size: the 100k benchmark crawl's 5 million links are exported in
+  76 MB (CSV) and 91 MB (Excel), as its 112,577 URLs are in 70 and 88;
+- nothing is held between two pages: a writer here (an analysis, a continue) waits no longer than for a grid's read,
+  and a running crawl's write-ahead log can be folded into the file between any two pages;
+- a crawl that changes under it (analysed again, continued or finished) ends the export, which says so
+  (`ExportFailure.CrawlChanged`) rather than write the rows of two crawls into one file; a crawl paused or resumed is
+  the same crawl, and the export goes on;
+- a crawl that's running is exported as it stood when the export began (its highest URL and link ids are the bounds),
+  in crawl order or by URL only;
+- what the grid's reads count is kept between the pages (the sidecar's own `ReadCache`, or the export's): without it
+  a filtered or sorted export would count its rows, and order its targets, once a page.
+
+**The file** is written beside its target under another name and moved into place once whole (`Export/ExportTarget`),
+so an export that's cancelled or fails leaves nothing, and a file it was to replace is as it was. Its name must end in
+the format's extension, and hold no character a file's name can't (on Windows `\ / : * ? " < > |`). A place that
+can't be written to, a disk that fills up and a file open in another program (as Excel holds a workbook it's showing:
+found out before anything is read) are each told apart. An `IExportJournal` in `ExportSettings` is told of each part
+file before it's created and once it has gone: the sidecar keeps that note in its state folder and, when it next
+starts, deletes the part files a killed run left (those it names, and no others). `si export` keeps none: Ctrl+C
+deletes its part file, and one that is killed leaves it.
+
+**CSV** is RFC 4180: UTF-8 with a byte-order mark, CRLF rows, quotes doubled, and no field longer than the 32,758
+characters Excel reads as one cell (a longer one ends the row in Excel, and its rest starts a new row in column A,
+unguarded): longer text is cut, and counted in `TruncatedCells`, as `si issues --csv` cuts and counts it too.
+**Excel** files are written by the
+engine itself (`Export/Xlsx/XlsxWriter`), a row at a time into the ZIP, with no package: shared strings (streamed to a
+file beside the workbook as the sheets are written, a repeat naming the item it already has), every cell named by its
+place, numbers as numbers, a bold header row that stays in view and filters, and column widths from the first 200
+rows. That is the plain form of the format, as Excel writes it, for Excel, LibreOffice and Numbers alike. A sheet holds
+1,048,576 rows, so a longer table goes on to further sheets ("Links (2)"…), up to 16 of them (16,777,200 rows); more is
+refused before anything is written, never cut short.
+
+**Text from a site can't run.** A CSV field that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets an
+apostrophe before it; a number is written as its digits, so a negative one stays a number. In a workbook every text is
+a text cell, and one that looks like a formula is also marked as Excel marks text typed after an apostrophe, so
+editing the cell leaves it text. In the report every string is escaped where it's written, a URL is a link only when
+it's http or https, and the document's own Content-Security-Policy allows no script, no network and no style but its
+one sheet.
+
+**The report** (`Reporting/`) is one self-contained HTML document to [the design](../docs/v2-ui-simple.md#the-report):
+`ReportReader` reads what it says (counts, and a few rows a check, so its size follows the checks that found
+something, never the site's), `ReportDocument` writes it, and the workbook's summary sheet is written from the same
+model, so the two can't differ. The score and each check's words reach both through `ReportSources`, and neither
+works out anything of its own:
+
+- the score, its lines and "Fixing these five takes the score from 85 to 98" are the score the analysis stored
+  (`AnalysisResults.Score`, or why there is none: `NoScoreReason`), and the addresses are the URLs crawled when the
+  analysis ran;
+- problems are numbered in `AnalysisResults.FixFirst`'s order, in the report's first list, its sections and the
+  workbook's sheets alike;
+- a check's words are the catalog's plain ones (`IssueDefinition.Plain`), with any `{limit:…}` filled from the
+  thresholds the analysis ran with (`PlainLimits.Fill`), and its technical texts where it has no plain ones; a check
+  that couldn't run is named by what it looks for (`LooksFor`);
+- a check reported once for the whole site (`ReportedOnce`) says "Checked once, for the whole site" where another
+  says its share.
+
+`si report` writes it in 0.3 s for the garden crawl (19 checks found something: 94 KB, 12 pages of A4, 13 of Letter)
+and 0.5 s for the 100k benchmark crawl (75 checks: 210 KB, 33 pages of A4); `--cut summary` is its first page (18 KB)
+or, with a score of 45 lines, its first three (38 KB). A crawl never analysed has no report: `si report` says so,
+with the `si analyze` command to run, and exits 2.
+
 ## Synthetic site and benchmark
 
 The synthetic site is clean by construction: every page passes every check unless an issue is planted on it.
@@ -989,11 +1096,14 @@ The e2e tests also crawl these variants:
 - **HTTPS**, with a self-signed certificate. Plain HTTP answers on the same port, as port 80 does on a real site. It
   serves the home page there instead of redirecting: the planted duplicate version of the site.
 - **No sitemaps**, where the checks that need them are skipped.
-- **Hidden from search** (`HiddenFromSearch`, `si testsite --hidden-from-search`). Every product is noindex, as on a
-  site launched with its staging setting left on, so more than half of the pages that stand for themselves are
-  noindex (a canonicalised page is a variant of another, and no part of the count): `site-hidden-from-search` is
-  reported once, on the home page. Off everywhere else, the benchmark included,
+- **Hidden from search** (`HiddenFromSearch`, `si testsite --hidden-from-search`). The home page and every product
+  are noindex, as on a site launched with its staging setting left on, so the home page is noindex and so are more
+  than half of the pages that stand for themselves (a canonicalised page is a variant of another, and no part of the
+  count): `site-hidden-from-search` is reported once, on the home page. Off everywhere else, the benchmark included,
   where the check must flag nothing.
+- **Noindex products** (`NoindexProducts`). Every product is noindex and the home page is not, as on a shop that
+  keeps its many listings out of search on purpose: more than half of the pages are noindex, and
+  `site-hidden-from-search` must not be reported, as the home page can be indexed.
 - **Dead twin** (`DeadTwin`, plain HTTP only). The site links its https:// version on its own port, which doesn't
   answer: once from the plants hub, a URL the crawler asks for and finds unreachable, and five times from the first
   orphan. Only the sitemap leads there, so the crawler reads it once no linked URL is in flight, by when it has

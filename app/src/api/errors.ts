@@ -18,13 +18,70 @@ export type ProblemType =
   | 'url-not-found'
   | 'not-found'
   | 'check-not-found'
+  | 'check-skipped'
+  | 'invalid-export'
+  | 'export-not-found'
+  | 'export-busy'
+  | 'export-not-writable'
+  | 'export-disk-full'
+  | 'export-file-in-use'
+  | 'export-crawl-changed'
+  | 'export-too-large'
   | 'bad-request'
   | 'unauthorized'
   | 'origin-not-allowed'
   | 'body-too-large'
   | 'bad-host'
   | 'internal'
+  // Sitemaps and robots.txt (E3b): a sitemap's id, or an origin, that the crawl doesn't have. The engine's titles
+  // are plain sentences ("This crawl has no sitemap with that id."); the screens say what to do next, in
+  // STALE_PLACE_WORDS below.
+  | 'sitemap-not-found'
+  | 'origin-not-found'
   | (string & {});
+
+/**
+ * Plain words for a link to something the crawl doesn't have (any more): what it was, and what to do. A sitemap's id
+ * and an origin live in routes, so a link from before the site was crawled again, or one typed by hand, may name one
+ * that isn't there.
+ */
+export const STALE_PLACE_WORDS = {
+  'sitemap-not-found': {
+    title: 'This sitemap isn’t in this crawl',
+    why: 'The link names a sitemap this crawl doesn’t have. It may be from before the site was crawled again.',
+  },
+  'origin-not-found': {
+    title: 'This crawl has no robots.txt for that origin',
+    why: 'The link names an origin the crawl never asked for a robots.txt. It may be from before the site was crawled again.',
+  },
+} as const satisfies Partial<Record<ProblemType, { title: string; why: string }>>;
+
+/**
+ * The same places while the crawl hasn't ended: it may yet find the sitemap, or come to a URL on the origin, so the
+ * link isn't known to be stale. The place's reads are refreshed with the crawl, and it fills in if the crawl gets
+ * there. The words hold of a crawl that's paused, too: nothing says it's running.
+ */
+export const NOT_YET_PLACE_WORDS = {
+  'sitemap-not-found': {
+    title: 'The crawl hasn’t found this sitemap so far',
+    why: 'The link names a sitemap the crawl doesn’t have yet. If it finds it before it ends, it shows here.',
+  },
+  'origin-not-found': {
+    title: 'The crawl hasn’t asked that origin for a robots.txt so far',
+    why: 'It asks each origin when it first comes to a URL on it. If it comes to one before it ends, the file shows here.',
+  },
+} as const satisfies Record<keyof typeof STALE_PLACE_WORDS, { title: string; why: string }>;
+
+/**
+ * The words for a place the crawl doesn't have. `crawling`: the crawl hasn't ended (running, paused or stopping),
+ * so it's "not yet", never "from before the site was crawled again".
+ */
+export function missingPlaceWords(
+  place: keyof typeof STALE_PLACE_WORDS,
+  crawling: boolean,
+): { title: string; why: string } {
+  return crawling ? NOT_YET_PLACE_WORDS[place] : STALE_PLACE_WORDS[place];
+}
 
 export abstract class ApiError extends Error {
   /** A plain sentence for the UI. */

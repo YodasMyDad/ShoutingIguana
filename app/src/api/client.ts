@@ -2,6 +2,7 @@
 // failure becomes one of the typed errors in ./errors: a ProblemError for the contract's problem+json, otherwise
 // SidecarUnavailableError, SidecarUnreachableError or UnexpectedResponseError.
 import { ProblemError, UnexpectedResponseError, parseProblem } from './errors';
+import type { ExportJob, ExportRequest, ReportOptions } from './exports';
 import type {
   FacetsPage,
   FacetsQuery,
@@ -65,6 +66,13 @@ export async function call<T>(request: TransportRequest): Promise<T> {
   }
 }
 
+/** Sends one call whose answer is text, not JSON: the report's document. */
+export async function callText(request: TransportRequest): Promise<string> {
+  const response = await getTransport().send(request);
+  if (!response.ok) throw await toError(response);
+  return response.text();
+}
+
 async function toError(response: Response): Promise<Error> {
   const text = await response.text().catch(() => '');
   let body: unknown = null;
@@ -95,6 +103,18 @@ export async function callBytes(request: TransportRequest): Promise<Blob | null>
     return null;
   }
   return response.blob();
+}
+
+const exportJob = (exportId: string) => `/api/exports/${encodeURIComponent(exportId)}`;
+
+/** The report's options as its query string: only what was given, so the sidecar's defaults stand for the rest. */
+function reportQuery(options: ReportOptions): string {
+  const query = new URLSearchParams();
+  if (options.cut !== undefined) query.set('cut', options.cut);
+  if (options.examples !== undefined) query.set('examples', String(options.examples));
+  if (options.lookExamples !== undefined) query.set('lookExamples', String(options.lookExamples));
+  const text = query.toString();
+  return text ? `?${text}` : '';
 }
 
 const get = <T>(path: string, signal?: Signal) => call<T>({ method: 'GET', path, signal });
@@ -225,6 +245,24 @@ export const api = {
     post<RobotsFile>(`${crawl(id)}/robots/file`, { origin }, signal),
   robotsBlocked: (id: string, query: RobotsBlockedQuery, signal?: Signal) =>
     post<RobotsBlockedPage>(`${crawl(id)}/robots/blocked`, query, signal),
+
+  // Export and the report (E5). The sidecar writes the file; the job's progress and its end come as `export` events.
+  /**
+   * Starts an export to a path from a save dialog, and answers with the job, running. Refused at once when it can't
+   * be an export (`invalid-export`, `invalid-query`), or its file can't be written (`export-not-writable`,
+   * `export-file-in-use`); what only the crawl can say (`not-analyzed`, `needs-analysis`...) ends the job as failed.
+   */
+  startExport: (id: string, request: ExportRequest) => post<ExportJob>(`${crawl(id)}/export`, request),
+  /** An export by its id: one running, or one of the last 64 that ended. `export-not-found` otherwise. */
+  exportJob: (exportId: string, signal?: Signal) => get<ExportJob>(exportJob(exportId), signal),
+  /** Cancels a running export, which then leaves no file. One that has ended stays as it ended. */
+  cancelExport: (exportId: string) => post<undefined>(`${exportJob(exportId)}/cancel`),
+  /**
+   * The report's document: one self-contained HTML file, as text, for a sandboxed frame's `srcdoc`. `not-analyzed`
+   * when the crawl has never been analysed.
+   */
+  report: (id: string, options: ReportOptions = {}, signal?: Signal) =>
+    callText({ method: 'GET', path: `${crawl(id)}/report${reportQuery(options)}`, signal }),
 };
 
 export type Api = typeof api;

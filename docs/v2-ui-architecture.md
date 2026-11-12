@@ -33,7 +33,7 @@ Webview (React, app/src) ──────────────────�
 | `src/settings` | Preferences: schema, store (the shell's settings commands, or `localStorage`), appearance |
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
-| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues, Links and the URLs grid work; the rest are stubs for their slices |
+| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues, Links, the URLs grid, Sitemaps and robots.txt work; the rest are stubs for their slices |
 | `src/inspector` | The URL inspector: its sections, their pure logic, and the HTML source viewer (see The inspector) |
 | `src/app` | The router, the query client, overlays, sections, the root component |
 | `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
@@ -354,6 +354,14 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   cursor stays on it. Rows carry `aria-level` and `aria-expanded`; placeholders keep their level.
 - **A place to start** (`startRow`): read when the grid mounts, the cursor starts on that row, which comes into view
   once the rows are there. For a grid shown again where it was left (the inspector's links).
+- **Rows with an identity** (`rowKey`, opt in): the cursor is on a row, not at a number. When the rows change and
+  another row is at the cursor's number (a running crawl put one above it), the cursor goes to where its own row
+  went, looked for among the loaded rows up to 500 either side; a selection that follows the cursor goes with it,
+  and no move is told, as the row is the same. A row that isn't found leaves the cursor at its number. With
+  `startKey` beside `startRow`, a grid starts on the row it was left on wherever that row is by then. Without a
+  key the cursor is a row number, as before. A list a running crawl changes should give one.
+- **A header of two lines** (`si-grid-frame--two-line-head` on the grid's `className`, with a `headerHeight` 12 px
+  taller): a long column name wraps over a narrow count column, and the rows' cells stay on one line.
 - **Span rows** (`spanRow`): a row drawn as one cell across every column (`aria-colspan`), such as a group's pages and
   its "Show all N pages in URLs"; it is the cursor's cell whatever the cursor's column. Columns' `text` still gives
   every row's words for copying.
@@ -530,8 +538,8 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home, Overview, Issues and Links: the full URL grid, Sitemaps, robots.txt,
-  New crawl, the crawl's settings, the rest of Settings. The inspector and Links are built (below).
+- Every screen except Home, Overview, Issues, Links, Sitemaps and robots.txt: the full URL grid, New crawl, the
+  crawl's settings, the rest of Settings. The inspector, Links, Sitemaps and robots.txt are built (below).
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
@@ -1005,3 +1013,284 @@ In `src/grid`, for any grid; Links is the first to use them all, and the URL gri
 - **`NeedsAnalysis`, `summaryWords.ts`, `useUrlWords`, `useCheckWords`**: the URL grid's words for a column that
   waits for an analysis (and for one being analysed now), its state for a filter on one, with the button worded by
   the reason (`analyseWords`), and a URL's or a check's words by its id, moved here from the URL grid's screen.
+
+## Sitemaps and robots.txt (their slice)
+
+`screens/SitemapsScreen.tsx` with `screens/sitemaps/`, and `screens/RobotsScreen.tsx` with `screens/robots/`. Each
+is two views on one route: a list, and one thing from it, named in the path. What they settled:
+
+- **Pure first**, each unit-tested: `sitemapTree.ts` (the flat list as a tree's rows, what's open, each row's parent;
+  whether a sitemap's counts are known), `sitemapLinks.ts` (the filter behind every count, the quick filters),
+  `sitemapWords.ts` (how a sitemap was found, what became of it, the answer sentence, the pages no sitemap lists),
+  `urlOutcome.ts`, `robotsWords.ts` (the four states, why a URL was blocked, a line's kind) and `robotsFile.ts` (how
+  the viewer draws each line, which lines the crawl obeyed, what the list is narrowed to, the line of a URL).
+- **Their reads are keyed as grids** (`sitemapKeys`, `robotsKeys` in `api/queries.ts`:
+  `['grid', <grid>, <crawl id>, ...]`), the single reads too (the list of sitemaps, one origin's file). A running
+  crawl changes every one of them, so the live bridge's once-a-second refresh of a crawl's grids keeps them current
+  in place, with no skeleton and no progress line. One read is left out of it (`SELF_REFRESHED_GRIDS`): an
+  origin's file, which is read whole (a robots.txt of 500 KB is 1.4 MB as lines). Its view reads it again when the
+  list beside it counts another number of blocked URLs than the file does, and every 10 s for its answer; an origin
+  the crawl hasn't come to yet is looked for every 2 s. Measured on a crawl of 25 s: 4 reads of the file, where the
+  once-a-second refresh made 25.
+- **Nothing is read while the window is hidden**, as on URLs and Links: the bridge's refresh of a crawl's grids
+  waits until the window is shown (see The live stream), and the file's own look is an interval that doesn't run in
+  the background (`refetchIntervalInBackground: false`, said outright). Shown again, the next look is made.
+- **All four views are in the grid screens' frame** (`GridScreen` and `GridCore`'s `minRows`: see Links). What's
+  over a grid keeps its height, a grid never has less than five rows' room, and a window too short for both scrolls
+  the screen (200% zoom of 1280x720 is 640x360). One sitemap's URLs fill what the screen leaves, as URLs and Links
+  do. The two lists are as tall as their rows: a list of five rows or fewer is never squeezed, and a longer one
+  gives way down to five. An origin's file and its blocked URLs are the frame's body, side by side: the blocked URLs
+  keep five rows there, and where the two stack. The sweep measures all four at 640x360.
+- **A link to a route with an optional part must name the part**, as `undefined` for "none". Left out, the router
+  keeps the part the page is on: on one sitemap's page the sidebar's Sitemaps, Ctrl+5 and "All sitemaps" all led to
+  the sitemap itself. The sidebar's and the palette's Sitemaps and robots.txt name it now.
+- **A list is come back to where it was left** (`screens/listPlace.ts`): the row a sitemap or an origin was opened
+  from is remembered for the session and handed to the grid as `startRow`, so Back, "All sitemaps" and the sidebar
+  land on that row, not at the top of a thousand. The origins are paged and a running crawl sorts new ones in among
+  them, so their place is remembered by the origin too (`startKey`). The list of sitemaps is as tall as its rows,
+  the ones under a closed index not counted, and never taller than the room there is.
+- **The cursor stays on its row while a crawl runs**: all four grids give `GridCore` a `rowKey` (the origin, the
+  sitemap's id, the URL's id). Without one, an origin the crawl asked that sorted ahead of the cursor's, or a
+  sitemap it took up under an index above it, left the cursor on another row, and Enter opened the wrong one.
+- **A count of URLs in a sentence is a link too** (`screens/countSentence.ts`, drawn by `SentenceWithCounts.tsx`):
+  a sentence is built as words and counts, each count with the URL grid's filters for what it counts, so the
+  words and every landing are unit-tested. The robots.txt answer's "kept it from 1,204 URLs" opens the URLs whose
+  `outcome` is `robotsDisallowed`, which is what the origins' counts add up to.
+- **A place the crawl doesn't have is said, with the list a press away** (`missingPlaceWords` in
+  `api/errors.ts`): a sitemap's id or an origin the crawl has none of (`sitemap-not-found`, `origin-not-found`,
+  and a path that can't be an id). Once the crawl has ended the link is stale ("It may be from before the site was
+  crawled again"). While it hasn't, the crawl may yet find the sitemap or come to a URL on the origin: the words
+  are "not so far", and the page fills in when it does. There, only the way back to the list can run: the other
+  commands of the place are disabled, so the palette greys them and their keys do nothing.
+- **A failure is said by its kind** (`lib/failure.ts`, shared with Overview's alerts): the engine records how a
+  request failed in its own text ("TLS handshake failed: Cannot determine the frame size or a corrupted frame was
+  received."). A sentence takes the kind's plain words (the DNS name wasn't found, the connection was refused, it
+  timed out, a secure connection couldn't be made, the request failed; a status is said as it is), and the engine's
+  text is the tooltip and the accessible description (`title`), never the sentence. A sitemap whose XML is broken
+  says at which line.
+
+### Sitemaps
+
+- **The list is a treegrid** (`GridCore` with `tree`): an index, the sitemaps it lists under it, to any depth the
+  crawler reads. One Tab stop. Two things were added to the grid for it, both opt-in: `onActivateCell` (Enter or a
+  double-click, with the column the cursor was on: each count cell leads somewhere else; called in place of
+  `onActivate`, which is told the column too since Links, so the two could be made one) and `GridTree.activates`
+  (a group's row is a thing of its own, which Enter opens as it opens any row: an index has URLs of its own, those
+  of every sitemap under it; Right, Left and the chevron open and close it).
+- **Every count is a link to exactly its URLs**: that sitemap's page under the count's filter (`COUNT_FILTERS`).
+  The links are in the cells, out of the tab order, and Enter on a cell does what a click on its link does. A count
+  of 0 is a plain 0 (nothing to open). A sitemap whose contents the crawl doesn't know (left unread, not read yet,
+  or failed before an entry was read) shows dashes, never 0.
+- **"Crawled" means the crawl requested the URL**, which is what a person takes it to mean here. The engine's
+  `fetched` is wider: every URL the crawl is done with, the ones robots.txt refused included, which were never
+  requested. So the list's counts are Listed, Crawled, Blocked by robots.txt, Not crawled and Non-indexable, and
+  **Listed = Crawled + Blocked by robots.txt + Not crawled**. Crawled is `fetched` less the URLs robots.txt
+  refused (`fetched` is true and `outcome` is not `robotsDisallowed`): a URL that was requested and didn't
+  answer is crawled, and its Outcome says what happened. Blocked by robots.txt is `outcome` `robotsDisallowed`.
+  Not crawled is what's listed and not `fetched`.
+- **The list reads the two counts the E3c review added to `GET /sitemaps`**: the listed URLs robots.txt refused,
+  and those that redirect or are broken (`urls.robotsDisallowed`, `urls.redirectingOrBroken`, read in
+  `sitemapLinks.ts` only, typed in `api/grids.ts`, sent by the mock). The engine sends both since E3c, so Crawled
+  and Blocked by robots.txt are numbers on every sitemap whose counts are known, Redirecting or broken carries its
+  count, and one sitemap's page reads nothing more than its grid. The fields stay optional in the type: from a
+  sidecar without them the list would show a dash for Crawled and for Blocked by robots.txt, with a tooltip that
+  says why, never `fetched` under the name "Crawled", and one sitemap's page would count the two itself, each by a
+  read of its grid under that filter for the count alone (`sitemapCountQuery`).
+- **An index's counts are its sitemaps'**, so they're known only once the crawl has every sitemap under it and has
+  read each (`subtreeOf`, `wholeSubtree`, `countsKnown` in `sitemapTree.ts`). The crawl takes an index's
+  sitemaps up one at a time, so while it's still reading sitemaps (`discovery` isn't `done`), or when it stopped
+  first, it may not have them all; one left unread at its limits stands for more like it; and one it couldn't read
+  lists an unknown number. Until then the index's own row shows dashes, never 0, and its status says how far the
+  crawl got ("Read, 11 of its 12 sitemaps", "Read, has 1 of its sitemaps", "Read, 4 sitemaps so far"); each sitemap
+  under it keeps its own counts, and the index's page still lists the URLs of those that were read. How many
+  sitemaps an index's file lists isn't given by the API (only how many the crawl has), so its badge counts them
+  only once the crawl has them all.
+- **Five counts fit a 1280 px window**: "Blocked by robots.txt" takes two lines over its count, the other columns
+  are as wide as their names and a count in the millions need, and an index's badge leaves its count out where the
+  address would have no room (below 260 px).
+- **In a frame too narrow for every column the counts come straight after the address**, with Status and Found via
+  after them. The list measures its own frame (never the window): 200% zoom of 1280x720 leaves it 534 px, where
+  Listed began at the frame's last 44 px and the other four counts were a sideways scroll away. Listed, Crawled and
+  Blocked by robots.txt are whole in the window there now; the grid still scrolls sideways for the rest. The origins
+  do the same with Blocked URLs, which then comes before what the origin's answer meant. A frame that isn't laid
+  out yet (no width) keeps the order every column fits in.
+- **What isn't there is said.** No sitemap at all: a sentence by how far the crawl got (`discovery`), and where the
+  crawl looks. None read: the same, under the list. Nothing declared one and the default location has none (a 404
+  or a 410 at `/sitemap.xml`): "Nothing declared a sitemap, and there's none at /sitemap.xml.", and its row "None
+  there", never a sitemap that was found and couldn't be read. How a sitemap was found, when the crawl can't say
+  (`foundVia` null): "Not known", with why. One left unread at the crawl's limits says which limit, once (the
+  engine's "Not read: " is dropped). The site's pages no sitemap lists: one read of the URL grid's `inSitemap`
+  facet over the site's pages (`ANSWERED_SITE_PAGES`, as Overview counts pages). Both of its counts are links: the
+  pages no sitemap lists, and the site's pages they're of. It needs the analysis: without one the line says so, and
+  the counts that need none still show. And it needs the analysis to have made the comparison: when it skipped the
+  check (the crawl didn't finish, a sitemap wasn't read), the engine answers null for a page, never false, and the
+  line says the analysis didn't count them, with the analysis's own reason for skipping `not-in-sitemap`. A page
+  the engine can't place is never told it's in a sitemap.
+- **Without a URL summary** (never analysed, out of date, an earlier engine's, a crawl running) the list says which
+  counts are the crawl's own judgement (indexable, non-indexable) and offers the analysis where it can run. The note
+  isn't a live region, and while a crawl runs it's there with the list from the start: it used to mount when the
+  first sitemap was read, which pushed the tree down 52 px and read the banner out mid-crawl.
+- **One sitemap is the URL grid narrowed to it** (`/sitemaps/urls`): the URL grid's columns and filter chips
+  (exported from `UrlsScreen.tsx` as they stand: the full grid's slice gives them files of their own), with an
+  Outcome column that goes by each URL's `outcome`, never `fetched` alone, in the inspector's words (a URL that
+  answered says "Answered": "Crawled" is no outcome); quick search; sort from the headers, by the columns the engine
+  says it sorts (`GET /api/url-columns`); the inspector on Enter. Its view is in the route (`filter`, `sort`,
+  `q`, `inspect`), as the URL grid's. What it says of a column that waits for an analysis is the URL grid's too
+  (`grid/summaryWords.ts`, `grid/NeedsAnalysis.tsx`): the button is worded by why the analysis can't be read
+  ("Analyse again" for a crawl that was analysed before), and while the crawl is being analysed the columns "fill
+  in when the analysis that's running is done", with nothing to press.
+- **Its search field is the same field whatever is searched for** (`grid/useSearchText.ts`, which the URL grid uses
+  too): controlled by its own text, which follows the route's `q` when that changes from elsewhere. Keyed on `q`,
+  as it was, Enter made a new field and the one with focus was gone.
+- **Quick filters** are a segmented control: every count of the list's row, so each lands on a filter with a name
+  and its count (All, Crawled, Blocked by robots.txt, Not crawled, Non-indexable), and Redirecting or broken (by
+  `outcome`: a redirect, an error or no answer; not what robots.txt or a firewall kept the crawl from). Filters
+  that aren't one of them are a segment of their own while they last, "Other filters": a radio group chooses the
+  segment focus lands on, so with none chosen, Tab onto the control replaced the filters. The search shares the
+  filters' line, taking what's left of it down to 144 px. Where one line can't hold the filters they take a second
+  (`wrap` on `SegmentedControl`): at 640 px the six of them ran out of the window, and the screen scrolled sideways.
+- **Counts that must agree are one read's.** A quick filter's count is the list's; the one chosen, and All, take the
+  grid's own count once it's known, so the header and the filter never disagree while a crawl runs.
+- **A link can name a sitemap by its address** (`?url=`): Overview's "A sitemap was left out" does, and the list
+  goes on to that sitemap's page, in place.
+- **Its commands** are the registry's Sitemaps group: search this sitemap's URLs (Ctrl+F), show every sitemap, copy
+  the sitemap's URL, open it in the browser, and each quick filter.
+
+### robots.txt
+
+- **The origins are a paged grid** (200 a page, as every grid): the site's own first, then the rest by the URLs they
+  blocked, which is the engine's order. Each says what its answer meant to the crawl in words of its own: read (an
+  empty file says so), missing (nothing refused), unreachable (its URLs refused) and unanswered (crawled anyway). A
+  crawl told to ignore robots.txt says so at the top of both views.
+- **Whether the crawl obeyed robots.txt goes into every sentence that says what a file meant to it** (`Obeyed`:
+  true, false, or null when it couldn't be read): a crawl told to ignore robots.txt is never told it obeyed a file
+  ("Read: rules ignored"), a line ("it would have obeyed lines 5 to 9") or a rule. One origin's page holds those
+  words until it knows (the list of origins hands it what it found, so there's usually nothing to wait for), and
+  says no more than holds either way when it can't find out.
+- **Only the last answer is kept**, so an answer that refuses nothing (missing, empty, no answer, ignored) on an
+  origin with URLs stored as refused is said as the last answer only ("No answer when last asked"), with where
+  those URLs come from: refused earlier in the crawl, or by an earlier version of the engine, which took no answer
+  for a refusal. That was the garden crawl's contradiction ("crawled anyway" beside 1 blocked URL).
+- **An origin in the route is read as a URL** and its own origin is what the engine is asked for: the engine keeps
+  one spelling (scheme and host in lower case, the host as punycode, no default port), so capitals, a slash after
+  it or an international name as it's written all open the origin the crawl has.
+- **The file is the inspector's source viewer.** The search field, its count, Wrap lines and the viewer were taken
+  out of the Source section as they stood, as `inspector/SourcePane.tsx`, which both use: Ctrl+F, Enter and
+  Shift+Enter, the 10,000-match limit and the caret are the same. The viewer gained a `language` (HTML, or plain),
+  marks for lines (`inspector/sourceLines.ts`: a tone, a name, a note, a link) and a chosen line. The engine says
+  what each line is and whether it's part of the group the crawl obeyed: nothing is parsed or matched in the app.
+- **What the marks mean**: the obeyed group carries the accent's rule at its left edge, the other groups are muted, a
+  directive's name is set apart, a line the crawler made nothing of says why after it, and a rule that blocked URLs
+  says how many, as a link. A rule that blocked none says nothing (a real file has hundreds). The file's line above
+  it says the same in words ("As ShoutingIguana, the crawl obeyed lines 5 to 9."). Under forced colours the rule is
+  CanvasText against an edge of the page's own colour, and the chosen line is outlined in Highlight; the mark's
+  class is on the editor's content, as a theme's rules inside a media query can't name the editor itself.
+- **Choosing either way.** A line is chosen with a press on its link, or Enter with the caret on it: the route takes
+  `line`, the list is that line's URLs, and the file marks it. Moving the list's cursor shows each URL's line in the
+  file, focus arriving on the list included. The two cases no line accounts for (`unreachable`, `unknown`) are links
+  over the list, with the route's `reason`. What narrows the list shows as a chip that removes it: "Line is 2:
+  Disallow: /private/", which holds of any line a link can name. With nothing listed the words go by the line: the
+  file has no such line, the line isn't a rule, or it's a rule that blocked no URLs. The note over the list has two
+  lines' room whatever it holds, so the list stays put when the note wraps or first comes.
+- **A line the crawler made nothing of says why by what the line is for**: an empty `Sitemap:` names no sitemap;
+  only a `Crawl-delay` that isn't a number, or is below 0, is told so.
+- **A URL blocked without a line says which case it is**: robots.txt couldn't be read, or nothing kept refuses it
+  ("Only the last answer is kept, so what refused it is gone"), and no more than that.
+- **Copying**: the file as it is, and the blocked URLs the list is narrowed to (Ctrl+Shift+C), read 1,000 at a time
+  by the Issues screen's copy, with its progress toast.
+- **The layout**: the file and the list side by side, stacked below the `split` width (a narrow window, or the
+  inspector open beside them). Stacked, the file has a height of its own (360 px) and the blocked URLs at least
+  that: never less than their header, their note and five rows of the list.
+- **Its commands** are the registry's robots.txt group: search the file (Ctrl+F from anywhere on an origin's page:
+  the pane's search field is asked to take focus, as the inspector's Source is by its command; with focus in the
+  file the pane takes the key itself), show every origin, copy the file, copy the blocked URLs, open the robots.txt
+  in the browser, list every blocked URL.
+
+### From elsewhere
+
+- The inspector's "Blocked by robots.txt" leads to the file on that URL's own origin, and "In a sitemap" to
+  Sitemaps. `/urls/inspect` says neither which line nor which sitemaps, so neither link can be more exact.
+- The mock answers these endpoints from fixtures of their own (`api/mock/sitemapsRobots.ts`, saved by
+  `design/data/extract/sitemaps-robots.mjs`). It counts each sitemap's URLs over the rows its own grid has.
+
+### What the engine doesn't give
+
+- `POST /robots` takes only `offset` and `limit`: no search, no filter to the origins that blocked something, and
+  no count of them. The order puts them first after the site's own, and the screen says so.
+- A crawl's own text for a status is "HTTP 404" (a sitemap's `error`, a robots.txt's), and both screens say it as
+  it is. An issue's detail reads "404 Not Found" since the score's engine, which names the status when it analyses
+  and leaves the crawl file's words alone: the two screens and Issues say the same status in different words until
+  the engine names it in these answers too.
+- It doesn't say how many sitemaps an index's file lists, only how many of them the crawl has: "the crawl has 1 of
+  its sitemaps" can't say of how many.
+- An origin can read `unanswered` and still have blocked URLs (a crawl continued after a run that read a file
+  which refused them, or a file from the first engine, when no answer meant a refusal): the contract says so now,
+  and the UI says the URLs were refused earlier.
+- `/robots/blocked` can't be asked for one URL, and `/urls/inspect` doesn't carry the line: arriving from the
+  inspector, the file can't show that URL's line until the URL is found in the list.
+
+### Measured
+
+10 Nov 2026, this machine, the production build in headless Chromium at 1280x720, against the real sidecar: the
+100k crawl (112,577 URLs, 13 sitemaps listing 101,081 URLs) and the garden crawl (17 origins). Each is the median
+of 7, from the key or pointer event to the frame that shows it, with the worst in brackets (the first of each, the
+sidecar not having counted the crawl yet).
+
+- **The first page of a grid (300 ms)**: the list of sitemaps 32 ms (102); one sitemap of 101,081 URLs 32 ms (48),
+  its 2,348 non-indexable ones 32 ms (36); the origins 31 ms (79); an origin's file with its blocked URLs 40 ms
+  (103); the garden crawl's origins 33 ms (34) and a real 403-line file 30 ms (31).
+- **A sort or a filter (300 ms)**: a quick filter to its rows and count 32 ms (33); a sort from the header 30 ms
+  (31); a rule's link to its URLs listed 31 ms (31).
+- **A click or key to a visible response (100 ms)**: a quick filter chosen 13 ms (14); a rule's line marked 14 ms
+  (15); Left closing an index 6 ms (16); Enter opening a sitemap 10 ms (15); Down in the blocked URLs 7 ms (14);
+  Ctrl+F to the file's search 6 ms (17).
+
+Watched while a real crawl of the synthetic site ran (the same build and sidecar, sampled twice a second beside
+the engine's own answers): a sitemap index's counts filled in place, the origin's blocked count and the file's rule
+and list went from 0 to 10 within about a second of the engine, the Live mark showed throughout, the list of
+sitemaps kept its height, and the loading frame never came back.
+
+Watched again on 11 Nov 2026, after the review's fixes (the dev build and the real sidecar, sampled four times a
+second): through a crawl of the synthetic site the list of sitemaps kept its top edge (208 px from the first frame
+with rows; before, it moved from 156 to 208 px when the note on the crawl's own judgement mounted) and no banner
+was a live region; the blocked URLs kept theirs (243 px) while the list went from none to ten. On a crawl of a
+small local site with a robots.txt of 500 KB (10,468 lines, 1.36 MB as the engine answers it) the file was read 4
+times in 25 s, where the once-a-second refresh read it 25 times, and its rule and the list still moved together
+(5 URLs, then 10). That site's sitemap lists ten URLs its robots.txt disallows: the engine's `fetched` is 312 of
+312, and the sitemap's page says Crawled 302, Blocked by robots.txt 10, Not crawled 0. While the engine doesn't
+count the refused URLs for the list, one sitemap's page makes up to 4 reads of its grid a second during a crawl
+(the rows, and a count each for crawled and blocked) where it made 2.
+
+Checked on 12 Nov 2026, with `ui/step-3` merged in (the engine sends the two counts), against the real sidecar:
+
+- **Crawled and Blocked by robots.txt, each number against where it lands** (the sweep, on copies analysed by this
+  engine). The 100k crawl: 13 sitemaps; each of the ten of 10,000 URLs says Listed 10,000, Crawled 10,000, Blocked
+  0, Not crawled 0; `extra.xml` 1,081, 1,081, 0, 0, with 2 redirecting or broken; the index and the one that
+  answered 404 show dashes (107 links followed to their rows, 22 counts asked of the engine, 10 dashes). The garden
+  crawl: its one sitemap is the default location's 404, so five dashes. The test site's crawl, in every e2e run:
+  the sitemap that lists `/private/listed`, which robots.txt disallows, says Blocked 1 and Crawled one fewer than
+  the engine's `fetched`, and the 1 opens that URL alone.
+- **At 640x360** (the dev build): the list of 13 sitemaps is 214 px, five rows under its two-line header, with
+  Listed, Crawled and Blocked by robots.txt at 261 to 537 px of a 640 px window (Listed began at 571 px, and the
+  list showed three rows); one sitemap's grid is 202 px, five rows, and its screen no longer scrolls sideways (it
+  was 814 px wide in a region of 584); the garden crawl's 17 origins keep five rows, with Blocked URLs at 341 to
+  461 px (it began at 573); an origin's blocked URLs are 264 px under its file. At 1280x720 nothing moved: every
+  column fits, in the order it had. At 1280x420 the blocked URLs keep 202 px and the screen scrolls.
+
+### The sweep
+
+`e2e/sitemaps-robots.sweep.spec.ts` reads every count off both screens and follows it: each sitemap's five counts
+(a 0 has no link, so the engine is asked what its link would open; what each must be is restated there from the
+API's numbers, not taken from the app: a dash only where an index isn't read whole or a sitemap wasn't read; the
+engine's two counts must be there, and on the test site's own crawl one sitemap must say 1 blocked), that crawled,
+blocked and not crawled add up to listed, each quick filter, Redirecting or broken included, that the page's
+counts are the list's own and that the three add up to All on one sitemap's page, the pages no sitemap lists (or
+that the analysis didn't count them)
+and the site's pages they're of (the engine is asked for both first, so the sweep waits for the sentence it knows
+is coming and never passes for want of one), every URL robots.txt kept the crawl from,
+each origin's blocked URLs, each line's, and the two cases no line accounts for, which must add up to the origin's.
+A third test measures the four views at 640x360: each list keeps five rows (all of them, with five or fewer), the
+counts each list is for are whole in the window, one sitemap's grid and an origin's blocked URLs have room for five
+rows, a sitemap's six filters are each whole in the window, and no screen scrolls sideways (`e2e/gridView.ts`
+measures a grid in the window, for this spec and `grid-zoom.spec.ts`).
+It runs on the tests' own crawl of the synthetic site, and on a real one with `SI_E2E_CRAWL`.

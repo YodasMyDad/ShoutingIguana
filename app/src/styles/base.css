@@ -247,6 +247,15 @@
     flex-direction: row-reverse;
   }
 
+  /*
+    A grid whose column names may take two lines (a long name over a narrow count: "Blocked by robots.txt"). The grid
+    gives its header the height for them; the rows' cells stay on one line.
+  */
+  .si-grid-frame--two-line-head .si-grid-head .si-grid-cell {
+    line-height: var(--leading-12);
+    white-space: normal;
+  }
+
   /* A row drawn as one cell: a group's link to all its rows. */
   .si-grid-cell--span {
     grid-column: 1 / -1;
@@ -255,6 +264,21 @@
   /* In a tree, a group's rows sit under its title, past its chevron. */
   .si-grid-row[data-level='2'] > .si-grid-cell:first-child {
     padding-inline-start: calc(var(--grid-cell-x) + var(--tree-indent));
+  }
+
+  /* A tree more than two deep (a sitemap index under an index): each level a step further in. */
+  .si-grid-row[data-level='3'] > .si-grid-cell:first-child {
+    padding-inline-start: calc(var(--grid-cell-x) + var(--tree-indent) * 2);
+  }
+
+  .si-grid-row[data-level='4'] > .si-grid-cell:first-child {
+    padding-inline-start: calc(var(--grid-cell-x) + var(--tree-indent) * 3);
+  }
+
+  /* Where a chevron would be, on a row with nothing under it: its title lines up with the titles of rows that open. */
+  .si-tree-spacer {
+    flex-shrink: 0;
+    width: var(--tree-indent);
   }
 
   /* A group's row: its title a little heavier than the rows in it, and its chevron, turned down while it's open. */

@@ -37,6 +37,10 @@ public sealed class AnalysisFreshnessTests
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = AnalysisFreshness.VERSION - 1 }, CRAWLED, new AnalysisSettings()));
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ChecksFingerprint = "0123456789abcdef" }, CRAWLED, new AnalysisSettings()));
 
+        // Version 7 called a site hidden from search whatever its home page said, passed blocked-by-robots on a crawl that
+        // ignored robots.txt, and gave a redirecting canonical no final URL: what it stored isn't what this engine would.
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 7 }, CRAWLED, new AnalysisSettings()));
+
         // A score worked out by another version of the formula, or none at all, isn't the score the crawl would get now.
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = ScoreCalculator.VERSION + 1 }, CRAWLED, new AnalysisSettings()));
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = null }, CRAWLED, new AnalysisSettings()));

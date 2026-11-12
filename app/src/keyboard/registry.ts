@@ -19,13 +19,26 @@ import {
 } from './keys';
 import { isKeyTaken } from './layers';
 
-export type CommandGroup = 'Go to' | 'Crawl' | 'Issues' | 'Links' | 'Inspector' | 'View' | 'App' | 'In grids';
+export type CommandGroup =
+  | 'Go to'
+  | 'Crawl'
+  | 'Issues'
+  | 'Links'
+  // Sitemaps and robots.txt (their slice).
+  | 'Sitemaps'
+  | 'robots.txt'
+  | 'Inspector'
+  | 'View'
+  | 'App'
+  | 'In grids';
 
 export const COMMAND_GROUPS: readonly CommandGroup[] = [
   'Go to',
   'Crawl',
   'Issues',
   'Links',
+  'Sitemaps',
+  'robots.txt',
   'Inspector',
   'View',
   'App',

@@ -3,7 +3,8 @@
 // chips, no row of it in view, and "No links match" with its Clear couldn't be seen. The grid keeps room for five
 // rows now, and for all its empty state says; the screen scrolls to it. Against the real sidecar's synthetic crawl.
 // Nothing here waits for a time: every size is polled for.
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { gridInView, scrollToFoot } from './gridView';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -31,32 +32,7 @@ async function seededCrawl(): Promise<string> {
 const withFilters = (filters: Filter[]) => `?filter=${encodeURIComponent(JSON.stringify(filters))}`;
 const main = (page: Page) => page.getByRole('main');
 
-/** The grid's box and the rows of it that are wholly inside the window, header left out. */
-async function gridInView(grid: Locator) {
-  return grid.evaluate((element) => {
-    const box = element.getBoundingClientRect();
-    const top = Math.max(box.top, 0);
-    const bottom = Math.min(box.bottom, window.innerHeight);
-    const rows = [...element.querySelectorAll('[role="row"]')].filter((row) => {
-      const at = row.getBoundingClientRect();
-      return (
-        row.querySelector('[role="columnheader"]') === null &&
-        at.height > 0 &&
-        at.top >= top - 0.5 &&
-        at.bottom <= bottom + 0.5
-      );
-    });
-    const header = element.querySelector('[role="columnheader"]')?.getBoundingClientRect().height ?? 0;
-    const row = rows[0]?.getBoundingClientRect().height ?? 0;
-    return { height: box.height, rowsInView: rows.length, header, row };
-  });
-}
-
-/** Scrolls the screen to its foot, where the grid is, as a user scrolls to it. */
-const scrollToFoot = (page: Page) =>
-  main(page).evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
+// How a grid is measured in the window, and the way to its foot, are every such spec's: e2e/gridView.ts.
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 360 });

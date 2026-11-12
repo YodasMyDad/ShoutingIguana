@@ -69,6 +69,11 @@ export interface GridCoreProps<Row> {
    * was double-clicked, for a grid whose rows hold more than one thing to open (a link's two ends).
    */
   onActivate?: (index: number, row: Row | undefined, column: string | undefined) => void;
+  /**
+   * Enter or double-click, with the column the cursor (or the pointer) was on: for a grid whose cells lead to
+   * different places (a sitemap's counts). Called in place of `onActivate` when given.
+   */
+  onActivateCell?: (index: number, row: Row | undefined, column: string) => void;
   /** The cursor moved to another row (the inspector follows it). */
   onActiveRowChange?: (index: number | null) => void;
   /** The cursor moved to another column, by its id: for an action on the column the cursor is in (copy it). */
@@ -125,9 +130,19 @@ export interface GridCoreProps<Row> {
    * grid shown again where it was left (a URL's links, back along a walk).
    */
   startRow?: number | undefined;
+  /**
+   * A row's identity, for a list whose rows move under the cursor (a running crawl puts a new one above it): the
+   * cursor stays on the row it was on, wherever that row is once the rows have changed, and Enter opens that row.
+   * Without it the cursor is a row number, and the row under it is whichever is there now.
+   */
+  rowKey?: ((row: Row) => string | number) | undefined;
+  /** With `startRow` and `rowKey`: the row the grid was left on, so it starts there even if the row has moved. */
+  startKey?: string | number | undefined;
 }
 
 const SKELETON_ROWS = 12;
+/** How many rows either side of where the cursor's row was it's looked for, once another row is in its place. */
+const REANCHOR_REACH = 500;
 /** What a grid's frame takes besides its header and rows: its border, and the scrollbar under columns too wide for it. */
 const FRAME_ROOM = 12;
 
@@ -149,6 +164,7 @@ function GridCoreInner<Row>({
   onRangeChange,
   onScrollOffset,
   onActivate,
+  onActivateCell,
   onActiveRowChange,
   onActiveColumnChange,
   onContextMenu,
@@ -165,6 +181,8 @@ function GridCoreInner<Row>({
   onSort,
   focusHeader,
   startRow,
+  rowKey,
+  startKey,
 }: GridCoreProps<Row>) {
   const id = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -226,6 +244,46 @@ function GridCoreInner<Row>({
     if (nav.active) model.scrollToIndex(Math.min(nav.active.row, count - 1));
   });
   useEffect(() => revealStart(), [count]);
+
+  // With `rowKey`, the cursor is on a row, not at a number. `anchor` is the row it was last seen on. When the rows
+  // change and another row is at that number, the cursor goes to where its own row went (looked for among the loaded
+  // rows either side). The row hasn't changed, so no move is told (`onActiveRowChange`). A row that isn't found (it's
+  // gone, or far off) leaves the cursor at its number, as a grid without a key does.
+  const anchor = useRef<{ key: string | number; row: number; start: boolean } | null>(
+    startKey === undefined || startRow === undefined ? null : { key: startKey, row: startRow, start: true },
+  );
+  const reanchor = useEffectEvent(() => {
+    if (!rowKey || !nav.active || count === 0) return;
+    const at = Math.min(nav.active.row, count - 1);
+    const here = getRow(at);
+    if (here === undefined) return;
+    const held = anchor.current;
+    // The cursor hasn't been moved since its row was seen (it's at the same number, as it was given: a list that
+    // shrank shows it on its last row), and that row isn't the one there now.
+    if (held && (held.row === nav.active.row || held.start) && rowKey(here) !== held.key) {
+      for (let step = 1; step <= REANCHOR_REACH; step++) {
+        for (const row of [at + step, at - step]) {
+          const candidate = row >= 0 && row < count ? getRow(row) : undefined;
+          if (candidate === undefined || rowKey(candidate) !== held.key) continue;
+          anchor.current = { key: held.key, row, start: false };
+          setNav((current) =>
+            current.active
+              ? {
+                  ...current,
+                  active: { ...current.active, row },
+                  selection: current.follow ? selectOnly(row) : current.selection,
+                }
+              : current,
+          );
+          // A grid that starts on a row it was left on shows that row, wherever it is now.
+          if (held.start) model.scrollToIndex(row);
+          return;
+        }
+      }
+    }
+    anchor.current = { key: rowKey(here), row: nav.active.row, start: false };
+  });
+  useLayoutEffect(() => reanchor(), [getRow, count, nav.active?.row]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);
@@ -304,7 +362,7 @@ function GridCoreInner<Row>({
     if (!tree || !active || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
     const firstCell = active.col === 0 || spans(active.row);
     const expanded = tree.expanded(active.row);
-    if (event.key === 'Enter' && expanded !== undefined) {
+    if (event.key === 'Enter' && expanded !== undefined && !tree.activates) {
       toggle(active.row, !expanded);
       return true;
     }
@@ -468,13 +526,22 @@ function GridCoreInner<Row>({
     event.preventDefault();
     apply(result.state, result.reveal);
     const effect = result.effect;
-    if (effect?.type === 'activate') {
-      onActivate?.(effect.row, getRow(effect.row), columns[result.state.active?.col ?? active?.col ?? 0]?.id);
-    } else if (effect?.type === 'copy') void copy();
+    if (effect?.type === 'activate') activate(effect.row, result.state.active?.col ?? active?.col ?? 0);
+    else if (effect?.type === 'copy') void copy();
     else if (effect?.type === 'contextMenu') {
       const cell = document.getElementById(cellId(effect.row, effect.col))?.getBoundingClientRect();
       onContextMenu?.(effect.row, effect.col, cell ? { x: cell.left, y: cell.bottom } : { x: 0, y: 0 });
     }
+  };
+
+  /**
+   * Enter or a double-click on a row: the cell's own place when the grid has those (`onActivateCell`), else the
+   * row's, with the column it was asked from.
+   */
+  const activate = (row: number, col: number) => {
+    const column = columns[col];
+    if (onActivateCell && column) onActivateCell(row, getRow(row), column.id);
+    else onActivate?.(row, getRow(row), column?.id);
   };
 
   const positionOf = (target: EventTarget): GridPosition | null => {
@@ -509,8 +576,8 @@ function GridCoreInner<Row>({
     // The chevron's own press has opened or closed the group already.
     if (event.target instanceof Element && event.target.closest('[data-tree-toggle]')) return;
     const expanded = tree?.expanded(position.row);
-    if (expanded !== undefined) toggle(position.row, !expanded);
-    else onActivate?.(position.row, getRow(position.row), columns[position.col]?.id);
+    if (expanded !== undefined && !tree?.activates) toggle(position.row, !expanded);
+    else activate(position.row, position.col);
   };
 
   const onContextMenuEvent = (event: MouseEvent<HTMLDivElement>) => {

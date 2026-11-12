@@ -158,6 +158,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             // The crawler probes the site's other versions first thing, but a crawl stopped before then, or one from before
             // it did, doesn't know how they answer; nor is there a main version without a home page.
             var siteVersions = new SiteVersionRules(urls, new Uri(startUrl), reader.ReadUrlId, reader.ReadUrl);
+
+            // Whether a site hides itself is judged by its home page, and a crawl started anywhere else has none to judge
+            // by: its first page is a section's, or some page of the site. A query on the root is still the root, and so
+            // is a root that redirects (to /en/, to the www host): the home page is the page it ends on.
+            if (new Uri(startUrl).AbsolutePath is not "/" and var startPath)
+            {
+                Skip(notes, skipped, $"A site hidden from search wasn't looked for: the crawl started at {startPath}, not at the site's root, so its first page isn't known to be the site's home page.",
+                    SkippedCheckReasons.START_NOT_ROOT, $"The crawl started at {startPath}, not at the site's root, so its first page isn't known to be the site's home page.",
+                    IssueCatalog.SITE_HIDDEN_FROM_SEARCH);
+            }
             if (!siteVersions.CanCheck)
             {
                 Skip(notes, skipped, "The site's other versions (www or not, http or https) weren't all checked, so duplicate versions of the site weren't looked for.",
@@ -176,12 +186,36 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var mainUrls = new[] { startUrl, reader.ReadUrl(urls.HomeId) }.OfType<string>().Select(url => new Uri(url)).ToList();
             var mainOrigins = mainUrls.Select(uri => uri.GetLeftPart(UriPartial.Authority)).ToHashSet(StringComparer.Ordinal);
 
+            // A crawl told to ignore robots.txt asks for every URL, so none is refused, and it reads robots.txt only where
+            // something else needs it: sitemap discovery asks the start URL's origin for it. What it didn't read it can't
+            // judge, which isn't finding it fine: nothing blocked, no other origin's file read, and the site's own judged
+            // only when it was read.
+            var robots = reader.ReadRobots();
+            if (!options.RespectRobotsTxt)
+            {
+                var ownWasRead = robots.Any(file => mainOrigins.Contains(file.Origin));
+                Skip(notes, skipped, ownWasRead
+                        ? "robots.txt was ignored in this crawl, so the URLs it blocks weren't looked for, nor whether it is unavailable on the site's other origins."
+                        : "robots.txt was ignored in this crawl and never read, so the URLs it blocks, and whether it is missing or unavailable, weren't looked for.",
+                    SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl.",
+                    IssueCatalog.BLOCKED_BY_ROBOTS);
+                Skip(notes, skipped, note: null,
+                    SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl, so it wasn't read on the site's other origins.",
+                    IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN);
+                if (!ownWasRead)
+                {
+                    Skip(notes, skipped, note: null,
+                        SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl, and nothing else asked for it, so it was never read.",
+                        IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_MISSING);
+                }
+            }
+
             var hreflang = new HreflangRules(urls);
             var indexability = new IndexabilityRules();
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls), indexability, hreflang,
+                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl), indexability, hreflang,
                 new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings),
                 new HtmlRules()
             ];
@@ -194,7 +228,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new InlinkRules(urls, linksComplete), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
-                new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
+                new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
                 new SiteVisibilityRules(urls)
             ];
 
@@ -379,14 +413,18 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     }
 
     /// <summary>Leaves checks out of the results, with a note for the analysis and a reason for each check.</summary>
-    /// <param name="note">One sentence for the analysis notes, naming the checks.</param>
+    /// <param name="note">One sentence for the analysis notes, naming the checks. Null when another skip's note already covers these.</param>
     /// <param name="reason">The stable code (<see cref="SkippedCheckReasons"/>).</param>
     /// <param name="text">Why, to show beside each check. A check skipped for more than one reason keeps the first.</param>
-    private void Skip(List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, string note, string reason, string text,
+    private void Skip(List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, string? note, string reason, string text,
         params IssueDefinition[] issues)
     {
-        _logger.LogWarning("Skipped {Checks}: {Reason}", string.Join(", ", issues.Select(issue => issue.Id)), note);
-        notes.Add(note);
+        _logger.LogWarning("Skipped {Checks}: {Reason}", string.Join(", ", issues.Select(issue => issue.Id)), note ?? text);
+        if (note is not null)
+        {
+            notes.Add(note);
+        }
+
         foreach (var issue in issues)
         {
             skipped.TryAdd(issue, new SkippedCheck(issue.Id, reason, text));

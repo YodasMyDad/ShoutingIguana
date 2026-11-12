@@ -3,12 +3,14 @@ using System.Text.Json.Serialization;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Export.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors.Models;
 using ShoutingIguana.Sidecar.Events.Models;
+using ShoutingIguana.Sidecar.Exports.Models;
 using ShoutingIguana.Sidecar.Library.Models;
 using ShoutingIguana.Sidecar.Models;
 
@@ -63,6 +65,11 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<UrlSearchRank>),
         typeof(CamelCaseEnumConverter<UrlSearchField>),
         typeof(CamelCaseEnumConverter<LinkEnd>),
+
+        // Export (E5).
+        typeof(CamelCaseEnumConverter<ExportKind>),
+        typeof(CamelCaseEnumConverter<ExportFormat>),
+        typeof(CamelCaseEnumConverter<ExportStatus>),
 
         // The score and plain words (round 3).
         typeof(CamelCaseEnumConverter<ScoreBand>),
@@ -134,6 +141,10 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(Dictionary<string, JsonElement>))]
 [JsonSerializable(typeof(Dictionary<string, long>))]
 [JsonSerializable(typeof(UrlSearchResults))]
+
+// Export (E5).
+[JsonSerializable(typeof(ExportRequestDto))]
+[JsonSerializable(typeof(ExportDto))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]
 [JsonSerializable(typeof(double))]

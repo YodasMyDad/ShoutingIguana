@@ -91,13 +91,13 @@ public sealed class EventClientTests
         // A stream that connects now learns from its hello that the crawl is being analysed, so the analysis event makes sense.
         var during = hub.Connect().TakeAll()!;
         Assert.Equal(["hello", "analysis"], during.Select(sent => sent.Name));
-        Assert.Equal("""{"live":[],"analyzing":["a"]}""", during[0].Data);
+        Assert.Equal("""{"live":[],"analyzing":["a"],"exports":[]}""", during[0].Data);
         Assert.Equal("""{"crawlId":"a","phase":"pageRules","done":3,"total":60}""", during[1].Data);
 
         hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Completed), crawlEnded: true);
         var after = hub.Connect().TakeAll()!;
         Assert.Equal(["hello"], after.Select(sent => sent.Name));
-        Assert.Equal("""{"live":[],"analyzing":[]}""", after[0].Data);
+        Assert.Equal("""{"live":[],"analyzing":[],"exports":[]}""", after[0].Data);
     }
 
     /// <summary>A crawl analysed as soon as it ends is announced as analysing next: a stream that connects then hears so too.</summary>
@@ -106,12 +106,12 @@ public sealed class EventClientTests
     {
         var hub = new EventHub(new SidecarOptions { DataDirectory = "data", StateDirectory = "state" });
         hub.PublishProgress(ProgressEvent("a"));
-        Assert.Equal("""{"live":["a"],"analyzing":[]}""", hub.Connect().TakeAll()![0].Data);
+        Assert.Equal("""{"live":["a"],"analyzing":[],"exports":[]}""", hub.Connect().TakeAll()![0].Data);
 
         hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Completed), crawlEnded: true);
         hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Analyzing), crawlEnded: false);
 
-        Assert.Equal("""{"live":[],"analyzing":["a"]}""", hub.Connect().TakeAll()![0].Data);
+        Assert.Equal("""{"live":[],"analyzing":["a"],"exports":[]}""", hub.Connect().TakeAll()![0].Data);
     }
 
     private static ProgressEventDto ProgressEvent(string crawlId) =>

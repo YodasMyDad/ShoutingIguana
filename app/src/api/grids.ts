@@ -238,6 +238,12 @@ export interface UrlColumn {
   values: string[];
   /** A check's own columns (`detail`, `relatedUrl`...): only its rows have them. */
   issueRowsOnly: boolean;
+  /** E5: the column's name in words ("Status", "Target status"), as a header shows it and an export writes it. */
+  title?: string;
+  /** E5: the unit of its numbers (`ms`, `bytes`), which an export's header carries after the title. */
+  unit?: string | null;
+  /** E5: an enum's values in words, by value (`clientError` is "Client error"); empty otherwise. */
+  valueTitles?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------------------------------------- Facets
@@ -484,10 +490,19 @@ export interface Sitemap {
    */
   urls: {
     listed: number;
+    /** Every listed URL the crawl is done with: those it requested, and those robots.txt refused. */
     fetched: number;
     indexable: number;
     nonIndexable: number;
+    /**
+     * The listed URLs robots.txt refused (`outcome` `robotsDisallowed`), which `fetched` counts in (the E3c
+     * review). Left out by a sidecar from before it: not known then, never 0.
+     */
     robotsDisallowed?: number;
+    /**
+     * The listed URLs that answered with a redirect or an error, or didn't answer (`outcome` `redirect`,
+     * `clientError`, `serverError`, `timeout` or `networkError`). Left out by a sidecar from before it.
+     */
     redirectingOrBroken?: number;
   };
 }

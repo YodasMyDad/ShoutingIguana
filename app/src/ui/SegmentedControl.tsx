@@ -27,6 +27,11 @@ export interface SegmentedControlProps<T extends string> {
   onValueChange: (value: T) => void;
   /** Stretches across its container, the segments sharing the width (the Issues list's severity filter). */
   fill?: boolean | undefined;
+  /**
+   * Lets the segments go onto more lines where they don't fit on one (a sitemap's six filters at 200% zoom), rather
+   * than run out of the window. Never wider than its container then.
+   */
+  wrap?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -40,6 +45,7 @@ export function SegmentedControl<T extends string>({
   value,
   onValueChange,
   fill = false,
+  wrap = false,
   className,
 }: SegmentedControlProps<T>) {
   const descriptionId = useId();
@@ -57,7 +63,7 @@ export function SegmentedControl<T extends string>({
         value={value}
         onValueChange={choose}
         loop
-        className={clsx('si-segmented', fill && 'si-segmented--fill', className)}
+        className={clsx('si-segmented', fill && 'si-segmented--fill', wrap && 'si-segmented--wrap', className)}
       >
         {options.map((option) => {
           const count = option.count === undefined || option.count === null ? null : formatCount(option.count);

@@ -6,6 +6,7 @@ using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Sidecar.Crawls;
+using ShoutingIguana.Sidecar.Exports;
 using ShoutingIguana.Sidecar.Events.Models;
 using ShoutingIguana.Sidecar.Hosting;
 using ShoutingIguana.Sidecar.Tests.Support;
@@ -348,7 +349,7 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 1);
 
         // StoppingAsync runs before any hosted service (the web server included) stops: the engine's own fix point.
-        var shutdown = new CrawlShutdown(_sidecar.Host.Services.GetRequiredService<CrawlManager>());
+        var shutdown = new CrawlShutdown(_sidecar.Host.Services.GetRequiredService<CrawlManager>(), _sidecar.Host.Services.GetRequiredService<ExportManager>());
         await shutdown.StoppingAsync(CancellationToken.None);
 
         // From here nothing new starts, because the crawls were already told to stop.

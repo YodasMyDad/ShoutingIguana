@@ -1,9 +1,14 @@
 using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Export;
+using ShoutingIguana.Engine.Export.Models;
+using ShoutingIguana.Engine.Reporting;
+using ShoutingIguana.Engine.Reporting.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors;
+using ShoutingIguana.Sidecar.Exports;
 using ShoutingIguana.Sidecar.Models;
 using ShoutingIguana.Sidecar.Serialization;
 
@@ -34,14 +39,18 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
             column.Sortable,
             column.Filterable,
             column.Values,
-            UrlGridReader.Columns.All(other => other.Id != column.Id)))
+            UrlGridReader.Columns.All(other => other.Id != column.Id),
+            column.Title,
+            column.Unit,
+            column.ValueTitles))
     ];
 
     /// <summary>The links grid's columns: a link's own, then each end's.</summary>
     public static IReadOnlyList<LinkColumnDto> LinkColumns { get; } =
     [
         .. LinkGridReader.Columns.Select(column => new LinkColumnDto(
-            column.Id, column.Type.ToString().ToLowerInvariant(), column.NeedsAnalysis, column.Sortable, column.Filterable, column.Values))
+            column.Id, column.Type.ToString().ToLowerInvariant(), column.NeedsAnalysis, column.Sortable, column.Filterable, column.Values, column.Title, column.Unit,
+            column.ValueTitles))
     ];
 
     /// <summary>Tests only: called as each read starts, on its own thread, with the token that stops it.</summary>
@@ -330,6 +339,26 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
                        token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token, urlId),
                        cancellationToken).ConfigureAwait(false)
                ?? throw Problems.OriginNotFound();
+    }
+
+    /// <summary>
+    /// The report's document (E5), read as a grid is: in one of the read slots, and stopped when its request is given up.
+    /// A crawl never analysed has none (<c>not-analyzed</c>).
+    /// </summary>
+    public async Task<string> ReportAsync(string id, ReportOptions report, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        return await ReadAsync(token =>
+        {
+            try
+            {
+                return ReportExport.Build(path, report, new ExportSettings { Cache = cache }, crawls.AnalysisSettings, token);
+            }
+            catch (ExportException exception)
+            {
+                throw new ProblemException(ExportProblems.For(exception), exception);
+            }
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The origin a robots.txt call names: none is a field error.</summary>

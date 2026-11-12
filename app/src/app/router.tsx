@@ -23,11 +23,12 @@ import { getSettings } from '../settings/settingsStore';
 import {
   validateGridSearch,
   validateHomeSearch,
-  validateInspectSearch,
   validateIssuesSearch,
   validateLinksSearch,
   validateNewCrawlSearch,
   validateNoSearch,
+  validateRobotsSearch,
+  validateSitemapsSearch,
 } from '../routing/search';
 import { CRAWL_ID, isCrawlSection } from './sections';
 
@@ -122,14 +123,14 @@ export const linksRoute = createRoute({
 const sitemapsRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'sitemaps/{-$sitemap}',
-  validateSearch: validateInspectSearch,
+  validateSearch: validateSitemapsSearch,
   component: lazyRouteComponent(() => import('../screens/SitemapsScreen'), 'SitemapsScreen'),
 });
 
 const robotsRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'robots/{-$origin}',
-  validateSearch: validateInspectSearch,
+  validateSearch: validateRobotsSearch,
   component: lazyRouteComponent(() => import('../screens/RobotsScreen'), 'RobotsScreen'),
 });
 

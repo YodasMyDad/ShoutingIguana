@@ -19,7 +19,7 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
     {
         var columns = (await Sidecar.GetJsonAsync("api/link-columns")).AsArray().Select(column => column!).ToList();
         Assert.Equal(LinkGridReader.Columns.Select(column => column.Id), columns.Select(column => (string?)column["id"]));
-        Assert.Equal(["id", "type", "needsAnalysis", "sortable", "filterable", "values"], columns[0].AsObject().Select(property => property.Key));
+        Assert.Equal(["id", "type", "needsAnalysis", "sortable", "filterable", "values", "title", "unit", "valueTitles"], columns[0].AsObject().Select(property => property.Key));
         var kind = columns.Single(column => (string?)column["id"] == "kind");
         Assert.Equal(("enum", false, true), ((string?)kind["type"], (bool)kind["sortable"]!, (bool)kind["filterable"]!));
         Assert.Contains("hyperlink", kind["values"]!.AsArray().Select(value => (string?)value));

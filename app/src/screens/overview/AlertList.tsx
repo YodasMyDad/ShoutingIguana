@@ -37,7 +37,12 @@ function ActionFor({
       );
     case 'sitemaps':
       return (
-        <TextLink to="/crawls/$crawl/sitemaps/{-$sitemap}" params={{ crawl: crawlId }}>
+        <TextLink
+          to="/crawls/$crawl/sitemaps/{-$sitemap}"
+          params={{ crawl: crawlId }}
+          // The sitemap it means, by its address: Sitemaps goes on to it.
+          search={action.url ? { url: action.url } : {}}
+        >
           {action.label}
         </TextLink>
       );
@@ -70,7 +75,10 @@ const AlertItem = memo(function AlertItem({ crawlId, entry, live, canContinue, o
     <li>
       <Callout tone={TONES[entry.level]} title={entry.title}>
         {entry.detail || tally ? (
-          <p className="break-words">{[entry.detail, tally].filter(Boolean).join(' ')}</p>
+          // How the crawl recorded a failure is behind the plain words: the facts' tooltip and description.
+          <p className="break-words" title={entry.recorded}>
+            {[entry.detail, tally].filter(Boolean).join(' ')}
+          </p>
         ) : null}
         {entry.advice ? <p>{entry.advice}</p> : null}
         {/* Under the words, not beside them: the card is narrow, and the words need its width. */}

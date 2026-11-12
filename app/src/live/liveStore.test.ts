@@ -360,6 +360,61 @@ describe('E4’s alerts and hello', () => {
   });
 });
 
+describe('E5’s export events', () => {
+  const job = {
+    exportId: 'e1',
+    crawlId: 'a',
+    kind: 'urls',
+    format: 'csv',
+    path: 'C:\\out\\urls.csv',
+    status: 'running',
+    rowsWritten: 5000,
+    rowsExpected: 112577,
+    startedAt: '2026-11-01T17:42:00.118Z',
+    finishedAt: null,
+    result: null,
+    error: null,
+  };
+
+  it('hands an export to its listeners whole, and keeps none of it in a crawl’s live state', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    store.ingest({ event: 'hello', id: '', data: '{"live":["a"],"analyzing":[],"exports":["e1"]}' });
+    advance(PUBLISH_INTERVAL_MS);
+    const before = store.getState();
+    const heard: unknown[] = [];
+    store.onEvent((event) => {
+      if (event.type === 'export') heard.push(event.data);
+    });
+    store.ingest({ event: 'export', id: '', data: JSON.stringify(job) });
+    store.ingest({
+      event: 'export',
+      id: '',
+      data: JSON.stringify({ ...job, status: 'cancelled', finishedAt: job.startedAt }),
+    });
+    advance(PUBLISH_INTERVAL_MS);
+    expect(heard).toEqual([job, { ...job, status: 'cancelled', finishedAt: job.startedAt }]);
+    expect(store.getState()).toBe(before);
+  });
+
+  it('reads the exports a hello says are running, and drops an export event that isn’t one', () => {
+    const hello = parseSidecarEvent({ event: 'hello', id: '', data: '{"live":[],"analyzing":[],"exports":["e1",7]}' });
+    if (hello?.type !== 'hello') throw new Error('not a hello');
+    expect(hello.data.exports).toEqual(['e1']);
+    // A sidecar from before E5 lists none.
+    const older = parseSidecarEvent({ event: 'hello', id: '', data: '{"live":[]}' });
+    if (older?.type !== 'hello') throw new Error('not a hello');
+    expect(older.data.exports).toEqual([]);
+    expect(
+      parseSidecarEvent({ event: 'export', id: '', data: JSON.stringify({ ...job, status: 'exploded' }) }),
+    ).toBeNull();
+    expect(parseSidecarEvent({ event: 'export', id: '', data: JSON.stringify(job) })).toEqual({
+      type: 'export',
+      data: job,
+    });
+  });
+});
+
 describe('the found-and-crawled trail', () => {
   const point = (at: number): TrailPoint => ({
     at,

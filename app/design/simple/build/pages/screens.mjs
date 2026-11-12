@@ -214,7 +214,7 @@ export function advancedOverviewPage() {
         <section class="card">
           <div class="card__header"><h2 class="card__title">Not checked on this crawl</h2><span class="card__meta">${garden.skipped.length} checks skipped</span></div>
           <div class="card__body">
-            <div class="ov-skip">${sevIcon('skipped', 'md', 'Skipped')}<div><p class="ov-skip__title">Orphan page and Indexable page not in a sitemap</p><p class="ov-skip__why">No sitemap could be read.</p></div></div>
+            <div class="ov-skip">${sevIcon('skipped', 'md', 'Skipped')}<div><p class="ov-skip__title">Orphan page in a sitemap and Indexable page not in a sitemap</p><p class="ov-skip__why">No sitemap could be read.</p></div></div>
             <div class="ov-skip">${sevIcon('skipped', 'md', 'Skipped')}<div><p class="ov-skip__title">Near-duplicate content</p><p class="ov-skip__why">This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.</p></div></div>
             <div class="ov-skip">${sevIcon('skipped', 'md', 'Skipped')}<div><p class="ov-skip__title">Duplicate version of the site</p><p class="ov-skip__why">The site's other versions (www or not, http or https) weren't all checked.</p></div></div>
           </div>

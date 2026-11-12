@@ -148,7 +148,7 @@ internal sealed class PageProcessor(
         if (response.Outcome == FetchOutcome.Success && item.IsInternal)
         {
             parsed = response is { IsHtml: true, Body: { } document }
-                ? HtmlPageParser.Parse(document, uri, response.Headers, userAgent.RobotsToken)
+                ? HtmlPageParser.Parse(document, uri, response.Headers, userAgent.RobotsToken, response.ByteOrderMark)
                 : HtmlPageParser.ParseHeaders(uri, response.Headers, userAgent.RobotsToken);
         }
 
