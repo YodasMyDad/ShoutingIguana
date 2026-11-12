@@ -367,8 +367,18 @@ describe('the Overview of an analysed crawl', () => {
     expect(await alerts.findByText('The site is blocking the crawl')).toBeVisible();
     // The crawl is over: what it came to, not "so far".
     expect(alerts.getByText('example.com answered with a Cloudflare challenge. 37 responses blocked.')).toBeVisible();
-    expect(pathOf(alerts.getByRole('link', { name: 'Open the crawl’s settings' }))).toBe(
-      `/crawls/${TEST_CRAWL_ID}/settings`,
+    // Each way on opens where it's done, on its setting.
+    expect(alerts.getByRole('link', { name: 'Continue more slowly' })).toHaveAttribute(
+      'href',
+      `/crawls/${TEST_CRAWL_ID}/settings?focus=speed`,
+    );
+    expect(alerts.getByRole('link', { name: 'Add headers' })).toHaveAttribute(
+      'href',
+      `/crawls/${TEST_CRAWL_ID}/settings?focus=headers`,
+    );
+    expect(alerts.getByRole('link', { name: 'Crawl as another user agent' })).toHaveAttribute(
+      'href',
+      `/new?from=${TEST_CRAWL_ID}&focus=userAgent`,
     );
   });
 });

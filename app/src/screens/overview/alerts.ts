@@ -2,13 +2,19 @@
 // (live)). The words and the action are keyed on the alert's stable code; the engine's own message is shown only for a
 // code this app doesn't know. Pure.
 import type { AlertEvent, AlertLevel } from '../../api/types';
+import type { SettingFocus } from '../../routing/search';
 import { failureOf } from '../../lib/failure';
 import { formatCount, formatCountOf, formatDuration } from '../../lib/format';
 
 /** What an alert offers to do about it. The screen turns it into a link or a button. */
 export type AlertAction =
-  | { kind: 'crawlSettings'; label: string }
-  | { kind: 'newCrawl'; label: string; url: string }
+  /** `focus`: the setting the crawl's settings open on (Continue more slowly, Add headers). */
+  | { kind: 'crawlSettings'; label: string; focus?: SettingFocus }
+  /**
+   * `url`: the start URL to crawl from. `again`: with this crawl's settings (and its start URL, when there's no `url`).
+   * `focus`: the setting New crawl opens on.
+   */
+  | { kind: 'newCrawl'; label: string; url?: string; again?: boolean; focus?: SettingFocus }
   /** `url`: the sitemap the alert is about, by its address: the link lands on that sitemap. */
   | { kind: 'sitemaps'; label: string; url?: string }
   | { kind: 'continue'; label: string };
@@ -38,20 +44,28 @@ export interface AlertEntry {
   /** What to do about it. Null for one that needs nothing done. */
   advice: string | null;
   action: AlertAction | null;
+  /** More ways to do something about it, after `action`: a blocked crawl's three. */
+  more?: AlertAction[];
 }
 
 export const alertKey = (alert: Pick<AlertEvent, 'id' | 'at' | 'code'>): string =>
   `${alert.id ?? alert.code}@${alert.at}`;
 
-const SETTINGS: AlertAction = { kind: 'crawlSettings', label: 'Open the crawl’s settings' };
 const SITEMAPS: AlertAction = { kind: 'sitemaps', label: 'Open Sitemaps' };
+
+/** A blocked crawl's three ways on: the crawl's settings on its speed or its headers, or a new crawl as another agent. */
+const SLOWER: AlertAction = { kind: 'crawlSettings', label: 'Continue more slowly', focus: 'speed' };
+const BLOCKED_MORE: AlertAction[] = [
+  { kind: 'crawlSettings', label: 'Add headers', focus: 'headers' },
+  { kind: 'newCrawl', label: 'Crawl as another user agent', again: true, focus: 'userAgent' },
+];
 
 const BLOCKED_ADVICE =
   'Stop the crawl and continue it more slowly, add the headers the site expects, or crawl as another user agent.';
 
 function words(
   alert: AlertEvent,
-): Pick<AlertEntry, 'title' | 'detail' | 'advice' | 'action'> & { tally?: string; recorded?: string } {
+): Pick<AlertEntry, 'title' | 'detail' | 'advice' | 'action' | 'more'> & { tally?: string; recorded?: string } {
   const data = alert.data ?? {};
   const where = data.host ?? data.origin ?? 'The site';
   switch (alert.code) {
@@ -63,7 +77,8 @@ function words(
           ? { tally: `${formatCountOf(data.count, 'response')} blocked.` }
           : {}),
         advice: BLOCKED_ADVICE,
-        action: SETTINGS,
+        action: SLOWER,
+        more: BLOCKED_MORE,
       };
     case 'mostly-forbidden':
       return {
@@ -73,7 +88,8 @@ function words(
             ? `${formatCount(data.count)} of the first ${formatCountOf(data.sampled, 'URL')} on ${where}.`
             : null,
         advice: BLOCKED_ADVICE,
-        action: SETTINGS,
+        action: SLOWER,
+        more: BLOCKED_MORE,
       };
     case 'start-redirects-away':
       return {
@@ -101,7 +117,7 @@ function words(
           .filter(Boolean)
           .join(' '),
         advice: 'If it stays unreadable, crawl again with robots.txt ignored.',
-        action: SETTINGS,
+        action: { kind: 'newCrawl', label: 'Crawl again with robots.txt ignored', again: true, focus: 'robots' },
         ...(failure?.recorded ? { recorded: failure.recorded } : {}),
       };
     }

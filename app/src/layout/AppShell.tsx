@@ -2,6 +2,7 @@ import { Outlet, useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useEffect } from 'react';
 import { focusFallback, useModalOpen, useOverlay } from '../app/overlays';
+import { setCrawlSettingsOpener } from '../crawl/actions';
 import { Announcer } from '../feedback/Announcer';
 import { AppToaster } from '../feedback/AppToaster';
 import { RegionBoundary } from '../feedback/RegionBoundary';
@@ -32,6 +33,7 @@ export function AppShell() {
   useShellIntegration();
   useFocusAfterNavigation();
   useModeGuard();
+  useCrawlSettingsOpener();
   // Simple has no inspector: a page's detail is Advanced's. Its `inspect` param stays in the address, for the switch back.
   const inspector = !useSimpleScreenShown();
   const dock = useSettings((settings) => settings.inspectorDock);
@@ -84,6 +86,18 @@ export function AppShell() {
       <Announcer />
     </>
   );
+}
+
+/** Continue's toast, asked for a proxy password again, opens the crawl's settings, on its headers and proxy. */
+function useCrawlSettingsOpener() {
+  const router = useRouter();
+  useEffect(() => {
+    setCrawlSettingsOpener(
+      (crawl) =>
+        void router.navigate({ to: '/crawls/$crawl/settings', params: { crawl }, search: { focus: 'headers' } }),
+    );
+    return () => setCrawlSettingsOpener(null);
+  }, [router]);
 }
 
 const hasFocus = () => document.activeElement !== null && document.activeElement !== document.body;

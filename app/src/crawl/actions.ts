@@ -34,6 +34,13 @@ export async function stopCrawl(id: string): Promise<void> {
   }
 }
 
+/** Opens a crawl's settings, where what Continue asks for again is given: the shell sets it, with its router. */
+let openCrawlSettings: ((id: string) => void) | null = null;
+
+export function setCrawlSettingsOpener(open: ((id: string) => void) | null): void {
+  openCrawlSettings = open;
+}
+
 /** Continues a stopped crawl. When its headers or proxy password must be given again, says so plainly. */
 export async function continueCrawl(id: string, options: { skipMissingHeaders?: boolean } = {}): Promise<boolean> {
   try {
@@ -54,7 +61,9 @@ export async function continueCrawl(id: string, options: { skipMissingHeaders?: 
                 onClick: () => void continueCrawl(id, { skipMissingHeaders: true }),
               },
             }
-          : {}),
+          : openCrawlSettings
+            ? { action: { label: 'Open its settings', onClick: () => openCrawlSettings?.(id) } }
+            : {}),
       });
       return false;
     }
@@ -82,12 +91,20 @@ export async function cancelAnalysis(id: string): Promise<void> {
   }
 }
 
-/** Starts a crawl of `startUrl` with the user's defaults. Field problems come back for the form to show inline. */
+/**
+ * Starts a crawl of `startUrl` with the user's defaults: the saved ones, read now, since a setting left out of the
+ * request takes the engine's default, not the user's. A saved header has its name only (its value isn't kept), so it
+ * isn't sent. Field problems come back for the form to show inline.
+ */
 export async function startCrawl(
   startUrl: string,
 ): Promise<{ ok: true; item: CrawlListItem } | { ok: false; fieldErrors: Record<string, string[]> }> {
   try {
-    return { ok: true, item: await api.startCrawl({ options: { startUrl } }) };
+    const saved = { ...(await api.crawlOptionDefaults()).options };
+    // A response's own fact, not an option to send.
+    delete saved.hasRedactedProxyCredentials;
+    const extraHeaders = Object.fromEntries(Object.entries(saved.extraHeaders ?? {}).filter(([, value]) => value));
+    return { ok: true, item: await api.startCrawl({ options: { ...saved, extraHeaders, startUrl } }) };
   } catch (error) {
     if (isProblem(error, 'invalid-options')) return { ok: false, fieldErrors: error.errors };
     notifyError(error);

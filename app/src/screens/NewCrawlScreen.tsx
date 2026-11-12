@@ -133,7 +133,11 @@ function NewCrawlForm({
   const router = useRouter();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<CrawlForm>(() => formFromOptions(source ?? defaults.options, startUrl));
+  // "Crawl again with robots.txt ignored" (focus on robots) arrives with it ignored, to see and start.
+  const [form, setForm] = useState<CrawlForm>(() => {
+    const filled = formFromOptions(source ?? defaults.options, startUrl);
+    return focus === 'robots' ? { ...filled, respectRobotsTxt: false } : filled;
+  });
   const [open, setOpen] = useState<ReadonlySet<FormSection>>(() =>
     focus ? new Set([FOCUS_TARGETS[focus].section]) : new Set(),
   );

@@ -86,6 +86,7 @@ export function CrawlSettingsScreen() {
           options.data ? (
             <Button asChild icon={RotateCcw}>
               <Link
+                data-crawl-again=""
                 to="/new"
                 search={{ from: crawlId, ...(options.data.startUrl ? { url: options.data.startUrl } : {}) }}
               >
@@ -202,6 +203,10 @@ function ContinuePanel({
   useEffect(() => {
     if (focus !== 'speed' && focus !== 'headers') return;
     requestAnimationFrame(() => {
+      if (!canContinue && !running) {
+        document.querySelector<HTMLElement>('[data-crawl-again]')?.focus();
+        return;
+      }
       const root = rootRef.current;
       const target =
         focus === 'speed'
@@ -252,6 +257,21 @@ function ContinuePanel({
       setBusy(false);
     }
   };
+
+  // A crawl that ended has nothing to continue: the card says so, and Crawl again is the way on.
+  if (!canContinue && !running) {
+    return (
+      <Card as="section" aria-labelledby="continue-title">
+        <CardHeader title="Continue" titleId="continue-title" meta="Only a stopped crawl can be continued" />
+        <CardBody>
+          <p className="text-13 text-text-secondary">
+            This crawl isn’t stopped part-way, so there’s nothing to continue. Crawl the site again with these settings
+            instead, or with some of them changed.
+          </p>
+        </CardBody>
+      </Card>
+    );
+  }
 
   const message = (field: CrawlFormField) => errors[field]?.[0] ?? null;
   const fieldsWithErrors = (Object.keys(errors) as CrawlFormField[]).filter(
