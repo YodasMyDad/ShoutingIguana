@@ -17,6 +17,7 @@ import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import {
   ANCHOR_ROWS,
   ISSUES_ANALYSIS,
+  ISSUES_CHECKS_WITHOUT_SUBJECTS,
   ISSUE_GROUPS,
   issuesRoutes,
   type IssuesSidecarOptions,
@@ -148,7 +149,14 @@ describe('the Issues screen', () => {
     expect(all).toHaveFocus();
     expect(heard).toContain('Orphan page, skipped');
     fireEvent.keyDown(all, { key: 'j' });
-    await waitFor(() => expect(heard).toContain('Title too long, 3 URLs'));
+    // A check that flags only pages counts pages; one that can flag any URL counts URLs.
+    await waitFor(() => expect(heard).toContain('Title too long, 3 pages'));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(heard).toContain('Internal URL returns 4xx, 2 URLs'));
     stop();
   });
 
@@ -361,7 +369,7 @@ describe('the Issues screen', () => {
   it('shows both parts of a group that has a detail and a URL, and one wording for a group with no detail', async () => {
     const groups: IssueGroup[] = [
       {
-        detail: 'HTTP 404',
+        detail: '404 Not Found',
         relatedUrlId: 9,
         relatedUrl: 'https://example.com/garden/',
         pages: 1,
@@ -371,13 +379,16 @@ describe('the Issues screen', () => {
       { detail: null, relatedUrlId: null, relatedUrl: null, pages: 1, share: 0.5, likelyTemplate: false },
     ];
     sidecar({ groups: { ...ISSUE_GROUPS, 'internal-client-error': groups } });
-    await open(`${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"HTTP 404","relatedUrlId":9}')}`);
+    await open(
+      `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"404 Not Found","relatedUrlId":9}')}`,
+    );
     const grid = await screen.findByRole('treegrid');
-    const more = (await within(grid).findByRole('link', { name: 'Show the page in URLs' })).closest<HTMLElement>(
+    // The check can flag any URL, so the one URL of its group isn't called a page.
+    const more = (await within(grid).findByRole('link', { name: 'Show it in URLs' })).closest<HTMLElement>(
       '[role="gridcell"]',
     );
     if (!more) throw new Error('No link row');
-    expect(more).toHaveTextContent('Detail is HTTP 404');
+    expect(more).toHaveTextContent('Detail is 404 Not Found');
     expect(more).toHaveTextContent('Related URL is /garden/');
     // The group without a detail reads as the URL grid's chip will: "none".
     expect(within(grid).getByText('None')).toBeVisible();
@@ -800,7 +811,7 @@ describe('the Issues screen', () => {
   it('moves the selection to the first to fix when the severity chosen leaves the selected check out', async () => {
     sidecar();
     const { router, history } = await open(
-      `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"HTTP 404","relatedUrlId":null}')}`,
+      `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"404 Not Found","relatedUrlId":null}')}`,
     );
     fireEvent.click(await screen.findByRole('radio', { name: /Notices/ }));
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
@@ -811,5 +822,176 @@ describe('the Issues screen', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter checks' }), { target: { value: 'title' } });
     await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'title' }));
     expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`);
+  });
+});
+
+describe('a check’s count, worded by what the check flags', () => {
+  /** A figure of the check's header, by its label: the whole of what it says. */
+  const figure = (label: string) => screen.getByText(label, { selector: '.si-stat__label' }).parentElement;
+  /** The share figure, whatever it's of: null when the header has none. */
+  const share = () => screen.queryByText(/^Share of/, { selector: '.si-stat__label' });
+  /** A check's row in the list, by the whole of its name (jsdom runs the count and its noun together). */
+  const row = (name: RegExp) => screen.getByRole('option', { name });
+  const facetReads = (requests: readonly { path: string }[]) =>
+    requests.filter((request) => request.path.endsWith('/urls/facets')).length;
+  const OPEN_GROUP = `?group=${encodeURIComponent('{"detail":null,"relatedUrlId":1}')}`;
+
+  it('says pages for a check that flags only pages, as a share of the pages analysed', async () => {
+    const { requests } = sidecar();
+    await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3Open them in URLs$/);
+    // Of the 6 pages the analysis ran on, which is what its count of 3 is a part of: not of the 7 the file has.
+    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    expect(screen.getByRole('heading', { name: 'Affected pages', level: 3 }).parentElement).toHaveTextContent(
+      'Affected pages3 pages',
+    );
+    expect(await screen.findByRole('grid', { name: 'Title too long: affected pages' })).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?pages$/)).toBeVisible();
+    expect(screen.queryByText(/URLs affected|Share of URLs|Affected URLs/)).toBeNull();
+    // The pages analysed come with the analysis: nothing more is read for them.
+    expect(facetReads(requests)).toBe(0);
+  });
+
+  it('says URLs for a check that can flag any URL, as a share of the URLs crawled when it was analysed', async () => {
+    const { requests } = sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2Open them in URLs$/);
+    // 2 of the 40 URLs the analysis saw crawled: a broken image or a redirect is no part of its 6 pages. The total
+    // comes with the analysis, as its pages do: it's there at once, and nothing more is read for it.
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    expect(facetReads(requests)).toBe(0);
+    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 })).toBeVisible();
+    const grid = await screen.findByRole('treegrid', {
+      name: 'Internal URL returns 4xx: affected URLs, grouped by detail',
+    });
+    expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
+    expect(within(grid).queryByRole('columnheader', { name: 'Pages' })).toBeNull();
+    expect(row(/^Error Internal URL returns 4xx 2 ?URLs$/)).toBeVisible();
+    expect(screen.queryByText(/Pages affected|Share of pages|Affected pages/)).toBeNull();
+    // Its group's link doesn't call them pages, nor say "URLs in URLs".
+    await within(grid).findByText('404 Not Found');
+    fireEvent.pointerDown(grid.querySelector('[data-tree-toggle]')!, { button: 0 });
+    await waitFor(() => expect(router.state.location.search).toHaveProperty('group'));
+    expect(await within(grid).findByRole('link', { name: 'Show all 2 in URLs' })).toBeVisible();
+    expect(facetReads(requests)).toBe(0);
+  });
+
+  it('says only what’s known of a check that doesn’t say what it flags: URLs, of the URLs crawled', async () => {
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
+    const { router } = await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected3Open them in URLs$/);
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs7\.5%of the 40 URLs crawled$/);
+    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 }).parentElement).toHaveTextContent(
+      'Affected URLs3 URLs',
+    );
+    expect(await screen.findByRole('grid', { name: 'Title too long: affected URLs' })).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?URLs$/)).toBeVisible();
+    expect(screen.queryByText(/Pages affected|Share of pages|Affected pages|pages analysed/)).toBeNull();
+    const all = screen.getByRole('radio', { name: /All/ });
+    act(() => all.focus());
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(heard).toContain('Internal links without anchor text, 6 URLs'));
+    stop();
+  });
+
+  it('words a group’s count, its link and the template’s share in pages for a page check', async () => {
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
+    const grid = await screen.findByRole('treegrid', {
+      name: 'Internal links without anchor text: affected pages, grouped by related URL',
+    });
+    expect(within(grid).getByRole('columnheader', { name: 'Pages' })).toBeVisible();
+    expect(await within(grid).findByRole('link', { name: 'Show all 5 pages in URLs' })).toBeVisible();
+    expect(screen.getByText('Likely in the site’s template').parentElement).toHaveTextContent('on 5 of 6 pages');
+    // All 6 of the pages analysed.
+    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages100%of the 6 pages analysed$/);
+  });
+
+  it('words the same group in URLs when the check doesn’t say it flags only pages', async () => {
+    sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
+    await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
+    const grid = await screen.findByRole('treegrid', {
+      name: 'Internal links without anchor text: affected URLs, grouped by related URL',
+    });
+    expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
+    expect(await within(grid).findByRole('link', { name: 'Show all 5 in URLs' })).toBeVisible();
+    expect(screen.getByText('Likely in the site’s template').parentElement).toHaveTextContent('on 5 of 6 URLs');
+  });
+
+  it('keeps both shares while the crawl runs: each is of the analysis’s own total, which doesn’t move', async () => {
+    const { requests } = sidecar({ item: { status: 'running' } });
+    await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    fireEvent.click(screen.getByRole('option', { name: /Title too long/ }));
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    // Nothing of the running crawl is counted for either.
+    expect(facetReads(requests)).toBe(0);
+  });
+
+  it('after the crawl was continued, keeps both shares of what the analysis saw, never of what the file has now', async () => {
+    // Analysed at 6 pages and 40 URLs crawled, then continued: the file has 30 pages and 390 URLs crawled now.
+    const { requests } = sidecar({
+      item: { pageCount: 30, fetchedUrlCount: 390, crawledUrlCount: 390, outOfDate: true },
+      analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['crawlChanged'] },
+    });
+    await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    // 3 of the 6 pages the analysis ran on: never 10% "of the 30 pages crawled".
+    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    fireEvent.click(screen.getByRole('option', { name: /Internal URL returns 4xx/ }));
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
+    // 2 of the 40 URLs crawled when it was analysed, which the analysis kept: never 0.5% of the 390 crawled now.
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    expect(screen.queryByText(/390/)).toBeNull();
+    expect(facetReads(requests)).toBe(0);
+  });
+
+  // Such an analysis sends null for the count, or leaves it out: its page total it did keep.
+  const { crawledUrlCount: _none, ...WITHOUT_THE_COUNT } = ISSUES_ANALYSIS;
+  it.each([
+    ['sends null for it', { ...ISSUES_ANALYSIS, crawledUrlCount: null }],
+    ['leaves it out', WITHOUT_THE_COUNT],
+  ])(
+    'says no share of URLs for an analysis that kept no count of them (an engine from before the score ran it, and %s)',
+    async (_how, analysis) => {
+      const { requests } = sidecar({
+        item: { outOfDate: true },
+        analysis: { ...analysis, outOfDate: true, outOfDateReasons: ['engineChanged'] },
+      });
+      await open(`${ISSUES}/internal-client-error`);
+      await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+      expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
+      expect(share()).toBeNull();
+      expect(screen.queryByText(/URLs crawled|URLs found/)).toBeNull();
+      // And none is made up from the crawl as it is now: nothing is read for one.
+      expect(facetReads(requests)).toBe(0);
+      fireEvent.click(screen.getByRole('option', { name: /Title too long/ }));
+      await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+      expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    },
+  );
+
+  it('never says a share of more than the whole: a count past its total has none', async () => {
+    // An analysis that says it ran on fewer pages, and saw fewer URLs crawled, than a check flags: nothing true to say.
+    sidecar({ analysis: { ...ISSUES_ANALYSIS, pagesAnalyzed: 2, crawledUrlCount: 1 } });
+    await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3/);
+    expect(share()).toBeNull();
+    fireEvent.click(screen.getByRole('option', { name: /Internal URL returns 4xx/ }));
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
+    expect(share()).toBeNull();
   });
 });

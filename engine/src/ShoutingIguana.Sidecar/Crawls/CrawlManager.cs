@@ -858,6 +858,7 @@ internal sealed class CrawlManager(
                     flagged.GetValueOrDefault(IssueSeverity.Notice))
                 : null,
             AnalyzedAt = analyzedAt?.UtcDateTime,
+            Score = summary?.Analysis?.Score,
 
             // A crawl running here changes its file as it goes; otherwise the file says whether its analysis still stands.
             OutOfDate = analyzedAt is not null && (crawling || summary!.OutOfDate(AnalysisSettings).Count > 0),

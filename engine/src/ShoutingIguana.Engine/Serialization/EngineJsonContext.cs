@@ -15,6 +15,7 @@ namespace ShoutingIguana.Engine.Serialization;
 [JsonSerializable(typeof(CrawlOptions))]
 [JsonSerializable(typeof(AnalysisSettings))]
 [JsonSerializable(typeof(CrawlNoticeData))]
+[JsonSerializable(typeof(SiteScore))]
 internal sealed partial class EngineJsonContext : JsonSerializerContext
 {
 }

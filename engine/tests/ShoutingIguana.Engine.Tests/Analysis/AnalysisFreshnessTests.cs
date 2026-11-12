@@ -37,6 +37,10 @@ public sealed class AnalysisFreshnessTests
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = AnalysisFreshness.VERSION - 1 }, CRAWLED, new AnalysisSettings()));
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ChecksFingerprint = "0123456789abcdef" }, CRAWLED, new AnalysisSettings()));
 
+        // A score worked out by another version of the formula, or none at all, isn't the score the crawl would get now.
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = ScoreCalculator.VERSION + 1 }, CRAWLED, new AnalysisSettings()));
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = null }, CRAWLED, new AnalysisSettings()));
+
         // What an engine from before the analysis stored any of this leaves: only the time and the settings.
         var beforeTheSummary = new AnalysisInfo(CRAWLED.AddMinutes(1), "2.0.0-alpha.1", 10, TimeSpan.FromSeconds(1)) { Settings = new AnalysisSettings() };
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(beforeTheSummary, CRAWLED, new AnalysisSettings()));
@@ -73,6 +77,9 @@ public sealed class AnalysisFreshnessTests
             Title = "Renamed", Description = "", Fix = "", Why = "Different.", LearnMore = null
         })));
 
+        // Nor does what the score makes of a check: that is the score version's to say.
+        Assert.Equal(fingerprint, AnalysisFreshness.Fingerprint(checks.Select(check => check with { SiteWide = !check.SiteWide })));
+
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint(checks.Skip(1)));
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint([.. checks, checks[0] with { Id = "a-new-check" }]));
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint(checks.Select((check, index) =>
@@ -88,6 +95,7 @@ public sealed class AnalysisFreshnessTests
         Settings = new AnalysisSettings(),
         CrawlUpdatedAt = CRAWLED,
         AnalysisVersion = AnalysisFreshness.VERSION,
-        ChecksFingerprint = AnalysisFreshness.ChecksFingerprint
+        ChecksFingerprint = AnalysisFreshness.ChecksFingerprint,
+        ScoreVersion = ScoreCalculator.VERSION
     };
 }

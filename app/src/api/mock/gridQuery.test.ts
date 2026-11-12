@@ -68,6 +68,24 @@ describe('the mock grid query (E3a)', () => {
     expect(ids(after)).toEqual([3, 4]);
     expect(after.next).toBeNull();
   });
+
+  it('runs a pattern that starts with the engine’s inline options, which aren’t the browser’s syntax', () => {
+    const matching = (value: string) =>
+      ids(runGridQuery(rows, { filters: [{ column: 'title', op: 'regex', value }], sort: [], limit: 10 }));
+    expect(matching('^slow')).toEqual([]);
+    expect(matching('(?i)^slow')).toEqual([3]);
+    expect(matching('(?m)^Gone$')).toEqual([4]);
+    expect(matching('(?s)Slow.page')).toEqual([3]);
+    expect(matching('(?x) Slow \\s page')).toEqual([3]);
+    expect(matching('(?im)^HOME$')).toEqual([1]);
+    // And is asked for one, as the app now leaves every pattern to the engine: none is refused for its options.
+    const answer = answerGridQuery(
+      rows,
+      { filters: [{ column: 'title', op: 'regex', value: '(?m)^Gone$' }], sort: [], limit: 10 },
+      { available: true, reason: null },
+    );
+    expect(answer.ok).toBe(true);
+  });
 });
 
 describe('the mock’s answers, as the sidecar gives them', () => {

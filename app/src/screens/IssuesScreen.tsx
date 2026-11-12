@@ -14,6 +14,7 @@ import {
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
+import { affectedCount } from '../crawl/checkSubject';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -53,19 +54,22 @@ import { useAnalysisControl } from './issues/useAnalysisControl';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
-/** A check as it's announced when J or K selects it: "Title too long, 3 URLs". */
+/**
+ * A check as it's announced when J or K selects it: "Title too long, 3 pages", "Internal URL returns 4xx, 9 URLs".
+ * Pages only for a check that flags nothing else (crawl/checkSubject.ts).
+ */
 function checkWords(entry: CheckEntry): string {
   if (entry.outcome === 'skipped') return `${entry.check.title}, skipped`;
   if (entry.outcome === 'passed') return `${entry.check.title}, passed`;
-  return `${entry.check.title}, ${formatCountOf(entry.count ?? 0, 'URL')}`;
+  return `${entry.check.title}, ${affectedCount(entry.check, entry.count ?? 0)}`;
 }
 
 /**
  * Issues (docs/v2-ui-ia.md, Issues; flow 3, Triage): the answer first, the checks by category on the left, and the
- * selected check on the right, with what's wrong, why it matters, how to fix it, and its affected pages grouped by
- * their cause. The check is in the path; the severity, the text filter, the category a link narrowed the list to, the
- * group in view, a flat check's sort and the inspected URL are in the search, so back, forward and links restore all of
- * it.
+ * selected check on the right, with what's wrong, why it matters, how to fix it, and the pages or URLs it flags
+ * grouped by their cause. The check is in the path; the severity, the text filter, the category a link narrowed the
+ * list to, the group in view, a flat check's sort and the inspected URL are in the search, so back, forward and links
+ * restore all of it.
  */
 export function IssuesScreen() {
   const { crawl: crawlId, check: checkId } = useParams({ from: ROUTE });

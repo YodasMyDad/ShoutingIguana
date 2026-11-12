@@ -58,5 +58,5 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
         file.StatusCode is null && file.Error?.Contains("redirects", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string Describe(RobotsRecord file) =>
-        $"{file.Origin}/robots.txt ({(file.StatusCode is { } status ? $"HTTP {status}" : file.Error ?? "no response")})";
+        $"{file.Origin}/robots.txt ({(file.StatusCode is { } status ? HttpStatusNames.Describe(status) : file.Error is { } error ? HttpStatusNames.NameIn(error) : "no response")})";
 }

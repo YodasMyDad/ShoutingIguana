@@ -16,7 +16,7 @@ public enum IssueGrouping
     PageDetail,
 
     /// <summary>
-    /// By detail and other URL, the detail saying how the URL itself answered ("HTTP 404", "Timed out"): however big a
+    /// By detail and other URL, the detail saying how the URL itself answered ("404 Not Found", "Timed out"): however big a
     /// group, it says nothing of a template.
     /// </summary>
     ResponseDetail,

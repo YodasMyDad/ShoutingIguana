@@ -84,6 +84,11 @@ public sealed class AnalysisStateTests : IAsyncLifetime
             ALTER TABLE analysis DROP COLUMN crawl_updated_at;
             ALTER TABLE analysis DROP COLUMN analysis_version;
             ALTER TABLE analysis DROP COLUMN checks_fingerprint;
+            ALTER TABLE analysis DROP COLUMN crawled_urls;
+            ALTER TABLE analysis DROP COLUMN score_version;
+            ALTER TABLE analysis DROP COLUMN score;
+            ALTER TABLE analysis DROP COLUMN score_partial;
+            ALTER TABLE analysis DROP COLUMN score_json;
             DROP TABLE url_summary;
             DROP TABLE skipped_checks;
             """);
@@ -93,6 +98,8 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.Equal(((bool?)null, (int?)null, (string?)null, (DateTimeOffset?)null, false),
             (earlier.IsPartial, earlier.AnalysisVersion, earlier.ChecksFingerprint, earlier.CrawlUpdatedAt, earlier.HasUrlSummary));
         Assert.Equal(new AnalysisSettings(), earlier.Settings);
+        Assert.Equal(((long?)null, (int?)null, (SiteScoreSummary?)null, (NoScoreReason?)NoScoreReason.NotScored),
+            (earlier.CrawledUrlCount, earlier.ScoreVersion, earlier.Score, earlier.NoScoreReason));
         Assert.Equal(counts, IssueReader.ReadCounts(path));
         Assert.Empty(IssueReader.ReadSkippedChecks(path));
         Assert.False(UrlSummaryReader.IsAvailable(path));
@@ -102,8 +109,15 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.Equal(earlier.AnalyzedAt, summary.AnalyzedAt);
         Assert.Equal([OutOfDateReason.EngineChanged], summary.OutOfDate(new AnalysisSettings()));
 
+        // It has no score, and says why; what it found still has its order to fix.
+        var results = IssueReader.ReadResults(path)!;
+        Assert.Equal(((SiteScore?)null, (NoScoreReason?)NoScoreReason.NotScored), (results.Score, results.NoScoreReason));
+        Assert.Equal(FixFirstOrder.Of(counts), results.FixFirst);
+        Assert.NotEmpty(results.FixFirst);
+
         // Analysed by this engine, it gets what it lacked, and stands.
         var analysis = await AnalyseAsync(path);
+        Assert.NotNull(IssueReader.ReadResults(path)!.Score);
         Assert.True(UrlSummaryReader.IsAvailable(path));
         Assert.Empty(CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
         Assert.Equal(analysis.IsPartial, IssueReader.ReadAnalysis(path)!.IsPartial);

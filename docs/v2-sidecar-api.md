@@ -33,6 +33,10 @@ Built in stages:
   the crawler's own probes said apart in the counts; the URLs crawled counted as the grid counts them; the time spent
   crawling; the inspector's totals of every kind of link, the URL's length, and what became of each link's other end.
   [Engine changes E3c made](#engine-changes-e3c-made) has what changed and what was measured.
+- **The score** is marked below too, each addition a new field: what Simple mode needs of the engine that isn't export
+  ([the Simple design](v2-ui-simple.md#what-the-engine-needs)). A site's score, worked out and stored by the analysis;
+  the checks' plain words; which checks are a fault of the whole site, and which are reported once; and a status
+  code's name in an issue's detail. [Engine changes the score made](#engine-changes-the-score-made) has what changed.
 
 ## Process (E1)
 
@@ -203,8 +207,10 @@ Built in stages:
 
 `GET /api/checks` returns two lists:
 
-- `categories: [{ id, title }]`, where the title is a plain name such as "Meta descriptions";
-- `checks: [{ id, category, severity, title, description, fix, why, learnMore, grouping, subject }]`, in catalog order.
+- `categories: [{ id, title, plainTitle }]`, where the title is a plain name such as "Meta descriptions", and
+  `plainTitle` (the score) is the category in Simple's words, such as "Search descriptions";
+- `checks: [{ id, category, severity, title, description, fix, why, learnMore, grouping, subject, siteWide,
+  reportedOnce, plainTitle, plainWhat, plainFix, fixer, plainPassed, plainOneFix, plainLooksFor }]`, in catalog order.
   `description` is what is wrong, `why` is why it matters and `fix` is what to do. `learnMore` is an absolute URL, or
   null when no authoritative page exists. `grouping` (E3a) is how
   the check's issues group: see [Issue groups](#issue-groups-e3a).
@@ -218,8 +224,55 @@ Built in stages:
 
   It is the catalog's to say, per check, as the grouping is: it isn't stored with an analysis, so it reads the same
   for an analysis by any engine.
+- **`siteWide`** (the score) is true for a check that finds one fault of the whole site, not a page's:
+  `robots-txt-unreachable`, `no-https`, `site-hidden-from-search`, `duplicate-site-version` and
+  `robots-txt-unreachable-other-origin`. [The score](#the-score) counts such a check as the whole site, whatever its
+  count.
+- **`reportedOnce`** (the score) is true for a check whose rule reports one issue for the whole site, on the home page
+  (the start URL when no home page was read), or one for each other version of the site: the five site-wide checks,
+  and `robots-txt-missing`, `sitemap-error`, `sitemap-missing` and `security-headers-missing`. Its count isn't a share
+  of the pages or the URLs, so the UI says "checked once, for the whole site" where "1 of 265 pages" would misread.
+  Several origins or sitemaps at fault are one issue whose detail lists them; `duplicate-site-version` has one issue
+  for each other version that answers, three at most. It is for wording only: the score never reads it. Every
+  `siteWide` check is `reportedOnce`.
+- **The plain words** (the score) are a check's texts for a reader who isn't an SEO, beside the technical ones and
+  never in place of them ([the Simple design's template](v2-ui-simple.md#the-template)):
 
-Both come from `IssueCatalog`. The engine gets public category titles, so the UI hard-codes none.
+  | Field | What it is |
+  | --- | --- |
+  | `plainTitle` | The problem as its owner would say it: sentence case, no count, 60 characters at most |
+  | `plainWhat` | What's wrong and why it matters, as 2 to 4 sentences, **a sentence a string**. The first stands alone, in 120 characters at most: lists show only it |
+  | `plainFix` | How to fix it, as 1 to 4 steps, **a step a string**: each one sentence, which starts with a verb or with "If …," |
+  | `fixer` | Who usually makes the fix: `you`, `developer` or `either` |
+  | `plainPassed` | The good news when the check finds nothing, as a fact: "Every page has a title" |
+  | `plainOneFix` | Optional. What a fault in the site's template usually is, in one sentence |
+  | `plainLooksFor` | Optional. What the check looks for, as a noun phrase of 60 characters at most ("A missing sitemap"): for a list of checks that couldn't run, where a title that is a sentence would read as a finding |
+
+  - **Every check has them.** All 87 checks have `plainTitle`, `plainWhat`, `plainFix`, `fixer` and `plainPassed`.
+    `plainOneFix` is filled for 26 of them and `plainLooksFor` for 12, and each is null for the rest.
+  - **All or none, still.** A check has every one of the five, or none of them, and **a check with no plain words
+    says null in every plain field**, the two optional ones included: never an empty string, never the technical
+    text. No check of this catalog is without (a test holds that), and a UI should take null all the same: a check
+    added to the catalog before its words are written would say it.
+  - **Limits are filled in.** A plain text names a threshold as a token (`{limit:titleMaxLength}`), and the API serves
+    it filled, with the value and its unit as a sentence says them: "60 characters", "200 words", "200 KB", "1 MB",
+    "1 second", "1.5 seconds". No served text holds a token. **`GET /api/checks` fills them from the thresholds an
+    analysis would run with now; `GET /api/checks?crawl={id}` from the ones that crawl's last analysis ran with**, so
+    a crawl's words say the limits it was judged by. A crawl never analysed, or whose stored settings can't be read,
+    takes the current ones. `crawl` is one crawl's id: `crawl-not-found` when no crawl has it, `bad-request` when it
+    is empty or given twice. Everything else in the answer is the same for every crawl.
+
+    Ten checks name a limit (`title-too-long`, `title-too-short`, `description-too-long`, `description-too-short`,
+    `low-word-count`, `image-alt-too-long`, `image-too-large`, `url-too-long`, `slow-response`, `large-page`). For a
+    crawl analysed with titles to 70 characters and 2.5 seconds to answer, `title-too-long`'s first sentence is
+    "These pages have a title of more than 70 characters." and `slow-response`'s "These pages took more than 2.5
+    seconds to arrive when the check asked for them."; without `crawl`, at the defaults, they say "60 characters" and
+    "1 second".
+  - A category's `plainTitle` is filled for all 17. Like every plain word it is words, not results: none of them is
+    stored with an analysis, and writing one makes no analysis out of date.
+
+Both come from `IssueCatalog`, the plain words from `IssuePlainTexts` and `PlainWords` beside it. The engine gets
+public category titles, so the UI hard-codes none.
 
 ### Crawl options (E1)
 
@@ -249,7 +302,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
  "crawlingMs":41250,"fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
- "analyzedAt":"…","outOfDate":false,"sizeBytes":18276352,"missing":false}
+ "analyzedAt":"…","score":{"value":85,"band":"good","partial":false},"outOfDate":false,"sizeBytes":18276352,"missing":false}
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
@@ -290,6 +343,13 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 
 - **`issues`** counts checks with at least one issue, by severity: the Issues screen's rows, not issue rows. It is
   null before the first analysis.
+- **`score`** (the score) is the last analysis's score in brief: `value` (0 to 100), `band` (`veryGood`, `good`,
+  `needsWork`, `poor`) and `partial` (the crawl didn't read all of the site, so the score is of what it read so far).
+  **Null when there is none**: the crawl was never analysed, its analysis read no page, or an engine from before the
+  score analysed it. It is the stored score, so it stays as it was while the crawl is continued, with `outOfDate`
+  saying the analysis no longer stands. The whole of it, and why there is none, is on
+  [the analysis](#the-score). It is read from the analysis's own row, which the summary already reads, and kept in the
+  summary cache: listing costs what it did.
 - **`outOfDate`** (E2) is true when the last analysis no longer stands, and false before the first one. That's when:
   - the crawl changed after it: the crawl row's `updated_at` isn't the one the analysis kept, because the crawl was
     continued, here or elsewhere, or is running here;
@@ -490,7 +550,7 @@ An `analysis` event's `phase` is one of these, in this order, each counting what
 | --- | --- | --- |
 | `reading` | Reading the crawl's URLs, their statuses and what the checks need into memory | URLs |
 | `pageRules` | Running every page's checks, in one pass over the pages | Pages, counted ahead from the URLs read |
-| `siteRules` | Running the checks across pages (duplicates, orphans, redirect chains, sitemaps...) once every page is read | Rules (9) |
+| `siteRules` | Running the checks across pages (duplicates, orphans, redirect chains, sitemaps...) once every page is read | Rules (10) |
 | `urlSummary` | Building the URL grids' table, one row per URL | URLs |
 | `writing` | Committing the results; it ends once the file is closed | 1 |
 
@@ -611,17 +671,104 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 ```json
 {"analyzedAt":"…","engineVersion":"…","pagesAnalyzed":265,"durationMs":7012,"isPartial":true,"outOfDate":false,
  "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12}],
- "skipped":[{"checkId":"orphan-page","reason":{"code":"no-sitemap","text":"No sitemap could be read."}}]}
+ "skipped":[{"checkId":"orphan-page","reason":{"code":"no-sitemap","text":"No sitemap could be read.",
+   "plainText":"No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
+   "plainAction":"Add a sitemap, or fix the one that can't be read, then check the site again."}}],
+ "crawledUrlCount":4521,"fixFirst":["internal-client-error","broken-internal-links","image-too-large","…"],
+ "score":{"version":1,"value":85,"band":"good","lost":15,"beforeCeiling":85,"heldBySerious":false,"partial":false,
+   "covers":{"pages":265,"urls":4521,"checksRun":83,"checksSkipped":4,"complete":true,"reason":null,"blockedByRobots":0},
+   "lines":[{"checkId":"internal-client-error","severity":"error","count":9,"of":4521,"unit":"urls","extent":"few","points":2},
+            {"checkId":"broken-internal-links","severity":"error","count":5,"of":265,"unit":"pages","extent":"some","points":4}],
+   "ifFixed":{"checkIds":["internal-client-error","broken-internal-links","image-too-large","description-duplicate","title-duplicate"],"value":98}},
+ "noScoreReason":null}
 ```
 
 - **`isPartial`** (E2) is true when a check was skipped or a rule failed on some pages; the notes say which.
 - **`skipped`** is every catalog check missing from the counts. Its `reason` (E2) has a stable `code` to key on, and
   a `text` to show beside the check ("No sitemap could be read."). A check skipped for several reasons gets the
-  first; the notes give them all.
+  first; the notes give them all. **`plainText` and `plainAction`** (the score) are the reason in plain words, by its
+  code: why the check couldn't run, and what would let it, a sentence each. Every code this engine gives (the 15
+  under **Skip reason**, below) has both. **Null, both, for a code it has no words for** (a later engine's, in a
+  file that engine analysed), never the engine's sentence in their place.
+  A limit in them is filled from the settings this analysis ran with.
+- **`crawledUrlCount`** (the score) is the URLs crawled **as they stood when the analysis ran**: the library item's
+  `crawledUrlCount`, as it was then. A check whose `subject` is `url` flagged a share of these, as a `page` check
+  flagged a share of `pagesAnalyzed`: "9 of the 4,521 URLs crawled" is the analysis's 9 over the analysis's 4,521.
+  **Use these two, not the library's counts, beside a check's count**: a crawl continued since has more URLs than its
+  analysis saw, and the library counts those. Null when an engine from before the score ran the analysis.
+- **`fixFirst`** (the score) is the checks that found something, in the order to fix them: the most severe first;
+  within a severity, a fault of the whole site (a `siteWide` check) before any other; then the most URLs flagged;
+  then catalog order ([The score](#the-score) says how it is made, and why). It is the engine's order, so every host
+  agrees: **take the order from here, don't sort again by count**, which would put a site-wide fault last of its
+  severity. **Checks the user has hidden are in it**: hiding is the app's own preference, which
+  the engine doesn't know, so the UI takes hidden checks out of what it lists. A check a newer engine counted, which
+  this catalog doesn't have, isn't in it. It is worked out from the counts whenever the analysis is read, so an
+  analysis by any engine has it.
 - **`outOfDate`** and **`outOfDateReasons`** (E2) are as the library item's: `crawlChanged`, `engineChanged`,
   `settingsChanged`. The UI offers to analyse again.
 - **An earlier engine's analysis** never fails to read. Its `isPartial` and every `reason` are null, as it didn't
-  store them, so the UI shows the notes. It's out of date with `engineChanged`, and analysing it again mends it.
+  store them, so the UI shows the notes. It's out of date with `engineChanged`, and analysing it again mends it. It
+  has no score (`noScoreReason` is `notScored`) and no `crawledUrlCount`.
+
+#### The score
+
+One number, 0 to 100, for a site ([the Simple design](v2-ui-simple.md#the-score) has the formula and its reasons). It
+starts at 100, and each check that found a problem takes points off: up to 10 for an error (60 if it is a fault of
+the whole site) and up to 4 for a warning, by how much of the site it affects. While any error check has issues the
+score can't be above 89, and notices take nothing off.
+
+**The analysis works it out and stores it**, from its own counts, the pages it read and the URLs crawled as it read
+them. What the API serves is that stored score: nothing in it is counted from the crawl as it is now, so a count from
+one moment is never set against a total from another, and the app, the report and `si score` give the same number.
+
+| Field | What it is |
+| --- | --- |
+| `version` | The formula's version: 1. A changed formula is a new version |
+| `value` | The score: 100 less `lost`, no lower than 0, and no higher than 89 while an error check has issues |
+| `band` | The score as a word: `veryGood` (90 and over), `good` (70 and over), `needsWork` (50 and over), `poor` |
+| `lost` | The points every line takes off, added up. It can pass 100 |
+| `beforeCeiling` | The score before the ceiling: 100 less `lost`, no lower than 0 |
+| `heldBySerious` | The ceiling is what holds the score: it would be `beforeCeiling` with no error check's issues standing |
+| `partial` | The crawl didn't read all of the site, so the score is of what it read so far. Always `!covers.complete` |
+| `covers.pages` | The pages the analysis read: `pagesAnalyzed`. What a page check's count is a share of |
+| `covers.urls` | The URLs crawled when the analysis ran: `crawledUrlCount`. What a URL check's count is a share of |
+| `covers.checksRun`, `covers.checksSkipped` | The checks that ran, whatever they found, and the ones the analysis couldn't run. A skipped check takes nothing off and adds nothing |
+| `covers.complete` | The crawl read all it set out to: it finished, and no limit kept internal URLs out |
+| `covers.reason` | Why not, or null when it is complete: `stopped` (stopped, or it stopped itself, before it finished), `failed`, `urlLimit` or `depthLimit` (it finished, but the limit kept internal URLs out). A crawl kept to its start folder is complete: that is its scope |
+| `covers.blockedByRobots` | The site's URLs robots.txt kept the crawler out of, which weren't read and so aren't covered: the `blocked-by-robots` check's own count |
+| `lines` | Every check that found something, **in `fixFirst` order**, a notice among them at 0 points |
+| `lines[].checkId`, `severity`, `count` | The check, its severity when the analysis ran, and the URLs it flagged |
+| `lines[].unit` | What the count is a share of: `pages` (a check whose `subject` is `page`), `urls` (any other check) or `site` (a `siteWide` check: nothing, it is the whole site) |
+| `lines[].of` | That total: `covers.pages` or `covers.urls`. For a `site` line it is `covers.urls`, and isn't for showing: say "the whole site" |
+| `lines[].extent` | How much of the site: `few` (under 1 in 100), `some` (1 in 100 or more), `many` (1 in 10 or more), `most` (half or more), or `site` (a site-wide fault, whatever its count) |
+| `lines[].points` | Points off: 2, 4, 7, 10 or 60 for an error by extent, 1, 2, 3, 4 or 4 for a warning, 0 for a notice |
+| `ifFixed.checkIds` | The first five checks in `fixFirst` order that take points off (errors and warnings; never a notice). Fewer when fewer found anything, and empty on a site with nothing to fix |
+| `ifFixed.value` | The score without them: "Fixing these five takes the score from 85 to 98" |
+
+- **`score` is null when there is nothing honest to say, and `noScoreReason` says why**: `noPages` (the analysis read
+  no page: a start URL that failed or was refused, a site robots.txt blocks) or `notScored` (the analysis stored no
+  score this engine reads: an engine from before the score ran it, and it is out of date). With a score,
+  `noScoreReason` is null. A crawl never analysed has no analysis to ask: `not-analyzed`, as before.
+- **Out of date.** An analysis scored by another version of the formula is out of date with `engineChanged`, as one
+  by another analysis version is. Its score is still served, as stored, until the crawl is analysed again.
+- **How the order to fix is made.** `fixFirst`, and so `lines` and `ifFixed`, is made in four steps, each settling
+  only what the one before left level:
+  1. **Severity**: errors, then warnings, then notices.
+  2. **A fault of the whole site leads its severity.** Every `siteWide` check that found something comes before every
+     other check of its severity, **however small its count**. Among themselves, site-wide checks are in catalog
+     order: their counts don't order them (a site-wide fault's count is of nothing: 1 on most sites, 3 for a site
+     that answers at three other addresses).
+  3. **The most URLs flagged**, among the rest.
+  4. **Catalog order**, where checks are still level (titles before meta descriptions).
+
+  Why step 2: a site-wide fault is one issue, so by its count it would come after every check of its severity that
+  flagged more, and on a site with five other errors it would be outside the first five to fix, and outside
+  `ifFixed`, while taking 60 points off: the one thing to fix first, listed sixth. So a site not on HTTPS with six
+  errors on hundreds of pages each has `no-https` first, and `ifFixed` takes it and the four largest away. Where no
+  check is site-wide the order is what the UI's "Fix first" has always had (severity, count, catalog). A warning
+  never comes before an error, site-wide or not, and a notice never before a warning.
+- **Hidden checks count.** The score, its lines and `ifFixed` take in every check, hidden in the app or not.
+- **A partial score is still a score.** It changes no number: it says the crawl didn't read all of the site.
 
 | Skip reason | The check was skipped because |
 | --- | --- |
@@ -1138,7 +1285,7 @@ catalog's to say, per check, and `GET /api/checks` gives it as each check's `gro
 
 | `grouping` | The check's issues are grouped by | Checks like |
 | --- | --- | --- |
-| `detail` | The detail and the other URL involved: the detail names the cause, or the fault it's an instance of | `open-graph-missing` ("Missing og:image"), `internal-client-error` ("HTTP 404"), `structured-data-invalid` |
+| `detail` | The detail and the other URL involved: the detail names the cause, or the fault it's an instance of | `open-graph-missing` ("Missing og:image"), `internal-client-error` ("404 Not Found"), `structured-data-invalid` |
 | `relatedUrl` | Each other URL the issue is about: the detail is a count, and the URLs are the cause | `broken-internal-links` (each broken target), `empty-anchor-text`, `canonicalised-page`, `title-duplicate` (the cluster, named after its first page) |
 | `none` | Nothing: the detail is a measurement (78 characters, 1,250 ms, 3 images), or the same on every issue | `title-too-long`, `slow-response`, `noindex-page` |
 
@@ -2220,3 +2367,190 @@ pages in 16.5 s with the log at 76 MB; with the fold taken out, those 40,000 pag
 benchmark failed on it. `si readbench --gate --runs 20` passed every class on the new 100k crawl: `stats` 107 ms
 against 350, `stats-kept` 0.8 against 10, `stats-pass` 207 against 450, `sitemaps` 45 against 200, the links grid's
 slowest read from the link summary 135 against 200, a pass over the links 1,068 against 2,500.
+
+## Engine changes the score made
+
+What Simple mode needs of the engine that isn't export ([the Simple design](v2-ui-simple.md#what-the-engine-needs)):
+the score, the catalog's new fields, one new check, and a status code's name in details. Every addition to the API is
+a new field; nothing is taken away. Each has its own tests.
+
+- **The score, worked out by one class and stored by the analysis.** `ScoreCalculator` works a site's score out to
+  the design's version 1 ([The score](#the-score)). The analysis does it as it commits, in `IssueWriter`, the only
+  writer: from the counts it has just stored, the pages it read and the URLs crawled as it read them, with the file's
+  lock keeping any crawl out, so they are all of one moment. It is stored in new columns of the `analysis` row
+  (`score_version`, `score`, `score_partial`, and the whole of it as `score_json`), and every reader serves what was
+  stored: the API, `si score`, and the report when it comes. **Why stored and not worked out when read:** a score
+  worked out at read time would set an analysis's counts against the crawl's totals as they are now, and a crawl
+  continued since has more URLs than its analysis saw. A score this engine can't read (a later engine's, a crafted
+  file's) is no score, never an error.
+  - Tests: every row of the design's "Worked examples", "What each mix gives" and "It can't say these lies"; 288
+    cases scored by the design's reference code (`app/design/simple/build/lib/score.mjs`) and then by the engine,
+    line for line (`ScoreReference/cases.json`, which `generate.mjs` beside it writes: the design's named sites, the
+    mockups', every band edge, and 120 random sites); the catalog's site-wide and any-URL checks against the
+    reference's own lists; and on 2,000 random sites, that the score stays within 0 to 100, never passes 89 with an
+    error, is 100 with none but notices, and never rises when a problem is added or spreads.
+  - With the ceiling taken out of the code, 7 tests fail; with the site-wide rule taken out, 7; with the stored URL
+    count read from the crawl as it is now instead, the test that continues a stopped crawl after its analysis fails;
+    with the count not stored, 3.
+  - **The garden crawl scores 85, Good**, from the engine, on a copy analysed by it: 2 errors (a few, some), 4
+    warnings (many, some, some, some), 13 notices; fixing the first five would make it 98. As the design has it.
+- **The URLs crawled, as the analysis saw them.** A URL check's count is a share of the URLs crawled, and nothing
+  kept that total with the analysis: the library's `crawledUrlCount` is the crawl's as it is now. The analysis now
+  stores it (`crawled_urls`: `AnalysisInfo.CrawledUrlCount`), counted from the URL table it read, by the library's
+  own definition (every URL with an outcome, less those never asked because their host had stopped answering), and
+  serves it as the analysis's `crawledUrlCount`, beside `pagesAnalyzed`. Every end-to-end crawl of the synthetic site
+  holds it to the library's count, the dead twin's unchecked URLs included.
+- **"Fix first" is the engine's, and a fault of the whole site leads its severity.** `FixFirstOrder` is the one
+  order, served as the analysis's `fixFirst`; the score's lines follow it, and `ifFixed` takes its first five errors
+  and warnings away. Hidden checks are in it: hiding is the app's. It is the app's order (`rankChecksToFix`: the most
+  severe, then the most URLs flagged, then catalog order) with one step added: within a severity, `siteWide` checks
+  come first, in catalog order among themselves ([The score](#the-score) has the steps). By count alone a site-wide
+  error, one issue, sorted after every error that flagged more, and on a site with five of those it was outside the
+  first five and outside `ifFixed`, where the design's Summary has it lead.
+  - The design's reference code has the same order (`fixFirstOrder` and `firstToFix` in `score.mjs`, which the
+    mockups' data now uses), and the replayed cases take their order and `ifFixed` from it: two more named cases
+    hold a site-wide error among six errors that flagged more, and three site-wide errors with two site-wide
+    warnings.
+  - Tests: a site-wide error on 1 URL leads six errors on 200 to 700, and is in `ifFixed`; site-wide checks lead in
+    catalog order whatever their counts; with every check of the catalog counted, every site-wide check is before
+    every other of its severity.
+  - **The app's own sort no longer agrees where a check is site-wide.** `rankChecksToFix`
+    (`app/src/screens/issues/checkList.ts`) still sorts by severity, count and catalog, so its list puts a site-wide
+    fault by its count until a screen reads `fixFirst` instead. No screen code is changed here.
+- **The score in the library, at no cost.** The headline is three columns of the row the summary already reads, so a
+  list reads no more than it did, and it is kept in the summary cache (`summaries.json`, whose format moves to 4: a
+  summary kept before the score is read again, once). Measured back to back on copies of the two development
+  crawls, 40 reads each on a fresh connection, three runs, on a machine other work was loading: the garden crawl's
+  summary 3.4 to 3.6 ms before and 3.1 to 3.6 ms now (median); the 100k crawl's 41.7 to 44.2 ms before and 40.9 to
+  42.7 ms now.
+- **Which checks are a fault of the whole site, and which are reported once.** `siteWide` and `reportedOnce` on a
+  check, from the catalog (`IssueDefinition.SiteWide`, `ReportedOnce`), neither stored with an analysis nor part of
+  the checks' fingerprint. Each was held against its rule:
+
+  | Check | Its rule reports | `siteWide` | `reportedOnce` |
+  | --- | --- | --- | --- |
+  | `robots-txt-unreachable` | One issue on the home page; the detail lists the main origins failing | yes | yes |
+  | `no-https` | One issue on the home page, when it is served over plain HTTP | yes | yes |
+  | `site-hidden-from-search` | One issue on the home page, or on the start URL without one | yes | yes |
+  | `duplicate-site-version` | One issue for each other version of the site that answers (three at most), on that version's URL, not on the home page | yes | yes |
+  | `robots-txt-unreachable-other-origin` | One issue on the home page; the detail lists the origins. It is a fault of another origin of the site, not of the main one: the design counts it as site-wide, at a warning's 4 points | yes | yes |
+  | `robots-txt-missing` | One issue on the home page; the detail lists the origins | no | yes |
+  | `sitemap-error` | One issue on the home page however many sitemaps failed: the detail lists the first three and counts the rest | no | yes |
+  | `sitemap-missing` | One issue on the home page | no | yes |
+  | `security-headers-missing` | One issue on the home page: only its response is checked | no | yes |
+
+  A test puts each of the nine through its own rule on a site with the fault several times over, and every
+  end-to-end crawl checks none is reported more than once (three times for the duplicate site). A change to
+  `siteWide`, or to a check's `subject`, changes what a score is worked out from, so it comes with a new score
+  version: a test holds the catalog to the reference's lists.
+- **A new check, `site-hidden-from-search`** (Error, Indexability, site-wide): **more than half of the pages that
+  stand for themselves are noindex.** Without it a site whose every page is noindex scored 100, noindex being a
+  notice. Its detail gives the numbers: "212 of 240 pages are noindex" ("1 of 1 page is noindex").
+  - **The first number is the noindex pages**, counted as `noindex-page` counts them: it is that check's count.
+  - **The second is the pages the page pass audits (`pagesAnalyzed`), less those canonicalised to another URL.** A
+    page whose canonical names another URL is a variant of that page, not a page that stands for itself: it counts
+    **neither as hidden nor in the total**. So a shop whose crawl reads more filtered and sorted listings than main
+    pages isn't flagged while its main pages can be indexed, and is when most of those are noindex. (It counted
+    canonicalised pages as hidden at first, which flagged such a shop. No engine shipped with that, so the analysis
+    version stays 7.)
+  - **Which canonicals make a variant**: where the analysis has the page as canonicalised (it is flagged by
+    `canonicalised-page`), so not one that leads back to the page or to a broken URL; and **not one that names the
+    same page on the site's other version** (www or not, http or https): that page stands for itself, at its other
+    address, and the other version answering is `duplicate-site-version`'s to report. Those pages stay in the total.
+  - **A noindex page whose canonical names another URL is noindex**, and in the total: the noindex wins, as it does
+    for the page's indexability (and `noindex-with-canonical` flags the contradiction). So a site most of whose own
+    pages are deliberately noindex still fires, as a private site does: its `why` says to check the noindex pages and
+    ignore it when they are meant.
+  - **More than half** is a strict majority: exactly half doesn't count, and a site of one page is hidden when that
+    page is. **It never fires with no page to judge**: a site whose every page read is a variant (a mirror that names
+    another site throughout) reports nothing, never "0 of 0".
+  - **A page** that moves on with an instant meta refresh is read and in the total, and never noindex: search engines
+    treat it as a redirect, and `noindex-page` doesn't flag it either.
+  - **A crawl stopped early** is judged on the pages it read, as every page check is; its score is partial.
+  - **URLs robots.txt blocked** weren't read, so they are neither pages nor hidden. A site blocked whole reads no
+    page, and has no score.
+  - **Where**: the home page, or the start URL when no home page was read (it refused the crawler, and a sitemap led
+    to the pages), so its `subject` is `url`.
+  - Tests, one an edge: a majority reported once on the home page with a variant left out of the total; exactly
+    half; one page; **40 variants with indexable targets beside 3 pages: nothing**; **3 of 5 own pages noindex
+    beside 40 variants: reported, "3 of 5 pages are noindex"**; nothing but variants; a noindex page that names
+    another URL; blocked URLs; the same page on each other version of the site against another host or path; a
+    canonical that leads back or nowhere; an instant refresh; no home page; a start URL that redirects; thousands
+    grouped.
+
+  It is planted on the synthetic site by a new option (`SyntheticSiteOptions.HiddenFromSearch`, `si testsite
+  --hidden-from-search`: every product noindex), crawled end to end with the whole issues table compared, and is
+  never flagged on the site without it, the benchmark's included. The catalog has **87 checks**, so the checks'
+  fingerprint has changed and every earlier analysis is out of date (`engineChanged`).
+- **Plain words.** A check's, a category's and a skip reason's, in files of their own beside the catalog
+  (`IssuePlainTexts`, by check id; `PlainWords`), so words change without touching the catalog or a rule. **All 87
+  checks, the 17 categories and the 15 skip reasons have theirs.**
+  - **One data file, and a generator.** The words are written in
+    `engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/plain-words.json`, in the API's own shapes
+    (`plainTitle`, `plainWhat` and `plainFix` as lists, `fixer`, `plainPassed`, `plainOneFix`, `plainLooksFor`; a
+    category by its API id; a skip reason by its code, with `plainText` and `plainAction`), and `generate.mjs` beside
+    it writes the two C# files from it. A text change is an edit to the data file and
+    `node engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/generate.mjs` from the repo root (`--check`
+    writes nothing and says whether the files are current). It refuses a check, category or reason the engine
+    doesn't have, one the data file leaves out, a field it doesn't know, and a brace that isn't a limit's. Nothing
+    needed mapping: the data file's `fixer` values and field shapes were the API's already.
+  - **Tests.** The compiled words are the data file's, field for field, so neither is changed without the other.
+    Every check, category and skip reason has its words (the test that was written and skipped is on). Every text
+    keeps to the template: a title of 60 characters with no number in it; 2 to 4 sentences of 30 words at most and
+    70 in all, the first of 120 characters once its limits are filled; 1 to 4 steps of 25 words, a sentence each;
+    good news of 60 characters; a noun phrase of 60. Sentences average 20 words or fewer. No text holds a word the
+    rules ban (a technical term only where the check's words first give it in quotation marks, never in a title).
+    The ten checks the design writes out are served as the document writes them, word for word, read from the
+    document itself, with their category, severity and fixer; the six Notices it names say when they can wait; its
+    examples of a category's title and a skip reason's words are the ones served.
+  - **All 87 passed the template's tests as they stood.** One test of the engine's own didn't, and was changed: it
+    held a category's title to three words, a shape the design never gave, and "Extras in search results" is four.
+    It allows four. One rule of the design has no test, as nothing mechanical can judge it: "each step starts with a
+    verb". 68 of the 263 steps start "If …,", as eleven steps of the design's own ten do.
+  - **`site-hidden-from-search`'s words** were written when the check counted canonicals too. Two sentences were
+    brought to the rule as it is, by taking words out and adding none: sentence 1 lost ", or to show another page
+    instead" ("More than half of your pages tell search engines to keep them out of search results."), and step 3
+    lost ", and to point each page's main address (its "canonical" link) at itself" ("Ask them to remove the
+    "noindex" setting."). The rest of the data file is its writer's, byte for byte.
+  - **`plainLooksFor`**: 12 checks have one, the ones whose title is a sentence about the site
+    (`robots-txt-unreachable`: "A rules file that search engines can't read").
+  - **Limits follow the settings.** A text names a threshold as `{limit:name}`, the name an analysis setting's as its
+    JSON has it; `PlainLimits.Fill` puts the value there with its unit. All 12 numeric thresholds have a name
+    (`titleMinLength`, `titleMaxLength`, `descriptionMinLength`, `descriptionMaxLength`, `minWordCount`,
+    `duplicateMinWordCount`, `nearDuplicateMaxBits`, `imageAltMaxLength`, `largeImageBytes`, `largePageBytes`,
+    `slowResponseMs`, `maxUrlLength`), a test holds the names to the settings, and a name no setting has is an error
+    that a test looks for in every plain text the engine has. Ten checks name a limit, eleven times in all (ten of
+    the twelve names; no text names `duplicateMinWordCount` or `nearDuplicateMaxBits`), and no text types a number a
+    setting holds. A number that is a fixed rule stays a number: Google's 2 MB and 10 steps, the sitemap protocol's
+    50,000.
+  - Plain words are no part of the checks' fingerprint, nor of what an analysis stores.
+- **A status code's name in details.** Where a detail said "HTTP 404" it says "404 Not Found": the standard reason
+  phrase (RFC 9110), in every rule that writes a status (the response-code, redirect, robots.txt, sitemap and
+  site-version rules, and the shared wording for where a link, canonical or image ends). A code with no standard
+  name (a CDN's 520, LinkedIn's 999) stays "HTTP 520". What the crawl stored with a status in it ("Rate limited
+  (HTTP 429)", a sitemap's "HTTP 500", "robots.txt unreachable: HTTP 503") is named the same way where a detail
+  quotes it; **the crawl file keeps its own words**, and so do the sitemaps and robots.txt lists, alerts and notes,
+  which read them. Details are stored and grouped on, so the analysis version is 7 (once, for all of this), and an
+  analysis by an earlier engine is out of date until it is run again.
+- **On the command line.** `si score <crawl>` prints the breakdown, and `si issues` leads with the score.
+
+Nothing here changed what a crawl stores, so the crawl's schema version is as it was, and either engine reads and
+continues either file. An analysis of the 100k development crawl took 12.9 s before and 12.9 s now (a second analysis
+of each copy, back to back; the first of each, with other work loading the machine, 23.3 s and 20.7 s).
+
+**After the score**, on the same machine, with other agents' builds and benchmarks loading it throughout: the
+benchmark, run once, crawled its 100,000 pages in 79 s (36 to 58 s on a quieter machine; its pace fell to a fifth for
+stretches, and nothing in the crawl changed), peaked at 198 MB with no growth (−15 MB over the crawl), analysed in
+22.8 s, and found every planted issue and nothing else, `site-hidden-from-search` among the checks that must stay
+silent. `si readbench --gate` on that crawl passed every class on its second run (`text` 75 ms against 190, `stats`
+108 ms against 350, `stats-pass` 207 ms against 600, the links grid slowest read from the link summary 120 ms against
+200). On its first, with the machine busier, one read alone was over its gate: a regular expression over every title,
+219 ms against 190. Repeated by itself three times it took 94 to 102 ms, as it did for the engine before the score on
+a 100k crawl of its own (71 to 124 ms): the load, not the change, and no read was changed here.
+
+**After the three changes that followed** (a site-wide fault leads its severity in the order to fix;
+`site-hidden-from-search` counts noindex only; every check has its plain words), the benchmark, run once on the same
+machine, crawled its 100,000 pages in 56.8 s (1,779 pages/s), peaked at 193 MB with no growth (+1 MB over the crawl),
+analysed in 19.6 s, and found every planted issue and nothing else. The analysis's working set peaked at 331 MB, against 253 to 327 MB in
+the runs before it: one run, not repeated, and nothing these changes add is of that size (three counters in a rule,
+and 87 checks' words held once). `si readbench --gate` wasn't run again: no read changed.

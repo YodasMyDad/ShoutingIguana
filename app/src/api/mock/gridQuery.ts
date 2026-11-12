@@ -17,10 +17,25 @@ import type {
   GridSort,
   SummaryReason,
   SummaryState,
+  UrlColumn,
 } from '../grids';
 import { OPS_BY_TYPE, urlColumn } from './urlColumns';
 
 type Value = string | number | boolean | null | undefined;
+
+/**
+ * What tells one grid's queries from another's (the links grid's from the URL grid's, which is the default): its
+ * columns, where a search looks, how many keys it sorts by, and the columns of a query that names none.
+ */
+export interface GridShape {
+  column: (id: string) => Omit<UrlColumn, 'issueRowsOnly'> | undefined;
+  searchColumns: readonly string[];
+  maxSorts: number;
+  defaultColumns: readonly string[];
+}
+
+/** The URL grid's search: the URL or the title. */
+const URL_SEARCH_COLUMNS: readonly string[] = ['url', 'title'];
 
 const MAX_FILTERS = 20;
 const MAX_SORTS = 3;
@@ -123,8 +138,7 @@ function patternProblem(pattern: string): string | null {
     if (low >= 1_000 || high >= 1_000) return TOO_LARGE;
   }
   try {
-    const source = pattern.startsWith('(?i)') ? pattern.slice(4) : pattern;
-    const flags = pattern.startsWith('(?i)') ? 'i' : '';
+    const { source, flags } = browserPattern(pattern);
     RegExp(source, flags);
     return null;
   } catch (error) {
@@ -133,10 +147,26 @@ function patternProblem(pattern: string): string | null {
   }
 }
 
+/**
+ * A .NET pattern as the browser runs it, as far as the mock goes: the options a pattern starts with (`(?i)`, `(?m)`,
+ * `(?s)`, `(?x)`, or several, `(?im)`) become the browser's flags, and `x` takes the pattern's white space out. An
+ * option part-way through a pattern (`a(?i)b`), which the engine also runs, the mock can't.
+ */
+function browserPattern(pattern: string): { source: string; flags: string } {
+  const start = /^\(\?([imsx]+)\)/.exec(pattern);
+  if (!start) return { source: pattern, flags: '' };
+  const options = new Set(start[1]);
+  const rest = pattern.slice(start[0].length);
+  return {
+    source: options.has('x') ? rest.replace(/\s+/g, '') : rest,
+    flags: ['i', 'm', 's'].filter((flag) => options.has(flag)).join(''),
+  };
+}
+
 function regex(pattern: string): RegExp | null {
   if (patternProblem(pattern) !== null) return null;
-  const source = pattern.startsWith('(?i)') ? pattern.slice(4) : pattern;
-  return new RegExp(source, pattern.startsWith('(?i)') ? 'i' : '');
+  const { source, flags } = browserPattern(pattern);
+  return new RegExp(source, flags);
 }
 
 function matches(value: Value, filter: GridFilter): boolean {
@@ -203,17 +233,36 @@ function compareRows<Row extends { id: number }>(a: Row, b: Row, sort: readonly 
   return lastDesc ? b.id - a.id : a.id - b.id;
 }
 
-function filtered<Row extends { id: number }>(rows: readonly Row[], filters: readonly GridFilter[], search: string) {
+function filtered<Row extends { id: number }>(
+  rows: readonly Row[],
+  filters: readonly GridFilter[],
+  search: string,
+  searchColumns: readonly string[] = URL_SEARCH_COLUMNS,
+) {
   const term = asciiLower(search.trim());
   return rows.filter(
     (row) =>
       filters.every((filter) => matches(field(row, filter.column), filter)) &&
-      (term === '' || ['url', 'title'].some((column) => asciiLower(String(field(row, column) ?? '')).includes(term))),
+      (term === '' || searchColumns.some((column) => asciiLower(String(field(row, column) ?? '')).includes(term))),
   );
 }
 
-function ordered<Row extends { id: number }>(rows: readonly Row[], query: GridQuery): Row[] {
-  const result = filtered(rows, query.filters, query.search ?? '');
+/** The rows a filter set and a search match, in the rows' own order: what a grid's facets count. */
+export function matchingRows<Row extends { id: number }>(
+  rows: readonly Row[],
+  filters: readonly GridFilter[],
+  search: string,
+  searchColumns: readonly string[] = URL_SEARCH_COLUMNS,
+): Row[] {
+  return filtered(rows, filters, search, searchColumns);
+}
+
+function ordered<Row extends { id: number }>(
+  rows: readonly Row[],
+  query: GridQuery,
+  searchColumns: readonly string[] = URL_SEARCH_COLUMNS,
+): Row[] {
+  const result = filtered(rows, query.filters, query.search ?? '', searchColumns);
   if (query.sort.length === 0) return result;
   return [...result].sort((a, b) => compareRows(a, b, query.sort));
 }
@@ -241,14 +290,18 @@ function indexAfter<Row extends { id: number }>(rows: readonly Row[], orderedRow
 export function runGridQuery<Row extends { id: number }>(
   rows: readonly Row[],
   query: GridQuery,
-  options: { summary?: SummaryState; unavailable?: readonly string[] } = {},
+  options: {
+    summary?: SummaryState;
+    unavailable?: readonly string[];
+    shape?: Partial<Pick<GridShape, 'searchColumns' | 'defaultColumns'>>;
+  } = {},
 ): GridPage<Partial<Row> & { id: number }> {
-  const result = ordered(rows, query);
+  const result = ordered(rows, query, options.shape?.searchColumns);
   const unavailable = options.unavailable ?? [];
   const limit = query.limit;
   const fromCursor = query.after !== undefined;
   const start = fromCursor ? (indexAfter(rows, result, query) ?? result.length) : (query.offset ?? 0);
-  const asked = (query.columns ?? ['url']).filter((column) => column !== 'id');
+  const asked = (query.columns ?? options.shape?.defaultColumns ?? ['url']).filter((column) => column !== 'id');
   const columns = ['id', ...asked.filter((column) => !unavailable.includes(column))];
   const source = start < 0 ? [] : result.slice(start, start + limit);
   const page = source.map((row) => {
@@ -303,10 +356,15 @@ function looseFilter(value: unknown): Record<string, unknown> | null {
  * Field-keyed messages for a query the sidecar would refuse with `invalid-query`, empty when it would run it. A check's
  * own columns are only for its rows (`issueRows`). `limit` and `offset` are already defaulted.
  */
-export function queryErrors(query: GridQuery, issueRows = false): Record<string, string[]> {
+export function queryErrors(
+  query: GridQuery,
+  issueRows = false,
+  shape: Partial<Pick<GridShape, 'column' | 'maxSorts'>> = {},
+): Record<string, string[]> {
   const errors: Record<string, string[]> = {};
   const add = (key: string, message: string) => (errors[key] ??= []).push(message);
-  const columnOf = (id: string) => urlColumn(id, issueRows);
+  const columnOf = shape.column ?? ((id: string) => urlColumn(id, issueRows));
+  const maxSorts = shape.maxSorts ?? MAX_SORTS;
   ((query.columns ?? []) as readonly unknown[]).forEach((id, index) => {
     if (typeof id !== 'string') add(`columns[${index}]`, 'Give a column’s id.');
     else if (!columnOf(id)) add(`columns[${index}]`, `There’s no column called “${id}”.`);
@@ -402,7 +460,12 @@ export function queryErrors(query: GridQuery, issueRows = false): Record<string,
   });
   if ((query.search?.length ?? 0) > MAX_TEXT) add('search', `A search can be at most ${MAX_TEXT} characters.`);
   const sort = query.sort as readonly unknown[];
-  if (sort.length > MAX_SORTS) add('sort', `A view can be sorted by at most ${MAX_SORTS} columns.`);
+  if (sort.length > maxSorts) {
+    add(
+      'sort',
+      maxSorts === 1 ? 'This view sorts by one column.' : `A view can be sorted by at most ${maxSorts} columns.`,
+    );
+  }
   sort.forEach((item, index) => {
     const key = looseFilter(item);
     const column = key !== null && typeof key.column === 'string' ? key.column : null;
@@ -478,7 +541,7 @@ export function withPagingDefaults(body: unknown): GridQuery {
   return asked;
 }
 
-function invalidQuery(errors: Record<string, string[]>): ProblemBody {
+export function invalidQuery(errors: Record<string, string[]>): ProblemBody {
   const first = Object.values(errors)[0]?.[0];
   return {
     type: 'invalid-query',
@@ -489,13 +552,14 @@ function invalidQuery(errors: Record<string, string[]>): ProblemBody {
   };
 }
 
-function needsAnalysisProblem(
+export function needsAnalysisProblem(
   filters: readonly GridFilter[],
   sort: readonly GridSort[],
   summary: SummaryState,
+  columnOf: GridShape['column'] = urlColumn,
 ): ProblemBody | null {
   if (summary.available) return null;
-  const needsAnalysis = (id: string) => id === 'check' || urlColumn(id)?.needsAnalysis === true;
+  const needsAnalysis = (id: string) => id === 'check' || columnOf(id)?.needsAnalysis === true;
   const reason = summary.reason ?? 'notAnalyzed';
   const refused = [
     ...new Set([
@@ -521,18 +585,20 @@ export function answerGridQuery<Row extends { id: number }>(
   rows: readonly Row[],
   query: GridQuery,
   summary: SummaryState,
-  options: { issueRows?: boolean } = {},
+  options: { issueRows?: boolean; shape?: Partial<GridShape> } = {},
 ): GridAnswer<Partial<Row> & { id: number }> {
   const asked = withPagingDefaults(query);
-  const errors = queryErrors(asked, options.issueRows);
+  const shape = options.shape ?? {};
+  const columnOf = shape.column ?? urlColumn;
+  const errors = queryErrors(asked, options.issueRows, shape);
   if (Object.keys(errors).length > 0) return { ok: false, problem: invalidQuery(errors) };
-  const analysis = needsAnalysisProblem(asked.filters, asked.sort, summary);
+  const analysis = needsAnalysisProblem(asked.filters, asked.sort, summary, columnOf);
   if (analysis) return { ok: false, problem: analysis };
   const stale = cursorProblem(rows, asked);
   if (stale) return { ok: false, problem: invalidQuery({ after: [stale] }) };
-  const needsAnalysis = (id: string) => id === 'check' || urlColumn(id)?.needsAnalysis === true;
+  const needsAnalysis = (id: string) => id === 'check' || columnOf(id)?.needsAnalysis === true;
   const unavailable = summary.available ? [] : (asked.columns ?? []).filter(needsAnalysis);
-  return { ok: true, page: runGridQuery(rows, asked, { summary, unavailable }) };
+  return { ok: true, page: runGridQuery(rows, asked, { summary, unavailable, shape }) };
 }
 
 /** The response-time facet's buckets, in ms: the last has no top. */
@@ -556,7 +622,7 @@ const ALL_FACETS: readonly FacetId[] = [
 ];
 
 /** Each value of a column with URLs, known values first in the column's order, then the unknown. */
-function valueFacet(rows: readonly object[], column: string, order: readonly string[] = []): FacetBucket[] {
+export function valueFacet(rows: readonly object[], column: string, order: readonly string[] = []): FacetBucket[] {
   const counts = new Map<Value, number>();
   for (const row of rows) {
     const value = field(row, column) ?? null;

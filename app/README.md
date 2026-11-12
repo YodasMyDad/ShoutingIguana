@@ -34,9 +34,10 @@ another checkout of the engine, such as a clean worktree while someone edits thi
 
 `npm run dev` never touches your own library or crawls:
 
-- It copies the crawls in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls` into `%TEMP%\si-app-dev\data` (once, and again
-  when they change). With no dev crawls, or with `--synthetic`, it makes a small crawl of the engine's synthetic site
-  with the CLI.
+- It copies the crawls in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls` into `%TEMP%\si-app-dev\data`, and keeps a copy
+  from run to run while its original hasn't changed (its size and modified time, kept in
+  `%TEMP%\si-app-dev\copied-from`), so a copy you analysed stays analysed. When an original changes, its copy is made
+  again. With no dev crawls, or with `--synthetic`, it makes a small crawl of the engine's synthetic site with the CLI.
 - The sidecar gets a fresh state folder each run, a fixed development token and only the dev server's origin.
 - Ctrl+C stops both. Set `SI_DEV_LOG=1` to see the sidecar's log.
 
@@ -65,6 +66,12 @@ and serves the build. The crawl is `SI_E2E_CRAWL` if set, otherwise a small synt
 synthetic crawl an older engine analysed is made again, and an out-of-date `SI_E2E_CRAWL` has its copy analysed again
 (never the file itself). An out-of-date analysis would put its "Analyse again" offer on the screens, a Tab stop of its
 own. It needs `npm run build:sidecar` first, and Playwright's Chromium (`npx playwright install chromium`).
+
+`e2e/links-sweep.spec.ts` walks every count on Links (the header's under each view, every value of every facet, the
+inspector's "All N in Links") against the screen it lands on and the sidecar's own count. It runs with the rest on the
+synthetic crawl; to sweep a real crawl, every preset included, give it the file:
+`SI_E2E_CRAWL=<a .sicrawl file> npx playwright test e2e/links-sweep.spec.ts`. Most other specs look for the synthetic
+site's planted pages, so they are run on the synthetic crawl only.
 
 The setup also serves the engine's synthetic test site (the CLI's `testsite`, on a free port), which the Overview's
 tests crawl live from Home: watched to the answer, paused, resumed, stopped and continued. They never crawl a real

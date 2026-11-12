@@ -23,6 +23,11 @@ export interface FilterWords {
    * is one whose HTML was read. Null for the default, "is empty" and "is not empty".
    */
   empty?: (column: string, empty: boolean) => FilterSentence | null;
+  /**
+   * A yes-or-no column in plainer words than "is yes" and "is no", where it has them: "Target is on another site".
+   * Null for the default.
+   */
+  boolean?: (column: string, value: boolean) => FilterSentence | null;
 }
 
 const OPS: Record<string, string> = {
@@ -56,7 +61,7 @@ function either(values: readonly string[]): string {
 }
 
 /**
- * The chips a filter reads as. A check's group is a chip of its own, "Detail is HTTP 404" or "Related URL is /", and
+ * The chips a filter reads as. A check's group is a chip of its own, "Detail is 404 Not Found" or "Related URL is /", and
  * a group that has both (a temporary redirect's "302" and where it goes) is both, so the check and its group can be
  * read, and removed, one at a time. `relatedUrl` gives a related URL's words: the URL, `LOOKING_UP`, or plain words for
  * one that couldn't be read; without it, "another URL".
@@ -74,7 +79,7 @@ export function filterSentences(
     case 'isNotEmpty':
       return [words.empty?.(filter.column, false) ?? { field, op: 'is', value: 'not empty' }];
     case 'is':
-      return [{ field, op: 'is', value: filter.value ? 'yes' : 'no' }];
+      return [words.boolean?.(filter.column, filter.value) ?? { field, op: 'is', value: filter.value ? 'yes' : 'no' }];
     case 'between':
       // Each end in the column's own words, so a range of times has its unit on both.
       if (filter.min !== undefined && filter.max !== undefined)

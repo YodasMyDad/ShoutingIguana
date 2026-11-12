@@ -86,9 +86,9 @@ const PAGE = testUrlDetail({
     {
       checkId: 'internal-client-error',
       severity: 'error',
-      detail: 'HTTP 404',
+      detail: '404 Not Found',
       related: null,
-      group: { detail: 'HTTP 404', relatedUrlId: null },
+      group: { detail: '404 Not Found', relatedUrlId: null },
     },
     { checkId: 'title-too-long', severity: 'notice', detail: '61 characters', related: null, group: null },
     {

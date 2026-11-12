@@ -98,6 +98,16 @@ internal sealed class UrlTable
         return pages;
     }
 
+    /// <summary>
+    /// The URLs crawled, as the library and the URL grid count them: every URL with an outcome, less those never asked
+    /// because their host had stopped answering. What a check on any URL flags is a share of these.
+    /// </summary>
+    public int CountCrawled() => _statuses.Count(status => status.Fetched);
+
+    /// <summary>The site's URLs robots.txt kept the crawler out of, as the blocked-by-robots check flags them.</summary>
+    public int CountBlockedByRobots() =>
+        _statuses.Count(status => status is { IsInternal: true, Fetched: true, Outcome: FetchOutcome.RobotsDisallowed, IsSiteVersionProbe: false });
+
     public ref readonly UrlStatus this[int id] => ref _statuses[id];
 
     /// <summary>Pages with a followed link to this URL, not counting the URL itself.</summary>

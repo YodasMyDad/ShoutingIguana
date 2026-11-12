@@ -133,7 +133,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
             ? Html(context, "<a href=\"/from-www\">Copy</a>")
             : RedirectsHome(301)(context));
 
-        Assert.Equal(Added(expected, "duplicate-site-version | http://www.example.com/ | Answers HTTP 200 instead of redirecting to http://example.com/ | null"),
+        Assert.Equal(Added(expected, "duplicate-site-version | http://www.example.com/ | Answers 200 OK instead of redirecting to http://example.com/ | null"),
             Issues(path));
         Assert.DoesNotContain("www.example.com/from-www", _requests);
         Assert.Equal(0, TestCrawls.Count(path, "SELECT COUNT(*) FROM urls WHERE url LIKE '%/from-www'"));
@@ -147,7 +147,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
 
         var (path, _) = await CrawlAsync(RedirectsHome(302));
 
-        Assert.Equal(Added(expected, "redirect-temporary | http://www.example.com/ | HTTP 302 | http://example.com/"), Issues(path));
+        Assert.Equal(Added(expected, "redirect-temporary | http://www.example.com/ | 302 Found | http://example.com/"), Issues(path));
     }
 
     /// <summary>
@@ -167,7 +167,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         });
 
         Assert.Equal(Added(expected,
-                "duplicate-site-version | http://www.example.com/ | Redirects to http://www.example.com/home, which answers HTTP 200 instead of redirecting to http://example.com/ | http://www.example.com/home"),
+                "duplicate-site-version | http://www.example.com/ | Redirects to http://www.example.com/home, which answers 200 OK instead of redirecting to http://example.com/ | http://www.example.com/home"),
             Issues(path));
         Assert.DoesNotContain("www.example.com/from-www-home", _requests);
         Assert.Equal(DiscoverySource.SiteVersion, (DiscoverySource)TestCrawls.Count(path, $"SELECT source FROM urls WHERE url = '{WWW}/home'"));
@@ -210,12 +210,12 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
 
         var expected = await IssuesAsync(RedirectsHome(301));
         var (probed, _) = await CrawlAsync(Www);
-        Assert.Equal(Added(expected, "redirect-broken | http://www.example.com/ | Ends at a URL that returns HTTP 404 | http://www.example.com/gone"),
+        Assert.Equal(Added(expected, "redirect-broken | http://www.example.com/ | Ends at a URL that returns 404 Not Found | http://www.example.com/gone"),
             Issues(probed));
 
         var (linked, _) = await CrawlAsync(Www, home: $"<a href=\"/a\">A</a> <a href=\"{WWW}/gone\">Gone</a>");
         var issues = Issues(linked);
-        Assert.Contains("internal-client-error | http://www.example.com/gone | HTTP 404 | null", issues);
+        Assert.Contains("internal-client-error | http://www.example.com/gone | 404 Not Found | null", issues);
         Assert.Contains(issues, row => row.StartsWith("broken-internal-links | http://example.com/ |", StringComparison.Ordinal));
         Assert.Equal(DiscoverySource.Link, (DiscoverySource)TestCrawls.Count(linked, $"SELECT source FROM urls WHERE url = '{WWW}/gone'"));
     }
@@ -331,7 +331,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
             _ => RedirectsHome(301)(context)
         }, options => options with { MaxUrls = 1 });
 
-        Assert.Equal(["duplicate-site-version | http://www.example.com/ | Redirects to http://www.example.com/home, which answers HTTP 200 instead of redirecting to http://example.com/ | http://www.example.com/home"],
+        Assert.Equal(["duplicate-site-version | http://www.example.com/ | Redirects to http://www.example.com/home, which answers 200 OK instead of redirecting to http://example.com/ | http://www.example.com/home"],
             Issues(path).Where(row => row.StartsWith("duplicate-site-version", StringComparison.Ordinal)));
         Assert.Equal(1, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE state = {(int)UrlState.Done} AND source <> {(int)DiscoverySource.SiteVersion}"));
         Assert.Equal(4, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE state = {(int)UrlState.Done} AND source = {(int)DiscoverySource.SiteVersion}"));
@@ -464,7 +464,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         var resumed = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
 
         Assert.DoesNotContain(SKIPPED_NOTE, resumed.Notes);
-        Assert.Equal(["duplicate-site-version | http://www.example.com/ | Answers HTTP 200 instead of redirecting to http://example.com/ | null"],
+        Assert.Equal(["duplicate-site-version | http://www.example.com/ | Answers 200 OK instead of redirecting to http://example.com/ | null"],
             Issues(path).Where(row => row.StartsWith("duplicate-site-version", StringComparison.Ordinal)));
     }
 
@@ -599,7 +599,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
             TestCrawls.Rows(path, "SELECT origin FROM robots"));
         Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE url LIKE '%{UNICODE[7..]}%'"));
         var issues = Issues(path);
-        Assert.Contains($"duplicate-site-version | http://www.{PUNYCODE[7..]}/ | Answers HTTP 200 instead of redirecting to {PUNYCODE}/ | null", issues);
+        Assert.Contains($"duplicate-site-version | http://www.{PUNYCODE[7..]}/ | Answers 200 OK instead of redirecting to {PUNYCODE}/ | null", issues);
         Assert.DoesNotContain(issues, row => row.Split(" | ")[0] is "robots-txt-unreachable-other-origin" or "robots-txt-missing" or "sitemap-url-other-host");
     }
 
@@ -622,7 +622,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
 
         var issues = Issues(path);
-        Assert.Contains($"robots-txt-unreachable | {PUNYCODE}/ | {PUNYCODE}/robots.txt (HTTP 503) | null", issues);
+        Assert.Contains($"robots-txt-unreachable | {PUNYCODE}/ | {PUNYCODE}/robots.txt (503 Service Unavailable) | null", issues);
         Assert.DoesNotContain(issues, row => row.StartsWith("robots-txt-unreachable-other-origin", StringComparison.Ordinal));
     }
 

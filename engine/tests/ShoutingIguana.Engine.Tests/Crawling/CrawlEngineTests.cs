@@ -83,6 +83,34 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         await AssertFindsExactlyThePlantsAsync(server, Options(server));
     }
 
+    /// <summary>
+    /// Every product is noindex, as on a site launched with its staging setting left on: more than half of the pages that
+    /// stand for themselves are noindex, which is one fault of the whole site, reported once, on the home page, with the
+    /// numbers: the noindex check's own count, of the pages analysed less the canonicalised ones. The site without it
+    /// (every other test here, and the benchmark) is never flagged: the whole issues table is compared.
+    /// </summary>
+    [Fact]
+    public async Task FindsASiteHiddenFromSearch()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, HiddenFromSearch = true });
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
+
+        var expected = server.Site.GetExpectations();
+        Assert.True(expected.Noindex >= VARIANT_PAGES - 1 && expected.Canonicalised > 0 && expected.Noindex * 2 > expected.AnalysedPages - expected.Canonicalised);
+        var hidden = Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, 10));
+        Assert.Equal(
+            (server.BaseUri.AbsoluteUri, (string?)null, string.Create(CultureInfo.InvariantCulture,
+                $"{expected.Noindex:N0} of {expected.AnalysedPages - expected.Canonicalised:N0} pages are noindex")),
+            (hidden.Url, hidden.RelatedUrl, hidden.Detail));
+
+        // A noindex page is a notice and costs nothing; the site being hidden is serious and site-wide. With the site on
+        // plain HTTP as well, nothing is left of the score: a site search engines can't list never reads as fine.
+        var score = IssueReader.ReadResults(path)!.Score!;
+        Assert.Contains(score.Lines, line => line is { CheckId: "site-hidden-from-search", Severity: IssueSeverity.Error, Extent: ScoreExtent.Site, Points: 60 });
+        Assert.Contains(score.Lines, line => line is { CheckId: "noindex-page", Severity: IssueSeverity.Notice, Points: 0 } && line.Count == expected.Noindex);
+        Assert.Equal((0, ScoreBand.Poor), (score.Value, score.Band));
+    }
+
     /// <summary>Crawls the site and checks the crawl and every issue against what the site planted; returns the crawl file.</summary>
     private async Task<string> AssertFindsExactlyThePlantsAsync(SyntheticSiteServer server, CrawlOptions options)
     {
@@ -146,12 +174,28 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(ran.Select(issue => issue.Id).Order(StringComparer.Ordinal), counts.Keys.Order(StringComparer.Ordinal));
         Assert.All(ran, issue => Assert.Equal((issue.Id, flaggedPerIssue.GetValueOrDefault(issue.Id)), (issue.Id, counts.GetValueOrDefault(issue.Id))));
 
+        // A check that says it is reported once has one issue at most, whatever the site: one for each other version of
+        // the site, for the duplicate site version.
+        Assert.All(ran.Where(issue => issue.ReportedOnce), issue =>
+            Assert.True(counts.GetValueOrDefault(issue.Id) <= (issue == IssueCatalog.DUPLICATE_SITE_VERSION ? 3 : 1), $"{issue.Id} was reported {counts.GetValueOrDefault(issue.Id)} times"));
+
         // The analysis's own state is stored with it: partial or not, and why each skipped check was skipped.
         var stored = IssueReader.ReadAnalysis(path)!;
         Assert.Equal(analysis.IsPartial, stored.IsPartial);
         Assert.Equal(analysis.Skipped, IssueReader.ReadSkippedChecks(path));
         Assert.Equal(expected.SkippedChecks.Order(StringComparer.Ordinal), analysis.Skipped.Select(skip => skip.CheckId).Order(StringComparer.Ordinal));
-        Assert.Empty(CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
+        var listed = CrawlSummaryReader.Read(path);
+        Assert.Empty(listed.OutOfDate(new AnalysisSettings()));
+
+        // The score is stored with it, worked out from these counts over the pages analysed and the URLs crawled, as the
+        // library counts them: the URLs that weren't checked (a dead twin's) are no part of either.
+        var score = IssueReader.ReadResults(path)!.Score!;
+        Assert.Equal((listed.CrawledUrlCount, listed.CrawledUrlCount), ((long?)analysis.CrawledUrlCount, stored.CrawledUrlCount));
+        Assert.Equal(((long)expected.AnalysedPages, listed.CrawledUrlCount), (score.Covers.Pages, (long?)score.Covers.Urls));
+        Assert.Equal((ran.Count, expected.SkippedChecks.Count, true), (score.Covers.ChecksRun, score.Covers.ChecksSkipped, score.Covers.Complete));
+        Assert.Equal(counts.Where(count => count.Value > 0).Select(count => (count.Key, count.Value)).Order(),
+            score.Lines.Select(line => (line.CheckId, line.Count)).Order());
+        Assert.Equal(expected.RobotsDisallowed, score.Covers.BlockedByRobots);
 
         // The URLs grid shows what the checks judged.
         UrlSummaryAgreement.AssertAgreesWithTheChecks(path, expected, stats);

@@ -1,3 +1,5 @@
+using ShoutingIguana.Engine.Analysis.Models;
+
 namespace ShoutingIguana.Sidecar.Api.Models;
 
 /// <summary>One crawl in the library.</summary>
@@ -42,6 +44,12 @@ internal sealed record CrawlListItem
     public IssueCountsDto? Issues { get; init; }
 
     public DateTime? AnalyzedAt { get; init; }
+
+    /// <summary>
+    /// The score of the last analysis: the number, its word, and whether it is of a crawl that didn't read all of the
+    /// site. Null when there's none: never analysed, no page read, or analysed by an engine from before the score.
+    /// </summary>
+    public SiteScoreSummary? Score { get; init; }
 
     /// <summary>
     /// The last analysis no longer stands: the crawl changed after it, this engine would judge it differently, or its

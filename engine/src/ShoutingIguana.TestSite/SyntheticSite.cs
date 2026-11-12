@@ -391,9 +391,20 @@ public sealed partial class SyntheticSite
         var products = PageCount - 1;
         var orphans = _options.Sitemaps ? OrphanCount : 0;
         var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true });
+        var analysedPages = htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false });
+
+        // A site more than half of whose pages are noindex is hidden as a whole, which is reported once, on the home
+        // page. A canonicalised page is a variant of another, and no part of the count: no planted canonical names its
+        // own page on another version of the site, so every one of them is out. Only a site with HiddenFromSearch gets
+        // there.
+        if (Count(issues, "noindex-page") * 2 > analysedPages - Count(issues, "canonicalised-page"))
+        {
+            Flag("site-hidden-from-search", "/");
+        }
+
         return new SyntheticSiteExpectations(
             HtmlPages: htmlPages,
-            AnalysedPages: htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false }),
+            AnalysedPages: analysedPages,
             Products: products,
             Orphans: orphans,
             BrokenUrls: broken.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: false }),
@@ -433,11 +444,11 @@ public sealed partial class SyntheticSite
 
     private static bool MissesDescription(int product) => product % 50 == 0;
 
-    private static bool IsNoindex(int product) => product % 101 == 0;
+    private bool IsNoindex(int product) => _options.HiddenFromSearch || product % 101 == 0;
 
     private static bool IsCanonicalised(int product) => product % 73 == 0;
 
-    private static bool IsIndexable(int product) => !IsNoindex(product) && !IsCanonicalised(product);
+    private bool IsIndexable(int product) => !IsNoindex(product) && !IsCanonicalised(product);
 
     private static bool MissesAlt(int product) => product % 31 == 0;
 

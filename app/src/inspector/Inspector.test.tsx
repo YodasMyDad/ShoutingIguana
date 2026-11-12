@@ -357,14 +357,14 @@ describe('the summary', () => {
           severity: 'error',
           detail: 'its own detail',
           related: null,
-          group: { detail: 'HTTP 404', relatedUrlId: null },
+          group: { detail: '404 Not Found', relatedUrlId: null },
         },
       ],
     });
     const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: grouped } });
     const link = await within(inspector).findByRole('link', { name: 'Internal URL returns 4xx' });
     expect(link.getAttribute('href')).toContain(`/crawls/${TEST_CRAWL_ID}/issues/internal-client-error?group=`);
-    expect(groupOf(link)).toEqual({ detail: 'HTTP 404', relatedUrlId: null });
+    expect(groupOf(link)).toEqual({ detail: '404 Not Found', relatedUrlId: null });
   });
 });
 
@@ -642,7 +642,46 @@ describe('the sections', () => {
       detail: null,
       relatedUrlId: 2,
     });
-    expect(within(named).getByText('5 URLs')).toBeVisible();
+    // The check flags only pages, so the URLs whose issue names this one are pages.
+    expect(within(named).getByText('5 pages')).toBeVisible();
+  });
+
+  it('counts the URLs that name this one in pages only for a check that flags nothing else', async () => {
+    const chain = { ...ISSUES_CHECKS.checks[0]!, id: 'redirect-chain', title: 'Redirect chain' };
+    const { subject: _subject, ...duplicate } = ISSUES_CHECKS.checks[2]!;
+    const older = { ...duplicate, id: 'title-duplicate', title: 'Duplicate title' };
+    const { user } = await open(
+      `${URLS}?inspect=2`,
+      {
+        urls: {
+          2: testUrlDetail({
+            namedBy: {
+              total: 4,
+              checks: [
+                { checkId: 'empty-anchor-text', count: 1 },
+                { checkId: 'redirect-chain', count: 2 },
+                { checkId: 'title-duplicate', count: 1 },
+              ],
+            },
+          }),
+        },
+      },
+      undefined,
+      { checks: { ...ISSUES_CHECKS, checks: [...ISSUES_CHECKS.checks, chain, older] } },
+    );
+    const panel = await showTab(user, /^Issues/);
+    const named = within(panel).getByRole('list', { name: 'Issues on other URLs that name this one' });
+    const counts = within(named)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(counts).toEqual([
+      // A page check: its one page.
+      'Internal links without anchor text1 page',
+      // A check that can flag any URL (the redirects that end here): URLs.
+      'Redirect chain2 URLs',
+      // A check that doesn't say what it flags: a page is a URL, so URLs is true.
+      'Duplicate title1 URL',
+    ]);
   });
 
   it('draws the redirect chain hop by hop, and calls out a loop', async () => {

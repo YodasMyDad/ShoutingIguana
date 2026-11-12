@@ -1,6 +1,7 @@
 import { EyeOff } from 'lucide-react';
 import { useEffect, useId, useRef, type KeyboardEvent, type Ref } from 'react';
 import type { Severity } from '../../api/types';
+import { affectedWords } from '../../crawl/checkSubject';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
@@ -283,6 +284,8 @@ function CheckOption({
 }) {
   const { check, outcome, count, skipReason } = entry;
   const skipped = outcome === 'skipped';
+  // What the count is of, for the row's name: pages only for a check that flags nothing else.
+  const words = affectedWords(check);
   const meta = skipped ? (
     <Badge variant="dashed">Skipped</Badge>
   ) : outcome === 'passed' ? (
@@ -290,15 +293,15 @@ function CheckOption({
   ) : (
     <>
       <Num value={count ?? 0} />
-      <span className="sr-only"> {count === 1 ? 'URL' : 'URLs'}</span>
+      <span className="sr-only"> {count === 1 ? words.noun : words.plural}</span>
     </>
   );
   return (
     <ListRow
       asChild
       muted={skipped || outcome === 'passed' || entry.hidden}
-      // The mark's word is part of the row's name ("Error Internal URL returns 4xx 9 URLs"); a skipped or passed
-      // check's own word is on the right already.
+      // The mark's word is part of the row's name ("Error Internal URL returns 4xx 9 URLs", "Notice Title too long 3
+      // pages"); a skipped or passed check's own word is on the right already.
       icon={<SeverityMark severity={outcome} decorative={skipped || outcome === 'passed'} />}
       title={check.title}
       meta={

@@ -47,7 +47,7 @@ public sealed class SiteRuleTests
         Assert.Contains(new IssueHit(IssueCatalog.REDIRECT_DOWNGRADE, downgrade, null, site.Id("http://example.com/insecure")), hits);
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.REDIRECT_TEMPORARY && hit.UrlId == temporary);
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.REDIRECT_BROKEN && hit.UrlId == broken);
-        Assert.Equal("HTTP 301 without a usable Location header", hits.Single(hit => hit.UrlId == dangling).Detail);
+        Assert.Equal("301 Moved Permanently without a usable Location header", hits.Single(hit => hit.UrlId == dangling).Detail);
         Assert.Equal(4, hits.Count);
     }
 
@@ -122,7 +122,7 @@ public sealed class SiteRuleTests
 
         var unreachable = Assert.Single(hits);
         Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, unreachable.Issue);
-        Assert.Equal("https://example.com/robots.txt (HTTP 503)", unreachable.Detail);
+        Assert.Equal("https://example.com/robots.txt (503 Service Unavailable)", unreachable.Detail);
 
         // Google treats 429 like a server error; a redirect loop is handled as "no rules", as the crawler does.
         var limited = new RobotsTxtRules(site.Table(), [new("https://example.com", 429, null, null, 0)], scope, main).Finish().Single();
@@ -147,7 +147,7 @@ public sealed class SiteRuleTests
         var hit = new RobotsTxtRules(site.Table(), robots, scope, new HashSet<string> { "https://example.com" }).Finish().Single();
 
         Assert.Equal(new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, site.Id($"{site.Site}/"),
-            "https://blog.example.com/robots.txt (HTTP 503), http://example.com/robots.txt (Timed out)"), hit);
+            "https://blog.example.com/robots.txt (503 Service Unavailable), http://example.com/robots.txt (Timed out)"), hit);
         Assert.Equal(IssueSeverity.Warning, hit.Issue.Severity);
 
         // The home page's origin counts as the site's own once the start URL redirects there.
@@ -175,7 +175,7 @@ public sealed class SiteRuleTests
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.NOT_IN_SITEMAP && hit.UrlId == unlisted);
         Assert.Equal("The URL is noindex", hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_NON_INDEXABLE).Detail);
         Assert.Equal(listedNoindex, hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_NON_INDEXABLE).UrlId);
-        Assert.Contains("sitemap-old.xml (HTTP 404)", hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_ERROR).Detail);
+        Assert.Contains("sitemap-old.xml (404 Not Found)", hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_ERROR).Detail);
         Assert.Equal(3, hits.Count);
 
     }
@@ -256,11 +256,11 @@ public sealed class SiteRuleTests
 
         Assert.Equal(
         [
-            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, moved, "The URL redirects (HTTP 301)"),
-            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, gone, "The URL returns HTTP 404"),
-            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, fine, "The URL returns HTTP 200"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, moved, "The URL redirects (301 Moved Permanently)"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, gone, "The URL returns 404 Not Found"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, fine, "The URL returns 200 OK"),
             new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, notChecked, "The URL wasn't checked"),
-            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, partner, "The URL returns HTTP 200")
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, partner, "The URL returns 200 OK")
         ], all.Where(hit => hit.Issue == IssueCatalog.SITEMAP_URL_OTHER_HOST));
 
         // Being the site's own URLs, the www ones are judged like any other entry as well.
@@ -421,8 +421,8 @@ public sealed class SiteRuleTests
         Assert.Equal([new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, backHere.UrlId, "The canonical URL redirects back to this page", site.Id($"{site.Site}/page"))],
             Hits(analysed[0]));
         Assert.Equal([IssueCatalog.TITLE_TOO_SHORT], new TitleRules(new AnalysisSettings()).Check(analysed[0]).Select(hit => hit.Issue));
-        Assert.Equal("The canonical URL returns HTTP 404", Hits(analysed[1]).Single().Detail);
-        Assert.Equal("The canonical URL redirects to a URL that returns HTTP 404", Hits(analysed[2]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_BROKEN).Detail);
+        Assert.Equal("The canonical URL returns 404 Not Found", Hits(analysed[1]).Single().Detail);
+        Assert.Equal("The canonical URL redirects to a URL that returns 404 Not Found", Hits(analysed[2]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_BROKEN).Detail);
         Assert.Equal([IssueCatalog.CANONICALISED_PAGE], Hits(analysed[3]).Select(hit => hit.Issue));
         Assert.Equal([IssueCatalog.CANONICALISED_PAGE, IssueCatalog.CANONICAL_TO_REDIRECT], Hits(analysed[4]).Select(hit => hit.Issue));
     }
@@ -526,9 +526,9 @@ public sealed class SiteRuleTests
         Assert.True(rules.CanCheck);
         Assert.Equal(
         [
-            new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, www, "Answers HTTP 200 instead of redirecting to https://example.com/"),
+            new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, www, "Answers 200 OK instead of redirecting to https://example.com/"),
             new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, wwwOverHttp,
-                "Redirects to https://www.example.com/, which answers HTTP 200 instead of redirecting to https://example.com/", www)
+                "Redirects to https://www.example.com/, which answers 200 OK instead of redirecting to https://example.com/", www)
         ], rules.Finish());
         Assert.Equal(IssueCategory.Content, IssueCatalog.DUPLICATE_SITE_VERSION.Category);
         Assert.Equal(IssueSeverity.Warning, IssueCatalog.DUPLICATE_SITE_VERSION.Severity);
@@ -575,7 +575,7 @@ public sealed class SiteRuleTests
         var rules = Versions(site);
 
         Assert.True(rules.CanCheck);
-        Assert.Equal([new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, bare, "Answers HTTP 200 instead of redirecting to https://www.example.com/")],
+        Assert.Equal([new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, bare, "Answers 200 OK instead of redirecting to https://www.example.com/")],
             rules.Finish());
     }
 
@@ -650,7 +650,7 @@ public sealed class SiteRuleTests
 
         var hits = new ResponseCodeRules(site.Table(), new Dictionary<int, string>()).Finish().ToList();
 
-        Assert.Equal([new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, linked, "HTTP 503")], hits);
+        Assert.Equal([new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, linked, "503 Service Unavailable")], hits);
         Assert.Contains(new RedirectRules(site.Table()).Finish(), hit => hit.Issue == IssueCatalog.REDIRECT_BROKEN && hit.UrlId == site.Id("http://example.com/"));
     }
 
