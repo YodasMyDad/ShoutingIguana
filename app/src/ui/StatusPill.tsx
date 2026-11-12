@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { Ban, Check, CircleAlert, FileX, Lock, Pause, Square, TriangleAlert, type LucideIcon } from 'lucide-react';
 import type { CrawlStatus } from '../api/types';
 import { statusLabel } from '../crawl/status';
-import { formatCountOf } from '../lib/format';
+import { formatCount, formatCountOf } from '../lib/format';
 import { Icon } from './Icon';
 import { LiveDot } from './LiveBadge';
 
@@ -32,10 +32,13 @@ export function StatusPill({
   status,
   fetched,
   variant = 'pill',
+  words = 'advanced',
   className,
 }: {
   status: CrawlStatus;
   fetched: number | null;
+  /** Whose words: Advanced's ("Running 2,713 URLs") or Simple's ("Checking 2,713 checked"). */
+  words?: 'simple' | 'advanced' | undefined;
   /** `plain`: the icon and the word without the pill, for a table's status column (the library's). */
   variant?: 'pill' | 'plain' | undefined;
   className?: string | undefined;
@@ -52,11 +55,13 @@ export function StatusPill({
       )}
     >
       {live ? <LiveDot pulse={status !== 'stopping'} /> : <Icon icon={icon} size="sm" />}
-      {statusLabel(status)}
+      {statusLabel(status, words)}
       {fetched !== null && COUNTED.has(status) ? (
         <>
           {' '}
-          <span className="si-status-pill__count">{formatCountOf(fetched, 'URL')}</span>
+          <span className="si-status-pill__count">
+            {words === 'simple' ? `${formatCount(fetched)} checked` : formatCountOf(fetched, 'URL')}
+          </span>
         </>
       ) : null}
     </span>

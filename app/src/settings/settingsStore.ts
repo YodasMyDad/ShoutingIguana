@@ -70,6 +70,15 @@ export function updateSettings(patch: Partial<Settings> | ((settings: Settings) 
   saveTimer = setTimeout(() => void backend.save(current).catch(() => undefined), SAVE_DELAY_MS);
 }
 
+/**
+ * Puts preferences in place without saving them: for tests and stories, which start each case from a known state
+ * (Advanced, unless a case says otherwise, as the screens built before Simple expect).
+ */
+export function replaceSettings(patch: Partial<Settings>): void {
+  current = readSettings({ ...current, ...patch });
+  listeners.forEach((listener) => listener());
+}
+
 /** Writes any pending change now: before the window closes. */
 export async function flushSettings(): Promise<void> {
   if (saveTimer === undefined) return;

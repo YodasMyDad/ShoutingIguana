@@ -4,8 +4,12 @@
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type Density = 'compact' | 'standard' | 'comfortable';
 export type InspectorDock = 'right' | 'bottom';
+/** Simple or Advanced: one app, two views of the same crawl (docs/v2-ui-simple.md, The switch). */
+export type Mode = 'simple' | 'advanced';
 
 export interface Settings {
+  /** Simple on a first start; the switch in the top bar and Settings > General > Mode are this one value. */
+  mode: Mode;
   theme: ThemePreference;
   /** Grid rows of 28, 32 or 40 px. */
   density: Density;
@@ -29,6 +33,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  mode: 'simple',
   theme: 'system',
   density: 'standard',
   zoom: 1,
@@ -78,6 +83,7 @@ export function readSettings(value: unknown): Settings {
     }
   }
   return {
+    mode: oneOf(stored.mode, ['simple', 'advanced'], DEFAULT_SETTINGS.mode),
     theme: oneOf(stored.theme, ['system', 'light', 'dark'], DEFAULT_SETTINGS.theme),
     density: oneOf(stored.density, ['compact', 'standard', 'comfortable'], DEFAULT_SETTINGS.density),
     zoom: numberIn(stored.zoom, ZOOM_RANGE, DEFAULT_SETTINGS.zoom),

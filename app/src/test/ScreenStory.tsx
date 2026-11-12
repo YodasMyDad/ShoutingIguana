@@ -10,7 +10,8 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { liveStore } from '../live/liveStore';
-import { updateSettings } from '../settings/settingsStore';
+import type { Mode } from '../settings/schema';
+import { replaceSettings, updateSettings } from '../settings/settingsStore';
 import { setDirectConnection } from '../shell/connection';
 import { TEST_CRAWL_ID, fakeSidecar, type FakeRoute } from './fakeSidecar';
 
@@ -41,10 +42,13 @@ export interface ScreenAppProps {
   /** Everything about the crawl is read again once, after this long: the refreshing state. */
   refreshAfterMs?: number | undefined;
   crawlId?: string | undefined;
+  /** The mode the app is in: Advanced unless the story is of Simple. */
+  mode?: Mode | undefined;
 }
 
-export function ScreenApp({ path, live, refreshAfterMs, crawlId = TEST_CRAWL_ID }: ScreenAppProps) {
+export function ScreenApp({ path, live, refreshAfterMs, crawlId = TEST_CRAWL_ID, mode = 'advanced' }: ScreenAppProps) {
   const [app] = useState(() => {
+    replaceSettings({ mode });
     const queryClient: QueryClient = createQueryClient();
     return { queryClient, router: createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] })) };
   });

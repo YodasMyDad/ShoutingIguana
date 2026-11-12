@@ -734,7 +734,9 @@ describe('Sitemaps: one sitemap', () => {
     expect(await screen.findByText('of 6 URLs')).toBeVisible();
     // One segment is always chosen, so focus arriving on the control chooses nothing for the user: these filters
     // are a segment of their own while they last, with the count the grid shows.
-    const chosen = screen.getAllByRole('radio').filter((option) => option.getAttribute('aria-checked') === 'true');
+    const chosen = within(screen.getByRole('main'))
+      .getAllByRole('radio')
+      .filter((option) => option.getAttribute('aria-checked') === 'true');
     expect(chosen.map((option) => option.textContent)).toEqual(['Other filters 5']);
     act(() => chosen[0]?.focus());
     expect(searchOf(router).filter).toEqual([{ column: 'fetched', op: 'is', value: true }]);

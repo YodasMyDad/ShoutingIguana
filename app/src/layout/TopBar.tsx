@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useParams, useRouter } from '@tanstack/react-router';
+import clsx from 'clsx';
 import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Search, Square } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { crawlQuery } from '../api/queries';
-import { CRAWL_SECTIONS, sectionOf } from '../app/sections';
+import { crawlSectionEntry, sectionOf } from '../app/sections';
 import { setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
@@ -12,6 +13,7 @@ import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
 import { formatExactTime } from '../lib/format';
 import { isMac } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
+import { useMode, type Mode } from '../mode/mode';
 import { Button } from '../ui/Button';
 import { Favicon } from '../ui/Favicon';
 import { Icon } from '../ui/Icon';
@@ -19,28 +21,60 @@ import { IconButton } from '../ui/IconButton';
 import { Kbd } from '../ui/Kbd';
 import { StatusPill } from '../ui/StatusPill';
 import { TextLink } from '../ui/TextLink';
+import { Tooltip } from '../ui/Tooltip';
+import { ModeSwitch } from './ModeSwitch';
+import { useGiveWay } from './useGiveWay';
 
-/** A crawl control's words: in a top bar short of room, read but not shown, so the button keeps its name. */
+/** A crawl control's words: once the bar is short of room (step 6), read but not shown, so the button keeps its name. */
 function ControlWords({ children }: { children: string }) {
-  return <span className="@max-topbar-words/topbar:sr-only">{children}</span>;
+  return <span className="group-data-give-6/topbar:sr-only">{children}</span>;
 }
 
 // The crawl's status pill is the design system's now (ui/StatusPill.tsx); it's still exported from here, where it began.
 export { StatusPill };
 
+/** The crumbs' separator: drawn, not read (the breadcrumb's list says where each part ends). */
+function Separator({ className }: { className?: string }) {
+  return (
+    <li aria-hidden="true" className={clsx('shrink-0 text-text-muted', className)}>
+      <Icon icon={ChevronRight} size="sm" />
+    </li>
+  );
+}
+
+/** Where you are outside a crawl: the page's own name, after Home. */
+function pageTitle(pathname: string, mode: Mode): string | null {
+  if (pathname === '/new') return mode === 'simple' ? 'Check a website' : 'New crawl';
+  if (pathname === '/settings' || pathname.startsWith('/settings/')) return 'Settings';
+  return null;
+}
+
 /**
- * The top bar (docs/v2-ui-ia.md, The shell): back and forward, where you are, the crawl's status and controls, and
- * the palette. The same on every screen, so a running crawl is always visible and controllable.
+ * The top bar (docs/v2-ui-ia.md, The shell; docs/v2-ui-simple.md, Top bar): back and forward, where you are, the
+ * crawl's status and controls, search, and the switch. The same on every screen, so a running crawl is always visible
+ * and controllable.
+ *
+ * Short of room, its parts give way in a fixed order, measured on the bar's own width (useGiveWay): the keys inside
+ * buttons, the crawl's date, the search field (to its icon), Home, the status pill's count, the controls' words (to
+ * their icons), the site, Forward. Never Back, the section you're on, the status word, the controls, search's icon or
+ * the switch. Each part that gives way keeps its whole name for a screen reader, and in a tooltip.
  */
 export function TopBar() {
   const router = useRouter();
+  const mode = useMode();
   const { crawl: crawlId } = useParams({ strict: false });
   const pathname = useLocation({ select: (location) => location.pathname });
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
   const live = useLiveCrawl(crawlId);
   const status = crawlId ? effectiveStatus(crawl, live) : null;
   const controls = crawlControls(status, crawl);
-  const section = CRAWL_SECTIONS.find((candidate) => candidate.id === sectionOf(pathname));
+  const sectionId = sectionOf(pathname);
+  const section = sectionId ? crawlSectionEntry(sectionId) : null;
+  const here = section ? ((mode === 'simple' ? section.simpleTitle : undefined) ?? section.title) : null;
+  const page = crawlId ? null : pageTitle(pathname, mode);
+  const onHome = pathname === '/';
+  const barRef = useRef<HTMLElement>(null);
+  useGiveWay(barRef);
   // A control pressed goes once it has worked (Pause becomes Resume, Stop goes while the crawl stops): focus goes to
   // the control that took its place, or to the view when none did, never to the page.
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -49,8 +83,17 @@ export function TopBar() {
     () => controlsRef.current?.querySelector<HTMLElement>('button') ?? document.getElementById('main'),
   );
 
+  const date = crawl?.startedAt ? formatExactTime(crawl.startedAt) : null;
+  const site = crawlId ? crawlName(crawl) : null;
+  // The whole trail, for the tooltip, whatever has given way.
+  const trail = ['Home', site, date, here ?? page].filter(Boolean).join(' › ');
+
   return (
-    <header className="@container/topbar flex h-(--topbar-height) shrink-0 items-center gap-3 border-b border-border-subtle bg-canvas pr-4 pl-3">
+    <header
+      ref={barRef}
+      data-mode={mode}
+      className="group/topbar flex h-(--topbar-height) shrink-0 items-center gap-2 overflow-hidden border-b border-border-subtle bg-canvas pr-4 pl-3 *:shrink-0"
+    >
       <div className="flex gap-0.5">
         <IconButton
           label="Back"
@@ -59,119 +102,192 @@ export function TopBar() {
           command="nav.back"
           onClick={() => router.history.back()}
         />
-        <IconButton
-          label="Forward"
-          icon={ChevronRight}
-          size="sm"
-          command="nav.forward"
-          onClick={() => router.history.forward()}
-        />
+        <span className="flex group-data-give-8/topbar:hidden">
+          <IconButton
+            label="Forward"
+            icon={ChevronRight}
+            size="sm"
+            command="nav.forward"
+            onClick={() => router.history.forward()}
+          />
+        </span>
       </div>
 
-      {/* Short of room (200% zoom), the crumbs are cut at their edge rather than run under the palette button; the
-          inset keeps Home's focus ring inside that edge. */}
-      <nav aria-label="Breadcrumb" className="-ml-1 min-w-0 overflow-x-clip pl-1">
-        <ol className="flex min-w-0 items-center gap-1 text-14 text-text-secondary">
-          <li className="shrink-0">
-            <TextLink variant="subtle" to="/" search={{}} className="rounded-sm px-1.5 py-1 hover:bg-surface-hover">
+      {/* The inset keeps Home's focus ring inside the bar. */}
+      <nav aria-label="Breadcrumb" className="-ml-1 pl-1" title={trail}>
+        <ol className="flex items-center gap-1 text-14 text-text-secondary *:shrink-0">
+          {onHome ? (
+            <li aria-current="page" className="px-1.5 font-medium text-text">
               Home
-            </TextLink>
-          </li>
+            </li>
+          ) : (
+            <li className="group-data-give-4/topbar:hidden">
+              <TextLink variant="subtle" to="/" search={{}} className="rounded-sm px-1.5 py-1 hover:bg-surface-hover">
+                Home
+              </TextLink>
+            </li>
+          )}
           {crawlId ? (
             <>
-              <li aria-hidden="true" className="shrink-0 text-text-muted">
-                <Icon icon={ChevronRight} size="sm" />
-              </li>
+              <Separator className="group-data-give-4/topbar:hidden" />
               <li
-                className="flex min-w-0 items-center gap-2 px-1.5 font-medium text-text"
-                title={crawl?.startUrl ?? undefined}
+                className="flex max-w-(--topbar-site-max) items-center gap-2 px-1.5 font-medium text-text group-data-give-7/topbar:sr-only"
+                title={crawl?.startUrl ?? site ?? undefined}
               >
-                <Favicon site={crawl?.site ?? crawlName(crawl)} size="md" />
-                <span className="truncate">{crawlName(crawl)}</span>
+                <Favicon site={crawl?.site ?? site ?? ''} size="md" />
+                <span className="truncate">{site}</span>
               </li>
-              {crawl?.startedAt ? (
+              {date ? (
                 <>
-                  <li aria-hidden="true" className="shrink-0 text-text-muted">
-                    <Icon icon={ChevronRight} size="sm" />
-                  </li>
-                  {/* Short of room (200% zoom), the date gives way first (after the palette button's words), then the
-                      crawl's name. */}
-                  <li className="min-w-0 shrink-100 truncate px-1.5" title={formatExactTime(crawl.startedAt)}>
-                    {formatExactTime(crawl.startedAt)}
+                  <Separator className="group-data-give-2/topbar:hidden" />
+                  <li className="px-1.5 group-data-give-2/topbar:sr-only">{date}</li>
+                </>
+              ) : null}
+              {here ? (
+                <>
+                  <Separator className="group-data-give-7/topbar:hidden" />
+                  <li aria-current="page" className="px-1.5 font-medium text-text">
+                    {here}
                   </li>
                 </>
               ) : null}
-              {section ? (
-                <>
-                  <li aria-hidden="true" className="shrink-0 text-text-muted">
-                    <Icon icon={ChevronRight} size="sm" />
-                  </li>
-                  <li aria-current="page" className="shrink-0 px-1.5 font-medium text-text">
-                    {section.title}
-                  </li>
-                </>
-              ) : null}
+            </>
+          ) : page ? (
+            <>
+              <Separator className="group-data-give-4/topbar:hidden" />
+              <li aria-current="page" className="px-1.5 font-medium text-text">
+                {page}
+              </li>
             </>
           ) : null}
         </ol>
       </nav>
 
       {crawlId && status ? (
-        // Short of room (200% zoom with a running crawl's Pause and Stop), the controls' keys go, then their words.
-        <div ref={controlsRef} className="flex shrink-0 items-center gap-2 @max-topbar-keys/topbar:[&_kbd]:hidden">
-          <StatusPill status={status} fetched={live?.progress?.fetched ?? crawl?.fetchedUrlCount ?? null} />
+        <div
+          ref={controlsRef}
+          className="flex items-center gap-2 group-data-give-5/topbar:[&_.si-status-pill\_\_count]:sr-only group-data-give-1/topbar:[&_kbd]:hidden"
+        >
+          <StatusPill
+            status={status}
+            fetched={live?.progress?.fetched ?? crawl?.fetchedUrlCount ?? null}
+            words={mode}
+          />
           {controls.canPause ? (
-            <Button
-              size="sm"
+            <ControlButton
+              title="Pause"
               icon={Pause}
               command="crawl.pauseResume"
-              showShortcut
+              keys
               onClick={() => void pauseOrResume(crawlId, status)}
-            >
-              <ControlWords>Pause</ControlWords>
-            </Button>
+            />
           ) : null}
           {controls.canResume ? (
-            <Button
-              size="sm"
+            <ControlButton
+              title="Resume"
               icon={Play}
               command="crawl.pauseResume"
-              showShortcut
+              keys
               onClick={() => void pauseOrResume(crawlId, status)}
-            >
-              <ControlWords>Resume</ControlWords>
-            </Button>
+            />
           ) : null}
           {controls.canStop ? (
-            <Button size="sm" icon={Square} command="crawl.stop" showShortcut onClick={() => void stopCrawl(crawlId)}>
-              <ControlWords>Stop</ControlWords>
-            </Button>
+            <ControlButton
+              title="Stop"
+              icon={Square}
+              command="crawl.stop"
+              keys
+              onClick={() => void stopCrawl(crawlId)}
+            />
           ) : null}
           {controls.canContinue ? (
-            <Button size="sm" icon={Play} command="crawl.continue" onClick={() => void continueCrawl(crawlId)}>
-              <ControlWords>Continue</ControlWords>
-            </Button>
+            <ControlButton
+              title="Continue"
+              icon={Play}
+              command="crawl.continue"
+              onClick={() => void continueCrawl(crawlId)}
+            />
           ) : null}
           {controls.canAnalyse && crawl?.outOfDate ? (
-            <Button size="sm" icon={RefreshCw} command="crawl.analyse" onClick={() => void analyseCrawl(crawlId)}>
-              <ControlWords>Analyse again</ControlWords>
-            </Button>
+            <ControlButton
+              title={mode === 'simple' ? 'Work out the results again' : 'Analyse again'}
+              icon={RefreshCw}
+              command="crawl.analyse"
+              onClick={() => void analyseCrawl(crawlId)}
+            />
           ) : null}
         </div>
       ) : null}
 
+      <span aria-hidden="true" className="flex-1" />
+
+      <SearchButton iconOnly={mode === 'simple'} />
+      <ModeSwitch />
+    </header>
+  );
+}
+
+function ControlButton({
+  title,
+  icon,
+  command,
+  keys = false,
+  onClick,
+}: {
+  title: string;
+  icon: typeof Pause;
+  command: string;
+  /** Shows the command's key inside the button (F7, F8), until the bar is short of room. */
+  keys?: boolean;
+  onClick: () => void;
+}): ReactNode {
+  return (
+    <Button
+      size="sm"
+      icon={icon}
+      command={command}
+      showShortcut={keys}
+      title={title}
+      className="group-data-give-6/topbar:w-(--control-height-sm) group-data-give-6/topbar:px-0"
+      onClick={onClick}
+    >
+      <ControlWords>{title}</ControlWords>
+    </Button>
+  );
+}
+
+/**
+ * Search and the palette (Ctrl+K). The field, with its words and keys; in Simple, and in Advanced once the bar is short
+ * of room (step 3), its icon. Either way it's named "Search or run a command", with the keys in its tooltip.
+ */
+function SearchButton({ iconOnly }: { iconOnly: boolean }) {
+  return (
+    <Tooltip content="Search or run a command" chord="mod+k" triggerName="Search or run a command">
       <button
         type="button"
         onClick={() => setOverlay('palette')}
+        aria-label="Search or run a command"
         aria-keyshortcuts={ariaKeyShortcut(parseChord('mod+k'), isMac)}
-        // Narrowed (200% zoom), its words give way before the crumbs do, down to the magnifier and the keys.
-        className="ml-auto flex h-(--control-height) w-(--search-width) shrink-100 items-center gap-2 rounded-sm border border-border bg-surface pr-1.5 pl-2.5 text-13 text-text-muted shadow-control hover:border-border-strong hover:text-text-secondary"
+        data-icon-only={iconOnly ? '' : undefined}
+        className={clsx(
+          'flex h-(--control-height) items-center gap-2 rounded-sm border border-border bg-surface text-13 text-text-muted shadow-control hover:border-border-strong hover:text-text-secondary',
+          iconOnly
+            ? 'w-(--control-height) justify-center'
+            : 'w-(--search-width) pr-1.5 pl-2.5 group-data-give-3/topbar:w-(--control-height) group-data-give-3/topbar:justify-center group-data-give-3/topbar:p-0',
+        )}
       >
         <Icon icon={Search} size="sm" />
-        {/* No width of its own (w-0), so the button can narrow to the magnifier and the keys. */}
-        <span className="w-0 flex-1 truncate text-left">Search or run a command…</span>
-        <Kbd chord="mod+k" size="sm" aria-hidden />
+        {iconOnly ? null : (
+          <>
+            <span aria-hidden="true" className="flex-1 truncate text-left group-data-give-3/topbar:hidden">
+              Search or run a command…
+            </span>
+            <span className="flex group-data-give-3/topbar:hidden">
+              <Kbd chord="mod+k" size="sm" aria-hidden />
+            </span>
+          </>
+        )}
       </button>
-    </header>
+    </Tooltip>
   );
 }

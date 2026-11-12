@@ -29,8 +29,16 @@ const ANNOUNCEMENTS: Record<CrawlStatus, string> = {
   unreadable: 'can’t be read',
 };
 
-export function statusLabel(status: CrawlStatus): string {
-  return LABELS[status];
+/** Simple's words where Advanced's are technical (docs/v2-ui-simple.md, Simple's words); the rest are the same. */
+const SIMPLE_LABELS: Partial<Record<CrawlStatus, string>> = {
+  running: 'Checking',
+  stopped: 'Stopped early',
+  analyzing: 'Working out the results',
+};
+
+/** A status in a word or two: Advanced's, or with `simple`, Simple's. */
+export function statusLabel(status: CrawlStatus, mode: 'simple' | 'advanced' = 'advanced'): string {
+  return (mode === 'simple' ? SIMPLE_LABELS[status] : undefined) ?? LABELS[status];
 }
 
 export function statusAnnouncement(site: string, status: CrawlStatus): string {

@@ -414,6 +414,7 @@
   --search-width-min: 144px; /* a search that shares a line with filters gives way down to this before it wraps */
   --search-width-filter: 160px;
   --search-width-library: 260px;
+  --topbar-site-max: 240px; /* the site's name in the top bar's crumbs: longer is cut, with the whole in its tooltip */
   --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
   --settings-nav-width: 192px;
   --detail-max-height: 192px; /* an error's technical detail, before it scrolls */

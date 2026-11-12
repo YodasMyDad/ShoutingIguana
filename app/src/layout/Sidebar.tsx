@@ -3,6 +3,7 @@ import { useParams } from '@tanstack/react-router';
 import clsx from 'clsx';
 import {
   Bot,
+  FileText,
   House,
   LayoutDashboard,
   Link as LinkIcon,
@@ -17,11 +18,14 @@ import {
 import { useMemo } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
 import type { IssueCounts } from '../api/types';
-import { CRAWL_SECTIONS, type CrawlSection } from '../app/sections';
+import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection, type CrawlSectionEntry } from '../app/sections';
+import { SIMPLE_SECTIONS } from '../app/modeRoutes';
+import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import logoUrl from '../assets/iguana-64.png';
 import { crawlName } from '../crawl/status';
 import { formatExactTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
+import { useMode } from '../mode/mode';
 import { useSettings } from '../settings/settingsStore';
 import { Favicon } from '../ui/Favicon';
 import { IconButton } from '../ui/IconButton';
@@ -41,15 +45,33 @@ const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
   sitemaps: Network,
   robots: Bot,
   settings: SlidersHorizontal,
+  report: FileText,
 };
 
-/** The sidebar (docs/v2-ui-ia.md, The shell): Home, the open crawl's sections, crawls running now, Settings. */
+/**
+ * The sidebar (docs/v2-ui-ia.md, The shell; docs/v2-ui-simple.md, The shell in Simple): Home, the open crawl's
+ * sections, crawls running now, Settings. In Simple the crawl's sections are three: Summary, What to fix (counting the
+ * problems that are Serious or Worth fixing) and Report; in Advanced, the seven as built, and Report after a rule. The
+ * Report is listed once its screen exists (app/simpleScreens.ts).
+ */
 export function Sidebar() {
   const collapsed = useSidebarCollapsed();
+  const mode = useMode();
   const { crawl: crawlId } = useParams({ strict: false });
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
   const counts = useIssueCounts(crawlId, crawl?.issues != null);
-  const issues = counts ? counts.error + counts.warning + counts.notice : null;
+  const issues = counts
+    ? mode === 'simple'
+      ? counts.error + counts.warning
+      : counts.error + counts.warning + counts.notice
+    : null;
+  const report = SIMPLE_SCREENS.report !== null;
+  const sections =
+    mode === 'simple'
+      ? [...CRAWL_SECTIONS, REPORT_SECTION].filter(
+          (section) => SIMPLE_SECTIONS.includes(section.id) && (section.id !== 'report' || report),
+        )
+      : CRAWL_SECTIONS;
 
   return (
     <nav
@@ -98,22 +120,35 @@ export function Sidebar() {
             )}
           </div>
           <ul className="flex flex-col gap-0.5">
-            {CRAWL_SECTIONS.map((section) => (
+            {sections.map((section) => (
               <SectionLink
                 key={section.id}
                 crawlId={crawlId}
                 section={section}
+                title={(mode === 'simple' ? section.simpleTitle : undefined) ?? section.title}
                 collapsed={collapsed}
                 count={section.id === 'issues' ? issues : null}
-                issueCounts={section.id === 'issues' ? counts : null}
+                // Simple counts problems, not severities: no Errors, Warnings and Notices under What to fix.
+                issueCounts={section.id === 'issues' && mode === 'advanced' ? counts : null}
               />
             ))}
           </ul>
+          {mode === 'advanced' && report ? (
+            <ul className="flex flex-col gap-0.5 border-t border-border-subtle pt-1.5">
+              <SectionLink
+                crawlId={crawlId}
+                section={REPORT_SECTION}
+                title="Report"
+                collapsed={collapsed}
+                count={null}
+              />
+            </ul>
+          ) : null}
         </section>
       ) : null}
 
       <div className="mt-auto flex flex-col gap-2">
-        <RunningCrawls collapsed={collapsed} />
+        <RunningCrawls collapsed={collapsed} simple={mode === 'simple'} />
         <div className="border-t border-border-subtle pt-2">
           <NavItem to="/settings/{-$section}" params={{}} label="Settings" icon={Settings} collapsed={collapsed} />
         </div>
@@ -144,19 +179,22 @@ const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'W
 function SectionLink({
   crawlId,
   section,
+  title,
   collapsed,
   count,
   issueCounts = null,
 }: {
   crawlId: string;
-  section: (typeof CRAWL_SECTIONS)[number];
+  section: CrawlSectionEntry;
+  /** Its name in the mode shown. */
+  title: string;
   collapsed: boolean;
   count: number | null;
   /** Checks with issues, by severity: each opens the list filtered to it. */
   issueCounts?: IssueCounts | null;
 }) {
   const props = {
-    label: section.title,
+    label: title,
     icon: SECTION_ICONS[section.id],
     collapsed,
     count,
@@ -228,6 +266,12 @@ function SectionLink({
           <NavItem to="/crawls/$crawl/settings" params={{ crawl: crawlId }} {...props} />
         </li>
       );
+    case 'report':
+      return (
+        <li>
+          <NavItem to="/crawls/$crawl/report" params={{ crawl: crawlId }} {...props} />
+        </li>
+      );
     default:
       return (
         <li>
@@ -237,16 +281,16 @@ function SectionLink({
   }
 }
 
-/** Crawls running in the background: each a link with its progress. */
-function RunningCrawls({ collapsed }: { collapsed: boolean }) {
+/** Crawls running in the background: each a link with its progress. Simple calls them "Checking now". */
+function RunningCrawls({ collapsed, simple }: { collapsed: boolean; simple: boolean }) {
   const live = useLiveIds();
   const library = useQuery(libraryQuery()).data;
   if (live.length === 0) return null;
   return (
-    <section aria-label="Running crawls" className="flex flex-col gap-0.5">
+    <section aria-label={simple ? 'Checking now' : 'Running crawls'} className="flex flex-col gap-0.5">
       {collapsed ? null : (
         <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">
-          {live.length === 1 ? '1 crawling' : `${live.length} crawling`}
+          {simple ? 'Checking now' : live.length === 1 ? '1 crawling' : `${live.length} crawling`}
         </h2>
       )}
       <ul className="flex flex-col gap-0.5">
