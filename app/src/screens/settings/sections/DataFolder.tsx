@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { healthQuery } from '../../../api/queries';
 import { ErrorState } from '../../../feedback/ErrorState';
+import { useMode } from '../../../mode/mode';
 import { PathRow, SectionPage, Setting } from '../SectionPage';
 
 export const id = 'data';
@@ -13,17 +14,22 @@ export const order = 40;
  */
 export function Section() {
   const health = useQuery(healthQuery());
+  const simple = useMode() === 'simple';
   return (
     <SectionPage
       title="Data folder"
-      purpose="Where your crawls are saved: one file each, named after the site and the date."
+      purpose={`Where your ${simple ? 'site checks' : 'crawls'} are saved: one file each, named after the site and the date.`}
     >
       {health.error ? (
-        <ErrorState error={health.error} title="The engine couldn’t say" onRetry={() => void health.refetch()} />
+        <ErrorState
+          error={health.error}
+          title="Where they’re saved couldn’t be read"
+          onRetry={() => void health.refetch()}
+        />
       ) : (
         <Setting
-          label="Crawls are saved in"
-          help="A crawl opened from somewhere else stays where it is. This folder is set by the app, and can’t be changed here yet."
+          label={simple ? 'Site checks are saved in' : 'Crawls are saved in'}
+          help={`A ${simple ? 'check' : 'crawl'} opened from somewhere else stays where it is. This folder is set by the app, and can’t be changed here yet.`}
         >
           <PathRow label="folder" path={health.data?.dataDir ?? null} />
         </Setting>

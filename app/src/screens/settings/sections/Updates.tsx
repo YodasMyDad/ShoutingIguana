@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { healthQuery } from '../../../api/queries';
+import { useMode } from '../../../mode/mode';
 import { Fact, Facts } from '../../../ui/Facts';
 import { SectionPage } from '../SectionPage';
 import { useShellInfo } from '../../../shell/useShellInfo';
@@ -15,6 +16,7 @@ export const order = 70;
 export function Section() {
   const shell = useShellInfo();
   const health = useQuery(healthQuery());
+  const simple = useMode() === 'simple';
   return (
     <SectionPage title="Updates" purpose="The version you have, and how a new one arrives.">
       <Facts auto>
@@ -27,7 +29,7 @@ export function Section() {
       </Facts>
       <p className="text-13 text-text-secondary">
         This version doesn’t look for new ones by itself. A new version comes as a new installer: run it, and your
-        crawls and settings stay as they are.
+        {simple ? 'site checks' : 'crawls'} and settings stay as they are.
       </p>
     </SectionPage>
   );

@@ -167,7 +167,7 @@ export function useAppCommands(): void {
       },
       {
         id: 'crawl.open',
-        title: 'Open a crawl file…',
+        title: simple ? 'Open a site check file…' : 'Open a crawl file…',
         group: 'Crawl',
         keys: ['mod+o'],
         inInputs: true,

@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
+import { setOverlay } from '../app/overlays';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
@@ -179,5 +180,24 @@ describe('the shell in Simple', () => {
     }
     // Report joins as the eighth once its screen exists.
     expect(sidebar().queryAllByRole('link', { name: /Report/ })).toHaveLength(SIMPLE_SCREENS.report ? 1 : 0);
+  });
+});
+
+describe('Simple’s words in what the modes share', () => {
+  it('the shortcut sheet lists what works in Simple, in its words', async () => {
+    await open(`${CRAWL}/overview`, 'simple');
+    act(() => setOverlay('shortcuts'));
+    const sheet = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+    expect(within(sheet).getByRole('heading', { name: 'Site check' })).toBeVisible();
+    expect(within(sheet).getByText('Open a site check file…')).toBeVisible();
+    expect(within(sheet).queryByRole('heading', { name: 'In grids' })).toBeNull();
+    expect(within(sheet).queryByRole('heading', { name: 'Crawl' })).toBeNull();
+    act(() => setOverlay(null));
+  });
+
+  it('Settings’ Data folder speaks of site checks', async () => {
+    await open('/settings/data', 'simple');
+    expect(await screen.findByText(/Where your site checks are saved/)).toBeVisible();
+    expect(screen.getByText('Site checks are saved in')).toBeVisible();
   });
 });

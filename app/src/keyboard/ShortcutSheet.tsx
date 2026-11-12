@@ -2,6 +2,8 @@ import clsx from 'clsx';
 import { restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { Dialog } from '../ui/Dialog';
 import { Kbd } from '../ui/Kbd';
+import { useMode } from '../mode/mode';
+import { groupTitle, listedIn } from './modeWords';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
 
 /** The `?` sheet: every shortcut in the registry, so it can never list a key that does nothing. */
@@ -32,7 +34,9 @@ export function ShortcutSheet() {
  */
 export function ShortcutList({ scrollable = false }: { scrollable?: boolean }) {
   useRegistryVersion();
-  const listed = commands.list().filter((command) => (command.keys?.length ?? 0) > 0);
+  const mode = useMode();
+  // What works in the mode: in Simple, not the grids' or the inspector's keys.
+  const listed = commands.list().filter((command) => (command.keys?.length ?? 0) > 0 && listedIn(command, mode));
   return (
     <div
       {...(scrollable ? { role: 'region', 'aria-label': 'Shortcuts', tabIndex: 0 } : {})}
@@ -43,7 +47,7 @@ export function ShortcutList({ scrollable = false }: { scrollable?: boolean }) {
         return inGroup.length === 0 ? null : (
           <section key={group} aria-labelledby={`shortcuts-${group}`}>
             <h3 id={`shortcuts-${group}`} className="pb-2 text-12 font-medium text-text-muted">
-              {group}
+              {groupTitle(group, mode)}
             </h3>
             <dl className="flex flex-col gap-1.5">
               {inGroup.map((command) => (
