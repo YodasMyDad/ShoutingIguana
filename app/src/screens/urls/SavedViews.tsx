@@ -81,10 +81,12 @@ export interface ViewNameDialogProps {
   views: readonly SavedView[];
   onClose: () => void;
   onSubmit: (name: string) => void;
+  /** Where the keyboard goes once it closes: the menu item or command that opened it has gone. */
+  onCloseFocus?: (() => void) | undefined;
 }
 
 /** Names a view: saved, or renamed. What's wrong with a name is said under the field, never in a toast. */
-export function ViewNameDialog({ mode, views, onClose, onSubmit }: ViewNameDialogProps) {
+export function ViewNameDialog({ mode, views, onClose, onSubmit, onCloseFocus }: ViewNameDialogProps) {
   const [name, setName] = useState('');
   const [shownFor, setShownFor] = useState<ViewNameDialogProps['mode']>(null);
   const [tried, setTried] = useState(false);
@@ -105,6 +107,14 @@ export function ViewNameDialog({ mode, views, onClose, onSubmit }: ViewNameDialo
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      {...(onCloseFocus
+        ? {
+            onCloseAutoFocus: (event: Event) => {
+              event.preventDefault();
+              onCloseFocus();
+            },
+          }
+        : {})}
       title={mode?.kind === 'rename' ? 'Rename the view' : 'Save this view'}
       description={
         mode?.kind === 'rename'

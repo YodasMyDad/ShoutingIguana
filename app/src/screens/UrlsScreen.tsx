@@ -786,6 +786,7 @@ export function UrlsScreen() {
         mode={naming}
         views={saved.views}
         onClose={() => setNaming(null)}
+        onCloseFocus={() => frame.current?.querySelector<HTMLElement>('[role="grid"]')?.focus()}
         onSubmit={(name) => {
           if (naming?.kind === 'rename') saved.rename(naming.view, name);
           else saved.save(name);

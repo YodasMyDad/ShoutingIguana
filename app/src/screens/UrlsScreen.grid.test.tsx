@@ -280,6 +280,8 @@ describe('saved views', () => {
     expect(within(dialog).getByText('Give the view a name.')).toBeVisible();
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Broken by depth{Enter}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // The command that opened the dialog has no place to give the keyboard back to: the grid takes it.
+    await waitFor(() => expect(screen.getByRole('grid', { name: 'URLs' })).toHaveFocus());
     expect(getSettings().savedViews).toEqual([
       expect.objectContaining({ name: 'Broken by depth', search: { filter, sort: [{ column: 'depth', desc: true }] } }),
     ]);
