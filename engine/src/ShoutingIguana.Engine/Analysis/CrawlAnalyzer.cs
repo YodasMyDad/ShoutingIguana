@@ -158,6 +158,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             // The crawler probes the site's other versions first thing, but a crawl stopped before then, or one from before
             // it did, doesn't know how they answer; nor is there a main version without a home page.
             var siteVersions = new SiteVersionRules(urls, new Uri(startUrl), reader.ReadUrlId, reader.ReadUrl);
+
+            // Whether a site hides itself is judged by its home page, and a crawl started anywhere else has none to judge
+            // by: its first page is a section's, or some page of the site. A query on the root is still the root, and so
+            // is a root that redirects (to /en/, to the www host): the home page is the page it ends on.
+            if (new Uri(startUrl).AbsolutePath is not "/" and var startPath)
+            {
+                Skip(notes, skipped, $"A site hidden from search wasn't looked for: the crawl started at {startPath}, not at the site's root, so its first page isn't known to be the site's home page.",
+                    SkippedCheckReasons.START_NOT_ROOT, $"The crawl started at {startPath}, not at the site's root, so its first page isn't known to be the site's home page.",
+                    IssueCatalog.SITE_HIDDEN_FROM_SEARCH);
+            }
             if (!siteVersions.CanCheck)
             {
                 Skip(notes, skipped, "The site's other versions (www or not, http or https) weren't all checked, so duplicate versions of the site weren't looked for.",
@@ -175,16 +185,6 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             // The site lives on the start URL's origin and the home page's (after redirects); robots.txt failing there stops all crawling.
             var mainUrls = new[] { startUrl, reader.ReadUrl(urls.HomeId) }.OfType<string>().Select(url => new Uri(url)).ToList();
             var mainOrigins = mainUrls.Select(uri => uri.GetLeftPart(UriPartial.Authority)).ToHashSet(StringComparer.Ordinal);
-
-            var hreflang = new HreflangRules(urls);
-            var indexability = new IndexabilityRules();
-            IPageRule[] pageRules =
-            [
-                new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl), indexability, hreflang,
-                new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings),
-                new HtmlRules()
-            ];
 
             // A crawl told to ignore robots.txt asks for every URL, so none is refused, and it reads robots.txt only where
             // something else needs it: sitemap discovery asks the start URL's origin for it. What it didn't read it can't
@@ -209,6 +209,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                         IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_MISSING);
                 }
             }
+
+            var hreflang = new HreflangRules(urls);
+            var indexability = new IndexabilityRules();
+            IPageRule[] pageRules =
+            [
+                new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
+                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl), indexability, hreflang,
+                new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings),
+                new HtmlRules()
+            ];
 
             // An instant meta refresh makes the page a redirect: nobody sees it, so only the refresh itself is reported.
             IPageRule[] redirectRules = [indexability];

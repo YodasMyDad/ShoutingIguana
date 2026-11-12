@@ -1455,6 +1455,10 @@
       "plainText": "The site check was kept to one section of the site, so links from the rest of it weren't read.",
       "plainAction": "Start the check from your home page, so it reads the whole site."
     },
+    "start-not-root": {
+      "plainText": "This site check started from a page inside your site, not from its home page, so it can't judge the site as a whole.",
+      "plainAction": "Start the check from your home page, then check the site again."
+    },
     "external-links-off": {
       "plainText": "This site check was set not to try links to other websites.",
       "plainAction": "Check the site again, with \"Links to other websites\" ticked."

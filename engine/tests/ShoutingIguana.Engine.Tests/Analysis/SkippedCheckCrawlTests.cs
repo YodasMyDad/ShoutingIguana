@@ -203,6 +203,70 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
             PlainWords.SkipReason(SkippedCheckReasons.ROBOTS_TXT_IGNORED));
     }
 
+    /// <summary>
+    /// Whether a site hides itself from search is judged by its home page, and a crawl started anywhere else has none: a
+    /// crawl of a shop's section, whose first page and listings are all noindex, would be called a site hidden from
+    /// search, at 60 points. The check is skipped there, saying why: not passed, and not fired. A start URL at the root is
+    /// still the root with a query, and where it redirects: the home page is the page it ends on.
+    /// </summary>
+    [Theory]
+    [InlineData("shop/", "/shop/")]
+    [InlineData("home", "/home")]
+    [InlineData("?lang=en", null)]
+    [InlineData("", null)]
+    public async Task ASiteHiddenFromSearchIsSkippedOnACrawlThatDidNotStartAtTheSitesRoot(string start, string? skippedFor)
+    {
+        const string NOINDEX = "<meta name=\"robots\" content=\"noindex\">";
+        await using var site = await LoopbackServer.StartAsync(context =>
+        {
+            // The root moves to /en/, as a site with a language in its paths does; every page is noindex.
+            var path = context.Request.Path.Value!;
+            if (path == "/" && !context.Request.QueryString.HasValue)
+            {
+                context.Response.Redirect("/en/", permanent: true);
+                return Task.CompletedTask;
+            }
+
+            if (path == "/robots.txt")
+            {
+                return Write(context, "text/plain", "User-agent: *\nAllow: /");
+            }
+
+            var folder = path.EndsWith('/') ? path : "/";
+            var links = path is "/" or "/en/" or "/shop/" or "/home" ? $"<a href=\"{folder}a\">A</a> <a href=\"{folder}b\">B</a> <a href=\"{folder}c\">C</a>" : "<p>Text</p>";
+            return Write(context, "text/html; charset=utf-8", $"<!doctype html><html lang=\"en\"><head><title>A page</title>{NOINDEX}</head><body>{links}</body></html>");
+        });
+
+        var analysis = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = new Uri(site.BaseUri, start).AbsoluteUri, MaxRetries = 0, DiscoverSitemaps = false });
+
+        // Four pages read, every one noindex: the start page and the three it links.
+        Assert.Equal(4, IssueReader.ReadCounts(_path)[IssueCatalog.NOINDEX_PAGE.Id]);
+        var hidden = IssueReader.ReadAll(_path, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id).ToList();
+        var skip = analysis.Skipped.SingleOrDefault(skipped => skipped.CheckId == IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id);
+        if (skippedFor is null)
+        {
+            // From the root: judged, and reported on the page the root ends on.
+            Assert.Null(skip);
+            var hit = Assert.Single(hidden);
+            Assert.Equal((new Uri(site.BaseUri, start.Length == 0 ? "en/" : start).AbsoluteUri, "4 of 4 pages are noindex"), (hit.Url, hit.Detail));
+            return;
+        }
+
+        Assert.Equal(new SkippedCheck(IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, SkippedCheckReasons.START_NOT_ROOT,
+            $"The crawl started at {skippedFor}, not at the site's root, so its first page isn't known to be the site's home page."), skip);
+        Assert.Contains($"A site hidden from search wasn't looked for: the crawl started at {skippedFor}, not at the site's root, so its first page isn't known to be the site's home page.",
+            analysis.Notes);
+        Assert.Empty(hidden);
+        Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.SITE_HIDDEN_FROM_SEARCH);
+        Assert.False(IssueReader.ReadCounts(_path).ContainsKey(IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id));
+        Assert.DoesNotContain(IssueReader.ReadResults(_path)!.Score!.Lines, line => line.CheckId == IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id);
+        Assert.Equal(
+            new SkipReasonPlainText(
+                "This site check started from a page inside your site, not from its home page, so it can't judge the site as a whole.",
+                "Start the check from your home page, then check the site again."),
+            PlainWords.SkipReason(SkippedCheckReasons.START_NOT_ROOT));
+    }
+
     private void DeleteCrawl()
     {
         foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })

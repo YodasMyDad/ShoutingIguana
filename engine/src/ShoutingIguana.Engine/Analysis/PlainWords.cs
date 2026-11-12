@@ -51,6 +51,10 @@ public static class PlainWords
             """The site check was kept to one section of the site, so links from the rest of it weren't read.""",
             """Start the check from your home page, so it reads the whole site."""),
 
+        [SkippedCheckReasons.START_NOT_ROOT] = new(
+            """This site check started from a page inside your site, not from its home page, so it can't judge the site as a whole.""",
+            """Start the check from your home page, then check the site again."""),
+
         [SkippedCheckReasons.EXTERNAL_LINKS_OFF] = new(
             """This site check was set not to try links to other websites.""",
             """Check the site again, with "Links to other websites" ticked."""),

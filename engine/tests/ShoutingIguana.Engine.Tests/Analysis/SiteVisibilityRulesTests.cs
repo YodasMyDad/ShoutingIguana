@@ -136,13 +136,8 @@ public sealed class SiteVisibilityRulesTests
         // Three of four pages are noindex, and the page the start URL leads to isn't one of them.
         Assert.Empty(Hits(urls, [home, .. others]));
 
-        // A crawl started in a section is judged by that section's first page.
-        var section = new RuleHarness();
-        var start = section.Page($"{section.Site}/shop/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
-        var listing = section.Page($"{section.Site}/shop/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
-        var siteHome = section.Page($"{section.Site}/", RuleHarness.Html());
-        var hit = Assert.Single(Hits(section.Table(start: $"{section.Site}/shop/"), start, listing, siteHome));
-        Assert.Equal((start.UrlId, "2 of 3 pages are noindex"), (hit.UrlId, hit.Detail));
+        // A crawl that didn't start at the site's root has no home page to go by: the analysis skips the check there
+        // (SkippedCheckCrawlTests), so the rule is never asked what a section's first page says of the site.
     }
 
     /// <summary>

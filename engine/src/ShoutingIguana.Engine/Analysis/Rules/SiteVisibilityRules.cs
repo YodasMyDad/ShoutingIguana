@@ -17,6 +17,11 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// failed, or was refused, and a sitemap led to the rest) nothing says the site hides itself, and nothing is reported.
 /// </item>
 /// <item>
+/// The rule takes the start URL to be the site's root. A crawl started anywhere else (a section, a page) has no home
+/// page to judge the site by, and the analysis skips the check for it (<see cref="SkippedCheckReasons.START_NOT_ROOT"/>),
+/// so what this rule would say of a section's first page is never stored.
+/// </item>
+/// <item>
 /// A page is one the page pass audits, as the analysis counts its pages (<see cref="AnalysisSummary.PagesAnalyzed"/>):
 /// an internal HTML page the crawler parsed. One that moves on with an instant meta refresh is read, and never hidden:
 /// search engines treat it as a redirect, whatever else it says.

@@ -327,7 +327,13 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         Assert.True(analysis.IsPartial);
         Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.ORPHAN_PAGE);
-        Assert.Contains(SyntheticSite.PLANTS_PATH, Assert.Single(analysis.Notes));
+
+        // A crawl of a folder didn't start at the site's root either, so it can't say whether the site as a whole is hidden.
+        Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.SITE_HIDDEN_FROM_SEARCH);
+        Assert.Equal([(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.START_FOLDER), (IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, SkippedCheckReasons.START_NOT_ROOT)],
+            analysis.Skipped.Select(skip => (skip.CheckId, skip.Reason)));
+        Assert.Equal(2, analysis.Notes.Count);
+        Assert.All(analysis.Notes, note => Assert.Contains(SyntheticSite.PLANTS_PATH, note));
     }
 
     [Fact]

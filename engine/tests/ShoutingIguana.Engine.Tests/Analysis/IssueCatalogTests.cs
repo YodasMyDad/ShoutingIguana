@@ -130,6 +130,9 @@ public sealed class IssueCatalogTests
             () => Assert.Contains("one that isn't noindex and whose canonical names another URL", hidden.Description),
             () => Assert.StartsWith("Your home page and more than half of your pages", hidden.Plain!.What[0]),
 
+            // A crawl that didn't start at the site's root has no home page to judge the site by, and skips the check.
+            () => Assert.Contains("Not checked on a crawl that didn't start at the site's root.", hidden.Description),
+
             // A crawl told to ignore robots.txt reads it only for the start origin's sitemaps, and judges only what it read.
             () => Assert.EndsWith("Not checked on a crawl told to ignore robots.txt that never read it.", IssueCatalog.ROBOTS_TXT_UNREACHABLE.Description),
             () => Assert.EndsWith("Not checked on a crawl told to ignore robots.txt, which doesn't read it there.", IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN.Description),
