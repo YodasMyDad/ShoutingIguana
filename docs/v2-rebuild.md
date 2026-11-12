@@ -23,7 +23,7 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | In progress on `ui/step-3`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-11) |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | In progress on `ui/step-3`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-12) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
 | 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
@@ -89,7 +89,7 @@ everything else is finished.
 - Simple itself is a fourth round, after round 3. Step 3 isn't finished without it, as it is the first thing a
   user sees.
 
-The order, item by item, is "Left, in this order" under [Where step 3 stands](#where-step-3-stands-2026-11-11).
+The order, item by item, is "Left, in this order" under [Where step 3 stands](#where-step-3-stands-2026-11-12).
 
 **The comparison.** Research only, no code. It writes `docs/v2-comparison.md`.
 
@@ -127,15 +127,61 @@ The owner answered this plan's four questions on 2026-11-10, and nothing here wa
 flags and explains, and doesn't draft or make fixes; the comparison reads the vendors' sites and screenshots; and
 the three audit sites above.
 
-## Where step 3 stands (2026-11-11)
+## Where step 3 stands (2026-11-12)
 
 Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3`. `v2` and `master`
-were not moved. This section is the place to resume.
+were not moved. This section is the place to resume. Merging to `master` or releasing still needs an explicit yes.
 
-**Paused on 2026-11-11 by the owner, to save usage.** Step 3 is about two-thirds done. The owner asked for everyone
-to finish where they had got to and for everything to be saved, so that it is easy to continue after their usage
-resets. Nothing was launched after that, and nothing is running. Merging to `master` or releasing still needs an
-explicit yes.
+**Resumed on 2026-11-12** ("Finish step 3"). The 2026-11-11 notes below are kept for their detail; where they
+disagree with this part, this part is right.
+
+**Merged on 2026-11-12**, each reviewed, fixed with a test seen failing per fix, and verified again by the
+orchestrator on the merge (engine build and tests, the 100k bench, `readbench --gate`; the app's typecheck, lint,
+format, unit, script tests, Storybook in both themes, forced colours and reduced motion, the sidecar build, e2e):
+
+- **Sitemaps and robots.txt** (`ui/sitemaps-robots`, f61714d): `ui/step-3` merged in, both screens on the
+  `GridScreen` frame, the counts checked against the real sidecar. Verified: 1,300 unit, 286 stories x3, e2e 111.
+- **Export, the workbook and the report (E5)** (`ui/e5`), with its review's 16 fixes. A CSV field is cut at 32,758
+  characters, Excel's real limit for one cell (measured), so a long URL can't split a row and start a formula. The
+  sidecar keeps a journal of export part files in its own data folder and deletes them at its next start (a hard
+  kill left them in the user's folder); it never sweeps a folder by pattern.
+- **The catalog's fixes** (`ui/catalog-fixes`), with its review's 8 fixes. `site-hidden-from-search` needs a
+  noindex home page as well as a noindex majority, and is skipped (new reason `start-not-root`) on a crawl that
+  didn't start at the site's root. The `robots-txt-*` checks and `blocked-by-robots` are skipped
+  (`robots-txt-ignored`) where a crawl that ignored robots.txt never read it. A byte-order mark declares a page's
+  encoding; an empty `charset=` doesn't. `canonical-to-redirect` names where its redirects end, or says the end
+  wasn't checked. Eight technical texts corrected (four titles). **17 skip reasons, 87 checks,
+  `AnalysisFreshness.VERSION` 8.** The garden crawl is unchanged: 85. Verified with E5: engine 1,301 + 228 + 25,
+  bench, gate; app 1,311 unit, 286 stories x3, e2e 111.
+- **E6** (`ui/e6`), with its review's 6 fixes: `POST /search` (a keystroke 1.3-4.5 ms p95; the first search of a
+  crawl 55-89 ms p95, so the palette warms it up on open); link passes split over up to eight read connections
+  (common text filters and search 110-210 ms where they took 0.8-1.6 s), gated against their one-connection twins;
+  the favicon (raster only, its whole structure checked, never failing a crawl); links to URLs (`linkEnds`,
+  `/links/ends`); robots.txt origins searched; the inspector's exact links; `urls` on groups;
+  `GET`/`PUT /api/analysis-settings`; `listedSitemaps`; `respected`; statuses in sitemaps and robots.txt named as
+  in issue details ("404 Not Found") for new crawls. Its verify on the merge: see the status log.
+
+**Built and under fixes on 2026-11-12, not merged yet:** the URL grid to the IA (`ui/urls-grid`), round 3's mode,
+switch, top bar, Settings and New crawl (`ui/round3`), the UI's take-up of E3c (`ui/e3c-takeup`). **Briefed, not
+started:** round 4, the Simple screens, three agents on round 3's frame; the hand-over UI (export on every grid,
+the report and the workbook from Overview and Issues, the palette's search, favicons, Settings > Analysis). The
+briefs, reviews' findings and the orchestrator's checkpoint are in the session scratchpad
+`C:\Users\LeeMessenger\AppData\Local\Temp\claude\e2e5beaddde4c070\8e7045a4-9ede-460a-be29-971bc406a6c0\scratchpad\`
+(`checkpoint.md` first); they are copied into `docs/handoff/` at the end of step 3 or at a pause.
+
+**Decided on 2026-11-12 under the owner's delegation** (each the owner's to overturn): a crawl that didn't start
+at the site's root skips `site-hidden-from-search`; export part files are cleaned through the sidecar's journal;
+search ranks a match at the start of the host or of a path segment first, never in the scheme or query; the top
+bar's switch never gives way, and at the smallest sizes Pause, Stop and search fold into one "More" menu and then
+the status pill shrinks to its dot; a settings file from before the mode existed opens in Advanced (only a first
+start is Simple); Copy diagnostics writes `%USERPROFILE%` for the user's profile path; grids keep the design's 32 px
+rows by default (Compact, 28 px, gives about 18 rows at 1280x720 against Screaming Frog's 20); a named URL whose
+fate isn't known says "Not fetched". Open for the owner: should the analysis count links on pages it doesn't audit
+(Cloudflare's `/cdn-cgi/` pages)? It would change inlink counts and possibly orphans.
+
+### The pause of 2026-11-11 (history)
+
+**Paused on 2026-11-11 by the owner, to save usage.** Step 3 was about two-thirds done. Nothing was running.
 
 **Everything is on GitHub**: this branch, and every working branch under its own name (`ui/links`,
 `ui/sitemaps-robots`, `ui/e5`, `ui/e6`, and the merged `ui/e3c`, `ui/score` and `ui/simple-design`). Work can go on
