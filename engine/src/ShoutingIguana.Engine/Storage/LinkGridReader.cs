@@ -91,6 +91,26 @@ public static class LinkGridReader
     /// </summary>
     internal static int WalkRows { get; set; } = 200_000;
 
+    /// <summary>
+    /// The most helpers a pass over every link takes beside its own connection (<see cref="ReadHelpers"/>): eight
+    /// connections in all. Measured on the 100k benchmark's 5 million links, beside the same pass on one connection, a
+    /// pass split in four takes a quarter of the time and one split in eight a sixth, for twice the cores kept from other
+    /// reads for a fraction of a second. Eight is what brings a search and a filter on the source's depth inside the
+    /// budget (190 and 230 ms, where four gave 290 and 400), so eight it is; a host with fewer cores to lend gives fewer.
+    /// Each part keeps its own ids and counts until they're put together: a megabyte a part for those 5 million links.
+    /// Tests change it.
+    /// </summary>
+    internal static int PassHelpers { get; set; } = 7;
+
+    /// <summary>
+    /// From this many links on, a pass over all of them is worth splitting: below it the pass takes tens of milliseconds
+    /// by itself, and opening the connections to split it a few. Tests lower it.
+    /// </summary>
+    internal static long SplitFrom { get; set; } = 500_000;
+
+    /// <summary>Tests only: how many connections each pass over the links ran on, in order.</summary>
+    internal static Action<int>? Split { get; set; }
+
     /// <summary>Unknown, among the status classes a URL's facts hold.</summary>
     private const int NO_STATUS_CLASS = 7;
 
@@ -130,6 +150,7 @@ public static class LinkGridReader
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         ValidateFilters(query.Filters, query.Search, errors);
+        RefuseEnds(query.LinkEnds, errors);
         for (var index = 0; index < query.Facets.Count; index++)
         {
             if (!FACETS.Contains(query.Facets[index]))
@@ -141,6 +162,91 @@ public static class LinkGridReader
         UrlGridReader.ThrowIfInvalid(errors);
         return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Settled(context, () => Facets(context, query))));
     }
+
+    /// <summary>
+    /// One page of the URLs at one end of the links the filters match, each once, in the order the crawl found them, with
+    /// how many of those links each has: a view's targets (or the pages its links are on) as a list, however many links
+    /// the view holds. Their number is the URL grid's count under the same links (<see cref="UrlQuery.LinkEnds"/>).
+    /// <list type="bullet">
+    /// <item>The targets come from what the links grid counts by target anyway: the link summary's rows where it holds
+    /// what the filters test, else the pass over the links that gives the view its count.</item>
+    /// <item>The sources are counted in a pass over the links, as nothing counts links by the page they're on: once per
+    /// set of filters, and kept.</item>
+    /// </list>
+    /// </summary>
+    /// <inheritdoc cref="Query(string, UrlQuery, ReadCache?, CancellationToken)" path="/exception"/>
+    public static LinkEndPage Ends(string databasePath, LinkEndQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
+    {
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        ValidateFilters(query.Filters, query.Search, errors);
+        UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, after: null, errors);
+        UrlGridReader.ThrowIfInvalid(errors);
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
+        {
+            var filters = Compile(context, query.Filters, query.Search, sort: null);
+            var tally = EndTally(context, filters, query.End);
+            var total = Held(context, $"linkendcount|{query.End}|{filters.Key}", () => tally.Targets().LongCount());
+            List<(int Id, int Links)> ends = [.. tally.Targets().Skip(query.Offset).Take(query.Limit)];
+            Dictionary<int, string> urls = [];
+            if (ends.Count > 0)
+            {
+                using var command = context.Command($"SELECT id, url FROM urls WHERE id IN ({string.Join(",", ends.Select(end => end.Id.ToString(CultureInfo.InvariantCulture)))})", []);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    urls[reader.GetInt32(0)] = reader.GetString(1);
+                }
+            }
+
+            // An end the crawl has no URL for (a crafted file's link to nowhere) has no row: it's counted, and can't be named.
+            return new LinkEndPage(query.End, total, tally.Links, query.Offset,
+                [.. ends.Where(end => urls.ContainsKey(end.Id)).Select(end => new LinkEndRow(end.Id, urls[end.Id], end.Links))], context.Summary);
+        }));
+    }
+
+    /// <summary>The filters of a condition on the ends of links, checked as the links grid's own are, each error under <c>linkEnds</c>.</summary>
+    internal static void ValidateEnds(UrlLinkEnds? ends, Dictionary<string, List<string>> errors)
+    {
+        if (ends is null)
+        {
+            return;
+        }
+
+        Dictionary<string, List<string>> found = new(StringComparer.Ordinal);
+        ValidateFilters(ends.Filters, ends.Search, found);
+        foreach (var (field, messages) in found)
+        {
+            messages.ForEach(message => UrlQueryCompiler.Add(errors, "linkEnds." + field, message));
+        }
+    }
+
+    /// <summary>
+    /// The URLs at one end of the links some link filters match, as a set, for the URL grid to narrow itself by: read from
+    /// the same counts <see cref="Ends"/> lists, so the grid's count is the list's, and kept per set of link filters.
+    /// </summary>
+    /// <exception cref="NeedsAnalysisException">A link filter needs the URL summary, and there's none.</exception>
+    internal static UrlIdSet EndIds(GridReadContext context, UrlLinkEnds ends)
+    {
+        var filters = Compile(context, ends.Filters, ends.Search, sort: null);
+        return HeldLarge(context, $"linkendids|{ends.End}|{filters.Key}", () =>
+        {
+            var set = UrlIds(context);
+            foreach (var (id, _) in EndTally(context, filters, ends.End).Targets())
+            {
+                set.Add(id);
+            }
+
+            return set.Seal(GridPlanner.ID_SET_CAP);
+        });
+    }
+
+    /// <summary>
+    /// The matching links counted by the URL at one end: by target as the grid counts them for its facets and its sorts
+    /// (<see cref="Tally"/>), or by the page they're on, which takes a pass over the links of its own, kept per filter set.
+    /// </summary>
+    private static LinkTally EndTally(GridReadContext context, Filters filters, LinkEnd end) => end == LinkEnd.To
+        ? Tally(context, filters)
+        : HeldHuge(context, "linksources|" + filters.Key, () => Scan(context, filters, Total(context), ids: false, tally: true, bySource: true).Tally!);
 
     /// <returns>Null when a running crawl's moment no longer holds (<see cref="Settled"/>).</returns>
     private static LinkGridPage? Read(GridReadContext context, UrlQuery query)
@@ -340,6 +446,7 @@ public static class LinkGridReader
         }
 
         ValidateFilters(query.Filters, query.Search, errors);
+        RefuseEnds(query.LinkEnds, errors);
         if (query.Sort.Count > 1)
         {
             UrlQueryCompiler.Add(errors, "sort", "The links grid sorts by one column.");
@@ -367,6 +474,15 @@ public static class LinkGridReader
 
         UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, query.After, errors);
         return errors;
+    }
+
+    /// <summary>The ends of some links narrow the URL grids: asked of the links grid, which its own filters narrow, it's a field error.</summary>
+    private static void RefuseEnds(UrlLinkEnds? ends, Dictionary<string, List<string>> errors)
+    {
+        if (ends is not null)
+        {
+            UrlQueryCompiler.Add(errors, "linkEnds", "Only the URL grids take linkEnds: the links grid takes the link filters themselves.");
+        }
     }
 
     private static void ValidateFilters(IReadOnlyList<UrlFilter> filters, string? search, Dictionary<string, List<string>> errors)
@@ -751,26 +867,128 @@ public static class LinkGridReader
     /// False to read every link in order whatever the conditions name: the link summary has said the ends they name have
     /// many links, each of which the index would fetch from wherever it's stored.
     /// </param>
-    private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true)
+    /// <param name="bySource">Counts the links by the page they're on rather than by their target: the tally's targets are then the sources.</param>
+    private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true, bool bySource = false)
     {
-        var found = ids ? new LinkIdSet(LargestLinkId(context), total) : null;
-        var counted = tally ? NewTally(context) : null;
-        (context.LinkIds, context.LinkTally, context.NofollowPages) = (found, counted, tally ? NofollowPages(context) : null);
-        try
+        var largest = LargestLinkId(context);
+        LinkIdSet? NewIds() => ids ? new LinkIdSet(largest, total) : null;
+        var nofollow = tally ? NofollowPages(context) : null;
+
+        // What a part's tally is sized by, read here, on the read's own thread: a part runs on a thread and a connection
+        // of its own, and never touches the read's context, which isn't made to be shared.
+        var (largestUrl, urls) = tally ? (LargestUrlId(context), UrlCount(context)) : (0L, 0L);
+
+        // With nothing to count, the id is all that's passed on.
+        var each = tally
+            ? $"{ReaderFunctions.LINK}(l.rowid, {(bySource ? "l.from_id" : "l.to_id")}, l.from_id, l.kind, l.position, l.flags)"
+            : $"{ReaderFunctions.LINK_ID}(l.rowid)";
+        var inOrder = !indexed || !filters.Direct;
+        var from = inOrder ? "links l NOT INDEXED" : filters.From;
+
+        // One part of the pass, on one read's connection: the links between two ids (all of them, with no bounds), kept
+        // and counted by that read.
+        (LinkIdSet? Ids, LinkTally? Tally) Part(GridReadContext read, string? bounds)
         {
-            // With nothing to count, the id is all that's passed on.
-            var each = tally ? $"{ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)" : $"{ReaderFunctions.LINK_ID}(l.rowid)";
-            var sql = $"SELECT COUNT({each}) FROM {(indexed ? filters.From : "links l NOT INDEXED")}{filters.Where(Within(context))}";
-            Ran?.Invoke(sql);
-            using var command = context.Command(sql, filters.Parameters);
-            command.ExecuteScalar();
-        }
-        finally
-        {
-            (context.LinkIds, context.LinkTally, context.NofollowPages) = (null, null, null);
+            var (found, counted) = (NewIds(), tally ? new LinkTally(largestUrl, urls) : null);
+            (read.LinkIds, read.LinkTally, read.NofollowPages) = (found, counted, nofollow);
+            try
+            {
+                var sql = $"SELECT COUNT({each}) FROM {from}{filters.Where(bounds is null ? Within(context) : bounds)}";
+                Ran?.Invoke(sql);
+                using var command = read.Command(sql, filters.Parameters);
+                command.ExecuteScalar();
+            }
+            finally
+            {
+                (read.LinkIds, read.LinkTally, read.NofollowPages) = (null, null, null);
+            }
+
+            return (found, counted);
         }
 
-        return (found?.Seal(), counted);
+        // Every link read in order, of a crawl that stands still, and many of them: split by link id over as many
+        // connections as the host has room for, each on a thread of its own. A running crawl's pass stays on the one
+        // connection and its one snapshot, which is the moment it answers for.
+        using var helpers = inOrder && largest >= SplitFrom && context.Stamp is { Live: false } ? context.BorrowHelpers(PassHelpers) : null;
+        if (helpers is not { Count: > 0 })
+        {
+            Split?.Invoke(1);
+            var (found, counted) = Part(context, null);
+            return (found?.Seal(), counted);
+        }
+
+        var parts = helpers.Count + 1;
+        string Bounds(int part) => string.Create(CultureInfo.InvariantCulture, $"{(part == 0 ? string.Empty : $"l.rowid > {largest * part / parts}")}{(part is 0 || part == parts - 1 ? string.Empty : " AND ")}{(part == parts - 1 ? string.Empty : $"l.rowid <= {largest * (part + 1) / parts}")}");
+
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(context.Token);
+        var others = Enumerable.Range(1, helpers.Count).Select(part => Task.Factory.StartNew(() =>
+        {
+            try
+            {
+                using var alongside = context.OpenAlongside(stop.Token);
+                try
+                {
+                    return alongside is null ? ((LinkIdSet? Ids, LinkTally? Tally)?)null : Part(alongside.Context, Bounds(part));
+                }
+                catch (Exception exception) when (alongside?.Context.RefusedPattern is { } pattern && exception is not RegexTooComplexException)
+                {
+                    // A pattern this part gave up on: the read's refusal, as when the read's own connection gives up on it.
+                    throw new RegexTooComplexException(pattern, exception);
+                }
+            }
+            catch
+            {
+                // One part failed, so the pass has: the others stop.
+                stop.Cancel();
+                throw;
+            }
+        }, stop.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
+
+        (LinkIdSet? Ids, LinkTally? Tally) mine;
+        try
+        {
+            mine = Part(context, Bounds(0));
+        }
+        catch
+        {
+            stop.Cancel();
+            Task.WaitAll(others.Select(other => other.ContinueWith(_ => { }, TaskScheduler.Default)).ToArray());
+            throw;
+        }
+
+        try
+        {
+            Task.WaitAll(others);
+        }
+        catch (AggregateException failed)
+        {
+            // What a part failed with is what the pass fails with: a pattern too complex before the parts stopped for it.
+            throw failed.Flatten().InnerExceptions.FirstOrDefault(exception => exception is not OperationCanceledException) ?? failed.InnerExceptions[0];
+        }
+
+        if (others.Any(other => other.Result is null))
+        {
+            // A connection found the file changed under the read: the pass again, on this read's own.
+            Split?.Invoke(1);
+            var (found, counted) = Part(context, null);
+            return (found?.Seal(), counted);
+        }
+
+        Split?.Invoke(parts);
+        foreach (var other in others.Select(other => other.Result!.Value))
+        {
+            if (other.Ids is not null)
+            {
+                mine.Ids!.Merge(other.Ids);
+            }
+
+            if (other.Tally is not null)
+            {
+                mine.Tally!.Merge(other.Tally);
+            }
+        }
+
+        return (mine.Ids?.Seal(), mine.Tally);
     }
 
     /// <summary>

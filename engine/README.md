@@ -71,7 +71,7 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
 | Flag | Default | Does |
 | --- | --- | --- |
 | `--data-dir <folder>` | `Documents/Shouting Iguana` | Where new crawls are saved. The library lists the `.sicrawl` files at its top level, plus files opened from elsewhere |
-| `--state-dir <folder>` | `<local app data>/ShoutingIguana` | Holds `library.json`, `defaults.json`, `summaries.json` and `logs/`. One sidecar at a time may use it |
+| `--state-dir <folder>` | `<local app data>/ShoutingIguana` | Holds `library.json`, `defaults.json`, `analysis-settings.json` (the analysis's limits the user changed, and only those), `summaries.json` and `logs/`. One sidecar at a time may use it |
 | `--port <number>` | `0`, a free port | A fixed port, for development. The ready line gives the port either way |
 | `--stdin-lifeline` | Off | Shut down on a `shutdown` line on stdin, or when stdin ends because the shell has gone |
 | `--dev` | Off | Development only: without `SI_SIDECAR_TOKEN`, make a token up and give it in the ready line |
@@ -132,6 +132,10 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
    exact completion test.
 5. Stop at any point with Ctrl+C, then continue with `--resume`. Progress counts what was actually read:
    `BytesDownloaded` is the bodies fetched, not the sizes that status checks were told.
+
+Beside all that, once, the crawl fetches the site's icon: the first page it parses names the candidates, and one to
+four polite requests later the icon is in the crawl file, or the site has none ([the site's icon](#the-sites-icon)).
+It is no URL of the crawl, and the crawl neither waits for it nor fails with it.
 
 Progress (`CrawlProgress`, twice a second) costs the same at a million URLs as at ten. The writer keeps running totals
 as it stores each response, and publishes them as one record after each batch it stores, so one report's numbers are
@@ -292,8 +296,10 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   previous results.
 - **Details name their status codes.** Where a rule writes a status into a detail it carries its standard name: "404
   Not Found", "301 Moved Permanently" (`Rules/HttpStatusNames`, RFC 9110's reason phrases). A code with no standard
-  name stays "HTTP 599". What the crawl stored with a status in it (a firewall's "Rate limited (HTTP 429)", a
-  sitemap's "HTTP 500") is named the same way when a detail quotes it; the crawl file keeps its own words.
+  name stays "HTTP 599". The crawl stores its own sentences the same way, through the same helper: a sitemap's
+  "404 Not Found", a robots.txt's "503 Service Unavailable" (as the reason of its alert and of the URLs it refused),
+  a firewall's "Rate limited (429 Too Many Requests)". A crawl an earlier engine stored keeps its words ("HTTP 404"),
+  which a detail still names when it quotes them; the crawl file is never rewritten.
 - **What an issue names.** An issue is one check on one URL, with a short detail and the other URL involved. Where a
   page has several (it links to three broken URLs, shows two large images), `issues` keeps the first and
   `issue_targets` every one, so the Issues screen puts the page in the group of each and the inspector counts each as
@@ -458,6 +464,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `response_html` | Compressed HTML, only with `--store-html` |
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (under the URL they were found at, which may redirect elsewhere; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one; the first one left unread, past 1,000 sitemaps or nested more than 3 deep, has an error starting "Not read"), and which URLs each listed |
+| `favicon` | The site's icon, fetched once near the crawl's start: one row at most, the image's bytes as the site sent them, where they came from and when, with the media type and size the engine read from the bytes ([below](#the-sites-icon)) |
 | `notices` | What the crawl told the person running it, every run's, in order: an id numbered across runs, when, the level as text, a stable code, the message, and JSON of the facts it's about (host, origin, URL, reason, counts, a duration) |
 | `run_time` | The time the crawl spent crawling: a row for each stretch of it, from a run's start (or its resuming after a pause) to its next pause or its end, with the run it belongs to, when it began, how long it went on, whether it has ended, and the crawl row's stamp it was stored under |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical): the first, where there are several |
@@ -486,13 +493,44 @@ issue is in. A file analysed before them reads without them, and gets them when 
 
 `notices` is created whenever the crawl writer opens a file,
 so an earlier engine's crawl gets it when it's continued, and reads as having none until then. `run_time` is created
-the same way ([below](#time-spent-crawling)). The writer adds the
+the same way ([below](#time-spent-crawling)), and so is `favicon` ([below](#the-sites-icon)). The writer adds the
 fingerprint's `responses.simhash_1` to `_3` the same way: pages fetched before then, and any an earlier engine fetches
-into a newer file, have none. The crawl's own schema version doesn't change, so either engine reads and continues
+into a newer file, have none. And `sitemaps.listed_sitemaps` (E6): how many sitemaps a sitemap's own file lists, as
+the crawl read it, so an index says how many it names beside how many of them the crawl has; null for a file whose
+body was never read, and for every sitemap an earlier engine read. The crawl's own schema version doesn't change, so either engine reads and continues
 either file. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
 without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
 and a `notices` table of another shape reads as none; the writer won't continue a crawl whose table it couldn't store
 a notice in, and says so.
+
+### The site's icon
+
+A crawl fetches the site's icon once and keeps it in its file, for the app's library, top bar and sidebar
+(`Favicons/`; [the API doc](../docs/v2-sidecar-api.md#favicon-e6) has the contract).
+
+- **Whose page names it.** The first page of the site that a run parses: in a new crawl, the start URL's page or the
+  page it redirects to, as nothing else is known until it has been read. The parser keeps that page's
+  `<link rel="icon">` elements as facts (`PageFacts.Icons`: URL, `sizes`, `type`), which aren't stored: the crawl file
+  holds what it held, and the links table has each icon as a link of kind `icon`, as before.
+- **Which is tried** (`FaviconCandidates`): the smallest the page declares as 64 px or more (a 32 px tile on a dense
+  screen), else the largest it declares below that, then those with no size, in page order; three of the page's at
+  most, then `/favicon.ico` at the page's origin. An SVG is never asked for.
+- **What is kept** (`FaviconSniffer`): the first candidate whose bytes are a PNG, an ICO, a GIF, a JPEG or a WebP, by
+  its signature, with a size its header gives of at most 1,024 px a side, in at most 512 KB. Whatever the site calls
+  it. An ICO's directory must hold up: every image it lists inside the file, the largest a PNG or a bitmap.
+- **How it's asked for** (`FaviconFetcher`): beside the crawl, as a job of its own. Each request waits for its
+  origin's robots.txt and obeys it when the crawl does, takes its turn at the host's gate, stops while the crawl is
+  paused, has the crawl's request timeout, and goes to another site only when the crawl checks other sites' links. It
+  is no URL of the crawl: nothing is discovered, recorded or counted for it, and a host that fails it is not a site
+  that is down. The crawl never hears of its failures. A crawl that completes first gives it 5 s; one that is
+  stopped, or fails, none.
+- **Where it's kept**: `favicon`, one row, written by `CrawlWriter` like everything a crawl stores, the first one
+  offered and no other. A table of another shape is another program's: no icon is then fetched or kept, and the crawl
+  goes on. A crawl that has its icon asks for none when it's continued; one that has none looks once more, from the
+  first page that run parses.
+- **How it's read** (`FaviconReader`): a file is trusted no more than the site was. At most 512 KB are read, and the
+  bytes are told to be an image again, so what a reader gives out is an image the engine keeps, under the type its
+  bytes are, or nothing. `CrawlSummaryReader` says whether a file has one (`HasFavicon`), in two lookups.
 
 ### Time spent crawling
 
@@ -635,9 +673,27 @@ Three more read what the Links, Sitemaps and robots.txt screens show (see [below
 the crawl's headline numbers (`si stats`, the API's `/stats`), reads the same way: one snapshot, stopped by its token,
 and kept in the `ReadCache` it's given while the crawl stands still.
 
+**Search as it's typed** (E6) is `UrlSearchReader.Search`, for the app's palette: the best few of a crawl's URLs whose
+URL or title holds the text, the page a person means first (the text is the URL or its path; then it starts the host
+or a segment of the path, never in the scheme, the query string or the fragment, or follows a character in the title
+that isn't a letter or a digit; then anywhere). Nothing is stored for it. An FTS5 index with a trigram
+tokenizer was measured on the 100k crawl and left out: with its content it adds 44 to 48 MB to a 479 MB file (9 to
+10%) and 2.0 s to an analysis of 11.8 s (or 2.7 s spread over the crawl); without, 9.4 MB and 1.4 s; it answers rare
+text of three characters or more in 0.1 to 2 ms, but a common word in 28 ms (81 ms with the text that ranking
+needs), and one or two characters not at all. Instead the first search of a crawl as it stands reads its URLs and
+titles into memory, once (`SearchText`: about 106 bytes a URL, the letters lowercased, a bit a letter for the
+capitals), the `ReadCache` keeps it (two crawls': `TEXT_CAPACITY`; a running crawl's for 2 s), and every keystroke
+after is a pass over that text: 1.3 to 4.5 ms at p95 at 100k whatever is typed, against the palette's 50 ms. The
+first search, which reads the text, takes 55 to 89 ms (49 to 78 at p50, five runs), which is why an empty text is a search too:
+the palette asks it as it opens. What matches is what the grid's `search` matches, so the count is the grid's. **The
+kept text isn't let go when a crawl sits idle**: a crawl of a million URLs holds about 110 MB in the sidecar until
+two other crawls are searched; that, and a search of a million URLs, weren't measured. The grid's own `search`
+stayed the scan it was: 26 to 50 ms at p95 for a first page at 100k, one letter or forty characters.
+
 A query (`UrlQuery`) has typed filters per column, up to three sort keys with unknown values last, a quick search of
 the URL and title, the columns to read, and `offset` plus `limit` (up to 1,000) to reach any row, or the `after` cursor
-a page gives to read on. The API, with every column and operator, is in
+a page gives to read on. `LinkEnds` (E6) narrows it to the URLs at one end of the links a view of the links grid
+matches ([below](#links-sitemaps-and-robotstxt)). The API, with every column and operator, is in
 [`docs/v2-sidecar-api.md`](../docs/v2-sidecar-api.md#urls-e3a).
 
 - **With or without the URL summary.** While a summary describes the crawl, sorts and filters read it. Without one (a
@@ -762,6 +818,21 @@ a page gives to read on. The API, with every column and operator, is in
     a filter it doesn't hold (the link's text or fragment, the page it's on, a search), one pass over the links gives
     the count, the facets and the set of ids at once, kept per filter set. Filters that name few source pages read
     only their links, through `ix_links_from`: a page's links are stored together.
+  - **That pass is split over connections** (E6) for a crawl that stands still and has 500,000 links or more, when
+    the host lends them (`ReadHelpers`, given on the `ReadCache`; the sidecar lends the read slots free beside the
+    read's own, never the last one: `ReadSlots`). The links are divided by id into as many stretches as there are
+    connections, eight at most (`PassHelpers`); each is read on a thread and a connection of its own
+    (`GridReadContext.OpenAlongside`: the read's rules, and stopped with it), and what each kept and counted is put
+    together (`LinkIdSet.Merge`, `LinkTally.Merge`). The answer is the one connection's, to the link; a part that
+    finds the file changed under it has the pass run again on the read's own connection. A running crawl's pass is
+    never split: it stays on the one connection and the one snapshot that are the moment it answers for, so the time
+    its log goes unfolded is what it was. Nothing is stored for it, and with no helper free the pass is as it was.
+  - **`Ends`** (E6) lists the URLs at one end of the links a view matches, each once with its links, in URL id order:
+    the view's targets, or the pages its links are on. The targets come from the tally the grid has of the view (the
+    link summary's rows, or the pass that gave the view its count); the pages take a pass of their own, counted by
+    source (`LinkTally` again), kept per filter set and split as any pass is. **`UrlQuery.LinkEnds`** narrows the URL
+    grid, its facets, a check's rows and a sitemap's URLs to those URLs: the links grid gives their set (`EndIds`),
+    which the grid tests each row against (`GridPlanner.InSet`), so the grid's count is the list's.
   - What's kept per filter set (ids, counts by target, a sort's order) is megabytes on a large crawl, so the cache
     keeps 12 of them (`ReadCache.HUGE_CAPACITY`).
   - **A running crawl is answered for one moment of it** (`LinkMoment`). What's counted is kept between reads, and
@@ -790,7 +861,16 @@ a page gives to read on. The API, with every column and operator, is in
   continued later keeps each origin's last answer. An origin's state is what its answer meant to the crawl, as the
   crawler's `RobotsCache` took it: read, missing (no rules), unreachable (a 5xx, a 429, or no answer from the start
   URL's origin: its URLs were refused) or unanswered (no answer from any other origin: no verdict, and the crawl
-  went ahead).
+  went ahead). E6: `ReadOrigins` takes a `RobotsOriginQuery` (text in the origin's name, and whether it blocked
+  anything) and counts what the text finds each way, for a filter bar; `ReadBlocked` answers for one URL
+  (`urlId`); and the inspector's robots.txt test names the origin, the reason and the line that refused the URL
+  (`RobotsReader.WhyRefused`, the same match), so it opens the file at that line.
+- **The inspector** (E6) also names the sitemaps whose own file lists the URL (`InspectedUrl.ListedIn`, the first 20
+  and how many), from `sitemap_urls`, and counts the hyperlinks to the URL as the crawl stored them
+  (`UrlLinkTotals.HyperlinkInlinks`: the links grid's count for the same URL, so "N hyperlinks" lands). The
+  analysis's `inlinks` can be less: it counts links on the pages it audits, and it doesn't audit Cloudflare's own
+  pages (`/cdn-cgi/`), whose links the crawl stores like any other's. On the 100k benchmark that is 24 URLs of
+  112,590 (a menu's targets, by one or two links each).
 
 `si readbench <crawl>` times the grids' reads as the UI makes them, each on a fresh connection with nothing cached, as
 a filter set's first read is: the first page, the page half way down and the one just past it (read from the far end),
@@ -832,6 +912,9 @@ half way or just past it), on a 32-core Windows machine (20 runs at 100k, 5 at 1
 | robots.txt: origins, a file, its blocked URLs (`robots`) | 34 | not measured | | 200 |
 | The crawl's headline numbers: read, and read again from what was kept (`stats`) | 174 | not measured | | 350 |
 | The same without the link summary: the links counted, each sitemap page looked up among them (`stats-pass`) | 322 | not measured | | 600 |
+| The links grid's passes over the links, and a view's pages, split over the connections a host lends (`link-pass-split`) | 489 | not measured | | 1,500 |
+| Search as it's typed, the crawl's text kept (`search`) | 2.8 | not measured | | 25 |
+| The first search of a crawl, which reads its text (`search-first`) | 72 | not measured | | 200 |
 
 The facets of the pages without the summary take 1.35 s at 1M: they read and judge every row of the crawl's own tables.
 Every other read of 1M in the table is under 1 s apart from `links-kind`, which was measured before its index (below);
@@ -875,6 +958,30 @@ URLs took 407 to 459 ms half way down and take 97 to 132. `link-pass` keeps a fi
 that the fewer links pass (the content links to pages four clicks from the start, 455 ms), and the text filters and
 searches: a table of the distinct link texts was measured for those and not built
 ([the API doc](../docs/v2-sidecar-api.md#engine-changes-e3c-made) has the numbers).
+
+E6 split the passes of `link-pass` over connections (`link-pass-split`), and `si readbench` times each both ways: on
+one connection, as a running crawl's are read and as any is when no read slot is free, and with the helpers a host
+with every core free lends (`ReadHelpers.UpTo`, every other core, of which a pass takes seven at most). Timed in turn
+with the engine from before E6 on the 100k crawl, three rounds of ten runs on a machine other work was loading: on
+one connection a pass takes what it took (a common text filter 665 to 934 ms at p50 for 778 to 914 before, a search
+1,233 to 1,592 for 1,301 to 1,615); on four connections a quarter (172 to 187, 289 to 297); on eight a sixth (113 to
+123, 183 to 211), which puts every one of them inside the 300 ms budget at p50, a filter on the source's depth (210
+to 228 ms, from 819 to 1,536) and a pattern over every link's text (146 to 161, from 853 to 1,284) included. Their
+worst p95 over the rounds was 489 ms on eight connections and 532 on four (1,295 once, as the machine was busiest).
+The gate is 1,500 ms: CI's 4-core runner has three helpers to lend and is taken as twice as slow a core, so the gate
+is over twice the worst with four connections, and above the one busy run. No CI run has yet confirmed it. That gate
+alone would let a pass that stopped splitting through, as every one of them takes less on one connection, so `--gate`
+also holds each split case to what it is for (`SplitGate`), on a crawl of 500,000 links or more: every pass it read
+was split (`LinkGridReader.Split` reports the connections), and, on 4 cores or more, its slowest page took at most
+60% of its one-connection twin's at p50, in the same run. With splitting switched off, the 100k crawl's read gate
+fails on every split case. `link-pass` holds
+the same reads on one connection to the 2.5 s it had. A view's ends are timed with them: its targets from the link
+summary in 20 to 58 ms (`link-grid`), the pages its links are on in a pass (475 to 740 ms on one connection, 148 to
+157 at p50 on eight).
+
+The three reads the Sitemaps, robots.txt and inspector screens gained in E6 are timed in their classes: the origins
+searched and filtered and one blocked URL's row (`robots`), and the inspector of a URL robots.txt refused and of one
+sitemaps list (`inspector`).
 
 The `links-kind` cell, and the inspector's, were measured before `ix_links_to_kind` and `issue_targets`. With those, on
 the same 1M crawl, links of one kind half way down take 94–241 ms (they were 1.7–3.1 s) and "named by" is 2 ms, 8 ms for

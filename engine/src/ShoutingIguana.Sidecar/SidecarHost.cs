@@ -160,9 +160,13 @@ internal sealed class SidecarHost : IAsyncDisposable
         builder.Services.AddSingleton<CrawlSummaryCache>();
         builder.Services.AddSingleton<CrawlLibrary>();
         builder.Services.AddSingleton<DefaultsStore>();
+        builder.Services.AddSingleton<AnalysisSettingsStore>();
         builder.Services.AddSingleton<CrawlManager>();
         builder.Services.AddSingleton<CrawlData>();
-        builder.Services.AddSingleton(new ReadCache());
+        // The grids' reads keep what they count in one cache, and a pass over a large crawl's links may use the read
+        // slots that are free beside its own.
+        builder.Services.AddSingleton<ReadSlots>();
+        builder.Services.AddSingleton(services => new ReadCache { Helpers = services.GetRequiredService<ReadSlots>().Helpers });
         builder.Services.AddSingleton<GridData>();
         builder.Services.AddSingleton<ExportJournal>();
         builder.Services.AddSingleton<ExportManager>();
@@ -186,6 +190,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         app.UseMiddleware<RequestGuard>();
         AppEndpoints.Map(app);
         OptionsEndpoints.Map(app);
+        AnalysisSettingsEndpoints.Map(app);
         LibraryEndpoints.Map(app);
         CrawlEndpoints.Map(app);
         AnalysisEndpoints.Map(app);

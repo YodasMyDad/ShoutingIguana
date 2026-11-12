@@ -8,9 +8,12 @@ import type {
   FacetsQuery,
   GridPage,
   GridQuery,
+  UrlGridQuery,
   IssueGroupPage,
   IssueRow,
   LinkColumn,
+  LinkEndsPage,
+  LinkEndsQuery,
   LinkFacetsPage,
   LinkFacetsQuery,
   LinkRow,
@@ -18,6 +21,8 @@ import type {
   RobotsBlockedQuery,
   RobotsFile,
   RobotsOriginPage,
+  RobotsOriginsQuery,
+  SearchResults,
   SitemapList,
   UrlColumn,
   UrlLookup,
@@ -28,6 +33,8 @@ import { getTransport, type TransportRequest } from './transport';
 import type {
   AlertEvent,
   Analysis,
+  AnalysisSettings,
+  AnalysisSettingsChange,
   Checks,
   ContinueCrawlRequest,
   CrawlHistory,
@@ -85,6 +92,20 @@ async function toError(response: Response): Promise<Error> {
 
 const crawl = (id: string) => `/api/crawls/${encodeURIComponent(id)}`;
 
+/**
+ * Sends one call whose answer is a file's bytes, not JSON. A success with no body (204) resolves with null: there is
+ * nothing to show. A failure is the typed error any call's is.
+ */
+export async function callBytes(request: TransportRequest): Promise<Blob | null> {
+  const response = await getTransport().send(request);
+  if (!response.ok) throw await toError(response);
+  if (response.status === 204) {
+    await response.body?.cancel();
+    return null;
+  }
+  return response.blob();
+}
+
 const exportJob = (exportId: string) => `/api/exports/${encodeURIComponent(exportId)}`;
 
 /** The report's options as its query string: only what was given, so the sidecar's defaults stand for the rest. */
@@ -120,6 +141,12 @@ export const api = {
   // Library
   crawls: (signal?: Signal) => get<CrawlListItem[]>('/api/crawls', signal),
   crawl: (id: string, signal?: Signal) => get<CrawlListItem>(crawl(id), signal),
+  /**
+   * E6: the site's icon as the crawl kept it: a PNG, ICO, GIF, JPEG or WebP, its `type` the one its bytes are. Null for
+   * a crawl that has none (`hasFavicon` on its item says which to expect), where the app draws a letter. It needs the
+   * token, so show it from an object URL of the blob: an `<img src>` can't ask for it.
+   */
+  favicon: (id: string, signal?: Signal) => callBytes({ method: 'GET', path: `${crawl(id)}/favicon`, signal }),
   /** Adds a crawl file from anywhere: an absolute path ending in `.sicrawl`. */
   openCrawl: (path: string) => post<CrawlListItem>('/api/crawls/open', { path }),
   /** Removes it from the library, not from disk. Undone by restoreCrawl. */
@@ -148,6 +175,21 @@ export const api = {
   cancelAnalysis: (id: string) => post<undefined>(`${crawl(id)}/analyze/cancel`),
   analysis: (id: string, signal?: Signal) => get<Analysis>(`${crawl(id)}/analysis`, signal),
 
+  // Analysis settings (E6): the limits every analysis here judges by.
+  analysisSettings: (signal?: Signal) => get<AnalysisSettings>('/api/analysis-settings', signal),
+  /**
+   * Saves limits and answers with all of them. `invalid-settings` (422) saves nothing; its `errors` are keyed as
+   * `AnalysisSettingsErrors` says: by a limit's name, or `settings` for the limits as a whole.
+   */
+  saveAnalysisSettings: (limits: AnalysisSettingsChange) =>
+    call<AnalysisSettings>({ method: 'PUT', path: '/api/analysis-settings', body: limits }),
+  /** What a save of the same limits would refuse (`AnalysisSettingsErrors`); always 200 for a body of limits. Nothing is saved. */
+  validateAnalysisSettings: (limits: AnalysisSettingsChange, signal?: Signal) =>
+    post<ValidationResult>('/api/analysis-settings/validate', limits, signal),
+  /** Puts the named limits back to the engine's values; all of them when none is named. A name that's no limit's is `invalid-settings` on `limits[<index>]`. */
+  resetAnalysisSettings: (limits?: string[]) =>
+    post<AnalysisSettings>('/api/analysis-settings/reset', limits ? { limits } : undefined),
+
   // Data
   stats: (id: string, signal?: Signal) => get<CrawlStats>(`${crawl(id)}/stats`, signal),
   issues: (id: string, checkId: string, page: { limit: number; offset: number }, signal?: Signal) =>
@@ -158,11 +200,18 @@ export const api = {
 
   // Grids (E3a). One fixed URL per grid, so one preflight per session.
   urlColumns: (signal?: Signal) => get<UrlColumn[]>('/api/url-columns', signal),
-  urls: (id: string, query: GridQuery, signal?: Signal) => post<GridPage<UrlRow>>(`${crawl(id)}/urls`, query, signal),
+  urls: (id: string, query: UrlGridQuery, signal?: Signal) =>
+    post<GridPage<UrlRow>>(`${crawl(id)}/urls`, query, signal),
   urlFacets: (id: string, query: FacetsQuery, signal?: Signal) =>
     post<FacetsPage>(`${crawl(id)}/urls/facets`, query, signal),
   /** A URL of the crawl by its text: `url-not-found` when the crawl has none, `invalid-query` when it isn't a URL. */
   lookupUrl: (id: string, url: string, signal?: Signal) => post<UrlLookup>(`${crawl(id)}/urls/lookup`, { url }, signal),
+  /**
+   * E6: search as it's typed, for the palette. `limit` is 1 to 50 (10 when left out). An empty `text` finds nothing and
+   * reads the crawl's text, so ask it as the palette opens. `invalid-query` for a text over 1,000 characters.
+   */
+  search: (id: string, text: string, limit?: number, signal?: Signal) =>
+    post<SearchResults>(`${crawl(id)}/search`, limit === undefined ? { text } : { text, limit }, signal),
   /** One URL in full. `url-not-found` for an id the crawl doesn't have, `invalid-query` without one. */
   urlDetail: (id: string, urlId: number, signal?: Signal) =>
     post<UrlDetail>(`${crawl(id)}/urls/inspect`, { urlId }, signal),
@@ -173,7 +222,7 @@ export const api = {
     post<HtmlSource>(`${crawl(id)}/urls/source`, { urlId }, signal),
   issueGroups: (id: string, checkId: string, page: { offset: number; limit: number }, signal?: Signal) =>
     post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
-  issueRows: (id: string, checkId: string, query: GridQuery, signal?: Signal) =>
+  issueRows: (id: string, checkId: string, query: UrlGridQuery, signal?: Signal) =>
     post<GridPage<IssueRow>>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/rows`, query, signal),
 
   // Links, sitemaps and robots.txt (E3b).
@@ -183,12 +232,19 @@ export const api = {
     post<GridPage<LinkRow>>(`${crawl(id)}/links`, query, signal),
   linkFacets: (id: string, query: LinkFacetsQuery, signal?: Signal) =>
     post<LinkFacetsPage>(`${crawl(id)}/links/facets`, query, signal),
+  /**
+   * E6: the URLs at one end of the links a view matches, each once: its targets, or the pages its links are on. Its
+   * `total` is the URL grid's `matching` under the same links as `linkEnds`.
+   */
+  linkEnds: (id: string, query: LinkEndsQuery, signal?: Signal) =>
+    post<LinkEndsPage>(`${crawl(id)}/links/ends`, query, signal),
   sitemaps: (id: string, signal?: Signal) => get<SitemapList>(`${crawl(id)}/sitemaps`, signal),
   /** The URL grid for one sitemap (an index: every sitemap under it). `sitemap-not-found` for an id the crawl lacks. */
-  sitemapUrls: (id: string, sitemapId: number, query: GridQuery, signal?: Signal) =>
+  sitemapUrls: (id: string, sitemapId: number, query: UrlGridQuery, signal?: Signal) =>
     post<GridPage<UrlRow>>(`${crawl(id)}/sitemaps/urls`, { sitemapId, ...query }, signal),
-  robotsOrigins: (id: string, page: { offset: number; limit: number }, signal?: Signal) =>
-    post<RobotsOriginPage>(`${crawl(id)}/robots`, page, signal),
+  /** E6: `search` finds origins by name and `blocked` filters them; the page then has `matching` and `counts`. */
+  robotsOrigins: (id: string, query: RobotsOriginsQuery, signal?: Signal) =>
+    post<RobotsOriginPage>(`${crawl(id)}/robots`, query, signal),
   /** One origin's robots.txt, line by line. `origin-not-found` for an origin the crawl has none for. */
   robotsFile: (id: string, origin: string, signal?: Signal) =>
     post<RobotsFile>(`${crawl(id)}/robots/file`, { origin }, signal),

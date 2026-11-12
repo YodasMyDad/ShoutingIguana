@@ -7,6 +7,9 @@ public sealed record UrlFacetQuery
 
     public string? Search { get; init; }
 
+    /// <summary>Only the URLs at one end of the links these link filters match (<see cref="UrlQuery.LinkEnds"/>).</summary>
+    public UrlLinkEnds? LinkEnds { get; init; }
+
     /// <summary>Facet ids from <see cref="UrlGridReader.FACETS"/>; none means all of them.</summary>
     public IReadOnlyList<string> Facets { get; init; } = [];
 }

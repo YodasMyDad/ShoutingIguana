@@ -270,6 +270,12 @@ export interface CrawlListItem {
   /** The last analysis no longer stands. False before the first one. */
   outOfDate: boolean;
   sizeBytes: number;
+  /**
+   * E6: the crawl kept the site's icon, which `api.favicon` then gives. False for a site with no icon the engine keeps,
+   * for a crawl made before E6, and for a running crawl until its icon has arrived, a few requests after its first
+   * page. Absent from a sidecar built before E6.
+   */
+  hasFavicon?: boolean;
   /** A file opened from elsewhere that isn't there any more. */
   missing: boolean;
   /** Why the file couldn't be read, in plain words: only when the status is `unreadable`. */
@@ -327,6 +333,57 @@ export interface SkippedCheck {
 }
 
 export type OutOfDateReason = 'crawlChanged' | 'engineChanged' | 'settingsChanged';
+
+// ----------------------------------------------------------------------------------------- Analysis settings (E6)
+
+export type AnalysisLimitUnit = 'characters' | 'words' | 'bits' | 'bytes' | 'ms';
+
+/** One limit an analysis judges by ("a title longer than this is too long"), with what Settings needs to show it. */
+export interface AnalysisLimit {
+  /** The limit's name, as the engine's analysis settings and every crawl file have it: `titleMaxLength`. */
+  id: string;
+  /** The value in force. */
+  value: number;
+  /** The engine's own value. */
+  default: number;
+  unit: AnalysisLimitUnit;
+  /** The range it may be set within, both ends included. */
+  min: number;
+  max: number;
+  /** One sentence saying what the limit does, to show as it is. */
+  description: string;
+}
+
+/**
+ * `GET /api/analysis-settings`, and what a save or a reset answers with: the limits in force. An analysis that ran with
+ * other limits is out of date (`settingsChanged`) from the next read of the library or of its analysis; no event is
+ * sent, so read the library again after a save. An analysis under way keeps the limits it began with.
+ */
+export interface AnalysisSettings {
+  /** Each limit's value by name: the body a save and `validate` take. */
+  settings: Record<string, number>;
+  /** Every limit, in the order Settings shows them. */
+  limits: AnalysisLimit[];
+  /** True while every limit is at the engine's value. */
+  isDefault: boolean;
+}
+
+/**
+ * Limits to save or to check, by name. Every limit is optional: one left out, or null, takes the engine's value. A
+ * value out of its range, or not a whole number, is `invalid-settings` (422) with `errors` (`AnalysisSettingsErrors`);
+ * a name that is no limit's is a `bad-request`.
+ */
+export type AnalysisSettingsChange = Record<string, number | null>;
+
+/**
+ * What `invalid-settings` (and `validate`) key their messages by: a limit's name (`titleMaxLength`) for a value of its
+ * own; `settings` (`ANALYSIS_SETTINGS_WHOLE`) for a rule only the limits together break; and, for a reset,
+ * `limits[<index>]` for a name that's no limit's. Show a key with no field of its own above the form.
+ */
+export type AnalysisSettingsErrors = Record<string, string[]>;
+
+/** The key of a refusal about the analysis's limits as a whole, not one of them. */
+export const ANALYSIS_SETTINGS_WHOLE = 'settings';
 
 export interface Analysis {
   analyzedAt: string;

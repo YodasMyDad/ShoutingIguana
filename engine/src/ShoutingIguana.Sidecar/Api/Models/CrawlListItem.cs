@@ -59,6 +59,12 @@ internal sealed record CrawlListItem
 
     public long SizeBytes { get; init; }
 
+    /// <summary>
+    /// The crawl kept the site's icon, which <c>GET /api/crawls/{id}/favicon</c> gives (E6). A running crawl gains it a few
+    /// requests after its start page; false for a crawl whose site has none, and for one made before icons were kept.
+    /// </summary>
+    public bool HasFavicon { get; init; }
+
     /// <summary>A file opened from elsewhere that isn't there any more.</summary>
     public bool Missing { get; init; }
 }

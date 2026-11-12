@@ -29,4 +29,10 @@ internal sealed record GridPredicate(string Sql, string Disabled, IReadOnlyList<
 
     /// <summary>Once read: the set of the rows it leaves out, by their own URL id; it matches every other row.</summary>
     public UrlIdSet? Excluded { get; init; }
+
+    /// <summary>
+    /// The links whose ends it matches, for a condition still to be read from the links grid (<see cref="UrlGridReader"/>
+    /// reads it once the query is compiled); null for any other condition, and once it has been.
+    /// </summary>
+    public UrlLinkEnds? LinkEnds { get; init; }
 }

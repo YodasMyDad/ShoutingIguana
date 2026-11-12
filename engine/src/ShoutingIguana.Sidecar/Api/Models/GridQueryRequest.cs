@@ -22,4 +22,7 @@ internal sealed record GridQueryRequest
 
     /// <summary>For a sitemap's URLs (E3b): the sitemap, by its id.</summary>
     public long? SitemapId { get; init; }
+
+    /// <summary>For the URL grids (E6): only the URLs at one end of the links these link filters match.</summary>
+    public LinkEndsDto? LinkEnds { get; init; }
 }

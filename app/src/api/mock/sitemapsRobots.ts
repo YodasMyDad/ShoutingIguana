@@ -4,7 +4,7 @@
 // to its own with one line.
 import type { ProblemBody } from '../errors';
 import type {
-  GridQuery,
+  LinkEnds,
   RobotsBlockedPage,
   RobotsBlockedQuery,
   RobotsBlockedUrl,
@@ -13,11 +13,13 @@ import type {
   Sitemap,
   SitemapList,
   SummaryState,
+  UrlGridQuery,
   UrlRow,
 } from '../grids';
 import type { TransportRequest } from '../transport';
 import type { CrawlListItem } from '../types';
 import { optionalFixture, type FixtureCrawl } from './fixtures';
+import { answerOrigins } from './e6';
 import { answerGridQuery, pagingErrors } from './gridQuery';
 
 type Handler = (match: RegExpMatchArray, request: TransportRequest) => Promise<Response>;
@@ -36,6 +38,13 @@ export interface MockCrawls {
   summary: (item: CrawlListItem) => SummaryState;
   /** A crawl started here is still running. */
   live: (id: string) => boolean;
+  /** A URL grid's rows narrowed to a links view's ends (E6's `linkEnds`), or the problem for one that can't be run. */
+  narrow: <Row extends { id: number }>(
+    id: string,
+    item: CrawlListItem,
+    rows: Row[],
+    linkEnds: LinkEnds | undefined,
+  ) => Promise<Row[] | Response>;
 }
 
 const sitemapNotFound = (): ProblemBody => ({
@@ -149,11 +158,13 @@ export function sitemapsRobotsRoutes(mock: MockCrawls): MockRoute[] {
       async ([, id = ''], request) => {
         const item = await mock.item(id);
         if (!item) return mock.problem(mock.notFound(id));
-        const { sitemapId, ...query } = (request.body ?? {}) as GridQuery & { sitemapId?: unknown };
+        const { sitemapId, linkEnds, ...query } = (request.body ?? {}) as UrlGridQuery & { sitemapId?: unknown };
         if (typeof sitemapId !== 'number') return mock.problem(invalid({ sitemapId: ['Give the sitemap’s id.'] }));
         const { sitemaps } = await savedSitemaps(id);
         if (!sitemaps.some((sitemap) => sitemap.id === sitemapId)) return mock.problem(sitemapNotFound());
-        const answer = answerGridQuery(await listedRows(id, sitemaps, sitemapId), query, mock.summary(item));
+        const rows = await mock.narrow(id, item, await listedRows(id, sitemaps, sitemapId), linkEnds);
+        if (rows instanceof Response) return rows;
+        const answer = answerGridQuery(rows, query, mock.summary(item));
         return answer.ok ? mock.json(answer.page) : mock.problem(answer.problem);
       },
     ],
@@ -162,18 +173,9 @@ export function sitemapsRobotsRoutes(mock: MockCrawls): MockRoute[] {
       new RegExp(`${crawl}/robots$`),
       async ([, id = ''], request) => {
         if (!(await mock.item(id))) return mock.problem(mock.notFound(id));
-        const body = (request.body ?? {}) as { offset?: number; limit?: number };
-        const offset = body.offset ?? 0;
-        const limit = body.limit ?? 100;
-        const errors = pagingErrors(offset, limit);
-        if (Object.keys(errors).length > 0) return mock.problem(invalid(errors));
-        const saved = await savedOrigins(id);
-        return mock.json({
-          ...saved,
-          total: saved.origins.length,
-          offset,
-          origins: saved.origins.slice(offset, offset + limit),
-        } satisfies RobotsOriginPage);
+        // E6: searched by the origin's name and filtered by whether it blocked anything, with the counts a filter bar shows.
+        const answer = answerOrigins(await savedOrigins(id), request.body);
+        return answer.ok ? mock.json(answer.page) : mock.problem(answer.problem);
       },
     ],
     [
@@ -187,7 +189,10 @@ export function sitemapsRobotsRoutes(mock: MockCrawls): MockRoute[] {
         }
         const files = await optionalFixture<Record<string, RobotsFile>>(`api/${mock.folder(id)}/robots-files.json`);
         const file = files?.[asked];
-        return file ? mock.json(file) : mock.problem(originNotFound());
+        // E6: whether the crawl obeyed robots.txt, as the list of origins says it, where the saved file doesn't.
+        return file
+          ? mock.json({ ...file, respected: file.respected ?? (await savedOrigins(id)).respected })
+          : mock.problem(originNotFound());
       },
     ],
     [
@@ -220,7 +225,8 @@ export function sitemapsRobotsRoutes(mock: MockCrawls): MockRoute[] {
         const matching = all.filter(
           (row) =>
             (query.line === undefined || row.line === query.line) &&
-            (query.reason === undefined || row.reason === query.reason),
+            (query.reason === undefined || row.reason === query.reason) &&
+            (query.urlId === undefined || row.id === query.urlId),
         );
         return mock.json({
           origin: asked,

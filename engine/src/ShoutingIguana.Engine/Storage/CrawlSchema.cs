@@ -169,6 +169,32 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
+    /// The site's icon, as the crawl fetched it near its start: one row at most, the image's bytes as the site sent them,
+    /// already told to be an image by their own signature (<c>Favicons.FaviconSniffer</c>). A crawl-time table, created
+    /// whenever the writer opens a file, as <see cref="NOTICES"/> is, so a file from an earlier engine gets it when it is
+    /// continued (and an icon only if that run reads the start page). The fetch is no URL of the crawl: nothing else in
+    /// the file knows of it. <c>content_type</c>, <c>width</c> and <c>height</c> are what the engine read from the bytes,
+    /// kept so the file explains itself; readers read them from the bytes again.
+    /// </summary>
+    public const string FAVICON = """
+        CREATE TABLE IF NOT EXISTS favicon (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            url TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL,
+            fetched_at INTEGER NOT NULL,
+            body BLOB NOT NULL
+        );
+        """;
+
+    /// <summary>
+    /// The columns of <see cref="FAVICON"/>, in order. A table of any other shape is another program's: the writer then
+    /// keeps no icon (a crawl matters more than its icon), and readers find none.
+    /// </summary>
+    public const string FAVICON_COLUMNS = "id,url,content_type,width,height,fetched_at,body";
+
+    /// <summary>
     /// The columns of <see cref="RUN_TIME"/>, in order. A table of any other shape is another program's: the writer then
     /// keeps no time (a crawl matters more than how long it took), and readers don't know the crawl's.
     /// </summary>
@@ -188,6 +214,18 @@ internal static class CrawlSchema
     /// the columns it knows. The crawl's schema version doesn't change, so either engine can read and continue either file.
     /// </summary>
     public static readonly (string Name, string Type)[] RESPONSE_COLUMNS = [("simhash_1", "INTEGER"), ("simhash_2", "INTEGER"), ("simhash_3", "INTEGER")];
+
+    /// <summary>
+    /// The <c>sitemaps</c> columns added since the table was first created, which the writer adds whenever it opens a file,
+    /// as it does <see cref="RESPONSE_COLUMNS"/>:
+    /// <list type="bullet">
+    /// <item><c>listed_sitemaps</c> is how many sitemaps the file lists (its <c>&lt;sitemap&gt;</c> entries, as read: repeats
+    /// and entries that aren't URLs included), so an index says how many it names beside how many of them the crawl has;
+    /// 0 for a sitemap that lists only URLs. Null when the file's body was never read (it failed first, or was left
+    /// unread), and for every sitemap an engine from before the column read.</item>
+    /// </list>
+    /// </summary>
+    public static readonly (string Name, string Type)[] SITEMAP_COLUMNS = [("listed_sitemaps", "INTEGER")];
 
     /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and

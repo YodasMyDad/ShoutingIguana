@@ -20,7 +20,7 @@ public sealed class BlockDetectorTests
         Assert.Equal("Cloudflare challenge", BlockDetector.Detect(403, [new ResponseHeader("cf-mitigated", "challenge")], null));
 
     [Fact]
-    public void RateLimited() => Assert.Equal("Rate limited (HTTP 429)", BlockDetector.Detect(429, [], null));
+    public void RateLimited() => Assert.Equal("Rate limited (429 Too Many Requests)", BlockDetector.Detect(429, [], null));
 
     [Fact]
     public void CloudflareChallengePage() =>

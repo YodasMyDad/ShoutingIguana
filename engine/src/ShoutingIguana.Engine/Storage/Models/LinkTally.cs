@@ -74,6 +74,21 @@ internal sealed class LinkTally
         _byTarget[slot] = (int)Math.Min(int.MaxValue, _byTarget[slot] + links);
     }
 
+    /// <summary>Adds another tally's counts: the parts of one pass split over several connections, each of which counted its own stretch of the links.</summary>
+    public void Merge(LinkTally other)
+    {
+        Links += other.Links;
+        for (var shape = 0; shape < SHAPES; shape++)
+        {
+            ByShape[shape] += other.ByShape[shape];
+        }
+
+        for (var target = 0; target < _byTarget.Length && target < other._byTarget.Length; target++)
+        {
+            _byTarget[target] = (int)Math.Min(int.MaxValue, (long)_byTarget[target] + other._byTarget[target]);
+        }
+    }
+
     /// <summary>
     /// What a link is, as the facets count it: its kind and position, unknown when this engine has no name for them, and
     /// whether search engines follow it, which only a hyperlink can be asked: not when its <c>rel</c> says nofollow, nor

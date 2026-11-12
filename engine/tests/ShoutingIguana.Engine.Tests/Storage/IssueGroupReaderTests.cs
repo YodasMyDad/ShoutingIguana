@@ -42,7 +42,8 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
             Assert.Equal(expected.Count, page.GroupCount);
 
             // A page is in a group for each URL its issue names, so a check grouped by the other URL can count it more than once.
-            var pages = page.Groups.Sum(group => group.Pages);
+            Assert.All(page.Groups, group => Assert.Equal(group.Pages, group.Urls));
+            var pages = page.Groups.Sum(group => group.Urls);
             Assert.True(grouping == IssueGrouping.RelatedUrl ? pages >= total : pages == total, $"{check}: {pages} pages in groups, {total} flagged");
 
             // Paged, the same groups in the same order.

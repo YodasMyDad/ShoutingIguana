@@ -50,6 +50,15 @@ internal static class ReaderFunctions
     /// </summary>
     public const string LINKS = "si_links";
 
+    /// <summary>
+    /// <c>si_search_url(id, url, is_internal)</c>: one URL's text kept for searching (<see cref="GridReadContext.SearchText"/>),
+    /// and gives 1.
+    /// </summary>
+    public const string SEARCH_URL = "si_search_url";
+
+    /// <summary><c>si_search_title(url_id, title)</c>: one URL's title kept for searching, and gives 1.</summary>
+    public const string SEARCH_TITLE = "si_search_title";
+
     /// <summary>What the user is told of a pattern whose matches took too long on the crawl's text.</summary>
     public const string TOO_COMPLEX = "This pattern is too complex to run on this crawl. Simplify it.";
 
@@ -185,6 +194,33 @@ internal static class ReaderFunctions
             {
                 ((GridReadContext)state).LinkTally?.Add(raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_int64(arguments[1]), raw.sqlite3_value_int64(arguments[2]),
                     raw.sqlite3_value_int64(arguments[3]), raw.sqlite3_value_int64(arguments[4]) != 0, raw.sqlite3_value_int64(arguments[5]));
+                raw.sqlite3_result_int(call, 1);
+            }
+            catch (Exception exception)
+            {
+                raw.sqlite3_result_error(call, exception.Message);
+            }
+        });
+
+        raw.sqlite3_create_function(handle, SEARCH_URL, 3, raw.SQLITE_UTF8, context, static (call, state, arguments) =>
+        {
+            try
+            {
+                ((GridReadContext)state).SearchText?.AddUrl(raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_blob(arguments[1]),
+                    raw.sqlite3_value_int64(arguments[2]) != 0);
+                raw.sqlite3_result_int(call, 1);
+            }
+            catch (Exception exception)
+            {
+                raw.sqlite3_result_error(call, exception.Message);
+            }
+        });
+
+        raw.sqlite3_create_function(handle, SEARCH_TITLE, 2, raw.SQLITE_UTF8, context, static (call, state, arguments) =>
+        {
+            try
+            {
+                ((GridReadContext)state).SearchText?.AddTitle(raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_blob(arguments[1]));
                 raw.sqlite3_result_int(call, 1);
             }
             catch (Exception exception)

@@ -250,7 +250,7 @@ export const DoneWithAlerts: Story = {
           alert({
             id: 1,
             code: 'sitemaps-not-read',
-            data: { url: 'https://example.com/sitemap-news.xml', reason: 'HTTP 503' },
+            data: { url: 'https://example.com/sitemap-news.xml', reason: '503 Service Unavailable' },
           }),
           alert({
             id: 2,
@@ -552,7 +552,7 @@ export const LiveWithAlerts: Story = {
           id: 2,
           code: 'robots-unreachable',
           at: '2026-11-01T10:21:10.000Z',
-          data: { origin: 'https://shop.example.com', reason: 'HTTP 503', durationMs: 120_000 },
+          data: { origin: 'https://shop.example.com', reason: '503 Service Unavailable', durationMs: 120_000 },
         }),
         alert({
           id: 3,
