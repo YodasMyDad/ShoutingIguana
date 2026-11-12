@@ -34,8 +34,22 @@ const fileOf = (origin: RobotsOrigin): RobotsFile => ({
 });
 
 const REFUSED: RobotsBlockedUrl[] = [
-  { id: 31, url: 'https://cdn.example.net/app.js', reason: 'unreachable', line: null, rule: null, error: 'HTTP 503' },
-  { id: 32, url: 'https://cdn.example.net/app.css', reason: 'unreachable', line: null, rule: null, error: 'HTTP 503' },
+  {
+    id: 31,
+    url: 'https://cdn.example.net/app.js',
+    reason: 'unreachable',
+    line: null,
+    rule: null,
+    error: '503 Service Unavailable',
+  },
+  {
+    id: 32,
+    url: 'https://cdn.example.net/app.css',
+    reason: 'unreachable',
+    line: null,
+    rule: null,
+    error: '503 Service Unavailable',
+  },
 ];
 
 /** Every origin of the test data with its file, and the blocked URLs of the two that blocked some. */

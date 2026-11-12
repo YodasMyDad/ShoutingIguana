@@ -74,7 +74,7 @@ describe('Sitemaps: the list', () => {
     expect(within(rows[0]!).getByText('robots.txt')).toBeVisible();
     expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByText('Sitemap index')).toBeVisible();
     expect(within(rowOf(`${SITE}/news-sitemap.xml`)).getByText('Crawl settings')).toBeVisible();
-    expect(within(rowOf(`${SITE}/sitemaps/missing.xml`)).getByText('Couldn’t be read: HTTP 404')).toBeVisible();
+    expect(within(rowOf(`${SITE}/sitemaps/missing.xml`)).getByText('Couldn’t be read: 404 Not Found')).toBeVisible();
   });
 
   it('says plainly when the crawl can’t say how it found a sitemap', async () => {
@@ -481,7 +481,7 @@ describe('Sitemaps: what isn’t there', () => {
       foundVia: 'defaultLocation',
       state: 'failed',
       statusCode: 404,
-      error: 'HTTP 404',
+      error: '404 Not Found',
     });
     sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: [only] } });
     await open(SITEMAPS);
@@ -490,7 +490,7 @@ describe('Sitemaps: what isn’t there', () => {
     expect(screen.queryByText(/found 1 sitemap/)).toBeNull();
     expect(await screen.findByText('No sitemap was read')).toBeVisible();
     expect(within(rowOf(only.url)).getByText('Default location')).toBeVisible();
-    expect(within(rowOf(only.url)).getByText('None there: HTTP 404')).toBeVisible();
+    expect(within(rowOf(only.url)).getByText('None there: 404 Not Found')).toBeVisible();
     // No sitemap was read, so there's no count of the pages none lists to make.
     expect(screen.queryByText(/in any sitemap/)).toBeNull();
   });
@@ -598,7 +598,7 @@ describe('Sitemaps: live and refreshing', () => {
 
   it('says nothing of the crawl’s own judgement where there are no counts to qualify', async () => {
     // A crawl that isn't running, whose only sitemap couldn't be read: no counts, so no note on them.
-    const failed = testSitemap({ id: 1, state: 'failed', statusCode: 503, error: 'HTTP 503' });
+    const failed = testSitemap({ id: 1, state: 'failed', statusCode: 503, error: '503 Service Unavailable' });
     sidecar({
       sitemaps: { discovery: 'done', summary: { available: false, reason: 'notAnalyzed' }, sitemaps: [failed] },
       item: { analyzedAt: null },
@@ -824,7 +824,7 @@ describe('Sitemaps: one sitemap', () => {
     sidecar();
     await open(`${SITEMAPS}/4`);
     expect(await screen.findByText('No URLs to show for this sitemap.')).toBeVisible();
-    expect(screen.getByText('The crawl couldn’t read it: HTTP 404.')).toBeVisible();
+    expect(screen.getByText('The crawl couldn’t read it: 404 Not Found.')).toBeVisible();
     expect(screen.getByText('Not known')).toBeVisible();
   });
 
@@ -922,7 +922,7 @@ describe('Sitemaps: one sitemap', () => {
     const { router } = await open(`${SITEMAPS}?url=${encodeURIComponent(`${SITE}/sitemaps/missing.xml`)}`);
     await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/4`));
     expect(searchOf(router).url).toBeUndefined();
-    expect(await screen.findByText('The crawl couldn’t read it: HTTP 404.')).toBeVisible();
+    expect(await screen.findByText('The crawl couldn’t read it: 404 Not Found.')).toBeVisible();
   });
 
   it('stays on the list, without the name, when no sitemap has that address', async () => {

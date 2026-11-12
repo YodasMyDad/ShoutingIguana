@@ -13,6 +13,9 @@ internal sealed record RobotsBlockedRequest
     /// <summary><c>rule</c>, <c>unreachable</c> or <c>unknown</c>.</summary>
     public string? Reason { get; init; }
 
+    /// <summary>Only this URL: its row, with why it was refused, or none when the origin didn't block it.</summary>
+    public long? UrlId { get; init; }
+
     public int? Offset { get; init; }
 
     public int? Limit { get; init; }

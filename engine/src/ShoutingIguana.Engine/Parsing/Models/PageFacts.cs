@@ -43,4 +43,12 @@ public sealed record PageFacts
     /// </summary>
     [JsonIgnore]
     public SimHashLanes? SimHashLanes { get; init; }
+
+    /// <summary>
+    /// The page's <c>&lt;link rel="icon"&gt;</c> elements, in page order: what the crawl chooses the site's icon from
+    /// (<c>Favicons.FaviconFetcher</c>), on the first page it reads. They aren't stored with the rest of the facts: the
+    /// links table has each as a link of kind icon, and nothing reads them back.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<IconFact> Icons { get; init; } = [];
 }

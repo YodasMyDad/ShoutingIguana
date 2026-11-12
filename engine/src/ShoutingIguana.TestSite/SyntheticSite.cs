@@ -56,6 +56,13 @@ public sealed partial class SyntheticSite
     private static readonly string FILLER_STYLES = BuildFillerStyles();
     private static readonly byte[] IMAGE_BYTES = BuildImage(2_048);
 
+    /// <summary>A 32 px PNG: a green disc on a pale square. Served as /favicon.ico under an icon file's media type, as sites do.</summary>
+    private static readonly byte[] FAVICON_BYTES = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAZ0lEQVR42mP48vEFTRHDCLDAqtYFPyLfAoJGE2MNA1VMx2MHA7VMx2UHAxVNx2oHA3VNx7SDgeqmo9lBRwuoaDqyHaMWjFowasHwsmDoF3b0qA/oUaPRo06mR6uCHu0ierTshkbjFwCU+d/JYZdKeQAAAABJRU5ErkJggg==");
+
+    /// <summary>The site's icon, as <c>/favicon.ico</c> serves it.</summary>
+    public static IReadOnlyList<byte> Favicon => FAVICON_BYTES;
+
     private readonly SyntheticSiteOptions _options;
     private readonly string _base;
     private readonly string _external;
@@ -205,6 +212,12 @@ public sealed partial class SyntheticSite
         if (path == "/img/large.jpg")
         {
             return new SyntheticResponse(200, "image/jpeg", null, LARGE_IMAGE_BYTES, null);
+        }
+
+        // The site's icon, where browsers look for one: no page links it, so it's no URL of a crawl.
+        if (path == "/favicon.ico")
+        {
+            return new SyntheticResponse(200, "image/x-icon", null, FAVICON_BYTES, null);
         }
 
         if (path == "/static/site.css")

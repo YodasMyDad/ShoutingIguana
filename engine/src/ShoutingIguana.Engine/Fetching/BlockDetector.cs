@@ -1,3 +1,4 @@
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Fetching.Models;
 
 namespace ShoutingIguana.Engine.Fetching;
@@ -31,7 +32,7 @@ internal static class BlockDetector
 
         if (statusCode == 429)
         {
-            return "Rate limited (HTTP 429)";
+            return $"Rate limited ({HttpStatusNames.Describe(429)})";
         }
 
         if (statusCode is not (401 or 403 or 405 or 503))

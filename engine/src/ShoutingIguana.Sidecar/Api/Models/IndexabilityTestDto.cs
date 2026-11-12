@@ -16,6 +16,18 @@ internal sealed record IndexabilityTestDto(IndexabilityTestKind Test, TestOutcom
     public bool? Unreachable { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Origin { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RobotsBlockReason? Reason { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Line { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Rule { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Meta { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -29,7 +41,7 @@ internal sealed record IndexabilityTestDto(IndexabilityTestKind Test, TestOutcom
 
     public static IndexabilityTestDto From(IndexabilityTest test) => new(test.Test, test.Outcome)
     {
-        StatusCode = test.StatusCode, MetaRefresh = test.MetaRefresh, Unreachable = test.Unreachable, Meta = test.Meta, Header = test.Header,
-        Canonical = test.Canonical, CanonicalUrl = test.CanonicalUrl
+        StatusCode = test.StatusCode, MetaRefresh = test.MetaRefresh, Unreachable = test.Unreachable, Origin = test.Origin, Reason = test.Reason,
+        Line = test.Line, Rule = test.Rule, Meta = test.Meta, Header = test.Header, Canonical = test.Canonical, CanonicalUrl = test.CanonicalUrl
     };
 }

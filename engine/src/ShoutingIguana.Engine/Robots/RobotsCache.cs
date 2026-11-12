@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -122,7 +123,7 @@ internal sealed class RobotsCache(
 
                 // A redirect that can't be followed (no Location, or not to http or https) leaves robots.txt unavailable
                 // too, as RFC 9309 has it, so it's recorded and treated like one behind too many redirects.
-                await RecordAsync(origin, null, null, $"HTTP {response.StatusCode} redirects to no http or https URL").ConfigureAwait(false);
+                await RecordAsync(origin, null, null, $"{Status(response.StatusCode)} redirects to no http or https URL").ConfigureAwait(false);
                 return RobotsTxt.AllowAll;
             }
 
@@ -163,7 +164,7 @@ internal sealed class RobotsCache(
         }
 
         var isInternal = scope.IsInternal(new Uri(origin));
-        var reason = response.StatusCode is { } status ? $"HTTP {status}" : response.Error ?? response.Outcome.ToString();
+        var reason = response.StatusCode is { } status ? HttpStatusNames.Describe(status) : response.Error ?? response.Outcome.ToString();
         if (isInternal && options.RespectRobotsTxt && _reported.TryAdd(origin, true))
         {
             observer.OnNotice(new CrawlNotice(
@@ -177,6 +178,9 @@ internal sealed class RobotsCache(
 
         return RobotsTxt.Unreachable(reason);
     }
+
+    /// <summary>A status as the crawl's words name it: "301 Moved Permanently" ("HTTP 520" for one with no name).</summary>
+    private static string Status(int? statusCode) => statusCode is { } status ? HttpStatusNames.Describe(status) : "A redirect";
 
     private ValueTask RecordAsync(string origin, int? statusCode, string? content, string? error) =>
         writer.RecordRobotsAsync(

@@ -79,7 +79,7 @@ export const TEST_SITEMAPS: Sitemap[] = [
     foundVia: 'index',
     state: 'failed',
     statusCode: 404,
-    error: 'HTTP 404',
+    error: '404 Not Found',
   }),
   testSitemap({
     id: 5,

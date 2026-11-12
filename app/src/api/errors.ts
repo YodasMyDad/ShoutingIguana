@@ -5,6 +5,7 @@ import type { FieldErrors } from './types';
 /** The contract's problem types (docs/v2-sidecar-api.md, Errors). The engine may add more: unknown ones stay strings. */
 export type ProblemType =
   | 'invalid-options'
+  | 'invalid-settings'
   | 'needs-secrets'
   | 'not-a-crawl'
   | 'crawl-not-found'

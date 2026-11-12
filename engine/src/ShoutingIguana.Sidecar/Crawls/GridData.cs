@@ -25,9 +25,9 @@ namespace ShoutingIguana.Sidecar.Crawls;
 /// no thread, so the API's other calls never wait behind them, and one given up while it queues never runs.</item>
 /// </list>
 /// </summary>
-internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOptions options)
+internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots slots)
 {
-    private readonly SemaphoreSlim _reads = new(options.GridReads, options.GridReads);
+    private readonly SemaphoreSlim _reads = slots.Free;
 
     /// <summary>The columns for the column chooser and the filter bar, a check's own last.</summary>
     public static IReadOnlyList<UrlColumnDto> Columns { get; } =
@@ -76,8 +76,9 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         var filters = GridRequests.Filters(request?.Filters, errors);
         var asked = GridRequests.Facets(request?.Facets, errors);
+        var ends = GridRequests.LinkEnds(request?.LinkEnds, errors);
         GridRequests.ThrowIfAny(errors);
-        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked };
+        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked, LinkEnds = ends };
         return Facets(await ReadAsync(token => UrlGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
@@ -95,14 +96,34 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         }
 
         RefuseSitemap(request);
+        RefuseLinkEnds(request?.LinkEnds);
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var page = await ReadAsync(token => LinkGridReader.Query(path, query, cache, token), cancellationToken).ConfigureAwait(false);
         return new LinkGridPageDto(page.Columns, new LinkRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable);
     }
 
+    /// <summary>
+    /// The URLs at one end of the links a links view matches, a page of them: the view's targets, or the pages its links
+    /// are on, each once, however many links the view holds.
+    /// </summary>
+    public async Task<LinkEndPage> LinkEndsAsync(string id, LinkEndsRequest? request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        var filters = GridRequests.Filters(request?.Filters, errors);
+        var end = GridRequests.End(request?.End, errors);
+        GridRequests.ThrowIfAny(errors);
+        var query = new LinkEndQuery
+        {
+            End = end!.Value, Filters = filters, Search = request?.Search, Offset = request?.Offset ?? 0, Limit = request?.Limit ?? UrlGridReader.DEFAULT_LIMIT
+        };
+        return await ReadAsync(token => LinkGridReader.Ends(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<FacetsDto> LinkFacetsAsync(string id, FacetsRequest? request, CancellationToken cancellationToken)
     {
+        RefuseLinkEnds(request?.LinkEnds);
         var path = crawls.PathOf(id);
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         var filters = GridRequests.Filters(request?.Filters, errors);
@@ -124,6 +145,19 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         var stats = await RunAsync(token => CrawlStatsReader.ReadKept(path, cache, token), cancellationToken).ConfigureAwait(false)
                     ?? await ReadAsync(token => CrawlStatsReader.Read(path, cache, token), cancellationToken).ConfigureAwait(false);
         return CrawlStatsDto.From(stats);
+    }
+
+    /// <summary>
+    /// Search as it's typed. The crawl's URLs and titles are kept in memory once read, and a search of them passes over
+    /// nothing in the file, so it takes no read slot: a keystroke doesn't queue behind the grids' reads, of this crawl or
+    /// another. The read that fills them (the first search of a crawl as it stands) queues as any pass over the file does.
+    /// </summary>
+    public async Task<UrlSearchResults> SearchAsync(string id, SearchRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var limit = request.Limit ?? UrlSearchReader.DEFAULT_LIMIT;
+        return await RunAsync(token => UrlSearchReader.SearchKept(path, request.Text!, limit, cache, token), cancellationToken).ConfigureAwait(false)
+               ?? await ReadAsync(token => UrlSearchReader.Search(path, request.Text!, limit, cache, token), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
@@ -151,7 +185,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
             url.Redirects,
             new IndexabilityDto(indexability.Indexable, indexability.Reason, indexability.JudgedBy, [.. indexability.Tests.Select(IndexabilityTestDto.From)]),
             url.Content, url.Limits, url.Links, url.LinkTotals, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
-            new SourceStateDto(url.SourceStored));
+            new SourceStateDto(url.SourceStored), url.ListedIn);
     }
 
     public async Task<LinkPageDto> LinksAsync(string id, LinkDirection direction, LinksRequest request, CancellationToken cancellationToken)
@@ -170,6 +204,16 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                        : null)
                    ?? throw Problems.UrlNotFound();
         return new LinkPageDto([.. page.Rows.Select(LinkRowDto.From)], page.Offset, page.Total, page.Next);
+    }
+
+    /// <summary>
+    /// The site's icon as the crawl kept it, or null when it has none. The engine gives out nothing but an image it told
+    /// by its bytes as it read the file, with the media type those bytes are.
+    /// </summary>
+    public Task<CrawlFavicon?> FaviconAsync(string id, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        return ReadAsync(token => FaviconReader.Read(path, token), cancellationToken);
     }
 
     /// <summary>The stored HTML, written as it's unpacked (<see cref="HtmlSourceResult"/>), or why there's none.</summary>
@@ -252,12 +296,16 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                     ?? throw Problems.SitemapNotFound());
     }
 
-    public async Task<RobotsOriginPageDto> RobotsAsync(string id, GroupsRequest? request, CancellationToken cancellationToken)
+    public async Task<RobotsOriginPageDto> RobotsAsync(string id, RobotsOriginsRequest? request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
-        var page = await ReadAsync(token => RobotsReader.ReadOrigins(path, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
-            cancellationToken).ConfigureAwait(false);
-        return new RobotsOriginPageDto(page.Total, page.Offset, page.Respected, page.UserAgent, page.Blocked, [.. page.Origins.Select(RobotsOriginDto.From)]);
+        var query = new RobotsOriginQuery
+        {
+            Search = request?.Search, Blocked = request?.Blocked, Offset = request?.Offset ?? 0, Limit = request?.Limit ?? UrlGridReader.DEFAULT_LIMIT
+        };
+        var page = await ReadAsync(token => RobotsReader.ReadOrigins(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+        return new RobotsOriginPageDto(page.Total, page.Offset, page.Respected, page.UserAgent, page.Blocked, [.. page.Origins.Select(RobotsOriginDto.From)], page.Matching,
+            page.Counts);
     }
 
     public async Task<RobotsFileDto> RobotsFileAsync(string id, RobotsFileRequest request, CancellationToken cancellationToken)
@@ -267,7 +315,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         var file = await ReadAsync(token => RobotsReader.ReadFile(path, origin, cache, token), cancellationToken).ConfigureAwait(false) ?? throw Problems.OriginNotFound();
         var read = RobotsOriginDto.From(file.Origin);
         return new RobotsFileDto(read.Origin, read.IsInternal, read.State, read.StatusCode, read.FetchedAt, read.Error, read.Bytes, read.Blocked, file.UserAgent, file.Lines,
-            file.Unmatched);
+            file.Unmatched, file.Respected);
     }
 
     public async Task<RobotsBlockedPage> RobotsBlockedAsync(string id, RobotsBlockedRequest request, CancellationToken cancellationToken)
@@ -285,8 +333,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                 ["reason"] = [$"There's no reason called '{other}': there are rule, unreachable and unknown."]
             })
         };
-        return await ReadAsync(token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
-                   cancellationToken).ConfigureAwait(false)
+        // An id no URL could have is one the origin didn't block: no rows, as for any other URL it didn't.
+        int? urlId = request.UrlId is { } asked ? asked is < 1 or > int.MaxValue ? 0 : (int)asked : null;
+        return await ReadAsync(
+                       token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token, urlId),
+                       cancellationToken).ConfigureAwait(false)
                ?? throw Problems.OriginNotFound();
     }
 
@@ -314,6 +365,15 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
     private static string Origin(string? origin) => string.IsNullOrWhiteSpace(origin)
         ? throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>> { ["origin"] = ["Give the origin, as the list of origins names it."] })
         : origin;
+
+    /// <summary>The ends of some links narrow the URL grids: the links grid is narrowed by its own filters.</summary>
+    private static void RefuseLinkEnds(LinkEndsDto? ends)
+    {
+        if (ends is not null)
+        {
+            throw Problems.BadRequest("Only the URL grids take linkEnds: the links grid takes the link filters themselves.");
+        }
+    }
 
     /// <summary>A sitemap's id belongs to the sitemap's own grid.</summary>
     private static void RefuseSitemap(GridQueryRequest? request)

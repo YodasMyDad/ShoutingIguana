@@ -195,7 +195,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         var product = await InspectAsync(IdOf("/p/7"));
         Assert.Equal(
             ["id", "url", "urlLength", "isInternal", "type", "discovery", "response", "redirects", "indexability", "content", "limits", "links", "linkTotals",
-             "headers", "structuredData", "hreflang", "issues", "namedBy", "summary", "source"],
+             "headers", "structuredData", "hreflang", "issues", "namedBy", "summary", "source", "listedIn"],
             product.AsObject().Select(property => property.Key));
         Assert.Equal("page", (string?)product["type"]);
         Assert.Equal("success", (string?)product["response"]!["outcome"]);
@@ -211,7 +211,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal("analysis", (string?)indexability["judgedBy"]);
         var tests = indexability["tests"]!.AsArray();
         Assert.Equal("""{"test":"answered","outcome":"pass","statusCode":200}""", tests[0]!.ToJsonString());
-        Assert.Equal("""{"test":"robotsTxt","outcome":"pass"}""", tests[1]!.ToJsonString());
+        Assert.Equal($$"""{"test":"robotsTxt","outcome":"pass","origin":"{{grid.Url(string.Empty)}}"}""", tests[1]!.ToJsonString());
         Assert.Equal("""{"test":"noindex","outcome":"pass","meta":false,"header":false}""", tests[2]!.ToJsonString());
         Assert.Equal(grid.Url("/p/7"), (string?)tests[3]!["canonical"]!["url"]);
 
@@ -223,7 +223,21 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal(grid.Url("/p/7").Length, (int?)product["urlLength"]);
         var inlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", new JsonObject { ["urlId"] = IdOf("/p/7"), ["limit"] = 1 });
         var outlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/outlinks", new JsonObject { ["urlId"] = IdOf("/p/7"), ["limit"] = 1 });
-        Assert.Equal($$"""{"inlinks":{{inlinks["total"]}},"outlinks":{{outlinks["total"]}}}""", product["linkTotals"]!.ToJsonString());
+        var hyperlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", JsonNode.Parse($$"""{"urlId":{{IdOf("/p/7")}},"kinds":["hyperlink"],"limit":1}"""));
+        Assert.Equal($$"""{"inlinks":{{inlinks["total"]}},"outlinks":{{outlinks["total"]}},"hyperlinkInlinks":{{hyperlinks["total"]}}}""", product["linkTotals"]!.ToJsonString());
+
+        // The hyperlinks to it land in the links grid: the count there is the inspector's. For the home page, which the
+        // site's Cloudflare page links to with every other, it's more than the analysis's inlinks, which leave that page out.
+        foreach (var path in new[] { "/p/7", "/" })
+        {
+            var inspected = path == "/p/7" ? product : await InspectAsync(IdOf(path));
+            var listed = await PostOkAsync($"api/crawls/{grid.Id}/links", JsonNode.Parse(
+                $$"""{"filters":[{"column":"to.id","op":"eq","value":{{IdOf(path)}}},{"column":"kind","op":"in","values":["hyperlink"]},{"column":"selfLink","op":"is","value":false}],"limit":1}"""));
+            Assert.Equal((long)listed["matching"]!, (long)inspected["linkTotals"]!["hyperlinkInlinks"]!);
+            Assert.True((long)inspected["linkTotals"]!["hyperlinkInlinks"]! >= (long)inspected["links"]!["inlinks"]!);
+        }
+
+        Assert.True((long)(await InspectAsync(IdOf("/")))["linkTotals"]!["hyperlinkInlinks"]! > (long)(await InspectAsync(IdOf("/")))["links"]!["inlinks"]!);
         Assert.True((long)outlinks["total"]! > (long)product["links"]!["outlinks"]!, "A product page links to more than its hyperlinks: its images, its stylesheet.");
 
         var gone = await InspectAsync(IdOf("/plants/gone"));
@@ -348,7 +362,8 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal(counts[related], (long?)groups["total"]);
         foreach (var group in groups["groups"]!.AsArray())
         {
-            Assert.Equal(["detail", "relatedUrlId", "relatedUrl", "pages", "share", "likelyTemplate"], group!.AsObject().Select(property => property.Key));
+            Assert.Equal(["detail", "relatedUrlId", "relatedUrl", "pages", "share", "likelyTemplate", "urls"], group!.AsObject().Select(property => property.Key));
+            Assert.Equal((long?)group["pages"], (long?)group["urls"]);
             var key = new JsonObject { ["detail"] = group["detail"]?.DeepClone(), ["relatedUrlId"] = group["relatedUrlId"]?.DeepClone() };
             var rows = await PostOkAsync($"api/crawls/{grid.Id}/issues/{related}/rows", new JsonObject { ["group"] = key, ["limit"] = 1000 });
             Assert.Equal((long?)group["pages"], (long?)rows["total"]);
@@ -385,6 +400,13 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Null((long?)rows["total"]);
         Assert.Null((long?)rows["matching"]);
         Assert.Empty(rows["rows"]!.AsArray());
+
+        // A check that can flag any URL counts its groups in URLs: a missing image's group is no page. The count has that
+        // name, and its old one beside it.
+        var anyUrl = await PostOkAsync($"api/crawls/{grid.Id}/issues/internal-client-error/groups");
+        Assert.NotEmpty(anyUrl["groups"]!.AsArray());
+        Assert.All(anyUrl["groups"]!.AsArray(), group => Assert.True((long?)group!["urls"] > 0 && (long?)group["urls"] == (long?)group["pages"]));
+        Assert.Equal((long?)anyUrl["total"], anyUrl["groups"]!.AsArray().Sum(group => (long)group!["urls"]!));
 
         foreach (var path in new[] { "groups", "rows" })
         {
