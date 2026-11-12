@@ -247,6 +247,22 @@
     flex-direction: row-reverse;
   }
 
+  /* A column's place in a sort of more than one key: a small figure after its arrow. */
+  .si-grid-sort__order {
+    font-size: var(--text-11);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary);
+  }
+
+  /* Words after a header's name that its values share ("on example.com"): quieter, and cut short first. */
+  .si-grid-head__detail {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: var(--font-weight-regular);
+    color: var(--color-text-secondary);
+  }
+
   /*
     A grid whose column names may take two lines (a long name over a narrow count: "Blocked by robots.txt"). The grid
     gives its header the height for them; the rows' cells stay on one line.

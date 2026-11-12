@@ -46,6 +46,20 @@ export interface GridCopyResult {
   cell: boolean;
 }
 
+/** What a row's menu acts on: the row it was opened on, or the selection that row is in. */
+export interface GridMenuContext<Row> {
+  /** The rows' indices, in order: the selection's (at most MAX_COPY_ROWS of it), or the one row. */
+  indices: readonly number[];
+  /** The selection had more rows than a menu acts on. */
+  truncated: boolean;
+  /** The rows themselves, read where they aren't loaded; undefined for one that couldn't be. */
+  rows: () => Promise<readonly (Row | undefined)[]>;
+  /** Copies the rows as tab-separated text with a header row, as Ctrl+C copies a selection. */
+  copy: () => Promise<void>;
+  /** Gives the keyboard back to the grid, with the cursor where it was. */
+  focus: () => void;
+}
+
 export interface GridCoreProps<Row> {
   /** The grid's accessible name: "URLs", "Links". */
   label: string;
@@ -78,8 +92,11 @@ export interface GridCoreProps<Row> {
   onActiveRowChange?: (index: number | null) => void;
   /** The cursor moved to another column, by its id: for an action on the column the cursor is in (copy it). */
   onActiveColumnChange?: (column: string | undefined) => void;
-  /** Right-click, Shift+F10 or the menu key. */
-  onContextMenu?: (index: number, column: number, anchor: { x: number; y: number }) => void;
+  /**
+   * Right-click, Shift+F10 or the menu key. `menu` says which rows the menu is for (the selection, when the row is in
+   * it, else the row), reads them, copies them as Ctrl+C does, and gives the keyboard back to the grid.
+   */
+  onContextMenu?: (index: number, column: number, anchor: { x: number; y: number }, menu: GridMenuContext<Row>) => void;
   /** Fetches rows that aren't loaded, for copying a selection that spans pages. */
   fetchRows?: RowFetcher<Row>;
   onCopy?: (result: GridCopyResult) => void;
@@ -117,9 +134,10 @@ export interface GridCoreProps<Row> {
   /**
    * A sortable column's header was pressed, or Enter or Space with the cursor on it: sort by it, or change its
    * direction. `focused`: the grid had focus, so the grid the new sort brings (another `key`) should start with the
-   * cursor on this header, focused (`focusHeader`).
+   * cursor on this header, focused (`focusHeader`). `extend`: Shift was held (Shift+click, Shift+Enter), to add the
+   * column to the sort as a further key rather than sort by it alone.
    */
-  onSort?: (column: string, focused: boolean) => void;
+  onSort?: (column: string, focused: boolean, extend: boolean) => void;
   /**
    * Read when the grid mounts: the cursor starts on this column's header and the grid takes focus. For the grid that
    * replaced one sorted from its header, so the cursor stays where the user pressed.
@@ -138,6 +156,26 @@ export interface GridCoreProps<Row> {
   rowKey?: ((row: Row) => string | number) | undefined;
   /** With `startRow` and `rowKey`: the row the grid was left on, so it starts there even if the row has moved. */
   startKey?: string | number | undefined;
+}
+
+const ORDINALS = ['first', 'second', 'third'];
+
+/**
+ * A column's place in a sort of more than one key: its number beside the arrow, and in words for a screen reader,
+ * which hears the first key from `aria-sort` and the others from this ("sorted second, descending").
+ */
+function SortOrder<Row>({ column }: { column: GridColumn<Row> }) {
+  const order = column.sortOrder ?? 1;
+  return (
+    <>
+      <span className="si-grid-sort__order" aria-hidden="true">
+        {order}
+      </span>
+      {order > 1 ? (
+        <span className="sr-only">{`, sorted ${ORDINALS[order - 1] ?? String(order)}, ${column.sort ?? ''}`}</span>
+      ) : null}
+    </>
+  );
 }
 
 const SKELETON_ROWS = 12;
@@ -422,18 +460,30 @@ function GridCoreInner<Row>({
    */
   const copy = async () => {
     const pick = selectedIndices(selection, MAX_COPY_ROWS);
+    if (pick.indices.length > 0) {
+      await copyRows(pick.indices, pick.truncated);
+      return;
+    }
     try {
-      if (pick.indices.length === 0) {
-        if (!active) return;
-        const column = columns[active.col];
-        const row = getRow(active.row) ?? (await fetchRows?.([active.row]))?.[0];
-        if (!column || row === undefined) return;
-        if (!(await copyText(column.text(row)))) throw new ClipboardRefused();
-        announce('Copied the cell.');
-        onCopy?.({ rows: 1, truncated: false, cell: true });
-        return;
-      }
-      const copied = await selectionText(pick.indices);
+      if (!active) return;
+      const column = columns[active.col];
+      const row = getRow(active.row) ?? (await fetchRows?.([active.row]))?.[0];
+      if (!column || row === undefined) return;
+      if (!(await copyText(column.text(row)))) throw new ClipboardRefused();
+      announce('Copied the cell.');
+      onCopy?.({ rows: 1, truncated: false, cell: true });
+    } catch (error) {
+      notifyError(error, {
+        title: 'The cell couldn’t be copied.',
+        ...(error instanceof ClipboardRefused ? { description: 'The clipboard didn’t take it. Try again.' } : {}),
+      });
+    }
+  };
+
+  /** Rows as tab-separated text with a header row: a selection's (Ctrl+C), or a row menu's. */
+  const copyRows = async (indices: readonly number[], truncated: boolean) => {
+    try {
+      const copied = await selectionText(indices);
       if (copied.rows === 0) throw new NothingToCopy();
       if (!(await copyText(copied.text))) throw new ClipboardRefused();
       // What was copied, never what was selected: rows that weren't there aren't counted.
@@ -442,10 +492,10 @@ function GridCoreInner<Row>({
           ? `Copied ${formatCountOf(copied.rows, 'row')}. ${formatCountOf(copied.unread, 'row')} couldn’t be read.`
           : `Copied ${formatCountOf(copied.rows, 'row')}.`,
       );
-      onCopy?.({ rows: copied.rows, truncated: pick.truncated, cell: false });
+      onCopy?.({ rows: copied.rows, truncated, cell: false });
     } catch (error) {
       notifyError(error, {
-        title: pick.indices.length > 0 ? 'The rows couldn’t be copied.' : 'The cell couldn’t be copied.',
+        title: 'The rows couldn’t be copied.',
         ...(error instanceof ClipboardRefused
           ? { description: 'The clipboard didn’t take it. Try again.' }
           : error instanceof NothingToCopy
@@ -476,7 +526,7 @@ function GridCoreInner<Row>({
       if (move?.type === 'sort') {
         event.preventDefault();
         const column = columns[move.col];
-        if (column?.sortable) onSort?.(column.id, true);
+        if (column?.sortable) onSort?.(column.id, true, move.add === true);
         // A header that can't sort, where others can, says why: a key that does nothing reads as broken.
         else if (column?.sortHint) announce(column.sortHint);
         return;
@@ -530,8 +580,35 @@ function GridCoreInner<Row>({
     else if (effect?.type === 'copy') void copy();
     else if (effect?.type === 'contextMenu') {
       const cell = document.getElementById(cellId(effect.row, effect.col))?.getBoundingClientRect();
-      onContextMenu?.(effect.row, effect.col, cell ? { x: cell.left, y: cell.bottom } : { x: 0, y: 0 });
+      onContextMenu?.(
+        effect.row,
+        effect.col,
+        cell ? { x: cell.left, y: cell.bottom } : { x: 0, y: 0 },
+        menuContext(effect.row, selection),
+      );
     }
+  };
+
+  /**
+   * What a row's menu acts on: the selection, when the row is in it, else the row alone (a right-click outside the
+   * selection has just made it the selection).
+   */
+  const menuContext = (row: number, within: typeof selection): GridMenuContext<Row> => {
+    const inSelection = effectiveRanges(within).some(([first, last]) => row >= first && row <= last);
+    const pick = inSelection ? selectedIndices(within, MAX_COPY_ROWS) : { indices: [row], truncated: false };
+    const read = async () => {
+      const missing = pick.indices.filter((index) => getRow(index) === undefined);
+      const fetched = missing.length > 0 && fetchRows ? await fetchRows(missing) : [];
+      const byIndex = new Map(missing.map((index, i) => [index, fetched[i]]));
+      return pick.indices.map((index) => getRow(index) ?? byIndex.get(index));
+    };
+    return {
+      indices: pick.indices,
+      truncated: pick.truncated,
+      rows: read,
+      copy: () => copyRows(pick.indices, pick.truncated),
+      focus: () => scrollRef.current?.focus({ preventScroll: true }),
+    };
   };
 
   /**
@@ -584,10 +661,24 @@ function GridCoreInner<Row>({
     const position = positionOf(event.target);
     if (!position || !onContextMenu) return;
     event.preventDefault();
+    let within = selection;
     if (!ranges.some(([first, last]) => position.row >= first && position.row <= last)) {
-      apply(gridPointer({ active, selection, follow: nav.follow }, position, { shift: false, mod: false }), null);
+      const next = gridPointer({ active, selection, follow: nav.follow }, position, { shift: false, mod: false });
+      apply(next, null);
+      within = next.selection;
     }
-    onContextMenu(position.row, position.col, { x: event.clientX, y: event.clientY });
+    onContextMenu(
+      position.row,
+      position.col,
+      { x: event.clientX, y: event.clientY },
+      menuContext(position.row, within),
+    );
+  };
+
+  // Shift+F10 and the menu key open the row's menu from the keys (above); the browser's own menu, which the same keys
+  // ask for on the focused grid, would open over it.
+  const onGridContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+    if (onContextMenu && event.target === event.currentTarget) event.preventDefault();
   };
 
   // Rows arriving while the grid has focus and no cursor (it was focused before its first page came, or while the
@@ -635,6 +726,7 @@ function GridCoreInner<Row>({
         tabIndex={0}
         onKeyDown={onKeyDown}
         onFocus={onFocus}
+        onContextMenu={onGridContextMenu}
         className={clsx('si-grid min-h-0 flex-1 overflow-auto', view.windowed && 'si-grid--windowed')}
         style={style}
       >
@@ -651,7 +743,8 @@ function GridCoreInner<Row>({
                 id={headerCellId(col)}
                 role="columnheader"
                 aria-colindex={col + 1}
-                aria-sort={column.sort}
+                // A sort of more than one key: the first is the grid's sort, the others say their place in words.
+                aria-sort={column.sortOrder === undefined || column.sortOrder === 1 ? column.sort : undefined}
                 data-active={header === col || undefined}
                 className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric')}
                 title={sortable && !column.sortable ? column.sortHint : undefined}
@@ -668,9 +761,10 @@ function GridCoreInner<Row>({
                       scrollRef.current?.focus({ preventScroll: true });
                       setHeaderCursor(col);
                     }}
-                    onClick={() => onSort(column.id, document.activeElement === scrollRef.current)}
+                    onClick={(event) => onSort(column.id, document.activeElement === scrollRef.current, event.shiftKey)}
                   >
                     {column.header}
+                    {column.headerDetail ? <span className="si-grid-head__detail">{column.headerDetail}</span> : null}
                     <Icon
                       icon={
                         column.sort === 'ascending'
@@ -681,9 +775,13 @@ function GridCoreInner<Row>({
                       }
                       size="xs"
                     />
+                    {column.sort && column.sortOrder !== undefined ? <SortOrder column={column} /> : null}
                   </button>
                 ) : (
-                  column.header
+                  <>
+                    {column.header}
+                    {column.headerDetail ? <span className="si-grid-head__detail">{column.headerDetail}</span> : null}
+                  </>
                 )}
               </div>
             ))}

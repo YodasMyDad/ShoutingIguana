@@ -678,7 +678,7 @@ describe('GridCore as a tree', () => {
     const header = screen.getByRole('columnheader', { name: 'Name' });
     expect(header).toHaveAttribute('aria-sort', 'ascending');
     fireEvent.click(screen.getByRole('button', { name: 'Size' }));
-    expect(sort).toHaveBeenCalledWith('size', false);
+    expect(sort).toHaveBeenCalledWith('size', false, false);
   });
 });
 
@@ -695,12 +695,12 @@ describe('GridCore with columns that sort', () => {
     expect(activeCell()).toHaveAttribute('role', 'columnheader');
     expect(activeCell()).toHaveTextContent('URL');
     fireEvent.keyDown(grid, { key: 'Enter' });
-    expect(onSort).toHaveBeenLastCalledWith('url', true);
+    expect(onSort).toHaveBeenLastCalledWith('url', true, false);
     expect(onActivate).not.toHaveBeenCalled();
     fireEvent.keyDown(grid, { key: 'ArrowRight' });
     expect(activeCell()).toHaveTextContent('Status');
     fireEvent.keyDown(grid, { key: ' ' });
-    expect(onSort).toHaveBeenLastCalledWith('status', true);
+    expect(onSort).toHaveBeenLastCalledWith('status', true, false);
     // Space sorted: it selected no row.
     expect(grid.querySelectorAll('[aria-selected="true"]')).toHaveLength(0);
     fireEvent.keyDown(grid, { key: 'ArrowDown' });
@@ -729,7 +729,7 @@ describe('GridCore with columns that sort', () => {
     fireEvent.mouseDown(button);
     fireEvent.click(button);
     expect(grid).toHaveFocus();
-    expect(onSort).toHaveBeenCalledWith('status', true);
+    expect(onSort).toHaveBeenCalledWith('status', true, false);
     expect(activeCell()).toHaveTextContent('Status');
   });
 
@@ -807,7 +807,7 @@ describe('GridCore with columns that sort', () => {
       // The next header sorts, and says nothing more.
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
       fireEvent.keyDown(grid, { key: 'Enter' });
-      expect(onSort).toHaveBeenCalledWith('status', true);
+      expect(onSort).toHaveBeenCalledWith('status', true, false);
       expect(announce).toHaveBeenCalledTimes(2);
     });
 

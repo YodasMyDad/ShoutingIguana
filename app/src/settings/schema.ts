@@ -1,5 +1,6 @@
 // The app's preferences: what they are, their defaults, and how a stored value is read. Stored values come from disk,
 // so each is checked at the boundary and anything unusable falls back to its default.
+import { readSavedViews, type SavedView } from '../grid/savedViews';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type Density = 'compact' | 'standard' | 'comfortable';
@@ -26,6 +27,10 @@ export interface Settings {
   lastLocation: string | null;
   /** Checks hidden from the Issues list (by id), in every crawl, until shown again. */
   hiddenChecks: string[];
+  /** Grid views kept under a name (the URL grid's): each a route's filters, search, sort and columns. */
+  savedViews: SavedView[];
+  /** The URL grid's "Show full URLs": the crawl's own URLs whole, rather than as paths under a header naming the host. */
+  showFullUrls: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -39,6 +44,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lastViewByCrawl: {},
   lastLocation: null,
   hiddenChecks: [],
+  savedViews: [],
+  showFullUrls: false,
 };
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
@@ -98,5 +105,7 @@ export function readSettings(value: unknown): Settings {
           ...new Set(stored.hiddenChecks.filter((id): id is string => typeof id === 'string' && CHECK_ID.test(id))),
         ].slice(0, MAX_HIDDEN_CHECKS)
       : DEFAULT_SETTINGS.hiddenChecks,
+    savedViews: readSavedViews(stored.savedViews),
+    showFullUrls: typeof stored.showFullUrls === 'boolean' ? stored.showFullUrls : DEFAULT_SETTINGS.showFullUrls,
   };
 }
