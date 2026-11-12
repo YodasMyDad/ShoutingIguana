@@ -1,0 +1,339 @@
+// The crawl settings form's model (docs/v2-ui-simple.md, New crawl in each mode): one set of values for New crawl in
+// both modes, Settings > Crawl defaults and the crawl's own settings. Pure: what the form holds, how it's filled from
+// the engine's options and turned back into them, the speed presets, and what differs from a set of defaults.
+//
+// Numbers are held as typed, so a half-typed value stays on screen; the engine checks them (`validate`), and a value
+// that isn't a number reaches it as typed, so its message says so beside the field.
+import type { CrawlOptions, SpeedPreset, UserAgentPreset } from '../../api/types';
+import type { SettingFocus } from '../../routing/search';
+import { ENGINE_DEFAULTS } from './engineDefaults';
+
+/** A header to send: its value is a secret, kept only while the app runs (never in defaults or a crawl file). */
+export interface HeaderRow {
+  /** Stable while the row lives, for React's key and focus. */
+  key: number;
+  name: string;
+  value: string;
+}
+
+export interface CrawlForm {
+  startUrl: string;
+  maxUrls: string;
+  maxDepth: string;
+  /** In MB, as the form asks for it; the engine takes bytes. */
+  maxHtmlMb: string;
+  concurrency: string;
+  externalConcurrency: string;
+  maxRequestsPerSecond: string;
+  userAgent: UserAgentPreset;
+  customUserAgent: string;
+  acceptLanguage: string;
+  headers: HeaderRow[];
+  respectRobotsTxt: boolean;
+  respectCrawlDelay: boolean;
+  checkResources: boolean;
+  checkExternalLinks: boolean;
+  includeSubdomains: boolean;
+  stayInStartFolder: boolean;
+  followNofollow: boolean;
+  crawlCanonicals: boolean;
+  crawlHreflang: boolean;
+  crawlPagination: boolean;
+  discoverSitemaps: boolean;
+  /** One sitemap URL a line. */
+  extraSitemaps: string;
+  storeHtml: boolean;
+  useCookies: boolean;
+  /** With its user name and password when it has them: a secret, as header values are. */
+  proxyUrl: string;
+  requestTimeoutSeconds: string;
+  maxRetries: string;
+}
+
+export type CrawlFormField = keyof CrawlForm;
+
+const MB = 1024 * 1024;
+
+let nextHeaderKey = 1;
+export function headerRow(name = '', value = ''): HeaderRow {
+  return { key: nextHeaderKey++, name, value };
+}
+
+function numberText(value: number | null | undefined, fallback: number): string {
+  return String(value ?? fallback);
+}
+
+/** "8" for 8 MB, "0.5" for 512 KB: as few digits as say it. */
+function megabytes(bytes: number): string {
+  return String(Math.round((bytes / MB) * 1000) / 1000);
+}
+
+/**
+ * The form filled from options (saved defaults, or a crawl's), each value left out taking the engine's. A stored
+ * proxy whose credentials were taken out (`***`) is left empty: it must be given again.
+ */
+export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm {
+  const defaults = ENGINE_DEFAULTS;
+  const proxy = options.proxyUrl ?? '';
+  return {
+    startUrl: startUrl || (options.startUrl ?? ''),
+    maxUrls: numberText(options.maxUrls, defaults.maxUrls),
+    maxDepth: numberText(options.maxDepth, defaults.maxDepth),
+    maxHtmlMb: megabytes(options.maxHtmlBytes ?? defaults.maxHtmlBytes),
+    concurrency: numberText(options.concurrency, defaults.concurrency),
+    externalConcurrency: numberText(options.externalConcurrency, defaults.externalConcurrency),
+    maxRequestsPerSecond: numberText(options.maxRequestsPerSecond, defaults.maxRequestsPerSecond),
+    userAgent: options.userAgent ?? defaults.userAgent,
+    customUserAgent: options.customUserAgent ?? '',
+    acceptLanguage: options.acceptLanguage ?? defaults.acceptLanguage,
+    headers: Object.entries(options.extraHeaders ?? {}).map(([name, value]) => headerRow(name, value)),
+    respectRobotsTxt: options.respectRobotsTxt ?? defaults.respectRobotsTxt,
+    respectCrawlDelay: options.respectCrawlDelay ?? defaults.respectCrawlDelay,
+    checkResources: options.checkResources ?? defaults.checkResources,
+    checkExternalLinks: options.checkExternalLinks ?? defaults.checkExternalLinks,
+    includeSubdomains: options.includeSubdomains ?? defaults.includeSubdomains,
+    stayInStartFolder: options.stayInStartFolder ?? defaults.stayInStartFolder,
+    followNofollow: options.followNofollow ?? defaults.followNofollow,
+    crawlCanonicals: options.crawlCanonicals ?? defaults.crawlCanonicals,
+    crawlHreflang: options.crawlHreflang ?? defaults.crawlHreflang,
+    crawlPagination: options.crawlPagination ?? defaults.crawlPagination,
+    discoverSitemaps: options.discoverSitemaps ?? defaults.discoverSitemaps,
+    extraSitemaps: (options.extraSitemaps ?? []).join('\n'),
+    storeHtml: options.storeHtml ?? defaults.storeHtml,
+    useCookies: options.useCookies ?? defaults.useCookies,
+    proxyUrl: options.hasRedactedProxyCredentials ? '' : proxy,
+    requestTimeoutSeconds: numberText(options.requestTimeoutSeconds, defaults.requestTimeoutSeconds),
+    maxRetries: numberText(options.maxRetries, defaults.maxRetries),
+  };
+}
+
+/** A number as typed: the number, when it is one; otherwise the text, for the engine to say what's wrong with it. */
+function typed(text: string): number {
+  const trimmed = text.trim().replace(/,/g, '');
+  const value = trimmed === '' ? Number.NaN : Number(trimmed);
+  return (Number.isFinite(value) ? value : text) as number;
+}
+
+/** The headers to send: the rows with a name (a row being typed in has none yet). */
+function headersOf(rows: readonly HeaderRow[], withValues: boolean): Record<string, string> {
+  return Object.fromEntries(
+    rows.filter((row) => row.name.trim() !== '').map((row) => [row.name.trim(), withValues ? row.value : '']),
+  );
+}
+
+/**
+ * The engine's options from the form. `secrets: false` leaves the header values and the proxy's credentials out, for
+ * saving as defaults: the sidecar would drop them too, but they never leave the app.
+ */
+export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?: boolean } = {}): CrawlOptions {
+  const mb = typed(form.maxHtmlMb);
+  return {
+    startUrl: form.startUrl.trim(),
+    maxUrls: typed(form.maxUrls),
+    maxDepth: typed(form.maxDepth),
+    maxHtmlBytes: typeof mb === 'number' ? Math.round(mb * MB) : mb,
+    concurrency: typed(form.concurrency),
+    externalConcurrency: typed(form.externalConcurrency),
+    maxRequestsPerSecond: typed(form.maxRequestsPerSecond),
+    userAgent: form.userAgent,
+    customUserAgent: form.userAgent === 'custom' ? form.customUserAgent : null,
+    acceptLanguage: form.acceptLanguage,
+    extraHeaders: headersOf(form.headers, secrets),
+    respectRobotsTxt: form.respectRobotsTxt,
+    respectCrawlDelay: form.respectCrawlDelay,
+    checkResources: form.checkResources,
+    checkExternalLinks: form.checkExternalLinks,
+    includeSubdomains: form.includeSubdomains,
+    stayInStartFolder: form.stayInStartFolder,
+    followNofollow: form.followNofollow,
+    crawlCanonicals: form.crawlCanonicals,
+    crawlHreflang: form.crawlHreflang,
+    crawlPagination: form.crawlPagination,
+    discoverSitemaps: form.discoverSitemaps,
+    extraSitemaps: form.extraSitemaps
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line !== ''),
+    storeHtml: form.storeHtml,
+    useCookies: form.useCookies,
+    proxyUrl: form.proxyUrl.trim() === '' ? null : secrets ? form.proxyUrl.trim() : withoutCredentials(form.proxyUrl),
+    requestTimeoutSeconds: typed(form.requestTimeoutSeconds),
+    maxRetries: typed(form.maxRetries),
+  };
+}
+
+/** A proxy's address without its user name and password. */
+export function withoutCredentials(proxyUrl: string): string {
+  try {
+    const url = new URL(proxyUrl.trim());
+    url.username = '';
+    url.password = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return proxyUrl.trim();
+  }
+}
+
+/** Whether a proxy address carries a user name or password. */
+export function hasCredentials(proxyUrl: string): boolean {
+  try {
+    const url = new URL(proxyUrl.trim());
+    return url.username !== '' || url.password !== '';
+  } catch {
+    return false;
+  }
+}
+
+// ----------------------------------------------------------------------------------------------------- Speed
+
+export type SpeedId = 'polite' | 'standard' | 'fast';
+
+/** The preset the form's concurrency and rate are, or null when they're the user's own. */
+export function speedOf(
+  form: Pick<CrawlForm, 'concurrency' | 'maxRequestsPerSecond'>,
+  presets: readonly SpeedPreset[],
+) {
+  const concurrency = Number(form.concurrency);
+  const rate = Number(form.maxRequestsPerSecond);
+  return (
+    (presets.find((preset) => preset.concurrency === concurrency && preset.maxRequestsPerSecond === rate)?.id as
+      SpeedId | undefined) ?? null
+  );
+}
+
+export function withSpeed(form: CrawlForm, preset: SpeedPreset): CrawlForm {
+  return {
+    ...form,
+    concurrency: String(preset.concurrency),
+    maxRequestsPerSecond: String(preset.maxRequestsPerSecond),
+  };
+}
+
+// ------------------------------------------------------------------------------------------- What's changed
+
+/** The form's sections, in order: where each setting lives in Advanced. */
+export type FormSection = 'start' | 'scope' | 'limits' | 'robots' | 'network' | 'advanced';
+
+export const SECTION_TITLES: Record<FormSection, string> = {
+  start: 'Start',
+  scope: 'Scope',
+  limits: 'Limits',
+  robots: 'Robots and sitemaps',
+  network: 'Headers and network',
+  advanced: 'Advanced',
+};
+
+/** Each field's section. */
+export const FIELD_SECTIONS: Record<CrawlFormField, FormSection> = {
+  startUrl: 'start',
+  stayInStartFolder: 'scope',
+  includeSubdomains: 'scope',
+  followNofollow: 'scope',
+  crawlCanonicals: 'scope',
+  crawlHreflang: 'scope',
+  crawlPagination: 'scope',
+  maxUrls: 'limits',
+  maxDepth: 'limits',
+  maxHtmlMb: 'limits',
+  respectRobotsTxt: 'robots',
+  respectCrawlDelay: 'robots',
+  discoverSitemaps: 'robots',
+  extraSitemaps: 'robots',
+  userAgent: 'network',
+  customUserAgent: 'network',
+  acceptLanguage: 'network',
+  headers: 'network',
+  proxyUrl: 'network',
+  useCookies: 'network',
+  requestTimeoutSeconds: 'advanced',
+  maxRetries: 'advanced',
+  concurrency: 'advanced',
+  maxRequestsPerSecond: 'advanced',
+  externalConcurrency: 'advanced',
+  checkResources: 'advanced',
+  checkExternalLinks: 'advanced',
+  storeHtml: 'advanced',
+};
+
+/** The fields Simple asks about: the address, how fast, how much, and the two switches. */
+export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField>([
+  'startUrl',
+  'concurrency',
+  'maxRequestsPerSecond',
+  'maxUrls',
+  'checkExternalLinks',
+  'checkResources',
+]);
+
+/** Which of the form's settings differ from these defaults: by field, with the start URL left out. */
+export function changedFields(form: CrawlForm, defaults: CrawlForm): CrawlFormField[] {
+  return (Object.keys(FIELD_SECTIONS) as CrawlFormField[]).filter((field) => {
+    if (field === 'startUrl') return false;
+    if (field === 'headers') return Object.keys(headersOf(form.headers, false)).length > 0;
+    if (field === 'customUserAgent') return form.userAgent === 'custom' && form[field] !== defaults[field];
+    const a = form[field];
+    const b = defaults[field];
+    return typeof a === 'string' && typeof b === 'string' ? !sameText(field, a, b) : a !== b;
+  });
+}
+
+function sameText(field: CrawlFormField, a: string, b: string): boolean {
+  if (field === 'extraSitemaps' || field === 'acceptLanguage' || field === 'proxyUrl') return a.trim() === b.trim();
+  return Number(a) === Number(b) || a.trim() === b.trim();
+}
+
+/** The Advanced settings Simple doesn't show that differ from the engine's defaults: their sections, in order. */
+export function hiddenChanges(form: CrawlForm): { count: number; sections: FormSection[] } {
+  const changed = changedFields(form, formFromOptions(ENGINE_DEFAULTS)).filter((field) => !SIMPLE_FIELDS.has(field));
+  const sections = [...new Set(changed.map((field) => FIELD_SECTIONS[field]))];
+  const order = Object.keys(SECTION_TITLES) as FormSection[];
+  return { count: changed.length, sections: sections.sort((a, b) => order.indexOf(a) - order.indexOf(b)) };
+}
+
+/** The form's field an engine error is about, by the options' JSON name. */
+export function fieldOfError(name: string): CrawlFormField | null {
+  switch (name) {
+    case 'maxHtmlBytes':
+      return 'maxHtmlMb';
+    case 'extraHeaders':
+      return 'headers';
+    default:
+      return Object.hasOwn(FIELD_SECTIONS, name) ? (name as CrawlFormField) : null;
+  }
+}
+
+/** Where each focus a link can ask for lives: its section, and the field to put focus on. */
+export const FOCUS_TARGETS: Record<SettingFocus, { section: FormSection; field: CrawlFormField }> = {
+  speed: { section: 'start', field: 'concurrency' },
+  headers: { section: 'network', field: 'headers' },
+  userAgent: { section: 'network', field: 'userAgent' },
+  robots: { section: 'robots', field: 'respectRobotsTxt' },
+};
+
+/** A bare host typed ("www.example.co.uk") is the site's https:// address, as Home takes it. */
+export function withScheme(url: string): string {
+  const trimmed = url.trim();
+  return trimmed === '' || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+/** Puts focus on a setting's control in a form: its field, or the speed's chosen radio (or its first). */
+export function focusSetting(root: HTMLElement | null, field: CrawlFormField): void {
+  if (!root) return;
+  if (field === 'concurrency' || field === 'maxRequestsPerSecond') {
+    const group = root.querySelector('[data-setting-group="speed"]');
+    const radio =
+      group?.querySelector<HTMLInputElement>('input[type="radio"]:checked') ??
+      group?.querySelector<HTMLInputElement>('input[type="radio"]');
+    if (radio) {
+      radio.focus();
+      return;
+    }
+  }
+  const control =
+    root.querySelector<HTMLElement>(`[data-setting="${field}"]`) ??
+    root.querySelector<HTMLElement>(`#setting-${field}`);
+  const focusable = control?.matches('input, select, textarea, button')
+    ? control
+    : control?.querySelector<HTMLElement>('input, select, textarea, button');
+  focusable?.focus();
+}

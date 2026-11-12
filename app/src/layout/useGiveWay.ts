@@ -2,8 +2,9 @@
 // window's, so the order holds whatever the sidebar is doing, in either mode, idle or with a crawl running.
 //
 // The bar's parts never shrink: each step makes one give way, in order, and the bar takes the fewest steps that let
-// everything fit. The steps are marked on the bar as `data-give-1` … `data-give-8`, cumulatively (step 3 sets 1, 2
-// and 3), and each part hides or narrows itself on its own step's mark (`group-data-[give-3]/topbar:…`). The measure is
+// everything fit. The steps are marked on the bar as `data-give-1` … `data-give-9`, cumulatively (step 3 sets 1, 2
+// and 3), and each part hides or narrows itself on its own step's mark (`group-data-give-3/topbar:…`). The site is
+// the one part that narrows before it goes: shortened (step 7), then gone (step 8). The measure is
 // taken before the browser paints, so no in-between state is ever seen: when the bar is resized, and when what it holds
 // changes (a crawl's count, a crumb, a control coming or going).
 import { useLayoutEffect, type RefObject } from 'react';
@@ -16,8 +17,9 @@ export const GIVE_WAY_STEPS = [
   'home', // 4: Home
   'count', // 5: the count in the status pill
   'controls', // 6: Pause, Stop and Continue become icons
-  'site', // 7: the site
-  'forward', // 8: Forward
+  'site-short', // 7: the site is shortened, as far as its least width…
+  'site', // 8: …then goes
+  'forward', // 9: Forward
 ] as const;
 
 const MAX_STEP = GIVE_WAY_STEPS.length;
@@ -27,10 +29,17 @@ function setStep(bar: HTMLElement, step: number): void {
   bar.dataset.give = String(step);
 }
 
-/** Whether the bar's parts fit at this step. A bar not laid out (hidden, or a test's DOM) fits. */
+/**
+ * Whether the bar's parts fit at this step: the bar, and each part that may narrow (`data-give-fit`, the crumbs, which
+ * clip what doesn't fit), hold all they have. A bar not laid out (hidden, or a test's DOM) fits.
+ */
 function fits(bar: HTMLElement, step: number): boolean {
   setStep(bar, step);
-  return bar.scrollWidth <= bar.clientWidth;
+  if (bar.scrollWidth > bar.clientWidth) return false;
+  for (const part of bar.querySelectorAll<HTMLElement>('[data-give-fit]')) {
+    if (part.scrollWidth > part.clientWidth) return false;
+  }
+  return true;
 }
 
 /** The fewest steps that let everything fit, starting from the step the bar is at: usually a read or two. */

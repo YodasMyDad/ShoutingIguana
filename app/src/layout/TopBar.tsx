@@ -56,7 +56,7 @@ function pageTitle(pathname: string, mode: Mode): string | null {
  *
  * Short of room, its parts give way in a fixed order, measured on the bar's own width (useGiveWay): the keys inside
  * buttons, the crawl's date, the search field (to its icon), Home, the status pill's count, the controls' words (to
- * their icons), the site, Forward. Never Back, the section you're on, the status word, the controls, search's icon or
+ * their icons), the site (shortened, then gone), Forward. Never Back, the section you're on, the status word, the controls, search's icon or
  * the switch. Each part that gives way keeps its whole name for a screen reader, and in a tooltip.
  */
 export function TopBar() {
@@ -102,7 +102,7 @@ export function TopBar() {
           command="nav.back"
           onClick={() => router.history.back()}
         />
-        <span className="flex group-data-give-8/topbar:hidden">
+        <span className="flex group-data-give-9/topbar:hidden">
           <IconButton
             label="Forward"
             icon={ChevronRight}
@@ -113,9 +113,15 @@ export function TopBar() {
         </span>
       </div>
 
-      {/* The inset keeps Home's focus ring inside the bar. */}
-      <nav aria-label="Breadcrumb" className="-ml-1 pl-1" title={trail}>
-        <ol className="flex items-center gap-1 text-14 text-text-secondary *:shrink-0">
+      {/* Narrowed (step 7), it clips what doesn't fit, and the measure counts that as not fitting. The inset keeps
+          Home's focus ring inside it. */}
+      <nav
+        aria-label="Breadcrumb"
+        data-give-fit=""
+        className="-ml-1 overflow-hidden py-1 pl-1 group-data-give-7/topbar:min-w-0 group-data-give-7/topbar:shrink"
+        title={trail}
+      >
+        <ol className="flex min-w-0 items-center gap-1 text-14 text-text-secondary *:shrink-0">
           {onHome ? (
             <li aria-current="page" className="px-1.5 font-medium text-text">
               Home
@@ -131,11 +137,11 @@ export function TopBar() {
             <>
               <Separator className="group-data-give-4/topbar:hidden" />
               <li
-                className="flex max-w-(--topbar-site-max) items-center gap-2 px-1.5 font-medium text-text group-data-give-7/topbar:sr-only"
+                className="flex max-w-(--topbar-site-max) items-center gap-2 px-1.5 font-medium text-text group-data-give-7/topbar:min-w-(--topbar-site-min) group-data-give-7/topbar:shrink group-data-give-8/topbar:sr-only"
                 title={crawl?.startUrl ?? site ?? undefined}
               >
                 <Favicon site={crawl?.site ?? site ?? ''} size="md" />
-                <span className="truncate">{site}</span>
+                <span className="min-w-0 truncate">{site}</span>
               </li>
               {date ? (
                 <>
@@ -145,7 +151,7 @@ export function TopBar() {
               ) : null}
               {here ? (
                 <>
-                  <Separator className="group-data-give-7/topbar:hidden" />
+                  <Separator className="group-data-give-8/topbar:hidden" />
                   <li aria-current="page" className="px-1.5 font-medium text-text">
                     {here}
                   </li>
