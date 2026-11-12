@@ -2761,11 +2761,40 @@ to fail with the behaviour taken out.
   engine has is described there. Nothing in the engine changed for it: an analysis already stored the limits it ran
   with, and one that ran with others was already out of date.
 - **The crawl file.** One table and one column more, both added as a file is opened for writing; the schema version
-  is as it was, and either engine reads and continues either file. The benchmark's file is the size it was but for
-  the icon (160 bytes).
+  is as it was, and either engine reads and continues either file. The benchmark's file is the size it was: 477 and
+  480 MB in two runs, 479 before E6, one run differing from the next by more than the 160 bytes of its icon.
 - **In the app's API module**: typed calls and types for all of it (`api.search`, `api.favicon`, `api.linkEnds`,
   the analysis settings, `linkEnds` on a grid query), each new field optional on the answers that gained it. No
   screen uses them yet.
+
+**Checked against the files themselves.** A script of its own started the Release sidecar on a fresh 100k benchmark
+crawl and on a copy of the garden crawl (6,286 URLs, analysed by this engine), asked every endpoint E6 added or
+changed, and held each number to SQL written for it over the same file: `/search` (13 texts each: `matching`,
+`total`, every result's URL, title and status, that it holds the text, and the ranks in order) and the grid's
+`search`; the origins, what each blocked, searched and filtered every way (`matching`, `counts`, the rows);
+`/robots/file`'s `respected` and that its lines account for every blocked URL; `/robots/blocked` for one URL, and the
+inspector's robots.txt test for 40 refused URLs (the origin, the reason, and a line that is the file's own and whose
+rule matches the URL's path); `listedIn` and `hyperlinkInlinks` for 214 and 165 URLs, and the links grid's and
+`/urls/inlinks`' counts for the most linked; every sitemap's `listedSitemaps`; 641 issue groups' `urls`; eleven
+links views' ends from either end, a page in the middle and the last, and the URL grid and its facets narrowed to
+them, alone and beside a filter; the icon's bytes and type, and `hasFavicon`; the analysis's limits, saved and reset,
+turning both crawls' analyses out of date and back. **3,563 checks, none wrong.** The first run had 62 "wrong", every
+one the script's own model of a check's groups (it grouped a `detail` check by detail alone, where the engine groups
+by the detail and the other URL, and by the fault for the three checks that have one); corrected, they agree. On the
+benchmark crawl the analysis's `inlinks` differ from the stored hyperlinks for 15 of the 214 URLs sampled, the menu's
+targets, as above; on the garden crawl for none. Eight passes over the 5 million links at once, through the sidecar
+with every one of 32 slots free, took 385 ms in all (104 to 384 ms each), with `/health` answered in 10 to 14 ms
+throughout.
+
+**The checks on the last commit's code.** The Release build has no warning; the engine's tests (1,229), the
+sidecar's (200) and the CLI's (21) pass; the app's `typecheck`, `lint`, `format:check` and its 1,059 tests pass.
+`si bench --pages 100000` completed and found every planted issue and nothing else: 38.7 s, 2,613 pages/s, a peak of
+192 MB and +1 MB over the crawl, a 480 MB file, analysed in 11.3 s, its icon kept and no URL for it. `si bench
+--pages 40000 --read-links --max-log-mb 128`, as CI runs it: every planted issue, the links read 4,397 times while the
+crawl ran, the log at 82 MB at most. `si readbench --runs 20 --gate` passed every class, 205 reads: `search` 4.5 ms
+against 25, `search-first` 73 against 200, `link-pass-split` 392 against 1,500, `link-pass` 1,806 against 2,500, the
+links grid from the link summary 96 against 200, `robots` 59 against 200, `inspector` 2.2 against 200, `stats-pass`
+325 against 450.
 
 Not verified: anything on a crawl of a million URLs; any of the timings on a quiet machine (other agents' builds and
 benchmarks loaded this one throughout, so each was repeated, and the passes were timed in turn with the engine from
