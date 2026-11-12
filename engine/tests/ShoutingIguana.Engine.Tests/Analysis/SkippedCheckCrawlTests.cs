@@ -108,17 +108,107 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
 
         var ignoring = await CrawlAndAnalyseAsync(options with { RespectRobotsTxt = false });
 
+        // Sitemap discovery still read the start origin's robots.txt, so the site's own is judged; no other origin's was.
         Assert.True(ignoring.IsPartial);
-        Assert.Equal(new SkippedCheck(IssueCatalog.BLOCKED_BY_ROBOTS.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl."),
-            Assert.Single(ignoring.Skipped));
-        Assert.Contains("robots.txt was ignored in this crawl, so the URLs it blocks weren't looked for.", ignoring.Notes);
-        Assert.Equal(IssueCatalog.All.Except([IssueCatalog.BLOCKED_BY_ROBOTS]), ignoring.Issues.Select(issue => issue.Issue));
+        Assert.Equal(
+        [
+            new SkippedCheck(IssueCatalog.BLOCKED_BY_ROBOTS.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl."),
+            new SkippedCheck(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED,
+                "robots.txt was ignored in this crawl, so it wasn't read on the site's other origins.")
+        ], ignoring.Skipped);
+        Assert.Equal(["robots.txt was ignored in this crawl, so the URLs it blocks weren't looked for, nor whether it is unavailable on the site's other origins."],
+            ignoring.Notes);
+        Assert.Equal(IssueCatalog.All.Except([IssueCatalog.BLOCKED_BY_ROBOTS, IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN]), ignoring.Issues.Select(issue => issue.Issue));
 
-        // As stored: the reason is read back with the analysis, the check has no count (never 0), and the score says one check couldn't run.
+        // As stored: the reasons are read back with the analysis, the checks have no count (never 0), and the score says two checks couldn't run.
         Assert.Equal(ignoring.Skipped, IssueReader.ReadSkippedChecks(_path));
         Assert.False(IssueReader.ReadCounts(_path).ContainsKey(IssueCatalog.BLOCKED_BY_ROBOTS.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.BLOCKED_BY_ROBOTS.Id));
-        Assert.Equal(1, IssueReader.ReadResults(_path)!.Score!.Covers.ChecksSkipped);
+        Assert.Equal(2, IssueReader.ReadResults(_path)!.Score!.Covers.ChecksSkipped);
+    }
+
+    /// <summary>
+    /// The three checks of robots.txt itself on a site whose robots.txt is missing on both its origins (https, and the
+    /// http one a page links to), crawled three ways. Obeying robots.txt, the crawl reads both files and the check lists
+    /// both. Ignoring it with sitemaps on, only sitemap discovery asks, and only the start origin: the site's own is
+    /// judged, and what another origin's does is skipped. Ignoring it with sitemaps off, robots.txt is never asked for, so
+    /// every one of the three is skipped: none reads as passed on a file nobody read.
+    /// </summary>
+    [Fact]
+    public async Task TheChecksOfRobotsTxtAreSkippedWhereACrawlThatIgnoredItNeverReadIt()
+    {
+        var asked = 0;
+        await using var site = await LoopbackServer.StartAsync(context =>
+        {
+            if (context.Request.Path.Value == "/robots.txt")
+            {
+                Interlocked.Increment(ref asked);
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return Write(context, "text/plain", "Not here");
+            }
+
+            var links = context.Request.Path.Value == "/" ? $"<a href=\"/a\">A</a> <a href=\"http://{context.Request.Host}/b\">B</a>" : "<p>Text</p>";
+            return Write(context, "text/html; charset=utf-8", $"<!doctype html><html lang=\"en\"><head><title>A page</title></head><body>{links}</body></html>");
+        }, https: true);
+        var origin = site.BaseUri.GetLeftPart(UriPartial.Authority);
+        var plainOrigin = "http" + origin["https".Length..];
+        var options = new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0, TrustedCertificate = site.Certificate };
+        IssueDefinition[] robotsChecks = [IssueCatalog.BLOCKED_BY_ROBOTS, IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, IssueCatalog.ROBOTS_TXT_MISSING];
+        List<SkippedCheck> OfRobots(AnalysisSummary analysis) => [.. analysis.Skipped.Where(skip => robotsChecks.Any(check => check.Id == skip.CheckId))];
+        string? Missing() => IssueReader.ReadAll(_path, IssueCatalog.ROBOTS_TXT_MISSING.Id).SingleOrDefault()?.Detail;
+
+        // Obeying robots.txt: both origins' files were read, and both are listed.
+        var obeying = await CrawlAndAnalyseAsync(options);
+        Assert.Empty(OfRobots(obeying));
+        Assert.Equal($"{plainOrigin}/robots.txt (404 Not Found), {origin}/robots.txt (404 Not Found)", Missing());
+
+        // Ignoring it, sitemaps on: the start origin's was read for its Sitemap lines, and is judged; the other origin's wasn't.
+        DeleteCrawl();
+        asked = 0;
+        var ignoring = await CrawlAndAnalyseAsync(options with { RespectRobotsTxt = false });
+        Assert.Equal(
+        [
+            new SkippedCheck(IssueCatalog.BLOCKED_BY_ROBOTS.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl."),
+            new SkippedCheck(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED,
+                "robots.txt was ignored in this crawl, so it wasn't read on the site's other origins.")
+        ], OfRobots(ignoring));
+        Assert.Equal($"{origin}/robots.txt (404 Not Found)", Missing());
+        Assert.Contains(ignoring.Issues, issue => issue is { Count: 0 } && issue.Issue == IssueCatalog.ROBOTS_TXT_UNREACHABLE);
+        Assert.Equal(1, asked);
+
+        // Ignoring it, sitemaps off: nothing asked for robots.txt, so nothing is known of it, and no check of it ran.
+        DeleteCrawl();
+        asked = 0;
+        var unread = await CrawlAndAnalyseAsync(options with { RespectRobotsTxt = false, DiscoverSitemaps = false });
+        Assert.Equal(0, asked);
+        const string NEVER_READ = "robots.txt was ignored in this crawl, and nothing else asked for it, so it was never read.";
+        Assert.Equal(
+        [
+            new SkippedCheck(IssueCatalog.BLOCKED_BY_ROBOTS.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl."),
+            new SkippedCheck(IssueCatalog.ROBOTS_TXT_UNREACHABLE.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED, NEVER_READ),
+            new SkippedCheck(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED,
+                "robots.txt was ignored in this crawl, so it wasn't read on the site's other origins."),
+            new SkippedCheck(IssueCatalog.ROBOTS_TXT_MISSING.Id, SkippedCheckReasons.ROBOTS_TXT_IGNORED, NEVER_READ)
+        ], OfRobots(unread));
+        Assert.Contains("robots.txt was ignored in this crawl and never read, so the URLs it blocks, and whether it is missing or unavailable, weren't looked for.", unread.Notes);
+        Assert.DoesNotContain(unread.Issues, issue => robotsChecks.Contains(issue.Issue));
+        Assert.DoesNotContain(IssueReader.ReadCounts(_path).Keys, id => robotsChecks.Any(check => check.Id == id));
+        Assert.Equal(unread.Skipped, IssueReader.ReadSkippedChecks(_path));
+
+        // One reason for the four checks, in words that are true of each: what the files block, and whether each can be read.
+        Assert.Equal(
+            new SkipReasonPlainText(
+                "This site check was set to ignore your site's rules files for search engines, so it can't say what they put off limits or whether each can be read.",
+                "Set the check to follow the rules files again in its Advanced settings, then check the site again."),
+            PlainWords.SkipReason(SkippedCheckReasons.ROBOTS_TXT_IGNORED));
+    }
+
+    private void DeleteCrawl()
+    {
+        foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })
+        {
+            File.Delete(path);
+        }
     }
 
     /// <summary>

@@ -128,7 +128,13 @@ public sealed class IssueCatalogTests
             () => Assert.StartsWith("The home page is noindex, and so are more than half of the site's pages", hidden.Description),
             () => Assert.EndsWith("Reported once, on the home page.", hidden.Description),
             () => Assert.Contains("one that isn't noindex and whose canonical names another URL", hidden.Description),
-            () => Assert.StartsWith("Your home page and more than half of your pages", hidden.Plain!.What[0]));
+            () => Assert.StartsWith("Your home page and more than half of your pages", hidden.Plain!.What[0]),
+
+            // A crawl told to ignore robots.txt reads it only for the start origin's sitemaps, and judges only what it read.
+            () => Assert.EndsWith("Not checked on a crawl told to ignore robots.txt that never read it.", IssueCatalog.ROBOTS_TXT_UNREACHABLE.Description),
+            () => Assert.EndsWith("Not checked on a crawl told to ignore robots.txt, which doesn't read it there.", IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN.Description),
+            () => Assert.EndsWith("A crawl told to ignore robots.txt judges the start URL's origin alone, and not at all when it never read robots.txt.",
+                IssueCatalog.ROBOTS_TXT_MISSING.Description));
     }
 
     /// <summary>

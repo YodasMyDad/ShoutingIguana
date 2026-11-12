@@ -39,7 +39,11 @@ public static class SkippedCheckReasons
     /// <summary>The crawl was told not to fetch images and other files.</summary>
     public const string RESOURCES_OFF = "resources-off";
 
-    /// <summary>The crawl was told to ignore robots.txt, so it asked for every URL and none was refused.</summary>
+    /// <summary>
+    /// The crawl was told to ignore robots.txt: it asked for every URL, so none was refused, and it read robots.txt only
+    /// where sitemap discovery asked for it (the start URL's origin, with sitemaps on). What robots.txt blocks, and
+    /// whether it answers where the crawl never read it, can't be judged.
+    /// </summary>
     public const string ROBOTS_TXT_IGNORED = "robots-txt-ignored";
 
     /// <summary>

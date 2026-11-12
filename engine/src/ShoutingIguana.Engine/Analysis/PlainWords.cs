@@ -60,8 +60,8 @@ public static class PlainWords
             """Check the site again, with "Images and other files" ticked."""),
 
         [SkippedCheckReasons.ROBOTS_TXT_IGNORED] = new(
-            """This site check was set to ignore your site's rules file for search engines, so it can't show which addresses that file puts off limits.""",
-            """Set the check to follow the rules file again in its Advanced settings, then check the site again."""),
+            """This site check was set to ignore your site's rules files for search engines, so it can't say what they put off limits or whether each can be read.""",
+            """Set the check to follow the rules files again in its Advanced settings, then check the site again."""),
 
         [SkippedCheckReasons.SITE_VERSIONS_UNCHECKED] = new(
             """The site's other addresses (with and without www, http and https) couldn't all be tried.""",

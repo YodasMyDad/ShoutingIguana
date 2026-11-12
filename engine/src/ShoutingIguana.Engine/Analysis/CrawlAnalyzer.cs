@@ -155,15 +155,6 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE);
             }
 
-            // A crawl told to ignore robots.txt asks for every URL, so none is refused, and the check has nothing to find:
-            // that isn't finding that robots.txt blocks nothing.
-            if (!options.RespectRobotsTxt)
-            {
-                Skip(notes, skipped, "robots.txt was ignored in this crawl, so the URLs it blocks weren't looked for.",
-                    SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl.",
-                    IssueCatalog.BLOCKED_BY_ROBOTS);
-            }
-
             // The crawler probes the site's other versions first thing, but a crawl stopped before then, or one from before
             // it did, doesn't know how they answer; nor is there a main version without a home page.
             var siteVersions = new SiteVersionRules(urls, new Uri(startUrl), reader.ReadUrlId, reader.ReadUrl);
@@ -195,6 +186,30 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new HtmlRules()
             ];
 
+            // A crawl told to ignore robots.txt asks for every URL, so none is refused, and it reads robots.txt only where
+            // something else needs it: sitemap discovery asks the start URL's origin for it. What it didn't read it can't
+            // judge, which isn't finding it fine: nothing blocked, no other origin's file read, and the site's own judged
+            // only when it was read.
+            var robots = reader.ReadRobots();
+            if (!options.RespectRobotsTxt)
+            {
+                var ownWasRead = robots.Any(file => mainOrigins.Contains(file.Origin));
+                Skip(notes, skipped, ownWasRead
+                        ? "robots.txt was ignored in this crawl, so the URLs it blocks weren't looked for, nor whether it is unavailable on the site's other origins."
+                        : "robots.txt was ignored in this crawl and never read, so the URLs it blocks, and whether it is missing or unavailable, weren't looked for.",
+                    SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl.",
+                    IssueCatalog.BLOCKED_BY_ROBOTS);
+                Skip(notes, skipped, note: null,
+                    SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl, so it wasn't read on the site's other origins.",
+                    IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN);
+                if (!ownWasRead)
+                {
+                    Skip(notes, skipped, note: null,
+                        SkippedCheckReasons.ROBOTS_TXT_IGNORED, "robots.txt was ignored in this crawl, and nothing else asked for it, so it was never read.",
+                        IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_MISSING);
+                }
+            }
+
             // An instant meta refresh makes the page a redirect: nobody sees it, so only the refresh itself is reported.
             IPageRule[] redirectRules = [indexability];
             var duplicates = new DuplicateRules(settings);
@@ -203,7 +218,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new InlinkRules(urls, linksComplete), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
-                new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
+                new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
                 new SiteVisibilityRules(urls)
             ];
 
@@ -388,14 +403,18 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     }
 
     /// <summary>Leaves checks out of the results, with a note for the analysis and a reason for each check.</summary>
-    /// <param name="note">One sentence for the analysis notes, naming the checks.</param>
+    /// <param name="note">One sentence for the analysis notes, naming the checks. Null when another skip's note already covers these.</param>
     /// <param name="reason">The stable code (<see cref="SkippedCheckReasons"/>).</param>
     /// <param name="text">Why, to show beside each check. A check skipped for more than one reason keeps the first.</param>
-    private void Skip(List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, string note, string reason, string text,
+    private void Skip(List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, string? note, string reason, string text,
         params IssueDefinition[] issues)
     {
-        _logger.LogWarning("Skipped {Checks}: {Reason}", string.Join(", ", issues.Select(issue => issue.Id)), note);
-        notes.Add(note);
+        _logger.LogWarning("Skipped {Checks}: {Reason}", string.Join(", ", issues.Select(issue => issue.Id)), note ?? text);
+        if (note is not null)
+        {
+            notes.Add(note);
+        }
+
         foreach (var issue in issues)
         {
             skipped.TryAdd(issue, new SkippedCheck(issue.Id, reason, text));

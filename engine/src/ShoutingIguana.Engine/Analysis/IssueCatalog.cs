@@ -259,7 +259,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE = new("robots-txt-unreachable", IssueCategory.Indexability, IssueSeverity.Error,
         "robots.txt unavailable",
-        """robots.txt on the site's main origin (the start URL's, or the home page's after redirects) returned a 5xx error or 429, or didn't respond. Reported once, on the home page.""",
+        """robots.txt on the site's main origin (the start URL's, or the home page's after redirects) returned a 5xx error or 429, or didn't respond. Reported once, on the home page. Not checked on a crawl told to ignore robots.txt that never read it.""",
         """Make /robots.txt answer quickly with 200 and your rules, or with 404 if you don't need any. Check that the firewall, CDN or rate limiting doesn't treat requests for it differently from pages.""")
     {
         Why = """Google treats a robots.txt it can't fetch as a server error: it stops crawling the whole site for the first 12 hours, then uses its last good copy for up to 30 days (or assumes no restrictions if it has none). If it's still failing after that and the site is otherwise up, Google acts as if there were no robots.txt. Until it's fixed, new and changed pages aren't crawled, so fix this first.""",
@@ -272,7 +272,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN = new("robots-txt-unreachable-other-origin", IssueCategory.Indexability, IssueSeverity.Warning,
         "robots.txt unavailable on another of the site's origins",
-        """robots.txt on another of the site's origins, such as a subdomain or the http:// version, returned a 5xx error or 429, or didn't respond; the detail names the origin. Origins reached only by the crawler's own probe of the site's other versions aren't included.""",
+        """robots.txt on another of the site's origins, such as a subdomain or the http:// version, returned a 5xx error or 429, or didn't respond; the detail names the origin. Origins reached only by the crawler's own probe of the site's other versions aren't included. Not checked on a crawl told to ignore robots.txt, which doesn't read it there.""",
         """Make robots.txt on that origin return 200, or 404 if it needs no rules. If the origin shouldn't exist, stop linking to it.""")
     {
         Why = """Each origin (scheme, host and port) has its own robots.txt, so only that origin is affected: Google stops crawling it for 12 hours, then relies on its last good copy for up to 30 days. The main site carries on as normal. It matters if pages or files you want in search live there, or if that origin's redirects to the main site haven't been picked up yet.""",
@@ -285,7 +285,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
         "robots.txt missing or refused",
-        """robots.txt returned a 4xx error other than 429 (usually 404, sometimes 401 or 403 from a firewall), or redirected too many times, on the main origin or another of the site's origins. Reported on the home page; the detail lists the origins.""",
+        """robots.txt returned a 4xx error other than 429 (usually 404, sometimes 401 or 403 from a firewall), or redirected too many times, on the main origin or another of the site's origins. Reported on the home page; the detail lists the origins. A crawl told to ignore robots.txt judges the start URL's origin alone, and not at all when it never read robots.txt.""",
         """Add a robots.txt at the origin's root, even if it only holds a Sitemap: line with your XML sitemap's full URL. If a firewall answers it with 401 or 403, let it through.""")
     {
         Why = """Crawling isn't affected: Google treats a missing robots.txt as having no restrictions, so everything can be crawled. What's missing is a Sitemap: line, which Google, Bing and other search engines read to find your sitemaps, and a way to keep crawlers out of URLs with no search value should you need one. A 401 or 403 meant to keep crawlers out has the opposite effect.""",
