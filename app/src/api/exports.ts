@@ -1,7 +1,7 @@
 // Export and the report (docs/v2-sidecar-api.md, "Export (E5)" and "Report (E5)"). The sidecar writes the file to a
 // path the user chose in a native save dialog; an export is a job, as an analysis is: `startExport` answers at once
 // with the job, `export` events on the live stream carry it as it goes on and as it ends, and `exportJob` reads it.
-import type { ProblemBody } from './errors';
+import { parseProblem, type ProblemBody } from './errors';
 import type { CheckGroupRef, GridFilter, GridSort, RobotsBlockReason } from './grids';
 
 /** What an export writes. */
@@ -97,10 +97,75 @@ export interface ExportJob {
 
 /**
  * The live stream's `export` event (docs/v2-sidecar-api.md, Live events): the job, whole, as it starts, at most
- * every 250 ms while it writes rows, and as it ends. It isn't in `SidecarEvent` yet: the live store drops the events it
- * doesn't know, and whoever builds the export's progress adds it to the union and to the store together.
+ * every 250 ms while it writes rows, and as it ends. It is one of `SidecarEvent`: the live store reads it at the
+ * boundary with `parseExportJob` and hands it to its listeners (`onEvent`), keeping none of it. `hello.exports` lists
+ * the exports running when a stream connects, and each one's latest event follows it.
  */
 export interface ExportEvent {
   type: 'export';
   data: ExportJob;
+}
+
+const EXPORT_KINDS: readonly ExportKind[] = [
+  'urls',
+  'links',
+  'sitemapUrls',
+  'robotsBlocked',
+  'issueRows',
+  'check',
+  'workbook',
+  'report',
+];
+const EXPORT_FORMATS: readonly ExportFormat[] = ['csv', 'xlsx', 'html'];
+const EXPORT_STATUSES: readonly ExportStatus[] = ['running', 'done', 'cancelled', 'failed'];
+
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+/** True once an export has ended, however it ended: only `done` left a file. */
+export const isExportOver = (job: ExportJob): boolean => job.status !== 'running';
+
+/**
+ * Reads an export at the boundary, as an `export` event carries it: anything that doesn't match the contract's shape
+ * gives null, so a malformed event is dropped and never shown as progress. A `result` or an `error` that doesn't
+ * read is null, with the job's status standing.
+ */
+export function parseExportJob(value: unknown): ExportJob | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const { exportId, crawlId, kind, format, path, status, rowsWritten, rowsExpected, startedAt, finishedAt } = record;
+  if (typeof exportId !== 'string' || typeof crawlId !== 'string' || typeof path !== 'string') return null;
+  if (!EXPORT_KINDS.includes(kind as ExportKind) || !EXPORT_FORMATS.includes(format as ExportFormat)) return null;
+  if (!EXPORT_STATUSES.includes(status as ExportStatus) || !isCount(rowsWritten)) return null;
+  if (typeof startedAt !== 'string') return null;
+  return {
+    exportId,
+    crawlId,
+    kind: kind as ExportKind,
+    format: format as ExportFormat,
+    path,
+    status: status as ExportStatus,
+    rowsWritten,
+    rowsExpected: isCount(rowsExpected) ? rowsExpected : null,
+    startedAt,
+    finishedAt: typeof finishedAt === 'string' ? finishedAt : null,
+    result: parseExportResult(record.result),
+    error: parseProblem(record.error),
+  };
+}
+
+function parseExportResult(value: unknown): ExportResult | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const { rows, bytes, sheets, unavailableColumns, truncatedCells, crawlWasRunning } = record;
+  if (!isCount(rows) || !isCount(bytes)) return null;
+  return {
+    rows,
+    bytes,
+    sheets: isCount(sheets) ? sheets : 0,
+    unavailableColumns: Array.isArray(unavailableColumns)
+      ? unavailableColumns.filter((column): column is string => typeof column === 'string')
+      : [],
+    truncatedCells: isCount(truncatedCells) ? truncatedCells : 0,
+    crawlWasRunning: crawlWasRunning === true,
+  };
 }

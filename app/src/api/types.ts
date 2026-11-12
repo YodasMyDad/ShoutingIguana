@@ -1,3 +1,4 @@
+import type { ExportJob } from './exports';
 import type { CheckGrouping } from './grids';
 
 // The sidecar's JSON, as docs/v2-sidecar-api.md defines it (E1 and E2; the grids' E3a shapes are in grids.ts and
@@ -742,4 +743,6 @@ export type SidecarEvent =
   | { type: 'alert'; data: AlertEvent }
   | { type: 'crawl'; data: CrawlEvent }
   | { type: 'library'; data: Record<string, never> }
-  | { type: 'analysis'; data: AnalysisEvent };
+  | { type: 'analysis'; data: AnalysisEvent }
+  /** E5: an export as it stands, whole (./exports): as it starts, as it goes on, and as it ends. */
+  | { type: 'export'; data: ExportJob };
