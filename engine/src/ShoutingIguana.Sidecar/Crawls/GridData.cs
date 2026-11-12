@@ -197,6 +197,16 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         return new LinkPageDto([.. page.Rows.Select(LinkRowDto.From)], page.Offset, page.Total, page.Next);
     }
 
+    /// <summary>
+    /// The site's icon as the crawl kept it, or null when it has none. The engine gives out nothing but an image it told
+    /// by its bytes as it read the file, with the media type those bytes are.
+    /// </summary>
+    public Task<CrawlFavicon?> FaviconAsync(string id, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        return ReadAsync(token => FaviconReader.Read(path, token), cancellationToken);
+    }
+
     /// <summary>The stored HTML, written as it's unpacked (<see cref="HtmlSourceResult"/>), or why there's none.</summary>
     public async Task<IResult> SourceAsync(string id, UrlRequest request, CancellationToken cancellationToken)
     {

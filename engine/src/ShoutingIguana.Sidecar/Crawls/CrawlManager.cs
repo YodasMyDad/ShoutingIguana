@@ -863,6 +863,7 @@ internal sealed class CrawlManager(
             // A crawl running here changes its file as it goes; otherwise the file says whether its analysis still stands.
             OutOfDate = analyzedAt is not null && (crawling || summary!.OutOfDate(AnalysisSettings).Count > 0),
             SizeBytes = cached.Stamp?.SizeBytes ?? 0,
+            HasFavicon = summary?.HasFavicon ?? false,
 
             // A crawl starting here may not have created its file yet.
             Missing = live is null && !cached.Exists

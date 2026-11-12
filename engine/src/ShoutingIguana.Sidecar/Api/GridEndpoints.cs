@@ -48,6 +48,13 @@ internal static class GridEndpoints
             await data.SourceAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlRequest).ConfigureAwait(false), cancellationToken)
                 .ConfigureAwait(false));
 
+        // The site's icon: an image and nothing else. Its media type is the one the engine read from its bytes, and every
+        // answer already forbids a browser to guess another, or to run or load anything from it (RequestGuard).
+        api.MapGet("/api/crawls/{id}/favicon", async (string id, GridData data, CancellationToken cancellationToken) =>
+            await data.FaviconAsync(id, cancellationToken).ConfigureAwait(false) is { } favicon
+                ? Results.Bytes(favicon.Bytes, favicon.ContentType)
+                : Results.NoContent());
+
         api.MapGet("/api/link-columns", () => TypedResults.Json(GridData.LinkColumns, SidecarJsonContext.Default.IReadOnlyListLinkColumnDto));
 
         api.MapPost("/api/crawls/{id}/links", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
