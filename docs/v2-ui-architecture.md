@@ -1085,11 +1085,12 @@ What it settled:
   sidecar, on the 100k crawl analysed by this engine; `e2e/urls-measure.spec.ts`, from the input to the frame after).
   At the default density (32 px rows) every preset shows 15 rows; Overview 7 columns whole of its 11, Indexability 6
   of 10, Content 5 of 8, Performance 8 of 8, Links 8 of 11 (Screaming Frog's figure: about 20 rows by 7). A preset's
-  columns and rows are on screen 21 to 29 ms after its press; the sidecar's page 0 of each takes 3 to 30 ms, and of
+  columns and rows are on screen 19 to 29 ms after its press; the sidecar's page 0 of each takes 2 to 30 ms, and of
   ten filtered views 2 to 52 ms (a title search's first read the slowest), each view open from its address, the app
-  started, in 78 to 101 ms. A header's sort arrow shows in 21 to 31 ms with rows at most 8 ms later; a facet's value's
-  chip in 18 ms, rows 25 ms later; a column ticked in the chooser in 37 ms. Ctrl+End draws the last of 112,577 rows in
-  29 ms, and the heap is 97 MB before and after twenty more jumps between the ends.
+  started, in 76 to 115 ms. A header's sort arrow shows in 20 to 32 ms with rows at most 8 ms later; a facet's value's
+  chip in 18 to 29 ms, rows at most 25 ms later; a column ticked in the chooser in 25 to 37 ms. Ctrl+End draws the
+  last of 112,577 rows in 29 to 30 ms, and the heap is the same before and after twenty more jumps between the ends
+  (97 MB, then 116 MB, in two runs). Two runs, before and after the merge of ui/step-3 at be294da.
 
 ## Sitemaps and robots.txt (their slice)
 
