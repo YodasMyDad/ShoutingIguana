@@ -8,6 +8,7 @@ import type {
   FacetsQuery,
   GridPage,
   GridQuery,
+  UrlGridQuery,
   IssueGroupPage,
   IssueRow,
   LinkColumn,
@@ -176,13 +177,16 @@ export const api = {
 
   // Analysis settings (E6): the limits every analysis here judges by.
   analysisSettings: (signal?: Signal) => get<AnalysisSettings>('/api/analysis-settings', signal),
-  /** Saves limits and answers with all of them. `invalid-settings` (422) keys its `errors` by limit, and saves nothing. */
+  /**
+   * Saves limits and answers with all of them. `invalid-settings` (422) saves nothing; its `errors` are keyed as
+   * `AnalysisSettingsErrors` says: by a limit's name, or `settings` for the limits as a whole.
+   */
   saveAnalysisSettings: (limits: AnalysisSettingsChange) =>
     call<AnalysisSettings>({ method: 'PUT', path: '/api/analysis-settings', body: limits }),
-  /** What a save of the same limits would refuse, by limit; always 200 for a body of limits. Nothing is saved. */
+  /** What a save of the same limits would refuse (`AnalysisSettingsErrors`); always 200 for a body of limits. Nothing is saved. */
   validateAnalysisSettings: (limits: AnalysisSettingsChange, signal?: Signal) =>
     post<ValidationResult>('/api/analysis-settings/validate', limits, signal),
-  /** Puts the named limits back to the engine's values; all of them when none is named. */
+  /** Puts the named limits back to the engine's values; all of them when none is named. A name that's no limit's is `invalid-settings` on `limits[<index>]`. */
   resetAnalysisSettings: (limits?: string[]) =>
     post<AnalysisSettings>('/api/analysis-settings/reset', limits ? { limits } : undefined),
 
@@ -196,7 +200,8 @@ export const api = {
 
   // Grids (E3a). One fixed URL per grid, so one preflight per session.
   urlColumns: (signal?: Signal) => get<UrlColumn[]>('/api/url-columns', signal),
-  urls: (id: string, query: GridQuery, signal?: Signal) => post<GridPage<UrlRow>>(`${crawl(id)}/urls`, query, signal),
+  urls: (id: string, query: UrlGridQuery, signal?: Signal) =>
+    post<GridPage<UrlRow>>(`${crawl(id)}/urls`, query, signal),
   urlFacets: (id: string, query: FacetsQuery, signal?: Signal) =>
     post<FacetsPage>(`${crawl(id)}/urls/facets`, query, signal),
   /** A URL of the crawl by its text: `url-not-found` when the crawl has none, `invalid-query` when it isn't a URL. */
@@ -217,7 +222,7 @@ export const api = {
     post<HtmlSource>(`${crawl(id)}/urls/source`, { urlId }, signal),
   issueGroups: (id: string, checkId: string, page: { offset: number; limit: number }, signal?: Signal) =>
     post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
-  issueRows: (id: string, checkId: string, query: GridQuery, signal?: Signal) =>
+  issueRows: (id: string, checkId: string, query: UrlGridQuery, signal?: Signal) =>
     post<GridPage<IssueRow>>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/rows`, query, signal),
 
   // Links, sitemaps and robots.txt (E3b).
@@ -235,7 +240,7 @@ export const api = {
     post<LinkEndsPage>(`${crawl(id)}/links/ends`, query, signal),
   sitemaps: (id: string, signal?: Signal) => get<SitemapList>(`${crawl(id)}/sitemaps`, signal),
   /** The URL grid for one sitemap (an index: every sitemap under it). `sitemap-not-found` for an id the crawl lacks. */
-  sitemapUrls: (id: string, sitemapId: number, query: GridQuery, signal?: Signal) =>
+  sitemapUrls: (id: string, sitemapId: number, query: UrlGridQuery, signal?: Signal) =>
     post<GridPage<UrlRow>>(`${crawl(id)}/sitemaps/urls`, { sitemapId, ...query }, signal),
   /** E6: `search` finds origins by name and `blocked` filters them; the page then has `matching` and `counts`. */
   robotsOrigins: (id: string, query: RobotsOriginsQuery, signal?: Signal) =>

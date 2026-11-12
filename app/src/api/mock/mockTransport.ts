@@ -13,10 +13,13 @@ import type {
   IssueRow,
   LinkFacetsQuery,
   SummaryState,
+  LinkEnds,
+  UrlGridQuery,
   UrlLookup,
 } from '../grids';
 import { LINK_KINDS, type LinkKind, type LinkPage, type LinksQuery } from '../inspector';
 import type { Transport, TransportRequest } from '../transport';
+import { SYNTHETIC_FAVICON, e6Routes, linkEndIds } from './e6';
 import { sitemapsRobotsRoutes } from './sitemapsRobots';
 import {
   isCrawling,
@@ -340,6 +343,12 @@ export function createMockTransport(): Transport {
       for (const folder of ['garden', 'synthetic'] as const) {
         const crawl = await optionalFixture<Record<string, unknown>>(`api/${folder}/crawl.json`);
         if (crawl && typeof crawl.id === 'string') folders.set(crawl.id, folder);
+      }
+
+      // A crawl of the synthetic site keeps its icon (E6): the one that site serves at /favicon.ico.
+      for (const [id, folder] of folders) {
+        const item = items.get(id);
+        if (item) items.set(id, { ...item, hasFavicon: folder === 'synthetic' });
       }
     })());
 
@@ -762,11 +771,13 @@ export function createMockTransport(): Transport {
       async ([, id = ''], request) => {
         const item = await itemOrNull(id);
         if (!item) return problem(crawlNotFound(id));
-        const body = (request.body ?? {}) as GridQuery;
+        const { linkEnds, ...body } = (request.body ?? {}) as UrlGridQuery;
         if (body.group !== undefined) {
           return problem(badRequest('Only a check’s rows take a group: filter by the check, with its group, instead.'));
         }
-        const answer = answerGridQuery(await crawlRows(id), body, summaryOf(item));
+        const rows = await narrowed(id, item, await crawlRows(id), linkEnds);
+        if (rows instanceof Response) return rows;
+        const answer = answerGridQuery(rows, body, summaryOf(item));
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
@@ -776,8 +787,10 @@ export function createMockTransport(): Transport {
       async ([, id = ''], request) => {
         const item = await itemOrNull(id);
         if (!item) return problem(crawlNotFound(id));
-        const query: FacetsQuery = (request.body as FacetsQuery | undefined) ?? {};
-        const answer = answerFacets(await crawlRows(id), query, summaryOf(item));
+        const { linkEnds, ...query }: FacetsQuery = (request.body as FacetsQuery | undefined) ?? {};
+        const rows = await narrowed(id, item, await crawlRows(id), linkEnds);
+        if (rows instanceof Response) return rows;
+        const answer = answerFacets(rows, query, summaryOf(item));
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
@@ -946,7 +959,8 @@ export function createMockTransport(): Transport {
           if (Object.keys(paging).length > 0) return problem(invalidQuery(paging));
           return json(issueGroups(checkId, grouping, skipped ? null : issueRows, offset, limit));
         }
-        const query = withPagingDefaults(request.body ?? {});
+        const { linkEnds, ...asked } = (request.body ?? {}) as UrlGridQuery;
+        const query = withPagingDefaults(asked);
         if (query.columns === undefined || query.columns.length === 0) query.columns = ['url', 'detail', 'relatedUrl'];
         const errors = queryErrors(query, true);
         if (grouping === 'none' && query.group !== undefined) {
@@ -975,7 +989,9 @@ export function createMockTransport(): Transport {
                 row.relatedUrlId === query.group?.relatedUrlId,
             )
           : issueRows;
-        const answer = answerGridQuery(inGroup, query, summaryOf(item), { issueRows: true });
+        const ends = await narrowed(id, item, inGroup, linkEnds);
+        if (ends instanceof Response) return ends;
+        const answer = answerGridQuery(ends, query, summaryOf(item), { issueRows: true });
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
@@ -989,8 +1005,41 @@ export function createMockTransport(): Transport {
       rows: crawlRows,
       summary: summaryOf,
       live: (id) => live(id) !== undefined,
+      narrow: narrowed,
+    }),
+    // What E6 added: search, a links view's ends, the site's icon and the analysis's limits.
+    ...e6Routes({
+      json,
+      problem,
+      item: itemOrNull,
+      notFound: crawlNotFound,
+      folder: folderOf,
+      rows: crawlRows,
+      summary: summaryOf,
+      live: (id) => live(id) !== undefined,
+      narrow: narrowed,
+      links: crawlLinks,
+      icon: (id) => (folderOf(id) === 'synthetic' ? SYNTHETIC_FAVICON : null),
     }),
   ];
+
+  /**
+   * A URL grid's rows narrowed to the ends of a links view (E6's `linkEnds`), or the problem the sidecar gives for one
+   * it can't run; the rows as they are without one.
+   */
+  async function narrowed<Row extends { id: number }>(
+    id: string,
+    item: CrawlListItem,
+    rows: Row[],
+    linkEnds: LinkEnds | undefined,
+  ): Promise<Row[] | Response> {
+    if (linkEnds === undefined) return rows;
+    const links = await crawlLinks(id);
+    if (!links) return problem(sampleLacks('this crawl’s links'));
+    const ends = linkEndIds(links, linkEnds, summaryOf(item));
+    if (ends === null) return rows;
+    return ends.ok ? rows.filter((row) => ends.page.has(row.id)) : problem(ends.problem);
+  }
 
   async function itemOrNull(id: string) {
     await load();

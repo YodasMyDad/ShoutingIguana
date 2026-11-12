@@ -370,10 +370,20 @@ export interface AnalysisSettings {
 
 /**
  * Limits to save or to check, by name. Every limit is optional: one left out, or null, takes the engine's value. A
- * value out of its range, or not a whole number, is `invalid-settings` (422) with `errors` keyed by the limit; a name
- * that is no limit's is a `bad-request`.
+ * value out of its range, or not a whole number, is `invalid-settings` (422) with `errors` (`AnalysisSettingsErrors`);
+ * a name that is no limit's is a `bad-request`.
  */
 export type AnalysisSettingsChange = Record<string, number | null>;
+
+/**
+ * What `invalid-settings` (and `validate`) key their messages by: a limit's name (`titleMaxLength`) for a value of its
+ * own; `settings` (`ANALYSIS_SETTINGS_WHOLE`) for a rule only the limits together break; and, for a reset,
+ * `limits[<index>]` for a name that's no limit's. Show a key with no field of its own above the form.
+ */
+export type AnalysisSettingsErrors = Record<string, string[]>;
+
+/** The key of a refusal about the analysis's limits as a whole, not one of them. */
+export const ANALYSIS_SETTINGS_WHOLE = 'settings';
 
 export interface Analysis {
   analyzedAt: string;

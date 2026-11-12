@@ -86,10 +86,14 @@ export interface GridQuery {
   limit: number;
   /** A check's rows only (`/issues/{checkId}/rows`): one of its groups. `/urls` refuses it with `bad-request`. */
   group?: CheckGroupRef;
+}
+
+/** A query of one of the URL grids (`/urls`, a check's `/rows`, `/sitemaps/urls`): the grid query, and E6's `linkEnds`. */
+export interface UrlGridQuery extends GridQuery {
   /**
-   * E6, the URL grids only (`/urls`, a check's `/rows`, `/sitemaps/urls`): only the URLs at one end of the links a
-   * view of the links grid matches. `matching` under it alone is `total` of `/links/ends` for the same links. Its
-   * errors are keyed under it (`linkEnds.end`, `linkEnds.filters[0].column`). `/links` refuses it with `bad-request`.
+   * E6: only the URLs at one end of the links a view of the links grid matches. `matching` under it alone is `total`
+   * of `/links/ends` for the same links. Its errors are keyed under it (`linkEnds.end`, `linkEnds.filters[0].column`).
+   * The links grid doesn't take it (`bad-request`), which is why it isn't on `GridQuery`.
    */
   linkEnds?: LinkEnds;
 }

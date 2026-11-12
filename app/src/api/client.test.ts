@@ -234,6 +234,11 @@ describe('the API client', () => {
       linkEnds: { end: 'from', search: 'sale' },
     });
     await api.robotsOrigins('0123456789abcdef', { search: 'cdn', blocked: true, offset: 0, limit: 100 });
+    // linkEnds is the URL grids' alone: the links grid refuses it (400), so its query type doesn't have it.
+    const forUrls: Parameters<typeof api.urls>[1] = { filters: [], sort: [], limit: 1, linkEnds: { end: 'to' } };
+    // @ts-expect-error linkEnds isn't a field of the links grid's query
+    const forLinks: Parameters<typeof api.links>[1] = { filters: [], sort: [], limit: 1, linkEnds: { end: 'to' } };
+    expect([forUrls.linkEnds, forLinks.limit]).toEqual([{ end: 'to' }, 1]);
     expect(sent()).toEqual([
       {
         method: 'POST',
