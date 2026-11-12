@@ -640,7 +640,8 @@ public static class UrlInspectorReader
             headings,
             facts.WordCount,
             facts.Language,
-            facts.DeclaredCharset,
+            // A byte-order mark declares the encoding too: a page that passes the charset check on its mark alone says which.
+            facts.DeclaredCharset ?? facts.ByteOrderMark,
             facts.Robots.Directives,
             facts.MetaRefresh is { } refresh ? new MetaRefreshInfo(refresh.DelaySeconds, refresh.Url) : null,
             facts.Images.Count,

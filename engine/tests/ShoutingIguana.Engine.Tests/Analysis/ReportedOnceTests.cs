@@ -39,16 +39,17 @@ public sealed class ReportedOnceTests
     /// <summary>
     /// Every one of them, by its own rule, on a site where the fault is there several times: robots.txt failing on two
     /// main origins and another, missing on two more; five sitemaps that can't be read; no sitemap at all; every page
-    /// without the security headers, and over plain HTTP; three other versions of the site answering; most pages noindex.
+    /// without the security headers, and over plain HTTP; three other versions of the site answering; the home page and
+    /// most other pages noindex.
     /// </summary>
     [Fact]
     public void EachIsOneIssueHoweverManyTimesTheFaultIsThere()
     {
         List<IssueHit> hits = [];
 
-        // An HTTPS site of four pages, three of them noindex, none sending a security header.
+        // An HTTPS site of four pages, every one noindex, the home page among them, and none sending a security header.
         var site = new RuleHarness();
-        var home = site.Page($"{site.Site}/", RuleHarness.Html());
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
         AnalyzedPage[] pages =
         [
             home,
