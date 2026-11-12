@@ -209,9 +209,9 @@ public sealed class ScoreCalculatorTests
         var reference = File.ReadAllText(Path.Combine(RepoFolder(), "app", "design", "simple", "build", "lib", "score.mjs"));
         Assert.Equal(Ids(reference, "SITE_WIDE"), IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
 
-        // A site-wide check is the whole site whatever its subject, so the reference doesn't list the new one as a URL check.
+        // A site hidden from search is reported on its home page, which is a page: no URL check, here or in the reference.
         Assert.Equal(Ids(reference, "URL_SUBJECT"),
-            IssueCatalog.All.Where(check => check.Subject == IssueSubject.Url && check != IssueCatalog.SITE_HIDDEN_FROM_SEARCH).Select(check => check.Id).Order(StringComparer.Ordinal));
+            IssueCatalog.All.Where(check => check.Subject == IssueSubject.Url).Select(check => check.Id).Order(StringComparer.Ordinal));
 
         static IEnumerable<string> Ids(string source, string name)
         {

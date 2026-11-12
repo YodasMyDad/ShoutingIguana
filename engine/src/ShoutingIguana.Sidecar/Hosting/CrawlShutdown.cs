@@ -1,13 +1,15 @@
 using ShoutingIguana.Sidecar.Crawls;
+using ShoutingIguana.Sidecar.Exports;
 
 namespace ShoutingIguana.Sidecar.Hosting;
 
 /// <summary>
-/// On shutdown (the shutdown call, Ctrl+C, SIGTERM or the shell ending), every crawl is stopped and stays resumable, and
-/// every analysis is cancelled. That starts as soon as shutdown does, before the web server waits for the requests in
-/// flight, however slow one is; then the host waits for both, as long as its shutdown timeout allows.
+/// On shutdown (the shutdown call, Ctrl+C, SIGTERM or the shell ending), every crawl is stopped and stays resumable,
+/// every analysis is cancelled, and every export is cancelled, leaving no file. That starts as soon as shutdown does,
+/// before the web server waits for the requests in flight, however slow one is; then the host waits for them all, as
+/// long as its shutdown timeout allows.
 /// </summary>
-internal sealed class CrawlShutdown(CrawlManager crawls) : IHostedLifecycleService
+internal sealed class CrawlShutdown(CrawlManager crawls, ExportManager exports) : IHostedLifecycleService
 {
     private Task _stopped = Task.CompletedTask;
 
@@ -20,7 +22,7 @@ internal sealed class CrawlShutdown(CrawlManager crawls) : IHostedLifecycleServi
     /// <summary>Runs before any hosted service stops, the web server included. Nothing new can start from here on.</summary>
     public Task StoppingAsync(CancellationToken cancellationToken)
     {
-        _stopped = crawls.StopAllAsync(cancellationToken);
+        _stopped = Task.WhenAll(crawls.StopAllAsync(cancellationToken), exports.StopAllAsync(cancellationToken));
         return Task.CompletedTask;
     }
 

@@ -134,7 +134,7 @@ export const EmptyStates: Story = {
       <Card className="max-w-(--content-max)">
         <CardBody>
           <SkippedState
-            title="Orphan page: skipped"
+            title="Orphan page in a sitemap: skipped"
             reason="No sitemap could be read, so orphan pages weren’t checked. Add a sitemap to the crawl’s settings, then analyse again."
             actions={<Button size="sm">Crawl settings</Button>}
           />

@@ -71,6 +71,18 @@ internal static class Problems
 
     public static ProblemException OriginNotFound() => new(new ProblemDto("origin-not-found", "This crawl has no robots.txt for that origin.", 404));
 
+    /// <summary>An export that can't be made as asked, with what's wrong by the request's field.</summary>
+    public static ProblemException InvalidExport(IReadOnlyDictionary<string, IReadOnlyList<string>> errors) =>
+        new(new ProblemDto("invalid-export", "This export can’t be made as asked.", 422) { Errors = errors, Detail = errors.Values.SelectMany(messages => messages).FirstOrDefault() });
+
+    public static ProblemException InvalidExport(string field, string message) =>
+        InvalidExport(new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal) { [field] = [message] });
+
+    public static ProblemException ExportNotFound() => new(new ProblemDto("export-not-found", "There’s no export with this id.", 404));
+
+    /// <summary>An export can't start now: too many are running, one is writing the same file, or the sidecar is shutting down.</summary>
+    public static ProblemException ExportBusy(string title) => new(new ProblemDto("export-busy", title, 409));
+
     /// <summary>A request the UI shouldn't send: a missing or malformed body, a parameter out of range.</summary>
     public static ProblemException BadRequest(string title, string? detail = null) =>
         new(new ProblemDto("bad-request", title, 400) { Detail = detail });

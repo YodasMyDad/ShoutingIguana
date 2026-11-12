@@ -19,6 +19,8 @@ run() {
 }
 
 run ci npm ci
+# A failed install leaves node_modules half-made: every later step would fail for that reason alone.
+if ! grep -q "^ci exit=0 " "$logs/summary.txt"; then echo "ABORT: npm ci failed; nothing after it was run" >> "$logs/summary.txt"; exit 1; fi
 run typecheck npm run typecheck
 run lint npm run lint
 run format npm run format:check

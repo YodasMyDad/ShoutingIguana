@@ -55,6 +55,26 @@ public sealed class HttpFetcherTests : IAsyncLifetime
         Assert.Equal(PAGE, response.Body);
     }
 
+    /// <summary>
+    /// A page whose bytes begin with a byte-order mark has declared its encoding. The decoded body no longer has the
+    /// mark, so the response says which it was; a page without one says nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("utf-8", "utf-8")]
+    [InlineData("utf-16", "utf-16le")]
+    [InlineData("utf-16BE", "utf-16be")]
+    public async Task AByteOrderMarkIsKeptWithTheResponse(string encoding, string expected)
+    {
+        using var fetcher = Fetcher();
+
+        var marked = await fetcher.FetchAsync(_server.Url($"/marked?encoding={encoding}"), FetchBody.Html, CancellationToken.None);
+        var plain = await fetcher.FetchAsync(_server.Url("/page?type=text/html"), FetchBody.Html, CancellationToken.None);
+
+        Assert.Equal((FetchOutcome.Success, PAGE, expected), (marked.Outcome, marked.Body, marked.ByteOrderMark));
+        Assert.Equal(FetchOutcome.Success, plain.Outcome);
+        Assert.Null(plain.ByteOrderMark);
+    }
+
     [Theory]
     [InlineData("text/html; charset=")]
     [InlineData("text/html;")]
@@ -261,6 +281,12 @@ public sealed class HttpFetcherTests : IAsyncLifetime
             case "/page":
                 response.Headers.ContentType = request.Query["type"].ToString();
                 await response.Body.WriteAsync(WINDOWS_1252.GetBytes(PAGE));
+                break;
+            case "/marked":
+                // The page in the encoding asked for, after that encoding's byte-order mark, with no charset in the header.
+                var marking = Encoding.GetEncoding(request.Query["encoding"].ToString());
+                response.Headers.ContentType = "text/html";
+                await response.Body.WriteAsync((byte[])[.. marking.GetPreamble(), .. marking.GetBytes(PAGE)]);
                 break;
             case "/compressed":
                 var compressed = Compressed(request.Query["encoding"].ToString());

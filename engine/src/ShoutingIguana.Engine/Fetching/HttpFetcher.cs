@@ -92,6 +92,7 @@ internal sealed class HttpFetcher : IDisposable
             };
 
             string? text = null;
+            string? byteOrderMark = null;
             long? bodyBytes = null;
             long? transferBytes = null;
             var truncated = false;
@@ -99,6 +100,7 @@ internal sealed class HttpFetcher : IDisposable
             {
                 using var buffer = await ReadBodyAsync(response, readLimit, timeout.Token).ConfigureAwait(false);
                 text = CharsetDecoder.Decode(buffer.Span, ContentTypeHeader.CharsetOf(rawContentType));
+                byteOrderMark = CharsetDecoder.ByteOrderMarkOf(buffer.Span);
                 bodyBytes = buffer.Length;
                 transferBytes = buffer.TransferBytes;
                 truncated = buffer.Truncated;
@@ -124,6 +126,7 @@ internal sealed class HttpFetcher : IDisposable
                 TransferBytes = transferBytes,
                 BodyBytes = bodyBytes,
                 Body = isSuccess && blockReason is null ? text : null,
+                ByteOrderMark = isSuccess && blockReason is null ? byteOrderMark : null,
                 BodyTruncated = truncated,
                 Location = ResolveLocation(uri, response),
                 RetryAfter = GetRetryAfter(response),

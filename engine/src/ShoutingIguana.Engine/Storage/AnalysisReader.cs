@@ -33,6 +33,8 @@ internal sealed class AnalysisReader : IDisposable
     private readonly SqliteParameter _linksFromId;
     private readonly SqliteCommand _details;
     private readonly SqliteParameter _detailsUrlId;
+    private readonly SqliteCommand _url;
+    private readonly SqliteParameter _urlId;
 
     private AnalysisReader(SqliteConnection connection)
     {
@@ -43,6 +45,9 @@ internal sealed class AnalysisReader : IDisposable
         _details = connection.CreateCommand();
         _details.CommandText = "SELECT data FROM response_details WHERE url_id = $urlId";
         _detailsUrlId = _details.Parameters.Add("$urlId", SqliteType.Integer);
+        _url = connection.CreateCommand();
+        _url.CommandText = "SELECT url FROM urls WHERE id = $id";
+        _urlId = _url.Parameters.Add("$id", SqliteType.Integer);
     }
 
     public static AnalysisReader Open(string databasePath) => new(CrawlDatabase.OpenReader(databasePath));
@@ -209,8 +214,15 @@ internal sealed class AnalysisReader : IDisposable
             ? null
             : new SimHashLanes(unchecked((ulong)reader.GetInt64(first)), unchecked((ulong)reader.GetInt64(first + 1)), unchecked((ulong)reader.GetInt64(first + 2)));
 
-    /// <summary>The stored URL with this id, or null when there's none (0 means no URL).</summary>
-    public string? ReadUrl(int urlId) => CrawlDatabase.Scalar(_connection, $"SELECT url FROM urls WHERE id = {urlId}") as string;
+    /// <summary>
+    /// The stored URL with this id, or null when there's none (0 means no URL). One statement, compiled once: a rule may
+    /// ask for a URL for every page it flags.
+    /// </summary>
+    public string? ReadUrl(int urlId)
+    {
+        _urlId.Value = urlId;
+        return _url.ExecuteScalar() as string;
+    }
 
     /// <summary>The id of a stored URL, given normalised, or 0 when the crawl never found it.</summary>
     public int ReadUrlId(string url)
@@ -323,6 +335,7 @@ internal sealed class AnalysisReader : IDisposable
     {
         _links.Dispose();
         _details.Dispose();
+        _url.Dispose();
         _connection.Dispose();
     }
 

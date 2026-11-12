@@ -307,7 +307,7 @@ public sealed class RuleConditionTests
             ["unchecked"] = Page("/g", $"{site.Site}/never-fetched"),
             ["fine"] = Page("/h", $"{site.Site}/fine")
         };
-        var rules = new CanonicalRules(site.Table());
+        var rules = new CanonicalRules(site.Table(), site.UrlOf);
         List<IssueDefinition> Targets(string name) => Issues(rules, pages[name]).Where(issue => issue != IssueCatalog.CANONICALISED_PAGE).ToList();
 
         Assert.Equal("The canonical URL is noindex", rules.Check(pages["noindex"]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_NON_INDEXABLE).Detail);

@@ -37,7 +37,7 @@ const CHECKS: Checks = {
     check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx'),
     check('broken-internal-links', 'links', 'error', 'Links to broken internal URLs'),
     check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text'),
-    check('orphan-page', 'links', 'notice', 'Orphan page'),
+    check('orphan-page', 'links', 'notice', 'Orphan page in a sitemap'),
     check('title-too-long', 'titles', 'notice', 'Title too long'),
     check('title-duplicate', 'titles', 'warning', 'Duplicate title'),
     check('future-check', 'aNewCategory', 'warning', 'A check from a newer engine'),

@@ -21,6 +21,10 @@ internal sealed class EventHub(SidecarOptions options)
     private readonly Dictionary<string, SidecarEvent> _latestProgress = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SidecarEvent> _latestAnalysis = new(StringComparer.Ordinal);
 
+    // The exports running, each with its latest event, in the order they started.
+    private readonly Dictionary<string, SidecarEvent> _latestExport = new(StringComparer.Ordinal);
+    private readonly List<string> _exports = [];
+
     // The crawls whose last crawl event said analysing, in the order they started, from then until their crawl ends.
     private readonly List<string> _analyzing = [];
 
@@ -40,7 +44,7 @@ internal sealed class EventHub(SidecarOptions options)
         var client = new EventClient(options.MaxQueuedEvents);
         lock (_sync)
         {
-            var hello = new HelloEventDto([.. _latestProgress.Keys], [.. _analyzing]);
+            var hello = new HelloEventDto([.. _latestProgress.Keys], [.. _analyzing], [.. _exports]);
             client.Enqueue(new SidecarEvent("hello", JsonSerializer.Serialize(hello, SidecarJsonContext.Default.HelloEventDto)));
             foreach (var (crawlId, progress) in _latestProgress)
             {
@@ -50,6 +54,11 @@ internal sealed class EventHub(SidecarOptions options)
             foreach (var analysis in _latestAnalysis.Values)
             {
                 client.Enqueue(analysis);
+            }
+
+            foreach (var export in _exports)
+            {
+                client.Enqueue(_latestExport[export]);
             }
 
             _clients.Add(client);
@@ -111,6 +120,34 @@ internal sealed class EventHub(SidecarOptions options)
             else if (crawl.Status == CrawlListStatus.Analyzing && !_analyzing.Contains(crawl.CrawlId))
             {
                 _analyzing.Add(crawl.CrawlId);
+            }
+
+            Broadcast(sidecarEvent);
+        }
+    }
+
+    /// <summary>
+    /// An export as it stands: started, further on, or ended. Never merged. The latest of each running export is kept for
+    /// streams that connect later; one that has ended is forgotten here, and asked for with its id.
+    /// </summary>
+    public void PublishExport(ExportDto export, bool ended)
+    {
+        var sidecarEvent = new SidecarEvent("export", JsonSerializer.Serialize(export, SidecarJsonContext.Default.ExportDto), export.CrawlId);
+        lock (_sync)
+        {
+            if (ended)
+            {
+                _latestExport.Remove(export.ExportId);
+                _exports.Remove(export.ExportId);
+            }
+            else
+            {
+                if (!_latestExport.ContainsKey(export.ExportId))
+                {
+                    _exports.Add(export.ExportId);
+                }
+
+                _latestExport[export.ExportId] = sidecarEvent;
             }
 
             Broadcast(sidecarEvent);

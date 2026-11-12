@@ -35,6 +35,22 @@ public sealed class HtmlPageParserTests
         Assert.Equal([new HeadingFact(1, "Red shoes"), new HeadingFact(2, "Sizes")], facts.Headings);
     }
 
+    /// <summary>
+    /// The parser reads text, which has no byte-order mark left, so the fetch hands over the one it saw and the facts keep
+    /// it beside the declared charset: the page is parsed once, and the analysis works from the facts.
+    /// </summary>
+    [Fact]
+    public void AByteOrderMarkTheFetchSawIsKeptWithTheFacts()
+    {
+        const string html = "<!DOCTYPE html><html lang=\"en\"><head><title>T</title></head><body></body></html>";
+
+        var marked = HtmlPageParser.Parse(html, PAGE, [], TOKEN, byteOrderMark: "utf-8").Facts;
+        var plain = Parse(html).Facts;
+
+        Assert.Equal(("utf-8", (string?)null), (marked.ByteOrderMark, marked.DeclaredCharset));
+        Assert.Equal(((string?)null, (string?)null), (plain.ByteOrderMark, plain.DeclaredCharset));
+    }
+
     [Fact]
     public void CanonicalAfterAStrayHeadElementLandsInTheBody()
     {

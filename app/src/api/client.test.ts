@@ -205,4 +205,77 @@ describe('the API client', () => {
       'http://127.0.0.1:5000/api/crawls/0123456789abcdef/issues/title-too-long?limit=200&offset=400',
     );
   });
+
+  it('starts an export with the grid’s own query and reads the job the sidecar answers with', async () => {
+    const job = {
+      exportId: '3f9a61c2d0b4e87a',
+      crawlId: '0123456789abcdef',
+      kind: 'urls',
+      format: 'xlsx',
+      path: 'C:\\exports\\urls.xlsx',
+      status: 'running',
+      rowsWritten: 0,
+      rowsExpected: null,
+      startedAt: '2026-11-01T17:42:00.118Z',
+      finishedAt: null,
+      result: null,
+      error: null,
+    };
+    // 201 with the job, as starting a crawl answers: a 202's body is never read.
+    fetchMock.mockResolvedValue(Response.json(job, { status: 201 }));
+    const started = await api.startExport('0123456789abcdef', {
+      kind: 'urls',
+      format: 'xlsx',
+      path: 'C:\\exports\\urls.xlsx',
+      columns: ['url', 'statusCode'],
+      filters: [{ column: 'type', op: 'in', values: ['page'] }],
+      sort: [{ column: 'url', desc: false }],
+    });
+    expect(started).toEqual(job);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('http://127.0.0.1:5000/api/crawls/0123456789abcdef/export');
+    expect(init?.method).toBe('POST');
+    const raw = init?.body;
+    expect(typeof raw === 'string' ? (JSON.parse(raw) as unknown) : null).toEqual({
+      kind: 'urls',
+      format: 'xlsx',
+      path: 'C:\\exports\\urls.xlsx',
+      columns: ['url', 'statusCode'],
+      filters: [{ column: 'type', op: 'in', values: ['page'] }],
+      sort: [{ column: 'url', desc: false }],
+    });
+  });
+
+  it('reads and cancels an export by its id', async () => {
+    fetchMock.mockImplementation((_, init) =>
+      Promise.resolve(
+        init?.method === 'POST' ? new Response(null, { status: 202 }) : Response.json({ status: 'done' }),
+      ),
+    );
+    await expect(api.exportJob('3f9a61c2d0b4e87a')).resolves.toEqual({ status: 'done' });
+    await expect(api.cancelExport('3f9a61c2d0b4e87a')).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls.map((call) => [call[1]?.method, call[0]])).toEqual([
+      ['GET', 'http://127.0.0.1:5000/api/exports/3f9a61c2d0b4e87a'],
+      ['POST', 'http://127.0.0.1:5000/api/exports/3f9a61c2d0b4e87a/cancel'],
+    ]);
+  });
+
+  it('reads the report as its document’s text, with only the options given', async () => {
+    const html = '<!doctype html>\n<html lang="en-GB"><title>Website check</title></html>';
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })),
+    );
+    await expect(api.report('0123456789abcdef')).resolves.toBe(html);
+    await api.report('0123456789abcdef', { cut: 'summary', examples: 2, lookExamples: 0 });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      'http://127.0.0.1:5000/api/crawls/0123456789abcdef/report',
+      'http://127.0.0.1:5000/api/crawls/0123456789abcdef/report?cut=summary&examples=2&lookExamples=0',
+    ]);
+
+    // A crawl never analysed has no report: the problem, not a document.
+    fetchMock.mockResolvedValue(
+      problem({ type: 'not-analyzed', title: 'This crawl hasn’t been analysed yet.', status: 404 }, 404),
+    );
+    await expect(api.report('0123456789abcdef')).rejects.toSatisfy((error) => isProblem(error, 'not-analyzed'));
+  });
 });

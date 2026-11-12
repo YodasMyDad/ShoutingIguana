@@ -424,6 +424,19 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         Assert.Equal(new AnalysisSettings().TitleMaxLength, limits.TitleMax);
     }
 
+    /// <summary>
+    /// The character set a page declares: its meta tag's, or with none the encoding its byte-order mark declares, so a page
+    /// that passes the charset check on its mark alone still says which it is. A page that declares neither has none.
+    /// </summary>
+    [Fact]
+    public void ThePagesCharacterSetIsItsMetaTagsOrItsByteOrderMarks()
+    {
+        Assert.Equal("utf-8", Inspect("/p/7").Content!.Charset);
+        Assert.Equal("utf-8", Inspect("/plants/charset-bom").Content!.Charset);
+        Assert.Equal("utf-16le", Inspect("/plants/charset-bom-utf16").Content!.Charset);
+        Assert.Null(Inspect("/plants/no-charset").Content!.Charset);
+    }
+
     private UrlDetail Inspect(string path) => Read(crawl.Path, Id(path));
 
     private static UrlDetail Read(string path, int id) => UrlInspectorReader.Read(path, id) ?? throw new InvalidOperationException($"No URL {id}");
