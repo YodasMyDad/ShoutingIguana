@@ -1145,3 +1145,41 @@ describe('a read of the links that takes a while', () => {
     release();
   });
 });
+
+describe('the links grid under a running crawl', () => {
+  it('keeps the cursor on its link when a new link sorts in above it', async () => {
+    const { state } = sidecar();
+    const { queryClient, user } = await open(`${LINKS}?cols=id,from.url,to.url&sort=-id`);
+    const grid = await screen.findByRole('grid', { name: 'Links' });
+    await counted('13 links');
+    act(() => grid.focus());
+    await user.keyboard('{ArrowDown}');
+    const cursorRow = () =>
+      document.getElementById(grid.getAttribute('aria-activedescendant') ?? '')?.closest('[role="row"]') ?? null;
+    const before = cursorRow()?.textContent;
+    expect(before).toBeTruthy();
+    // The crawl stores a link that sorts first: the rows move down one.
+    state.links = [...state.links, { ...state.links[0]!, id: 999 }];
+    await act(() => queryClient.invalidateQueries(liveGridPagesOf(TEST_CRAWL_ID)));
+    await counted('14 links');
+    await within(grid).findByText('999');
+    expect(cursorRow()?.textContent).toBe(before);
+  });
+});
+
+describe('the links grid’s row menu', () => {
+  it('acts on the end of the link it was opened in, and inspects either end', async () => {
+    const { state } = sidecar();
+    const { router, user } = await open(`${LINKS}?cols=from.url,to.url`);
+    const grid = await screen.findByRole('grid', { name: 'Links' });
+    await counted('13 links');
+    act(() => grid.focus());
+    // The cursor in the first column: the page the link is on.
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+    const menu = await screen.findByRole('menu', { name: /^Menu for the link on / });
+    expect(within(menu).getByRole('menuitem', { name: 'Copy the URL' })).toBeVisible();
+    await user.click(within(menu).getByRole('menuitem', { name: 'Inspect the target' }));
+    const target = [...state.links].sort((a, b) => a.id - b.id)[0]?.['to.id'];
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: target }));
+  });
+});

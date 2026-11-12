@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { announce } from '../feedback/announce';
 import { notifyError } from '../feedback/notify';
 import { commands } from '../keyboard/registry';
-import { GridCore } from './GridCore';
+import { GridCore, type GridMenuContext } from './GridCore';
 import type { RowWindowModel } from './rowWindow';
 import type { GridColumn } from './types';
 
@@ -842,5 +842,62 @@ describe('GridCore with columns that sort', () => {
         vi.useRealTimers();
       }
     });
+  });
+});
+
+describe('GridCore with a sort of several keys', () => {
+  const sortable: GridColumn<Row>[] = columns.map((column) => ({ ...column, sortable: true }));
+
+  it('adds a key with Shift+Enter on a header, and Shift+click', () => {
+    const onSort = vi.fn();
+    const { grid } = setup({ columns: sortable, onSort });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    fireEvent.keyDown(grid, { key: 'Enter', shiftKey: true });
+    expect(onSort).toHaveBeenLastCalledWith('url', true, true);
+    fireEvent.click(screen.getByRole('button', { name: 'Status' }), { shiftKey: true });
+    expect(onSort).toHaveBeenLastCalledWith('status', true, true);
+  });
+
+  it('marks the first key with aria-sort, and says the others’ places in words', () => {
+    setup({
+      columns: [
+        { ...sortable[0]!, sort: 'descending', sortOrder: 1 },
+        { ...sortable[1]!, sort: 'ascending', sortOrder: 2 },
+      ],
+      onSort: vi.fn(),
+    });
+    const [url, status] = screen.getAllByRole('columnheader');
+    expect(url).toHaveAttribute('aria-sort', 'descending');
+    expect(status).not.toHaveAttribute('aria-sort');
+    expect(status).toHaveTextContent('Status2, sorted second, ascending');
+  });
+});
+
+describe('GridCore’s row menu', () => {
+  it('is for the selection the row is in, else the row, and copies those rows', async () => {
+    const onContextMenu = vi.fn();
+    const { grid, writeText } = setup({ onContextMenu });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(grid, { key: 'F10', shiftKey: true });
+    const menu = onContextMenu.mock.lastCall?.[3] as GridMenuContext<Row>;
+    expect(onContextMenu.mock.lastCall?.slice(0, 2)).toEqual([1, 0]);
+    expect(menu.indices).toEqual([0, 1]);
+    expect((await menu.rows()).map((row) => row?.id)).toEqual([0, 1]);
+    await act(() => menu.copy());
+    expect(writeText).toHaveBeenLastCalledWith(
+      'URL\tStatus\r\nhttps://example.com/0\t404\r\nhttps://example.com/1\t200',
+    );
+    // A right-click outside the selection makes that row the selection, and the menu is its.
+    const cell = grid.querySelector('[data-row="5"][data-col="1"]')!;
+    fireEvent.contextMenu(cell);
+    expect((onContextMenu.mock.lastCall?.[3] as GridMenuContext<Row>).indices).toEqual([5]);
+  });
+
+  it('keeps the browser’s own menu away from a grid whose rows have one', () => {
+    setup({ onContextMenu: vi.fn() });
+    const grid = screen.getByRole('grid', { name: 'URLs' });
+    expect(fireEvent.contextMenu(grid)).toBe(false);
   });
 });
