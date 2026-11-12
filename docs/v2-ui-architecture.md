@@ -293,7 +293,9 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   it's open and, when it's closed, opened in place as a grid opens it (a push would leave two entries for the same
   view once it's closed, and a back between them that shows nothing); from any other view (Overview, the crawl's
   settings) the crawl's URLs with the inspector open, a place of its own that back leaves.
-- `/crawls/:crawl` opens the crawl's last view. The app reopens where it was left.
+- `/crawls/:crawl` opens the crawl's last view, in the current mode. The app reopens where it was left.
+- A route with a Simple screen renders it in Simple through the one table, `app/simpleScreens.ts`
+  ([The routes' table](#the-routes-table-adding-a-simple-screen)).
 - Each screen's route renders `RouteError` when it fails (Try again where it could work, and Go to Home); the shell
   keeps working around it. Each part of the shell (sidebar, top bar, the engine's banner, the inspector) has its own
   `RegionBoundary`, so one that fails says so in its place. The root's `AppError` is for the frame itself, and offers
@@ -538,8 +540,10 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home, Overview, Issues, Links, Sitemaps and robots.txt: the full URL grid, New crawl, the
-  crawl's settings, the rest of Settings. The inspector, Links, Sitemaps and robots.txt are built (below).
+- Every screen except Home, Overview, Issues, Links, Sitemaps, robots.txt, New crawl, the crawl's settings and
+  Settings: the full URL grid. The inspector, Links, Sitemaps and robots.txt are built (below), and so are the mode and
+  its frame, Settings and New crawl ([Modes, Settings and New crawl](#modes-settings-and-new-crawl-round-3)). Simple's
+  own screens are round 4's, each one row of `app/simpleScreens.ts`.
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
@@ -1294,3 +1298,155 @@ counts each list is for are whole in the window, one sitemap's grid and an origi
 rows, a sitemap's six filters are each whole in the window, and no screen scrolls sideways (`e2e/gridView.ts`
 measures a grid in the window, for this spec and `grid-zoom.spec.ts`).
 It runs on the tests' own crawl of the synthetic site, and on a real one with `SI_E2E_CRAWL`.
+
+## Modes, Settings and New crawl (round 3)
+
+Simple and Advanced ([Simple mode](v2-ui-simple.md)) are one app with two views. This round built the frame: the
+mode, its switch, the routes' table round 4 plugs Simple's screens into, the shell in Simple, the top bar's order of
+giving way, Settings, New crawl in both modes and the crawl's own settings.
+
+### The mode
+
+- **One preference**, `settings.mode` (`simple` | `advanced`), kept with the others (`settings.json` in the shell,
+  `localStorage` in a browser). Nothing stored, or an unknown value, reads as `simple`: a first start is Simple.
+- **Read** through `useMode()` (or `getMode()` outside React), in `mode/mode.ts`. **Changed** through
+  `switchMode(router, mode)` (`mode/switchMode.ts`), which the switch, Ctrl+Shift+A (`app.mode`), the palette's
+  "Switch to …", Settings > General > Mode, "Show them in Advanced" and "Back to Simple" all call. A change the user
+  made is announced once ("Advanced is on").
+- **Switching keeps the route.** The same route renders its other view, its search params kept (Simple ignores
+  Issues' `group`, `severity`, `inspect`), so switching back restores them. From an Advanced-only screen, switching to
+  Simple navigates (a push, so Back returns) to the nearest screen Simple has: the crawl's Summary
+  (`/crawls/:crawl/overview`), or Settings > General. `app/modeRoutes.ts` says which screens are Advanced only
+  (`advancedOnlyScreen`) and where a switch lands (`simpleLanding`).
+- **Arriving at an Advanced-only screen in Simple** (a link, Back or Forward, a reopened session) turns Advanced on,
+  with the toast "Advanced is on" and **Back to Simple** (`mode/useModeGuard.ts`). The guard looks at where each
+  navigation lands (`onResolved`) and at the place the app opens on, never at a change of mode, so switching to Simple
+  on such a screen (which then leaves it) isn't undone. A link in Simple to an Advanced-only screen says so in its
+  words ("See it in Advanced").
+- **`/crawls/:crawl`** opens the crawl's last view in the current mode: in Simple, a last view Simple doesn't have
+  opens the Summary.
+- **No inspector in Simple**: the shell leaves the inspector's slot out while a Simple screen is shown
+  (`useSimpleScreenShown`). A route still showing its Advanced screen in Simple works as it does in Advanced.
+- **The palette and the `?` sheet** list what's registered, and `useAppCommands` registers each mode's own: in Simple
+  its sections (Summary, What to fix, the Report once it exists) on Ctrl+1 to Ctrl+3, its words ("Check a website",
+  "Pause the check", "Work out the results again"), and no Advanced-only command (Go to URLs, Go to URL…, Density)
+  but "Switch to Advanced". A check is found by either of its titles, and shows the mode's own.
+- **Tests, stories and the e2e start in Advanced**, which every screen built before Simple was written for:
+  `test/setup.ts` puts `mode: 'advanced'` in place before each test (`replaceSettings`, which doesn't save),
+  `.storybook/preview.tsx` before each story, and the e2e's browsers start with it stored (`e2e/storage.ts`,
+  `ADVANCED_STORAGE`). A test of Simple says so: `replaceSettings({ mode: 'simple' })`, `<ScreenApp mode="simple">`,
+  or `test.use({ storageState: { cookies: [], origins: [] } })` for a first start.
+
+### The routes' table: adding a Simple screen
+
+`app/simpleScreens.ts` is the one table from a route to its Simple screen. A row that is null shows the route's
+Advanced screen in either mode; all four are null today. **To give a route its Simple screen, set its row and change
+nothing else**: the router (`app/modeScreen.tsx`), the switch, the sidebar, the keys and the inspector's slot all read
+the table. Each row is one line with a comment line between it and the next, so rows set on separate branches never
+touch the same lines:
+
+```ts
+  // `/crawls/:crawl/overview`: Checking a site while it runs, then the Summary.
+  overview: simpleScreen(() => import('../simple/SummaryScreen'), 'SummaryScreen'),
+```
+
+- `home` is `/`, `overview` is `/crawls/:crawl/overview`, `issues` is `/crawls/:crawl/issues/:check?` (What to fix and
+  one problem: the screen reads `check`), and `report` is `/crawls/:crawl/report`.
+- `report` is the same screen in both modes. While its row is null the route is not found and nothing links to it;
+  set, it's the sidebar's third section in Simple (Ctrl+3) and eighth in Advanced, after a rule (Ctrl+8). Its search
+  (`cut`: `full` or `summary`) is validated already (`validateReportSearch`).
+- The router preloads the screen the mode shows, and the other mode's once the app is idle, so a switch never waits
+  for a chunk.
+- New crawl and Settings aren't rows: each is one screen that reads the mode itself.
+- A Simple screen's own search params go into its route's validator in `routing/search.ts` (Overview's `score`): a
+  route's validator serves both views.
+- `src/app/simpleScreens.test.tsx` fills the table as round 4 will (a stub a row) and holds the frame to it: the
+  Simple screen in Simple and the Advanced one in Advanced on the same route, the inspector left out, the Report's
+  sidebar item, keys and route.
+
+### The shell in Simple, and the top bar
+
+- **The sidebar** in Simple: Home; the open site; **Summary**, **What to fix** (counting the checks with issues that
+  are Serious or Worth fixing, Errors and Warnings, from the same entries as Issues) and **Report** (once it exists);
+  "Checking now"; Settings. Advanced's is as built, with Report after a rule once it exists.
+- **The top bar**: the switch at its end (`layout/ModeSwitch.tsx`, a segmented control in words, its tooltip with
+  Ctrl+Shift+A), Simple's section names in the crumbs, the status pill in Simple's words (`StatusPill words`:
+  Checking, Stopped early, Working out the results, "2,713 checked"), and search as its icon in Simple. Outside a crawl
+  the crumbs name the page (New crawl or Check a website, Settings).
+- **The order of giving way** (`layout/useGiveWay.ts`), measured on the bar's own width, so it holds whatever the
+  sidebar is doing. The bar's parts never shrink. Steps: 1 the keys in buttons, 2 the crawl's date, 3 the search
+  field to its icon, 4 Home, 5 the status pill's count, 6 the controls' words (to icons), 7 the site shortened (to
+  `--topbar-site-min`), 8 the site gone, 9 Forward. The bar takes the fewest steps that let everything fit: each step
+  is marked on the bar as `data-give-N` (cumulatively), each part hides or narrows on its own step's mark
+  (`group-data-give-3/topbar:…`), and the measure runs before paint (a ResizeObserver on the bar, a MutationObserver
+  on its content, the fonts arriving), usually in one or two reads. What gives way keeps its name: the date, the
+  site, the count and the controls' and search's words become `sr-only`, Home and Forward (both reachable otherwise)
+  go, and the breadcrumb's tooltip has the whole trail. Never: Back, the section, the status word, the controls,
+  search and the switch. `e2e/topbar.spec.ts` sweeps the window from 1700 to 600 px in both modes with a crawl
+  running, and checks the three sizes idle and running: nothing overprints or runs out of the bar.
+
+### Settings
+
+- **One file a section**, in `screens/settings/sections/`, found by `screens/settings/registry.ts`
+  (`import.meta.glob`). A section file exports `id` (its place in `/settings/:section`), `title`, `order` (General
+  10, Crawl defaults 20, Analysis 30, Data folder 40, Shortcuts 50, Diagnostics 60, Updates 70, About 80) and
+  `function Section()`. **The Analysis section is one new file, `sections/Analysis.tsx`, and nothing else**: it is
+  Advanced only already (`ADVANCED_ONLY_SETTINGS`), Simple's note names "the checks' limits" once it exists, and
+  until then Analysis isn't listed. An address naming a section with no file opens General.
+- **Each mode's list**: Simple lists General, Data folder, Updates and About, with a note naming the Advanced-only
+  sections that exist and **Show them in Advanced** (focus goes to the first section it brings into the list).
+- **General**: Mode (the switch's value, as two choice cards, each with its line), Theme, and Density in Advanced.
+- **Crawl defaults**: New crawl's form in Advanced, without a start URL, saved a moment after each change once the
+  engine finds nothing wrong (`PUT /api/crawl-options/defaults`), with "Put back the engine's defaults" (with Undo).
+  Every new crawl starts from them, and so does Home's Enter: `startCrawl` sends the saved defaults, since a setting
+  left out of `POST /api/crawls` takes the engine's default, not the user's.
+- **Data folder**, **Diagnostics** (Copy diagnostics: versions, folders, mode, theme, zoom, page, browser; nothing
+  from a crawl), **Updates**, **About** (with Copy diagnostics in Simple) and **Shortcuts** (the registry's list) show
+  what is true today. Neither the shell nor the sidecar can move the data folder or look for updates, so there's no
+  control for either (below).
+
+### New crawl, and the crawl's settings
+
+- **One form** (`crawl/options/`): `form.ts` is the model (every `CrawlOptions` property; numbers held as typed, so
+  a half-typed value stays and reaches the engine as typed for its message; the HTML limit in MB), `words.ts` each
+  setting's name and line, the presets' words in each mode (from the presets' numbers) and each folded section's
+  line, `CrawlOptionsForm.tsx` Simple's four questions or Advanced's start card and five folded sections. New crawl
+  draws it in the mode shown, from the same state, so what is typed goes across the switch.
+- **Validation** is the engine's (`POST /api/crawl-options/validate`, a moment after the last change), shown beside a
+  field once it's been left or changed, and every field once Start was pressed; a folded section holding a message
+  says so in its line. A refused Start opens the first field's section and puts focus on it. In Simple, a message
+  about a setting Simple doesn't show, and settings changed from the engine's defaults, are said above the buttons
+  with "Show it in Advanced" or "Show them in Advanced".
+- **Start** is the form's submit and `crawl.start` (Ctrl+Enter, from any control: the form takes the key before a
+  checkbox, which keeps Enter for itself). "Use these choices every time" (Simple) and "Save as my defaults"
+  (Advanced) save the form's options without a start URL or a secret.
+- **Secrets** (header values, a proxy's user name and password) live only in the form's state while the app runs:
+  never in saved defaults (the app strips them before the sidecar does), never in a crawl file. The OS credential
+  store the brief offers, with the user's consent, needs a shell command the shell doesn't have (below), so nothing is
+  remembered between runs.
+- **`/new` params**: `url` (the start URL), `from` (a crawl's id: "Crawl again with these", its options and start
+  URL, with a note that header values and a proxy password must be given again), `focus` (`speed`, `headers`,
+  `userAgent`, `robots`: that setting's section open and focus on it; `robots` arrives with robots.txt ignored; in
+  Simple, a setting only Advanced has turns Advanced on). The engine's own defaults, for "changed from the default",
+  are a copy in `crawl/options/engineDefaults.ts`, which `e2e/new-crawl.spec.ts` checks against a sidecar with none
+  saved.
+- **The crawl's settings** (`/crawls/:crawl/settings?focus=`): what it used, by section, as words, from
+  `GET /api/crawls/{id}/options`; "Crawl again with these"; and Continue, for a stopped crawl, with what a continue
+  may change (the speed, the timeout, the headers with their values, the proxy). `needs-secrets` is answered in
+  place: the headers whose values must be given again, the proxy's, and "Continue without" for headers. A running
+  crawl's card says to stop it first; an ended one has nothing to continue. Overview's alerts lead here: a blocked
+  crawl's "Continue more slowly" (`focus=speed`) and "Add headers" (`focus=headers`), and to New crawl for "Crawl as
+  another user agent" and "Crawl again with robots.txt ignored" (`from` this crawl). Continue's toast, when a proxy
+  password is needed again, opens this screen.
+
+### What the shell and the engine don't give
+
+- **The OS credential store.** The shell has no command for it (a keychain crate and two commands, read and write by
+  a key the app chooses, asking the user first). Until it has, secrets last as long as the form.
+- **Moving the data folder.** The sidecar takes its data folder at start (`--data-dir`, from the shell) and has no
+  call to change it; Settings shows it, with Copy.
+- **Looking for updates.** The shell has no updater; Updates says how a new version arrives.
+- **A proxy test.** The parity list keeps "Test proxy connection"; the sidecar has no call for it, so the form has no
+  Test button.
+- **The engine's own defaults** once the user has saved theirs: `GET /api/crawl-options/defaults` gives one or the
+  other. The app keeps a copy, checked end to end.
