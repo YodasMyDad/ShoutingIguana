@@ -131,7 +131,7 @@ function Library() {
       as="section"
       aria-labelledby="library-title"
       aria-busy={library.isFetching}
-      className="@container/library relative"
+      className="@container/library relative min-w-0"
     >
       {library.isFetching && !library.isPending ? <RefreshLine label="Refreshing the library" /> : null}
       <CardHeader
@@ -140,7 +140,9 @@ function Library() {
         meta={
           library.data ? `${formatCount(library.data.length)} ${library.data.length === 1 ? 'crawl' : 'crawls'}` : null
         }
-        className="pb-4"
+        // A narrow card (the sidebar open at 200% zoom) puts the search on a line of its own rather than push the card
+        // past the window.
+        className="pb-4 @max-library/library:flex-wrap"
         actions={
           <SearchField
             label="Search the library"
@@ -150,7 +152,7 @@ function Library() {
               void navigate({ search: event.target.value ? { q: event.target.value } : {}, replace: true })
             }
             onClear={clearSearch}
-            className="w-(--search-width-library)"
+            className="w-(--search-width-library) max-w-full"
           />
         }
       />
@@ -174,8 +176,9 @@ function Library() {
         <FilteredEmptyState title={`No crawls match “${q}”.`} clearLabel="Clear the search" onClear={clearSearch} />
       ) : (
         // Should the card ever be narrower than its columns (the sidebar open at 200% zoom), the table scrolls in it,
-        // never the page.
-        <div className="overflow-x-auto">
+        // never the page. Positioned, so what's placed absolutely inside it (the Actions header's hidden words) is
+        // held in it too, not by the card, past the window's edge.
+        <div className="relative overflow-x-auto">
           <table className="w-full border-separate border-spacing-0 text-13">
             <caption className="sr-only">Crawls in the library, running ones first</caption>
             <thead>

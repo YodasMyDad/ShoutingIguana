@@ -88,3 +88,58 @@ test('at 200% zoom (640x360) the library keeps its Site column and nothing scrol
   await expect(library.getByText(/^Started /).first()).toBeVisible();
   await expectNoViolations(page);
 });
+
+test('at 200% zoom with the sidebar open, the library scrolls inside its card, never the screen', async ({ page }) => {
+  // A 1,120 px window at 200%: with the sidebar open, the library's columns are wider than its card.
+  await page.setViewportSize({ width: 560, height: 360 });
+  await page.goto('/');
+  const library = page.getByRole('region', { name: 'Library' });
+  await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Expand the sidebar' }).click();
+  await expect(page.getByRole('button', { name: 'Collapse the sidebar' })).toBeVisible();
+  const overflow = () =>
+    page.evaluate(() => {
+      const main = document.querySelector('main');
+      const card = document.querySelector('main table')?.closest('section');
+      return {
+        page: document.scrollingElement!.scrollWidth - document.scrollingElement!.clientWidth,
+        main: main ? main.scrollWidth - main.clientWidth : -1,
+        // The card ends inside the screen, its right edge and gutter on show.
+        card: main && card ? Math.max(0, card.getBoundingClientRect().right - main.getBoundingClientRect().right) : -1,
+      };
+    });
+  // The sidebar opens with a transition: measured once it has settled. The table is wider than the card, and
+  // scrolls in it.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const box = document.querySelector('main table')?.parentElement;
+        return box ? box.scrollWidth > box.clientWidth : false;
+      }),
+    )
+    .toBe(true);
+  expect(await overflow()).toEqual({ page: 0, main: 0, card: 0 });
+  // What's placed absolutely inside the table (the Actions header's hidden words) is held by the table's scroller, so
+  // it can't reach past the card when the table is scrolled out of view: with more or wider crawls than this test
+  // site's, it took the screen 49 px past the window (the mock app's library, 465 px in 416).
+  const loose = await page.evaluate(() => {
+    const box = document.querySelector('main table')?.parentElement;
+    return (
+      [...(box?.querySelectorAll('*') ?? [])]
+        // Laid out (not in a folded, hidden column), and placed absolutely.
+        .filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).position === 'absolute')
+        .filter(
+          (element) => !(element instanceof HTMLElement && element.offsetParent && box?.contains(element.offsetParent)),
+        )
+        .map((element) => element.textContent)
+    );
+  });
+  expect(loose).toEqual([]);
+  // The search keeps its place in the card, on a line of its own.
+  const search = library.getByRole('searchbox', { name: 'Search the library' });
+  await expect(search).toBeVisible();
+  const box = await search.boundingBox();
+  const cardBox = await library.boundingBox();
+  expect(box && cardBox && box.x + box.width <= cardBox.x + cardBox.width).toBe(true);
+  await expectNoViolations(page);
+});
