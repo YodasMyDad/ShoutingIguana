@@ -933,3 +933,138 @@ describe('Sitemaps: one sitemap', () => {
     expect(pathOf(router)).toBe(SITEMAPS);
   });
 });
+
+describe('Sitemaps in a short or narrow window', () => {
+  /** jsdom lays nothing out: the width a frame measures itself at, as a real window would give it. */
+  const frameWidth = (width: number) => vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+  const headersOf = (grid: HTMLElement) =>
+    within(grid)
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent);
+
+  it('keeps a long list room for five rows, in the frame every grid screen shares', async () => {
+    // Six sitemaps: one more than the list always shows.
+    sidecar();
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    // Its header takes two lines here ("Blocked by robots.txt"): 12 px over the grid's own.
+    expect(tree.parentElement!.style.minHeight).toBe(`${32 + 12 + 5 * 32 + 12}px`);
+    const frame = tree.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    // The title and the line under the list are the frame's own children: they keep their height, the list gives.
+    expect(screen.getByRole('heading', { name: 'Sitemaps', level: 1 }).closest('.si-grid-screen > *')).not.toBeNull();
+    expect(tree.parentElement!.parentElement).toHaveClass('shrink');
+    expect(tree.parentElement!.parentElement!.parentElement).toBe(frame);
+  });
+
+  it('never squeezes a list of five sitemaps or fewer: it stays as tall as its rows', async () => {
+    const two = TEST_SITEMAPS.filter((sitemap) => sitemap.id === 5 || sitemap.id === 6);
+    sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: two } });
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(within(tree).getAllByRole('row')).toHaveLength(3);
+    const list = tree.parentElement!.parentElement!;
+    expect(list).toHaveClass('shrink-0');
+    expect(list.style.height).toBe(`${2 * 32 + 32 + 12 + 2}px`);
+    expect(tree.parentElement!.style.minHeight).toBe('');
+  });
+
+  it('puts the counts straight after the address in a frame too narrow for every column', async () => {
+    // 200% zoom of a 1280 px window leaves the list 534 px.
+    frameWidth(534);
+    sidecar();
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(headersOf(tree)).toEqual([
+      'Sitemap',
+      'Listed',
+      'Crawled',
+      'Blocked by robots.txt',
+      'Not crawled',
+      'Non-indexable',
+      'Status',
+      'Found via',
+    ]);
+    // Each count still opens exactly its URLs from there.
+    const row = rowOf(`${SITE}/sitemaps/pages.xml`);
+    expect(row.querySelector('[aria-colindex="2"]')).toHaveTextContent('4');
+    expect(within(row).getByRole('link', { name: '4 URLs listed' })).toBeVisible();
+    expect(row.querySelector('[aria-colindex="7"]')).toHaveTextContent('Read');
+  });
+
+  it('keeps how it was found and what became of it before the counts where every column fits', async () => {
+    frameWidth(1_006);
+    sidecar();
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(headersOf(tree)).toEqual([
+      'Sitemap',
+      'Found via',
+      'Status',
+      'Listed',
+      'Crawled',
+      'Blocked by robots.txt',
+      'Not crawled',
+      'Non-indexable',
+    ]);
+  });
+
+  it('keeps one sitemap’s grid room for five rows under whatever is over it, and lets its filters take a second line', async () => {
+    sidecar();
+    await open(`${SITEMAPS}/2`);
+    const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/sitemaps/pages.xml` });
+    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    const frame = grid.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    expect(grid.closest('.si-grid-screen__body')?.parentElement).toBe(frame);
+    const show = screen.getByRole('radiogroup', { name: 'Show' });
+    expect(show).toHaveClass('si-segmented--wrap');
+    expect(show.closest('.si-grid-screen > *')?.parentElement).toBe(frame);
+  });
+});
+
+describe('Sitemaps: one sitemap without the URL summary', () => {
+  const outOfDate = { available: false, reason: 'engineChanged' } as const;
+
+  it('offers to analyse again, in those words, where a sort needs an analysis the crawl once had: never “Analyse it”', async () => {
+    // The engine refuses a sort on a column the analysis fills, and says why: analysed by another version.
+    const analyse = vi.fn(() => new Response(null, { status: 202 }));
+    setTransport(
+      fakeSidecar([
+        ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse],
+        [
+          'POST',
+          /\/sitemaps\/urls$/,
+          () =>
+            problem({
+              type: 'needs-analysis',
+              title:
+                'Filtering or sorting by these columns needs an analysis, and another version of Shouting Iguana analysed this crawl.',
+              status: 409,
+              reason: 'engineChanged',
+              columns: ['issues'],
+            }),
+        ],
+        ...sitemapsRobotsRoutes({ sitemaps: { ...TEST_SITEMAP_LIST, summary: outOfDate } }),
+      ]),
+    );
+    await open(`${SITEMAPS}/2?sort=-issues`);
+    await screen.findByText(/^Filtering or sorting by these columns needs an analysis, /);
+    const main = screen.getByRole('main');
+    const again = within(main).getByRole('button', { name: 'Analyse again' });
+    expect(within(main).queryByRole('button', { name: 'Analyse it' })).toBeNull();
+    fireEvent.click(again);
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+  });
+
+  it('says the analysis that’s running fills the columns, with nothing to press, while the crawl is analysed', async () => {
+    sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, summary: { available: false, reason: 'notAnalyzed' } },
+      item: { status: 'analyzing', analyzedAt: null },
+    });
+    await open(`${SITEMAPS}/2`);
+    const notice = await screen.findByText(/fill in when the analysis that’s running is done/);
+    expect(notice).not.toHaveTextContent('hasn’t been analysed yet');
+    expect(within(screen.getByRole('main')).queryByRole('button', { name: /^Analyse/ })).toBeNull();
+  });
+});

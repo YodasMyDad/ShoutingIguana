@@ -863,4 +863,106 @@ describe('robots.txt: live and refreshing', () => {
     });
     await waitFor(() => expect(screen.queryByText(`${SITE}/old-private`)).toBeNull());
   });
+
+  it('doesn’t look for an origin’s file while the window is hidden, and does once it’s shown again', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const late = 'https://late.example';
+    sidecar({ item: running });
+    await open(`${ROBOTS}/${encodeURIComponent(late)}`);
+    expect(
+      await screen.findByRole('heading', { name: 'The crawl hasn’t asked that origin for a robots.txt so far' }),
+    ).toBeVisible();
+    // The window goes to the tray; the crawl comes to a URL on the origin meanwhile.
+    let hidden = true;
+    vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => (hidden ? 'hidden' : 'visible'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    const { transport } = sidecar({
+      item: running,
+      files: { [late]: { ...TEST_FILE, origin: late, isInternal: false } },
+    });
+    const looks = () => transport.requests.filter((request) => request.path.endsWith('/robots/file')).length;
+    // Longer than the two seconds between its looks: hidden, it makes none.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 2_600)));
+    expect(looks()).toBe(0);
+    expect(screen.getByRole('heading', { name: /hasn’t asked that origin/ })).toBeVisible();
+    // Shown again, the next look finds the file.
+    hidden = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(await screen.findByTestId('source-viewer', {}, { timeout: 5_000 })).toBeVisible();
+    expect(looks()).toBeGreaterThan(0);
+  }, 15_000);
+});
+
+describe('robots.txt in a short or narrow window', () => {
+  /** jsdom lays nothing out: the width a frame measures itself at, as a real window would give it. */
+  const frameWidth = (width: number) => vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+  const headersOf = (grid: HTMLElement) =>
+    within(grid)
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent);
+  const many = Array.from({ length: 9 }, (_unused, index) =>
+    testOrigin({ origin: `https://host-${index}.example`, isInternal: index === 0, blocked: 9 - index }),
+  );
+
+  it('keeps a long list of origins room for five rows, in the frame every grid screen shares', async () => {
+    sidecar({ origins: many });
+    await open(ROBOTS);
+    const grid = await screen.findByRole('grid', { name: 'Origins' });
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '10'));
+    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    const frame = grid.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'robots.txt', level: 1 }).closest('.si-grid-screen > *')).not.toBeNull();
+    expect(grid.parentElement!.parentElement).toHaveClass('shrink');
+    expect(grid.parentElement!.parentElement!.parentElement).toBe(frame);
+  });
+
+  it('never squeezes a list of five origins or fewer: it stays as tall as its rows', async () => {
+    // Four origins.
+    sidecar();
+    await open(ROBOTS);
+    const grid = await screen.findByRole('grid', { name: 'Origins' });
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
+    const list = grid.parentElement!.parentElement!;
+    expect(list).toHaveClass('shrink-0');
+    expect(list.style.height).toBe(`${4 * 32 + 32 + 2}px`);
+    expect(grid.parentElement!.style.minHeight).toBe('');
+  });
+
+  it('puts what each origin blocked straight after it in a frame too narrow for every column', async () => {
+    // 200% zoom of a 1280 px window leaves the list 534 px.
+    frameWidth(534);
+    sidecar();
+    await open(ROBOTS);
+    const grid = await screen.findByRole('grid', { name: 'Origins' });
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
+    expect(headersOf(grid)).toEqual(['Origin', 'Blocked URLs', 'robots.txt', 'Read', 'Size']);
+    expect(within(rowOf(SITE)).getByRole('link', { name: '4 URLs blocked' })).toBeVisible();
+    expect(rowOf(SITE).querySelector('[aria-colindex="2"]')).toHaveTextContent('4');
+    expect(rowOf(SITE).querySelector('[aria-colindex="3"]')).toHaveTextContent('Read');
+  });
+
+  it('keeps what an origin’s answer meant before what it blocked where every column fits', async () => {
+    frameWidth(1_006);
+    sidecar();
+    await open(ROBOTS);
+    const grid = await screen.findByRole('grid', { name: 'Origins' });
+    expect(headersOf(grid)).toEqual(['Origin', 'robots.txt', 'Blocked URLs', 'Read', 'Size']);
+  });
+
+  it('keeps an origin’s blocked URLs room for five rows beside its file, in the frame every grid screen shares', async () => {
+    sidecar();
+    await open(FILE);
+    const grid = await screen.findByRole('grid', { name: 'Blocked URLs' });
+    await screen.findByText(`${SITE}/old-private`);
+    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    const frame = grid.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    // The file and the blocked URLs are the frame's body; the title and what the answer meant are over it.
+    const body = grid.closest('.si-grid-screen__body')!;
+    expect(body.parentElement).toBe(frame);
+    expect(body).toContainElement(screen.getByTestId('source-viewer'));
+    expect(body).not.toContainElement(screen.getByRole('heading', { level: 1 }));
+  });
 });

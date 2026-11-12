@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import type { GridFilter, Sitemap, SitemapDiscovery } from '../../api/grids';
 import { GridCore } from '../../grid/GridCore';
+import { GRID_SCREEN_MIN_ROWS } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn, GridTree } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
@@ -120,6 +121,10 @@ export function SitemapTree({
 
   const fixed = FOUND_WIDTH + STATE_WIDTH + LIST_COUNTS.reduce((sum, count) => sum + COUNT_WIDTHS[count], 0);
   const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 960) - fixed - FRAME_SLACK);
+  // A frame too narrow for every column (200% zoom) scrolls sideways: the counts, which the list is for, then come
+  // straight after the address, and how each sitemap was found and what became of it after them. A frame not laid
+  // out yet has no width to be narrow in.
+  const narrow = width !== null && width > 0 && width < fixed + MIN_URL_WIDTH + FRAME_SLACK;
 
   const columns = useMemo<GridColumn<SitemapRow>[]>(() => {
     const countCell = (row: SitemapRow, count: SitemapCount): ReactNode => {
@@ -150,75 +155,77 @@ export function SitemapTree({
         </TextLink>
       );
     };
-    return [
-      {
-        id: 'url',
-        header: 'Sitemap',
-        width: urlWidth,
-        cell: (row) => (
-          <span className="flex min-w-0 items-center">
-            {row.expanded !== undefined ? (
-              <span data-tree-toggle aria-hidden="true" className="si-tree-toggle">
-                <Icon icon={ChevronRight} size="sm" />
-              </span>
-            ) : grouped ? (
-              <span aria-hidden="true" className="si-tree-spacer" />
-            ) : null}
-            <span className="min-w-0 flex-1">
-              <Url url={row.sitemap.url} siteOrigin={siteOrigin} copyable={false} openable={false} />
+    const address: GridColumn<SitemapRow> = {
+      id: 'url',
+      header: 'Sitemap',
+      width: urlWidth,
+      cell: (row) => (
+        <span className="flex min-w-0 items-center">
+          {row.expanded !== undefined ? (
+            <span data-tree-toggle aria-hidden="true" className="si-tree-toggle">
+              <Icon icon={ChevronRight} size="sm" />
             </span>
-            {row.sitemap.isIndex ? (
-              <Badge variant="outline" className="ml-2 shrink-0">
-                {indexBadgeWords(row.sitemap, row.subtree, urlWidth >= BADGE_COUNT_WIDTH)}
-              </Badge>
-            ) : null}
+          ) : grouped ? (
+            <span aria-hidden="true" className="si-tree-spacer" />
+          ) : null}
+          <span className="min-w-0 flex-1">
+            <Url url={row.sitemap.url} siteOrigin={siteOrigin} copyable={false} openable={false} />
           </span>
-        ),
-        text: (row) => row.sitemap.url,
+          {row.sitemap.isIndex ? (
+            <Badge variant="outline" className="ml-2 shrink-0">
+              {indexBadgeWords(row.sitemap, row.subtree, urlWidth >= BADGE_COUNT_WIDTH)}
+            </Badge>
+          ) : null}
+        </span>
+      ),
+      text: (row) => row.sitemap.url,
+    };
+    const found: GridColumn<SitemapRow> = {
+      id: 'foundVia',
+      header: 'Found via',
+      width: FOUND_WIDTH,
+      cell: (row) => {
+        const words = foundViaWords(row.sitemap.foundVia);
+        return (
+          <span title={words.sentence} className={row.sitemap.foundVia === null ? 'text-text-muted' : undefined}>
+            {words.short}
+          </span>
+        );
       },
-      {
-        id: 'foundVia',
-        header: 'Found via',
-        width: FOUND_WIDTH,
-        cell: (row) => {
-          const words = foundViaWords(row.sitemap.foundVia);
-          return (
-            <span title={words.sentence} className={row.sitemap.foundVia === null ? 'text-text-muted' : undefined}>
-              {words.short}
-            </span>
-          );
-        },
-        text: (row) => foundViaWords(row.sitemap.foundVia).short,
+      text: (row) => foundViaWords(row.sitemap.foundVia).short,
+    };
+    const state: GridColumn<SitemapRow> = {
+      id: 'state',
+      header: 'Status',
+      width: STATE_WIDTH,
+      cell: (row) => {
+        const words = stateWords(row.sitemap, crawling, row.subtree);
+        // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
+        return <span title={withRecorded(words.sentence, words.recorded)}>{words.short}</span>;
       },
-      {
-        id: 'state',
-        header: 'Status',
-        width: STATE_WIDTH,
-        cell: (row) => {
-          const words = stateWords(row.sitemap, crawling, row.subtree);
-          // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
-          return <span title={withRecorded(words.sentence, words.recorded)}>{words.short}</span>;
-        },
-        text: (row) => stateWords(row.sitemap, crawling, row.subtree).short,
-      },
-      ...LIST_COUNTS.map((count): GridColumn<SitemapRow> => ({
-        id: count,
-        header: COUNT_WORDS[count],
-        width: COUNT_WIDTHS[count],
-        numeric: true,
-        cell: (row) => countCell(row, count),
-        text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count) ?? '') : ''),
-      })),
-    ];
-  }, [crawlId, siteOrigin, crawling, urlWidth, grouped]);
+      text: (row) => stateWords(row.sitemap, crawling, row.subtree).short,
+    };
+    const counts = LIST_COUNTS.map((count): GridColumn<SitemapRow> => ({
+      id: count,
+      header: COUNT_WORDS[count],
+      width: COUNT_WIDTHS[count],
+      numeric: true,
+      cell: (row) => countCell(row, count),
+      text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count) ?? '') : ''),
+    }));
+    return narrow ? [address, ...counts, state, found] : [address, found, state, ...counts];
+  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow]);
 
   const getRow = useCallback((index: number) => rows[index], [rows]);
 
+  // Up to five rows are all kept in view, however short the window; a longer list gives way down to five (the grid's
+  // own least, `minRows`), and the screen scrolls for the rest of what's on it.
+  const short = rows.length <= GRID_SCREEN_MIN_ROWS;
   return (
     // As tall as its rows, the ones under a closed index not counted, and never more than the room there is.
     <div
       ref={measure}
-      className="flex min-h-(--list-grid-min-height) shrink flex-col"
+      className={short ? 'flex shrink-0 flex-col' : 'flex shrink flex-col'}
       style={{ height: rows.length * rowHeight + headerHeight + 2 }}
       // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
       onClickCapture={(event) => {
@@ -238,6 +245,7 @@ export function SitemapTree({
         startRow={startRow}
         // A running crawl finds sitemaps under an index above the cursor's row: the cursor stays on its sitemap.
         rowKey={sitemapOf}
+        minRows={short ? undefined : GRID_SCREEN_MIN_ROWS}
         onActivateCell={(_index, row, column) => {
           if (!row) return;
           rememberPlace(place, row.sitemap.id);

@@ -10,6 +10,7 @@ import { ErrorState } from '../../feedback/ErrorState';
 import { SkeletonRows } from '../../feedback/Skeleton';
 import { useDelayedLoading } from '../../feedback/useDelayedLoading';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
+import { GridScreen } from '../../grid/GridScreen';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
 import { Callout } from '../../ui/Callout';
@@ -145,7 +146,9 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
   }
 
   return (
-    <div ref={container} className="flex h-full min-h-0 flex-col gap-4 px-(--page-gutter) pt-7 pb-6">
+    // The frame every grid screen shares: the title, the notes and the line under the list keep their height, the list
+    // gives way down to five rows, and a window too short for all of it scrolls the screen.
+    <GridScreen ref={container} className="gap-4 px-(--page-gutter) pt-7 pb-6">
       <PageHeader
         title="Sitemaps"
         titleRef={title}
@@ -184,7 +187,7 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
       ) : null}
       {body}
       {data && sitemaps && tally && tally.read > 0 ? <NotInAnySitemap crawlId={crawlId} /> : null}
-    </div>
+    </GridScreen>
   );
 }
 

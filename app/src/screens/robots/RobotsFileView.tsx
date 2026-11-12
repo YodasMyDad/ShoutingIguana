@@ -13,6 +13,7 @@ import { useAnnounceResults } from '../../feedback/useAnnounceResults';
 import { useDelayedLoading } from '../../feedback/useDelayedLoading';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { GridCore } from '../../grid/GridCore';
+import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
@@ -96,6 +97,9 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
     // answer; one the crawl hasn't come to yet is looked for more often, so its page fills in soon after it does.
     refetchInterval: (query) =>
       !crawling ? false : isProblem(query.state.error, 'origin-not-found') ? FILE_MISSING_MS : FILE_REFRESH_MS,
+    // Never while the window is hidden (in the tray), as the lists aren't read then either: the next look comes once
+    // it's shown again.
+    refetchIntervalInBackground: false,
   });
   const refetchFile = file.refetch;
   const fileChanged = useCallback(() => void refetchFile(), [refetchFile]);
@@ -253,7 +257,10 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   const state = data && obeyed !== undefined ? stateWords(data, data.userAgent, obeyed) : null;
   return (
     <div ref={container} className="@container h-full">
-      <div className="flex h-full min-h-0 flex-col @max-split:h-auto">
+      {/* The frame every grid screen shares: what's over the two panes keeps its height, and the panes take the rest,
+          never less than their own least (the blocked URLs keep five rows): a window too short for that scrolls the
+          screen. In a narrow panel the two stack, each at its own height, and the screen scrolls through them. */}
+      <GridScreen className="@max-split:h-auto">
         <div className="px-6 pt-2">{back}</div>
         <GridHeader
           titleRef={title}
@@ -307,7 +314,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             {IGNORED}
           </Banner>
         ) : null}
-        <div className="grid min-h-0 flex-1 grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-split:flex-none @max-split:grid-cols-1">
+        <GridScreenBody className="grid grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-split:flex-none @max-split:grid-cols-1">
           <Card
             as="section"
             flush
@@ -333,7 +340,8 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             as="section"
             flush
             aria-label="Blocked URLs"
-            className="flex min-h-(--robots-file-min-height) flex-col @max-split:h-(--robots-pane-height)"
+            // At least as tall as the file beside or over it, and never less than its list's five rows need.
+            className="flex min-h-(--robots-file-min-height) flex-col @max-split:min-h-(--robots-pane-height)"
           >
             <BlockedUrls
               crawlId={crawlId}
@@ -350,8 +358,8 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
               copying={copying}
             />
           </Card>
-        </div>
-      </div>
+        </GridScreenBody>
+      </GridScreen>
     </div>
   );
 }
@@ -545,7 +553,8 @@ function BlockedUrls({
     );
 
   return (
-    <div ref={measure} className="flex min-h-0 flex-1 flex-col" onFocus={onGridFocus}>
+    // No `min-h-0`: the pane is never shorter than its header, its note and its list's least height.
+    <div ref={measure} className="flex flex-1 flex-col" onFocus={onGridFocus}>
       <SectionHeader
         title="Blocked URLs"
         size="sm"
@@ -608,6 +617,8 @@ function BlockedUrls({
           getRow={rows.getRow}
           // The cursor stays on its URL should the list change above it while a crawl runs.
           rowKey={blockedUrlOf}
+          // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
+          minRows={GRID_SCREEN_MIN_ROWS}
           rowHeight={rowHeight}
           headerHeight={headerHeight}
           onRangeChange={rows.onRangeChange}

@@ -8,6 +8,7 @@ import { originsAsGridPage, robotsKeys, type OriginsGridPage } from '../../api/q
 import type { CrawlState } from '../../crawl/useCrawlState';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
+import { GRID_SCREEN_MIN_ROWS, GridScreen } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
@@ -88,79 +89,81 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
 
   const fixed = STATE_WIDTH + BLOCKED_WIDTH + READ_WIDTH + SIZE_WIDTH;
   const originWidth = Math.max(MIN_ORIGIN_WIDTH, (width ?? 960) - fixed - FRAME_SLACK);
-  const columns = useMemo<GridColumn<RobotsOrigin>[]>(
-    () => [
-      {
-        id: 'origin',
-        header: 'Origin',
-        width: originWidth,
-        mono: true,
-        cell: (row) => (
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate" title={row.origin}>
-              {row.origin}
-            </span>
-            {row.isInternal ? (
-              <Badge variant="outline" className="shrink-0 font-sans">
-                This site
-              </Badge>
-            ) : null}
+  // A frame too narrow for every column (200% zoom) scrolls sideways: what each origin blocked, which the list is
+  // sorted by, then comes straight after the origin, and what its answer meant after that. A frame not laid out yet
+  // has no width to be narrow in.
+  const narrow = width !== null && width > 0 && width < fixed + MIN_ORIGIN_WIDTH + FRAME_SLACK;
+  const columns = useMemo<GridColumn<RobotsOrigin>[]>(() => {
+    const origin: GridColumn<RobotsOrigin> = {
+      id: 'origin',
+      header: 'Origin',
+      width: originWidth,
+      mono: true,
+      cell: (row) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate" title={row.origin}>
+            {row.origin}
           </span>
+          {row.isInternal ? (
+            <Badge variant="outline" className="shrink-0 font-sans">
+              This site
+            </Badge>
+          ) : null}
+        </span>
+      ),
+      text: (row) => row.origin,
+    };
+    const state: GridColumn<RobotsOrigin> = {
+      id: 'state',
+      header: 'robots.txt',
+      width: STATE_WIDTH,
+      cell: (row) => {
+        const words = stateWords(row, userAgent, respected);
+        // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
+        return <span title={withRecorded(words.sentence, words.recorded)}>{words.short}</span>;
+      },
+      text: (row) => stateWords(row, userAgent, respected).short,
+    };
+    const blocked: GridColumn<RobotsOrigin> = {
+      id: 'blocked',
+      header: 'Blocked URLs',
+      width: BLOCKED_WIDTH,
+      numeric: true,
+      cell: (row) =>
+        row.blocked > 0 ? (
+          <TextLink
+            to={ROUTE}
+            params={{ crawl: crawlId, origin: row.origin }}
+            search={{}}
+            // The grid is the one Tab stop: Enter on the row does what a click on the link does.
+            tabIndex={-1}
+            aria-label={`${formatCountOf(row.blocked, 'URL')} blocked`}
+          >
+            {formatCount(row.blocked)}
+          </TextLink>
+        ) : (
+          formatCount(0)
         ),
-        text: (row) => row.origin,
-      },
-      {
-        id: 'state',
-        header: 'robots.txt',
-        width: STATE_WIDTH,
-        cell: (row) => {
-          const words = stateWords(row, userAgent, respected);
-          // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
-          return <span title={withRecorded(words.sentence, words.recorded)}>{words.short}</span>;
-        },
-        text: (row) => stateWords(row, userAgent, respected).short,
-      },
-      {
-        id: 'blocked',
-        header: 'Blocked URLs',
-        width: BLOCKED_WIDTH,
-        numeric: true,
-        cell: (row) =>
-          row.blocked > 0 ? (
-            <TextLink
-              to={ROUTE}
-              params={{ crawl: crawlId, origin: row.origin }}
-              search={{}}
-              // The grid is the one Tab stop: Enter on the row does what a click on the link does.
-              tabIndex={-1}
-              aria-label={`${formatCountOf(row.blocked, 'URL')} blocked`}
-            >
-              {formatCount(row.blocked)}
-            </TextLink>
-          ) : (
-            formatCount(0)
-          ),
-        text: (row) => String(row.blocked),
-      },
-      {
-        id: 'fetchedAt',
-        header: 'Read',
-        width: READ_WIDTH,
-        cell: (row) =>
-          row.fetchedAt ? <RelativeTime iso={row.fetchedAt} /> : <span className="text-text-muted">–</span>,
-        text: (row) => (row.fetchedAt ? formatExactTime(row.fetchedAt) : ''),
-      },
-      {
-        id: 'bytes',
-        header: 'Size',
-        width: SIZE_WIDTH,
-        numeric: true,
-        cell: (row) => (row.bytes === null ? <span className="text-text-muted">–</span> : formatBytes(row.bytes)),
-        text: (row) => (row.bytes === null ? '' : String(row.bytes)),
-      },
-    ],
-    [crawlId, originWidth, userAgent, respected],
-  );
+      text: (row) => String(row.blocked),
+    };
+    const read: GridColumn<RobotsOrigin> = {
+      id: 'fetchedAt',
+      header: 'Read',
+      width: READ_WIDTH,
+      cell: (row) =>
+        row.fetchedAt ? <RelativeTime iso={row.fetchedAt} /> : <span className="text-text-muted">–</span>,
+      text: (row) => (row.fetchedAt ? formatExactTime(row.fetchedAt) : ''),
+    };
+    const size: GridColumn<RobotsOrigin> = {
+      id: 'bytes',
+      header: 'Size',
+      width: SIZE_WIDTH,
+      numeric: true,
+      cell: (row) => (row.bytes === null ? <span className="text-text-muted">–</span> : formatBytes(row.bytes)),
+      text: (row) => (row.bytes === null ? '' : String(row.bytes)),
+    };
+    return narrow ? [origin, blocked, state, read, size] : [origin, state, blocked, read, size];
+  }, [crawlId, originWidth, userAgent, respected, narrow]);
 
   let body;
   if (rows.error && rows.rowCount === null) {
@@ -175,10 +178,13 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
     );
   } else {
     const height = (rows.rowCount ?? 8) * rowHeight + headerHeight + 2;
+    // Up to five origins are all kept in view, however short the window; a longer list gives way down to five (the
+    // grid's own least, `minRows`), and the screen scrolls for the rest of what's on it.
+    const short = rows.rowCount !== null && rows.rowCount <= GRID_SCREEN_MIN_ROWS;
     body = (
       <div
         ref={measure}
-        className="flex min-h-(--list-grid-min-height) shrink flex-col"
+        className={short ? 'flex shrink-0 flex-col' : 'flex shrink flex-col'}
         style={{ height }}
         // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
         onClickCapture={(event) => {
@@ -200,6 +206,7 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
           startKey={startKey}
           // A running crawl asks new origins, which sort in among these: the cursor stays on its origin.
           rowKey={originOf}
+          minRows={short ? undefined : GRID_SCREEN_MIN_ROWS}
           onActivate={(index, row) => {
             if (row) open(row.origin, index);
           }}
@@ -212,7 +219,9 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 px-(--page-gutter) pt-7 pb-6">
+    // The frame every grid screen shares: the title and the note keep their height, the list gives way down to five
+    // rows, and a window too short for all of it scrolls the screen.
+    <GridScreen className="gap-4 px-(--page-gutter) pt-7 pb-6">
       <PageHeader
         title="robots.txt"
         titleRef={title}
@@ -235,6 +244,6 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
         </Banner>
       ) : null}
       {body}
-    </div>
+    </GridScreen>
   );
 }

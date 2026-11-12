@@ -14,8 +14,10 @@ import { notifyResult } from '../../feedback/notify';
 import { useAnnounceResults } from '../../feedback/useAnnounceResults';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { GridCore, type GridCopyResult } from '../../grid/GridCore';
+import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import { nextSort, useHeaderHandoff } from '../../grid/sort';
+import { UNAVAILABLE_WHILE_ANALYSING, analyseWords } from '../../grid/summaryWords';
 import { MAX_COPY_ROWS } from '../../grid/tsv';
 import type { GridColumn } from '../../grid/types';
 import { usePagedRows } from '../../grid/usePagedRows';
@@ -302,13 +304,20 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         {label}
       </Button>
     ) : null;
+  // While the crawl is being analysed the summary still gives the reason from before (never analysed, out of date):
+  // what's true now is that the analysis under way fills the columns, and there's nothing to press. As URLs says it.
+  const analysing = crawl.analysing;
+  const unavailableBecause =
+    analysing && summary?.reason !== 'crawling'
+      ? UNAVAILABLE_WHILE_ANALYSING
+      : URL_COLUMNS_UNAVAILABLE_BECAUSE[summary?.reason ?? 'notAnalyzed'];
   const chips = (
     <UrlGridFilters crawlId={crawlId} siteOrigin={crawl.siteOrigin} filters={filters} onChange={setFilters} />
   );
   const filtered = filters.length > 0 || Boolean(q);
 
   return (
-    <div ref={container} className="flex h-full min-h-0 flex-col">
+    <GridScreen ref={container}>
       <div className="px-6 pt-2">{back}</div>
       <GridHeader
         titleRef={title}
@@ -362,6 +371,8 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
       <div className="flex flex-wrap items-center gap-2 px-6 pb-3">
         <SegmentedControl<QuickFilter | 'other'>
           label="Show"
+          // Six filters with their counts are wider than a narrow window (200% zoom): they take a second line there.
+          wrap
           // Filters that aren't one of these (a count's link, a chip removed) are a segment of their own while they
           // last: one is always chosen, so focus arriving on the control never chooses for the user.
           value={quick ?? 'other'}
@@ -409,17 +420,15 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
       {summary && !summary.available && unavailable.length > 0 ? (
         <Banner inset className="mx-6 mb-3">
           <span className="inline-flex flex-wrap items-center gap-3">
-            {urlColumnNames(unavailable)} {URL_COLUMNS_UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']}. Until
-            then, which URLs are indexable is the crawl’s own judgement.
-            {summary.reason === 'crawling'
-              ? null
-              : analyse(summary.reason === 'notAnalyzed' ? 'Analyse it' : 'Analyse again')}
+            {urlColumnNames(unavailable)} {unavailableBecause}. Until then, which URLs are indexable is the crawl’s own
+            judgement.
+            {summary.reason === 'crawling' || analysing ? null : analyse(analyseWords(summary.reason))}
           </span>
         </Banner>
       ) : null}
       {rows.error && rows.rowCount === null ? (
         isProblem(rows.error, 'needs-analysis') ? (
-          <UrlGridNeedsAnalysis error={rows.error} action={analyse('Analyse it')} onClear={clearView} />
+          <UrlGridNeedsAnalysis error={rows.error} action={analyse} onClear={clearView} />
         ) : isProblem(rows.error, 'invalid-query') ? (
           <ErrorState
             error={rows.error}
@@ -433,57 +442,61 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
           <ErrorState error={rows.error} title="This sitemap’s URLs couldn’t be read." onRetry={rows.refetch} />
         )
       ) : (
-        <GridCore
-          key={JSON.stringify(queryKey)}
-          label={sitemap ? `URLs listed by ${sitemap.url}` : 'URLs this sitemap lists'}
-          columns={columns}
-          rowCount={enabled ? rows.rowCount : null}
-          getRow={rows.getRow}
-          // Under a sort, a running crawl's new URLs come in among these: the cursor stays on its URL.
-          rowKey={urlOf}
-          rowHeight={rowHeight}
-          headerHeight={headerHeight}
-          onRangeChange={rows.onRangeChange}
-          onScrollOffset={rows.onScrollOffset}
-          fetchRows={rows.fetchRows}
-          onCopy={onCopy}
-          onSort={(column, focused) => {
-            const next = nextSort(sort, column);
-            handoff.sorted(column, focused, next);
-            void navigate({
-              params: here,
-              search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
-              replace: true,
-              state: true,
-            });
-          }}
-          focusHeader={handoff.focusHeader}
-          onActivate={(_index, row) => {
-            if (row) inspector.open(row.id);
-          }}
-          // While it's open, the inspector follows the cursor, in place.
-          onActiveRowChange={(index) => {
-            const row = inspecting && index !== null ? rows.getRow(index) : undefined;
-            if (row) inspector.open(row.id);
-          }}
-          // Live refreshes update in place: the progress line is for a refresh the user asked for.
-          busy={rows.isRefreshing && !crawl.crawling}
-          emptyState={
-            filtered ? (
-              <FilteredEmptyState
-                title="None of this sitemap’s URLs match."
-                level="none"
-                filters={filters.length > 0 ? chips : undefined}
-                onClear={clearView}
-              />
-            ) : (
-              <NothingListed sitemap={sitemap} subtree={subtree} crawling={crawl.crawling} />
-            )
-          }
-          className="mx-6 mb-4 flex-1 rounded-lg border border-border shadow-1"
-        />
+        <GridScreenBody className="mx-6 pb-4">
+          <GridCore
+            key={JSON.stringify(queryKey)}
+            // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
+            minRows={GRID_SCREEN_MIN_ROWS}
+            label={sitemap ? `URLs listed by ${sitemap.url}` : 'URLs this sitemap lists'}
+            columns={columns}
+            rowCount={enabled ? rows.rowCount : null}
+            getRow={rows.getRow}
+            // Under a sort, a running crawl's new URLs come in among these: the cursor stays on its URL.
+            rowKey={urlOf}
+            rowHeight={rowHeight}
+            headerHeight={headerHeight}
+            onRangeChange={rows.onRangeChange}
+            onScrollOffset={rows.onScrollOffset}
+            fetchRows={rows.fetchRows}
+            onCopy={onCopy}
+            onSort={(column, focused) => {
+              const next = nextSort(sort, column);
+              handoff.sorted(column, focused, next);
+              void navigate({
+                params: here,
+                search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
+                replace: true,
+                state: true,
+              });
+            }}
+            focusHeader={handoff.focusHeader}
+            onActivate={(_index, row) => {
+              if (row) inspector.open(row.id);
+            }}
+            // While it's open, the inspector follows the cursor, in place.
+            onActiveRowChange={(index) => {
+              const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+              if (row) inspector.open(row.id);
+            }}
+            // Live refreshes update in place: the progress line is for a refresh the user asked for.
+            busy={rows.isRefreshing && !crawl.crawling}
+            emptyState={
+              filtered ? (
+                <FilteredEmptyState
+                  title="None of this sitemap’s URLs match."
+                  level="none"
+                  filters={filters.length > 0 ? chips : undefined}
+                  onClear={clearView}
+                />
+              ) : (
+                <NothingListed sitemap={sitemap} subtree={subtree} crawling={crawl.crawling} />
+              )
+            }
+            className="flex-1 rounded-lg border border-border shadow-1"
+          />
+        </GridScreenBody>
       )}
-    </div>
+    </GridScreen>
   );
 }
 
