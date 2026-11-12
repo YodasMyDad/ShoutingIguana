@@ -117,13 +117,25 @@ afterEach(() => {
 });
 
 describe('the Overview of an analysed crawl', () => {
-  it('says when the crawl started, and not how long it took, which nothing the engine keeps can say', async () => {
-    // From when it started to when it finished has every pause in it, and the time between stopping and continuing.
-    sidecar();
+  it('says when the crawl started and how long it spent crawling, by that clock, not from start to finish', async () => {
+    // Started 10:15, finished 10:20, but crawled for 41 s: it was paused, and stopped and continued.
+    sidecar({ item: { crawlingMs: 41_250 } });
     await open();
     const facts = (await main().findByRole('link', { name: '4,521 URLs' })).closest('p');
-    expect(facts).toHaveTextContent(/^4,521 URLs crawled, 265 pages read, started .+ 2026.*\.$/);
-    expect(facts).not.toHaveTextContent(/over|5 min/);
+    expect(facts).toHaveTextContent(
+      /^4,521 URLs crawled, 265 pages read, started .+ 2026.*\. It spent 41 s crawling, not counting pauses or the time between runs\.$/,
+    );
+    expect(facts).not.toHaveTextContent(/5 min/);
+  });
+
+  it('says it doesn’t know how long a crawl an earlier version made spent crawling, and doesn’t guess', async () => {
+    sidecar({ item: { crawlingMs: null } });
+    await open();
+    const facts = (await main().findByRole('link', { name: '4,521 URLs' })).closest('p');
+    expect(facts).toHaveTextContent(
+      'How long it spent crawling isn’t known: an earlier version of Shouting Iguana crawled it, or part of it, and didn’t keep the time.',
+    );
+    expect(facts).not.toHaveTextContent(/\d+ (s|min) crawling|5 min/);
   });
 
   it('answers first, in one sentence built from the counts', async () => {
@@ -909,6 +921,72 @@ describe('the Overview while the crawl runs', () => {
     ).toBeVisible();
     // Not the three days and ten minutes since it first started.
     expect(main().queryByText(/72 h|3 days|10 min/)).toBeNull();
+  });
+
+  it('draws a continued crawl whole on the time it spent crawling, the days between runs closed, each start marked', async () => {
+    // Ten minutes of crawling three days ago, with a minute's pause in it, counted back from the file; then this run.
+    const first = Date.parse('2026-10-29T10:15:00.000Z');
+    const runStart = Date.parse(progressAt(0, POLITE).at ?? '');
+    const filePoint = (ms: number, fetched: number) => ({
+      at: new Date(ms).toISOString(),
+      fetched,
+      htmlPages: fetched,
+      internalFetched: fetched,
+      internalFound: 3_000,
+      errors: 0,
+      blocked: 0,
+    });
+    const iso = (ms: number) => new Date(ms).toISOString();
+    sidecar({
+      analysis: null,
+      item: LIVE_ITEM,
+      history: {
+        crawlId: TEST_CRAWL_ID,
+        startedAt: iso(first),
+        liveFrom: iso(runStart),
+        points: [
+          // 120 a minute while it crawled, nothing in the paused minute (4 to 5 min in).
+          ...Array.from({ length: 12 }, (_, index) =>
+            filePoint(first + index * 60_000, Math.min(index, 4) * 120 + Math.max(0, index - 5) * 120),
+          ),
+          { ...filePoint(runStart, 1_200), elapsedMs: 0 },
+        ],
+        crawlingMs: 600_000,
+        runs: [
+          {
+            startedAt: iso(first),
+            endedAt: iso(first + 660_000),
+            crawlingMs: 600_000,
+            crawling: [
+              { from: iso(first), to: iso(first + 240_000) },
+              { from: iso(first + 300_000), to: iso(first + 660_000) },
+            ],
+          },
+          { startedAt: iso(runStart), endedAt: null, crawlingMs: 0, crawling: [] },
+        ],
+      },
+    });
+    await open();
+    await heard(
+      ...Array.from({ length: 9 }, (_, index) =>
+        at(index / 2, 0, { fetched: 1_200 + index, internalFetched: 1_200 + index, internalFound: 3_000 }),
+      ),
+    );
+    // One clock: Elapsed and the chart's axis are the crawl's time spent crawling, its earlier run's ten minutes first.
+    expect(cell('Elapsed')).toHaveTextContent('10 min 4 s');
+    const chart = region('Found and crawled');
+    expect(chart.getByText('The site’s URLs over 10 min 4 s of crawling, in 2 runs')).toBeVisible();
+    expect(
+      chart.getByRole('img', {
+        name: 'Found and crawled URLs of the site over 10 min 4 s of crawling, in 2 runs, continued at 10 min of it: 3,000 found, 1,208 crawled',
+      }),
+    ).toBeVisible();
+    // This run's start is marked, once.
+    expect(
+      main().getByRole('region', { name: 'Found and crawled' }).querySelectorAll('.si-chart__marker'),
+    ).toHaveLength(1);
+    // Not the three days since it first started, nor the minute it was paused.
+    expect(main().queryByText(/72 h|3 days|11 min/)).toBeNull();
   });
 
   it('says the limit is reached, not that there’s no time left, while the last requests finish', async () => {

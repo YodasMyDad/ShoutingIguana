@@ -2573,6 +2573,14 @@
     shape-rendering: crispEdges;
   }
 
+  /* A moment on the time axis (a crawl continued): a dashed upright, quieter than the lines and above the grid. */
+  .si-chart__marker {
+    stroke: var(--color-chart-secondary);
+    stroke-width: var(--hairline);
+    stroke-dasharray: 3 3;
+    shape-rendering: crispEdges;
+  }
+
   .si-chart__dot {
     stroke: var(--color-surface);
     stroke-width: var(--rule-width);

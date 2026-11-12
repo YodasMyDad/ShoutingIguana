@@ -138,3 +138,10 @@ export function formatPercent(part: number | null | undefined, total: number | n
   const decimals = share < 10 || share > 90 ? 1 : 0;
   return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimals }).format(share)}%`;
 }
+
+const LIST = new Intl.ListFormat('en-GB', { style: 'long', type: 'conjunction' });
+
+/** "8 min", "8 min and 15 min", "1 s, 8 min and 15 min": UK English, no comma before the "and". */
+export function formatList(items: readonly string[]): string {
+  return LIST.format(items);
+}

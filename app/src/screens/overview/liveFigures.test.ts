@@ -324,6 +324,8 @@ describe('the found-and-crawled series', () => {
       found: 130,
       crawled: 18,
       continued: false,
+      runStarts: null,
+      offsetMs: 0,
     });
   });
 

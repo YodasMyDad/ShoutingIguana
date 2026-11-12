@@ -11,7 +11,7 @@ import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { useElementWidth } from '../grid/useElementWidth';
 import { useCommands } from '../keyboard/registry';
-import { formatCount, formatCountOf, formatExactTime } from '../lib/format';
+import { formatCount, formatCountOf, formatDuration, formatExactTime } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { useSettings } from '../settings/settingsStore';
 import { Banner } from '../ui/Banner';
@@ -498,9 +498,11 @@ function EmptyAction({ crawlId, item, reason }: { crawlId: string; item: CrawlLi
 }
 
 /**
- * The crawl in a line: what it fetched (opening its URLs), its pages and when it started. Not how long it took: from
- * when it started to when it finished has every pause in it, and the hours or days between stopping it and continuing
- * it, and nothing the engine keeps says how long it spent crawling.
+ * The crawl in a line: what it crawled (opening its URLs), its pages, when it started, and how long it spent crawling
+ * (E3c's `crawlingMs`): every run's time, each from its start to its end less its pauses, so neither a pause nor the
+ * days between stopping it and continuing it are in it, which the words say. Not from when it started to when it
+ * finished, which has all of that in it. A crawl an earlier engine made, or made a run of, didn't keep the time: it
+ * says so rather than guess.
  */
 function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlListItem; crawled: number }) {
   return (
@@ -512,9 +514,18 @@ function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlLi
         {formatCountOf(crawled, 'URL')}
       </TextLink>{' '}
       crawled, {formatCountOf(item.pageCount, 'page')} read
-      {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.
+      {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.{crawlingWords(item.crawlingMs)}
     </p>
   );
+}
+
+/** The time spent crawling, in words that say which clock it is; nothing from a sidecar that doesn't say. */
+function crawlingWords(crawlingMs: number | null | undefined): string {
+  if (crawlingMs === undefined) return '';
+  if (crawlingMs === null) {
+    return ' How long it spent crawling isn’t known: an earlier version of Shouting Iguana crawled it, or part of it, and didn’t keep the time.';
+  }
+  return ` It spent ${formatDuration(crawlingMs)} crawling, not counting pauses or the time between runs.`;
 }
 
 /** The crawl's alerts, from its file and from this session, when it has any: they explain what's missing. */

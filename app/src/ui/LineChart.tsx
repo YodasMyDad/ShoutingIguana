@@ -23,6 +23,12 @@ export interface LineChartTick {
   label: string;
 }
 
+/** A moment marked on the time axis (a crawl continued): a quiet upright rule. What it means is said in the label. */
+export interface LineChartMarker {
+  key: string;
+  x: number;
+}
+
 export interface LineChartProps {
   series: readonly LineChartSeries[];
   /** The chart in words, with its numbers: "Found and crawled URLs over 22 min 26 s: 5,722 found, 2,713 crawled". */
@@ -32,8 +38,12 @@ export interface LineChartProps {
   yMax: number;
   xTicks: readonly LineChartTick[];
   yTicks: readonly LineChartTick[];
+  /** Moments marked across the plot, drawn behind the lines. Say each in `label`, which the picture can't. */
+  markers?: readonly LineChartMarker[] | undefined;
   className?: string | undefined;
 }
+
+const NO_MARKERS: readonly LineChartMarker[] = [];
 
 /** What the plot is drawn at before it's measured, and in tests. */
 const FALLBACK = { width: 480, height: 188 };
@@ -52,6 +62,7 @@ export const LineChart = memo(function LineChart({
   yMax,
   xTicks,
   yTicks,
+  markers = NO_MARKERS,
   className,
 }: LineChartProps) {
   const [ref, measured] = useElementSize();
@@ -82,6 +93,18 @@ export const LineChart = memo(function LineChart({
                 x2={width}
                 y1={y(tick.value)}
                 y2={y(tick.value)}
+              />
+            ))}
+          </Group>
+          <Group>
+            {markers.map((marker) => (
+              <line
+                key={marker.key}
+                className="si-chart__marker"
+                x1={x(marker.x)}
+                x2={x(marker.x)}
+                y1={INSET}
+                y2={height}
               />
             ))}
           </Group>

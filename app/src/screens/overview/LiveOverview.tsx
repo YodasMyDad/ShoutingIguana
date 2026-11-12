@@ -5,7 +5,7 @@ import { alertsQuery, checksQuery, historyQuery } from '../../api/queries';
 import type { CrawlListItem, CrawlStatus } from '../../api/types';
 import { continueCrawl, pauseOrResume } from '../../crawl/actions';
 import { useElementWidth } from '../../grid/useElementWidth';
-import { formatBytes, formatCount, formatCountOf, formatDuration, formatRate } from '../../lib/format';
+import { formatBytes, formatCount, formatCountOf, formatDuration, formatList, formatRate } from '../../lib/format';
 import { useLiveCrawl } from '../../live/liveStore';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
@@ -85,15 +85,26 @@ export function LiveOverview({
   const series = useMemo(() => progressSeries(history, trail ?? []), [history, trail]);
   const spark = useMemo(() => sparkOf(rates ?? []), [rates]);
   const left = timeLeft(status, progress, live?.pace ?? []);
-  // The run's time spent crawling; the engine's own count of the run (which runs on through a pause) only for an
-  // engine whose progress doesn't say when it was taken.
-  const elapsedMs = live?.clock?.runMs ?? progress?.elapsedMs;
-  // "over 4 s", and for a crawl that was continued, of which only this run is drawn, "over the 4 s since it was continued".
+  // The time spent crawling: the run's, on its clock, after the earlier runs' when the history says what they were
+  // (E3c), so Elapsed and the chart's axis are one clock. The engine's own count of the run (which runs on through a
+  // pause) only for an engine whose progress doesn't say when it was taken.
+  const runMs = live?.clock?.runMs ?? progress?.elapsedMs;
+  const elapsedMs = runMs == null ? runMs : runMs + (series?.offsetMs ?? 0);
+  // "over 4 s"; for a crawl continued, "over 1 h 4 min of crawling, in 2 runs" when the runs' times are known, and
+  // "over the 4 s since it was continued", of which only this run is drawn, when they aren't.
+  const runCount = (series?.runStarts?.length ?? 0) + 1;
   const over = series
-    ? series.continued
-      ? `over the ${formatDuration(series.spanMs)} since it was continued`
-      : `over ${formatDuration(series.spanMs)}`
+    ? series.runStarts && runCount > 1
+      ? `over ${formatDuration(series.spanMs)} of crawling, in ${formatCount(runCount)} runs`
+      : series.continued && !series.runStarts
+        ? `over the ${formatDuration(series.spanMs)} since it was continued`
+        : `over ${formatDuration(series.spanMs)}`
     : '';
+  // Where each later run began, in words, for the chart's label: the picture marks them.
+  const continuedAt =
+    series?.runStarts && series.runStarts.length > 0
+      ? `, continued at ${formatList(series.runStarts.map((start) => formatDuration(start)))} of it`
+      : '';
   const statusClasses = progress?.statusClasses ?? null;
   const statusCodes = progress?.statusCodes ?? null;
   const noResponse = progress?.noResponse ?? null;
@@ -133,6 +144,7 @@ export function LiveOverview({
       yMax: yTicks.at(-1) ?? 1,
       xTicks: timeTicks(series.spanMs).map((value) => ({ value, label: value === 0 ? '0' : formatDuration(value) })),
       yTicks: yTicks.map((value) => ({ value, label: formatCount(value) })),
+      markers: (series.runStarts ?? []).map((start, index) => ({ key: `run-${index + 2}`, x: start })),
     };
   }, [series]);
 
@@ -267,7 +279,7 @@ export function LiveOverview({
               <LineChart
                 label={
                   series
-                    ? `Found and crawled URLs of the site ${over}: ${formatCount(series.found)} found, ${formatCount(series.crawled)} crawled`
+                    ? `Found and crawled URLs of the site ${over}${continuedAt}: ${formatCount(series.found)} found, ${formatCount(series.crawled)} crawled`
                     : 'Found and crawled URLs of the site: waiting for the crawl’s first figures'
                 }
                 series={chart?.lines ?? NO_LINES}
@@ -275,6 +287,7 @@ export function LiveOverview({
                 yMax={chart?.yMax ?? 1}
                 xTicks={chart?.xTicks ?? NO_TICKS}
                 yTicks={chart?.yTicks ?? NO_TICKS}
+                markers={chart?.markers}
               />
               {chart ? null : (
                 // Over the chart's own box, which is there from the start.
