@@ -288,6 +288,12 @@ public sealed class PageRuleTests
 
         Assert.Equal([IssueCatalog.CHARSET_MISSING], withoutHeader);
         Assert.Empty(withHeader);
+
+        // A header that names the parameter and gives it no value declares nothing, as the fetch reads it.
+        Assert.All(new[] { "text/html; charset=", "text/html; charset=\"\"", "text/html; x-charset=utf-8", "text/html;" }, (contentType, index) =>
+            Assert.Equal([IssueCatalog.CHARSET_MISSING],
+                Issues(rules, site.Page($"{site.Site}/empty-{index}", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", contentType)]))));
+        Assert.Empty(Issues(rules, site.Page($"{site.Site}/quoted", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html;charset=\"utf-8\"")])));
         Assert.Contains(IssueCatalog.LANG_MISSING, Issues(rules, site.Page($"{site.Site}/c", RuleHarness.Html(lang: string.Empty), IndexabilityReason.Noindex)));
     }
 
