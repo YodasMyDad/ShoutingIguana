@@ -34,11 +34,21 @@ public sealed record SyntheticSiteOptions
     public bool DeadTwin { get; init; }
 
     /// <summary>
-    /// Every product page is noindex, as on a site launched with its staging setting left on, so the site as a whole
-    /// keeps itself out of search: once more than half of its pages are noindex (a <see cref="PageCount"/> of about
-    /// 105 or more, as the categories, static pages and planted pages aren't noindex; the canonicalised ones among
-    /// those are no part of the count), <c>site-hidden-from-search</c> is reported on the home page. The products' other checks follow: none is indexable, so their titles and descriptions
-    /// aren't judged, and each is a sitemap entry that can't be indexed. Off by default, and in the benchmark.
+    /// The home page and every product page are noindex, as on a site launched with its staging setting left on, so the
+    /// site as a whole keeps itself out of search: once more than half of its pages are noindex (a
+    /// <see cref="PageCount"/> of about 105 or more, as the categories, static pages and planted pages aren't noindex;
+    /// the canonicalised ones among those are no part of the count), <c>site-hidden-from-search</c> is reported on the
+    /// home page. The pages' other checks follow: no product is indexable, so their titles and descriptions aren't
+    /// judged, and the home page and each product is a sitemap entry that can't be indexed. Off by default, and in the
+    /// benchmark.
     /// </summary>
     public bool HiddenFromSearch { get; init; }
+
+    /// <summary>
+    /// Every product page is noindex and the home page is not, as on a shop that keeps its many listings out of search
+    /// on purpose. More than half of the pages are then noindex (from the same <see cref="PageCount"/> as
+    /// <see cref="HiddenFromSearch"/>), and <c>site-hidden-from-search</c> must not be reported: the home page can be
+    /// indexed, so the site isn't hiding itself. The products' other checks follow as they do there. Off by default.
+    /// </summary>
+    public bool NoindexProducts { get; init; }
 }

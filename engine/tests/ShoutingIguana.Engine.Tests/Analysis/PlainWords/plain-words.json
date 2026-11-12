@@ -398,9 +398,9 @@
     },
     "site-hidden-from-search": {
       "plainTitle": "Your site hides most of its pages from search",
-      "plainLooksFor": "A site that hides most of its pages from search",
+      "plainLooksFor": "A site that hides its home page and most pages from search",
       "plainWhat": [
-        "More than half of your pages tell search engines to keep them out of search results.",
+        "Your home page and more than half of your pages tell search engines to keep them out of search results.",
         "Those pages can't be found through Google, however good they are.",
         "It's often one setting left on from when the site was being built, so one change may fix it.",
         "This is one fault for the whole site, and the first thing to fix."
@@ -412,7 +412,7 @@
         "Check the site again once it's changed."
       ],
       "fixer": "either",
-      "plainPassed": "The site isn't hiding most of its pages from search"
+      "plainPassed": "The site as a whole isn't hidden from search"
     },
     "canonicalised-page": {
       "plainTitle": "Pages that name another page as the main version",

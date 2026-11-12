@@ -7,10 +7,10 @@ using ShoutingIguana.Engine.Parsing.Models;
 namespace ShoutingIguana.Engine.Tests.Analysis;
 
 /// <summary>
-/// <c>site-hidden-from-search</c>: more than half of the pages that stand for themselves are noindex. A page whose
-/// canonical names another URL is a variant of that page, and counts neither as hidden nor in the total. Its edges, one
-/// a test: what a page is, what a variant is, a site of one page, exactly half, no page left to judge, and where it is
-/// reported.
+/// <c>site-hidden-from-search</c>: the home page is noindex, and so are more than half of the pages that stand for
+/// themselves. A page whose canonical names another URL is a variant of that page, and counts neither as hidden nor in
+/// the total. Its edges, one a test: which page is the home page, what a page is, what a variant is, a site of one page,
+/// exactly half, no page left to judge, and where it is reported.
 /// </summary>
 public sealed class SiteVisibilityRulesTests
 {
@@ -20,13 +20,13 @@ public sealed class SiteVisibilityRulesTests
     public void MoreThanHalfOfThePagesNoindexIsReportedOnceOnTheHomePage()
     {
         var site = new RuleHarness();
-        var home = site.Page($"{site.Site}/", RuleHarness.Html());
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
         AnalyzedPage[] pages =
         [
             home,
             site.Page($"{site.Site}/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
             site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
-            site.Page($"{site.Site}/c", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page($"{site.Site}/c", RuleHarness.Html()),
             // A variant of the home page: six pages read, five that stand for themselves.
             site.Page($"{site.Site}/?sort=price", RuleHarness.Html(Canonical($"{site.Site}/")), IndexabilityReason.Canonicalised),
             site.Page($"{site.Site}/d", RuleHarness.Html())
@@ -45,9 +45,9 @@ public sealed class SiteVisibilityRulesTests
         var site = new RuleHarness();
         AnalyzedPage[] pages =
         [
-            site.Page($"{site.Site}/", RuleHarness.Html()),
+            site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
             site.Page($"{site.Site}/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
-            site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page($"{site.Site}/b", RuleHarness.Html()),
             site.Page($"{site.Site}/c", RuleHarness.Html())
         ];
 
@@ -71,6 +71,110 @@ public sealed class SiteVisibilityRulesTests
     }
 
     /// <summary>
+    /// The brief's shop: its home page can be indexed, and it keeps its many filtered listings out of search with
+    /// noindex. Most of its pages are noindex, and the site isn't hiding itself, so nothing is reported, which would cost
+    /// 60 points of the score. The same pages under a noindex home page are a site hidden from search.
+    /// </summary>
+    [Fact]
+    public void ASiteWithManyNoindexPagesAndAnIndexableHomePageIsNotHidden()
+    {
+        var shop = new RuleHarness();
+        List<AnalyzedPage> pages = [shop.Page($"{shop.Site}/", RuleHarness.Html()), shop.Page($"{shop.Site}/shoes", RuleHarness.Html())];
+        pages.AddRange(Enumerable.Range(1, 40).Select(number =>
+            shop.Page($"{shop.Site}/shoes?colour={number}", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)));
+
+        // 40 of its 42 pages are noindex.
+        Assert.Empty(Hits(shop.Table(), [.. pages]));
+
+        var staging = new RuleHarness();
+        var home = staging.Page($"{staging.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+        List<AnalyzedPage> hidden = [home, staging.Page($"{staging.Site}/shoes", RuleHarness.Html())];
+        hidden.AddRange(Enumerable.Range(1, 40).Select(number =>
+            staging.Page($"{staging.Site}/shoes?colour={number}", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)));
+
+        var hit = Assert.Single(Hits(staging.Table(), [.. hidden]));
+        Assert.Equal((home.UrlId, "41 of 42 pages are noindex"), (hit.UrlId, hit.Detail));
+    }
+
+    /// <summary>
+    /// The home page alone hides nothing: it is noindex, and most of the site's pages can be indexed, so the site isn't
+    /// hidden. Both halves of the rule are needed.
+    /// </summary>
+    [Fact]
+    public void ANoindexHomePageOnASiteOfIndexablePagesIsNotHidden()
+    {
+        var site = new RuleHarness();
+        AnalyzedPage[] pages =
+        [
+            site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page($"{site.Site}/a", RuleHarness.Html()),
+            site.Page($"{site.Site}/b", RuleHarness.Html())
+        ];
+
+        Assert.Empty(Hits(site.Table(), pages));
+    }
+
+    /// <summary>
+    /// The home page is the page the start URL ends on: where the start URL redirects to a page that can be indexed, the
+    /// noindex pages behind it don't hide the site, and a noindex page that isn't the home page never stands for it.
+    /// </summary>
+    [Fact]
+    public void TheHomePageIsThePageTheStartUrlEndsOn()
+    {
+        var site = new RuleHarness("https://example.com");
+        site.Fetched("https://example.com/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/");
+        var home = site.Page("https://www.example.com/", RuleHarness.Html());
+        AnalyzedPage[] others =
+        [
+            site.Page("https://www.example.com/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page("https://www.example.com/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page("https://www.example.com/c", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)
+        ];
+        var urls = site.Table();
+        Assert.Equal(home.UrlId, urls.HomeId);
+
+        // Three of four pages are noindex, and the page the start URL leads to isn't one of them.
+        Assert.Empty(Hits(urls, [home, .. others]));
+
+        // A crawl started in a section is judged by that section's first page.
+        var section = new RuleHarness();
+        var start = section.Page($"{section.Site}/shop/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+        var listing = section.Page($"{section.Site}/shop/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+        var siteHome = section.Page($"{section.Site}/", RuleHarness.Html());
+        var hit = Assert.Single(Hits(section.Table(start: $"{section.Site}/shop/"), start, listing, siteHome));
+        Assert.Equal((start.UrlId, "2 of 3 pages are noindex"), (hit.UrlId, hit.Detail));
+    }
+
+    /// <summary>
+    /// A start page that moves on with an instant meta refresh is a redirect to search engines, so the home page is the
+    /// page it moves to: the start page's own noindex says nothing, and the page it leads to decides.
+    /// </summary>
+    [Fact]
+    public void AStartPageThatMovesOnAtOnceLeavesTheHomePageToThePageItMovesTo()
+    {
+        foreach (var (homeHead, reason, expected) in new[]
+                 {
+                     (string.Empty, IndexabilityReason.None, (string?)null), (NOINDEX, IndexabilityReason.Noindex, "4 of 5 pages are noindex")
+                 })
+        {
+            var site = new RuleHarness();
+            var start = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX + $"<meta http-equiv=\"refresh\" content=\"0; url={site.Site}/home\">"), IndexabilityReason.Noindex);
+            var home = site.Page($"{site.Site}/home", RuleHarness.Html(homeHead), reason);
+            var first = site.Page($"{site.Site}/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+            var second = site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+            var third = site.Page($"{site.Site}/c", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+            var urls = site.Table(instantRefreshes: [(start.UrlId, home.UrlId)]);
+            Assert.Equal(home.UrlId, urls.HomeId);
+
+            // Three of the five pages are noindex whatever the home page says: the start page itself is never one of them.
+            var hits = Hits(urls, start, home, first, second, third);
+
+            (int, string)[] wanted = expected is null ? [] : [(home.UrlId, expected)];
+            Assert.Equal(wanted, hits.Select(hit => (hit.UrlId, hit.Detail!)));
+        }
+    }
+
+    /// <summary>
     /// A shop whose crawl read far more filtered and sorted listings than main pages: every listing names its main page,
     /// which can be indexed, so nothing is hidden. The variants are no part of the count, however many they are.
     /// </summary>
@@ -80,17 +184,18 @@ public sealed class SiteVisibilityRulesTests
         var site = new RuleHarness();
         List<AnalyzedPage> pages =
         [
-            site.Page($"{site.Site}/", RuleHarness.Html()),
+            site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
             site.Page($"{site.Site}/shoes", RuleHarness.Html()),
             site.Page($"{site.Site}/hats", RuleHarness.Html())
         ];
         pages.AddRange(Enumerable.Range(1, 40).Select(number =>
             site.Page($"{site.Site}/shoes?page={number}", RuleHarness.Html(Canonical($"{site.Site}/shoes")), IndexabilityReason.Canonicalised)));
 
-        // 40 of the 43 pages read can't be indexed themselves, and the site isn't hidden: its three pages can be.
+        // 41 of the 43 pages read can't be indexed themselves, and the site isn't hidden: of the three that stand for
+        // themselves, one is noindex.
         Assert.Empty(Hits(site.Table(), [.. pages]));
 
-        // One of the three noindex is one of three, not 41 of 43.
+        // Two of the four noindex is half, not 42 of 44.
         pages.Add(site.Page($"{site.Site}/basket", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex));
         Assert.Empty(Hits(site.Table(), [.. pages]));
     }
@@ -103,13 +208,13 @@ public sealed class SiteVisibilityRulesTests
     public void ASiteWhoseNonVariantPagesAreMostlyNoindexIsHidden()
     {
         var site = new RuleHarness();
-        var home = site.Page($"{site.Site}/", RuleHarness.Html());
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
         List<AnalyzedPage> pages =
         [
             home,
             site.Page($"{site.Site}/shoes", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
             site.Page($"{site.Site}/hats", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
-            site.Page($"{site.Site}/coats", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page($"{site.Site}/coats", RuleHarness.Html()),
             site.Page($"{site.Site}/about", RuleHarness.Html())
         ];
         pages.AddRange(Enumerable.Range(1, 40).Select(number =>
@@ -151,12 +256,13 @@ public sealed class SiteVisibilityRulesTests
         var site = new RuleHarness();
         AnalyzedPage[] pages =
         [
-            site.Page($"{site.Site}/", RuleHarness.Html()),
+            site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
             site.Page($"{site.Site}/a", RuleHarness.Html(NOINDEX + Canonical($"{site.Site}/")), IndexabilityReason.Noindex),
-            site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX + Canonical($"{site.Site}/")), IndexabilityReason.Noindex)
+            site.Page($"{site.Site}/b", RuleHarness.Html())
         ];
         var urls = site.Table();
 
+        // Were the page that names the home page a variant, it would be one of two, and nothing.
         Assert.Equal("2 of 3 pages are noindex", Assert.Single(Hits(urls, pages)).Detail);
         Assert.Equal(2, pages.Count(page => new IndexabilityRules().Check(RuleHarness.AsAnalysed(page, urls)).Any(hit => hit.Issue == IssueCatalog.NOINDEX_PAGE)));
     }
@@ -170,11 +276,11 @@ public sealed class SiteVisibilityRulesTests
         site.Fetched($"{site.Site}/private", FetchOutcome.RobotsDisallowed, 0);
         Assert.Empty(Hits(site.Table()));
 
-        // Two blocked URLs beside two pages, one of them noindex: one of two pages, not three of four URLs.
+        // Two blocked URLs beside two pages, the home page noindex: one of two pages, not three of four URLs.
         var mixed = new RuleHarness();
         mixed.Fetched($"{mixed.Site}/private/1", FetchOutcome.RobotsDisallowed, 0);
         mixed.Fetched($"{mixed.Site}/private/2", FetchOutcome.RobotsDisallowed, 0);
-        AnalyzedPage[] pages = [mixed.Page($"{mixed.Site}/", RuleHarness.Html()), mixed.Page($"{mixed.Site}/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)];
+        AnalyzedPage[] pages = [mixed.Page($"{mixed.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex), mixed.Page($"{mixed.Site}/a", RuleHarness.Html())];
         Assert.Empty(Hits(mixed.Table(), pages));
     }
 
@@ -193,10 +299,10 @@ public sealed class SiteVisibilityRulesTests
         var site = new RuleHarness();
         AnalyzedPage[] pages =
         [
-            site.Page($"{site.Site}/", RuleHarness.Html(Canonical($"{canonicalOrigin}/")), IndexabilityReason.Canonicalised),
+            site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page($"{site.Site}/a", RuleHarness.Html(Canonical($"{canonicalOrigin}/a")), IndexabilityReason.Canonicalised),
             site.Page($"{site.Site}/a?page=2", RuleHarness.Html(Canonical($"{canonicalOrigin}/a?page=2")), IndexabilityReason.Canonicalised),
-            site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
-            site.Page($"{site.Site}/c", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)
+            site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)
         ];
 
         var hits = Hits(site.Table(), pages);
@@ -213,10 +319,10 @@ public sealed class SiteVisibilityRulesTests
         var site = new RuleHarness();
         AnalyzedPage[] pages =
         [
-            site.Page($"{site.Site}/", RuleHarness.Html(Canonical("https://www.example.com/home")), IndexabilityReason.Canonicalised),
+            site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
+            site.Page($"{site.Site}/index", RuleHarness.Html(Canonical("https://www.example.com/home")), IndexabilityReason.Canonicalised),
             site.Page($"{site.Site}/a", RuleHarness.Html(Canonical("https://www.example.com/")), IndexabilityReason.Canonicalised),
             site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
-            site.Page($"{site.Site}/c", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex),
             site.Page($"{site.Site}/d", RuleHarness.Html())
         ];
 
@@ -234,9 +340,9 @@ public sealed class SiteVisibilityRulesTests
         var site = new RuleHarness();
         var back = site.Page($"{site.Site}/back/", RuleHarness.Html(Canonical($"{site.Site}/back")), IndexabilityReason.Canonicalised);
         var nowhere = site.Page($"{site.Site}/nowhere", RuleHarness.Html(Canonical($"{site.Site}/gone")), IndexabilityReason.Canonicalised);
-        var plain = site.Page($"{site.Site}/", RuleHarness.Html());
+        var plain = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
         var first = site.Page($"{site.Site}/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
-        var second = site.Page($"{site.Site}/b", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+        var second = site.Page($"{site.Site}/b", RuleHarness.Html());
         var toBack = site.Fetched($"{site.Site}/back", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/back/");
         var gone = site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
         var urls = site.Table(canonicals: [(back.UrlId, toBack), (nowhere.UrlId, gone)]);
@@ -260,12 +366,12 @@ public sealed class SiteVisibilityRulesTests
     {
         var site = new RuleHarness();
         var moving = site.Page($"{site.Site}/old", RuleHarness.Html(NOINDEX + $"<meta http-equiv=\"refresh\" content=\"0; url={site.Site}/\">"), IndexabilityReason.Noindex);
-        var hidden = site.Page($"{site.Site}/a", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
-        var home = site.Page($"{site.Site}/", RuleHarness.Html());
+        var hidden = site.Page($"{site.Site}/a", RuleHarness.Html());
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
         var urls = site.Table(instantRefreshes: [(moving.UrlId, home.UrlId)]);
         Assert.Equal(IndexabilityReason.Redirected, urls[moving.UrlId].IndexabilityReason);
 
-        // One of three pages noindex; were the refresh page noindex too it would be two of three.
+        // One of three pages noindex, the home page; were the refresh page noindex too it would be two of three.
         Assert.Empty(Hits(urls, moving, hidden, home));
         Assert.DoesNotContain(new IndexabilityRules().Check(RuleHarness.AsAnalysed(moving, urls)), hit => hit.Issue == IssueCatalog.NOINDEX_PAGE);
 
@@ -276,9 +382,12 @@ public sealed class SiteVisibilityRulesTests
         Assert.Equal("3 of 5 pages are noindex", Assert.Single(Hits(site.Table(instantRefreshes: [(moving.UrlId, home.UrlId)]), moving, hidden, home, second, third)).Detail);
     }
 
-    /// <summary>With no home page read (the start URL refuses the crawler, and a sitemap led to the pages), it is reported on the start URL.</summary>
+    /// <summary>
+    /// With no home page read (the start URL refuses the crawler, and a sitemap led to the pages), nothing says the home
+    /// page is noindex, so nothing is reported, though every page read is. What the check flags is always a page.
+    /// </summary>
     [Fact]
-    public void WithoutAHomePageItIsReportedOnTheStartUrl()
+    public void WithoutAHomePageNothingIsReported()
     {
         var site = new RuleHarness();
         var start = site.Fetched($"{site.Site}/", FetchOutcome.ClientError, 403);
@@ -286,11 +395,8 @@ public sealed class SiteVisibilityRulesTests
         var urls = site.Table();
         Assert.Equal(start, urls.HomeId);
 
-        var hit = Assert.Single(Hits(urls, page));
-
-        Assert.Equal((start, "1 of 1 page is noindex"), (hit.UrlId, hit.Detail));
-        Assert.False(urls[hit.UrlId].IsPage);
-        Assert.Equal(IssueSubject.Url, hit.Issue.Subject);
+        Assert.Empty(Hits(urls, page));
+        Assert.Equal(IssueSubject.Page, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Subject);
     }
 
     /// <summary>The start URL redirects to the home page: that is where the site's faults are reported.</summary>
@@ -309,8 +415,8 @@ public sealed class SiteVisibilityRulesTests
     public void TheDetailGroupsThousands()
     {
         var site = new RuleHarness();
-        List<AnalyzedPage> pages = [site.Page($"{site.Site}/", RuleHarness.Html())];
-        pages.AddRange(Enumerable.Range(1, 1_200).Select(number => site.Page($"{site.Site}/p/{number}", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)));
+        List<AnalyzedPage> pages = [site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex), site.Page($"{site.Site}/about", RuleHarness.Html())];
+        pages.AddRange(Enumerable.Range(1, 1_199).Select(number => site.Page($"{site.Site}/p/{number}", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex)));
         pages.AddRange(Enumerable.Range(1, 1_050).Select(number =>
             site.Page($"{site.Site}/v/{number}", RuleHarness.Html(Canonical($"{site.Site}/")), IndexabilityReason.Canonicalised)));
 

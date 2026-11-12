@@ -84,10 +84,11 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Every product is noindex, as on a site launched with its staging setting left on: more than half of the pages that
-    /// stand for themselves are noindex, which is one fault of the whole site, reported once, on the home page, with the
-    /// numbers: the noindex check's own count, of the pages analysed less the canonicalised ones. The site without it
-    /// (every other test here, and the benchmark) is never flagged: the whole issues table is compared.
+    /// The home page and every product are noindex, as on a site launched with its staging setting left on: the home
+    /// page is noindex, with more than half of the pages that stand for themselves, which is one fault of the whole site,
+    /// reported once, on the home page, with the numbers: the noindex check's own count, of the pages analysed less the
+    /// canonicalised ones. The site without it (every other test here, and the benchmark) is never flagged: the whole
+    /// issues table is compared.
     /// </summary>
     [Fact]
     public async Task FindsASiteHiddenFromSearch()
@@ -96,7 +97,8 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
 
         var expected = server.Site.GetExpectations();
-        Assert.True(expected.Noindex >= VARIANT_PAGES - 1 && expected.Canonicalised > 0 && expected.Noindex * 2 > expected.AnalysedPages - expected.Canonicalised);
+        Assert.True(expected.Noindex >= VARIANT_PAGES && expected.Canonicalised > 0 && expected.Noindex * 2 > expected.AnalysedPages - expected.Canonicalised);
+        Assert.Contains(server.BaseUri.AbsoluteUri, expected.IssueUrls["noindex-page"]);
         var hidden = Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, 10));
         Assert.Equal(
             (server.BaseUri.AbsoluteUri, (string?)null, string.Create(CultureInfo.InvariantCulture,
@@ -109,6 +111,29 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Contains(score.Lines, line => line is { CheckId: "site-hidden-from-search", Severity: IssueSeverity.Error, Extent: ScoreExtent.Site, Points: 60 });
         Assert.Contains(score.Lines, line => line is { CheckId: "noindex-page", Severity: IssueSeverity.Notice, Points: 0 } && line.Count == expected.Noindex);
         Assert.Equal((0, ScoreBand.Poor), (score.Value, score.Band));
+    }
+
+    /// <summary>
+    /// The same site with a home page that can be indexed: every product is noindex, as on a shop that keeps its many
+    /// listings out of search on purpose, so more than half of its pages are noindex, and it isn't hidden from search.
+    /// Nothing is reported for the site (the whole issues table is compared), and the 60 points aren't lost.
+    /// </summary>
+    [Fact]
+    public async Task ASiteWithManyNoindexPagesAndAnIndexableHomePageIsNotHiddenFromSearch()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, NoindexProducts = true });
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
+
+        // As many noindex pages as the hidden site has, less its home page: still more than half.
+        var expected = server.Site.GetExpectations();
+        Assert.True(expected.Noindex >= VARIANT_PAGES - 1 && expected.Noindex * 2 > expected.AnalysedPages - expected.Canonicalised);
+        Assert.DoesNotContain(server.BaseUri.AbsoluteUri, expected.IssueUrls["noindex-page"]);
+        Assert.DoesNotContain("site-hidden-from-search", expected.IssueUrls.Keys);
+        Assert.Empty(IssueReader.ReadIssues(path, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, 10));
+
+        var score = IssueReader.ReadResults(path)!.Score!;
+        Assert.DoesNotContain(score.Lines, line => line.CheckId == "site-hidden-from-search");
+        Assert.Contains(score.Lines, line => line is { CheckId: "noindex-page", Severity: IssueSeverity.Notice, Points: 0 } && line.Count == expected.Noindex);
     }
 
     /// <summary>Crawls the site and checks the crawl and every issue against what the site planted; returns the crawl file.</summary>

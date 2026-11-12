@@ -342,6 +342,16 @@ public sealed partial class SyntheticSite
             }
         }
 
+        // The home page of a site hidden from search is noindex itself, and a sitemap entry that can't be indexed.
+        if (IsHomeNoindex)
+        {
+            Flag("noindex-page", "/");
+            if (_options.Sitemaps)
+            {
+                Flag("sitemap-non-indexable", "/");
+            }
+        }
+
         // Site-wide findings go on the home page: plain HTTP, or over HTTPS the missing Strict-Transport-Security header
         // and the plain-HTTP robots.txt that doesn't answer. The HTTPS site's plain-HTTP side serves the home page rather
         // than redirect, a duplicate version of the site. Over plain HTTP, the https:// version doesn't answer, as on a
@@ -393,11 +403,12 @@ public sealed partial class SyntheticSite
         var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true });
         var analysedPages = htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false });
 
-        // A site more than half of whose pages are noindex is hidden as a whole, which is reported once, on the home
-        // page. A canonicalised page is a variant of another, and no part of the count: no planted canonical names its
-        // own page on another version of the site, so every one of them is out. Only a site with HiddenFromSearch gets
-        // there.
-        if (Count(issues, "noindex-page") * 2 > analysedPages - Count(issues, "canonicalised-page"))
+        // A site whose home page is noindex, with more than half of its pages, is hidden as a whole, which is reported
+        // once, on the home page. A canonicalised page is a variant of another, and no part of the count: no planted
+        // canonical names its own page on another version of the site, so every one of them is out. Only a site with
+        // HiddenFromSearch gets there: one with NoindexProducts has as many noindex pages less one, and a home page
+        // that can be indexed.
+        if (IsHomeNoindex && Count(issues, "noindex-page") * 2 > analysedPages - Count(issues, "canonicalised-page"))
         {
             Flag("site-hidden-from-search", "/");
         }
@@ -444,7 +455,9 @@ public sealed partial class SyntheticSite
 
     private static bool MissesDescription(int product) => product % 50 == 0;
 
-    private bool IsNoindex(int product) => _options.HiddenFromSearch || product % 101 == 0;
+    private bool IsHomeNoindex => _options.HiddenFromSearch;
+
+    private bool IsNoindex(int product) => _options.HiddenFromSearch || _options.NoindexProducts || product % 101 == 0;
 
     private static bool IsCanonicalised(int product) => product % 73 == 0;
 
@@ -573,7 +586,8 @@ public sealed partial class SyntheticSite
             Title = "Synthetic Store | Everyday goods for crawler tests",
             Description = "The Synthetic Store home page: a deterministic shop with thousands of products, built to test SEO crawlers.",
             H1 = "Synthetic Store",
-            Content = $"<p>{Text("home", INTRO_WORDS)}</p><ul>{list}</ul>"
+            Content = $"<p>{Text("home", INTRO_WORDS)}</p><ul>{list}</ul>",
+            Robots = IsHomeNoindex ? "noindex" : null
         });
     }
 
