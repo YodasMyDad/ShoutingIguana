@@ -53,6 +53,9 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Equal(3, sitemap.UrlCount);
         Assert.NotNull(sitemap.Error);
         Assert.Equal(3, Count(path, "SELECT COUNT(*) FROM sitemap_urls"));
+
+        // Its body was read as far as it went, and listed no sitemap: that much is known of it.
+        Assert.Equal(0, Assert.Single(SitemapListReader.Read(path).Sitemaps).ListedSitemaps);
     }
 
     [Fact]
@@ -190,10 +193,13 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
     [Fact]
     public async Task SitemapsPastTheLimitAreRecordedAsNotRead()
     {
-        // An index of more sitemaps than the crawler reads: it and all but the last of them are read.
+        // An index of more sitemaps than the crawler reads, by forty, one of them listed twice and one that's no URL: it
+        // and the first of them are read, up to the limit.
+        const int OVER = 40;
         Serve("/robots.txt", "text/plain", $"User-agent: *\nDisallow:\nSitemap: {_server.Url("/index.xml")}");
         Serve("/index.xml", "application/xml", $"<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">{string.Concat(
-            Enumerable.Range(0, SitemapDiscoverer.MAX_SITEMAPS).Select(child => $"<sitemap><loc>{_server.Url($"/part-{child}.xml")}</loc></sitemap>"))}</sitemapindex>");
+            Enumerable.Range(0, SitemapDiscoverer.MAX_SITEMAPS + OVER).Select(child => $"<sitemap><loc>{_server.Url($"/part-{child}.xml")}</loc></sitemap>"))}<sitemap><loc>{
+                _server.Url("/part-0.xml")}</loc></sitemap><sitemap><loc>not a URL</loc></sitemap></sitemapindex>");
         for (var child = 0; child < SitemapDiscoverer.MAX_SITEMAPS; child++)
         {
             Serve($"/part-{child}.xml", "application/xml", $"{URLSET}</urlset>");
@@ -210,6 +216,14 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Null(notRead.StatusCode);
         Assert.False(notRead.IsProbe);
         Assert.Equal(1, observer.Count("sitemaps-not-read"));
+
+        // The index says how many sitemaps its file lists, every entry of it, though the crawl stopped at its limit: it
+        // has the 999 it read and the one it recorded as left unread. A sitemap read lists none, and the one left unread
+        // doesn't say.
+        var list = SitemapListReader.Read(path).Sitemaps;
+        Assert.Equal((SitemapDiscoverer.MAX_SITEMAPS + OVER + 2, SitemapDiscoverer.MAX_SITEMAPS, true), (list[0].ListedSitemaps, list[0].Sitemaps, list[0].IsIndex));
+        Assert.All(list.Skip(1).Take(SitemapDiscoverer.MAX_SITEMAPS - 1), sitemap => Assert.Equal((SitemapState.Read, 0), (sitemap.State, sitemap.ListedSitemaps)));
+        Assert.Equal((SitemapState.NotRead, null), (list[^1].State, list[^1].ListedSitemaps));
     }
 
     /// <remarks>

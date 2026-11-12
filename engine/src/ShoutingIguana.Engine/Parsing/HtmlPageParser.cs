@@ -50,6 +50,7 @@ public static class HtmlPageParser
             Images = walker.Images,
             JsonLd = walker.JsonLd,
             AnchorIds = walker.AnchorIds,
+            Icons = walker.Icons,
             MetaRefresh = walker.MetaRefresh,
             Robots = RobotsMetaParser.Parse(walker.RobotsMetaContents, signals.RobotsTagValues, robotsToken),
             Language = walker.Language,

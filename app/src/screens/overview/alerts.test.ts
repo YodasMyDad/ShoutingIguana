@@ -44,11 +44,11 @@ describe('alerts', () => {
     const [robots] = alertEntries([
       alert({
         code: 'robots-unreachable',
-        data: { origin: 'https://example.com', reason: 'HTTP 503', durationMs: 120_000 },
+        data: { origin: 'https://example.com', reason: '503 Service Unavailable', durationMs: 120_000 },
       }),
     ]);
     expect(robots?.detail).toBe(
-      'https://example.com answered HTTP 503. It’s asked again in 2 min. Its URLs aren’t fetched until it can be read; they get one more try after that.',
+      'https://example.com answered 503 Service Unavailable. It’s asked again in 2 min. Its URLs aren’t fetched until it can be read; they get one more try after that.',
     );
 
     const [sitemaps] = alertEntries([alert({ code: 'sitemaps', level: 'info', data: { count: 1, urlCount: 4_200 } })]);
@@ -230,8 +230,8 @@ describe('how an alert words a failure', () => {
   });
 
   it('says a status as the answer it is, with nothing behind it', () => {
-    const [robots] = alertEntries([raised('robots-unreachable', 'HTTP 503')]);
-    expect(robots?.detail).toMatch(/^https:\/\/example\.com answered HTTP 503\./);
+    const [robots] = alertEntries([raised('robots-unreachable', '503 Service Unavailable')]);
+    expect(robots?.detail).toMatch(/^https:\/\/example\.com answered 503 Service Unavailable\./);
     expect(robots?.recorded).toBeUndefined();
     const [site] = alertEntries([raised('site-unreachable', 'Timed out')]);
     expect(site?.detail).toBe('https://example.com: it timed out.');

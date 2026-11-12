@@ -36,6 +36,11 @@ Built in stages:
   the crawler's own probes said apart in the counts; the URLs crawled counted as the grid counts them; the time spent
   crawling; the inspector's totals of every kind of link, the URL's length, and what became of each link's other end.
   [Engine changes E3c made](#engine-changes-e3c-made) has what changed and what was measured.
+- **E6** is marked below where it adds, each addition a new field or a new call: search as it's typed, the site's
+  icon, the analysis's limits read and changed, a links view's ends and the URL grid narrowed to them, robots.txt's
+  origins searched and filtered, the inspector's exact links to a sitemap and a robots.txt line, and a pass over the
+  links split over connections. [Engine changes E6 made](#engine-changes-e6-made) has what changed and what was
+  measured.
 - **The score** is marked below too, each addition a new field: what Simple mode needs of the engine that isn't export
   ([the Simple design](v2-ui-simple.md#what-the-engine-needs)). A site's score, worked out and stored by the analysis;
   the checks' plain words; which checks are a fault of the whole site, and which are reported once; and a status
@@ -168,6 +173,7 @@ Built in stages:
     | Type | Status | When |
     | --- | --- | --- |
     | `invalid-options` | 422 | Validation failed |
+    | `invalid-settings` | 422 | The analysis's limits can't be saved as sent: `errors` is keyed by limit (E6) |
     | `needs-secrets` | 422 | A secret must be given again |
     | `not-a-crawl` | 400 | The file isn't a crawl: SQLite error 26 (as in the CLI), the wrong schema, or a view or trigger the engine never writes |
     | `crawl-not-found` | 404 | No crawl has this id |
@@ -317,7 +323,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
  "crawlingMs":41250,"fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
- "analyzedAt":"…","score":{"value":85,"band":"good","partial":false},"outOfDate":false,"sizeBytes":18276352,"missing":false}
+ "analyzedAt":"…","score":{"value":85,"band":"good","partial":false},"outOfDate":false,"sizeBytes":18276352,"hasFavicon":true,"missing":false}
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
@@ -370,9 +376,13 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
     continued, here or elsewhere, or is running here;
   - this engine would judge the crawl differently: an engine with another analysis version or other checks ran it,
     as every engine from before E2 did;
-  - or the analysis ran with other thresholds than the sidecar's.
+  - or the analysis ran with other thresholds than the sidecar's, which Settings can change
+    ([Analysis settings](#analysis-settings-e6)).
 
   `GET /api/crawls/{id}/analysis` gives the reasons.
+- **`hasFavicon`** (E6) is true when the crawl kept the site's icon, which [`/favicon`](#favicon-e6) then gives; false
+  for a site with no icon the engine keeps, for a crawl made before E6, and for a running crawl until its icon has
+  arrived, a few requests after its first page. It is one lookup as the summary is read, and kept with it.
 - **Caching.** Each file's summary is read once and kept until the file's size or modified time changes, so the list
   stays cheap with many crawls. The cache is persisted in the state folder (`summaries.json`, keyed by the file's
   stamp, the engine version and the cache's own format, which changes whenever a summary keeps more), so a restart
@@ -594,7 +604,7 @@ An alert is a `CrawlNotice`, kept in the crawl file as the engine raises it (the
   | `blocked` | warning | `host`, `reason` (the firewall or challenge, "Cloudflare challenge"), `count`: the host's responses blocked, 1 on the live event (the one that raised it), and read with `GET /alerts`, the host's blocked responses in the whole crawl so far, every run's. A crawl continued while still blocked has a `blocked` alert for the host in each run, each with that same count, so the UI shows it once, on the latest | Continue more slowly, add headers, another user agent |
   | `mostly-forbidden` | warning | `host`, `count` (the 403s), `sampled` (of the site's first 20 URLs) | As for `blocked` |
   | `start-redirects-away` | warning | `url`: where the start URL leads | Crawl from there instead |
-  | `robots-unreachable` | warning | `origin`, `reason` (`HTTP 503`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
+  | `robots-unreachable` | warning | `origin`, `reason` (`503 Service Unavailable`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
   | `site-unreachable` | warning | `origin`, `reason` (the last error), `durationMs`: the pause between tries | Wait, or stop and continue later |
   | `site-down` | error | `origin`, `durationMs`: how long it hadn't answered | Continue once the site is back |
   | `sitemaps` | info | `count` (sitemaps read), `urlCount` (URLs they list) | Open Sitemaps |
@@ -865,6 +875,73 @@ one moment is never set against a total from another, and the app, the report an
 | `earlier-version` | The crawl, or some of the pages the check needs, was made by an earlier version, which didn't record what the check compares (for near-duplicate content, the 256-bit fingerprint). Crawling again mends it |
 | `newer-than-analysis` | The check is newer than the engine that ran the analysis. A check an analysis by a newer engine than the sidecar's didn't run has no `reason`: that engine dropped it |
 
+### Analysis settings (E6)
+
+The limits every analysis here judges by ("a title longer than this is too long"), for Settings to show and change.
+They're the engine's until the user saves their own, which are kept in the state folder (`analysis-settings.json`)
+and outlive a restart. The names are the JSON names of the engine's `AnalysisSettings` properties, which are also
+what each analysis stores in its crawl file.
+
+| Method and path | Does |
+| --- | --- |
+| `GET /api/analysis-settings` | The limits in force, with what each is |
+| `PUT /api/analysis-settings` | Saves limits, and answers as `GET` does. Every limit is optional: one left out, or null, takes the engine's value |
+| `POST /api/analysis-settings/validate` | `{ errors: { <limit>: [messages] } }`, 200: what a save of the same body would refuse, as it's typed. Nothing is saved |
+| `POST /api/analysis-settings/reset` | Body `{ "limits": ["titleMaxLength"] }`: puts those limits back to the engine's values and leaves the rest; with no body, or none named, all of them. Answers as `GET` does |
+
+```json
+{"settings":{"titleMinLength":30,"titleMaxLength":60,"descriptionMinLength":70,"descriptionMaxLength":155,"minWordCount":200,
+             "duplicateMinWordCount":50,"nearDuplicateMaxBits":24,"imageAltMaxLength":125,"largeImageBytes":204800,
+             "largePageBytes":1048576,"slowResponseMs":1000,"maxUrlLength":115},
+ "limits":[{"id":"titleMaxLength","value":60,"default":60,"unit":"characters","min":1,"max":10000,
+            "description":"A title longer than this is flagged as too long: search results cut it short."}],
+ "isDefault":true}
+```
+
+- **`settings`** is each limit's value by name: the body `PUT` and `validate` take. **`limits`** lists every limit in
+  the order Settings shows them, each with its `value` (the same number), the engine's `default`, its `unit`
+  (`characters`, `words`, `bits`, `bytes` or `ms`), the `min` and `max` it may be set within, and a `description`: one
+  sentence saying what it does, to show as it is. **`isDefault`** is true while every limit is at the engine's value.
+
+  | Limit | Default | Unit | Range | A page, image or URL is flagged when |
+  | --- | --- | --- | --- | --- |
+  | `titleMinLength` | 30 | characters | 0 to 10,000 | its title is shorter |
+  | `titleMaxLength` | 60 | characters | 1 to 10,000 | its title is longer |
+  | `descriptionMinLength` | 70 | characters | 0 to 10,000 | its meta description is shorter |
+  | `descriptionMaxLength` | 155 | characters | 1 to 10,000 | its meta description is longer |
+  | `minWordCount` | 200 | words | 0 to 1,000,000 | it has fewer words of main content (thin) |
+  | `duplicateMinWordCount` | 50 | words | 0 to 1,000,000 | (a page with fewer words is left out of the duplicate content checks) |
+  | `nearDuplicateMaxBits` | 24 | bits | 0 to 32 | its content fingerprint is within this many bits, of 256, of another page's |
+  | `imageAltMaxLength` | 125 | characters | 1 to 10,000 | an image's alt text is longer |
+  | `largeImageBytes` | 204,800 | bytes | 1 to 10 GB | an image is larger |
+  | `largePageBytes` | 1,048,576 | bytes | 1 to 10 GB | its HTML is larger |
+  | `slowResponseMs` | 1,000 | ms | 1 to 3,600,000 | it takes longer to answer |
+  | `maxUrlLength` | 115 | characters | 1 to 10,000 | the URL is longer |
+
+  The inspector's `limits` are these as the URL's analysis ran with them, under the inspector's own shorter names.
+- **Checked limit by limit.** A save that can't be made is `invalid-settings` (422) with `errors` keyed by the limit, and
+  saves nothing: a value outside its range ("This must be from 1 to 10,000 characters."), one that isn't a whole
+  number (text, a fraction, true: a field error here, not a 400, as an option of the wrong type is), and a longest
+  length that isn't more than its shortest, reported on the longest (`titleMaxLength`, `descriptionMaxLength`) and
+  judged with the engine's value for whichever of the two wasn't sent. A rule of the engine's that no one limit
+  breaks, only the limits together, is keyed `settings`: so `errors`' keys are limits' names, `settings`, or (for
+  `reset`) `limits[<index>]`, and a client shows a key it has no field for above the form. A limit that doesn't
+  exist, or a body that isn't an object of limits, is a `bad-request` (400), as a property the API doesn't know is
+  everywhere. `reset` with a name that's no limit's is `invalid-settings` on `limits[<index>]`, and changes nothing.
+- **Resetting one of a pair** that would leave the longest under the shortest (the shortest title raised to 70, the
+  longest put back to 60) puts both back.
+- **What a change does to the crawls already analysed.** An analysis stores the limits it ran with, and one that ran
+  with other limits than those now in force is out of date: `outOfDate` on its library item and `outOfDateReasons`
+  `settingsChanged` on `/analysis`, from the next read of either, for every crawl, open or not. Nothing else changes
+  until it's analysed again: its counts, its URL summary and its grids stay as they are behind the notice. Putting the
+  limits back makes it stand again. No event is sent: the UI reads the library again after its own save.
+- **An analysis under way keeps the limits it began with.** It takes them once, as it starts, runs to its end with
+  them and stores them: limits saved meanwhile reach the next analysis, and the one that was running is out of date
+  (`settingsChanged`) the moment it's done.
+- **What's kept.** Only the limits that differ from the engine's are written, so a limit never changed follows the
+  engine's default if a later version moves it. A file edited by hand keeps the values that could be saved today,
+  and the rest take the engine's.
+
 ### Data (E1: the readers that exist today)
 
 | Method and path | Returns |
@@ -910,6 +987,8 @@ the checks or thresholds changed keeps its summary, shown behind the out-of-date
 - `/sitemaps` and `/sitemaps/urls` (E3b);
 - `/robots`, `/robots/file` and `/robots/blocked` (E3b);
 - `/search` (E6);
+- `/links/ends`, and `linkEnds` on the URL grids (E6);
+- `/favicon` (E6);
 - `/export` (E5).
 
 The GET issues endpoint above stays as it is, for scripts and the design fixtures; the Issues screen uses `/rows`.
@@ -992,8 +1071,20 @@ of the file and holds it for that one page only.
     `{"column":"check","op":"in","values":["empty-anchor-text"],"group":{"detail":null,"relatedUrlId":1}}`. It reads
     the last analysis's issues, as `/rows` does, so it works without the URL summary too (a crawl continued since its
     analysis); only a crawl never analysed refuses it, with `needs-analysis`.
-- **`search`** matches the URL or the title containing the text, ignoring the case of ASCII letters. It's a plain scan
-  for now (fast search comes in E6), at most 1,000 characters.
+- **`search`** matches the URL or the title containing the text, ignoring the case of ASCII letters, at most 1,000
+  characters. It reads every URL and every title once per text, and keeps the URLs that matched: 26 to 50 ms for the
+  first page on the 100k crawl at p95, whatever the text (one letter, forty characters, nothing matching), which E6
+  measured against an index and left as it is ([Engine changes E6 made](#engine-changes-e6-made)). The palette's
+  search as it's typed is [`/search`](#search-e6), which gives the same count.
+- **`linkEnds`** (E6) narrows the grid to the URLs at one end of the links a view of the links grid matches:
+  `{ "end": "from" | "to", "filters": [link filters], "search": "…" }`, where `filters` and `search` are the links
+  grid's own ([Links](#links-e3b)) and none of either means every link. `from` is the pages those links are on, `to`
+  the URLs they lead to. It narrows beside `filters` and `search`, as one more filter, and `matching` under it alone is
+  `total` of [`/links/ends`](#link-ends-e6) for the same links: the number a links view can state before it opens
+  "these pages in URLs". `/urls/facets`, a check's `/rows` and `/sitemaps/urls` take it too. Its errors are keyed
+  under it (`linkEnds.end`, `linkEnds.filters[0].column`), a link filter that needs the URL summary without one is
+  refused with `needs-analysis` as the links grid refuses it, and a cursor read under other links is refused on
+  `after`. What it costs is what the list of ends costs.
 - **`sort`** is up to 3 `{ column, desc }`, with unknown values last whichever the direction, and the URL's `id`
   breaking ties, in the last key's direction (so an index walked backwards needs no sort). The default is crawl order.
 - **The summary.** `summary` says whether the URL summary describes the crawl (see above), and `reason` why not:
@@ -1135,14 +1226,15 @@ below, or past what an id holds), and `invalid-query` without one.
  "limits":{"titleMin":30,"titleMax":60,"descriptionMin":70,"descriptionMax":155,"minWords":200,"slowResponseMs":1000,
            "largePageBytes":1048576,"largeImageBytes":204800,"imageAltMaxLength":125,"maxUrlLength":115,"fromAnalysis":true},
  "links":{"inlinks":3,"followedInlinks":3,"nofollowInlinks":0,"linkingPages":2,"outlinks":45,"inSitemap":false},
- "linkTotals":{"inlinks":4,"outlinks":63},
+ "linkTotals":{"inlinks":4,"outlinks":63,"hyperlinkInlinks":3},
  "headers":[{"name":"content-type","value":"text/html; charset=utf-8"}],
  "structuredData":[{"valid":true,"types":["BlogPosting"],"json":"{…}","error":null,"truncated":false}],
  "hreflang":[],
  "issues":[{"checkId":"title-too-short","severity":"notice","detail":"12 characters","related":null,"group":null}],
  "namedBy":{"total":0,"checks":[]},
  "summary":{"available":true,"reason":null},
- "source":{"stored":false}}
+ "source":{"stored":false},
+ "listedIn":{"total":1,"sitemaps":[{"id":3,"url":"https://www.example.com/sitemaps/pages-0.xml"}]}}
 ```
 
 - **`urlLength`** (E3c) is the URL's length as the check `url-too-long` measures it, to set against
@@ -1175,13 +1267,33 @@ below, or past what an id holds), and `invalid-query` without one.
   | Test | Passes when | With |
   | --- | --- | --- |
   | `answered` | The URL answered 2xx and doesn't move on with an instant meta refresh | `statusCode`, and `metaRefresh` (the target) when it does |
-  | `robotsTxt` | robots.txt allowed the request | `unreachable`: true when robots.txt couldn't be read, which refuses everything |
+  | `robotsTxt` | robots.txt allowed the request | `unreachable`: true when robots.txt couldn't be read, which refuses everything. And (E6) `origin`, `reason`, `line` and `rule`, below |
   | `noindex` | No noindex in a robots meta tag or the `X-Robots-Tag` header | `meta` and `header`: where a noindex is |
   | `canonical` | No canonical, one to the URL itself, or one that leads back to it or nowhere | `canonical`: the target `{ id, url, statusCode }` when the crawl has it; `canonicalUrl`: the canonical as the page gives it, normalised, whether the crawl has it or not (a page only status-checked keeps no links, so its `Link` header's canonical may be no URL of the crawl's) |
 
   `indexable` and `reason` are the verdict, as the analysis judged it (`judgedBy: "analysis"`); without a URL summary
   they are the crawl's own judgement where the analysis hasn't seen the URL (`judgedBy: "crawl"`), and both are null
   for a page that was only status-checked.
+
+  **The `robotsTxt` test links exactly** (E6), so the inspector can open the file that decided the URL at the line
+  that did:
+
+  ```json
+  {"test":"robotsTxt","outcome":"fail","unreachable":false,"origin":"https://www.example.com","reason":"rule","line":2,"rule":"Disallow: /private/"}
+  ```
+
+  - **`origin`** is the origin whose robots.txt decides the URL, named as the list of origins names it, to pass to
+    `/robots/file` and `/robots/blocked`. It's there whatever the outcome when the crawl has a robots.txt answer for
+    that origin, and always for a URL robots.txt refused; left out when the crawl never asked that origin for one (so
+    there's no file to open).
+  - **`reason`**, for a URL robots.txt refused, is why, as its row in `/robots/blocked` says: `rule` (with the
+    **`line`** of the origin's stored file that refused it, and that line's text as **`rule`**), `unreachable`
+    (robots.txt couldn't be read when the URL came up) or `unknown` (the file kept doesn't refuse it: a later run read
+    it again, and it had changed). It's worked out by the crawler's own matcher from the stored file, as that list is,
+    for this URL alone: the origin's file is parsed once and kept, so inspecting one of a hundred thousand refused URLs
+    matches one. `unreachable` stays as it was: true where the crawl stored that robots.txt couldn't be read with the
+    URL itself.
+  - A field that doesn't apply is left out, as the other tests' are.
 - **`content`** is null for anything that isn't a parsed page. Titles, descriptions and H1s are each listed in page
   order with their `length` as the checks measure it; `headings` counts H1 to H6, `images` the images and
   `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the crawler or to Googlebot;
@@ -1199,6 +1311,16 @@ below, or past what an id holds), and `invalid-query` without one.
   themselves (the inlinks from the link summary, where there is one), so they're there with or without a URL summary,
   a running crawl's included, where `links` (hyperlinks only, on the pages audited) is null; a running crawl's are
   kept for 2 s, as its other counts are.
+  - **`linkTotals.hyperlinkInlinks`** (E6) is the hyperlinks among those to the URL, every one the crawl stored: the
+    `total` of `/urls/inlinks` with `"kinds": ["hyperlink"]`, and **the links grid's `matching`** under
+    `to.id` `eq` this URL, `kind` `in` `["hyperlink"]`, `selfLink` `is` false. It's the figure to show as a link to
+    Links ("N hyperlinks"), because it lands.
+  - **`links.inlinks` can be less, and isn't that figure.** The analysis counts the hyperlinks on the pages it
+    audited, and it doesn't audit Cloudflare's own pages (a URL with `/cdn-cgi/` in it, such as the email-protection
+    page), which the crawl fetches and parses like any other and whose links it stores. So for a URL such a page
+    links to, `hyperlinkInlinks` is `links.inlinks` plus that page's hyperlinks to it, and for every other URL the
+    two are equal. On the 100k benchmark crawl that is 24 of 112,590 URLs (the menu's targets, each one more, the
+    home page two); on the garden crawl, none. The URL grid's `inlinks` column, sort and filters are the analysis's.
 - **A URL the inspector names carries its `outcome`** (E3c) beside its status, as the URL grid's `outcome` column has
   it: `redirects.final`, a test's `canonical` and `metaRefresh`, and an hreflang's `target`, as each hop of `redirects`
   already did. A status is null both for a URL never fetched and for one that gave no HTTP answer; the outcome tells
@@ -1221,6 +1343,13 @@ below, or past what an id holds), and `invalid-query` without one.
   first broken link on the page; the pages canonicalised to it; the other pages of a duplicate cluster it's the first of.
   Both come from the last analysis whatever its state, as the Issues screen's do, and are null before the first.
 - **`source.stored`** says whether `/source` has the HTML.
+- **`listedIn`** (E6) names the sitemaps that list the URL, `{ total, sitemaps: [{ id, url }] }`, in the order the
+  crawl found them: `id` is the sitemap's in [`/sitemaps`](#sitemaps-e3b), which `/sitemaps/urls` takes, so the
+  inspector opens the sitemap itself. `total` is how many list it and `sitemaps` the first 20 of them. Only the
+  sitemaps whose own file lists the URL are named, not the indexes over them. It's read from what the crawl stored,
+  so it's there with or without a URL summary and while a crawl runs, where `links.inSitemap` (the analysis's, which
+  also says "in none, and every sitemap was read") is null without one. `total` 0 with `links.inSitemap` null means
+  no sitemap read so far lists it.
 
 `POST /api/crawls/{id}/urls/inlinks` and `/urls/outlinks` page the links to and from the URL whose id is in the body, a
 page's links to itself left out, in the order they were found:
@@ -1273,12 +1402,16 @@ The UI lists a `none` check's URLs flat (`/rows` below), with the detail as a co
 
 ```json
 {"checkId":"empty-anchor-text","grouping":"relatedUrl","total":265,"groupCount":2,"offset":0,
- "groups":[{"detail":null,"relatedUrlId":1,"relatedUrl":"https://www.example.com/","pages":264,"share":0.9962,"likelyTemplate":true},
-           {"detail":null,"relatedUrlId":31,"relatedUrl":"https://www.example.com/greenhouses/","pages":1,"share":0.0038,"likelyTemplate":false}]}
+ "groups":[{"detail":null,"relatedUrlId":1,"relatedUrl":"https://www.example.com/","pages":264,"share":0.9962,"likelyTemplate":true,"urls":264},
+           {"detail":null,"relatedUrlId":31,"relatedUrl":"https://www.example.com/greenhouses/","pages":1,"share":0.0038,"likelyTemplate":false,"urls":1}]}
 ```
 
 - Groups come largest first, then by detail and related URL. `total` is the check's flagged URLs, and `share` a
   group's part of them. A `relatedUrl` check's groups have no `detail`; a `none` check has no groups.
+- **`urls`** (E6) is how many URLs the group holds, and is the name to read: it's true of every check. **`pages` is
+  the same number under its first name**, kept for what already reads it: for a check whose `subject` is `url`
+  (`internal-client-error` flags a missing image) the URLs it counts aren't all pages, so word the count by the
+  check's `subject`, as its `total` is worded. Where this section says a group's `pages`, it's that count.
 - **A `relatedUrl` check groups a page under every URL its issue names**, not just the first one `/rows` and the
   inspector show. A page linking to three broken URLs is in the group of each, and a broken link in the footer of
   every page is one group of every page. So the groups' `pages` add up to more than `total`, and their shares to more
@@ -1424,6 +1557,45 @@ value with the `filter` that selects it, as the URL grid's facets do:
 | `to.statusClass` | The target's status class, as the URL grid's, and null (not fetched) |
 | `to.isInternal` | true (the site's own URL) and false |
 
+#### Link ends (E6)
+
+`POST /api/crawls/{id}/links/ends` lists the URLs at one end of the links a view matches, each once: the view's
+targets, or the pages its links are on, however many links the view holds. It is what "Copy the target URLs" reads
+for a view of more than a page of links, and what [`linkEnds`](#urls-e3a) narrows the URL grid to.
+
+```json
+{"end":"to","filters":[{"column":"kind","op":"in","values":["hyperlink"]},{"column":"to.statusClass","op":"in","values":["4xx"]}],
+ "offset":0,"limit":100}
+```
+
+```json
+{"end":"to","total":4572,"links":50318,"offset":0,
+ "rows":[{"id":212,"url":"https://www.example.com/old/","links":31}],
+ "summary":{"available":true,"reason":null}}
+```
+
+- **`end`** is `to` (the URLs the links lead to) or `from` (the pages they are on); it must be given. **`filters`** and
+  **`search`** are the links grid's, and none of either is every link. **`offset`** and **`limit`** (1 to 1,000,
+  default 100) page the list; there is no cursor, and a page past the end has no rows. The links grid's own `/links`
+  and `/links/facets` refuse `linkEnds` (`bad-request`): they take the filters themselves.
+- **`rows`** are in the order the crawl found the URLs (by `id`), each with **`links`**, how many of the view's links
+  have it at that end. **`total`** is how many URLs there are at that end, and is the URL grid's `matching` under the
+  same `linkEnds`; top-level **`links`** is the links the view matches, the links grid's `matching`. So the rows'
+  `links` add up to it.
+- **What it costs.** The targets come from what the links grid counts by target anyway: the link summary's rows where
+  it holds what the filters test (20 to 58 ms for the first page on the 100k crawl at p95: every link's 112,588
+  targets, the 4,572 targets of the hyperlinks to 4xx URLs), else the pass over the links that gives the view its
+  count. **The pages take a pass over every link**, as nothing counts links by the page they're on: once per set of
+  filters, kept as the view's other counts are, and split over connections as any pass is. On the 100k crawl's 5
+  million links that is 155 to 280 ms where the sidecar has read slots free, **inside the budget**, and 475 to 740 ms
+  on one connection (a two-core machine, every slot taken, a running crawl), **over it**; the same for the targets
+  of a view beyond the link summary (a text filter: 170 ms split, 505 to 565 on one). The URL grid narrowed to
+  either end costs the same, as it reads the same set. Not measured at 1M URLs: the pass grows with the links.
+- **While a crawl runs** an answer is of one moment of it, as the links grid's are: its rows, `total` and `links`
+  are of the links the crawl had then, and the URL grid narrowed within the same 2 s counts the same URLs.
+- Errors: `invalid-query` on `end`, `filters[…]`, `search`, `offset` and `limit`; `needs-analysis` for a filter that
+  needs the URL summary, without one.
+
 #### How the links are read
 
 A crawl of 100,000 pages stores 5 million links, and one of a million 50 million, so no read may look at every link
@@ -1471,6 +1643,51 @@ So a page in crawl order is read:
   links from the nearer end when the page is near one; otherwise from a set of the matching links' ids, read once in
   one pass over the links and kept (a bit per link). That pass is over budget, as the next paragraph's are.
 
+**A pass over every link is split over several connections** (E6) where the sidecar has read slots free: the links
+are divided by id into as many stretches as there are connections (eight at most: the read's own and up to seven
+more), each read on a thread of its own, and what each kept and counted is put together. The answer is the one
+connection's, to the link.
+
+Measured on the 100k crawl's 5 million links, the first read of a view, the same read timed in turn by the engine
+from before E6 and by this one, on one connection, on four and on eight (three rounds of ten runs; other work was
+loading the machine throughout, which is why one connection takes half as long again as on a quiet one). First
+page, p50 over the rounds, in ms:
+
+| The view's filter | Before E6 | One connection | Four | Eight |
+| --- | --- | --- | --- | --- |
+| Text contains a common word (2.2 million links) | 778 to 914 | 665 to 934 | 172 to 187 | 113 to 123 |
+| Text contains rare text (28 links) | 268 to 283 | 273 to 281 | 98 to 101 | 64 to 66 |
+| A search (7,609 links) | 1,301 to 1,615 | 1,233 to 1,592 | 289 to 297 | 183 to 211 |
+| The facets of a text filter | 847 to 1,156 | 815 to 968 | 191 to 196 | 127 to 145 |
+| Text matches a pattern | | 853 to 1,284 | 240 to 249 | 146 to 161 |
+| From pages four clicks from the start (3.6 million links) | | 819 to 1,536 | 357 to 606 | 210 to 228 |
+
+So a pass on one connection takes what it took, a pass on four a quarter of it, and a pass on eight a sixth: **with
+eight, each of these reads' first page is inside the 300 ms budget at p50**, where four left the search at it and the
+filter on the source's depth over it. That is why a pass takes up to seven helpers and not three: twice the cores,
+for a fraction of a second. At p95 the worst of the eight-connection reads (first page, half way down or just past
+it) was 86 to 489 ms over the three rounds, and of the four-connection ones 139 to 532, with one of 1,295 as the
+machine was busiest; so they are **inside or near the budget when cores are free, not always inside it**, and as
+they were when none is. A page half way down takes some 50 to 100 ms more than the first on several connections
+(the rows it shows aren't ones the read's own connection has just passed over). Not measured: a quiet machine, and
+a crawl of a million URLs.
+
+- **No more read slots than the rule allows.** A connection more is a read slot more, taken only from those free at
+  that moment, never waited for, and never the last one free, so a read arriving meanwhile starts at once; with none
+  free the pass runs on its own connection. On a two-core machine it never splits, and on four cores it takes two
+  helpers at most. A pass having taken a slot looks again, and gives it back if that was the last after all (a read
+  or another pass took the one it counted on leaving). Two requests for the same view (its page and its facets)
+  share one pass: the second waits for the first's.
+- **What it holds while it runs**: each connection keeps its own ids and counts until they are put together, about a
+  megabyte a connection for 5 million links (so some 10 MB a connection, briefly, for a crawl of a million pages).
+- **A running crawl's pass is never split.** It stays on the read's one connection and one snapshot, which is the
+  moment it answers for, so the time a running crawl's log goes unfolded is what it was.
+- **Only for crawls worth it**: from 500,000 links. Nothing is stored for it, in the file or by the analysis.
+- **A writer still never waits.** Each connection is a read like any other to an analysis or a continue starting:
+  all are stopped together, and the read runs again after.
+- A regular expression's time limit (3 s for a read's matches) is each connection's own, so a pattern near the limit
+  on one connection may pass on several.
+
 **Without the link summary, or beyond it, every link is read once per filter set.** That is: a crawl that's running,
 never analysed, continued since it was last analysed, or last analysed by an engine from before E3b (whose analysis
 is not out of date for that, and gains the link summary when the crawl is analysed again); on any crawl, a filter
@@ -1494,10 +1711,12 @@ runs (a crawl that fetched a page again has gaps in its link ids: without a link
 {"discovery":"done","summary":{"available":true,"reason":null},
  "sitemaps":[{"id":1,"url":"https://www.example.com/sitemap.xml","parentId":null,"foundVia":"robotsTxt","state":"read",
               "statusCode":200,"isIndex":true,"entries":0,"sitemaps":3,"error":null,
-              "urls":{"listed":265,"fetched":262,"indexable":250,"nonIndexable":12,"robotsDisallowed":1,"redirectingOrBroken":4}},
+              "urls":{"listed":265,"fetched":262,"indexable":250,"nonIndexable":12,"robotsDisallowed":1,"redirectingOrBroken":4},
+              "listedSitemaps":3},
              {"id":4,"url":"https://www.example.com/sitemaps/missing.xml","parentId":1,"foundVia":"index","state":"failed",
-              "statusCode":404,"isIndex":false,"entries":0,"sitemaps":0,"error":"HTTP 404",
-              "urls":{"listed":0,"fetched":0,"indexable":0,"nonIndexable":0,"robotsDisallowed":0,"redirectingOrBroken":0}}]}
+              "statusCode":404,"isIndex":false,"entries":0,"sitemaps":0,"error":"404 Not Found",
+              "urls":{"listed":0,"fetched":0,"indexable":0,"nonIndexable":0,"robotsDisallowed":0,"redirectingOrBroken":0},
+              "listedSitemaps":null}]}
 ```
 
 - **`discovery`** says how far the crawl got with its sitemaps: `off` (it was told not to read them), `running` (it's
@@ -1508,12 +1727,24 @@ runs (a crawl that fetched a page again has gaps in its link ids: without a link
   (a sitemap index lists it: `parentId` is that index). It's worked out when read, from the stored robots.txt and the
   crawl's options, so it's null for a sitemap neither names any more (robots.txt was read again by a later run, and
   had changed).
-- **`state`** is `read`; `failed` (it couldn't be read, or not to its end: `error` says why, "HTTP 404", "Timed out",
+- **`state`** is `read`; `failed` (it couldn't be read, or not to its end: `error` says why, "404 Not Found", "Timed out",
   the XML parser's message, and the URLs read before the failure are still listed); `notRead` (left unread at the
   crawler's limits of 1,000 sitemaps and 3 levels of index: `error` says which, and there may be more like it); or
   `pending` (found, not read yet: the crawl is running, or stopped first).
 - **`entries`** is the URL entries the crawl read in the file, as it counted them: every `<loc>`, repeats included.
   **`sitemaps`** is the sitemaps an index lists that the crawl has.
+- **`listedSitemaps`** (E6) is how many sitemaps the file itself lists, as the crawl read it: every `<sitemap>` entry,
+  repeats and entries that aren't URLs included, so "the crawl has 3 of its 3 sitemaps" is `sitemaps` of
+  `listedSitemaps`. It's never less than `sitemaps`.
+  - **An index over the crawler's limits** says so here: the file is read to its end whatever the limits, so an index
+    of 5,000 sitemaps has `listedSitemaps` 5,000, while `sitemaps` counts those the crawl has of it: the ones it
+    read, up to its limit of 1,000 sitemaps in a crawl, and the first it left unread (`notRead`), whose `error` says
+    which limit. The same goes for an index nested deeper than 3 levels.
+  - It's 0 for a sitemap that lists only URLs. A file whose read failed part-way has what it listed up to there, as
+    `entries` does.
+  - **Null when it isn't known**: the file's body was never read (it failed first, as a 404 does; it was left unread;
+    it's still pending), or the crawl was made by an engine from before E6, which didn't keep the count. A crawl
+    continued by this engine has it for the sitemaps read from then on.
 - **`urls`** counts the URLs the sitemap lists, each once: for an index, the URLs of every sitemap under it, a URL
   two of them list counted once. `fetched`, `indexable` and `nonIndexable` are as the URL grid's `fetched` and
   `indexable` columns judge them, so each count opens its URLs in the grid below with that filter (`fetched` is true,
@@ -1552,13 +1783,31 @@ them, can be a moment apart.
 Each origin's robots.txt as the crawl read it, and the URLs it kept the crawl from. The crawl reads robots.txt on
 every origin it asks for a URL on, other sites' included, so a crawl can have thousands: the list pages.
 
-`POST /api/crawls/{id}/robots` takes `{ offset, limit }` (limit 1 to 1,000, default 100):
+`POST /api/crawls/{id}/robots` takes `{ offset, limit, search, blocked }` (limit 1 to 1,000, default 100), every field
+optional:
+
+```json
+{"search":"example","blocked":true,"offset":0,"limit":100}
+```
 
 ```json
 {"total":17,"offset":0,"respected":true,"userAgent":"ShoutingIguana","blocked":2,
  "origins":[{"origin":"https://www.example.com","isInternal":true,"state":"read","statusCode":200,
-             "fetchedAt":"2026-10-31T20:13:58.588Z","error":null,"bytes":79,"blocked":0}]}
+             "fetchedAt":"2026-10-31T20:13:58.588Z","error":null,"bytes":79,"blocked":2}],
+ "matching":1,"counts":{"all":3,"blocked":1,"notBlocked":2}}
 ```
+
+- **`search`** (E6) finds origins by their name: those whose origin contains the text, case ignored, at most 1,000
+  characters (`invalid-query` on `search` past that). **`blocked`** (E6) is the filter: `true` for only the origins
+  that blocked at least one URL, `false` for only those that blocked none. The list keeps its order under both, and
+  `offset` and `limit` page what matches.
+- **`matching`** (E6) is the origins the search and the filter match, which the page is of. `total` stays every
+  origin of the crawl, and the top-level `blocked` every URL the crawl was kept from, whatever is asked.
+- **`counts`** (E6) is what a filter bar shows: of the origins the `search` finds (every origin with none), `all`, those
+  that `blocked` something and those that didn't (`notBlocked`). Each is the `matching` its filter gives under the
+  same search, so a chip's number is the rows it opens: `blocked` with `"blocked": true`, `notBlocked` with
+  `"blocked": false`, `all` with neither. A sidecar from before E6 sends neither `matching` nor `counts`, and refuses
+  `search` and `blocked` as fields it doesn't know (`bad-request`).
 
 - The site's own origins come first, the start URL's before the others, then the rest by the URLs they blocked, most
   first, then by name.
@@ -1607,8 +1856,11 @@ line. `origin-not-found` (404) for an origin the crawl has no robots.txt for, an
           {"number":2,"text":"Disallow: /private/","kind":"disallow","applies":true,"blocked":12,"problem":null},
           {"number":3,"text":"","kind":"blank","applies":null,"blocked":null,"problem":null},
           {"number":4,"text":"Sitemap: https://www.example.com/sitemap.xml","kind":"sitemap","applies":true,"blocked":null,"problem":null}],
- "unmatched":{"unreachable":0,"unknown":0}}
+ "unmatched":{"unreachable":0,"unknown":0},"respected":true}
 ```
+
+- **`respected`** (E6) is the list of origins' `respected`: false for a crawl told to ignore robots.txt, which blocked
+  nothing by it. It's here so the file's page needn't read the list for it.
 
 - **`lines`** is the text as stored, split at its line breaks, numbered from 1; empty unless `state` is `read`.
 - **`kind`** is `userAgent`, `allow`, `disallow`, `sitemap`, `crawlDelay`, `comment`, `blank`, `other` (a directive the
@@ -1625,8 +1877,9 @@ line. `origin-not-found` (404) for an origin the crawl has no robots.txt for, an
   URL came up, which refuses everything) and `unknown` (the file kept doesn't refuse the URL: a later run read it
   again, and it had changed).
 
-`POST /api/crawls/{id}/robots/blocked` with `{ origin, line, reason, offset, limit }` pages the origin's blocked URLs,
-in crawl order; `line` narrows them to one line's and `reason` to one reason's, and both are optional:
+`POST /api/crawls/{id}/robots/blocked` with `{ origin, line, reason, urlId, offset, limit }` pages the origin's blocked
+URLs, in crawl order; `line` narrows them to one line's, `reason` to one reason's and `urlId` (E6) to one URL, and all
+three are optional:
 
 ```json
 {"origin":"https://www.example.com","total":12,"matching":12,"offset":0,
@@ -1640,6 +1893,10 @@ in crawl order; `line` narrows them to one line's and `reason` to one reason's, 
   line shown is the line the crawl obeyed, as long as the file kept is the one it read then.
 - `total` is the origin's blocked URLs, and `matching` those the line or reason narrows to. Paging is by `offset` and
   `limit` (1 to 1,000, default 100): the list is worked out once per origin and kept, so any offset costs the same.
+- **`urlId`** (E6) answers for one URL: its row, with why it was refused, and `matching` 1; or no rows and `matching`
+  0 for a URL this origin didn't block (another origin's, one that was fetched, an id the crawl doesn't have). It's a
+  number, as every URL's id is (`bad-request` otherwise). The inspector gives the same facts with the URL
+  ([its `robotsTxt` test](#the-inspector-e3a)), so a screen that has inspected the URL needn't ask.
 - An origin's answer, its lines and its blocked URLs are read and kept as one, so while a crawl runs the file's
   `blocked` is the URLs its lines and `unmatched` account for, and `/robots/blocked` lists that many. The list of
   origins is kept apart (for 2 s while a crawl runs): an origin's `blocked` there can be a moment behind its file's.
@@ -1917,6 +2174,118 @@ crawl's report in a `srcdoc` frame of a page served under each policy below:
   either way. Reaching `print` was tried; the dialog itself, and printing in the built shell on each OS, were not.
 - The frame's text is the string the app was given, so the page that holds the frame must itself be read as UTF-8
   (the app's is).
+
+### Search (E6)
+
+`POST /api/crawls/{id}/search` is search as it's typed, for the palette: the best few of the crawl's URLs whose URL or
+title contains the text, on every keystroke. A `POST` with the text in the body, so a keystroke costs no preflight.
+
+```json
+{"text":"gard","limit":10}
+```
+
+```json
+{"results":[{"id":31,"url":"https://www.example.com/garden-sofas/","title":"Garden sofas | Example","isInternal":true,
+             "statusCode":200,"outcome":"success","rank":"start","matchedIn":"url"}],
+ "matching":412,"total":6286}
+```
+
+- **`text`** is what's typed so far, at most 1,000 characters. **`limit`** is 1 to 50 (default 10). No `text`, one too
+  long or holding a zero character, or a `limit` out of range is `invalid-query` (422) on that field; a `text` that
+  isn't a string is a `bad-request`, as every fixed-type field is.
+- **What matches is what the URL grid's `search` matches**: the URL or the title contains the text, the case of ASCII
+  letters ignored. So **`matching`** is the grid's `matching` under `{"search": text}`, and "All 412 in URLs" lands on
+  412 rows; **`total`** is every URL in the crawl.
+- **The order** is the page a person means first:
+
+  | `rank` | The text |
+  | --- | --- |
+  | `exact` | is the URL: the whole of it, with or without its scheme, or its path (with its query string, if it has one). The slashes around the path don't count: `about`, `/about` and `about/` all name `https://www.example.com/about/`, and `/` names the home page |
+  | `start` | starts the URL's host name, with or without its `www.` (`fac` in `https://www.facebook.com/`), or a segment of its path (`gard` in `/shop/garden-sofas/`; text that begins with a slash starts one wherever that slash is one of the path's); never the scheme (`http` starts nothing), and never inside the query string or the fragment, whatever slashes they hold. In a title: at its start, or after a character that isn't a letter or a digit (`(garden` in `Sets: (garden) sofa`), whatever the text begins with |
+  | `anywhere` | is somewhere else in the URL or the title |
+
+  Within a rank: the site's own URLs before other sites'; a match in the URL before one in the title; the shorter URL
+  (or title) first, so `/blog/` comes before `/blog/2024/a-long-post/`; then the URL the crawl found first. A URL that
+  matches both ways takes the better of the two, and **`matchedIn`** (`url` or `title`) says which its rank is for.
+- **Each result** carries what a list shows and what opens it: `id` (for `/urls/inspect`), `url` and `title` as the crawl
+  stored them (`title` null without one), `isInternal`, and `statusCode` and `outcome` as the URL grid's columns have
+  them.
+- **An empty `text` finds nothing**: no results, and `matching` equal to `total`, as the grid with no search matches
+  every URL. It reads the crawl's text (below), so the palette can ask it as it opens and the first letter typed is
+  answered as fast as the rest.
+- **Nothing is stored for it.** The crawl's URLs and titles are read into the sidecar's memory by the first search of
+  a crawl as it stands (one pass over the URLs and one over the responses, in a grid read slot), and kept there while
+  the crawl stands still: every search after that is a pass over that text and reads the file only for its few results'
+  statuses, so it takes no read slot and never queues behind the grids' reads. A crawl made by any engine, analysed or
+  not, is searched the same way. The text takes about 106 bytes a URL (11.4 MB for the 100k crawl's 112,590), and two crawls' are
+  kept: the one being searched and the one before it.
+- **While a crawl runs, each answer is of one moment of it**, at most 2 s old: the results, their titles, `matching` and
+  `total` are of the URLs and titles the crawl had at that moment, and only each result's `statusCode` and `outcome` are
+  read as they now stand (a result fetched since shows its status). The text is read again once it's 2 s old, by the
+  next search.
+- **What it costs**, on the 100k crawl (112,590 URLs), p95: a keystroke with the text kept 1.3 to 4.5 ms, whatever is
+  typed (one letter that every URL matches, forty characters that none does); the first search of a crawl, which reads
+  the text, 55 to 89 ms (49 to 78 ms at p50), over five runs on a shared machine, the review's among them. That first read is the one over the palette's 50 ms: the empty search
+  as the palette opens is what keeps it off the first keystroke.
+
+### Favicon (E6)
+
+`GET /api/crawls/{id}/favicon` gives the site's icon as the crawl kept it, for the library, the top bar and the
+sidebar: **the image's bytes, under the media type they are**, `200`. A crawl that has none answers `204` with no
+body, and the app draws the site's first letter. A crawl's item says which to expect: `hasFavicon`
+([Library](#library-e1)). Like every call it needs the token, so the app fetches it and shows the bytes; an
+`<img src>` can't ask for it.
+
+- **Where the crawl looks.** The first page of the site that a run parses names the icons: in a new crawl that is the
+  start URL's page, or the page it redirects to. Its `<link rel="icon">` elements are the candidates (`rel="shortcut
+  icon"` is one; a touch icon and a mask icon aren't), then `/favicon.ico` at that page's origin, where browsers look
+  when a page names none.
+- **Which is kept.** The app shows the icon in a tile of 16 to 32 px, twice that on a dense screen, so the best is the
+  smallest icon the page declares (`sizes`) as 64 px or more; failing that, the largest it declares below 64; then the
+  icons with no size, in page order. They are tried in that order, three of the page's at most, then `/favicon.ico`,
+  and the first that turns out to be an image the engine keeps is the icon. So a crawl asks a site for its icon one to
+  four times, and usually once.
+- **What is kept is told by its bytes, never by what the site calls it.** The icon is content from the site, so it is
+  hostile until shown otherwise: a site can send a page, a script or an SVG under any name and any `Content-Type`.
+  Kept: **PNG, ICO, GIF, JPEG and WebP**, each known by its signature, its size read from its header, and its
+  structure whole to the end of its image data: a PNG's chunks and their checksums to its header, its image data
+  and its end; a GIF's blocks to an image and its trailer; a JPEG's segments to its scan and its end; a WebP's
+  chunks inside its length. So a header with nothing after it, or with a page after it, isn't kept. An ICO's
+  directory must hold up too: every image it lists inside the file, each a PNG that holds up as one or a bitmap whose
+  header and pixels do, of the size the directory gives it and no more than 1,024 px a side; the icon's size is its
+  largest image's. The pixels aren't decoded, so an image whose compressed data is damaged can still be kept: the app
+  then shows a broken image, and nothing in it can run. Not kept:
+  **anything else, SVG above all** (it can carry script; one is never even asked for, by its declared type or its
+  file name), anything over **512 KB** (it is read no further than that), and any image whose size can't be read or
+  is over **1,024 px** a side (a few hundred kilobytes can declare a picture that takes gigabytes to draw).
+- **Politely.** Each request waits for its origin's robots.txt and obeys it when the crawl does, takes its turn at
+  the host's gate as any request to that host does (its concurrency, its rate, a crawl delay, a backoff), stops while
+  the crawl is paused, and has the crawl's request timeout. A redirect is followed three hops at most, each held to
+  the same rules. An icon on another site is asked for only when the crawl checks other sites' links.
+- **It is no URL of the crawl.** Nothing is discovered, stored or counted for the fetch: it is in no grid, no count,
+  no progress figure and no byte total, and a host that fails it is not a site that is down. (An icon the page links
+  is, as before, also a link of kind `icon` and a URL the crawl checks: that check and this fetch are two requests.
+  And if the icon's origin is one whose robots.txt the crawl hadn't read yet, that robots.txt is kept and listed as
+  any the crawl reads is.)
+- **It never fails a crawl or holds one up.** It runs beside the crawl, which hears of none of its failures. A crawl
+  that completes while its icon is still on its way gives it 5 s, by the wall clock, then goes on without (a crawl
+  of a handful of pages is over before its icon arrives; a request's own timeout is 20 s). A crawl that is stopped,
+  or fails, doesn't wait at all.
+- **Once.** A crawl that has its icon keeps it: a run that continues it asks for none, and the first kept stands. A
+  crawl that has none (its site had none the engine keeps, its first page never answered, or an engine from before
+  E6 made it) looks once more when it is continued, from the first page that run parses, by the same rules.
+- **Where it is kept.** In the crawl file, in a table of its own (`favicon`, one row: the bytes, where they came
+  from, when), written only by the crawl's writer. A crawl file can come from anywhere, so the file is trusted no
+  more than the site was: as the icon is read, its bytes are told to be an image again, more than 512 KB of them are
+  never read, and what is served is the type the bytes are, whatever the file calls them. A file whose "icon" is a
+  page, an SVG or anything else answers `204`.
+- **The headers that keep it an image** are those every answer has: `X-Content-Type-Options: nosniff`, so a browser
+  never guesses another type from the bytes; `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`,
+  so nothing would run or load were it ever opened as a document; and `Cache-Control: no-store`. The `Content-Type`
+  is one of `image/png`, `image/x-icon`, `image/gif`, `image/jpeg` and `image/webp`, and no other.
+- **While a crawl runs** it answers `204` until the icon is kept, a few requests after the first page, and the image
+  from then on; `hasFavicon` turns true on the crawl's item the next time its file is read.
+- Errors: `crawl-not-found` (404), `unauthorized` (401).
 
 ## Engine changes E1 needs
 
@@ -2945,3 +3314,151 @@ that fails without it, and a planted case on the synthetic site where the rule n
 - **The analysis version is 8.** What an analysis stores differs for the first, third and fourth of these, so an
   analysis by an earlier engine is out of date (`engineChanged`) until it is run again. Nothing shipped at 8 before
   the review's fixes, which are part of it.
+
+## Engine changes E6 made
+
+Fast search and the site's icon, and what the Links, Sitemaps and robots.txt screens and their reviews found the
+engine couldn't answer. Every addition to the API is a new field or a new call; nothing was renamed or taken away.
+Each has its own tests, the reads are among those made while a crawl grows, and for each behaviour a test was seen
+to fail with the behaviour taken out.
+
+- **Search: no index, and what was measured before deciding.** The brief took the URL grid's `search` for a scan
+  that missed its budget. It doesn't: on the 100k crawl a first page takes 26 to 50 ms at p95 for one letter, two,
+  forty characters or text nothing matches, and it stayed the scan it is, with four `si readbench` cases added to
+  hold it there. For the palette, an FTS5 index with a trigram tokenizer was built on a copy of that crawl and
+  timed. With its content it adds 44 to 48 MB to a 479 MB file (9 to 10%) and takes 2.0 s to build, 17% of an
+  11.8 s analysis, or 2.7 s spread over the crawl; contentless, 9.4 MB (2%) and 1.4 s. It answers rare text of three
+  characters or more in 0.1 to 2 ms, but a common word in 28 ms (81 ms with each match's text, which ranking needs),
+  and one or two characters not at all, which is where typing starts. So nothing is stored: `UrlSearchReader` reads
+  a crawl's URLs and titles into memory once ([Search](#search-e6)), and a keystroke is a pass over that text. It
+  costs the file nothing, the crawl nothing and the analysis nothing; it costs the sidecar about 106 bytes a URL
+  (11.4 MB at 100k, measured twice), for two crawls at most. A keystroke takes 1.3 to 4.5 ms at p95 whatever is
+  typed; the first search of a crawl, which reads the text, 55 to 89 ms (49 to 78 at p50, five runs), over the palette's 50, which the empty
+  search as the palette opens keeps off the first keystroke. A crawl made by any engine is searched the same way.
+  **Not done: letting the kept text go when a crawl sits idle.** A crawl of a million URLs holds about 110 MB in
+  the sidecar until two other crawls are searched or it restarts. Nor was a search of a million URLs measured: the
+  pass grows with the text, so some 20 to 30 ms a keystroke is to be expected, not known.
+- **A pass over every link, split over connections** ([How the links are read](#how-the-links-are-read) has the
+  table). `LinkGridReader`'s pass over the links is divided by link id over the read's own connection and up to
+  seven more that the host lends (`ReadHelpers`; in the sidecar, read slots free at that moment, never the last:
+  `ReadSlots`), for a crawl that stands still and has 500,000 links or more. Timed in turn with the engine from
+  before E6: on one connection a pass takes what it took, on four a quarter, on eight a sixth, which puts the first
+  page of a text filter, a search, a pattern and a filter on the source's depth inside the 300 ms budget at p50
+  (113 to 228 ms where one connection takes 665 to 1,592), and near it at p95 (86 to 489 ms at worst over three
+  rounds on a loaded machine). Nothing is stored for it; a running crawl's pass is never split, so its log goes
+  unfolded no longer than it did; with no slot free a pass is as it was. It was built with three helpers and is
+  shipped with seven, on that measurement. The race it had is closed: two passes, or a pass and a read, asking at
+  the same moment could each count on the slot the other took, so a pass now looks again once it has a slot and
+  gives it back if it was the last.
+- **The site's icon** ([Favicon](#favicon-e6)). The parser keeps a page's `<link rel="icon">` elements as facts that
+  aren't stored (`PageFacts.Icons`); the first page a run parses starts `FaviconFetcher`, a job beside the crawl that
+  asks for one to four candidates by the crawl's own rules of politeness and has `CrawlWriter` keep the first that
+  is an image by its bytes. **The crawl file gains a table**, `favicon`, created whenever the writer opens a file, as
+  `notices` and `run_time` are. `FaviconReader` tells the bytes to be an image again as it reads, so neither a site
+  nor a crafted file can have anything but a raster image served. The synthetic site serves `/favicon.ico`, which no
+  page links, so the benchmark crawl keeps an icon and has no URL more than it had.
+- **From a links view to its URLs** ([Link ends](#link-ends-e6)). `LinkGridReader.Ends` lists a view's targets, or
+  the pages its links are on; `UrlQuery.LinkEnds` narrows the URL grids to them, to the list's own count. The
+  targets cost what the view's count costs (20 to 58 ms from the link summary); the pages take a pass (475 to 740 ms
+  on one connection, 148 to 157 at p50 on eight), as nothing stored counts links by the page they're on. **Not
+  done:** a view of a few thousand links still takes that pass for its pages, where reading just those links would
+  do; it is correct, and slower than it need be.
+- **robots.txt and sitemaps.** The origins are searched and filtered, with the counts a filter bar shows
+  (`RobotsOriginQuery`); `/robots/file` says whether the crawl obeyed robots.txt; `/robots/blocked` answers for one
+  URL; the inspector's robots.txt test names the origin and the line that refused the URL, and the inspector names
+  the sitemaps that list it; and a sitemap says how many sitemaps its own file lists. **The crawl file gains a
+  column** for that last, `sitemaps.listed_sitemaps`, added by the writer as it opens a file, null for every sitemap
+  an earlier engine read. They are small reads, each in `si readbench` under its screen's class.
+- **A check's count has a true name**: `urls` beside `pages` on each group ([Issue groups](#issue-groups-e3a)).
+- **The analysis's `inlinks` and the stored links.** The reviews found the two apart by one or two for about a tenth
+  of URLs. On the 100k crawl they differ for exactly 24 of 112,590 URLs (the tenth was a sample's: 24 of 200), and
+  for none on the garden crawl. The cause: the analysis counts the hyperlinks on the pages it audits, and it doesn't
+  audit Cloudflare's own pages (a URL with `/cdn-cgi/` in it), which the crawl fetches, parses and stores the links
+  of. The 24 are the 25 hyperlinks of `/cdn-cgi/l/email-protection`: a menu's targets, and the home page twice. The
+  stored links are right, so the fix is in what's read: `linkTotals.hyperlinkInlinks`, which is the links grid's
+  count ([the inspector](#the-inspector-e3a)). **Left for the owner:** whether the analysis should count links on
+  pages it doesn't audit. It would move `inlinks`, `linkingPages` and the followed and nofollow counts for those
+  URLs, and could clear an orphan result for a page linked only from such a page.
+- **The analysis's limits** ([Analysis settings](#analysis-settings-e6)) are read, saved, checked and reset through
+  the sidecar, kept in its state folder, and each described by `AnalysisLimits`: a test holds that every setting the
+  engine has is described there. Nothing in the engine changed for it: an analysis already stored the limits it ran
+  with, and one that ran with others was already out of date.
+- **The crawl file.** One table and one column more, both added as a file is opened for writing; the schema version
+  is as it was, and either engine reads and continues either file. The benchmark's file is the size it was: 477 and
+  480 MB in two runs, 479 before E6, one run differing from the next by more than the 160 bytes of its icon.
+- **In the app's API module**: typed calls and types for all of it (`api.search`, `api.favicon`, `api.linkEnds`,
+  the analysis settings, `linkEnds` on a grid query), each new field optional on the answers that gained it. No
+  screen uses them yet.
+
+**Checked against the files themselves.** A script of its own started the Release sidecar on a fresh 100k benchmark
+crawl and on a copy of the garden crawl (6,286 URLs, analysed by this engine), asked every endpoint E6 added or
+changed, and held each number to SQL written for it over the same file: `/search` (13 texts each: `matching`,
+`total`, every result's URL, title and status, that it holds the text, and the ranks in order) and the grid's
+`search`; the origins, what each blocked, searched and filtered every way (`matching`, `counts`, the rows);
+`/robots/file`'s `respected` and that its lines account for every blocked URL; `/robots/blocked` for one URL, and the
+inspector's robots.txt test for 40 refused URLs (the origin, the reason, and a line that is the file's own and whose
+rule matches the URL's path); `listedIn` and `hyperlinkInlinks` for 214 and 165 URLs, and the links grid's and
+`/urls/inlinks`' counts for the most linked; every sitemap's `listedSitemaps`; 641 issue groups' `urls`; eleven
+links views' ends from either end, a page in the middle and the last, and the URL grid and its facets narrowed to
+them, alone and beside a filter; the icon's bytes and type, and `hasFavicon`; the analysis's limits, saved and reset,
+turning both crawls' analyses out of date and back. **3,563 checks, none wrong.** The first run had 62 "wrong", every
+one the script's own model of a check's groups (it grouped a `detail` check by detail alone, where the engine groups
+by the detail and the other URL, and by the fault for the three checks that have one); corrected, they agree. On the
+benchmark crawl the analysis's `inlinks` differ from the stored hyperlinks for 15 of the 214 URLs sampled, the menu's
+targets, as above; on the garden crawl for none. Eight passes over the 5 million links at once, through the sidecar
+with every one of 32 slots free, took 385 ms in all (104 to 384 ms each), with `/health` answered in 10 to 14 ms
+throughout.
+
+**The checks on the last commit's code.** The Release build has no warning; the engine's tests (1,229), the
+sidecar's (200) and the CLI's (21) pass; the app's `typecheck`, `lint`, `format:check` and its 1,059 tests pass.
+`si bench --pages 100000` completed and found every planted issue and nothing else: 38.7 s, 2,613 pages/s, a peak of
+192 MB and +1 MB over the crawl, a 480 MB file, analysed in 11.3 s, its icon kept and no URL for it. `si bench
+--pages 40000 --read-links --max-log-mb 128`, as CI runs it: every planted issue, the links read 4,397 times while the
+crawl ran, the log at 82 MB at most. `si readbench --runs 20 --gate` passed every class, 205 reads: `search` 4.5 ms
+against 25, `search-first` 73 against 200, `link-pass-split` 392 against 1,500, `link-pass` 1,806 against 2,500, the
+links grid from the link summary 96 against 200, `robots` 59 against 200, `inspector` 2.2 against 200, `stats-pass`
+325 against 450.
+
+Not verified: anything on a crawl of a million URLs; any of the timings on a quiet machine (other agents' builds and
+benchmarks loaded this one throughout, so each was repeated, and the passes were timed in turn with the engine from
+before); the `link-pass-split` gate on CI's runner, as nothing was pushed.
+
+## Engine changes from the E6 review
+
+The review found no defect of high severity, one of medium and five of low; every number it checked against SQL of
+its own agreed. All six are fixed, each with a test seen failing without its fix.
+
+- **The read gate holds the split passes to being split** (medium). The `link-pass-split` gate (1,500 ms) passed a
+  pass that had silently stopped splitting, as every one of them takes less than that on one connection too. With
+  `--gate`, on a crawl of 500,000 links or more, each split case must now have had every pass reported split over
+  more than one connection, and on 4 cores or more take at most 60% of its one-connection twin's time at p50, in the
+  same run. On the 100k crawl with splitting switched off the gate failed on all 17 split cases; with it on it passed.
+- **An icon is kept only when its structure holds to the end of its image data** (low): see [Favicon](#favicon-e6).
+  The review's three proofs (a PNG header alone, a PNG header before a page, an ICO whose 16 px entry holds a PNG of
+  60,000 px a side) and eighteen more hollow images are refused; a crawl file's icon is checked the same way as it's
+  read.
+- **A split pass's parts never use the read's own context** (low, latent). Each part sized its tally through the
+  read's context from its own thread; it only ever read values already held, but the context isn't made to be
+  shared. The sizes are now read first, on the read's thread, and a test hook says of any use from another thread.
+- **A helper connection that can't be opened costs the pass its split, not the read** (low): the pass runs on the
+  read's own connection, as for a file that changed under it. A read stopped meanwhile is still stopped.
+- **Search's `start` rank is what the doc says** (low): never the scheme (`http` started every URL), never inside the
+  query string or the fragment (text after a slash there did), and in a title after any character that isn't a
+  letter or a digit, whatever the text begins with. The doc's figures are the review's and this branch's: about 106
+  bytes a URL kept (11.4 MB at 100k, measured twice), and a first search of 55 to 89 ms at p95 over five runs.
+- **The app's types and the mock** (low): `linkEnds` is on `UrlGridQuery` (the URL grids'), not on the links grid's
+  query, which refuses it; `invalid-settings` is said to be keyed by a limit's name, `settings` or `limits[n]`; and
+  the mock transport answers every E6 call (search, a links view's ends and `linkEnds`, the analysis's limits,
+  robots.txt's origins searched and filtered, the synthetic crawl's icon), each a pure answer with tests of its own.
+- **A status in the crawl's own words carries its name** (asked for after the review, for the Simple design's
+  "404 Not Found" in both modes). The sentences the crawl stores with a status in them are now made by the helper an
+  issue's detail uses (`HttpStatusNames.Describe`): a sitemap's `error` ("404 Not Found"), robots.txt's when it
+  couldn't be read (the `robots-unreachable` alert's `reason` "503 Service Unavailable", and each URL it refused
+  "robots.txt unreachable: 503 Service Unavailable", so `/robots/blocked`'s `error`), a robots.txt redirect that
+  can't be followed ("301 Moved Permanently redirects to no http or https URL"), and a firewall's block reason
+  ("Rate limited (429 Too Many Requests)"). A status with no standard name stays as it was: "HTTP 520". **Only crawls
+  made from now on read the new way**: what an earlier engine stored keeps its words ("HTTP 404") in the file and
+  in these answers, which serve what was stored; an issue's detail names it all the same, as before. One answer is
+  worded when read, and so changes for every crawl: `/robots/blocked`'s `error` for a URL refused by an origin whose
+  robots.txt couldn't be read, where the crawl stored no reason with the URL (an earlier engine's), now
+  "503 Service Unavailable" from the origin's stored status.

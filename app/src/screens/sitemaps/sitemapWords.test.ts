@@ -40,8 +40,8 @@ describe('how a sitemap was found', () => {
 
 describe('what became of a sitemap', () => {
   it('says a failed one couldn’t be read, and why in the engine’s words', () => {
-    const words = stateWords(testSitemap({ id: 1, state: 'failed', error: 'HTTP 404' }), false);
-    expect(words).toMatchObject({ tone: 'failed', short: 'Couldn’t be read: HTTP 404' });
+    const words = stateWords(testSitemap({ id: 1, state: 'failed', error: '404 Not Found' }), false);
+    expect(words).toMatchObject({ tone: 'failed', short: 'Couldn’t be read: 404 Not Found' });
   });
 
   it('says why one failed in plain words, by its kind, and keeps the crawl’s own text out of the sentence', () => {
@@ -71,7 +71,10 @@ describe('what became of a sitemap', () => {
       recorded: 'The archive entry was compressed using an unsupported compression method.',
     });
     // A status is said as it is, with nothing behind it.
-    expect(failed('HTTP 503')).toMatchObject({ short: 'Couldn’t be read: HTTP 503', recorded: null });
+    expect(failed('503 Service Unavailable')).toMatchObject({
+      short: 'Couldn’t be read: 503 Service Unavailable',
+      recorded: null,
+    });
     expect(sitemapFailure('Timed out')).toEqual({ kind: 'timeout', words: 'it timed out', recorded: null });
     // The answer over the list takes the same plain words.
     const only = testSitemap({ id: 1, state: 'failed', statusCode: null, error: 'No response within 30 seconds' });
@@ -186,36 +189,45 @@ describe('the answer in a sentence', () => {
   });
 
   it('says of a site’s one sitemap that it couldn’t be read, and why', () => {
-    const only = list([testSitemap({ id: 1, state: 'failed', statusCode: 404, error: 'HTTP 404' })]);
-    expect(answerSentence(only, false)).toBe('The crawl found 1 sitemap, which couldn’t be read: HTTP 404.');
+    const only = list([testSitemap({ id: 1, state: 'failed', statusCode: 404, error: '404 Not Found' })]);
+    expect(answerSentence(only, false)).toBe('The crawl found 1 sitemap, which couldn’t be read: 404 Not Found.');
   });
 
   it('never calls nothing at the default location a sitemap that was found and couldn’t be read', () => {
     const probe = (statusCode: number | null, error: string) =>
       testSitemap({ id: 1, foundVia: 'defaultLocation', state: 'failed', statusCode, error });
     // Nothing declared one, the crawl tried /sitemap.xml, and it isn't there: no sitemap, not a failed one.
-    for (const status of [404, 410]) {
-      const missing = probe(status, `HTTP ${status}`);
+    for (const [status, named] of [
+      [404, '404 Not Found'],
+      [410, '410 Gone'],
+    ] as const) {
+      const missing = probe(status, named);
       expect(nothingAtDefaultLocation(missing)).toBe(true);
       expect(answerSentence(list([missing]), false)).toBe(
         'Nothing declared a sitemap, and there’s none at /sitemap.xml.',
       );
       expect(stateWords(missing, false)).toMatchObject({
-        short: `None there: HTTP ${status}`,
-        sentence: `Nothing declared a sitemap, and there’s none at /sitemap.xml. It answered HTTP ${status}.`,
+        short: `None there: ${named}`,
+        sentence: `Nothing declared a sitemap, and there’s none at /sitemap.xml. It answered ${named}.`,
       });
     }
     // Any other answer there leaves it unknown whether there's one: it couldn't be read, and it still wasn't "found".
-    const refused = probe(403, 'HTTP 403');
+    const refused = probe(403, '403 Forbidden');
     expect(nothingAtDefaultLocation(refused)).toBe(false);
     expect(answerSentence(list([refused]), false)).toBe(
-      'Nothing declared a sitemap, and /sitemap.xml couldn’t be read: HTTP 403.',
+      'Nothing declared a sitemap, and /sitemap.xml couldn’t be read: 403 Forbidden.',
     );
-    expect(stateWords(refused, false).short).toBe('Couldn’t be read: HTTP 403');
+    expect(stateWords(refused, false).short).toBe('Couldn’t be read: 403 Forbidden');
     // A sitemap something declared that answers 404 is a sitemap that couldn't be read.
-    const declared = testSitemap({ id: 1, foundVia: 'robotsTxt', state: 'failed', statusCode: 404, error: 'HTTP 404' });
+    const declared = testSitemap({
+      id: 1,
+      foundVia: 'robotsTxt',
+      state: 'failed',
+      statusCode: 404,
+      error: '404 Not Found',
+    });
     expect(nothingAtDefaultLocation(declared)).toBe(false);
-    expect(stateWords(declared, false).short).toBe('Couldn’t be read: HTTP 404');
+    expect(stateWords(declared, false).short).toBe('Couldn’t be read: 404 Not Found');
   });
 
   it('has a sentence for no sitemap at all, by how far the crawl got', () => {

@@ -21,8 +21,8 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
     const sentences = TEST_ORIGINS.map((origin) => stateWords(origin, UA).sentence);
     expect(sentences).toEqual([
       'The crawl read this file and obeyed its rules for ShoutingIguana.',
-      'robots.txt couldn’t be read (HTTP 503), so the crawl refused this origin’s URLs until it could.',
-      'There’s no robots.txt here (HTTP 404), so nothing on this origin is refused.',
+      'robots.txt couldn’t be read (503 Service Unavailable), so the crawl refused this origin’s URLs until it could.',
+      'There’s no robots.txt here (404 Not Found), so nothing on this origin is refused.',
       'robots.txt didn’t answer (it timed out). The crawl gave no verdict and went ahead: this origin’s URLs show their own errors.',
     ]);
     expect(new Set(sentences).size).toBe(4);
@@ -77,7 +77,7 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
     );
     // A status is an answer, said as it is, with nothing behind it.
     const refusing = stateWords(TEST_ORIGINS[1]!, UA);
-    expect(refusing.sentence).toMatch(/^robots\.txt couldn’t be read \(HTTP 503\)/);
+    expect(refusing.sentence).toMatch(/^robots\.txt couldn’t be read \(503 Service Unavailable\)/);
     expect(refusing.recorded).toBeNull();
     // And the same of the other state that carries a failure.
     const unreachable = stateWords(
@@ -103,8 +103,8 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
     const sentences = TEST_ORIGINS.map((origin) => stateWords({ ...origin, blocked: 0 }, UA, false));
     expect(sentences.map((words) => words.sentence)).toEqual([
       'The crawl read this file, and was told to ignore its rules.',
-      'robots.txt couldn’t be read (HTTP 503). The crawl was told to ignore robots.txt, so it refused nothing.',
-      'There’s no robots.txt here (HTTP 404), so nothing on this origin is refused.',
+      'robots.txt couldn’t be read (503 Service Unavailable). The crawl was told to ignore robots.txt, so it refused nothing.',
+      'There’s no robots.txt here (404 Not Found), so nothing on this origin is refused.',
       'robots.txt didn’t answer (it timed out). The crawl was told to ignore robots.txt, so it went ahead.',
     ]);
     expect(sentences.map((words) => words.short)).toEqual([
@@ -124,7 +124,7 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
     expect(read).toMatchObject({ short: 'Read', sentence: 'The crawl read this file.' });
     expect(unreachable).toMatchObject({
       short: 'Couldn’t be read',
-      sentence: 'robots.txt couldn’t be read (HTTP 503).',
+      sentence: 'robots.txt couldn’t be read (503 Service Unavailable).',
     });
   });
 
@@ -168,7 +168,7 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
     );
     expect(missing.short).toBe('Missing when last asked');
     expect(missing.sentence).toBe(
-      'When the crawl last asked, there was no robots.txt here (HTTP 404), which refuses nothing. 1,204 URLs on this origin are stored as refused all the same: they were refused earlier in the crawl, or by an earlier version of Shouting Iguana. Only the last answer is kept.',
+      'When the crawl last asked, there was no robots.txt here (404 Not Found), which refuses nothing. 1,204 URLs on this origin are stored as refused all the same: they were refused earlier in the crawl, or by an earlier version of Shouting Iguana. Only the last answer is kept.',
     );
     const empty = stateWords(testOrigin({ origin: 'https://a.example', bytes: 0, blocked: 2 }), UA);
     expect(empty.sentence).toMatch(/^When the crawl last read this file it was empty, which refuses nothing. 2 URLs/);
@@ -257,10 +257,10 @@ describe('why a URL was blocked', () => {
   });
 
   it('says in words that the file couldn’t be read, with how when that’s stored', () => {
-    const why = blockedWhy({ reason: 'unreachable', line: null, rule: null, error: 'HTTP 503' });
+    const why = blockedWhy({ reason: 'unreachable', line: null, rule: null, error: '503 Service Unavailable' });
     expect(why.short).toBe('robots.txt couldn’t be read');
     expect(why.sentence).toBe(
-      'robots.txt couldn’t be read when the crawl came to this URL (HTTP 503), which refuses everything.',
+      'robots.txt couldn’t be read when the crawl came to this URL (503 Service Unavailable), which refuses everything.',
     );
   });
 

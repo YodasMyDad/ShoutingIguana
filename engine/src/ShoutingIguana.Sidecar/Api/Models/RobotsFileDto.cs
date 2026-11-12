@@ -14,4 +14,5 @@ internal sealed record RobotsFileDto(
     long Blocked,
     string UserAgent,
     IReadOnlyList<RobotsFileLine> Lines,
-    RobotsUnmatched Unmatched);
+    RobotsUnmatched Unmatched,
+    bool Respected);

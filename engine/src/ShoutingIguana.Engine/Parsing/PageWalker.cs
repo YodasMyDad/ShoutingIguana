@@ -23,6 +23,8 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     private const int MAX_IMAGES = 2_000;
     private const int MAX_HEADINGS = 500;
     private const int MAX_META_TAGS = 200;
+    private const int MAX_ICONS = 20;
+    private const int MAX_ICON_ATTRIBUTE_CHARS = 100;
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
 
@@ -65,6 +67,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     public List<string> JsonLd { get; } = [];
     public List<string> AnchorIds { get; } = [];
     public List<ExtractedLink> Links { get; } = [];
+    public List<IconFact> Icons { get; } = [];
     public MetaRefreshFact? MetaRefresh { get; private set; }
     public string? Language { get; private set; }
     public string? DeclaredCharset { get; private set; }
@@ -442,6 +445,12 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
                      token.Equals("apple-touch-icon", StringComparison.OrdinalIgnoreCase))
             {
                 AddLink(href, LinkKind.Icon, LinkFlags.None, position, null);
+
+                // The site's own icon, as a browser tab shows it, is a rel="icon": a touch icon is the home screen's.
+                if (token.Equals("icon", StringComparison.OrdinalIgnoreCase) && Icons.Count < MAX_ICONS && UrlNormalizer.TryResolve(baseUri, href, out var icon))
+                {
+                    Icons.Add(new IconFact(icon.AbsoluteUri, IconAttribute(element, "sizes"), IconAttribute(element, "type")));
+                }
             }
             else if (token.Equals("amphtml", StringComparison.OrdinalIgnoreCase))
             {
@@ -449,6 +458,10 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             }
         }
     }
+
+    /// <summary>What an icon's link says of it, trimmed and cut short: a size or a media type is a few characters.</summary>
+    private static string? IconAttribute(IElement element, string name) =>
+        NullIfBlank(element.GetAttribute(name)) is { } value ? NullIfBlank(Clean(value, MAX_ICON_ATTRIBUTE_CHARS)) : null;
 
     private void AddScript(IElement element, WalkContext context)
     {

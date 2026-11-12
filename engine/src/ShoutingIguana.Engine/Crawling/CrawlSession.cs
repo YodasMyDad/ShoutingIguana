@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Favicons;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -59,6 +60,7 @@ internal sealed class CrawlSession
     private readonly PageProcessor _processor;
     private readonly RobotsCache _robots;
     private readonly SitemapDiscoverer _sitemaps;
+    private readonly FaviconFetcher _favicon;
     private readonly HostGateRegistry _gates;
     private readonly Channel<FrontierItem> _internalQueue;
     private readonly Channel<FrontierItem> _externalQueue;
@@ -105,7 +107,8 @@ internal sealed class CrawlSession
         _robots = new RobotsCache(fetcher, _gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
-        _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, timeProvider);
+        _favicon = new FaviconFetcher(_options, _fetcher, _gates, _robots, _writer, scope, _pause, timeProvider, loggerFactory.CreateLogger<FaviconFetcher>(), _stop.Token);
+        _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, _favicon, timeProvider);
         _sitemaps = new SitemapDiscoverer(_options, _fetcher, _gates, _robots, _writer, _links, _observer, _pause, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
@@ -345,6 +348,9 @@ internal sealed class CrawlSession
             _internalQueue.Writer.TryComplete();
             _externalQueue.Writer.TryComplete();
             await WhenAllQuietlyAsync([.. workers, sitemaps]).ConfigureAwait(false);
+
+            // The site's icon, if it is still on its way: a crawl that completed gives it a moment, any other none.
+            await _favicon.FinishAsync(_status == CrawlStatus.Completed).ConfigureAwait(false);
             await progressStop.CancelAsync().ConfigureAwait(false);
             await WhenAllQuietlyAsync([progress]).ConfigureAwait(false);
             _elapsed.Stop();

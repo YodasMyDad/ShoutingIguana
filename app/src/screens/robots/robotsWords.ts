@@ -12,7 +12,7 @@ import type {
   RobotsOrigin,
   RobotsOriginPage,
 } from '../../api/grids';
-import { failureOf, type Failure } from '../../lib/failure';
+import { failureOf, statusWords, type Failure } from '../../lib/failure';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { sentenceText, type SentencePart } from '../countSentence';
 
@@ -38,7 +38,7 @@ type Answer = Pick<RobotsOrigin, 'state' | 'statusCode' | 'error' | 'bytes'> & P
  * failure is kept apart, for behind the words). Null when neither is stored.
  */
 function answerOf({ statusCode, error }: Pick<RobotsOrigin, 'statusCode' | 'error'>): Failure | null {
-  if (statusCode !== null) return { kind: 'status', words: `HTTP ${statusCode}`, recorded: null };
+  if (statusCode !== null) return { kind: 'status', words: statusWords(statusCode), recorded: null };
   return failureOf(error);
 }
 

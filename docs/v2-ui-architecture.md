@@ -1315,10 +1315,10 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 
 - `POST /robots` takes only `offset` and `limit`: no search, no filter to the origins that blocked something, and
   no count of them. The order puts them first after the site's own, and the screen says so.
-- A crawl's own text for a status is "HTTP 404" (a sitemap's `error`, a robots.txt's), and both screens say it as
-  it is. An issue's detail reads "404 Not Found" since the score's engine, which names the status when it analyses
-  and leaves the crawl file's words alone: the two screens and Issues say the same status in different words until
-  the engine names it in these answers too.
+- Done (E6 review, item 7): the engine names a status in the crawl's own words as an issue's detail does ("404 Not
+  Found", a sitemap's `error`, a robots.txt's reason; "HTTP 520" for one with no name), and both screens name a
+  status they word from its code the same way (`statusWords`); a crawl an earlier engine stored still says "HTTP
+  404", which `failureOf` names too, so the two screens and Issues say a status alike for every crawl.
 - It doesn't say how many sitemaps an index's file lists, only how many of them the crawl has: "the crawl has 1 of
   its sitemaps" can't say of how many.
 - An origin can read `unanswered` and still have blocked URLs (a crawl continued after a run that read a file

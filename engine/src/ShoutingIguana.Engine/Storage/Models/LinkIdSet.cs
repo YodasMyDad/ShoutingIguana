@@ -58,6 +58,24 @@ internal sealed class LinkIdSet
         }
     }
 
+    /// <summary>
+    /// Adds another set's ids, neither sealed yet: the parts of one pass split over several connections, each of which
+    /// kept the ids of its own stretch of the links. Both were made for the same crawl, so both keep their ids the same way.
+    /// </summary>
+    public void Merge(LinkIdSet other)
+    {
+        if (_bits is null || other._bits is null)
+        {
+            _adding!.AddRange(other._adding ?? []);
+            return;
+        }
+
+        for (var word = 0; word < _bits.Length && word < other._bits.Length; word++)
+        {
+            _bits[word] |= other._bits[word];
+        }
+    }
+
     /// <summary>Counts the ids, and readies it for <see cref="Range"/> and <see cref="Rank"/>. Nothing is added after.</summary>
     public LinkIdSet Seal()
     {

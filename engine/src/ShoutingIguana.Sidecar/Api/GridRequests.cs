@@ -50,12 +50,14 @@ internal static class GridRequests
             }
         }
 
+        var ends = LinkEnds(request.LinkEnds, errors);
         ThrowIfAny(errors);
         return new UrlQuery
         {
             Columns = request.Columns ?? [],
             Filters = filters,
             Search = request.Search,
+            LinkEnds = ends,
             Sort = sort,
             Offset = request.Offset ?? 0,
             Limit = request.Limit ?? UrlGridReader.DEFAULT_LIMIT,
@@ -105,6 +107,43 @@ internal static class GridRequests
         }
 
         return compiled;
+    }
+
+    /// <summary>
+    /// The ends of some links a URL grid is narrowed to, its errors keyed under <c>linkEnds</c>; null when the request
+    /// has none.
+    /// </summary>
+    public static UrlLinkEnds? LinkEnds(LinkEndsDto? ends, Dictionary<string, List<string>> errors)
+    {
+        if (ends is null)
+        {
+            return null;
+        }
+
+        Dictionary<string, List<string>> found = new(StringComparer.Ordinal);
+        var filters = Filters(ends.Filters, found);
+        var end = End(ends.End, found);
+        foreach (var (field, messages) in found)
+        {
+            messages.ForEach(message => Add(errors, "linkEnds." + field, message));
+        }
+
+        return end is { } known ? new UrlLinkEnds(known, filters, ends.Search) : null;
+    }
+
+    /// <summary>Which end of a link, by its name; anything else is a field error under <c>end</c>.</summary>
+    public static LinkEnd? End(string? end, Dictionary<string, List<string>> errors)
+    {
+        switch (end)
+        {
+            case "from":
+                return LinkEnd.From;
+            case "to":
+                return LinkEnd.To;
+            default:
+                Add(errors, "end", "Give the end of the links: from (the pages they're on) or to (the URLs they lead to).");
+                return null;
+        }
     }
 
     public static IReadOnlyList<LinkKind> Kinds(IReadOnlyList<string>? kinds)

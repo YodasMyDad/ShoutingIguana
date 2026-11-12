@@ -69,6 +69,12 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
 
     private static readonly UrlSort[] TARGET_SORTS = [new("to.url"), new("to.statusCode", true), new("to.depth")];
 
+    /// <summary>Text only the synthetic site's URLs hold, never a title: a URL's text never changes, so what matched it at any moment the finished file still says.</summary>
+    private const string IN_URLS_ONLY = "/p/1";
+
+    /// <summary>Searches as they're typed: one letter every URL holds, text in titles, text in URLs alone, and text in neither.</summary>
+    private static readonly string[] SEARCHES = ["p", "product", IN_URLS_ONLY, "nothing-holds-this"];
+
     /// <summary>
     /// The filter sets that go by a link alone, each as SQL over the links: what a link is never changes once it's
     /// stored, so an answer given while the crawl ran can be held to the finished file afterwards.
@@ -311,10 +317,11 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
             Assert.Equal((SummaryUnavailableReason.Crawling, 1_000), (before.Summary.Reason, sortedBefore.Rows.Count));
 
             // A page is fetched again: its links go, and are stored again after every other link. Among them are the newest
-            // links there were; with them, every other link to the sort's first target.
+            // links there were; with them, every other link to the sort's first target, its first among them (a target
+            // with one link, at an odd id, would otherwise have none stored again, as a crawl's order made it once).
             var page = TestCrawls.Count(running, "SELECT from_id FROM links ORDER BY rowid DESC LIMIT 1");
             var early = Convert.ToInt64(sortedBefore.Rows[0].Values[1], CultureInfo.InvariantCulture);
-            var again = $"from_id = {page} OR (to_id = {early} AND rowid % 2 = 0)";
+            var again = $"from_id = {page} OR (to_id = {early} AND (rowid % 2 = 0 OR rowid = (SELECT MIN(rowid) FROM links WHERE to_id = {early})))";
             Assert.InRange(TestCrawls.Count(running, $"SELECT COUNT(*) FROM links WHERE {again}"), 5, before.Total - 1);
             Change(running, $"""
                 BEGIN;
@@ -519,12 +526,14 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
         ConcurrentQueue<string> wrong = new();
         ConcurrentDictionary<long, int> totals = new();
         ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers = new();
+        ConcurrentDictionary<long, long> searched = new();
+        ConcurrentDictionary<(LinkEnd End, long Links), long> ended = new();
         var readers = Enumerable.Range(0, READERS).Select(reader => Task.Run(() =>
         {
             var reads = 0;
             for (var round = reader; !job.Completion.IsCompleted && wrong.Count < 20; round++)
             {
-                reads += ReadEverything(path, cache, round, wrong, totals, answers);
+                reads += ReadEverything(path, cache, round, wrong, totals, answers, searched, ended);
             }
 
             return reads;
@@ -560,12 +569,36 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
                 $"{set}, of {total} links: {matching} matched, the newest {string.Join(",", newest.Take(3))}; the file says {string.Join(",", truth.Take(3))}");
         }
 
+        // A search's answer too: the crawl's URLs are numbered as it finds them, none missing, so a moment with so many
+        // URLs had the first so many, and how many of them hold a text the finished file still says.
+        Assert.Equal(TestCrawls.Count(path, "SELECT COUNT(*) FROM urls"), TestCrawls.Count(path, "SELECT MAX(id) FROM urls"));
+        Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE instr(lower(COALESCE(title, '')), '{IN_URLS_ONLY}') > 0"));
+        Assert.True(searched.Count >= 3, $"The searches saw the crawl at only {searched.Count} sizes.");
+        foreach (var (total, matching) in searched)
+        {
+            Assert.Equal((total, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE id <= {total} AND instr(lower(url), '{IN_URLS_ONLY}') > 0")), (total, matching));
+        }
+
+        // The site's icon was read all the while too, and the crawl kept it.
+        Assert.Equal(SyntheticSite.Favicon, FaviconReader.Read(path)!.Bytes);
+
+        // And a view's ends: a moment with so many hyperlinks had the first so many of the file's, so how many pages they
+        // were on, and how many URLs they led to, the finished file still says.
+        Assert.True(ended.Count >= 6, $"The ends of the hyperlinks were listed at only {ended.Count} moments.");
+        foreach (var ((end, links), total) in ended)
+        {
+            var column = end == LinkEnd.From ? "from_id" : "to_id";
+            Assert.Equal((end, links, TestCrawls.Count(path, $"SELECT COUNT(DISTINCT {column}) FROM (SELECT {column} FROM links WHERE {TRUTHS["hyperlinks"]} ORDER BY rowid LIMIT {links})")),
+                (end, links, total));
+        }
+
         return folds;
     }
 
     /// <summary>One round of every read, each answer checked against itself; what's wrong is noted, and the reads counted.</summary>
     private static int ReadEverything(string path, ReadCache cache, int round, ConcurrentQueue<string> wrong, ConcurrentDictionary<long, int> totals,
-        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers)
+        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers, ConcurrentDictionary<long, long> searched,
+        ConcurrentDictionary<(LinkEnd End, long Links), long> ended)
     {
         var reads = 0;
         void Read(string what, Func<string?> read)
@@ -642,6 +675,63 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
             }
         }
 
+        // A view's ends, as a list and as the URL grid narrowed to them: each answer's rows are what its counts say.
+        foreach (var end in new[] { LinkEnd.From, LinkEnd.To })
+        {
+            var hyperlinks = SETS[1].Filters;
+            Read($"the hyperlinks' ends ({end})", () =>
+            {
+                var ends = LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = hyperlinks, Limit = 1_000 }, cache);
+                if (ends.Rows.Count != Math.Min(1_000, ends.Total) || ends.Total > ends.Links || ends.Rows.Any(row => row.Links < 1 || row.Url.Length == 0) ||
+                    !ends.Rows.Select(row => row.Id).SequenceEqual(ends.Rows.Select(row => row.Id).Distinct().Order()) ||
+                    (ends.Total <= 1_000 ? ends.Rows.Sum(row => row.Links) != ends.Links : ends.Rows.Sum(row => row.Links) > ends.Links))
+                {
+                    return $"{ends.Rows.Count} ends of {ends.Total}, with {ends.Rows.Sum(row => row.Links)} links between them, of {ends.Links} links";
+                }
+
+                // Two answers for one moment must be one answer.
+                return ends.Summary.Reason == SummaryUnavailableReason.Crawling && ended.GetOrAdd((end, ends.Links), ends.Total) is var first && first != ends.Total
+                    ? $"{ends.Links} hyperlinks have {ends.Total} ends where they had {first}"
+                    : null;
+            });
+            Read($"the URL grid of the hyperlinks' ends ({end})", () =>
+            {
+                var grid = UrlGridReader.Query(path, new UrlQuery { LinkEnds = new UrlLinkEnds(end, hyperlinks), Limit = LIMIT }, cache);
+                var last = UrlGridReader.Query(path, new UrlQuery { LinkEnds = new UrlLinkEnds(end, hyperlinks), Offset = (int)Math.Max(0, grid.Matching - 10), Limit = LIMIT }, cache);
+                return grid.Matching > grid.Total || grid.Rows.Count != Math.Min(LIMIT, grid.Matching) || last.Rows.Count > Math.Min(LIMIT, last.Matching)
+                    ? $"{grid.Rows.Count} URLs of {grid.Matching} that are ends, of {grid.Total}; from near the end, {last.Rows.Count} of {last.Matching}"
+                    : null;
+            });
+        }
+
+        foreach (var text in SEARCHES)
+        {
+            Read($"search for '{text}'", () =>
+            {
+                var found = UrlSearchReader.Search(path, text, LIMIT, cache);
+                if (found.Matching > found.Total || found.Results.Count != Math.Min(LIMIT, found.Matching))
+                {
+                    return $"{found.Results.Count} results of {found.Matching} that match, of {found.Total} URLs";
+                }
+
+                if (found.Results.FirstOrDefault(result => !Holds(result.MatchedIn == UrlSearchField.Url ? result.Url : result.Title, text)) is { } stray)
+                {
+                    return $"{stray.Url} ({stray.Title}) doesn't hold the text in its {stray.MatchedIn}";
+                }
+
+                if (!found.Results.Select(result => result.Rank).SequenceEqual(found.Results.Select(result => result.Rank).Order()) ||
+                    found.Results.Select(result => result.Id).Distinct().Count() != found.Results.Count || found.Results.Any(result => result.Id > found.Total))
+                {
+                    return $"the results come as {string.Join(", ", found.Results.Select(result => $"{result.Id} {result.Rank}"))}, of {found.Total} URLs";
+                }
+
+                // Two answers for one moment must be one answer.
+                return text == IN_URLS_ONLY && searched.GetOrAdd(found.Total, found.Matching) is var first && first != found.Matching
+                    ? $"of {found.Total} URLs, {found.Matching} hold the text where {first} did"
+                    : null;
+            });
+        }
+
         Read("robots.txt", () =>
         {
             var origins = RobotsReader.ReadOrigins(path, limit: 1_000, cache: cache);
@@ -650,11 +740,51 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
                 return $"{origins.Origins.Count} origins of {origins.Total} block {origins.Origins.Sum(origin => origin.Blocked)} URLs, and the page says {origins.Blocked}";
             }
 
+            // Searched and filtered: one answer's counts are of one list, and are the rows it has.
+            foreach (var query in new[] { new RobotsOriginQuery { Limit = 1_000 }, new RobotsOriginQuery { Blocked = true, Limit = 1_000 }, new RobotsOriginQuery { Search = "127", Blocked = false, Limit = 1_000 } })
+            {
+                var found = RobotsReader.ReadOrigins(path, query, cache);
+                var expected = query.Blocked switch { true => found.Counts.Blocked, false => found.Counts.NotBlocked, _ => found.Counts.All };
+                if (found.Matching != found.Origins.Count || found.Matching != expected || found.Counts.All != found.Counts.Blocked + found.Counts.NotBlocked ||
+                    found.Counts.All > found.Total || found.Origins.Any(origin => query.Blocked is { } blocked && origin.Blocked > 0 != blocked))
+                {
+                    return $"{found.Origins.Count} origins of {found.Matching} that match, where the counts are {found.Counts} of {found.Total}";
+                }
+            }
+
             var first = origins.Origins[0].Origin;
             var file = RobotsReader.ReadFile(path, first, cache);
             var urls = RobotsReader.ReadBlocked(path, first, limit: LIMIT, cache: cache);
-            return file is null || urls is null ? $"{first} is listed and has no robots.txt"
-                : file.Origin.Blocked != file.Lines.Sum(line => line.Blocked ?? 0) + file.Unmatched.Unreachable + file.Unmatched.Unknown
+            if (file is null || urls is null)
+            {
+                return $"{first} is listed and has no robots.txt";
+            }
+
+            // A URL the origin blocked, as the inspector has it: the same origin, reason and line, and the sitemaps that
+            // list it, each one the crawl has.
+            if (urls.Rows.Count > 0)
+            {
+                var row = urls.Rows[^1];
+                var inspected = UrlInspectorReader.Read(path, row.Id, cache);
+                var test = inspected?.Indexability.Tests.Single(test => test.Test == IndexabilityTestKind.RobotsTxt);
+                if (test is null || (test.Origin, test.Reason, test.Line, test.Rule) != (first, row.Reason, row.Line, row.Rule))
+                {
+                    return $"{row.Url} was refused by {row.Reason} at line {row.Line}, and the inspector says {test?.Reason} at line {test?.Line} of {test?.Origin}";
+                }
+
+                if (inspected!.ListedIn.Total < inspected.ListedIn.Sitemaps.Count || inspected.ListedIn.Sitemaps.Any(sitemap => sitemap.Id < 1 || sitemap.Url.Length == 0))
+                {
+                    return $"{row.Url} is listed in {inspected.ListedIn.Total} sitemaps, {inspected.ListedIn.Sitemaps.Count} of them named";
+                }
+
+                var one = RobotsReader.ReadBlocked(path, first, cache: cache, urlId: row.Id);
+                if (one is null || one.Matching != 1 || one.Rows.Count != 1 || one.Rows[0] != row)
+                {
+                    return $"{row.Url} asked for alone gives {one?.Matching} rows";
+                }
+            }
+
+            return file.Origin.Blocked != file.Lines.Sum(line => line.Blocked ?? 0) + file.Unmatched.Unreachable + file.Unmatched.Unknown
                     ? $"{first} blocks {file.Origin.Blocked} URLs, and its lines account for {file.Lines.Sum(line => line.Blocked ?? 0)}"
                 : urls.Matching != urls.Total || urls.Rows.Count != Math.Min(LIMIT, urls.Total) ? $"{first}: {urls.Rows.Count} rows of {urls.Matching} blocked URLs, of {urls.Total}"
                 : null;
@@ -668,6 +798,12 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
                     return $"{sitemap.Url} lists {sitemap.Urls.Listed}: {sitemap.Urls.Fetched} fetched, {sitemap.Urls.Indexable} indexable, {sitemap.Urls.NonIndexable} not";
                 }
 
+                // An index's file lists at least the sitemaps the crawl has of it, once it's read.
+                if (sitemap.ListedSitemaps < sitemap.Sitemaps || (sitemap.State == SitemapState.Pending && sitemap.ListedSitemaps is not null))
+                {
+                    return $"{sitemap.Url} ({sitemap.State}) lists {sitemap.ListedSitemaps} sitemaps, and the crawl has {sitemap.Sitemaps} of them";
+                }
+
                 if (UrlGridReader.QuerySitemap(path, sitemap.Id, new UrlQuery { Limit = 1 }, cache) is { } listed && listed.Matching != listed.Total)
                 {
                     return $"{sitemap.Url}: {listed.Matching} URLs match no filter, of {listed.Total}";
@@ -676,8 +812,14 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
 
             return null;
         });
+        // The site's icon: none yet, or the image the site serves, whole.
+        Read("the site's icon", () => FaviconReader.Read(path) is { } icon && (icon.ContentType != "image/png" || !icon.Bytes.SequenceEqual(SyntheticSite.Favicon))
+            ? $"the icon read is {icon.Bytes.Length} bytes of {icon.ContentType}"
+            : null);
         return reads;
     }
+
+    private static bool Holds(string? text, string part) => text?.Contains(part, StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>What's wrong with a page read by offset, by its own numbers; null when it agrees with itself.</summary>
     private static string? Wrong(LinkGridPage page, UrlQuery query)

@@ -24,15 +24,17 @@ public static class SitemapListReader
 
     private static SitemapList Read(GridReadContext context)
     {
-        List<(int Id, string Url, int? ParentId, int? Status, bool IsIndex, int Entries, string? Error, bool IsProbe)> stored = [];
-        using (var command = context.Command("SELECT id, url, parent_id, status_code, is_index, url_count, error, is_probe FROM sitemaps ORDER BY id", []))
+        // A file from before an index's own count was kept has no column for it, until it's continued.
+        var listed = context.Scalar("SELECT COUNT(*) FROM pragma_table_info('sitemaps') WHERE name = 'listed_sitemaps'", []) > 0 ? "listed_sitemaps" : "NULL";
+        List<(int Id, string Url, int? ParentId, int? Status, bool IsIndex, int Entries, string? Error, bool IsProbe, int? Listed)> stored = [];
+        using (var command = context.Command($"SELECT id, url, parent_id, status_code, is_index, url_count, error, is_probe, {listed} FROM sitemaps ORDER BY id", []))
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
             {
                 stored.Add((reader.GetInt32(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetInt32(2), reader.IsDBNull(3) ? null : reader.GetInt32(3),
                     !reader.IsDBNull(4) && reader.GetInt64(4) != 0, reader.IsDBNull(5) ? 0 : reader.GetInt32(5), reader.IsDBNull(6) ? null : reader.GetString(6),
-                    !reader.IsDBNull(7) && reader.GetInt64(7) != 0));
+                    !reader.IsDBNull(7) && reader.GetInt64(7) != 0, reader.IsDBNull(8) || reader.GetInt64(8) is < 0 or > int.MaxValue ? null : reader.GetInt32(8)));
             }
         }
 
@@ -65,7 +67,10 @@ public static class SitemapListReader
                 : disjoint.Value ? under.Select(id => own.GetValueOrDefault(id, NONE)).Aggregate(NONE, (sum, each) => sum.Plus(each))
                 : UnderCounts(context, sitemap.Id);
             sitemaps.Add(new SitemapInfo(sitemap.Id, sitemap.Url, sitemap.ParentId, foundVia, state, sitemap.Status, sitemap.IsIndex, sitemap.Entries,
-                children[sitemap.Id].Count(), sitemap.Error, counts));
+                children[sitemap.Id].Count(), sitemap.Error, counts)
+            {
+                ListedSitemaps = sitemap.Listed
+            });
         }
 
         return new SitemapList(discovery, sitemaps, context.Summary);

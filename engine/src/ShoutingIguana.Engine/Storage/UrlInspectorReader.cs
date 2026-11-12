@@ -33,6 +33,9 @@ public static class UrlInspectorReader
         [nameof(IssueSeverity.Error)] = 0, [nameof(IssueSeverity.Warning)] = 1, [nameof(IssueSeverity.Notice)] = 2
     };
 
+    /// <summary>The most sitemaps the inspector names of those that list a URL; their number is given whole.</summary>
+    public const int MAX_SITEMAPS_NAMED = 20;
+
     /// <summary>Tests only: each page of links as its query runs, with its parameters, so its plan can be asked for.</summary>
     internal static Action<string, IReadOnlyList<KeyValuePair<string, object>>>? Ran { get; set; }
 
@@ -100,15 +103,42 @@ public static class UrlInspectorReader
             Content = facts is null ? null : Content(facts),
             Limits = limits,
             Links = links,
-            LinkTotals = new UrlLinkTotals(TotalLinks(context, LinkDirection.Inlinks, urlId), TotalLinks(context, LinkDirection.Outlinks, urlId)),
+            LinkTotals = new UrlLinkTotals(TotalLinks(context, LinkDirection.Inlinks, urlId), TotalLinks(context, LinkDirection.Outlinks, urlId))
+            {
+                HyperlinkInlinks = TotalLinks(context, LinkDirection.Inlinks, urlId, [LinkKind.Hyperlink])
+            },
             Headers = details?.Headers ?? [],
             StructuredData = facts is null ? [] : [.. facts.JsonLd.Select(StructuredData)],
             Hreflang = facts is null ? [] : [.. facts.Hreflangs.Select(entry => Hreflang(context, entry))],
             Issues = context.Analysis is null ? null : Issues(context, urlId),
             NamedBy = context.Analysis is null ? null : NamedBy(context, urlId),
+            ListedIn = ListedIn(context, urlId),
             Summary = context.Summary,
             SourceStored = row.GetBoolean(26)
         };
+    }
+
+    /// <summary>
+    /// The sitemaps that list a URL, in the order the crawl found them. What each sitemap lists is keyed by sitemap, then
+    /// URL, so each sitemap is asked whether it lists this one: a lookup a sitemap (a crawl reads at most a thousand), where
+    /// finding the URL's rows without their sitemap would read every row of every sitemap.
+    /// </summary>
+    private static UrlSitemaps ListedIn(GridReadContext context, int urlId)
+    {
+        List<SitemapRef> sitemaps = [];
+        long total = 0;
+        using var command = context.Command(
+            "SELECT s.id, s.url FROM sitemaps s WHERE EXISTS (SELECT 1 FROM sitemap_urls m WHERE m.sitemap_id = s.id AND m.url_id = $id) ORDER BY s.id", [new("$id", urlId)]);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (total++ < MAX_SITEMAPS_NAMED)
+            {
+                sitemaps.Add(new SitemapRef(reader.GetInt32(0), reader.GetString(1)));
+            }
+        }
+
+        return new UrlSitemaps(total, sitemaps);
     }
 
     /// <summary>
@@ -140,11 +170,11 @@ public static class UrlInspectorReader
 
         var (near, far) = direction == LinkDirection.Inlinks ? ("to_id", "from_id") : ("from_id", "to_id");
         var kinds = query.Kinds.Distinct().Order().ToList();
-        var ofKinds = kinds.Count == 0 ? string.Empty : $" AND l.kind IN ({string.Join(", ", kinds.Select(kind => (int)kind))})";
+        var ofKinds = OfKinds(kinds);
         var where = $"l.{near} = $id AND l.{far} <> $id{ofKinds}";
         KeyValuePair<string, object>[] parameters = [new("$id", urlId)];
         var hash = $"{direction}|{urlId}|{ofKinds}";
-        var total = kinds.Count == 0 ? TotalLinks(context, direction, urlId) : context.Count($"links|{hash}", () => Count(context, direction, urlId, kinds, ofKinds));
+        var total = TotalLinks(context, direction, urlId, kinds);
 
         // Where the page starts: after a cursor's link; at an offset found on the index alone, when every kind is listed, or
         // when some kinds of link to the URL are, on the index of each kind's (merged, in crawl order); otherwise, for some
@@ -524,14 +554,25 @@ public static class UrlInspectorReader
             answered = new IndexabilityTest(IndexabilityTestKind.Answered, TestOutcome.Fail) { StatusCode = self.Status };
         }
 
-        var robotsTxt = !self.Fetched
+        // The origin whose robots.txt decides the URL, named where the crawl has a file for it to show; for a URL it
+        // refused, with why, and the line when a rule did: what the origin's own list of blocked URLs says of it.
+        var url = row.GetString(0);
+        var origin = RobotsReader.OriginOf(url);
+        var why = refused ? RobotsReader.WhyRefused(context, self.Id, url, error) : null;
+        var robotsTxt = (!self.Fetched
             ? new IndexabilityTest(IndexabilityTestKind.RobotsTxt, TestOutcome.NotChecked)
             : refused
                 ? new IndexabilityTest(IndexabilityTestKind.RobotsTxt, TestOutcome.Fail)
                 {
-                    Unreachable = error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true
+                    Unreachable = error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true,
+                    Reason = why!.Reason,
+                    Line = why.Line,
+                    Rule = why.Rule
                 }
-                : new IndexabilityTest(IndexabilityTestKind.RobotsTxt, context.Options.RespectRobotsTxt ? TestOutcome.Pass : TestOutcome.NotChecked);
+                : new IndexabilityTest(IndexabilityTestKind.RobotsTxt, context.Options.RespectRobotsTxt ? TestOutcome.Pass : TestOutcome.NotChecked)) with
+        {
+            Origin = origin is not null && (refused || RobotsReader.HasAnswer(context, origin)) ? origin : null
+        };
 
         // A noindex or a canonical is only read from a page that answered; one that didn't makes them moot. A file that answered
         // has nothing but its headers to say either, and they were read when its details were stored.
@@ -801,18 +842,26 @@ public static class UrlInspectorReader
     /// Every link to or from a URL, of every kind, its links to itself left out: counted once and kept, for the inspector's
     /// totals and for its lists of links alike.
     /// </summary>
-    private static long TotalLinks(GridReadContext context, LinkDirection direction, int urlId) =>
-        context.Count($"links|{direction}|{urlId}|", () => Count(context, direction, urlId, [], string.Empty));
+    private static long TotalLinks(GridReadContext context, LinkDirection direction, int urlId) => TotalLinks(context, direction, urlId, []);
+
+    /// <summary>The same of some kinds only (in order, each once): one count, kept, for the inspector's own figure and its list of those kinds.</summary>
+    private static long TotalLinks(GridReadContext context, LinkDirection direction, int urlId, IReadOnlyList<LinkKind> kinds) =>
+        context.Count($"links|{direction}|{urlId}|{OfKinds(kinds)}", () => Count(context, direction, urlId, kinds, OfKinds(kinds)));
+
+    /// <summary>The condition that a link <c>l</c> is of one of these kinds; none for every kind.</summary>
+    private static string OfKinds(IReadOnlyList<LinkKind> kinds) =>
+        kinds.Count == 0 ? string.Empty : $" AND l.kind IN ({string.Join(", ", kinds.Select(kind => (int)kind))})";
 
     private static long Count(GridReadContext context, LinkDirection direction, int urlId, IReadOnlyList<LinkKind> kinds, string ofKinds)
     {
         KeyValuePair<string, object>[] parameters = [new("$id", urlId)];
 
-        // Every link to the URL, where the link summary counts the crawl as it stands: it has them by target, a page's
-        // links to itself apart, in a few rows, where the links' index has an entry a link (a home page's million).
-        if (direction == LinkDirection.Inlinks && kinds.Count == 0 && context.LinkSummary is not null)
+        // The links to the URL, of every kind or of some, where the link summary counts the crawl as it stands: it has
+        // them by target and kind, a page's links to itself apart, in a few rows, where the links' index has an entry a
+        // link (a home page's million). It is what the links grid counts from, so the two can't differ.
+        if (direction == LinkDirection.Inlinks && context.LinkSummary is not null)
         {
-            return context.Scalar("SELECT COALESCE(SUM(links), 0) FROM link_summary WHERE to_id = $id AND self = 0", parameters);
+            return context.Scalar($"SELECT COALESCE(SUM(l.links), 0) FROM link_summary l WHERE l.to_id = $id AND l.self = 0{ofKinds}", parameters);
         }
 
         if (direction == LinkDirection.Inlinks && kinds is [LinkKind.Hyperlink] && context.Mode == GridMode.Summary)

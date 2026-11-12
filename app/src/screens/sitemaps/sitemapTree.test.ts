@@ -121,7 +121,7 @@ describe('an index’s counts', () => {
   });
 
   it('aren’t known when one under it couldn’t be read, was left unread, or sits under an index of its own', () => {
-    const failed = [index, child(2), child(3, { state: 'failed', statusCode: 404, error: 'HTTP 404' })];
+    const failed = [index, child(2), child(3, { state: 'failed', statusCode: 404, error: '404 Not Found' })];
     expect(subtreeOf(failed, 1, 'done')).toEqual({ sitemaps: 2, read: 1, more: false });
     expect(countsKnown(index, subtreeOf(failed, 1, 'done'))).toBe(false);
     // One that failed part-way has counts of its own, as its row shows: it's read as far as it goes.
