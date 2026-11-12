@@ -376,9 +376,23 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
 - **What a slow first load is doing** (`loadingNote`): a line of words over the first load's skeleton, shown with it
   (after 150 ms, never over rows already there) and outside the grid's rows. The view announces the same words.
 
+- **A sort of several keys** (the URL grid's three): Shift+click or Shift+Enter on a header adds the column as the
+  sort's next key (`onSort`'s third argument, `extend`); `grid/sort.ts` `nextMultiSort` has the rules (a plain press
+  sorts by that column alone; with Shift a key turns about, then leaves; a fourth is refused and said). A sorted
+  column of a sort of several keys shows its place beside its arrow (`sortOrder`); only the first key's header carries
+  `aria-sort`, the others say "sorted second, descending" in words.
+- **What a column's values share** (`headerDetail`): quieter words after a header's name ("URL on example.com"), never
+  copied with the header.
+- **The row menu**: `onContextMenu(index, column, anchor, menu)` on a right-click, Shift+F10 or the menu key. `menu`
+  is the rows it acts on (the selection when the row is in it, else the row; a right-click outside the selection first
+  makes that row the selection), reads them where they aren't loaded, copies them as Ctrl+C does, and gives the
+  keyboard back to the grid. The browser's own menu, which the same keys ask for on the focused grid, is kept away.
+  `grid/RowMenu.tsx` is the menu (`MenuAt`, at the point) and the items every grid of URLs shares; see
+  [The URL grid](#the-url-grid).
+
 The full grid's pieces (the filter bar and its editor, the column chooser, facets, copying a whole view) wrap this:
-see [The full grid's pieces](#the-full-grids-pieces). Column presets as TanStack Table would model them, and saved
-views, are still to come.
+see [The full grid's pieces](#the-full-grids-pieces). Column presets and saved views are the URL grid's: see
+[The URL grid](#the-url-grid).
 
 ## Keyboard
 
@@ -538,20 +552,15 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home, Overview, Issues, Links, Sitemaps and robots.txt: the full URL grid, New crawl, the
-  crawl's settings, the rest of Settings. The inspector, Links, Sitemaps and robots.txt are built (below).
+- Every screen except Home, Overview, Issues, URLs, Links, Sitemaps and robots.txt: New crawl, the crawl's settings,
+  the rest of Settings. The inspector, URLs, Links, Sitemaps and robots.txt are built (below).
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
   offers Copy URLs and no Export button.
-- The URL grid's own filter bar, column chooser and facets. The pieces are built, for any grid (see
-  [The full grid's pieces](#the-full-grids-pieces)), and the URL grid takes its chips from them: it shows the route's
-  filters as removable chips that read as sentences (`grid/filterSentence.ts`), so a group's "Show all N pages in
-  URLs" lands somewhere legible, but edits none yet. Giving it the editor, the chooser and its facets is its slice.
-- On every grid: column resize, reorder and pin, saved views, the right-click menu (inspect, open, copy, filter by
-  this value, exclude it) and export (E5). None is built: a grid's columns are fixed widths in the order chosen.
-- A grid sorted by something other than crawl order keeps its selection by row index while a crawl adds rows, so a
-  live refresh can move rows under it: selecting by row id is still to come.
+- On every grid: column resize, reorder and pin, "filter by this value" and "exclude it" in the row menu, and export
+  (E5). None is built: a grid's columns are fixed widths in the order chosen, and the URL grid's header keeps the place
+  Export will take (nothing is registered for Ctrl+E until it works). Saved views are the URL grid's only.
 - Each screen's own pieces, built from the components by its slice: the explanation band, charts. A piece two screens
   need joins `src/ui`.
 - Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
@@ -1013,6 +1022,65 @@ In `src/grid`, for any grid; Links is the first to use them all, and the URL gri
 - **`NeedsAnalysis`, `summaryWords.ts`, `useUrlWords`, `useCheckWords`**: the URL grid's words for a column that
   waits for an analysis (and for one being analysed now), its state for a filter on one, with the button worded by
   the reason (`analyseWords`), and a URL's or a check's words by its id, moved here from the URL grid's screen.
+
+## The URL grid
+
+`screens/UrlsScreen.tsx` and `screens/urls/`: every URL the crawl found, in the one grid, over the engine's URL
+columns (`POST /urls`, `POST /urls/facets`, `GET /api/url-columns`), with the full grid's pieces as Links has them.
+What it settled:
+
+- **Pure first**: `urlColumns.tsx` (the presets, what's shown, what the query asks for, each cell, widths, the
+  chooser's groups and the filter bar's columns), `urlFacets.ts`, `urlGridParts.ts` (the nine fixed columns one
+  sitemap's URLs still show, exported from `UrlsScreen` under their old names), `urlPlaces.ts`, `useUrlFilterWords.ts`;
+  `grid/savedViews.ts` and `grid/searchCommand.ts` are any grid's. Unit-tested in `urls/urls.test.ts` and
+  `grid/savedViews.test.ts`.
+- **The route holds the view**: `filter`, `q`, `sort` (up to three keys), `cols`, `inspect`. A filter, a search, a
+  facet's value and a saved view are each a new place; a sort and the columns replace. `view` stays unused: a preset
+  and a saved view are recognised from the route itself, so a link, back and forward always say which.
+- **Column presets** (Overview, the default; Indexability; Content; Performance; Links) are only columns: a preset
+  reads as chosen exactly while the route's columns are its own, in its order, and the default set isn't written to
+  the address. Each leads with the URL; the URL column takes the room the others leave and never less than 240 px, so
+  a preset wider than the window scrolls inside the grid, never the page. The chooser lists every column the engine
+  has (a check's own and the id left out) in six groups, with "Show full URLs" under them.
+- **The host named once**: URLs on the crawl's own origin show their path, and the URL column's header says "on
+  example.com" (`headerDetail`). "Show full URLs" (a preference, `settings.showFullUrls`, and a palette command) shows
+  them whole. A URL is always copied whole.
+- **A URL with no status says what happened**, from its outcome (`urlStatusWords`): "Blocked by robots.txt", "Not
+  checked", and "Not crawled" (or "so far" while the crawl runs) only for a URL with neither a code nor an outcome.
+- **A sort goes with its column**, as on Links (`sortShown`), and a header that can't sort says why: text "would read
+  every page", a column read from each response "would read every one", with "filter by it instead".
+- **Facets** (status, status code, indexability, type, depth, response time, sitemaps, issues) are read only while a
+  menu is open (`['grid', 'urlFacets', …]`, among the grids' keys, so an open menu stays fresh on a running crawl), and
+  a value replaces any filter on its column. The two the analysis counts say why they can't be, in the menu, on a
+  crawl without one. A URL counts once in every facet but Issues, where it counts once for each severity it has.
+- **Saved views** are preferences (`settings.savedViews`, checked as a route is when read back, 24 at most and none
+  over 1,500 characters, each saying so rather than being cut): a name and the route's filters, search, sort and
+  columns. The menu's button names the view the grid is on; save (a dialog, the name checked under its field), open
+  (the menu, and a palette command per view), rename and delete with Undo. A saved view opens on any crawl.
+- **Copies**: the URLs of the whole view (Ctrl+Shift+C) and the column the cursor is in, read by cursor as far as
+  10,000 rows, named "the first 10,000" on a bigger view.
+- **The row menu**: inspect, open in the browser, copy the URL (or the selection's URLs, each once), copy the row (or
+  rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). The same piece on
+  Links (each end: the end the menu was opened in, and Inspect the source page, Inspect the target), Issues' pages
+  ("Show the page in URLs": the URL grid filtered to its URL, `url eq`, with the inspector on it) and groups ("Show all
+  N pages in URLs"), one sitemap's URLs ("Show the URL in URLs") and an origin's blocked URLs ("List what line N
+  blocked"). Its accessible name says what it's of ("Menu for /about/", "Menu for 12 URLs").
+- **The cursor follows its row** (`rowKey`) on the URL grid, Links, Issues' flat rows (a URL's issue, by detail and
+  related URL) and groups, and the inspector's link lists (a link by its other end, kind, position, text, fragment
+  and flags: two links alike in all of these are the same to the cursor). Each has a test seen failing without it.
+- **Ctrl+F** is one command shape on URLs, Links, one sitemap and Issues (`searchCommand`): the screen's field
+  focused, its text selected, "filter this grid" among its palette words.
+- **Export's place** is kept at the end of the toolbar (`data-slot="export"`); nothing is offered until the engine's
+  export is in.
+- **States**, each a story under Screens/URLs: the garden crawl and each preset, sorted by two keys, every kind of URL,
+  full URLs, filtered, on a saved view, first load, refreshing, live (URLs sort in, the cursor stays), never analysed,
+  continued since its analysis, being analysed, a filter that needs an analysis, a filter the engine refuses, a query
+  it refuses, all the filters a view takes, no URLs matching, no URLs yet, a read error, the columns' list
+  unreadable, and a hundred thousand URLs. The menu at a point, the URL chooser, the saved views' menu and the name
+  dialog are under Design system.
+- **Tested** against the real sidecar (`e2e/urls.spec.ts`) and swept (`e2e/urls-sweep.spec.ts`: the header's count
+  under each preset and view, and every value of every facet under each view, against where it lands and the
+  sidecar's own count).
 
 ## Sitemaps and robots.txt (their slice)
 

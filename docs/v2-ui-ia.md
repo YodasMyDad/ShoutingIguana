@@ -146,8 +146,17 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 **URLs.**
 
 - The one grid: column presets (Overview, Indexability, Content, Performance, Links), the column chooser and the
-  filter bar.
-- Quick search and saved views.
+  filter bar. A preset is only columns, and reads as chosen while the columns are its own; one wider than the window
+  scrolls inside the grid.
+- Quick filters with counts (status, status code, indexability, type, depth, response time, sitemaps, issues), each
+  count opening exactly that many URLs, counted when their menu opens; a filter bar over any column the engine filters
+  (at most 20).
+- A sort of up to three columns from the headers: a press sorts by one, Shift adds the next key. Hiding a sorted
+  column drops its sort.
+- Quick search and saved views: the view (filters, search, sort, columns) under a name, opened from its menu or the
+  palette on any crawl, renamed, or deleted with Undo.
+- Copy: the URLs of the view, the column the cursor is in, the selected rows. Each row has a menu: inspect, open in
+  the browser, copy, and its inlinks in Links.
 - "12,345 of 101,107 URLs", live while crawling.
 - URLs on the crawled host show their path after the site's favicon, with the host named once in the column header.
   Other hosts, and the site's other versions, show in full. "Show full URLs" is a view option.
@@ -289,7 +298,15 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Ctrl+A | Select all |
 | Ctrl+C | Copy as tab-separated text |
 | Home, End, Page Up, Page Down | Jump |
-| Shift+F10 or the menu key | Right-click menu |
+| Shift+F10 or the menu key | Right-click menu: for the row, or the selection it's in. Esc gives the keyboard back to the row |
+| Up from the first row, then Enter | Sort by the header the cursor is on, where the grid sorts by it; Shift+Enter (or Shift+click) adds it to the sort, on the URL grid |
+
+### On URLs
+
+| Keys | Action |
+| --- | --- |
+| Ctrl+F | Search URLs and titles (as on Links, one sitemap and Issues: the screen's own field, its text selected) |
+| Ctrl+Shift+C | Copy the URLs of the view |
 
 ### On Links
 

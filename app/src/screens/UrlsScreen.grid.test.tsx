@@ -252,7 +252,7 @@ describe('the URL grid’s row menu', () => {
 
 describe('the URL grid under a running crawl', () => {
   it('keeps the cursor on its URL when a new URL sorts in above it', async () => {
-    const { state } = sidecar({ status: 'running', summary: { available: false, reason: 'crawling' } });
+    const { state, transport } = sidecar({ status: 'running', summary: { available: false, reason: 'crawling' } });
     const { queryClient, user, grid } = await open(`${URLS}?sort=url`);
     act(() => grid.focus());
     await user.keyboard('{ArrowDown}{ArrowDown}');
@@ -264,6 +264,8 @@ describe('the URL grid under a running crawl', () => {
     expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
     await within(grid).findByText('https://example.com/0');
     expect(cursorRowText(grid)).toMatch(/\/b/);
+    // With every facet's menu closed, a tick reads no facet: nothing on screen shows one.
+    expect(facetReads(transport)).toHaveLength(0);
   });
 });
 
