@@ -10,6 +10,8 @@ export interface SeverityMarkProps {
    * accessible name.
    */
   decorative?: boolean | undefined;
+  /** Its accessible name when it isn't decorative, where the severity's own word isn't the screen's: "Serious". */
+  label?: string | undefined;
   className?: string | undefined;
 }
 
@@ -18,13 +20,13 @@ export interface SeverityMarkProps {
  * triangle for warnings and a quiet slate circle for notices, so it reads without colour too. Skipped is a dashed
  * circle and passed a ticked one, both in the muted text colour. The word is its accessible name.
  */
-export function SeverityMark({ severity, size = 'sm', decorative = false, className }: SeverityMarkProps) {
+export function SeverityMark({ severity, size = 'sm', decorative = false, label, className }: SeverityMarkProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       className={clsx('si-sev-mark', `si-sev-mark--${severity}`, `si-icon--${size}`, className)}
       focusable="false"
-      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': outcomeWord(severity) })}
+      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label ?? outcomeWord(severity) })}
     >
       <Shape severity={severity} />
     </svg>
