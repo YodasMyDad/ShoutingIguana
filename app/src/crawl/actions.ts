@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { CrawlListItem, CrawlStatus } from '../api/types';
 import { crawlToast, notifyError, notifyResult } from '../feedback/notify';
+import { sendableHeaders } from './options/form';
 
 /**
  * Pause, Resume and Stop act on a crawl this sidecar is running: `crawl-busy` says it isn't (it ended, or another
@@ -103,8 +104,12 @@ export async function startCrawl(
     const saved = { ...(await api.crawlOptionDefaults()).options };
     // A response's own fact, not an option to send.
     delete saved.hasRedactedProxyCredentials;
-    const extraHeaders = Object.fromEntries(Object.entries(saved.extraHeaders ?? {}).filter(([, value]) => value));
-    return { ok: true, item: await api.startCrawl({ options: { ...saved, extraHeaders, startUrl } }) };
+    return {
+      ok: true,
+      item: await api.startCrawl({
+        options: { ...saved, extraHeaders: sendableHeaders(saved.extraHeaders), startUrl },
+      }),
+    };
   } catch (error) {
     if (isProblem(error, 'invalid-options')) return { ok: false, fieldErrors: error.errors };
     notifyError(error);

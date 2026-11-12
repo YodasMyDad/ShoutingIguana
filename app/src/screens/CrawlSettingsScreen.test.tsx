@@ -29,6 +29,8 @@ function sidecar(status: CrawlStatus) {
           startUrl: 'https://example.com/',
           maxUrls: 5000,
           extraHeaders: { 'X-Allow': '' },
+          proxyUrl: 'http://***@proxy.example.com:8080',
+          hasRedactedProxyCredentials: true,
         }),
     ],
     [
@@ -112,5 +114,35 @@ describe('the crawl’s settings', () => {
     await open(`${SETTINGS}?focus=speed`);
     await screen.findByRole('region', { name: 'Continue' });
     await waitFor(() => expect(continueCard().getByRole('radio', { name: 'Standard' })).toHaveFocus());
+  });
+});
+
+describe('the crawl’s settings, the review’s findings', () => {
+  it('say which proxy the crawl went through, without its user name and password', async () => {
+    sidecar('completed');
+    await open(SETTINGS);
+    const used = await screen.findByRole('region', { name: 'What it used' });
+    const proxy = within(used).getByText('Proxy').nextElementSibling;
+    expect(proxy).toHaveTextContent(/^http:\/\/proxy\.example\.com:8080/);
+    expect(proxy).not.toHaveTextContent(/None/);
+  });
+
+  it('never continue with a speed that isn’t a number: it’s said beside it, and nothing is sent', async () => {
+    const transport = sidecar('stopped');
+    await open(SETTINGS);
+    await screen.findByRole('region', { name: 'Continue' });
+    const atATime = continueCard().getByRole('textbox', { name: 'At a time' });
+    fireEvent.change(atATime, { target: { value: '3x' } });
+    fireEvent.click(continueCard().getByRole('button', { name: 'Continue the crawl' }));
+    await waitFor(() => expect(atATime).toHaveAttribute('aria-invalid', 'true'));
+    expect(atATime).toHaveFocus();
+    expect(transport.requests.some((request) => request.path.endsWith('/continue'))).toBe(false);
+  });
+
+  it('open on the proxy when Continue needs its password again', async () => {
+    sidecar('stopped');
+    await open(`${SETTINGS}?focus=proxy`);
+    await screen.findByRole('region', { name: 'Continue' });
+    await waitFor(() => expect(continueCard().getByRole('textbox', { name: 'Proxy' })).toHaveFocus());
   });
 });

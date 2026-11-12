@@ -7,6 +7,7 @@ import {
   headerRow,
   hiddenChanges,
   optionsFromForm,
+  sendableHeaders,
   speedOf,
   withScheme,
   withSpeed,
@@ -124,6 +125,26 @@ describe('a folded section’s line', () => {
     );
     expect(sectionSummary('limits', { ...form, maxUrls: '5000', maxDepth: '3' })).toBe(
       'Up to 5,000 URLs, 3 clicks deep, HTML up to 8 MB',
+    );
+  });
+});
+
+describe('what reaches the engine (the review’s findings 8 and 11)', () => {
+  it('sends a header only with its value: a saved or copied name alone is never sent', () => {
+    const form = { ...formFromOptions({ ...ENGINE_DEFAULTS, extraHeaders: { 'X-Token': '' } }) };
+    expect(optionsFromForm(form).extraHeaders).toEqual({});
+    expect(optionsFromForm({ ...form, headers: [headerRow('X-Token', 'v')] }).extraHeaders).toEqual({ 'X-Token': 'v' });
+    // Saved as defaults, the name is kept.
+    expect(optionsFromForm(form, { secrets: false }).extraHeaders).toEqual({ 'X-Token': '' });
+    expect(sendableHeaders({ 'X-Token': '', 'X-Other': 'v' })).toEqual({ 'X-Other': 'v' });
+  });
+
+  it('keeps an HTML limit that isn’t a whole number of MB as it was, and says it rounded', () => {
+    for (const bytes of [1_000_000, 65_536, 8 * 1024 * 1024, 104_857_599]) {
+      expect(optionsFromForm(formFromOptions({ ...ENGINE_DEFAULTS, maxHtmlBytes: bytes })).maxHtmlBytes).toBe(bytes);
+    }
+    expect(sectionSummary('limits', formFromOptions({ ...ENGINE_DEFAULTS, maxHtmlBytes: 1_000_000 }))).toBe(
+      'No URL limit, any depth, HTML up to 0.95 MB',
     );
   });
 });

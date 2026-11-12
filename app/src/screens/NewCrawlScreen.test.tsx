@@ -12,7 +12,15 @@ import { VALIDATE_DELAY_MS } from '../crawl/options/useValidation';
 import { installKeyboard } from '../keyboard/registry';
 import type { Mode } from '../mode/mode';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar, json, problem, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
+import {
+  TEST_CRAWL_ID,
+  fakeSidecar,
+  json,
+  problem,
+  standardRoutes,
+  testCrawlItem,
+  type FakeRoute,
+} from '../test/fakeSidecar';
 
 const PRESETS = [
   { id: 'polite', concurrency: 2, maxRequestsPerSecond: 2 },
@@ -31,9 +39,10 @@ function validate(options: CrawlOptions): Record<string, string[]> {
   return errors;
 }
 
-function sidecar(saved: CrawlOptions = ENGINE_DEFAULTS) {
+function sidecar(saved: CrawlOptions = ENGINE_DEFAULTS, extra: FakeRoute[] = []) {
   let defaults: CrawlOptionDefaults = { options: saved, speedPresets: PRESETS };
   const transport = fakeSidecar([
+    ...extra,
     ['GET', /^\/api\/crawl-options\/defaults$/, () => json(defaults)],
     [
       'PUT',
@@ -220,6 +229,7 @@ describe('New crawl in Advanced', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Headers and network/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Add a header' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Header 1 name' }), { target: { value: 'Host' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Header 1 value' }), { target: { value: 'example.org' } });
     fireEvent.click(screen.getByRole('button', { name: /Headers and network/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Start crawl' }));
     expect(
@@ -254,5 +264,69 @@ describe('New crawl in Advanced', () => {
     sidecar();
     await open(`/new?from=${TEST_CRAWL_ID}&focus=userAgent`, 'advanced');
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'User agent' })).toHaveFocus());
+  });
+});
+
+describe('New crawl, the review’s findings', () => {
+  it('in Simple, a setting only Advanced has turns Advanced on, says so with Back to Simple, and puts focus on it', async () => {
+    sidecar();
+    await open(`/new?from=${TEST_CRAWL_ID}&focus=userAgent`, 'simple');
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'User agent' })).toHaveFocus());
+    expect(getSettings().mode).toBe('advanced');
+    expect(await screen.findByText('Simple doesn’t show the user agent.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Back to Simple' })).toBeVisible();
+  });
+
+  it('copies from a crawl that isn’t in the library any more as the saved defaults, with a note', async () => {
+    sidecar(ENGINE_DEFAULTS, [
+      [
+        'GET',
+        /^\/api\/crawls\/[0-9a-f]{16}\/options$/,
+        () => problem({ type: 'crawl-not-found', title: 'No crawl has this id.', status: 404 }),
+      ],
+    ]);
+    await open(`/new?from=${TEST_CRAWL_ID}`, 'advanced');
+    expect(await screen.findByText('That crawl isn’t in the library any more')).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Start URL' })).toBeVisible();
+    expect(screen.getByRole('radio', { name: 'Standard' })).toBeChecked();
+  });
+
+  it('in Simple, ties what’s wrong to its question, in Simple’s words', async () => {
+    sidecar();
+    await open('/new?url=https://example.com/', 'simple');
+    fireEvent.click(await screen.findByRole('radio', { name: 'Stop after' }));
+    const limit = screen.getByRole('textbox', { name: 'Addresses to stop after' });
+    fireEvent.change(limit, { target: { value: 'lots' } });
+    fireEvent.blur(limit);
+    await waitFor(() => expect(limit).toHaveAttribute('aria-invalid', 'true'));
+    expect(limit).toHaveAccessibleDescription('Type a whole number of addresses, such as 5,000.');
+  });
+
+  it('starts one crawl however often Start is asked for while the engine answers', async () => {
+    let answer: (response: Response) => void = () => undefined;
+    const transport = sidecar(ENGINE_DEFAULTS, [
+      ['POST', /^\/api\/crawls$/, () => new Promise<Response>((resolve) => (answer = resolve))],
+    ]);
+    await open('/new?url=https://example.com/', 'advanced');
+    await screen.findByRole('textbox', { name: 'Start URL' });
+    // From outside the form, the registry's command each time.
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    fireEvent.keyDown(window, { key: 'Enter', code: 'Enter', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'Enter', code: 'Enter', ctrlKey: true });
+    fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(
+      transport.requests.filter((request) => request.method === 'POST' && request.path === '/api/crawls'),
+    ).toHaveLength(1);
+    answer(json(testCrawlItem({ status: 'running' }), 201));
+  });
+
+  it('keeps the defaults as they were when the engine refuses the start “every time” was ticked for', async () => {
+    const transport = sidecar();
+    await open('/new', 'simple');
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Use these choices every time' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Check site/ }));
+    expect(await screen.findByText(/Type the site’s address/)).toBeVisible();
+    expect(sent(transport, 'PUT', /defaults$/)).toBeUndefined();
   });
 });

@@ -57,6 +57,21 @@ function useStartFocus(autoFocus: boolean | undefined) {
 /** The first message for a field, or null. */
 const first = (errors: FormErrors, field: CrawlFormField) => errors[field]?.[0] ?? null;
 
+/** Simple's words for what's wrong with one of its questions; the engine's for what isn't one. */
+function simpleMessage(errors: FormErrors, field: 'startUrl' | 'maxUrls' | 'speed'): string | null {
+  if (field === 'speed') {
+    return (first(errors, 'concurrency') ?? first(errors, 'maxRequestsPerSecond'))
+      ? 'The speed set in Advanced can’t be used. Choose one here.'
+      : null;
+  }
+  const message = first(errors, field);
+  if (message === null) return null;
+  if (field === 'maxUrls') return 'Type a whole number of addresses, such as 5,000.';
+  return /user name|password/i.test(message)
+    ? 'Leave out the user name and password: the check never sends them.'
+    : 'Type the site’s address, such as www.example.co.uk.';
+}
+
 export function CrawlOptionsForm(props: CrawlOptionsFormProps) {
   return props.view === 'simple' ? <SimpleQuestions {...props} /> : <AdvancedSections {...props} />;
 }
@@ -97,7 +112,7 @@ function SimpleQuestions({
           placeholder="www.example.co.uk"
           ref={startRef}
           value={form.startUrl}
-          error={first(errors, 'startUrl')}
+          error={simpleMessage(errors, 'startUrl')}
           data-setting="startUrl"
           onChange={(event) => onChange({ ...form, startUrl: event.target.value })}
           onBlur={() => onTouch?.('startUrl')}
@@ -113,13 +128,13 @@ function SimpleQuestions({
             text: speedWords(preset, 'simple'),
           }))}
           value={speed}
+          error={simpleMessage(errors, 'speed')}
           onValueChange={(id) => {
             const preset = presets.find((candidate) => candidate.id === id);
             if (preset) onChange(withSpeed(form, preset));
           }}
         />
         {speed === null ? <OwnSpeed form={form} /> : null}
-        <FieldError message={first(errors, 'concurrency') ?? first(errors, 'maxRequestsPerSecond')} />
       </div>
       <fieldset className="min-w-0">
         <legend className="si-field-label mb-1">{SIMPLE_WORDS.limit.label}</legend>
@@ -156,13 +171,13 @@ function SimpleQuestions({
             inputMode="numeric"
             className="w-(--number-field-width)"
             disabled={!limited}
+            error={simpleMessage(errors, 'maxUrls')}
             value={limited ? form.maxUrls : ''}
             onChange={(event) => onChange({ ...form, maxUrls: event.target.value })}
             onBlur={() => onTouch?.('maxUrls')}
           />
           <span className="text-text-secondary">addresses</span>
         </div>
-        <FieldError message={first(errors, 'maxUrls')} />
       </fieldset>
       <fieldset className="min-w-0">
         <legend className="si-field-label mb-1">{SIMPLE_WORDS.also.label}</legend>
@@ -194,14 +209,6 @@ function OwnSpeed({ form }: { form: CrawlForm }) {
       {Number.isFinite(rate) && rate > 0 ? `up to ${form.maxRequestsPerSecond} a second` : 'no cap'}.
     </p>
   );
-}
-
-function FieldError({ message }: { message: string | null }) {
-  return message ? (
-    <p className="si-field-error pt-1.5" role="none">
-      {message}
-    </p>
-  ) : null;
 }
 
 // -------------------------------------------------------------------------------------------------- Advanced
@@ -524,6 +531,7 @@ export function HeaderRows({
               onChange(rows.map((other) => (other.key === row.key ? { ...other, value: event.target.value } : other)))
             }
             onBlur={onTouch}
+            description={row.name.trim() !== '' && row.value === '' ? 'Not sent without a value.' : undefined}
           />
           <IconButton
             label={`Remove header ${row.name.trim() || index + 1}`}

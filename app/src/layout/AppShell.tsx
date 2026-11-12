@@ -88,13 +88,12 @@ export function AppShell() {
   );
 }
 
-/** Continue's toast, asked for a proxy password again, opens the crawl's settings, on its headers and proxy. */
+/** Continue's toast, asked for a proxy password again, opens the crawl's settings on the proxy. */
 function useCrawlSettingsOpener() {
   const router = useRouter();
   useEffect(() => {
     setCrawlSettingsOpener(
-      (crawl) =>
-        void router.navigate({ to: '/crawls/$crawl/settings', params: { crawl }, search: { focus: 'headers' } }),
+      (crawl) => void router.navigate({ to: '/crawls/$crawl/settings', params: { crawl }, search: { focus: 'proxy' } }),
     );
     return () => setCrawlSettingsOpener(null);
   }, [router]);

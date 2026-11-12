@@ -29,6 +29,7 @@ import { notifyError, notifyResult } from '../feedback/notify';
 import { useCommands } from '../keyboard/registry';
 import { useMode, type Mode } from '../mode/mode';
 import { switchMode } from '../mode/switchMode';
+import { showAdvancedFor } from '../mode/useModeGuard';
 import type { SettingFocus } from '../routing/search';
 import { Button } from '../ui/Button';
 import { Callout } from '../ui/Callout';
@@ -51,7 +52,9 @@ export function NewCrawlScreen() {
   const source = useQuery({ ...crawlOptionsQuery(from ?? ''), enabled: from !== undefined });
   const mode = useMode();
 
-  const failed = defaults.error ?? (from ? source.error : null);
+  // A crawl to copy from that isn't in the library any more: the saved defaults, with a note, not a dead end.
+  const sourceGone = from !== undefined && isProblem(source.error, 'crawl-not-found');
+  const failed = defaults.error ?? (from && !sourceGone ? source.error : null);
   if (failed) {
     return (
       <Page mode={mode}>
@@ -63,7 +66,7 @@ export function NewCrawlScreen() {
       </Page>
     );
   }
-  if (!defaults.data || (from && !source.data)) {
+  if (!defaults.data || (from && !source.data && !sourceGone)) {
     return (
       <Page mode={mode}>
         <FormSkeleton />
@@ -76,7 +79,8 @@ export function NewCrawlScreen() {
         // A new address or source is a new form.
         key={`${from ?? ''}|${url ?? ''}`}
         defaults={defaults.data}
-        source={source.data ?? null}
+        source={sourceGone ? null : (source.data ?? null)}
+        sourceGone={sourceGone}
         startUrl={url ?? source.data?.startUrl ?? ''}
         focus={focus}
         mode={mode}
@@ -123,9 +127,12 @@ function NewCrawlForm({
   startUrl,
   focus,
   mode,
+  sourceGone = false,
 }: {
   defaults: CrawlOptionDefaults;
   source: CrawlOptions | null;
+  /** The crawl to copy from isn't in the library any more. */
+  sourceGone?: boolean;
   startUrl: string;
   focus: SettingFocus | undefined;
   mode: Mode;
@@ -173,27 +180,33 @@ function NewCrawlForm({
   useEffect(() => {
     if (!focus) return;
     const target = FOCUS_TARGETS[focus];
-    if (mode === 'simple' && !SIMPLE_FIELDS.has(target.field)) {
-      switchMode(router, 'advanced');
-      notifyResult('Advanced is on', { description: `Simple doesn’t show the ${focusName(focus)}.` });
-      return;
-    }
-    requestAnimationFrame(() => focusSetting(rootRef.current, target.field));
+    if (mode === 'simple' && !SIMPLE_FIELDS.has(target.field)) showAdvancedFor(router, `the ${focusName(focus)}`);
+    // Once the form is drawn (in Advanced, when it was just turned on).
+    requestAnimationFrame(() => requestAnimationFrame(() => focusSetting(rootRef.current, target.field)));
     // Once, as the form opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // One start at a time, however it's asked for (the button, Ctrl+Enter from the form or from anywhere): a ref, as a
+  // command registered before the last render would read an old `starting`.
+  const startingRef = useRef(false);
   const start = async () => {
-    if (starting) return;
+    if (startingRef.current) return;
+    startingRef.current = true;
     setSubmitted(true);
     setStarting(true);
     try {
-      if (mode === 'simple' && everyTime) await api.saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }));
       const item = await api.startCrawl({ options });
-      if (mode === 'simple' && everyTime)
-        void queryClient.invalidateQueries({ queryKey: queryKeys.crawlOptionDefaults });
+      // "Use these choices every time": once they've started a crawl, so a start the engine refuses changes nothing.
+      if (mode === 'simple' && everyTime) {
+        await api
+          .saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }))
+          .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.crawlOptionDefaults }))
+          .catch((error: unknown) => notifyError(error, { title: 'Your choices couldn’t be saved for next time' }));
+      }
       void navigate({ to: '/crawls/$crawl/overview', params: { crawl: item.id } });
     } catch (error) {
+      startingRef.current = false;
       setStarting(false);
       if (isProblem(error, 'invalid-options')) {
         const byField = formErrors(error.errors);
@@ -304,6 +317,11 @@ function NewCrawlForm({
       className="flex flex-col gap-6"
       aria-label={mode === 'simple' ? 'Check a website' : 'New crawl'}
     >
+      {sourceGone ? (
+        <Callout tone="info" title="That crawl isn’t in the library any more">
+          These are your saved defaults instead.
+        </Callout>
+      ) : null}
       {secretsAgain ? (
         <Callout tone="info" title="Some of this crawl’s settings must be given again">
           Header values and a proxy’s user name and password aren’t kept with a crawl.
@@ -405,6 +423,8 @@ function focusName(focus: SettingFocus): string {
   switch (focus) {
     case 'headers':
       return 'extra headers';
+    case 'proxy':
+      return 'proxy';
     case 'userAgent':
       return 'user agent';
     case 'robots':

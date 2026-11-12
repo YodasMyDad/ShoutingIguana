@@ -15,6 +15,8 @@ export interface ChoiceCardsProps<T extends string> {
   hideLegend?: boolean | undefined;
   /** What the choice does, in a line under the legend. */
   description?: ReactNode;
+  /** What's wrong with the choice made, under the cards, read with the group. */
+  error?: string | null | undefined;
   options: readonly ChoiceCard<T>[];
   /** None chosen is allowed: settings that are no preset (the rate set by hand). */
   value: T | null;
@@ -36,6 +38,7 @@ export function ChoiceCards<T extends string>({
   legend,
   hideLegend = false,
   description,
+  error,
   options,
   value,
   onValueChange,
@@ -47,8 +50,10 @@ export function ChoiceCards<T extends string>({
   const ownId = useId();
   const groupName = name ?? `${ownId}-choice`;
   const descriptionId = `${ownId}-description`;
+  const errorId = `${ownId}-error`;
+  const describedBy = clsx(error && errorId, description && descriptionId) || undefined;
   return (
-    <fieldset aria-describedby={description ? descriptionId : undefined} className={clsx('min-w-0', className)}>
+    <fieldset aria-describedby={describedBy} className={clsx('min-w-0', className)}>
       <legend className={hideLegend ? 'sr-only' : 'si-field-label mb-1'}>{legend}</legend>
       {description ? (
         <p id={descriptionId} className="si-field-description mb-2">
@@ -90,6 +95,11 @@ export function ChoiceCards<T extends string>({
           );
         })}
       </div>
+      {error ? (
+        <p id={errorId} className="si-field-error pt-1.5">
+          {error}
+        </p>
+      ) : null}
     </fieldset>
   );
 }

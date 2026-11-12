@@ -161,7 +161,7 @@ export function validateHomeSearch(search: Record<string, unknown>): HomeSearch 
  * A setting a link opens a form on, in focus: an alert's "Continue more slowly" (`speed`), "Add headers" (`headers`),
  * "Crawl as another user agent" (`userAgent`) and "Crawl again with robots.txt ignored" (`robots`).
  */
-export const SETTING_FOCUSES = ['speed', 'headers', 'userAgent', 'robots'] as const;
+export const SETTING_FOCUSES = ['speed', 'headers', 'proxy', 'userAgent', 'robots'] as const;
 export type SettingFocus = (typeof SETTING_FOCUSES)[number];
 
 function settingFocus(value: unknown): SettingFocus | undefined {
@@ -195,7 +195,7 @@ export function validateOverviewSearch(search: Record<string, unknown>): Overvie
 }
 
 export interface CrawlSettingsSearch {
-  /** The setting to put focus on: what Continue may change (`speed`, `headers`). */
+  /** The setting to put focus on: what Continue may change (`speed`, `headers`, `proxy`). */
   focus?: SettingFocus | undefined;
 }
 

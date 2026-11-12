@@ -63,9 +63,12 @@ function numberText(value: number | null | undefined, fallback: number): string 
   return String(value ?? fallback);
 }
 
-/** "8" for 8 MB, "0.5" for 512 KB: as few digits as say it. */
+/**
+ * "8" for 8 MB, "0.5" for 512 KB: as few digits as give the same bytes back, so a limit that isn't a whole number of MB
+ * (1,000,000 bytes) is sent as it was unless it's changed. The section's line rounds it for reading.
+ */
 function megabytes(bytes: number): string {
-  return String(Math.round((bytes / MB) * 1000) / 1000);
+  return String(bytes / MB);
 }
 
 /**
@@ -114,11 +117,23 @@ function typed(text: string): number {
   return (Number.isFinite(value) ? value : text) as number;
 }
 
-/** The headers to send: the rows with a name (a row being typed in has none yet). */
+/**
+ * The headers: the rows with a name (a row being typed in has none yet). With their values, to send: only the rows
+ * that have one (a saved or copied header has its name only, and an empty header is never sent). Without, to save:
+ * every name.
+ */
 function headersOf(rows: readonly HeaderRow[], withValues: boolean): Record<string, string> {
+  const named = rows.filter((row) => row.name.trim() !== '');
   return Object.fromEntries(
-    rows.filter((row) => row.name.trim() !== '').map((row) => [row.name.trim(), withValues ? row.value : '']),
+    withValues
+      ? named.filter((row) => row.value !== '').map((row) => [row.name.trim(), row.value])
+      : named.map((row) => [row.name.trim(), '']),
   );
+}
+
+/** The headers of saved or stored options that can be sent: those with a value. Home's Enter and New crawl agree. */
+export function sendableHeaders(headers: Record<string, string> | null | undefined): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers ?? {}).filter(([, value]) => value !== ''));
 }
 
 /**
@@ -306,6 +321,7 @@ export function fieldOfError(name: string): CrawlFormField | null {
 export const FOCUS_TARGETS: Record<SettingFocus, { section: FormSection; field: CrawlFormField }> = {
   speed: { section: 'start', field: 'concurrency' },
   headers: { section: 'network', field: 'headers' },
+  proxy: { section: 'network', field: 'proxyUrl' },
   userAgent: { section: 'network', field: 'userAgent' },
   robots: { section: 'robots', field: 'respectRobotsTxt' },
 };

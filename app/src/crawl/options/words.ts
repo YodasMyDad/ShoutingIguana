@@ -150,6 +150,12 @@ export const USER_AGENT_NAMES: Record<UserAgentPreset, string> = {
   custom: 'Your own',
 };
 
+/** An MB limit to read: "8", "0.95", never sixteen digits (the field keeps them all). */
+function readableMb(text: string): string {
+  const value = Number(text.trim());
+  return text.trim() === '' ? '–' : Number.isFinite(value) ? String(Math.round(value * 100) / 100) : text.trim();
+}
+
 function plural(count: number, one: string, many: string): string {
   return `${formatCount(count)} ${count === 1 ? one : many}`;
 }
@@ -182,7 +188,7 @@ export function sectionSummary(section: FormSection, form: CrawlForm): string {
       return [
         Number.isFinite(urls) && urls > 0 ? `Up to ${plural(urls, 'URL', 'URLs')}` : 'No URL limit',
         Number.isFinite(depth) && depth > 0 ? `${plural(depth, 'click', 'clicks')} deep` : 'any depth',
-        `HTML up to ${form.maxHtmlMb.trim() || '–'} MB`,
+        `HTML up to ${readableMb(form.maxHtmlMb)} MB`,
       ].join(', ');
     }
     case 'robots': {
@@ -241,7 +247,7 @@ export function settingValue(field: CrawlFormField, form: CrawlForm): string {
     case 'maxDepth':
       return Number(form.maxDepth) > 0 ? plural(Number(form.maxDepth), 'click', 'clicks') : 'Any depth';
     case 'maxHtmlMb':
-      return `${form.maxHtmlMb} MB`;
+      return `${readableMb(form.maxHtmlMb)} MB`;
     case 'maxRequestsPerSecond':
       return Number(form.maxRequestsPerSecond) > 0 ? form.maxRequestsPerSecond : 'No cap';
     case 'requestTimeoutSeconds':

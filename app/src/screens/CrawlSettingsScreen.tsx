@@ -11,6 +11,7 @@ import {
   FIELD_SECTIONS,
   SECTION_TITLES,
   formFromOptions,
+  optionsFromForm,
   speedOf,
   withSpeed,
   withoutCredentials,
@@ -18,7 +19,7 @@ import {
   type CrawlFormField,
   type FormSection,
 } from '../crawl/options/form';
-import { formErrors, type FormErrors } from '../crawl/options/useValidation';
+import { formErrors, useValidation, type FormErrors } from '../crawl/options/useValidation';
 import { FIELD_WORDS, settingValue, speedTitle, speedWords } from '../crawl/options/words';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
@@ -132,7 +133,12 @@ export function CrawlSettingsScreen() {
 
 /** Every setting the crawl used, by section, as words. */
 function UsedSettings({ stored }: { stored: CrawlOptions }) {
-  const form = formFromOptions(stored);
+  // The proxy it went through, by its address: the form leaves one whose credentials were taken out empty (to be given
+  // again), but the crawl did use it.
+  const form = {
+    ...formFromOptions(stored),
+    proxyUrl: stored.proxyUrl ? withoutCredentials(stored.proxyUrl) : '',
+  };
   return (
     <Card as="section" aria-labelledby="used-title">
       <CardHeader title="What it used" titleId="used-title" />
@@ -200,9 +206,16 @@ function ContinuePanel({
   const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const speed = speedOf(form, presets);
+  // The engine's own check of what may change, as it's typed: a rate out of range, a header it won't send.
+  const checked = useValidation(optionsFromForm(form), canContinue || running);
+  // A change puts right what it changes: the messages from the last Continue go.
+  const change = (next: CrawlForm) => {
+    setForm(next);
+    setErrors({});
+  };
 
   useEffect(() => {
-    if (focus !== 'speed' && focus !== 'headers') return;
+    if (focus !== 'speed' && focus !== 'headers' && focus !== 'proxy') return;
     requestAnimationFrame(() => {
       if (!canContinue && !running) {
         document.querySelector<HTMLElement>('[data-crawl-again]')?.focus();
@@ -213,8 +226,10 @@ function ContinuePanel({
         focus === 'speed'
           ? (root?.querySelector<HTMLElement>('input[type="radio"]:checked') ??
             root?.querySelector<HTMLElement>('input[type="radio"]'))
-          : (root?.querySelector<HTMLElement>('[data-header-name]') ??
-            root?.querySelector<HTMLElement>('[data-add-header]'));
+          : focus === 'proxy'
+            ? root?.querySelector<HTMLElement>('[data-setting="proxyUrl"]')
+            : (root?.querySelector<HTMLElement>('[data-header-name]') ??
+              root?.querySelector<HTMLElement>('[data-add-header]'));
       target?.focus();
     });
     // Once, as the screen opens.
@@ -240,6 +255,18 @@ function ContinuePanel({
 
   const continueCrawl = async (skipMissingHeaders = false) => {
     if (busy) return;
+    // A value that isn't a number would reach the engine as nothing at all, which it reads as "unchanged".
+    const notNumbers = numberErrors(form);
+    const refused = Object.fromEntries(
+      Object.entries(checked).filter(([field]) => CONTINUED.has(field as CrawlFormField)),
+    ) as FormErrors;
+    const blocking = { ...refused, ...notNumbers };
+    if (Object.keys(blocking).length > 0) {
+      setErrors(blocking);
+      const first = Object.keys(blocking)[0];
+      rootRef.current?.querySelector<HTMLElement>(`[data-setting="${first}"]`)?.focus();
+      return;
+    }
     setBusy(true);
     try {
       await api.continueCrawl(crawlId, request(skipMissingHeaders));
@@ -274,7 +301,8 @@ function ContinuePanel({
     );
   }
 
-  const message = (field: CrawlFormField) => errors[field]?.[0] ?? null;
+  const message = (field: CrawlFormField) =>
+    errors[field]?.[0] ?? (CONTINUED.has(field) ? checked[field]?.[0] : null) ?? null;
   const fieldsWithErrors = (Object.keys(errors) as CrawlFormField[]).filter(
     (field) => !['concurrency', 'maxRequestsPerSecond', 'requestTimeoutSeconds', 'headers', 'proxyUrl'].includes(field),
   );
@@ -317,7 +345,8 @@ function ContinuePanel({
               inputMode="numeric"
               value={form.concurrency}
               error={message('concurrency')}
-              onChange={(event) => setForm({ ...form, concurrency: event.target.value })}
+              data-setting="concurrency"
+              onChange={(event) => change({ ...form, concurrency: event.target.value })}
             />
             <TextField
               label={FIELD_WORDS.maxRequestsPerSecond.label}
@@ -325,7 +354,8 @@ function ContinuePanel({
               inputMode="decimal"
               value={form.maxRequestsPerSecond}
               error={message('maxRequestsPerSecond')}
-              onChange={(event) => setForm({ ...form, maxRequestsPerSecond: event.target.value })}
+              data-setting="maxRequestsPerSecond"
+              onChange={(event) => change({ ...form, maxRequestsPerSecond: event.target.value })}
             />
             <TextField
               label={FIELD_WORDS.requestTimeoutSeconds.label}
@@ -333,7 +363,8 @@ function ContinuePanel({
               inputMode="numeric"
               value={form.requestTimeoutSeconds}
               error={message('requestTimeoutSeconds')}
-              onChange={(event) => setForm({ ...form, requestTimeoutSeconds: event.target.value })}
+              data-setting="requestTimeoutSeconds"
+              onChange={(event) => change({ ...form, requestTimeoutSeconds: event.target.value })}
             />
           </div>
           <HeaderRows
@@ -354,7 +385,8 @@ function ContinuePanel({
             placeholder={stored.proxyUrl ? withoutCredentials(stored.proxyUrl) : 'http://proxy.example.com:8080'}
             value={form.proxyUrl}
             error={message('proxyUrl')}
-            onChange={(event) => setForm({ ...form, proxyUrl: event.target.value })}
+            data-setting="proxyUrl"
+            onChange={(event) => change({ ...form, proxyUrl: event.target.value })}
           />
           {missing ? (
             <Callout tone="warning" title="Some settings must be given again" role="alert">
@@ -396,4 +428,23 @@ function ContinuePanel({
       </Card>
     </div>
   );
+}
+
+/** What Continue may change: the engine's messages about these show as they're typed. */
+const CONTINUED: ReadonlySet<CrawlFormField> = new Set<CrawlFormField>([
+  'concurrency',
+  'maxRequestsPerSecond',
+  'requestTimeoutSeconds',
+  'headers',
+  'proxyUrl',
+]);
+
+/** What Continue sends as numbers, each that isn't one: a message beside it. */
+function numberErrors(form: CrawlForm): FormErrors {
+  const errors: FormErrors = {};
+  for (const field of ['concurrency', 'maxRequestsPerSecond', 'requestTimeoutSeconds'] as const) {
+    const text = form[field].trim().replace(/,/g, '');
+    if (text === '' || !Number.isFinite(Number(text))) errors[field] = ['Type a number.'];
+  }
+  return errors;
 }
