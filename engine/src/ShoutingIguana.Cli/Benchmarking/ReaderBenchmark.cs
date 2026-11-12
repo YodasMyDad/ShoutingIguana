@@ -179,6 +179,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         }
 
         LinksGrid();
+        LinkEnds();
         SitemapsAndRobots();
         WithoutSummary();
         Stats();
@@ -223,11 +224,81 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         }
 
         Timed("robots.txt: the origins, with what each blocked", "robots", "robots", null, () => RobotsReader.ReadOrigins(path));
+        Timed("robots.txt: the origins that blocked something, found by text", "robots", "robots", null,
+            () => RobotsReader.ReadOrigins(path, new RobotsOriginQuery { Search = ".", Blocked = true }));
         if (Wanted("robots.txt: ") && RobotsReader.ReadOrigins(path, limit: 1).Origins.FirstOrDefault() is { } site)
         {
             Timed("robots.txt: the site's file, with what each line blocked", "robots", "robots", site.Blocked, () => RobotsReader.ReadFile(path, site.Origin));
             Paged("robots.txt: the site's blocked URLs", "robots", "robots", site.Blocked, offset => RobotsReader.ReadBlocked(path, site.Origin, offset: offset));
+
+            // What the inspector links by: one blocked URL's row, and the URL inspected, with the line that refused it.
+            if (RobotsReader.ReadBlocked(path, site.Origin, limit: 1)?.Rows.FirstOrDefault() is { } blocked)
+            {
+                Timed("robots.txt: one blocked URL's row", "robots", "robots", 1, () => RobotsReader.ReadBlocked(path, site.Origin, urlId: blocked.Id));
+                Timed("Inspect a URL robots.txt refused (its origin and line)", "inspector", "inspector", null, () => UrlInspectorReader.Read(path, blocked.Id));
+            }
         }
+
+        if (Wanted("Inspect a URL sitemaps list") && First(new UrlQuery { Filters = [Boolean("inSitemap", true)], Limit = 1 }) is { } listed)
+        {
+            Timed("Inspect a URL sitemaps list (the sitemaps named)", "inspector", "inspector", null, () => UrlInspectorReader.Read(path, listed));
+        }
+    }
+
+    /// <summary>
+    /// From a view of the links to its URLs: the view's ends as a list, and the URL grid narrowed to them. The targets come
+    /// from what the link summary counts (<c>link-grid</c>) where it holds what the view's filters test; the pages the
+    /// links are on, and either end of a view beyond the summary, take a pass over every link, on one connection
+    /// (<c>link-pass</c>) and split over those a host lends (<c>link-pass-split</c>).
+    /// </summary>
+    private void LinkEnds()
+    {
+        (string Name, UrlFilter[] Filters, bool Summarised)[] views =
+        [
+            ("every link", [], true),
+            ("the hyperlinks to 4xx URLs", [In("kind", "hyperlink"), In("to.statusClass", "4xx")], true),
+            ("the links whose text contains a common word", [Text("text", FilterOperator.Contains, "product")], false)
+        ];
+        foreach (var (name, filters, summarised) in views)
+        {
+            if (summarised)
+            {
+                Ends($"Link ends: the targets of {name}", "link-grid", LinkEnd.To, filters);
+            }
+            else
+            {
+                Ends($"Link ends: the targets of {name} (every link read)", "link-pass", LinkEnd.To, filters);
+                Ends($"Link ends: the targets of {name} (every link read, on several connections)", "link-pass-split", LinkEnd.To, filters, HELPERS);
+            }
+
+            Ends($"Link ends: the pages of {name} (every link read)", "link-pass", LinkEnd.From, filters);
+            Ends($"Link ends: the pages of {name} (every link read, on several connections)", "link-pass-split", LinkEnd.From, filters, HELPERS);
+        }
+    }
+
+    /// <summary>One end of a view's links: the list's first page and the page half way down, then the URL grid narrowed to them.</summary>
+    private void Ends(string name, string readClass, LinkEnd end, UrlFilter[] filters, ReadHelpers? helpers = null)
+    {
+        if (!Wanted(name))
+        {
+            return;
+        }
+
+        ReadCache? Cache() => helpers is null ? null : new ReadCache { Helpers = helpers };
+        long total;
+        try
+        {
+            total = LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = filters, Limit = 1 }).Total;
+        }
+        catch (NeedsAnalysisException)
+        {
+            progress($"  skipped    {name}: it needs the URL summary");
+            return;
+        }
+
+        Paged(name, "link-ends", readClass, total, offset => LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = filters, Offset = offset }, Cache()));
+        Timed($"{name}: the URL grid narrowed to them", "grid", readClass, total,
+            () => UrlGridReader.Query(path, new UrlQuery { Columns = COLUMNS, LinkEnds = new UrlLinkEnds(end, filters) }, Cache()));
     }
 
     /// <summary>
