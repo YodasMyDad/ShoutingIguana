@@ -31,7 +31,7 @@ public sealed class ReadCache(int capacity = ReadCache.DEFAULT_CAPACITY, int lar
     public const int HUGE_CAPACITY = 12;
 
     /// <summary>
-    /// A crawl's URLs and titles held in memory for searching, some 95 bytes a URL (10 MB for 100,000 URLs, 100 MB for a
+    /// A crawl's URLs and titles held in memory for searching, some 106 bytes a URL (11.4 MB for the 100k crawl's 112,590, 110 MB or so for a
     /// million): two crawls' are kept, the one being searched and the one before it.
     /// </summary>
     public const int TEXT_CAPACITY = 2;

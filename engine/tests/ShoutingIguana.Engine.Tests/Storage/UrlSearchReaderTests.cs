@@ -44,6 +44,8 @@ public sealed class UrlSearchReaderTests(GridCrawl crawl) : IDisposable
                      (site + "wild/sofa/sofa-beds", "Beds", true),
                      (site + "wild/a-sofa", "Unsofa", true),
                      (site + "wild/emoji", "Tables 🪑 chairs", true),
+                     (site + "wild/find?q=/beach-huts", null, true),
+                     (site + "wild/page#/deck-chairs", null, true),
                      ("https://www.facebook.com/shoutingiguana", null, false),
                      ("https://facebook.example.org/", null, false),
                      ("https://example.org/", null, false),
@@ -107,7 +109,12 @@ public sealed class UrlSearchReaderTests(GridCrawl crawl) : IDisposable
     [InlineData("upper-c", "Wild/UPPER-Case/", UrlSearchRank.Start, UrlSearchField.Url)]
     [InlineData("facebook.com", "https://www.facebook.com/shoutingiguana", UrlSearchRank.Start, UrlSearchField.Url)]
     [InlineData("crème", "wild/caf%C3%A9", UrlSearchRank.Start, UrlSearchField.Title)]
-    [InlineData("(garden", "wild/find?q=sofa/", UrlSearchRank.Anywhere, UrlSearchField.Title)]
+    [InlineData("(garden", "wild/find?q=sofa/", UrlSearchRank.Start, UrlSearchField.Title)]
+    [InlineData("-sets", "wild/find?q=sofa/", UrlSearchRank.Anywhere, UrlSearchField.Title)]
+    [InlineData("beach-huts", "wild/find?q=/beach-huts", UrlSearchRank.Anywhere, UrlSearchField.Url)]
+    [InlineData("/beach-huts", "wild/find?q=/beach-huts", UrlSearchRank.Anywhere, UrlSearchField.Url)]
+    [InlineData("deck-chairs", "wild/page#/deck-chairs", UrlSearchRank.Anywhere, UrlSearchField.Url)]
+    [InlineData("/page", "wild/page#/deck-chairs", UrlSearchRank.Start, UrlSearchField.Url)]
     [InlineData("garden) sofa", "wild/find?q=sofa/", UrlSearchRank.Start, UrlSearchField.Title)]
     [InlineData("товаров", "wild/каталог/", UrlSearchRank.Start, UrlSearchField.Title)]
     [InlineData("оваров", "wild/каталог/", UrlSearchRank.Anywhere, UrlSearchField.Title)]
@@ -121,6 +128,25 @@ public sealed class UrlSearchReaderTests(GridCrawl crawl) : IDisposable
         var (analysed, _) = Planted();
         var first = UrlSearchReader.Search(analysed, text).Results[0];
         Assert.Equal((url.Contains("://", StringComparison.Ordinal) ? url : crawl.Server.BaseUri.AbsoluteUri + url, rank, field), (first.Url, first.Rank, first.MatchedIn));
+    }
+
+    /// <summary>
+    /// The scheme starts nothing: text that only the scheme holds ranks every URL anywhere, as text inside a query string
+    /// or a fragment does, slashes and all; the host and the path's segments start where they start.
+    /// </summary>
+    [Fact]
+    public void TheSchemeTheQueryAndTheFragmentStartNothing()
+    {
+        var (analysed, _) = Planted();
+        foreach (var text in new[] { "http", "http:", "http://", "://" })
+        {
+            var found = UrlSearchReader.Search(analysed, text, UrlSearchReader.MAX_LIMIT);
+            Assert.True(found.Matching > 0);
+            Assert.All(found.Results.Where(result => result.MatchedIn == UrlSearchField.Url), result => Assert.Equal(UrlSearchRank.Anywhere, result.Rank));
+        }
+
+        var host = crawl.Server.BaseUri.Host;
+        Assert.All(UrlSearchReader.Search(analysed, host, UrlSearchReader.MAX_LIMIT).Results, result => Assert.NotEqual(UrlSearchRank.Anywhere, result.Rank));
     }
 
     /// <summary>
@@ -391,9 +417,12 @@ public sealed class UrlSearchReaderTests(GridCrawl crawl) : IDisposable
             return UrlSearchRank.Exact;
         }
 
+        // The start of the host, after its www. too, or of a segment of the path: never the scheme, the query or the fragment.
+        var query = url.IndexOfAny(['?', '#'], path) is var mark and >= 0 ? mark : url.Length;
         for (var at = url.IndexOf(needle, StringComparison.Ordinal); at >= 0; at = url.IndexOf(needle, at + 1, StringComparison.Ordinal))
         {
-            if (needle[0] == '/' || at == 0 || url[at - 1] == '/' || (url[host..].StartsWith("www.", StringComparison.Ordinal) && at == host + 4))
+            if (at == host || (url[host..].StartsWith("www.", StringComparison.Ordinal) && at == host + 4) ||
+                (at >= path && at < query && (needle[0] == '/' || url[at - 1] == '/')))
             {
                 return UrlSearchRank.Start;
             }
@@ -402,12 +431,12 @@ public sealed class UrlSearchReaderTests(GridCrawl crawl) : IDisposable
         return UrlSearchRank.Anywhere;
     }
 
+    /// <summary>The start of the title, or after a character that isn't a letter or a digit, whatever the text starts with.</summary>
     private static UrlSearchRank TitleRank(string title, string needle)
     {
-        var word = Rune.GetRuneAt(needle, 0) is var first && Rune.IsLetterOrDigit(first);
         for (var at = title.IndexOf(needle, StringComparison.Ordinal); at >= 0; at = title.IndexOf(needle, at + 1, StringComparison.Ordinal))
         {
-            if (at == 0 || (word && !Rune.IsLetterOrDigit(RuneBefore(title, at))))
+            if (at == 0 || !Rune.IsLetterOrDigit(RuneBefore(title, at)))
             {
                 return UrlSearchRank.Start;
             }

@@ -1837,7 +1837,7 @@ title contains the text, on every keystroke. A `POST` with the text in the body,
   | `rank` | The text |
   | --- | --- |
   | `exact` | is the URL: the whole of it, with or without its scheme, or its path (with its query string, if it has one). The slashes around the path don't count: `about`, `/about` and `about/` all name `https://www.example.com/about/`, and `/` names the home page |
-  | `start` | starts a segment of the URL's path (`gard` in `/shop/garden-sofas/`), or its host name with or without its `www.`, or a word of the title (the character before it isn't a letter or a digit) |
+  | `start` | starts the URL's host name, with or without its `www.` (`fac` in `https://www.facebook.com/`), or a segment of its path (`gard` in `/shop/garden-sofas/`; text that begins with a slash starts one wherever that slash is one of the path's); never the scheme (`http` starts nothing), and never inside the query string or the fragment, whatever slashes they hold. In a title: at its start, or after a character that isn't a letter or a digit (`(garden` in `Sets: (garden) sofa`), whatever the text begins with |
   | `anywhere` | is somewhere else in the URL or the title |
 
   Within a rank: the site's own URLs before other sites'; a match in the URL before one in the title; the shorter URL
@@ -1853,15 +1853,15 @@ title contains the text, on every keystroke. A `POST` with the text in the body,
   a crawl as it stands (one pass over the URLs and one over the responses, in a grid read slot), and kept there while
   the crawl stands still: every search after that is a pass over that text and reads the file only for its few results'
   statuses, so it takes no read slot and never queues behind the grids' reads. A crawl made by any engine, analysed or
-  not, is searched the same way. The text takes about 95 bytes a URL (10 MB for 100,000 URLs), and two crawls' are
+  not, is searched the same way. The text takes about 106 bytes a URL (11.4 MB for the 100k crawl's 112,590), and two crawls' are
   kept: the one being searched and the one before it.
 - **While a crawl runs, each answer is of one moment of it**, at most 2 s old: the results, their titles, `matching` and
   `total` are of the URLs and titles the crawl had at that moment, and only each result's `statusCode` and `outcome` are
   read as they now stand (a result fetched since shows its status). The text is read again once it's 2 s old, by the
   next search.
-- **What it costs**, on the 100k crawl (112,590 URLs), p95: a keystroke with the text kept 1.5 to 2.8 ms, whatever is
+- **What it costs**, on the 100k crawl (112,590 URLs), p95: a keystroke with the text kept 1.3 to 4.5 ms, whatever is
   typed (one letter that every URL matches, forty characters that none does); the first search of a crawl, which reads
-  the text, 61 to 72 ms (48 to 55 ms at p50). That first read is the one over the palette's 50 ms: the empty search
+  the text, 55 to 89 ms (49 to 78 ms at p50), over five runs on a shared machine, the review's among them. That first read is the one over the palette's 50 ms: the empty search
   as the palette opens is what keeps it off the first keystroke.
 
 ### Favicon (E6)
@@ -2708,11 +2708,11 @@ to fail with the behaviour taken out.
   characters or more in 0.1 to 2 ms, but a common word in 28 ms (81 ms with each match's text, which ranking needs),
   and one or two characters not at all, which is where typing starts. So nothing is stored: `UrlSearchReader` reads
   a crawl's URLs and titles into memory once ([Search](#search-e6)), and a keystroke is a pass over that text. It
-  costs the file nothing, the crawl nothing and the analysis nothing; it costs the sidecar about 95 bytes a URL
-  (10 MB at 100k), for two crawls at most. A keystroke takes 1.5 to 2.8 ms at p95 whatever is typed; the first
-  search of a crawl, which reads the text, 61 to 72 ms (48 to 55 at p50), over the palette's 50, which the empty
+  costs the file nothing, the crawl nothing and the analysis nothing; it costs the sidecar about 106 bytes a URL
+  (11.4 MB at 100k, measured twice), for two crawls at most. A keystroke takes 1.3 to 4.5 ms at p95 whatever is
+  typed; the first search of a crawl, which reads the text, 55 to 89 ms (49 to 78 at p50, five runs), over the palette's 50, which the empty
   search as the palette opens keeps off the first keystroke. A crawl made by any engine is searched the same way.
-  **Not done: letting the kept text go when a crawl sits idle.** A crawl of a million URLs holds about 100 MB in
+  **Not done: letting the kept text go when a crawl sits idle.** A crawl of a million URLs holds about 110 MB in
   the sidecar until two other crawls are searched or it restarts. Nor was a search of a million URLs measured: the
   pass grows with the text, so some 20 to 30 ms a keystroke is to be expected, not known.
 - **A pass over every link, split over connections** ([How the links are read](#how-the-links-are-read) has the

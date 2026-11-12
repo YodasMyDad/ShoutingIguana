@@ -662,18 +662,19 @@ the crawl's headline numbers (`si stats`, the API's `/stats`), reads the same wa
 and kept in the `ReadCache` it's given while the crawl stands still.
 
 **Search as it's typed** (E6) is `UrlSearchReader.Search`, for the app's palette: the best few of a crawl's URLs whose
-URL or title holds the text, the page a person means first (the text is the URL or its path; then it starts a segment
-of the path, the host or a word of the title; then anywhere). Nothing is stored for it. An FTS5 index with a trigram
+URL or title holds the text, the page a person means first (the text is the URL or its path; then it starts the host
+or a segment of the path, never in the scheme, the query string or the fragment, or follows a character in the title
+that isn't a letter or a digit; then anywhere). Nothing is stored for it. An FTS5 index with a trigram
 tokenizer was measured on the 100k crawl and left out: with its content it adds 44 to 48 MB to a 479 MB file (9 to
 10%) and 2.0 s to an analysis of 11.8 s (or 2.7 s spread over the crawl); without, 9.4 MB and 1.4 s; it answers rare
 text of three characters or more in 0.1 to 2 ms, but a common word in 28 ms (81 ms with the text that ranking
 needs), and one or two characters not at all. Instead the first search of a crawl as it stands reads its URLs and
-titles into memory, once (`SearchText`: about 95 bytes a URL, the letters lowercased, a bit a letter for the
+titles into memory, once (`SearchText`: about 106 bytes a URL, the letters lowercased, a bit a letter for the
 capitals), the `ReadCache` keeps it (two crawls': `TEXT_CAPACITY`; a running crawl's for 2 s), and every keystroke
-after is a pass over that text: 1.5 to 2.8 ms at p95 at 100k whatever is typed, against the palette's 50 ms. The
-first search, which reads the text, takes 61 to 72 ms (48 to 55 at p50), which is why an empty text is a search too:
+after is a pass over that text: 1.3 to 4.5 ms at p95 at 100k whatever is typed, against the palette's 50 ms. The
+first search, which reads the text, takes 55 to 89 ms (49 to 78 at p50, five runs), which is why an empty text is a search too:
 the palette asks it as it opens. What matches is what the grid's `search` matches, so the count is the grid's. **The
-kept text isn't let go when a crawl sits idle**: a crawl of a million URLs holds about 100 MB in the sidecar until
+kept text isn't let go when a crawl sits idle**: a crawl of a million URLs holds about 110 MB in the sidecar until
 two other crawls are searched; that, and a search of a million URLs, weren't measured. The grid's own `search`
 stayed the scan it was: 26 to 50 ms at p95 for a first page at 100k, one letter or forty characters.
 

@@ -17,7 +17,7 @@ namespace ShoutingIguana.Engine.Storage.Models;
 /// <item>It's filled once, by one read of the file, and never changed after <see cref="Seal"/>: any number of searches
 /// read it at once.</item>
 /// </list>
-/// It takes about 95 bytes a URL: 10 MB for the 100k benchmark crawl.
+/// It takes about 106 bytes a URL: 11.4 MB for the 100k benchmark crawl's 112,590.
 /// </summary>
 internal sealed class SearchText
 {
@@ -218,6 +218,7 @@ internal sealed class SearchText
         ReadOnlySpan<byte> text = _urls;
         var bare = needle.TrimEnd((byte)'/');
         var slash = needle[0] == (byte)'/';
+        ReadOnlySpan<byte> queryOrFragment = [(byte)'?', (byte)'#'];
         long matching = 0;
         var ordinal = 0;
         var from = 0;
@@ -253,10 +254,14 @@ internal sealed class SearchText
             }
             else
             {
-                // Each place the text is, until one starts a segment of the path or the host name.
+                // Each place the text is, until one starts the host name (with its www. or after it) or a segment of the
+                // path: never in the scheme, and never in the query string or the fragment, whatever slashes they hold.
+                // Text that starts with a slash starts a segment wherever that slash is one of the path's.
+                var query = url[path..].IndexOfAny(queryOrFragment) is var mark and >= 0 ? path + mark : url.Length;
                 for (var at = found - start; at >= 0;)
                 {
-                    if (slash || at == 0 || url[at - 1] == (byte)'/' || (at == host + WWW.Length && url[host..].StartsWith(WWW)))
+                    if (at == host || (at == host + WWW.Length && url[host..].StartsWith(WWW)) ||
+                        (at >= path && at < query && (slash || (at > 0 && url[at - 1] == (byte)'/'))))
                     {
                         rank = UrlSearchRank.Start;
                         break;
@@ -278,7 +283,6 @@ internal sealed class SearchText
     private long SearchTitles(ReadOnlySpan<byte> needle, ulong[] matched, ref Best best, CancellationToken cancellationToken)
     {
         ReadOnlySpan<byte> text = _titles;
-        var word = Rune.DecodeFromUtf8(needle, out var first, out _) == OperationStatus.Done && Rune.IsLetterOrDigit(first);
         long matching = 0;
         var found = 0L;
         var title = 0;
@@ -311,11 +315,11 @@ internal sealed class SearchText
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            // Each place the text is, until one starts a word.
+            // Each place the text is, until one starts the title or follows a character that isn't a letter or a digit.
             var rank = UrlSearchRank.Anywhere;
             for (var at = hit - start; at >= 0;)
             {
-                if (at == 0 || (word && !EndsInWord(words[..at])))
+                if (at == 0 || !EndsInWord(words[..at]))
                 {
                     rank = UrlSearchRank.Start;
                     break;

@@ -53,10 +53,10 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// on four, with one of 1,295 as the machine was busiest. Held to 1,500 ms: CI's 4-core runner has three helpers to
     /// lend and is taken as twice as slow a core, so over twice the worst on four connections, and above the busy run.
     /// <b>No CI run has yet confirmed it.</b></item>
-    /// <item>Search as it's typed (<c>search</c>) passes over the crawl's URLs and titles in memory: 1.5 to 2.8 ms at 100k
+    /// <item>Search as it's typed (<c>search</c>) passes over the crawl's URLs and titles in memory: 1.3 to 4.5 ms at 100k
     /// on the desktop whatever is typed, against the palette's 50 ms, and held to 25 ms: a search that read the file
     /// again (the text no longer kept) takes 50 to 70 ms on the desktop and would fail it, where a gate of 50 might not.
-    /// The first search of a crawl reads that text from the file (<c>search-first</c>: 61 to 72 ms at p95 on the
+    /// The first search of a crawl reads that text from the file (<c>search-first</c>: 55 to 89 ms at p95 on the
     /// desktop, <b>over the palette's 50 ms</b>, which is why the palette asks an empty search as it opens): held to
     /// 200 ms for the runner, so it can't get slower unseen.</item>
     /// </list>
