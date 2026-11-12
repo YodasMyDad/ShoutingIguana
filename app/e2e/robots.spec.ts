@@ -135,7 +135,7 @@ test('an origin whose robots.txt didn’t answer says the crawl went ahead; a mi
   await page.goto(`/crawls/${crawl}/robots/${encodeURIComponent(missing.origin)}`);
   await expect(
     main(page)
-      .getByText(/There’s no robots\.txt here \(HTTP 404\), so nothing on this origin is refused\./)
+      .getByText(/There’s no robots\.txt here \(404 Not Found\), so nothing on this origin is refused\./)
       .first(),
   ).toBeVisible();
   await expect(main(page).getByText('There’s no robots.txt here, so nothing is refused.')).toBeVisible();

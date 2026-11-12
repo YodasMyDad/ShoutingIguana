@@ -57,7 +57,7 @@ test('the list: an index with its sitemaps under it, what became of each, and th
   await expect(row(page, index)).toHaveAttribute('aria-expanded', 'true');
   await expect(row(page, index)).toContainText('robots.txt');
   await expect(row(page, failed)).toHaveAttribute('aria-level', '2');
-  await expect(row(page, failed)).toContainText('Couldn’t be read: HTTP 404');
+  await expect(row(page, failed)).toContainText('Couldn’t be read: 404 Not Found');
   // What it lists isn't known: dashes, never 0.
   await expect(row(page, failed).getByRole('link')).toHaveCount(0);
   await expect(row(page, failed).getByText('–')).toHaveCount(5);
@@ -316,7 +316,7 @@ test('a sitemap that couldn’t be read says why, and a link that names a sitema
   await page.goto(`/crawls/${crawl}/sitemaps?url=${encodeURIComponent(failed.url)}`);
   await expect(page).toHaveURL(new RegExp(`/sitemaps/${failed.id}$`));
   await expect(main(page).getByText('No URLs to show for this sitemap.')).toBeVisible();
-  await expect(main(page).getByText('The crawl couldn’t read it: HTTP 404.')).toBeVisible();
+  await expect(main(page).getByText('The crawl couldn’t read it: 404 Not Found.')).toBeVisible();
   await main(page).getByRole('link', { name: 'All sitemaps' }).click();
   await expect(tree(page)).toBeVisible();
 });
