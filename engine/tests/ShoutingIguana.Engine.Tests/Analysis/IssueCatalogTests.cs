@@ -78,6 +78,60 @@ public sealed class IssueCatalogTests
     }
 
     /// <summary>
+    /// The technical texts the review of 2026-11-11 found saying something other than their rules do, each held to what
+    /// its rule does (the rules' own tests show that): a title that claimed more or less than its rule finds, a fix that
+    /// named the wrong URL, a cause the rule can't flag, and what three checks now do.
+    /// </summary>
+    [Fact]
+    public void TheTextsSayWhatTheirRulesDo()
+    {
+        var hidden = IssueCatalog.SITE_HIDDEN_FROM_SEARCH;
+
+        // Every text is judged, so one that slips doesn't hide another.
+        Assert.Multiple(
+            // 4xx, a firewall's 401 or 403 among them, and too many redirects: the file may well exist.
+            () => Assert.Equal("robots.txt missing or refused", IssueCatalog.ROBOTS_TXT_MISSING.Title),
+
+            // An empty alt has no text and passes: the rule looks for the attribute.
+            () => Assert.Equal("Images without an alt attribute", IssueCatalog.IMAGE_MISSING_ALT.Title),
+
+            // Only pages a sitemap lists are tested.
+            () => Assert.Equal("Orphan page in a sitemap", IssueCatalog.ORPHAN_PAGE.Title),
+
+            // A redirect with no usable Location leads to no URL at all, and is reported too.
+            () => Assert.Equal("Broken redirect", IssueCatalog.REDIRECT_BROKEN.Title),
+
+            // The rule compares each entry with the page's URL as crawled, not with its canonical.
+            () => Assert.DoesNotContain("canonical", IssueCatalog.HREFLANG_MISSING_SELF.Fix, StringComparison.OrdinalIgnoreCase),
+            () => Assert.Contains("exactly as the page is served", IssueCatalog.HREFLANG_MISSING_SELF.Fix),
+
+            // Only links to the site's own URLs are tested, and social media icons link elsewhere.
+            () => Assert.DoesNotContain("social", IssueCatalog.EMPTY_ANCHOR_TEXT.Why, StringComparison.OrdinalIgnoreCase),
+
+            // One threshold, named as the default once.
+            () => Assert.Single(Regex.Matches(IssueCatalog.NEAR_DUPLICATE_CONTENT.Description, "default")),
+            () => Assert.Contains("24 of the 256 bits", IssueCatalog.NEAR_DUPLICATE_CONTENT.Description),
+
+            // A URL is also refused when robots.txt itself couldn't be read, and the check doesn't run on a crawl that ignored robots.txt.
+            () => Assert.StartsWith("The crawler didn't fetch this internal URL", IssueCatalog.BLOCKED_BY_ROBOTS.Description),
+            () => Assert.Contains("couldn't be read", IssueCatalog.BLOCKED_BY_ROBOTS.Description),
+            () => Assert.Contains("ignore robots.txt", IssueCatalog.BLOCKED_BY_ROBOTS.Description),
+
+            // A byte-order mark is looked for now.
+            () => Assert.Contains("no byte-order mark", IssueCatalog.CHARSET_MISSING.Description),
+            () => Assert.DoesNotContain("doesn't look for one", IssueCatalog.CHARSET_MISSING.Why),
+
+            // The detail names where the canonical's redirects end.
+            () => Assert.Contains("The detail gives the URL the redirects end at", IssueCatalog.CANONICAL_TO_REDIRECT.Description),
+
+            // The home page must be noindex too, the check is only ever reported there, and a noindex page is never a variant.
+            () => Assert.StartsWith("The home page is noindex, and so are more than half of the site's pages", hidden.Description),
+            () => Assert.EndsWith("Reported once, on the home page.", hidden.Description),
+            () => Assert.Contains("one that isn't noindex and whose canonical names another URL", hidden.Description),
+            () => Assert.StartsWith("Your home page and more than half of your pages", hidden.Plain!.What[0]));
+    }
+
+    /// <summary>
     /// The checks that find one fault of the whole site, which the score counts as the whole site whatever their count.
     /// Each is reported on a URL that stands for the site (the home page, or the start URL without one), or on each other
     /// version of the site that answers: never on the site's pages one by one.

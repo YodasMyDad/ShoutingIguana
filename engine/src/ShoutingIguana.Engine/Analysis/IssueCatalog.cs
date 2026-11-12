@@ -89,7 +89,7 @@ public static class IssueCatalog
     };
 
     public static readonly IssueDefinition REDIRECT_BROKEN = new("redirect-broken", IssueCategory.Redirects, IssueSeverity.Error,
-        "Redirect leads to a broken URL",
+        "Broken redirect",
         """This internal URL redirects, but the redirects end at a URL that returns a 4xx or 5xx error or doesn't respond, or the redirect has no usable Location header.""",
         """Point the redirect at a working replacement or fix the target. If there's no replacement, let the old URL return 404 or 410 rather than redirect to an error.""")
     {
@@ -183,7 +183,7 @@ public static class IssueCatalog
         """The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. Links in the <head>, such as rel="amphtml", don't count.""",
         """Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.""")
     {
-        Why = """Screen readers announce these as just "link" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo or social media icons, usually account for most of them.""",
+        Why = """Screen readers announce these as just "link" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.RelatedUrl
@@ -201,7 +201,7 @@ public static class IssueCatalog
     };
 
     public static readonly IssueDefinition ORPHAN_PAGE = new("orphan-page", IssueCategory.Links, IssueSeverity.Warning,
-        "Orphan page",
+        "Orphan page in a sitemap",
         """This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished.""",
         """If the page matters, link to it from relevant pages and from its section's listing. If it doesn't, remove it from the sitemap, then redirect or remove the page.""")
     {
@@ -237,7 +237,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition BLOCKED_BY_ROBOTS = new("blocked-by-robots", IssueCategory.Indexability, IssueSeverity.Notice,
         "Blocked by robots.txt",
-        """robots.txt disallows this internal URL, so the crawler didn't fetch it. If it was refused because robots.txt itself couldn't be read, the detail says so.""",
+        """The crawler didn't fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn't be read, which crawlers treat as disallowing everything: the detail then says so. Not checked on a crawl that was told to ignore robots.txt.""",
         """If the URL should be crawled, change or remove the Disallow rule that matches it. If it's meant to be blocked, avoid linking to it from crawlable pages where you can, and if it must stay out of search, allow crawling and use noindex instead.""")
     {
         Why = """Search engines that obey robots.txt can't read the page, so its content, links and any noindex on it go unseen, yet Google can still index the URL without its content, with no description, if links point to it. Blocking is right for URLs with no search value, such as baskets, internal search or filter combinations. It's a problem when a broad rule catches pages you want in search, or the CSS and JavaScript that pages need to render.""",
@@ -284,7 +284,7 @@ public static class IssueCatalog
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
-        "No robots.txt",
+        "robots.txt missing or refused",
         """robots.txt returned a 4xx error other than 429 (usually 404, sometimes 401 or 403 from a firewall), or redirected too many times, on the main origin or another of the site's origins. Reported on the home page; the detail lists the origins.""",
         """Add a robots.txt at the origin's root, even if it only holds a Sitemap: line with your XML sitemap's full URL. If a firewall answers it with 401 or 403, let it through.""")
     {
@@ -654,7 +654,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition NEAR_DUPLICATE_CONTENT = new("near-duplicate-content", IssueCategory.Content, IssueSeverity.Notice,
         "Near-duplicate content",
-        """Another indexable page has almost the same main content, roughly 96% or more alike at the default of 24 differing bits out of 256 in a content fingerprint (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead.""",
+        """Another indexable page has almost the same main content, roughly 96% or more alike: at most 24 of the 256 bits of their content fingerprints differ (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.""",
         """Give each page main content that is clearly its own, canonicalise the variants to one version, or merge them into one page with options.""")
     {
         Why = """Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That's fine for variants you don't need to rank separately. Pages that should rank on their own need differences that are, in Google's words, clear and significant.""",
@@ -679,7 +679,7 @@ public static class IssueCatalog
 
     // Images
     public static readonly IssueDefinition IMAGE_MISSING_ALT = new("image-missing-alt", IssueCategory.Images, IssueSeverity.Warning,
-        "Images without alt text",
+        "Images without an alt attribute",
         """The page has <img> elements with no alt attribute at all. Images with an empty alt="" (marked as decorative) and 1×1 tracking pixels don't count.""",
         """Add alt text that says what each image shows or does in context. For purely decorative images, add an empty alt="" so screen readers skip them.""")
     {
@@ -749,7 +749,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition HREFLANG_MISSING_SELF = new("hreflang-missing-self", IssueCategory.Hreflang, IssueSeverity.Warning,
         "Hreflang without a self-reference",
         """This indexable page lists hreflang alternates, but none of them is the page's own URL exactly as crawled.""",
-        """Add an hreflang entry for the page's own URL, written exactly as its canonical URL (scheme, host, path and trailing slash), alongside the entries for the other versions.""")
+        """Add an hreflang entry for the page's own URL, written exactly as the page is served (scheme, host, path, trailing slash and any query string), alongside the entries for the other versions.""")
     {
         Why = """Google's rule is that each language version must list itself as well as all the other versions, with the same set of links on every page. Without the self-reference the set breaks that rule and may not be used as intended. Often the self-reference is there but in a different form of the URL, such as http instead of https, without the trailing slash or with a tracking parameter.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#all-method-guidelines",
