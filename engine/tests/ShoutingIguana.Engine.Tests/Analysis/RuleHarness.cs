@@ -78,11 +78,12 @@ internal sealed class RuleHarness(string site = "https://example.com")
         Fetched(url, FetchOutcome.Success, 200, isHtml: true, reason, inSitemap: inSitemap);
 
     /// <summary>Parses HTML the way the crawler does and records the page as a successful HTML response.</summary>
+    /// <param name="byteOrderMark">The encoding a byte-order mark at the start of the page's bytes declared, as the fetch reports it.</param>
     public AnalyzedPage Page(string url, string html, IndexabilityReason reason = IndexabilityReason.None,
-        IReadOnlyList<ResponseHeader>? headers = null, int responseMs = 100, long? bodyBytes = null)
+        IReadOnlyList<ResponseHeader>? headers = null, int responseMs = 100, long? bodyBytes = null, string? byteOrderMark = null)
     {
         var uri = new Uri(UrlNormalizer.Normalize(new Uri(url)));
-        var parsed = HtmlPageParser.Parse(html, uri, headers ?? [], "ShoutingIguana");
+        var parsed = HtmlPageParser.Parse(html, uri, headers ?? [], "ShoutingIguana", byteOrderMark);
         var id = Ok(uri.AbsoluteUri, reason);
         var links = parsed.Links
             .Select(link => new StoredLink(Id(link.Target.AbsoluteUri), link.Kind, link.Flags, link.Position, link.Text, UrlNormalizer.GetFragment(link.Target)))

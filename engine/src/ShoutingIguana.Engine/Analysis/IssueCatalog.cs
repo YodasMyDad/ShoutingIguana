@@ -89,7 +89,7 @@ public static class IssueCatalog
     };
 
     public static readonly IssueDefinition REDIRECT_BROKEN = new("redirect-broken", IssueCategory.Redirects, IssueSeverity.Error,
-        "Redirect leads to a broken URL",
+        "Broken redirect",
         """This internal URL redirects, but the redirects end at a URL that returns a 4xx or 5xx error or doesn't respond, or the redirect has no usable Location header.""",
         """Point the redirect at a working replacement or fix the target. If there's no replacement, let the old URL return 404 or 410 rather than redirect to an error.""")
     {
@@ -183,7 +183,7 @@ public static class IssueCatalog
         """The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. Links in the <head>, such as rel="amphtml", don't count.""",
         """Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.""")
     {
-        Why = """Screen readers announce these as just "link" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo or social media icons, usually account for most of them.""",
+        Why = """Screen readers announce these as just "link" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.RelatedUrl
@@ -201,7 +201,7 @@ public static class IssueCatalog
     };
 
     public static readonly IssueDefinition ORPHAN_PAGE = new("orphan-page", IssueCategory.Links, IssueSeverity.Warning,
-        "Orphan page",
+        "Orphan page in a sitemap",
         """This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished.""",
         """If the page matters, link to it from relevant pages and from its section's listing. If it doesn't, remove it from the sitemap, then redirect or remove the page.""")
     {
@@ -237,7 +237,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition BLOCKED_BY_ROBOTS = new("blocked-by-robots", IssueCategory.Indexability, IssueSeverity.Notice,
         "Blocked by robots.txt",
-        """robots.txt disallows this internal URL, so the crawler didn't fetch it. If it was refused because robots.txt itself couldn't be read, the detail says so.""",
+        """The crawler didn't fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn't be read, which crawlers treat as disallowing everything: the detail then says so. Not checked on a crawl that was told to ignore robots.txt.""",
         """If the URL should be crawled, change or remove the Disallow rule that matches it. If it's meant to be blocked, avoid linking to it from crawlable pages where you can, and if it must stay out of search, allow crawling and use noindex instead.""")
     {
         Why = """Search engines that obey robots.txt can't read the page, so its content, links and any noindex on it go unseen, yet Google can still index the URL without its content, with no description, if links point to it. Blocking is right for URLs with no search value, such as baskets, internal search or filter combinations. It's a problem when a broad rule catches pages you want in search, or the CSS and JavaScript that pages need to render.""",
@@ -259,7 +259,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE = new("robots-txt-unreachable", IssueCategory.Indexability, IssueSeverity.Error,
         "robots.txt unavailable",
-        """robots.txt on the site's main origin (the start URL's, or the home page's after redirects) returned a 5xx error or 429, or didn't respond. Reported once, on the home page.""",
+        """robots.txt on the site's main origin (the start URL's, or the home page's after redirects) returned a 5xx error or 429, or didn't respond. Reported once, on the home page. Not checked on a crawl told to ignore robots.txt that never read it.""",
         """Make /robots.txt answer quickly with 200 and your rules, or with 404 if you don't need any. Check that the firewall, CDN or rate limiting doesn't treat requests for it differently from pages.""")
     {
         Why = """Google treats a robots.txt it can't fetch as a server error: it stops crawling the whole site for the first 12 hours, then uses its last good copy for up to 30 days (or assumes no restrictions if it has none). If it's still failing after that and the site is otherwise up, Google acts as if there were no robots.txt. Until it's fixed, new and changed pages aren't crawled, so fix this first.""",
@@ -272,7 +272,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN = new("robots-txt-unreachable-other-origin", IssueCategory.Indexability, IssueSeverity.Warning,
         "robots.txt unavailable on another of the site's origins",
-        """robots.txt on another of the site's origins, such as a subdomain or the http:// version, returned a 5xx error or 429, or didn't respond; the detail names the origin. Origins reached only by the crawler's own probe of the site's other versions aren't included.""",
+        """robots.txt on another of the site's origins, such as a subdomain or the http:// version, returned a 5xx error or 429, or didn't respond; the detail names the origin. Origins reached only by the crawler's own probe of the site's other versions aren't included. Not checked on a crawl told to ignore robots.txt, which doesn't read it there.""",
         """Make robots.txt on that origin return 200, or 404 if it needs no rules. If the origin shouldn't exist, stop linking to it.""")
     {
         Why = """Each origin (scheme, host and port) has its own robots.txt, so only that origin is affected: Google stops crawling it for 12 hours, then relies on its last good copy for up to 30 days. The main site carries on as normal. It matters if pages or files you want in search live there, or if that origin's redirects to the main site haven't been picked up yet.""",
@@ -284,8 +284,8 @@ public static class IssueCatalog
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
-        "No robots.txt",
-        """robots.txt returned a 4xx error other than 429 (usually 404, sometimes 401 or 403 from a firewall), or redirected too many times, on the main origin or another of the site's origins. Reported on the home page; the detail lists the origins.""",
+        "robots.txt missing or refused",
+        """robots.txt returned a 4xx error other than 429 (usually 404, sometimes 401 or 403 from a firewall), or redirected too many times, on the main origin or another of the site's origins. Reported on the home page; the detail lists the origins. A crawl told to ignore robots.txt judges the start URL's origin alone, and not at all when it never read robots.txt.""",
         """Add a robots.txt at the origin's root, even if it only holds a Sitemap: line with your XML sitemap's full URL. If a firewall answers it with 401 or 403, let it through.""")
     {
         Why = """Crawling isn't affected: Google treats a missing robots.txt as having no restrictions, so everything can be crawled. What's missing is a Sitemap: line, which Google, Bing and other search engines read to find your sitemaps, and a way to keep crawlers out of URLs with no search value should you need one. A 401 or 403 meant to keep crawlers out has the opposite effect.""",
@@ -297,12 +297,12 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SITE_HIDDEN_FROM_SEARCH = new("site-hidden-from-search", IssueCategory.Indexability, IssueSeverity.Error,
         "Most pages hidden from search",
-        """More than half of the site's pages are noindex, so they can't appear in search results. The detail gives the numbers, as in "212 of 240 pages are noindex": the noindex pages, out of the pages the crawl read less those whose canonical names another URL. Such a page is a variant of the page it names, so it counts neither as noindex nor in the total. A canonical that leads back to the page, to a broken URL, or to the same page on another version of the site (www or not, http or https) doesn't make a variant. Reported once, on the home page, or on the start URL when the home page wasn't read.""",
+        """The home page is noindex, and so are more than half of the site's pages, so most of the site can't appear in search results. The home page is the page the start URL leads to, after its redirects; while it can be indexed, nothing is reported, however many other pages are noindex. The detail gives the numbers, as in "212 of 240 pages are noindex": the noindex pages, out of the pages the crawl read less the canonicalised ones. A canonicalised page (one that isn't noindex and whose canonical names another URL) is a variant of the page it names, so it isn't in the total. A canonical that leads back to the page, to a broken URL, or to the same page on another version of the site (www or not, http or https) doesn't make a variant. Not checked on a crawl that didn't start at the site's root. Reported once, on the home page.""",
         """Find what sets noindex on every page: a "discourage search engines" setting or a staging configuration left on, a robots meta tag in the template, or an X-Robots-Tag header from the server or CDN. Remove it from the pages that should appear in search, then crawl again.""")
     {
         Why = """Google drops a noindex page from its results, so most of this site can't be found in search. It's nearly always a launch mistake: a staging site's noindex or a "discourage search engines" setting left on. If the pages are meant to stay out, as on a private site or a staging copy, check the noindex pages and ignore this.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
-        Subject = IssueSubject.Url,
+        Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
         SiteWide = true,
         ReportedOnce = true
@@ -356,8 +356,8 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CANONICAL_TO_REDIRECT = new("canonical-to-redirect", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Canonical points to a redirect",
-        """The page's canonical names a URL that redirects. The detail says when the redirect leads back to this page.""",
-        """Change the canonical to the redirect's final URL; when the redirect leads back here, that's this page's own URL.""")
+        """The page's canonical names a URL that redirects. The detail gives the URL the redirects end at, or says that they lead back to this page. Where the crawl didn't check that URL, or was refused there, the detail says so: it is where the redirects lead, and may not be where they end.""",
+        """Change the canonical to the redirect's final URL, which the detail gives; when the redirect leads back here, that's this page's own URL. If the detail says the URL wasn't checked, or was refused, open it first and use the address you end up at: it may redirect again.""")
     {
         Why = """A canonical should name the final URL you want indexed. Naming a redirect sends search engines two signals that disagree: the canonical says to index the named URL, and its redirect says to index another. When the redirect leads back to this page, such as a canonical to /page on /page/ when /page redirects to /page/, this page most likely stays the indexed one, but the canonical is still wrong.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
@@ -654,7 +654,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition NEAR_DUPLICATE_CONTENT = new("near-duplicate-content", IssueCategory.Content, IssueSeverity.Notice,
         "Near-duplicate content",
-        """Another indexable page has almost the same main content, roughly 96% or more alike at the default of 24 differing bits out of 256 in a content fingerprint (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead.""",
+        """Another indexable page has almost the same main content, roughly 96% or more alike: at most 24 of the 256 bits of their content fingerprints differ (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.""",
         """Give each page main content that is clearly its own, canonicalise the variants to one version, or merge them into one page with options.""")
     {
         Why = """Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That's fine for variants you don't need to rank separately. Pages that should rank on their own need differences that are, in Google's words, clear and significant.""",
@@ -679,7 +679,7 @@ public static class IssueCatalog
 
     // Images
     public static readonly IssueDefinition IMAGE_MISSING_ALT = new("image-missing-alt", IssueCategory.Images, IssueSeverity.Warning,
-        "Images without alt text",
+        "Images without an alt attribute",
         """The page has <img> elements with no alt attribute at all. Images with an empty alt="" (marked as decorative) and 1×1 tracking pixels don't count.""",
         """Add alt text that says what each image shows or does in context. For purely decorative images, add an empty alt="" so screen readers skip them.""")
     {
@@ -749,7 +749,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition HREFLANG_MISSING_SELF = new("hreflang-missing-self", IssueCategory.Hreflang, IssueSeverity.Warning,
         "Hreflang without a self-reference",
         """This indexable page lists hreflang alternates, but none of them is the page's own URL exactly as crawled.""",
-        """Add an hreflang entry for the page's own URL, written exactly as its canonical URL (scheme, host, path and trailing slash), alongside the entries for the other versions.""")
+        """Add an hreflang entry for the page's own URL, written exactly as the page is served (scheme, host, path, trailing slash and any query string), alongside the entries for the other versions.""")
     {
         Why = """Google's rule is that each language version must list itself as well as all the other versions, with the same set of links on every page. Without the self-reference the set breaks that rule and may not be used as intended. Often the self-reference is there but in a different form of the URL, such as http instead of https, without the trailing slash or with a tracking parameter.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#all-method-guidelines",
@@ -992,10 +992,10 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CHARSET_MISSING = new("charset-missing", IssueCategory.Html, IssueSeverity.Notice,
         "Missing character encoding",
-        """Neither a meta tag (<meta charset> or http-equiv Content-Type) nor the Content-Type header's charset declares the page's character encoding.""",
+        """Nothing declares the page's character encoding: no byte-order mark at the start of the file, no meta tag (<meta charset> or http-equiv Content-Type) and no charset in the Content-Type header.""",
         """Add <meta charset="utf-8"> as the first element in the <head>, within the first 1024 bytes of the file, or send Content-Type: text/html; charset=utf-8 from the server.""")
     {
-        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A UTF-8 byte-order mark at the start of the file also declares it, though this check doesn't look for one.""",
+        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again.""",
         LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None

@@ -2,6 +2,7 @@
 // second, and not at all while the window is hidden (in the tray), so a 2,900 URLs/s crawl never re-renders the grid
 // and a hidden window stays idle. Only components that select live data subscribe.
 import { useSyncExternalStore } from 'react';
+import { parseExportJob } from '../api/exports';
 import { CRAWL_PHASES, isCrawlStatus, isLive } from '../api/types';
 import type {
   AlertData,
@@ -313,7 +314,14 @@ export function parseSidecarEvent(message: SseMessage): LiveEvent | null {
   switch (message.event) {
     case 'hello':
       return Array.isArray(record.live)
-        ? { type: 'hello', data: { live: strings(record.live), analyzing: strings(record.analyzing) } }
+        ? {
+            type: 'hello',
+            data: {
+              live: strings(record.live),
+              analyzing: strings(record.analyzing),
+              exports: strings(record.exports),
+            },
+          }
         : null;
     case 'library':
       return { type: 'library', data: {} };
@@ -352,6 +360,10 @@ export function parseSidecarEvent(message: SseMessage): LiveEvent | null {
         : null;
     case 'analysis':
       return typeof record.crawlId === 'string' ? { type: 'analysis', data: record as unknown as AnalysisEvent } : null;
+    case 'export': {
+      const job = parseExportJob(record);
+      return job ? { type: 'export', data: job } : null;
+    }
     default:
       return null;
   }
@@ -657,6 +669,9 @@ export function applyEvent(state: LiveState, event: LiveEvent): LiveState {
     case 'analysis':
       return updateCrawl(state, event.data.crawlId, (crawl) => ({ ...crawl, analysis: event.data }));
     case 'library':
+      return state;
+    case 'export':
+      // An export is no part of a crawl's live state: whoever shows its progress hears it through `onEvent`.
       return state;
   }
 }

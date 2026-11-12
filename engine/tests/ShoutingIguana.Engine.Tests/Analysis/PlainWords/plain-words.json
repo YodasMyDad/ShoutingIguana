@@ -398,9 +398,9 @@
     },
     "site-hidden-from-search": {
       "plainTitle": "Your site hides most of its pages from search",
-      "plainLooksFor": "A site that hides most of its pages from search",
+      "plainLooksFor": "A site that hides its home page and most pages from search",
       "plainWhat": [
-        "More than half of your pages tell search engines to keep them out of search results.",
+        "Your home page and more than half of your pages tell search engines to keep them out of search results.",
         "Those pages can't be found through Google, however good they are.",
         "It's often one setting left on from when the site was being built, so one change may fix it.",
         "This is one fault for the whole site, and the first thing to fix."
@@ -412,7 +412,7 @@
         "Check the site again once it's changed."
       ],
       "fixer": "either",
-      "plainPassed": "The site isn't hiding most of its pages from search"
+      "plainPassed": "The site as a whole isn't hidden from search"
     },
     "canonicalised-page": {
       "plainTitle": "Pages that name another page as the main version",
@@ -482,7 +482,7 @@
         "Often it forwards straight back to the page itself, which does little harm but is still worth tidying."
       ],
       "plainFix": [
-        "Open the main address the list shows for a page in your browser, and note the address you end up at.",
+        "Look at where each main address in the list ends up: the list names the address, and says when it couldn't be checked.",
         "Put that final address in the \"canonical\" box of your site's editor, often under \"SEO\", if it has one.",
         "Ask your developer to correct it in the page design if the same thing shows on many pages."
       ],
@@ -1455,6 +1455,10 @@
       "plainText": "The site check was kept to one section of the site, so links from the rest of it weren't read.",
       "plainAction": "Start the check from your home page, so it reads the whole site."
     },
+    "start-not-root": {
+      "plainText": "This site check started from a page inside your site, not from its home page, so it can't judge the site as a whole.",
+      "plainAction": "Start the check from your home page, then check the site again."
+    },
     "external-links-off": {
       "plainText": "This site check was set not to try links to other websites.",
       "plainAction": "Check the site again, with \"Links to other websites\" ticked."
@@ -1462,6 +1466,10 @@
     "resources-off": {
       "plainText": "This site check was set not to load images and other files.",
       "plainAction": "Check the site again, with \"Images and other files\" ticked."
+    },
+    "robots-txt-ignored": {
+      "plainText": "This site check was set to ignore your site's rules files for search engines, so it can't say what they put off limits or whether each can be read.",
+      "plainAction": "Set the check to follow the rules files again in its Advanced settings, then check the site again."
     },
     "site-versions-unchecked": {
       "plainText": "The site's other addresses (with and without www, http and https) couldn't all be tried.",

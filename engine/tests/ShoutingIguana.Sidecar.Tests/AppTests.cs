@@ -78,9 +78,9 @@ public sealed class AppTests : IAsyncLifetime
             "security-headers-missing", "site-hidden-from-search", "sitemap-error", "sitemap-missing"
         ], listed.Where(check => (bool)check!["reportedOnce"]!).Select(check => (string)check!["id"]!).Order(StringComparer.Ordinal));
 
-        // The new check, with the texts the catalog gives it.
+        // The new check, with the texts the catalog gives it. What it flags is a page: the home page, noindex itself.
         var hidden = listed.Single(check => (string?)check!["id"] == "site-hidden-from-search")!;
-        Assert.Equal(("indexability", "error", "url", "none", IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Title),
+        Assert.Equal(("indexability", "error", "page", "none", IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Title),
             ((string)hidden["category"]!, (string)hidden["severity"]!, (string)hidden["subject"]!, (string)hidden["grouping"]!, (string)hidden["title"]!));
     }
 

@@ -272,7 +272,7 @@ export const ListRows: Story = {
                 asChild
                 muted
                 icon={<SeverityMark severity="skipped" />}
-                title="Orphan page"
+                title="Orphan page in a sitemap"
                 meta={<Badge variant="dashed">Skipped</Badge>}
                 description="No sitemap could be read, so orphan pages weren’t checked."
               >

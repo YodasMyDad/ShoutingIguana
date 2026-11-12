@@ -8,7 +8,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// The page's canonical: whether it's declared properly, and whether the URL it names can be indexed. Only canonicals
 /// in the head or an HTTP Link header count, as with Google.
 /// </summary>
-internal sealed class CanonicalRules(UrlTable urls) : IPageRule
+/// <param name="readUrl">The stored URL with an id, or null: a canonical that redirects is reported with the URL its redirects end at.</param>
+internal sealed class CanonicalRules(UrlTable urls, Func<int, string?> readUrl) : IPageRule
 {
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
@@ -77,9 +78,10 @@ internal sealed class CanonicalRules(UrlTable urls) : IPageRule
         else if (target.Outcome == FetchOutcome.Redirect)
         {
             // /page/ naming /page, which redirects to /page/, still points search engines at /page/.
-            var detail = urls.TraceRedirects(targetId).FinalId == page.UrlId
+            var trace = urls.TraceRedirects(targetId);
+            var detail = trace.FinalId == page.UrlId
                 ? "The canonical URL redirects back to this page"
-                : $"The canonical URL {RuleText.Status(target)}";
+                : $"The canonical URL {RuleText.Status(target)}{EndsAt(trace)}";
             yield return new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, page.UrlId, detail, targetId);
         }
         // Another site blocking or disallowing the crawler says nothing about whether Google can see the page.
@@ -88,6 +90,32 @@ internal sealed class CanonicalRules(UrlTable urls) : IPageRule
         {
             yield return new IssueHit(IssueCatalog.CANONICAL_TO_NON_INDEXABLE, page.UrlId, $"The canonical URL {RuleText.Status(target)}", targetId);
         }
+    }
+
+    /// <summary>
+    /// Where the canonical's redirects end, which is the URL the canonical should name: " to https://example.com/page" after
+    /// one redirect, " and, after 3 redirects, ends at https://example.com/page" after more. Only a URL that answered is
+    /// known to be the end: one the crawl never asked for, or was refused at, may redirect again, so it is where the
+    /// redirects lead, and the detail says why no more is known: ", which wasn't checked", ", which is blocked by robots.txt".
+    /// </summary>
+    private string EndsAt(RedirectTrace trace)
+    {
+        if (readUrl(trace.FinalId) is not { } final)
+        {
+            return string.Empty;
+        }
+
+        var last = urls[trace.FinalId];
+        var unknown = last switch
+        {
+            { Fetched: false } => ", which wasn't checked",
+            { Outcome: FetchOutcome.Success } => string.Empty,
+            _ => $", which {RuleText.Status(last)}"
+        };
+
+        return trace.Hops == 1
+            ? $" to {final}{unknown}"
+            : $" and, after {RuleText.Count(trace.Hops, "redirect", "redirects")}, {(unknown.Length == 0 ? "ends at" : "leads to")} {final}{unknown}";
     }
 
     private static bool IsAbsolute(string href) =>

@@ -60,8 +60,13 @@ internal static class IssuesCommand
                     return 2;
                 }
 
-                var written = ExportCsv(path, id, csvPath);
+                var (written, truncated) = ExportCsv(path, id, csvPath);
                 Console.WriteLine($"Wrote {Format.Count(written, "row", "rows")} to {Path.GetFullPath(csvPath)}");
+                if (truncated > 0)
+                {
+                    Console.WriteLine($"  {Format.Count(truncated, "field was", "fields were")} cut to the 32,758 characters Excel reads of a CSV field.");
+                }
+
                 return 0;
             }
 
@@ -119,7 +124,7 @@ internal static class IssuesCommand
     /// Writes to a temporary file next to the target and moves it into place, so a failed or mistaken export never
     /// leaves a half-written file or truncates an existing one before the crawl has been read.
     /// </summary>
-    private static long ExportCsv(string path, string? issueId, string csvPath)
+    private static (long Rows, long TruncatedFields) ExportCsv(string path, string? issueId, string csvPath)
     {
         var target = Path.GetFullPath(csvPath);
         var temporary = Path.Combine(Path.GetDirectoryName(target)!, $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
@@ -143,7 +148,7 @@ internal static class IssuesCommand
             }
 
             File.Move(temporary, target, overwrite: true);
-            return rows;
+            return (rows, csv.TruncatedFields);
         }
         finally
         {

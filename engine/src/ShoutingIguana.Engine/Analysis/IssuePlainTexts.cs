@@ -443,7 +443,7 @@ public static class IssuePlainTexts
         ["site-hidden-from-search"] = new(
             """Your site hides most of its pages from search""",
             [
-                """More than half of your pages tell search engines to keep them out of search results.""",
+                """Your home page and more than half of your pages tell search engines to keep them out of search results.""",
                 """Those pages can't be found through Google, however good they are.""",
                 """It's often one setting left on from when the site was being built, so one change may fix it.""",
                 """This is one fault for the whole site, and the first thing to fix."""
@@ -455,9 +455,9 @@ public static class IssuePlainTexts
                 """Check the site again once it's changed."""
             ],
             IssueFixer.Either,
-            """The site isn't hiding most of its pages from search""")
+            """The site as a whole isn't hidden from search""")
         {
-            LooksFor = """A site that hides most of its pages from search"""
+            LooksFor = """A site that hides its home page and most pages from search"""
         },
 
         ["canonicalised-page"] = new(
@@ -530,7 +530,7 @@ public static class IssuePlainTexts
                 """Often it forwards straight back to the page itself, which does little harm but is still worth tidying."""
             ],
             [
-                """Open the main address the list shows for a page in your browser, and note the address you end up at.""",
+                """Look at where each main address in the list ends up: the list names the address, and says when it couldn't be checked.""",
                 """Put that final address in the "canonical" box of your site's editor, often under "SEO", if it has one.""",
                 """Ask your developer to correct it in the page design if the same thing shows on many pages."""
             ],

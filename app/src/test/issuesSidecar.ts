@@ -38,7 +38,7 @@ export const ISSUES_CHECKS: Checks = {
     check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail', 'url'),
     check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail', 'url'),
     check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl', 'page'),
-    check('orphan-page', 'links', 'notice', 'Orphan page', 'none', 'page'),
+    check('orphan-page', 'links', 'notice', 'Orphan page in a sitemap', 'none', 'page'),
     check('title-too-long', 'titles', 'notice', 'Title too long', 'none', 'page'),
   ],
 };

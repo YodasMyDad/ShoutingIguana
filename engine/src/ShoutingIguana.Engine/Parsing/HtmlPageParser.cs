@@ -16,7 +16,11 @@ public static class HtmlPageParser
 {
     private static readonly ThreadLocal<HtmlParser> PARSER = new(() => new HtmlParser(new HtmlParserOptions { IsScripting = true }));
 
-    public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken)
+    /// <param name="byteOrderMark">
+    /// The encoding a byte-order mark at the start of the response's bytes declared (<see cref="PageFacts.ByteOrderMark"/>),
+    /// or null with none. The fetch sees it, and the decoded <paramref name="html"/> no longer has it.
+    /// </param>
+    public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark = null)
     {
         using var document = PARSER.Value!.ParseDocument(html);
 
@@ -50,6 +54,7 @@ public static class HtmlPageParser
             Robots = RobotsMetaParser.Parse(walker.RobotsMetaContents, signals.RobotsTagValues, robotsToken),
             Language = walker.Language,
             DeclaredCharset = walker.DeclaredCharset,
+            ByteOrderMark = byteOrderMark,
             BaseHref = baseHref,
             WordCount = fingerprint.WordCount,
             ContentHash = fingerprint.ContentHash,

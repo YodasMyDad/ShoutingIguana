@@ -13,6 +13,8 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="ShoutingIguana.Engine.Tests" />
+        <!-- The sidecar's tests make an export's disk fill up, and its pages small, by the seams the engine's own tests use. -->
+        <InternalsVisibleTo Include="ShoutingIguana.Sidecar.Tests" />
         <!-- si readbench times the grids' reads as a crawl without a URL summary has them, without changing the file. -->
         <InternalsVisibleTo Include="si" />
     </ItemGroup>

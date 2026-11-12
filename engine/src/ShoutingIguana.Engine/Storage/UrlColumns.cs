@@ -205,7 +205,7 @@ internal static class UrlColumns
     public static IReadOnlyList<UrlColumnInfo> Describe(bool issueColumns) =>
     [
         .. ALL.Where(column => issueColumns || !column.IsIssueColumn)
-            .Select(column => new UrlColumnInfo(column.Id, column.Type, column.NeedsAnalysis, column.Sortable, column.Filterable, column.Values))
+            .Select(column => ColumnWords.Url(new UrlColumnInfo(column.Id, column.Type, column.NeedsAnalysis, column.Sortable, column.Filterable, column.Values)))
     ];
 
     /// <summary>
