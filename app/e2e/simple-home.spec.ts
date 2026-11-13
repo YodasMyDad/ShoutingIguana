@@ -125,6 +125,7 @@ test('Home passes axe in the dark theme and in forced colours, and nothing scrol
   });
   expect(overflow).toEqual({ page: 0, main: 0 });
   await expectNoViolations(page);
+  await rowOf(page, site()).scrollIntoViewIfNeeded();
   await shoot(page, 'home-200pct-light');
 });
 
