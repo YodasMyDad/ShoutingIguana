@@ -431,6 +431,7 @@
   --choice-card-min: 200px; /* a choice card's least width (the speed presets): narrower, they stack */
   --choice-columns: repeat(auto-fit, minmax(var(--choice-card-min), 1fr)); /* as many cards a row as fit */
   --form-max: 760px; /* the crawl settings form and a settings section: lines a reader can follow */
+  --limit-field-width: 480px; /* one of Settings > Analysis's limits: a number and its unit */
   --number-field-width: 96px; /* a count typed inline in a sentence: "Stop after [5,000] addresses" */
   --number-row-width: 320px; /* a setting's own field for a number or a short choice */
   --header-name-width: 200px; /* an extra header's name, beside its value */
