@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTransport, type Transport } from '../api/transport';
 import type { CrawlListItem } from '../api/types';
+import { announce } from '../feedback/announce';
 import { AppToaster } from '../feedback/AppToaster';
 import { dismissToast } from '../feedback/notify';
 import { replaceSettings } from '../settings/settingsStore';
@@ -80,7 +81,7 @@ function setup() {
     status('completed');
     await act(frame);
   };
-  return { stop, finish, openCrawl, status };
+  return { stop, finish, openCrawl, status, store };
 }
 
 beforeEach(() => {
@@ -168,6 +169,81 @@ describe('the finished toast in Simple', () => {
     expect(await screen.findByText('The check of gardenfurnituresets.co.uk was stopped')).toBeInTheDocument();
     expect(screen.getByText('1,234 addresses checked. You can continue it later.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    stop();
+  });
+});
+
+describe('a check that ends without its results, or fails, in Simple', () => {
+  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [] }));
+
+  it('a first analysis cancelled: checked, its results not worked out, with Work out the results', async () => {
+    render(<AppToaster />);
+    const { stop, status, openCrawl } = setup();
+    status('running');
+    status('completed');
+    status('analyzing');
+    // Cancelled: the analysis stored nothing, so the check is completed and was never analysed.
+    item = { ...item, status: 'completed' };
+    status('completed');
+    expect(await screen.findByText('gardenfurnituresets.co.uk is checked')).toBeInTheDocument();
+    expect(
+      screen.getByText('Its results weren’t worked out. Work out the results to see its score and what to fix.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('The results are ready.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'See the summary' }));
+    expect(openCrawl).toHaveBeenCalledWith(ID, 'overview');
+    asked.length = 0;
+    fireEvent.click(screen.getByRole('button', { name: 'Work out the results' }));
+    await act(frame);
+    expect(asked).toContain(`/api/crawls/${ID}/analyze`);
+    stop();
+  });
+
+  it('a failed check: it couldn’t finish, in the words of the shell’s notice', async () => {
+    render(<AppToaster />);
+    const { stop, status, store } = setup();
+    status('running');
+    store.ingest({
+      event: 'crawl',
+      id: '',
+      data: JSON.stringify({ crawlId: ID, status: 'failed', error: 'Connection refused' }),
+    });
+    expect(await screen.findByText('The check of gardenfurnituresets.co.uk couldn’t finish')).toBeInTheDocument();
+    expect(screen.queryByText(/the crawl failed/)).toBeNull();
+    stop();
+  });
+
+  it('results that failed to be worked out: said so, in Simple’s words', async () => {
+    render(<AppToaster />);
+    const { stop, status, store } = setup();
+    status('running');
+    status('completed');
+    status('analyzing');
+    item = { ...item, status: 'completed' };
+    store.ingest({
+      event: 'crawl',
+      id: '',
+      data: JSON.stringify({ crawlId: ID, status: 'completed', error: 'The disk is full.' }),
+    });
+    expect(
+      await screen.findByText('The results for gardenfurnituresets.co.uk couldn’t be worked out'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/the analysis failed/)).toBeNull();
+    stop();
+  });
+
+  it('announces a check’s status in Simple’s words', async () => {
+    vi.mocked(announce).mockClear();
+    const { stop, status } = setup();
+    status('running');
+    status('analyzing');
+    status('stopped');
+    await vi.waitFor(() => expect(vi.mocked(announce)).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(announce).mock.calls.map((call) => call[0])).toEqual([
+      'gardenfurnituresets.co.uk: checking',
+      'gardenfurnituresets.co.uk: working out the results',
+      'gardenfurnituresets.co.uk: stopped early',
+    ]);
     stop();
   });
 });

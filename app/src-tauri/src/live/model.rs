@@ -137,6 +137,10 @@ pub struct CrawlItem {
     /// The URLs fetched. Older sidecars call it `urlCount`.
     pub fetched_url_count: Option<u64>,
     pub url_count: Option<u64>,
+    /// E3c: the URLs crawled, as the URL grid counts them: `fetchedUrlCount` less the URLs that weren't checked. The
+    /// toast and Home say this count; an older sidecar leaves it out.
+    #[serde(default)]
+    pub crawled_url_count: Option<u64>,
     pub issues: Option<IssueCounts>,
     pub analyzed_at: Option<String>,
     pub finished_at: Option<String>,
@@ -187,6 +191,12 @@ impl CrawlItem {
 
     pub fn fetched(&self) -> u64 {
         self.fetched_url_count.or(self.url_count).unwrap_or(0)
+    }
+
+    /// The URLs crawled, as the toast and Home say them (src/crawl/status.ts `crawledUrls`): `crawledUrlCount`, or the
+    /// URLs fetched from a sidecar that doesn't send it.
+    pub fn crawled(&self) -> u64 {
+        self.crawled_url_count.unwrap_or_else(|| self.fetched())
     }
 
     /// Checks that found issues, when the counts describe the crawl as it is now.

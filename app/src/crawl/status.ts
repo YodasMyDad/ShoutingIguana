@@ -41,8 +41,20 @@ export function statusLabel(status: CrawlStatus, mode: 'simple' | 'advanced' = '
   return (mode === 'simple' ? SIMPLE_LABELS[status] : undefined) ?? LABELS[status];
 }
 
-export function statusAnnouncement(site: string, status: CrawlStatus): string {
-  return `${site}: ${ANNOUNCEMENTS[status]}`;
+/** Simple's words for what a screen reader hears, where Advanced's are technical; the rest are the same. */
+const SIMPLE_ANNOUNCEMENTS: Partial<Record<CrawlStatus, string>> = {
+  running: 'checking',
+  analyzing: 'working out the results',
+  stopped: 'stopped early',
+  failed: 'couldn’t finish',
+};
+
+export function statusAnnouncement(
+  site: string,
+  status: CrawlStatus,
+  mode: 'simple' | 'advanced' = 'advanced',
+): string {
+  return `${site}: ${(mode === 'simple' ? SIMPLE_ANNOUNCEMENTS[status] : undefined) ?? ANNOUNCEMENTS[status]}`;
 }
 
 /** The status to show: this sidecar's live one while it's working on the crawl, else the library's. */
