@@ -137,11 +137,30 @@ pub struct CrawlItem {
     /// The URLs fetched. Older sidecars call it `urlCount`.
     pub fetched_url_count: Option<u64>,
     pub url_count: Option<u64>,
+    /// E3c: the URLs crawled, as the URL grid counts them: `fetchedUrlCount` less the URLs that weren't checked. The
+    /// toast and Home say this count; an older sidecar leaves it out.
+    #[serde(default)]
+    pub crawled_url_count: Option<u64>,
     pub issues: Option<IssueCounts>,
     pub analyzed_at: Option<String>,
     pub finished_at: Option<String>,
     #[serde(default)]
     pub out_of_date: bool,
+    /// The score in brief, for Simple's notice ("Score 85: 6 problems to fix"). None before an analysis, with no
+    /// page read, or from a sidecar from before the score.
+    #[serde(default)]
+    pub score: Option<ScoreSummary>,
+    /// The pages it read: none means no score can be given.
+    #[serde(default)]
+    pub page_count: Option<u64>,
+}
+
+/// A library item's score: its value, and whether it covers only part of the site ("so far").
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct ScoreSummary {
+    pub value: u64,
+    #[serde(default)]
+    pub partial: bool,
 }
 
 /// Checks with at least one issue, by severity.
@@ -172,6 +191,12 @@ impl CrawlItem {
 
     pub fn fetched(&self) -> u64 {
         self.fetched_url_count.or(self.url_count).unwrap_or(0)
+    }
+
+    /// The URLs crawled, as the toast and Home say them (src/crawl/status.ts `crawledUrls`): `crawledUrlCount`, or the
+    /// URLs fetched from a sidecar that doesn't send it.
+    pub fn crawled(&self) -> u64 {
+        self.crawled_url_count.unwrap_or_else(|| self.fetched())
     }
 
     /// Checks that found issues, when the counts describe the crawl as it is now.

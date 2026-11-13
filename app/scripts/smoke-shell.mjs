@@ -321,6 +321,61 @@ try {
     return `Open folder showed ${folder} in Explorer (closed again); Open file opened the CSV in ${program} (closed again)`;
   });
 
+  await walk.step('the Report shows the engine’s report styled, and prints the frame alone', async () => {
+    await nav.getByRole('link', { name: /^Report/ }).click();
+    await page.waitForURL(/\/report/);
+    const frame = page.frameLocator('iframe[title^="The report for"]');
+    await frame.locator('h1').waitFor({ timeout: 20_000 });
+    // The shell's policy for the page, as the shell serves it: a nonce or a hash in style-src would unstyle the report.
+    const policy = await page.evaluate(async () =>
+      (await fetch(window.location.href)).headers.get('content-security-policy'),
+    );
+    const styleSrc = /style-src ([^;]*)/.exec(policy ?? '')?.[1] ?? '(none)';
+    // The report's one style sheet applies (its font, its sizes): without it the frame shows the browser's own look.
+    const styled = await frame.locator('body').evaluate((body) => ({
+      sheets: body.ownerDocument.styleSheets.length,
+      font: body.ownerDocument.defaultView.getComputedStyle(body).fontFamily,
+      margin: body.ownerDocument.defaultView.getComputedStyle(body).margin,
+    }));
+    expectThat(
+      /Inter|Segoe UI/.test(styled.font),
+      `the report is unstyled (font "${styled.font}", style-src ${styleSrc})`,
+    );
+    expectThat(!/nonce-|sha256-/.test(styleSrc), `style-src holds a nonce or a hash: ${styleSrc}`);
+    await picture('06b-report');
+    // Print: the frame's print() blocks the page until its dialog closes, so the button is pressed without waiting on
+    // it, the dialog is looked for from outside, and Esc, pressed in the webview, closes it. WebView2's print dialog
+    // isn't a window of its own: it is drawn in the app's window, as one more of the webview's surfaces in it.
+    const before = shellWindow('state');
+    void page
+      .getByRole('button', { name: /Print or save as PDF/ })
+      .click({ noWaitAfter: true })
+      .catch(() => undefined);
+    const opened = await until(
+      'the print dialog',
+      () => {
+        const state = shellWindow('state');
+        return state.surfaces > before.surfaces || state.webviewWindows > before.webviewWindows ? state : null;
+      },
+      20_000,
+    ).catch((error) => {
+      // Whatever was missed, a dialog left up would block the page, and the walk, for good.
+      shellWindow('keys', String(VIRTUAL_KEYS.Escape));
+      throw error;
+    });
+    // No picture of it: the page can't be drawn for DevTools while the dialog holds it.
+    shellWindow('keys', String(VIRTUAL_KEYS.Escape));
+    await until('the print dialog going', () => {
+      const state = shellWindow('state');
+      return state.surfaces <= before.surfaces && state.webviewWindows <= before.webviewWindows;
+    });
+    // The page runs again once the dialog has gone.
+    await page.evaluate(() => 1);
+    await page.keyboard.press('Control+2');
+    await page.waitForURL(/\/issues/);
+    return `styled (${styled.font.split(',')[0]}; style-src ${styleSrc}); WebView2's print dialog opened over the window (${opened.surfaces - before.surfaces} more surface) and closed on Esc`;
+  });
+
   await walk.step('the palette (Ctrl+K), "Go to URL…" and the shortcut sheet (?)', async () => {
     await page.keyboard.press('Control+k');
     await palette.waitFor();

@@ -29,17 +29,17 @@ export const simpleScreen = lazyRouteComponent as <T extends Record<string, unkn
 
 export const SIMPLE_SCREENS: SimpleScreens = {
   // `/`: Home in Simple. Check a website, and Your sites.
-  home: null,
+  home: simpleScreen(() => import('../simple/home/SimpleHome'), 'SimpleHome'),
 
   // `/crawls/:crawl/overview`: Checking a site while it runs, then the Summary.
-  overview: null,
+  overview: simpleScreen(() => import('../simple/SimpleOverview'), 'SimpleOverview'),
 
   // `/crawls/:crawl/issues/:check?`: What to fix, and one problem.
-  issues: null,
+  issues: simpleScreen(() => import('../simple/WhatToFixScreen'), 'WhatToFixScreen'),
 
   // `/crawls/:crawl/report`: the Report screen, the same in both modes. Its sidebar item (third in Simple, eighth in
   // Advanced), its key (Ctrl+3, Ctrl+8) and its route appear once this is set.
-  report: null,
+  report: simpleScreen(() => import('../screens/report/ReportScreen'), 'ReportScreen'),
 };
 
 export type SimpleScreenKey = keyof SimpleScreens;

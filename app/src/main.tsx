@@ -53,7 +53,9 @@ async function start() {
     openCrawl: (crawl, view) =>
       void (view === 'issues'
         ? router.navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl } })
-        : router.navigate({ to: '/crawls/$crawl/overview', params: { crawl } })),
+        : view === 'report'
+          ? router.navigate({ to: '/crawls/$crawl/report', params: { crawl } })
+          : router.navigate({ to: '/crawls/$crawl/overview', params: { crawl } })),
   });
   // Exports outlive the screen that started them: their toasts and the sidebar's list follow the live stream.
   startExports();

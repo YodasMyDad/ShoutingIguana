@@ -1,0 +1,2567 @@
+{
+  "categories": [
+    { "id": "responseCodes", "title": "Response codes", "plainTitle": "Pages that load" },
+    { "id": "redirects", "title": "Redirects", "plainTitle": "Forwarding addresses" },
+    { "id": "links", "title": "Links", "plainTitle": "Links" },
+    { "id": "indexability", "title": "Indexability", "plainTitle": "Visibility in search" },
+    { "id": "canonicals", "title": "Canonicals", "plainTitle": "Duplicate addresses" },
+    { "id": "sitemaps", "title": "Sitemaps", "plainTitle": "Sitemap" },
+    { "id": "titles", "title": "Titles", "plainTitle": "Page titles" },
+    { "id": "metaDescriptions", "title": "Meta descriptions", "plainTitle": "Search descriptions" },
+    { "id": "headings", "title": "Headings", "plainTitle": "Headings" },
+    { "id": "content", "title": "Content", "plainTitle": "Content" },
+    { "id": "images", "title": "Images", "plainTitle": "Images" },
+    { "id": "hreflang", "title": "Hreflang", "plainTitle": "Languages" },
+    { "id": "structuredData", "title": "Structured data", "plainTitle": "Extras in search results" },
+    { "id": "security", "title": "Security", "plainTitle": "Security" },
+    { "id": "urls", "title": "URLs", "plainTitle": "Web addresses" },
+    { "id": "performance", "title": "Performance", "plainTitle": "Speed" },
+    { "id": "html", "title": "HTML", "plainTitle": "Page set-up" }
+  ],
+  "checks": [
+    {
+      "id": "internal-client-error",
+      "category": "responseCodes",
+      "severity": "error",
+      "title": "Internal URL returns 4xx",
+      "description": "This internal URL, a page or a resource such as an image or script, answered with a 4xx client error such as 404 Not Found, 410 Gone or 403 Forbidden.",
+      "fix": "If the URL should work, restore it or 301-redirect it to the closest replacement. If it\u0027s gone for good, keep the 404 or 410 and update or remove the links and sitemap entries that point to it.",
+      "why": "Visitors who follow a link here get an error instead of the content. Google doesn\u0027t index URLs that return 4xx, and drops ones that were already indexed. A 404 or 410 is the right answer for something removed on purpose, and a 401 or 403 is normal behind a login: then the only problem is the links and sitemap entries that still lead here.",
+      "learnMore": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#4xx-client-errors",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages or files that can\u0027t be found",
+      "plainWhat": [
+        "Some addresses on your site answer with an error instead of a page or file, most often \u0022not found\u0022 (a 404).",
+        "Visitors who follow a link to one get an error page, and Google drops addresses like these from its results.",
+        "That\u0027s the right answer for something you removed on purpose, as long as nothing still links to it."
+      ],
+      "plainFix": [
+        "Look at each address in the list and decide whether it should still exist.",
+        "If it should, put the page or file back.",
+        "If it has moved, forward the old address to the new one (a \u0022301 redirect\u0022), in your site\u0027s redirect settings or through your developer.",
+        "If it\u0027s gone for good, leave it, and remove the links that still point to it."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page or file answers with a \u0022not found\u0022 error",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "internal-server-error",
+      "category": "responseCodes",
+      "severity": "error",
+      "title": "Internal URL returns 5xx",
+      "description": "The server answered this internal URL with a 5xx error, such as 500 Internal Server Error or 503 Service Unavailable. Temporary errors (502, 503 and 504) were retried before being recorded.",
+      "fix": "Check the server and application logs for this URL at the time of the crawl, fix the cause and recrawl. If many URLs failed together, the server may have been overloaded: recrawl at a slower speed preset to see whether the errors stop.",
+      "why": "Visitors get an error page instead of the content. Google slows down crawling when a site returns 5xx errors, and URLs that keep failing are eventually dropped from its index. A one-off error during a busy crawl can happen, so recheck the URL; errors that repeat or hit many URLs need fixing first.",
+      "learnMore": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#5xx-server-errors",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages or files that fail with a server error",
+      "plainWhat": [
+        "Some addresses on your site answer with a server error, such as \u0022internal server error\u0022 (a 500).",
+        "Visitors see an error page, and Google visits a site less often while the errors go on.",
+        "One error on a busy day can be a blip, but errors that repeat mean something on the server is broken."
+      ],
+      "plainFix": [
+        "Open two or three of the addresses in your browser to see whether they still fail.",
+        "If they do, send the list to your developer or hosting company: the cause will be in the server\u0027s error log.",
+        "If they load now, check the site again at the \u0022Polite\u0022 speed: the check itself may have been too much for the server."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page or file fails with a server error",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "internal-unreachable",
+      "category": "responseCodes",
+      "severity": "error",
+      "title": "Internal URL didn\u0027t respond",
+      "description": "This internal URL gave no response: the request timed out (after 20 seconds by default) or the connection failed, even after retries (2 by default). Both can be changed in the crawl settings.",
+      "fix": "Check whether the URL loads from another network, then look for dropped or slow connections at the server, firewall, load balancer or DNS. If it only fails under load, the server needs more capacity or caching; a slower speed preset shows whether the crawl itself caused it.",
+      "why": "Visitors get a browser error or a page that never loads. Google treats timeouts, connection resets and DNS errors like server errors: it slows crawling straight away, can\u0027t index URLs it gets nothing from, and removes indexed ones within days if the problem continues.",
+      "learnMore": "https://developers.google.com/crawling/docs/troubleshooting/dns-network-errors",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages or files that don\u0027t answer",
+      "plainWhat": [
+        "Some addresses on your site gave no answer at all: the connection failed, or the wait ran out.",
+        "Visitors get a browser error or a page that never loads, and Google can\u0027t list an address it gets nothing from.",
+        "It can also happen when the check itself asks faster than the server can cope with."
+      ],
+      "plainFix": [
+        "Open two or three of the addresses in your browser to see whether they load for you.",
+        "If they don\u0027t, send the list to your developer or hosting company and ask what is dropping or delaying connections.",
+        "If they do, check the site again at the \u0022Polite\u0022 speed to see whether the check was too much for the server."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page or file failed to answer",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "internal-blocked",
+      "category": "responseCodes",
+      "severity": "warning",
+      "title": "Internal URL blocked by a firewall",
+      "description": "A firewall, bot protection service (such as Cloudflare, Akamai, AWS WAF, DataDome or Imperva) or a rate limit (HTTP 429) refused the crawler on this internal URL. The detail names the protection when it\u0027s recognised.",
+      "fix": "Allowlist the crawler in the firewall or bot protection (by user agent, IP address or a secret header), or crawl at a slower speed preset. Make sure the same rules let verified search engine crawlers through: verify Googlebot by reverse DNS or Google\u0027s published IP ranges rather than by user agent, which anyone can fake.",
+      "why": "Nothing on this URL could be checked, so other checks can\u0027t see its problems. If the same rules challenge search engine crawlers, they can\u0027t crawl it either, and Google slows its crawling of sites that answer with 429. Many protections only challenge automated traffic, so visitors are usually unaffected.",
+      "learnMore": "https://developers.google.com/crawling/docs/crawlers-fetchers/verify-google-requests",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages or files your site\u0027s security wouldn\u0027t show",
+      "plainWhat": [
+        "Your site\u0027s firewall or security service turned the check away from some addresses, so they couldn\u0027t be read.",
+        "Any problems on those addresses are missing from these results.",
+        "Visitors rarely notice, but if search engines are turned away too, they can\u0027t list those addresses."
+      ],
+      "plainFix": [
+        "Open one of the addresses in your browser to see that it loads for you.",
+        "Ask your hosting company, or whoever runs the firewall, to let Shouting Iguana through, then check the site again.",
+        "Ask them to make sure Google and other search engines aren\u0027t turned away by the same rules.",
+        "Check again at the \u0022Polite\u0022 speed if the list shows \u0022too many requests\u0022 (a 429): the check was asking too fast."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page or file was refused by the site\u0027s security",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "soft-404",
+      "category": "responseCodes",
+      "severity": "warning",
+      "title": "Soft 404",
+      "description": "This indexable page returns 200 OK, but its title or H1 reads like an error message (such as \u0022Page not found\u0022 or \u0022no longer available\u0022) and it has fewer than 300 words.",
+      "fix": "Return 404 or 410 for content that\u0027s gone, or 301-redirect it to a real replacement. If the page should exist, change the wording that makes it look like an error, and check its content didn\u0027t fail to load.",
+      "why": "Google detects pages like this as soft 404s and excludes them from search, but keeps crawling them, which wastes crawling on large sites. Serving an error with 200 also hides real breakage from monitoring that only looks at status codes. If the page is fine and only mentions \u0022not found\u0022 in a heading, ignore this.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/troubleshoot-crawling-errors#soft-404-errors",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that read like an error page",
+      "plainWhat": [
+        "These pages have a title or main heading that reads like an error message, such as \u0022Page not found\u0022, and little text.",
+        "Yet they tell search engines they loaded normally, so Google keeps coming back to pages it won\u0027t show (it calls them \u0022soft 404s\u0022).",
+        "If a page is real and its heading only mentions \u0022not found\u0022, there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Open each page in the list and see whether it\u0027s a real page or an error message.",
+        "If it\u0027s a real page, change the title or heading so it doesn\u0027t read like an error.",
+        "If it\u0027s an error message, ask your developer to make the address answer \u0022not found\u0022 (a 404), or forward it to a replacement."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page reads like an error page",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "redirect-chain",
+      "category": "redirects",
+      "severity": "warning",
+      "title": "Redirect chain",
+      "description": "This internal URL (linked from a crawled page, listed in a sitemap or the start URL) takes two or more redirects to reach its final URL. The detail gives the number of hops, and says when there are more than Googlebot follows.",
+      "fix": "Point each redirect straight at the final URL, and update links and sitemap entries to the final URL so they skip the redirects altogether.",
+      "why": "Every hop is another round trip before the page starts to load, which visitors on slow connections notice. Google follows up to 10 hops and processes only the final URL\u0027s content, and its crawl budget guide says long chains have a negative effect on crawling, which matters mainly on large sites. Two hops is rarely a problem in itself, but chains grow with each site change.",
+      "learnMore": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
+      "grouping": "relatedUrl",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Addresses that forward more than once",
+      "plainWhat": [
+        "Some addresses on your site forward visitors on two or more times before they reach the final address.",
+        "Each extra step is a wait before the page starts to load, and Google gives up after 10 steps.",
+        "Two steps do little harm, but the steps pile up each time the site changes."
+      ],
+      "plainFix": [
+        "Change the links on your pages, and the addresses in your sitemap, to the final address: the list shows it.",
+        "Ask your developer or hosting company to forward each old address straight to the final one, in one step (a \u0022301 redirect\u0022)."
+      ],
+      "fixer": "either",
+      "plainPassed": "No address forwards more than once",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "redirect-loop",
+      "category": "redirects",
+      "severity": "error",
+      "title": "Redirect loop",
+      "description": "Following this internal URL\u0027s redirects leads back to a URL already passed, so they never reach a page.",
+      "fix": "Follow the hops, find the rule that sends the URL back, and change it so the chain ends at a URL that returns 200.",
+      "why": "Browsers give up with an error (Chrome\u0027s ERR_TOO_MANY_REDIRECTS), so visitors never see the content and search engines have nothing to index. Loops usually come from two rules undoing each other, such as one adding a trailing slash and another removing it, or an HTTPS redirect on a server behind a CDN or proxy that can\u0027t see the visitor is already on HTTPS. Fix this first.",
+      "learnMore": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
+      "grouping": "none",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Addresses that forward in a circle",
+      "plainWhat": [
+        "Some addresses on your site forward visitors round in a circle, so they never reach a page.",
+        "The browser gives up and shows an error such as \u0022too many redirects\u0022, and search engines have nothing to list.",
+        "The usual cause is two forwarding rules that undo each other, such as one adding a slash to an address and one removing it."
+      ],
+      "plainFix": [
+        "Open one of the addresses in your browser to see the error for yourself.",
+        "Send the list to your developer or hosting company and ask them to find the two forwarding rules that undo each other.",
+        "Ask them to make each address end at a page that loads, then check the site again."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No address forwards in a circle",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "redirect-broken",
+      "category": "redirects",
+      "severity": "error",
+      "title": "Broken redirect",
+      "description": "This internal URL redirects, but the redirects end at a URL that returns a 4xx or 5xx error or doesn\u0027t respond, or the redirect has no usable Location header.",
+      "fix": "Point the redirect at a working replacement or fix the target. If there\u0027s no replacement, let the old URL return 404 or 410 rather than redirect to an error.",
+      "why": "Visitors land on an error instead of the page the redirect promised. Google ignores a redirecting URL\u0027s own content and processes only the final URL\u0027s, so there\u0027s nothing to index, and links to the old URL lead nowhere.",
+      "learnMore": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Addresses that forward to a dead end",
+      "plainWhat": [
+        "Some addresses on your site forward visitors on, but to an address that doesn\u0027t work, or to nowhere at all.",
+        "Visitors land on an error instead of the page they were promised, and search engines find nothing to list.",
+        "Every link to the old address, on your site and on others, leads to that error."
+      ],
+      "plainFix": [
+        "Look at where each address in the list ends up, and decide which working page should replace it.",
+        "Change the forwarding (the \u0022redirect\u0022) to point at that page, in your site\u0027s redirect settings or through your developer.",
+        "If nothing replaces it, remove the forwarding so the old address answers \u0022not found\u0022 (a 404), then remove the links to it."
+      ],
+      "fixer": "either",
+      "plainPassed": "No address forwards to a dead end",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "redirect-temporary",
+      "category": "redirects",
+      "severity": "notice",
+      "title": "Temporary redirect",
+      "description": "This internal URL redirects with a temporary status code: 302, 303 or 307.",
+      "fix": "If the move is permanent, change the redirect to 301 or 308; if it\u0027s temporary, leave it.",
+      "why": "Google doesn\u0027t treat a temporary redirect as a sign that the target should replace the old URL (at most it\u0027s a weak signal), so the old URL can stay in search results. That\u0027s correct when the move really is temporary, such as a short-term campaign page or a login redirect. For a permanent move it delays the switch to the new URL.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/301-redirects#overview-of-redirect-types",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Forwarding marked as temporary",
+      "plainWhat": [
+        "Some addresses forward visitors on with a signal that the move is only temporary.",
+        "Google may then keep the old address in its results, which delays the switch when the move is really for good.",
+        "That\u0027s right for a short-term move, such as a sale page or a login step, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Look at each address in the list and decide whether its move is for good.",
+        "If it\u0027s temporary, leave it.",
+        "If it\u0027s for good, ask your developer or hosting company to change it from temporary (a \u0022302 redirect\u0022) to permanent (a \u0022301 redirect\u0022)."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No forwarding is marked as temporary",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "redirect-downgrade",
+      "category": "redirects",
+      "severity": "error",
+      "title": "Redirect from HTTPS to HTTP",
+      "description": "This internal HTTPS URL redirects to an HTTP URL.",
+      "fix": "Redirect to the HTTPS version of the target. The cause is usually an old rule or a proxy that rewrites the scheme, so check the server and CDN redirect rules.",
+      "why": "Visitors who started on a secure URL end on an insecure one that browsers label \u0022Not secure\u0022. Google normally prefers HTTPS URLs as canonical, but says HTTPS-to-HTTP redirects make it prefer the HTTP version very strongly, which even HSTS can\u0027t override.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#prefer-https-over-http-for-canonical-urls",
+      "grouping": "relatedUrl",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Secure addresses that forward to an insecure one",
+      "plainWhat": [
+        "Some secure addresses on your site (starting \u0022https\u0022) forward visitors to an insecure one (starting \u0022http\u0022).",
+        "Browsers label the page they land on \u0022Not secure\u0022, and Google is then likely to list the insecure address.",
+        "The usual cause is an old forwarding rule that was never updated."
+      ],
+      "plainFix": [
+        "Open one of the addresses in your browser and look for \u0022Not secure\u0022 beside the address it ends on.",
+        "Send the list to your developer or hosting company and ask them to forward each one to the \u0022https\u0022 version of where it goes.",
+        "Check the site again once it\u0027s changed."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No secure address forwards to an insecure one",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "meta-refresh",
+      "category": "redirects",
+      "severity": "warning",
+      "title": "Meta refresh",
+      "description": "The page has a \u003Cmeta http-equiv=\u0022refresh\u0022\u003E tag that sends visitors to another URL or reloads the page, at once or after a delay. The detail gives the target and the delay.",
+      "fix": "Replace it with a 301 redirect on the server (or 302 if the move is temporary). If the page reloads itself to show new content, update it with script instead, or let visitors refresh.",
+      "why": "Google treats an instant meta refresh as a permanent redirect and a delayed one as temporary, but recommends a server-side redirect wherever you can set one up; that\u0027s faster too, as the browser doesn\u0027t load the page first. A timed redirect or reload also moves content away while people are reading, which WCAG counts as a failure. A refresh on old URLs where the server can\u0027t redirect is an acceptable fallback.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/301-redirects#metarefresh",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that move on or reload by themselves",
+      "plainWhat": [
+        "These pages send visitors to another address, or reload, by themselves: at once, or after a set time.",
+        "A timed move takes the page away while people are still reading.",
+        "It\u0027s also slower than forwarding done by the server, which is what Google recommends.",
+        "It\u0027s an acceptable fallback only where the server can\u0027t forward."
+      ],
+      "plainFix": [
+        "Open one of the pages and watch what happens: the list shows where each one sends visitors, and when.",
+        "Ask your developer to replace it (it\u0027s called a \u0022meta refresh\u0022) with forwarding done by the server (a \u0022301 redirect\u0022).",
+        "If a page reloads to show fresh content, ask for it to update in place instead, or leave visitors to reload."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page moves on or reloads by itself",
+      "plainOneFix": "That\u0027s almost certainly one line in your page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "broken-internal-links",
+      "category": "links",
+      "severity": "error",
+      "title": "Links to broken internal URLs",
+      "description": "The page links to internal URLs that return a 4xx or 5xx error or don\u0027t respond, directly or at the end of their redirects (or whose redirects loop). The detail counts them and says where the first goes wrong.",
+      "fix": "Update each link to the working URL, remove it, or restore the target. For a target that moved, link to its new address rather than to a redirect.",
+      "why": "Visitors who click hit an error, and search engines spend crawls on URLs they won\u0027t index, as Google doesn\u0027t index URLs that return 4xx. Links in a template, such as the menu or footer, repeat on every page, so fix those first.",
+      "learnMore": "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#4xx-client-errors",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Links that lead to broken pages",
+      "plainWhat": [
+        "Some of your pages have links that lead to an address on your site that doesn\u0027t work.",
+        "Visitors who click one land on an error page, and search engines waste their visit on it.",
+        "A link in a menu or footer repeats on every page, so one bad link can show up hundreds of times."
+      ],
+      "plainFix": [
+        "Open each page in the list in your site\u0027s editor and find the link.",
+        "Point it at the right page, or remove it.",
+        "If the same link is on most pages, it\u0027s in your menu, footer or page design: fix it there once."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every link between your pages leads to a working page",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "broken-external-links",
+      "category": "links",
+      "severity": "warning",
+      "title": "Links to broken external URLs",
+      "description": "The page links to URLs on other sites that return a 4xx or 5xx error or don\u0027t respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn\u0027s 999) don\u0027t count.",
+      "fix": "Update each link to the resource\u0027s current address or an archived copy, or remove it.",
+      "why": "Visitors who click hit a dead end, which makes the page look neglected and its references unreliable. Google doesn\u0027t document broken outbound links as a ranking factor, so this is about visitors. Some sites refuse crawlers in other ways, so open a few in a browser before editing.",
+      "learnMore": null,
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Links to other websites that don\u0027t work",
+      "plainWhat": [
+        "Some of your pages link to an address on another website that doesn\u0027t work.",
+        "Visitors who click one reach a dead end, which makes your page look out of date.",
+        "Some websites turn away automatic checks but work for people, so try a link yourself before you change it."
+      ],
+      "plainFix": [
+        "Click a few of the links in your browser to confirm they\u0027re really broken.",
+        "Open each page in your site\u0027s editor and point the link at the new address, if the page has moved.",
+        "Remove the link, or swap it for another source, if the page has gone for good."
+      ],
+      "fixer": "you",
+      "plainPassed": "No link to another website was found broken",
+      "plainOneFix": "That\u0027s almost certainly a link in your menu, footer or page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "links-to-redirects",
+      "category": "links",
+      "severity": "notice",
+      "title": "Links to internal redirects",
+      "description": "The page links to internal URLs that redirect (by HTTP or an instant meta refresh) to a working page.",
+      "fix": "Change the links to point straight at the final URL. Keep the redirects for bookmarks and other sites\u0027 links.",
+      "why": "Each click costs visitors an extra round trip before the page starts to load, and each crawl costs search engines an extra request. Google\u0027s advice is to link to the canonical URL within your site, which a redirecting URL isn\u0027t. A few are harmless; it\u0027s worth fixing in templates, where the same link repeats on every page.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#best-practices",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Links that go through a forwarding address",
+      "plainWhat": [
+        "Some links on your pages point at an address on your site that forwards visitors on to another one.",
+        "The link still works, but each click takes an extra step, and so does each visit from a search engine.",
+        "A few of these do no harm, so there\u0027s nothing to do unless the link is in a menu or footer that repeats on every page."
+      ],
+      "plainFix": [
+        "Open a page from the list in your site\u0027s editor and find the link: the list shows the address it points at.",
+        "Change the link to the address it ends up at.",
+        "Leave the forwarding itself in place, for bookmarks and for links from other websites."
+      ],
+      "fixer": "you",
+      "plainPassed": "No link between your pages goes through a forwarding address",
+      "plainOneFix": "That\u0027s almost certainly a link in your menu, footer or page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "internal-nofollow-links",
+      "category": "links",
+      "severity": "warning",
+      "title": "Nofollow internal links",
+      "description": "The page has rel=\u0022nofollow\u0022 on links to the site\u0027s own pages. Links to resources, such as images opened in a gallery lightbox, don\u0027t count.",
+      "fix": "Remove rel=\u0022nofollow\u0022 from internal links. Block URLs that shouldn\u0027t be crawled in robots.txt, or add noindex (without a robots.txt block) to pages that shouldn\u0027t appear in search.",
+      "why": "Google treats nofollow as a hint not to crawl the target through that link or use the link for ranking, so pages linked only this way may be found late or not at all. For links within your own site, Google\u0027s advice is to use robots.txt to keep URLs from being crawled, and noindex to keep pages out of search, instead of nofollow. Nofollow on login or basket links is common and mostly harmless, but achieves little.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/qualify-outbound-links#nofollow",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Links that search engines are told not to follow",
+      "plainWhat": [
+        "Some links between your own pages carry a note that tells search engines not to follow them.",
+        "Pages reached only through links like these (marked \u0022nofollow\u0022) may be found late by search engines, or not at all.",
+        "It\u0027s common on login and basket links, where it does little harm and little good."
+      ],
+      "plainFix": [
+        "Open a page from the list in your site\u0027s editor and find the link: the list shows where it leads.",
+        "Remove the \u0022nofollow\u0022 setting from the link, often a tick box in the link\u0027s options.",
+        "If the link is in your menu, footer or page design, ask your developer to take the setting off there, once.",
+        "If the aim was to keep a page out of search results, ask your developer to set that on the page itself (a \u0022noindex\u0022 setting)."
+      ],
+      "fixer": "either",
+      "plainPassed": "No link between your pages is marked not to be followed",
+      "plainOneFix": "That\u0027s almost certainly a link in your menu, footer or page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "empty-anchor-text",
+      "category": "links",
+      "severity": "notice",
+      "title": "Internal links without anchor text",
+      "description": "The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. Links in the \u003Chead\u003E, such as rel=\u0022amphtml\u0022, don\u0027t count.",
+      "fix": "Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.",
+      "why": "Screen readers announce these as just \u0022link\u0022 or read out the URL, so their users can\u0027t tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Links with nothing to read",
+      "plainWhat": [
+        "Some links on your pages have no words: usually an image or icon, such as a logo, with no description.",
+        "People who use a screen reader hear only \u0022link\u0022, and search engines learn nothing about the page it leads to.",
+        "A logo or icon in the page design is the usual cause, so one fix often clears every page.",
+        "Pages are still found either way, so it can wait."
+      ],
+      "plainFix": [
+        "Find the link on one of the pages: the list shows where it leads.",
+        "If it\u0027s an image, give the image a short description (its \u0022alt text\u0022), such as your site\u0027s name for a logo.",
+        "If it\u0027s an icon, ask your developer to add a label to the link (an \u0022aria-label\u0022)."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every link between your pages has words to read",
+      "plainOneFix": "That\u0027s almost certainly your logo, which sits in the part of the site every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "broken-fragment-links",
+      "category": "links",
+      "severity": "notice",
+      "title": "Links to missing page sections",
+      "description": "The page links to a #fragment, on itself or another crawled page, that matches no id or named anchor on the target page. App routes (#/, #!), app state (fragments with =, : or \u0026) and #top aren\u0027t checked.",
+      "fix": "Correct the fragment in the link, or add the matching id to the section on the target page; ids on headings are often lost when content is edited or regenerated.",
+      "why": "Visitors land at the top of the page instead of the section the link promised. Google generally ignores URL fragments, so this is about visitors only. Ids added by JavaScript after the page loads can make a working link look broken, so check it in a browser first.",
+      "learnMore": "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Links to a part of a page that isn\u0027t there",
+      "plainWhat": [
+        "Some links point to a part of a page, such as a heading further down, but that part can\u0027t be found.",
+        "Visitors land at the top of the page instead of the section the link promised.",
+        "Search engines still follow the link to the page, so only visitors are affected.",
+        "Some pages build their sections after loading, so if a link works in your browser there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Click the link on one of the pages and see whether it jumps to the right section.",
+        "If it doesn\u0027t, compare the part of the link after the \u0022#\u0022 with the name the section was given (its \u0022anchor\u0022 or \u0022id\u0022).",
+        "Make the two match exactly in your site\u0027s editor, or ask your developer to put the name back on the section."
+      ],
+      "fixer": "either",
+      "plainPassed": "No link points to a missing part of a page",
+      "plainOneFix": "That\u0027s almost certainly a link in your page design, such as \u0022Skip to content\u0022, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "orphan-page",
+      "category": "links",
+      "severity": "warning",
+      "title": "Orphan page in a sitemap",
+      "description": "This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It\u0027s only checked when the crawl finished.",
+      "fix": "If the page matters, link to it from relevant pages and from its section\u0027s listing. If it doesn\u0027t, remove it from the sitemap, then redirect or remove the page.",
+      "why": "Visitors can\u0027t reach it by browsing, and search engines only know it from the sitemap. Google uses links to find pages and judge their relevance, and says every page you care about should have a link from at least one other page on your site. Often it\u0027s an old page left in the sitemap, or one linked only from places a crawler can\u0027t follow, such as forms or scripts.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages in your sitemap that nothing links to",
+      "plainWhat": [
+        "No page on your site links to these pages: they were found only in your sitemap.",
+        "Visitors can\u0027t reach them by browsing, and Google relies on links to find pages and judge what they\u0027re about.",
+        "They\u0027re often old pages left in the sitemap (the file that lists your pages for search engines), or pages reached only through a form."
+      ],
+      "plainFix": [
+        "Decide, for each page, whether you still want it.",
+        "If you do, link to it from a page where it belongs, such as its category.",
+        "If you don\u0027t, remove it from the site and from the sitemap."
+      ],
+      "fixer": "you",
+      "plainPassed": "No page in the sitemap is left with no links to it",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "noindex-page",
+      "category": "indexability",
+      "severity": "notice",
+      "title": "Noindex page",
+      "description": "The page has a noindex (or none) directive in a robots meta tag or an X-Robots-Tag header, which asks search engines to keep it out of their results.",
+      "fix": "Check that it\u0027s intended. If the page should appear in search, remove the noindex from the meta tag or header, and make sure robots.txt doesn\u0027t block the URL, so search engines can see the change.",
+      "why": "Google drops a noindex page from its results entirely, even if other sites link to it. That\u0027s right for thank-you pages, internal search results, account pages and staging copies. On a page that should rank, a leftover noindex from a launch or a plugin setting is a common reason it vanishes from search.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages told to stay out of search results",
+      "plainWhat": [
+        "These pages carry an instruction that tells search engines to keep them out of search results.",
+        "Google drops such a page from its results completely (the instruction is called \u0022noindex\u0022).",
+        "That\u0027s right for thank-you, account and site-search pages, and then there\u0027s nothing to do.",
+        "It\u0027s a problem only on a page you want people to find, where it\u0027s often left over from when the site was built."
+      ],
+      "plainFix": [
+        "Look down the list for any page you want people to find in search.",
+        "Open that page in your site\u0027s editor and find a setting such as \u0022Hide this page from search engines\u0022, often under \u0022SEO\u0022.",
+        "Turn the setting off, or ask your developer to remove the \u0022noindex\u0022 from the page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page is told to stay out of search results",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "nofollow-page",
+      "category": "indexability",
+      "severity": "warning",
+      "title": "Nofollow page",
+      "description": "The page has a nofollow (or none) directive in a robots meta tag or an X-Robots-Tag header, which asks search engines not to follow any of its links.",
+      "fix": "Remove nofollow from the robots meta tag or X-Robots-Tag header. To qualify individual links to other sites, use rel=\u0022nofollow\u0022, \u0022sponsored\u0022 or \u0022ugc\u0022 on those links instead.",
+      "why": "Search engines that honour it won\u0027t use the page\u0027s links to discover the pages they point to, so pages linked only from here may go unfound. A page-wide nofollow is rarely intended on a normal page; it\u0027s usually left over from a staging setup or set by a plugin.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nofollow",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that tell search engines not to follow their links",
+      "plainWhat": [
+        "These pages tell search engines not to follow any of the links on them.",
+        "Pages that are linked only from here may never be found by search engines.",
+        "That\u0027s rarely meant: it\u0027s usually left over from when the site was built, or set by a plugin."
+      ],
+      "plainFix": [
+        "Open one of the pages in your site\u0027s editor and find a setting about following links, often under \u0022SEO\u0022 or \u0022Advanced\u0022.",
+        "Set it to follow links, or ask your developer to remove the \u0022nofollow\u0022 setting from the page.",
+        "If only one or two links shouldn\u0027t be followed, ask your developer to mark those links instead of the whole page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page tells search engines not to follow its links",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "blocked-by-robots",
+      "category": "indexability",
+      "severity": "notice",
+      "title": "Blocked by robots.txt",
+      "description": "The crawler didn\u0027t fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn\u0027t be read, which crawlers treat as disallowing everything: the detail then says so. Not checked on a crawl that was told to ignore robots.txt.",
+      "fix": "If the URL should be crawled, change or remove the Disallow rule that matches it. If it\u0027s meant to be blocked, avoid linking to it from crawlable pages where you can, and if it must stay out of search, allow crawling and use noindex instead.",
+      "why": "Search engines that obey robots.txt can\u0027t read the page, so its content, links and any noindex on it go unseen, yet Google can still index the URL without its content, with no description, if links point to it. Blocking is right for URLs with no search value, such as baskets, internal search or filter combinations. It\u0027s a problem when a broad rule catches pages you want in search, or the CSS and JavaScript that pages need to render.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/robots/intro",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Addresses that search engines are told not to visit",
+      "plainWhat": [
+        "Your site\u0027s rules file for search engines puts these addresses off limits, so the check didn\u0027t read them.",
+        "Search engines can\u0027t see what\u0027s on them, though Google may still list the bare address if other pages link to it.",
+        "That\u0027s right for baskets and site searches, and then there\u0027s nothing to do.",
+        "It\u0027s a problem if the rule catches pages you want found."
+      ],
+      "plainFix": [
+        "Look down the list for any page you want people to find, and for files ending in .css or .js, which pages need to display.",
+        "If there are none, leave the rules as they are.",
+        "If there are, ask your developer to change the rule that covers them in the rules file (its \u0022robots.txt\u0022).",
+        "If the list says the rules file couldn\u0027t be read, fix that first: it\u0027s listed as a problem of its own."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No address is off limits to search engines",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "snippet-blocked",
+      "category": "indexability",
+      "severity": "notice",
+      "title": "Search snippet disabled",
+      "description": "This indexable page has a nosnippet or max-snippet:0 directive in a robots meta tag or X-Robots-Tag header.",
+      "fix": "Remove the directive if it isn\u0027t intended. To keep only part of the page out of snippets, use the data-nosnippet attribute on that part, or a max-snippet length instead of 0.",
+      "why": "Google shows the page in results without a text snippet or video preview, and doesn\u0027t use its content as direct input for AI Overviews or AI Mode. That can be intended, for example for sensitive content, but a result with no description tells searchers less about the page.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nosnippet",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages set to show no text in search results",
+      "plainWhat": [
+        "These pages tell search engines to show no text from the page under its title in search results.",
+        "The result is a bare title and address, which tells searchers less, and Google won\u0027t quote the page in its AI answers.",
+        "That can be deliberate, for private or paid-for content, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Search Google for one of the pages and see whether its result shows any text under the title.",
+        "Decide whether you meant these pages to appear that way.",
+        "If not, ask your developer to remove the setting the list names, such as \u0022nosnippet\u0022, from the pages."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page blocks its text from search results",
+      "plainOneFix": "These pages most likely get it from one setting, in your page design or SEO plugin.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "robots-txt-unreachable",
+      "category": "indexability",
+      "severity": "error",
+      "title": "robots.txt unavailable",
+      "description": "robots.txt on the site\u0027s main origin (the start URL\u0027s, or the home page\u0027s after redirects) returned a 5xx error or 429, or didn\u0027t respond. Reported once, on the home page. Not checked on a crawl told to ignore robots.txt that never read it.",
+      "fix": "Make /robots.txt answer quickly with 200 and your rules, or with 404 if you don\u0027t need any. Check that the firewall, CDN or rate limiting doesn\u0027t treat requests for it differently from pages.",
+      "why": "Google treats a robots.txt it can\u0027t fetch as a server error: it stops crawling the whole site for the first 12 hours, then uses its last good copy for up to 30 days (or assumes no restrictions if it has none). If it\u0027s still failing after that and the site is otherwise up, Google acts as if there were no robots.txt. Until it\u0027s fixed, new and changed pages aren\u0027t crawled, so fix this first.",
+      "learnMore": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#http-status-codes",
+      "grouping": "none",
+      "subject": "url",
+      "siteWide": true,
+      "reportedOnce": true,
+      "plainTitle": "Search engines can\u0027t read your site\u0027s rules file",
+      "plainWhat": [
+        "The file that tells search engines where they may go on your site (its \u0022robots.txt\u0022) answers with an error.",
+        "Google stops visiting the whole site when that happens, so new and changed pages don\u0027t reach search results.",
+        "This is one fault for the whole site, and the first thing to fix."
+      ],
+      "plainFix": [
+        "Open your site\u0027s address followed by /robots.txt in a browser, to see whether it loads for you.",
+        "Send this to your developer or hosting company today: the file must answer normally, or with \u0022not found\u0022 if you don\u0027t need one.",
+        "Ask them to make sure the firewall or security service isn\u0027t turning away requests for it.",
+        "Check the site again once it\u0027s fixed."
+      ],
+      "fixer": "developer",
+      "plainPassed": "The rules file for search engines isn\u0027t returning an error",
+      "plainOneFix": null,
+      "plainLooksFor": "A rules file that search engines can\u0027t read"
+    },
+    {
+      "id": "robots-txt-unreachable-other-origin",
+      "category": "indexability",
+      "severity": "warning",
+      "title": "robots.txt unavailable on another of the site\u0027s origins",
+      "description": "robots.txt on another of the site\u0027s origins, such as a subdomain or the http:// version, returned a 5xx error or 429, or didn\u0027t respond; the detail names the origin. Origins reached only by the crawler\u0027s own probe of the site\u0027s other versions aren\u0027t included. Not checked on a crawl told to ignore robots.txt, which doesn\u0027t read it there.",
+      "fix": "Make robots.txt on that origin return 200, or 404 if it needs no rules. If the origin shouldn\u0027t exist, stop linking to it.",
+      "why": "Each origin (scheme, host and port) has its own robots.txt, so only that origin is affected: Google stops crawling it for 12 hours, then relies on its last good copy for up to 30 days. The main site carries on as normal. It matters if pages or files you want in search live there, or if that origin\u0027s redirects to the main site haven\u0027t been picked up yet.",
+      "learnMore": "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#file-location-and-range-of-validity",
+      "grouping": "none",
+      "subject": "url",
+      "siteWide": true,
+      "reportedOnce": true,
+      "plainTitle": "The rules file on another part of your site can\u0027t be read",
+      "plainWhat": [
+        "The rules file for search engines answers with an error on another part of your site, such as shop.example.com.",
+        "Google stops visiting that part of the site when that happens, while your main site carries on as normal.",
+        "It matters only if that part holds pages or files you want people to find."
+      ],
+      "plainFix": [
+        "Open the address the list names in your browser, to see whether the file loads for you.",
+        "Send it to your developer or hosting company: the file (a \u0022robots.txt\u0022) must answer normally, or with \u0022not found\u0022 if it isn\u0027t needed.",
+        "If that part of the site shouldn\u0027t exist, remove the links to it."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No other part of the site has a rules file that fails",
+      "plainOneFix": null,
+      "plainLooksFor": "A rules file that fails on another part of your site"
+    },
+    {
+      "id": "robots-txt-missing",
+      "category": "indexability",
+      "severity": "notice",
+      "title": "robots.txt missing or refused",
+      "description": "robots.txt returned a 4xx error other than 429 (usually 404, sometimes 401 or 403 from a firewall), or redirected too many times, on the main origin or another of the site\u0027s origins. Reported on the home page; the detail lists the origins. A crawl told to ignore robots.txt judges the start URL\u0027s origin alone, and not at all when it never read robots.txt.",
+      "fix": "Add a robots.txt at the origin\u0027s root, even if it only holds a Sitemap: line with your XML sitemap\u0027s full URL. If a firewall answers it with 401 or 403, let it through.",
+      "why": "Crawling isn\u0027t affected: Google treats a missing robots.txt as having no restrictions, so everything can be crawled. What\u0027s missing is a Sitemap: line, which Google, Bing and other search engines read to find your sitemaps, and a way to keep crawlers out of URLs with no search value should you need one. A 401 or 403 meant to keep crawlers out has the opposite effect.",
+      "learnMore": "https://developers.google.com/crawling/docs/robots-txt/create-robots-txt",
+      "grouping": "none",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "A rules file for search engines is missing",
+      "plainWhat": [
+        "Search engines that ask for your site\u0027s rules file (a \u0022robots.txt\u0022) get \u0022not found\u0022, or are refused.",
+        "They take that to mean they may visit everything, so nothing is held back.",
+        "What you miss is a place to tell them where your sitemap is, and to keep them out of pages such as baskets.",
+        "If you need neither, there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Open the address the list names in a browser, to see what answers.",
+        "Look in your site\u0027s SEO settings or plugin for a \u0022robots.txt\u0022 option: most can create the file.",
+        "Ask your developer to add one that names your sitemap, if your site has no such option.",
+        "Ask your hosting company to let requests for the file through, if a firewall is refusing them."
+      ],
+      "fixer": "either",
+      "plainPassed": "The site isn\u0027t missing its rules file for search engines",
+      "plainOneFix": null,
+      "plainLooksFor": "A missing rules file for search engines"
+    },
+    {
+      "id": "site-hidden-from-search",
+      "category": "indexability",
+      "severity": "error",
+      "title": "Most pages hidden from search",
+      "description": "The home page is noindex, and so are more than half of the site\u0027s pages, so most of the site can\u0027t appear in search results. The home page is the page the start URL leads to, after its redirects; while it can be indexed, nothing is reported, however many other pages are noindex. The detail gives the numbers, as in \u0022212 of 240 pages are noindex\u0022: the noindex pages, out of the pages the crawl read less the canonicalised ones. A canonicalised page (one that isn\u0027t noindex and whose canonical names another URL) is a variant of the page it names, so it isn\u0027t in the total. A canonical that leads back to the page, to a broken URL, or to the same page on another version of the site (www or not, http or https) doesn\u0027t make a variant. Not checked on a crawl that didn\u0027t start at the site\u0027s root. Reported once, on the home page.",
+      "fix": "Find what sets noindex on every page: a \u0022discourage search engines\u0022 setting or a staging configuration left on, a robots meta tag in the template, or an X-Robots-Tag header from the server or CDN. Remove it from the pages that should appear in search, then crawl again.",
+      "why": "Google drops a noindex page from its results, so most of this site can\u0027t be found in search. It\u0027s nearly always a launch mistake: a staging site\u0027s noindex or a \u0022discourage search engines\u0022 setting left on. If the pages are meant to stay out, as on a private site or a staging copy, check the noindex pages and ignore this.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": true,
+      "reportedOnce": true,
+      "plainTitle": "Your site hides most of its pages from search",
+      "plainWhat": [
+        "Your home page and more than half of your pages tell search engines to keep them out of search results.",
+        "Those pages can\u0027t be found through Google, however good they are.",
+        "It\u0027s often one setting left on from when the site was being built, so one change may fix it.",
+        "This is one fault for the whole site, and the first thing to fix."
+      ],
+      "plainFix": [
+        "Look in your site\u0027s settings for an option such as \u0022Discourage search engines\u0022 or \u0022Hide site from search\u0022, and turn it off.",
+        "If there\u0027s no such option, send this to your developer: the list says how many pages are hidden, and how.",
+        "Ask them to remove the \u0022noindex\u0022 setting.",
+        "Check the site again once it\u0027s changed."
+      ],
+      "fixer": "either",
+      "plainPassed": "The site as a whole isn\u0027t hidden from search",
+      "plainOneFix": null,
+      "plainLooksFor": "A site that hides its home page and most pages from search"
+    },
+    {
+      "id": "canonicalised-page",
+      "category": "canonicals",
+      "severity": "notice",
+      "title": "Canonicalised page",
+      "description": "The page\u0027s canonical (in the \u003Chead\u003E or an HTTP Link header) names a different URL, so the page asks to be treated as a duplicate of it. Canonicals that lead back to this page or to a broken URL don\u0027t count.",
+      "fix": "Check the canonical is intended. If this page should rank, make its canonical point to itself; if it\u0027s a true duplicate, link to the canonical URL rather than this one within the site.",
+      "why": "Google treats a canonical as a strong hint, not a rule: it usually indexes the named URL and folds this page\u0027s signals into it, but can choose differently if other signals disagree. That\u0027s right for parameter, sorting and print versions of a page. It\u0027s a problem when the page has its own content and should rank, as when a template points every canonical at the home page or the first page of a series.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that name another page as the main version",
+      "plainWhat": [
+        "These pages tell search engines that another page is the main version of them (a \u0022canonical\u0022 link).",
+        "Google then shows that other page instead, which is right for copies, such as page 2 of a list or a print version.",
+        "It\u0027s a problem only if the page has its own content and should appear in search itself."
+      ],
+      "plainFix": [
+        "Look at each page and the page it points to, and decide whether they\u0027re really the same thing.",
+        "If they are, there\u0027s nothing to do.",
+        "If this page should appear in search on its own, ask your developer to point its canonical link at its own address."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page names another page as the main version",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "canonical-missing",
+      "category": "canonicals",
+      "severity": "notice",
+      "title": "Missing canonical",
+      "description": "This indexable page has no canonical, neither a \u003Clink rel=\u0022canonical\u0022\u003E in the \u003Chead\u003E nor an HTTP Link header.",
+      "fix": "Add \u003Clink rel=\u0022canonical\u0022 href=\u0022...\u0022\u003E to the \u003Chead\u003E with the page\u0027s own absolute URL; most CMSs and SEO plugins can do this for every page.",
+      "why": "Google doesn\u0027t require one: without it, Google picks the best URL itself when the same content is reachable at several addresses, such as with tracking parameters or with and without a trailing slash. A canonical pointing to the page itself makes your preference explicit, and Google recommends one on canonical pages. Low priority on its own, but it helps most on sites with many URL variants.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that don\u0027t name their main address",
+      "plainWhat": [
+        "These pages don\u0027t say which address is their main one (they have no \u0022canonical\u0022 link).",
+        "The same page can often be reached at several addresses, and without this Google picks one itself.",
+        "Google usually picks well, so there\u0027s nothing to do unless each page can be reached at many addresses."
+      ],
+      "plainFix": [
+        "See whether your site\u0027s SEO settings or plugin can add a canonical link to every page: most can.",
+        "If not, ask your developer to add one to the page design, pointing each page at its own address."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page names its main address",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "canonical-multiple",
+      "category": "canonicals",
+      "severity": "warning",
+      "title": "Conflicting canonicals",
+      "description": "The page declares two or more different canonical URLs, in the \u003Chead\u003E, the HTTP Link header, or across both.",
+      "fix": "Keep one canonical: find which plugin, theme or server rule adds each and turn off the wrong one. A Link header usually comes from the server, CDN or CMS, not the template.",
+      "why": "Google has said that when a page specifies more than one canonical, it will likely ignore all of them, so the page effectively has none and Google chooses on its own. It usually comes from two systems, such as a theme and an SEO plugin, or the HTML and a server or CDN header, each adding its own.",
+      "learnMore": "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that name more than one main address",
+      "plainWhat": [
+        "These pages name two or more different addresses as their main one (they have conflicting \u0022canonical\u0022 links).",
+        "Google is likely to ignore them all and choose the main address itself.",
+        "It usually means two parts of your site each add one, such as the page design and an SEO plugin."
+      ],
+      "plainFix": [
+        "Check whether your site has two SEO plugins, or a page design with SEO settings of its own, both switched on.",
+        "Turn one of them off, so each page names a single main address.",
+        "If you can\u0027t find a second source, ask your developer what else adds a canonical link: it can also come from the server."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page names more than one main address",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "canonical-broken",
+      "category": "canonicals",
+      "severity": "error",
+      "title": "Canonical points to a broken URL",
+      "description": "The page\u0027s canonical names a URL that returns a 4xx or 5xx error or doesn\u0027t respond, directly or at the end of its redirects (or its redirects loop).",
+      "fix": "Point the canonical at the working URL you want indexed, usually this page\u0027s own URL, and check templates that build canonicals from a hard-coded host or path.",
+      "why": "A canonical has to name a working page: Google\u0027s own checklist is to make sure the target exists and isn\u0027t an error or soft 404. One that leads to an error can\u0027t take this page\u0027s place, so expect search engines to disregard it and judge this page on its own. The cause is usually a stale URL, such as a staging host, an old URL structure or a mistyped path.",
+      "learnMore": "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that name a broken address as their main one",
+      "plainWhat": [
+        "These pages name a main address that doesn\u0027t work (their \u0022canonical\u0022 link leads to an error).",
+        "Search engines can\u0027t show an address that fails, so the instruction does nothing and they choose for themselves.",
+        "The cause is usually an out-of-date address, such as one from a test copy of the site."
+      ],
+      "plainFix": [
+        "Open the main address the list shows for one of the pages in your browser, to see the error.",
+        "If your site\u0027s editor has a \u0022canonical\u0022 box for the page, often under \u0022SEO\u0022, put the page\u0027s own address in it.",
+        "If the same wrong address is on many pages, ask your developer to correct it in the page design."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page names a broken address as its main one",
+      "plainOneFix": "That\u0027s almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "canonical-to-redirect",
+      "category": "canonicals",
+      "severity": "warning",
+      "title": "Canonical points to a redirect",
+      "description": "The page\u0027s canonical names a URL that redirects. The detail gives the URL the redirects end at, or says that they lead back to this page. Where the crawl didn\u0027t check that URL, or was refused there, the detail says so: it is where the redirects lead, and may not be where they end.",
+      "fix": "Change the canonical to the redirect\u0027s final URL, which the detail gives; when the redirect leads back here, that\u0027s this page\u0027s own URL. If the detail says the URL wasn\u0027t checked, or was refused, open it first and use the address you end up at: it may redirect again.",
+      "why": "A canonical should name the final URL you want indexed. Naming a redirect sends search engines two signals that disagree: the canonical says to index the named URL, and its redirect says to index another. When the redirect leads back to this page, such as a canonical to /page on /page/ when /page redirects to /page/, this page most likely stays the indexed one, but the canonical is still wrong.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that name a forwarding address as their main one",
+      "plainWhat": [
+        "These pages name a main address (a \u0022canonical\u0022 link) that forwards visitors on to another address.",
+        "That gives search engines two answers to one question, and they may not pick the one you want.",
+        "Often it forwards straight back to the page itself, which does little harm but is still worth tidying."
+      ],
+      "plainFix": [
+        "Look at where each main address in the list ends up: the list names the address, and says when it couldn\u0027t be checked.",
+        "Put that final address in the \u0022canonical\u0022 box of your site\u0027s editor, often under \u0022SEO\u0022, if it has one.",
+        "Ask your developer to correct it in the page design if the same thing shows on many pages."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page names a forwarding address as its main one",
+      "plainOneFix": "That\u0027s almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "canonical-to-non-indexable",
+      "category": "canonicals",
+      "severity": "warning",
+      "title": "Canonical points to a non-indexable page",
+      "description": "The page\u0027s canonical names another URL on the site that can\u0027t be indexed itself: it\u0027s noindex, canonicalised to yet another URL, or blocked by robots.txt or a firewall.",
+      "fix": "Point the canonical at the final, indexable URL. If the target isn\u0027t meant to be indexed, this page probably shouldn\u0027t name it as canonical.",
+      "why": "A canonical asks search engines to index the named URL instead of this one, so if that URL is noindex, blocked or points elsewhere in turn, the signals contradict each other and the outcome is up to Google. Google\u0027s own checklist includes making sure the canonical target isn\u0027t noindex. Canonical chains (A to B to C) usually come from content that moved more than once.",
+      "learnMore": "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that name a main address search engines can\u0027t show",
+      "plainWhat": [
+        "These pages name a main address (a \u0022canonical\u0022 link) that can\u0027t itself appear in search results.",
+        "The page says \u0022show that one instead\u0022, while that one says \u0022don\u0027t show me\u0022, so the outcome is left to Google.",
+        "The list says what holds each one back, such as an instruction to stay out of search."
+      ],
+      "plainFix": [
+        "Look at the main address the list shows for each page, and why it can\u0027t appear in search.",
+        "If that address should appear in search, ask your developer to remove what holds it back.",
+        "If it shouldn\u0027t, ask them to point the page\u0027s canonical link at its own address, or at one that can appear."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page names a main address that search can\u0027t show",
+      "plainOneFix": "That\u0027s almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "canonical-outside-head",
+      "category": "canonicals",
+      "severity": "warning",
+      "title": "Canonical outside \u003Chead\u003E",
+      "description": "The page\u0027s only canonical links are in the \u003Cbody\u003E as browsers parse it, and there\u0027s no canonical HTTP Link header.",
+      "fix": "Move the canonical into the \u003Chead\u003E, as early as you can, and remove the element that ends the head early (or move it into the body).",
+      "why": "Google only accepts rel=\u0022canonical\u0022 in the \u003Chead\u003E, so the page has no canonical in effect. Often the tag is in the head in the source, but an element that doesn\u0027t belong there, such as an \u003Cimg\u003E, a \u003Cdiv\u003E or stray text from a script or plugin, ends the head early and pushes everything after it into the body. The same break can push other head tags, such as hreflang, out too.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Main address written in the wrong part of the page",
+      "plainWhat": [
+        "These pages name their main address (a \u0022canonical\u0022 link) in a part of the page where search engines ignore it.",
+        "So the pages have no main address in effect, and Google chooses one itself.",
+        "It usually means something added near the top of the page\u0027s code, by a plugin or script, has pushed it out of place."
+      ],
+      "plainFix": [
+        "Note any plugin, tracking code or banner added to the site lately, as one of them may be the cause.",
+        "Send the list to your developer: the canonical link must sit in the page\u0027s \u0022head\u0022 section.",
+        "Ask them to move or remove whatever ends that section early."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No main address is written in the wrong part of the page",
+      "plainOneFix": null,
+      "plainLooksFor": "Main addresses written in the wrong part of the page"
+    },
+    {
+      "id": "canonical-relative",
+      "category": "canonicals",
+      "severity": "notice",
+      "title": "Relative canonical URL",
+      "description": "The canonical in the HTML is a relative URL, such as /page or //example.com/page, instead of a full URL with https:// and the host.",
+      "fix": "Write the canonical as a full URL, such as https://www.example.com/page.",
+      "why": "Google supports relative canonicals, but recommends absolute URLs because relative ones can cause problems later, for example when a testing copy of the site gets crawled and its canonicals point at itself. A mistyped relative path (page instead of /page) also resolves against the current folder. Low priority if the canonicals resolve to the right URLs.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Main address written as a partial address",
+      "plainWhat": [
+        "These pages give their main address in a short form, such as /page, without \u0022https://\u0022 and your site\u0027s name.",
+        "Google can read the short form, but recommends the full address.",
+        "A short form can end up pointing at the wrong place, for example on a test copy of the site.",
+        "If your main addresses already lead to the right pages, there\u0027s nothing to do now."
+      ],
+      "plainFix": [
+        "Send the list to your developer when they next work on the site: it isn\u0027t urgent.",
+        "Ask them to write each page\u0027s main address (its \u0022canonical\u0022 link) in full, starting with \u0022https://\u0022 and your site\u0027s name."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No main address is written as a partial address",
+      "plainOneFix": "That\u0027s almost certainly how your page design or SEO plugin writes the main address on every page.",
+      "plainLooksFor": "Main addresses written as partial addresses"
+    },
+    {
+      "id": "canonical-invalid",
+      "category": "canonicals",
+      "severity": "warning",
+      "title": "Invalid canonical URL",
+      "description": "A canonical in the \u003Chead\u003E or an HTTP Link header has a value that isn\u0027t a valid http or https URL, such as an empty href, a template placeholder or a malformed address.",
+      "fix": "Fix the template so the canonical holds the page\u0027s absolute URL, or remove the broken tag.",
+      "why": "Search engines can\u0027t resolve it, so it\u0027s ignored: if it\u0027s the page\u0027s only canonical, the page has none in effect. It\u0027s usually a template variable that didn\u0027t fill in.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages whose main address isn\u0027t a real web address",
+      "plainWhat": [
+        "These pages name a main address (a \u0022canonical\u0022 link) that is empty or isn\u0027t a real web address.",
+        "Search engines ignore it, which can leave the page with no main address at all.",
+        "It\u0027s usually a gap in the page design that was never filled in."
+      ],
+      "plainFix": [
+        "Look at what the list shows for each page: it says whether the address is empty or badly formed.",
+        "Send the list to your developer and ask them to make each page name its own full address, or remove the broken line."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page names a main address that isn\u0027t a real address",
+      "plainOneFix": "That\u0027s almost certainly a gap in your page design, which writes the same mistake on every page.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "noindex-with-canonical",
+      "category": "canonicals",
+      "severity": "warning",
+      "title": "Noindex page with a canonical to another URL",
+      "description": "The page is noindex and its canonical names a different URL, one that doesn\u0027t lead back to this page or to a broken URL.",
+      "fix": "If the page duplicates the other URL, remove the noindex and keep the canonical. If it should stay out of search, keep the noindex and make the canonical point to the page itself, or remove it.",
+      "why": "The two signals say different things: noindex asks for the page to be dropped from search, while the canonical says it\u0027s a duplicate whose signals belong to the other URL. Google hasn\u0027t documented which wins, and its guidance is to use rel=\u0022canonical\u0022, not noindex, to choose between duplicates on one site, since noindex removes the page from search entirely.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#best-practices",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that give search engines two opposite instructions",
+      "plainWhat": [
+        "These pages tell search engines to keep them out of search, and also name another page as their main version.",
+        "One instruction says \u0022drop this page\u0022, the other says \u0022treat it as a copy of that one\u0022, and Google doesn\u0027t say which wins.",
+        "Each page needs one or the other, not both."
+      ],
+      "plainFix": [
+        "Decide, for each page, whether it\u0027s a copy of the page it names or a page that should simply stay out of search.",
+        "If it\u0027s a copy, ask your developer to remove the instruction to stay out of search (the \u0022noindex\u0022).",
+        "If it should stay out of search, ask them to point its main address (its \u0022canonical\u0022 link) at the page itself."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page gives search engines opposite instructions",
+      "plainOneFix": "That\u0027s almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "sitemap-non-indexable",
+      "category": "sitemaps",
+      "severity": "warning",
+      "title": "Non-indexable URL in sitemap",
+      "description": "A sitemap lists this internal URL, but it can\u0027t be indexed as listed: it redirects, returns a 4xx or 5xx error, is blocked by robots.txt, is noindex or names another URL as canonical. URLs the crawler couldn\u0027t check, because of timeouts or firewall blocks, aren\u0027t included.",
+      "fix": "Remove the URL from the sitemap, or replace it with the final, indexable URL, such as the redirect target or the canonical. If the sitemap is generated, fix its filter rather than editing the file.",
+      "why": "A sitemap should list the URLs you want in search results, and Google treats every URL in it as a suggested canonical. Listing URLs that redirect, fail or ask not to be indexed contradicts your other signals and spends crawls on URLs that won\u0027t be indexed. It\u0027s usually a sitemap generator that doesn\u0027t filter by status, noindex or canonical.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#general-guidelines",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Sitemap addresses that can\u0027t appear in search",
+      "plainWhat": [
+        "Your sitemap, the file that lists your pages for search engines, includes addresses that can\u0027t appear in search.",
+        "Each one forwards elsewhere, fails, or is kept out of search some other way: the list says which.",
+        "A sitemap should hold only the addresses you want found, and these waste search engines\u0027 visits."
+      ],
+      "plainFix": [
+        "Look at the reason the list gives for each address.",
+        "If the address should be found, fix that reason: it\u0027s often listed as a problem of its own.",
+        "If it shouldn\u0027t, take it out of the sitemap, or list the address it forwards to instead.",
+        "Ask your developer to change how the sitemap is built if your site makes it for you and has no setting for this."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap lists an address that can\u0027t appear in search",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "not-in-sitemap",
+      "category": "sitemaps",
+      "severity": "notice",
+      "title": "Indexable page not in a sitemap",
+      "description": "This indexable page isn\u0027t in any sitemap the crawl read. It\u0027s only checked when the crawl finished and every declared sitemap could be read.",
+      "fix": "Add the page to your XML sitemap, ideally by making sure the generator includes every indexable page type.",
+      "why": "Search engines can still find it through links, and on a small, well-linked site that\u0027s enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages missing from your sitemap",
+      "plainWhat": [
+        "These pages can appear in search, but aren\u0027t in your sitemap: the file that lists your pages for search engines.",
+        "Search engines can still find them through links, which is enough on a small site.",
+        "On a big or fast-changing site, a full sitemap helps new pages get found sooner.",
+        "Leaving out some kinds of page on purpose is fine, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Look down the list for pages you want found quickly, such as new products or articles.",
+        "Find the sitemap options in your site\u0027s SEO settings or plugin, and include the kinds of page that are missing.",
+        "Ask your developer to add them if your sitemap is built another way."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page is missing from the sitemap",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "sitemap-error",
+      "category": "sitemaps",
+      "severity": "error",
+      "title": "Sitemap can\u0027t be read",
+      "description": "A sitemap listed in robots.txt, a sitemap index or the crawl settings returned an error (including 404), didn\u0027t respond, or isn\u0027t valid sitemap XML. Reported on the home page; the detail lists up to three, with their errors.",
+      "fix": "Open the sitemap URL to see the error, then fix the file or the server: it must be valid XML, at most 50 MB uncompressed and 50,000 URLs. If the sitemap no longer exists, remove its reference from robots.txt or the sitemap index.",
+      "why": "Search engines get no URLs from a sitemap they can\u0027t fetch or parse: Google keeps retrying for a few days, then stops trying that URL. Well-linked pages are still found, but what the sitemap adds, such as quicker discovery of new and deep pages, is lost. A referenced sitemap that returns 404 is usually stale and only needs removing.",
+      "learnMore": "https://support.google.com/webmasters/answer/7451001",
+      "grouping": "none",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "A sitemap on your site can\u0027t be read",
+      "plainWhat": [
+        "A sitemap your site points search engines to can\u0027t be read: it\u0027s missing, fails to load, or has mistakes in it.",
+        "A sitemap is a file that lists your pages for search engines, and they get nothing from one they can\u0027t read.",
+        "Pages with links to them are still found, but new pages may take longer to show up in search."
+      ],
+      "plainFix": [
+        "Open the sitemap\u0027s address from the list in your browser, to see the error.",
+        "If your site\u0027s SEO settings or plugin make the sitemap, use them to build it again.",
+        "If the sitemap no longer exists, ask your developer to remove the line that names it from your rules file (its \u0022robots.txt\u0022).",
+        "Send the error to your developer otherwise: the file must load and be a valid sitemap of at most 50,000 addresses."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap fails to load or has mistakes in it",
+      "plainOneFix": null,
+      "plainLooksFor": "A sitemap that can\u0027t be read"
+    },
+    {
+      "id": "sitemap-missing",
+      "category": "sitemaps",
+      "severity": "notice",
+      "title": "No XML sitemap found",
+      "description": "The crawl found no sitemap: none is listed in robots.txt or the crawl settings, and there\u0027s none at /sitemap.xml. Reported on the home page, only when sitemap discovery was on and the crawl finished.",
+      "fix": "Publish an XML sitemap of your indexable pages (most CMSs can generate one) and add a Sitemap: line with its full URL to robots.txt.",
+      "why": "A sitemap isn\u0027t required: Google finds pages through links, and a small, well-linked site may not need one. It helps most on large sites, new sites with few links from elsewhere, and sites with pages that links don\u0027t reach. A sitemap at another path that\u0027s only submitted in Search Console isn\u0027t visible to this crawl, so this may not be a real gap.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
+      "grouping": "none",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "No sitemap found",
+      "plainWhat": [
+        "The check found no sitemap: a file that lists your pages for search engines.",
+        "A small site whose pages all link to each other can manage without one, as Google finds pages by following links.",
+        "It helps most on big or new sites.",
+        "If you gave your sitemap straight to Google, in Search Console, it won\u0027t show here, and there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Look in your site\u0027s SEO settings or plugin: most can create a sitemap with one switch.",
+        "Ask your developer to add its address to the site\u0027s rules file for search engines (its \u0022robots.txt\u0022), so they all find it.",
+        "Check the site again: two more checks can then run."
+      ],
+      "fixer": "either",
+      "plainPassed": "A sitemap was found, or the site names one",
+      "plainOneFix": null,
+      "plainLooksFor": "A missing sitemap"
+    },
+    {
+      "id": "sitemap-url-other-host",
+      "category": "sitemaps",
+      "severity": "warning",
+      "title": "Sitemap lists a URL on another host",
+      "description": "A sitemap lists this URL, but it\u0027s on a different host from the sitemap: another site, or another of this site\u0027s hosts, such as www in a sitemap on the bare domain. The detail says how the URL answered.",
+      "fix": "List the URL as it is on the sitemap\u0027s own host now (usually where it redirects), or remove the entry. For a sitemap that deliberately covers several hosts, set up cross-submission through Search Console or robots.txt.",
+      "why": "The sitemaps protocol only accepts URLs on the sitemap\u0027s own host and drops the rest, so the page it was meant for isn\u0027t submitted. Google makes an exception for cross-submission: when every site involved is verified in Search Console and the sitemap is submitted there, or the other host\u0027s robots.txt references the sitemap. It\u0027s common after a move to or from www.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#cross-submit",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Sitemap addresses outside its own website",
+      "plainWhat": [
+        "Your sitemap lists addresses on another website, or on another version of your own, such as with or without \u0022www\u0022.",
+        "Search engines drop those entries, so the pages they were meant for aren\u0027t put forward.",
+        "It\u0027s common after a site moves to or from \u0022www\u0022."
+      ],
+      "plainFix": [
+        "Compare the start of the addresses in the list with the start of your sitemap\u0027s own address.",
+        "Build the sitemap again from your site\u0027s SEO settings or plugin, so it lists each page at its current address.",
+        "Ask your developer to correct the web address your site is set to, if the sitemap keeps using the old one.",
+        "Take out any address that belongs to another website altogether."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap lists an address outside its own website",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "title-missing",
+      "category": "titles",
+      "severity": "error",
+      "title": "Missing title",
+      "description": "This indexable page has no \u003Ctitle\u003E element, or its first one is empty.",
+      "fix": "Add a unique, descriptive \u003Ctitle\u003E in the \u003Chead\u003E. If a template sets it, check the field that fills it isn\u0027t empty for this page type.",
+      "why": "Google uses the \u003Ctitle\u003E as one of its main sources for the page\u0027s title link in search results, and browsers show it in tabs and bookmarks. Without one, Google builds the title link from headings, anchor text and other text on the page, which may not say what you\u0027d choose. Google asks for every page to have one, so fix this first.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/title-link#page-titles",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with no title",
+      "plainWhat": [
+        "These pages have no title: the text on the browser tab, and the link people click in search results.",
+        "Google has to make one up from other text on the page, which may not say what you\u0027d choose.",
+        "Every page should have one, so fix these first."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor and fill in its title, often under \u0022SEO\u0022 or \u0022Search engine listing\u0022.",
+        "Write a title that says what the page is about, and add your site\u0027s name if there\u0027s room.",
+        "If a whole kind of page has no title, ask your developer to set it in the page design."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every page has a title",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "title-multiple",
+      "category": "titles",
+      "severity": "warning",
+      "title": "Multiple titles",
+      "description": "This indexable page has more than one \u003Ctitle\u003E element (titles inside SVG images don\u0027t count). The detail says how many.",
+      "fix": "Keep a single \u003Ctitle\u003E in the \u003Chead\u003E and turn off the source of the others.",
+      "why": "HTML allows only one per page, and browsers use the first. Which one search engines use isn\u0027t documented, so the title you wrote may not be the one considered. A second title usually means two systems, such as a theme and an SEO plugin, are both writing the page\u0027s metadata.",
+      "learnMore": "https://html.spec.whatwg.org/multipage/semantics.html#the-title-element",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with more than one title",
+      "plainWhat": [
+        "These pages have more than one title in their code, where only one is allowed.",
+        "Browsers use the first, but search engines may use another, so the title you wrote may not be the one shown.",
+        "It usually means two parts of your site each write one, such as the page design and an SEO plugin."
+      ],
+      "plainFix": [
+        "Check whether your site has two SEO plugins, or a page design with SEO settings of its own, both switched on.",
+        "Turn one of them off, so each page gets a single title.",
+        "If you can\u0027t find a second source, ask your developer what else adds a title to the page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page has more than one title",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "title-too-long",
+      "category": "titles",
+      "severity": "notice",
+      "title": "Title too long",
+      "description": "The page\u0027s title is longer than 60 characters (the default, which can be changed in the analysis settings), counting full-width characters such as Chinese, Japanese and Korean, and emoji, as two.",
+      "fix": "Shorten the title or move the important words to the front; cut repeated words and long brand suffixes.",
+      "why": "Google sets no length limit for titles, but truncates title links to fit the device width, so the end of a long title may not show; 60 characters is a rough guide to what fits, not a rule. Google may also rewrite titles that are long-winded or stuffed with keywords. With the important words first, a cut-off rarely matters.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/title-link#page-titles",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Titles too long to show in full",
+      "plainWhat": [
+        "These pages have a title of more than 60 characters.",
+        "Search results cut a long title off to fit the screen, so the last words may not show.",
+        "That\u0027s harmless when the important words come first, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor and find its title.",
+        "Move the words that matter most to the front.",
+        "Cut repeated words and long endings, such as a slogan after your site\u0027s name."
+      ],
+      "fixer": "you",
+      "plainPassed": "No title is too long to show in full",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "title-too-short",
+      "category": "titles",
+      "severity": "notice",
+      "title": "Title too short",
+      "description": "The page\u0027s title is shorter than 30 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.",
+      "fix": "Describe the page in the title: add the specific topic, product or place and, if you like, the site name.",
+      "why": "Short isn\u0027t wrong: a brand or product name can be exactly right. But very short titles are often vague, such as \u0022Home\u0022, \u0022Products\u0022 or \u0022Page 2\u0022, which Google\u0027s guidance warns against because they don\u0027t tell searchers what the page is or set it apart from similar pages.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/title-link#page-titles",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Very short titles",
+      "plainWhat": [
+        "These pages have a title of fewer than 30 characters.",
+        "Titles like \u0022Login\u0022 or \u0022Products\u0022 don\u0027t tell a searcher what the page is, or whose.",
+        "A short title can be exactly right, such as a product name, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor and find its title.",
+        "Say what the page is about, and add your site\u0027s name if there\u0027s room.",
+        "Leave the titles that already say it all."
+      ],
+      "fixer": "you",
+      "plainPassed": "No title is very short",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "title-duplicate",
+      "category": "titles",
+      "severity": "warning",
+      "title": "Duplicate title",
+      "description": "Another indexable page has the same title, ignoring case and spacing. The detail says how many other pages share it.",
+      "fix": "Give each page a title that says what\u0027s specific about it. If the pages really are the same, consolidate them with a redirect or canonical instead.",
+      "why": "Google asks for distinct titles on every page, because identical ones make it impossible for searchers to tell pages apart, and it may rewrite title links that repeat boilerplate. Duplicate titles often mean duplicate pages, or a template that leaves out the distinguishing detail, such as the product, place or page number.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/title-link#page-titles",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that share the same title",
+      "plainWhat": [
+        "Two or more pages have the same title: the text on the browser tab, and the link people click in search results.",
+        "Searchers can\u0027t tell the pages apart, and Google may make up a title of its own.",
+        "It often means two addresses show the same page, or the site\u0027s design leaves out what\u0027s different, such as the page number."
+      ],
+      "plainFix": [
+        "Open each page in your site\u0027s editor and give it a title that says what\u0027s specific to it.",
+        "If two addresses show the same page, keep one and ask your developer to forward the other to it."
+      ],
+      "fixer": "you",
+      "plainPassed": "No two pages share a title",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "description-missing",
+      "category": "metaDescriptions",
+      "severity": "notice",
+      "title": "Missing meta description",
+      "description": "This indexable page has no meta description, or its first one is empty.",
+      "fix": "Write a one- or two-sentence summary specific to the page in \u003Cmeta name=\u0022description\u0022 content=\u0022...\u0022\u003E. On large sites, generate descriptions from each page\u0027s data, such as product name, price and key features.",
+      "why": "Google writes most snippets from the page\u0027s content, but uses the meta description when it describes the page better, and says high-quality descriptions can improve the quality and quantity of search traffic. Without one, the snippet is whatever text Google picks. Descriptions don\u0027t affect ranking, so prioritise important pages, such as the home page and key landing pages.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with no search description",
+      "plainWhat": [
+        "These pages have no search description: the short text under a page\u0027s title in search results.",
+        "Without one (a \u0022meta description\u0022), Google picks some text from the page, which may not be what you\u0027d choose.",
+        "It doesn\u0027t change where the page ranks, so start with the pages you most want people to click."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor and find the description box, often under \u0022SEO\u0022 or \u0022Search engine listing\u0022.",
+        "Write one or two sentences that say what the page offers.",
+        "Skip pages nobody searches for, such as login and basket pages."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every page has a search description",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "description-multiple",
+      "category": "metaDescriptions",
+      "severity": "warning",
+      "title": "Multiple meta descriptions",
+      "description": "This indexable page has more than one meta description. The detail says how many.",
+      "fix": "Keep a single meta description and turn off the other source.",
+      "why": "HTML allows only one per page, and which one search engines use isn\u0027t documented, so you can\u0027t be sure the one you wrote is the one considered for the snippet. It usually comes from a theme and an SEO plugin both adding one.",
+      "learnMore": "https://html.spec.whatwg.org/multipage/semantics.html#meta-description",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with more than one search description",
+      "plainWhat": [
+        "These pages have more than one search description in their code, where only one is allowed.",
+        "Search engines may read either one (each is a \u0022meta description\u0022), so the text you wrote may not be the one used.",
+        "It usually means two parts of your site each add one, such as the page design and an SEO plugin."
+      ],
+      "plainFix": [
+        "Check whether your site has two SEO plugins, or a page design with SEO settings of its own, both switched on.",
+        "Turn one of them off, so each page gets a single description.",
+        "If you can\u0027t find a second source, ask your developer what else adds a description to the page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page has more than one search description",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "description-too-long",
+      "category": "metaDescriptions",
+      "severity": "notice",
+      "title": "Meta description too long",
+      "description": "The page\u0027s meta description is longer than 155 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.",
+      "fix": "Put what matters in the first sentence and trim the rest, so the description still works if it\u0027s cut.",
+      "why": "There\u0027s no length limit, but Google truncates snippets to fit the device width, so the end of a long description may not show, and it often builds the snippet from page text anyway. With the key point first, the cut rarely matters.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Search descriptions too long to show in full",
+      "plainWhat": [
+        "These pages have a search description, the text under their title in search results, of more than 155 characters.",
+        "Search results cut off the end of a long description (a \u0022meta description\u0022).",
+        "That\u0027s harmless when the important words come first, so only pages where the cut loses the point need changing."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor and find its description, often under \u0022SEO\u0022.",
+        "Put what matters in the first sentence.",
+        "Trim the rest to about 155 characters, or leave it if the opening already works."
+      ],
+      "fixer": "you",
+      "plainPassed": "No search description is too long to show in full",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "description-too-short",
+      "category": "metaDescriptions",
+      "severity": "notice",
+      "title": "Meta description too short",
+      "description": "The page\u0027s meta description is shorter than 70 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.",
+      "fix": "Expand it into a specific one- or two-sentence summary of what the page offers and for whom.",
+      "why": "There\u0027s no minimum, but a very short description rarely summarises the page, and Google uses the meta description only when it describes the page better than the page\u0027s own text. A short one is fine if it says everything that matters.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/snippet#use-quality-descriptions",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Very short search descriptions",
+      "plainWhat": [
+        "These pages have a search description, the text under their title in search results, of fewer than 70 characters.",
+        "One that short (a \u0022meta description\u0022) rarely says enough, so Google often shows text from the page instead.",
+        "A short one that says everything that matters is fine, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor and find its description, often under \u0022SEO\u0022.",
+        "Write one or two sentences that say what the page offers, and who it\u0027s for."
+      ],
+      "fixer": "you",
+      "plainPassed": "No search description is very short",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "description-duplicate",
+      "category": "metaDescriptions",
+      "severity": "warning",
+      "title": "Duplicate meta description",
+      "description": "Another indexable page has the same meta description, ignoring case and spacing. The detail says how many other pages share it.",
+      "fix": "Write a page-specific description, or generate one from each page\u0027s own data.",
+      "why": "Google says identical descriptions aren\u0027t helpful when individual pages appear in search, and recommends a unique one per page, with site-level wording only on the home page and other aggregation pages. Repeated descriptions usually come from a template default.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/snippet#create-unique-descriptions-for-each-page-on-your-site",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that share the same search description",
+      "plainWhat": [
+        "Two or more pages share one search description: the short text under a page\u0027s title in search results.",
+        "Searchers can\u0027t tell the pages apart, and Google tends to write its own text instead.",
+        "The shared text (a \u0022meta description\u0022) often comes from a default that the site\u0027s design fills in."
+      ],
+      "plainFix": [
+        "Open each page in your site\u0027s editor and find its description, often under \u0022SEO\u0022 or \u0022Search engine listing\u0022.",
+        "Write one or two sentences that say what\u0027s on that page and nowhere else.",
+        "Leave numbered pages of one list (page 2, page 3) until last: they matter least."
+      ],
+      "fixer": "you",
+      "plainPassed": "No two pages share a search description",
+      "plainOneFix": "That\u0027s almost certainly a default description that your page design or SEO plugin gives to pages without one of their own.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "h1-missing",
+      "category": "headings",
+      "severity": "notice",
+      "title": "Missing H1",
+      "description": "This indexable page has no H1 heading, or its H1s are empty (the alt text of an image inside an H1, such as a logo, counts as text).",
+      "fix": "Mark up the page\u0027s visible main heading as a single \u003Ch1\u003E that describes the page.",
+      "why": "The H1 is the page\u0027s main heading, and screen reader users jump between headings to find their way, so a page without one is harder to scan. Google lists headings such as the H1 among its sources for title links, but says it can rarely rely on HTML semantics, so this matters mostly for readers. Often the visible main heading is just styled text.",
+      "learnMore": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/Heading_Elements#navigation",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with no main heading",
+      "plainWhat": [
+        "These pages have no main heading (an \u0022H1\u0022): the headline that says what the page is about.",
+        "People using a screen reader rely on headings to find their way, and the page is harder to scan.",
+        "Often the headline is there to look at, but isn\u0027t marked as a heading.",
+        "It matters more to readers than to search, so it can wait until you next edit the page."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor.",
+        "Select the headline at the top and set its style to \u0022Heading 1\u0022.",
+        "If the headline is part of the page design, ask your developer to mark it as the H1."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every page has a main heading",
+      "plainOneFix": "If these pages share one page design, marking its headline as the main heading fixes them all.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "h1-multiple",
+      "category": "headings",
+      "severity": "notice",
+      "title": "Multiple H1s",
+      "description": "This indexable page has more than one H1 element. The detail says how many.",
+      "fix": "Keep one \u003Ch1\u003E for the main heading and change the others to \u003Ch2\u003E or lower, or to plain styled text if they aren\u0027t headings.",
+      "why": "Google says the number and order of headings don\u0027t matter for Search, so this isn\u0027t a search problem. For readers and screen reader users, one H1 naming the page with H2s for its sections gives the clearest outline, which is why MDN advises against multiple H1s. Often a logo or a sidebar title is marked up as an H1 by the theme.",
+      "learnMore": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/Heading_Elements#avoid_using_multiple_h1_elements_on_one_page",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with more than one main heading",
+      "plainWhat": [
+        "These pages have more than one main heading (an \u0022H1\u0022), where one headline for the page is clearest.",
+        "Google says this doesn\u0027t matter for search, so it\u0027s about readers: screen readers use the main heading to say what the page is.",
+        "Often the page design marks the logo or a side panel\u0027s title as a main heading too.",
+        "The gain is small, so it can wait."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor and see which lines are set to \u0022Heading 1\u0022.",
+        "Keep that style for the page\u0027s headline, and set the others to \u0022Heading 2\u0022 or plain text.",
+        "If the extra one is the logo or part of the page design, ask your developer to change it there."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page has more than one main heading",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "h1-duplicate",
+      "category": "headings",
+      "severity": "notice",
+      "title": "Duplicate H1",
+      "description": "Another indexable page has the same H1, ignoring case and spacing. Pages in the same paginated series (joined by rel=\u0022next\u0022 and rel=\u0022prev\u0022) don\u0027t count against each other.",
+      "fix": "Make each H1 say what\u0027s specific about its page, such as the product, place or topic.",
+      "why": "Identical main headings make similar pages hard to tell apart for visitors arriving from search, and often signal duplicate pages or a template whose heading lacks the distinguishing detail. Google doesn\u0027t document duplicate headings as a problem in themselves, so it\u0027s low priority unless the pages are duplicates too.",
+      "learnMore": null,
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that share the same main heading",
+      "plainWhat": [
+        "Two or more pages have the same main heading (an \u0022H1\u0022): the headline that says what the page is about.",
+        "Visitors who land on one can\u0027t tell it from the other, and it often means the pages themselves are copies.",
+        "If the pages are clearly different in every other way, there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Open each page in your site\u0027s editor and look at its headline.",
+        "Change it to say what\u0027s specific to that page, such as the product, place or topic.",
+        "If two addresses show the same page, keep one and ask your developer to forward the other to it."
+      ],
+      "fixer": "you",
+      "plainPassed": "No two pages share a main heading",
+      "plainOneFix": "That\u0027s almost certainly one heading in your page design, such as your site\u0027s name, marked as the main heading of every page.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "low-word-count",
+      "category": "content",
+      "severity": "notice",
+      "title": "Low word count",
+      "description": "This indexable page\u0027s main content has fewer than 200 words (the default, which can be changed in the analysis settings). Navigation menus and footers aren\u0027t counted.",
+      "fix": "Check whether the page is meant to be this short. If content is missing, restore it; if the page has little to offer, merge it into a related page with a redirect, or noindex it.",
+      "why": "Google says content length alone doesn\u0027t matter for ranking: there\u0027s no minimum word count. Plenty of good pages are short, such as contact, product and category pages. Use this to find pages that are empty by mistake, such as an unfilled template, a placeholder or content that only appears with JavaScript, not as a reason to pad pages out.",
+      "learnMore": "https://developers.google.com/search/docs/fundamentals/seo-starter-guide#focusing",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with very little text",
+      "plainWhat": [
+        "These pages have fewer than 200 words of their own, not counting menus and footers.",
+        "Short pages are often fine, and then there\u0027s nothing to do: a contact page doesn\u0027t need an essay.",
+        "This list is for spotting pages that are empty by mistake, such as one where the content failed to appear."
+      ],
+      "plainFix": [
+        "Open each page and see whether anything is missing.",
+        "If content is missing, put it back.",
+        "If the page is meant to be short, leave it."
+      ],
+      "fixer": "you",
+      "plainPassed": "No page has very little text",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "duplicate-content",
+      "category": "content",
+      "severity": "warning",
+      "title": "Duplicate content",
+      "description": "Another indexable page has exactly the same main content: the same words in the same order, ignoring case and punctuation. Pages with fewer than 50 words (the default, which can be changed in the analysis settings) aren\u0027t compared.",
+      "fix": "Decide which URL should be indexed, then 301-redirect the others to it or give them a canonical pointing to it. If the pages should differ, give each its own content.",
+      "why": "Some duplication is normal and isn\u0027t against Google\u0027s spam policies. Google groups duplicates and shows one URL from the group, which may not be the one you\u0027d choose, and crawls the others less often. The usual cause is the same page at several URLs, through parameters, trailing slashes or print versions.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with identical content",
+      "plainWhat": [
+        "Two or more pages have exactly the same main text, word for word.",
+        "Google shows only one of them, and it may not be the one you\u0027d choose.",
+        "Usually it\u0027s one page that can be reached at several addresses, such as a print version or an address with extras on the end."
+      ],
+      "plainFix": [
+        "Open the pages in each group and decide which address is the one you want found.",
+        "Ask your developer to forward the other addresses to it (a \u0022301 redirect\u0022), or to name it as their main address (a \u0022canonical\u0022 link).",
+        "If the pages are meant to differ, give each one text of its own."
+      ],
+      "fixer": "either",
+      "plainPassed": "No two pages have identical content",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "near-duplicate-content",
+      "category": "content",
+      "severity": "notice",
+      "title": "Near-duplicate content",
+      "description": "Another indexable page has almost the same main content, roughly 96% or more alike: at most 24 of the 256 bits of their content fingerprints differ (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check\u0027s minimum word count aren\u0027t compared.",
+      "fix": "Give each page main content that is clearly its own, canonicalise the variants to one version, or merge them into one page with options.",
+      "why": "Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That\u0027s fine for variants you don\u0027t need to rank separately. Pages that should rank on their own need differences that are, in Google\u0027s words, clear and significant.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/canonicalization-troubleshooting",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with almost identical content",
+      "plainWhat": [
+        "Two or more pages have almost the same main text: only a few words differ.",
+        "Google may treat them as copies and show only one.",
+        "That\u0027s fine for versions you don\u0027t need found separately, such as one product in several sizes, and then there\u0027s nothing to do.",
+        "Pages that should each be found, such as one per town, need text that is clearly their own."
+      ],
+      "plainFix": [
+        "Open the pages in each group side by side and decide whether each needs to be found on its own.",
+        "If so, give each page text that is clearly its own.",
+        "If not, ask your developer to name one of them as the main version (a \u0022canonical\u0022 link), or merge them into one page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No two pages have almost identical content",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "duplicate-site-version",
+      "category": "content",
+      "severity": "warning",
+      "title": "Duplicate version of the site",
+      "description": "This version of the site (the bare domain or www, over http or https) answers with a page, directly or after redirecting to another non-main version, instead of redirecting to the main version: the home page\u0027s.",
+      "fix": "301-redirect every URL on the other versions to the same path on the main version, in one hop, at the server or CDN.",
+      "why": "Every page is then reachable at two or more addresses. Google treats the versions as duplicate URLs and picks one, preferring HTTPS, which may not be the version you want, and it crawls the copies less. If the duplicate is the http version, visitors who land on it browse unencrypted. The other version is only probed, not parsed, so a canonical on it isn\u0027t seen; a redirect is what makes the choice yours.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#reasons-to-specify-a-canonical-url",
+      "grouping": "detail",
+      "subject": "url",
+      "siteWide": true,
+      "reportedOnce": true,
+      "plainTitle": "Your site answers at more than one address",
+      "plainWhat": [
+        "Your site shows its pages at more than one address, such as with and without \u0022www\u0022, or on \u0022http\u0022 as well as \u0022https\u0022.",
+        "The spare addresses should forward to the main one.",
+        "As it is, search engines see two copies of everything and pick one themselves.",
+        "Visitors on an \u0022http\u0022 copy also browse without encryption."
+      ],
+      "plainFix": [
+        "Decide which address is the main one: usually the \u0022https\u0022 one your home page uses.",
+        "Ask your developer or hosting company to forward every other version to it (a \u0022301 redirect\u0022), page for page.",
+        "Check the site again to confirm."
+      ],
+      "fixer": "developer",
+      "plainPassed": "The site answers at one address only",
+      "plainOneFix": null,
+      "plainLooksFor": "A site that answers at more than one address"
+    },
+    {
+      "id": "image-missing-alt",
+      "category": "images",
+      "severity": "warning",
+      "title": "Images without an alt attribute",
+      "description": "The page has \u003Cimg\u003E elements with no alt attribute at all. Images with an empty alt=\u0022\u0022 (marked as decorative) and 1\u00D71 tracking pixels don\u0027t count.",
+      "fix": "Add alt text that says what each image shows or does in context. For purely decorative images, add an empty alt=\u0022\u0022 so screen readers skip them.",
+      "why": "Some screen readers read out the image\u0027s file name when there\u0027s no alt, and WCAG requires a text alternative for every image that conveys something. Google uses alt text, with computer vision and the page\u0027s content, to understand images for Google Images, and as the anchor text when an image is a link.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/google-images",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Images with no description",
+      "plainWhat": [
+        "Some images on these pages have no description: the short text that says what an image shows.",
+        "People who can\u0027t see the image rely on it, and Google uses it to understand the image for image search.",
+        "An image that is only decoration needs no words, but should be marked as decoration so screen readers skip it."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor, select each image and fill in its description box, often called \u0022Alt text\u0022.",
+        "Say what the image shows, in a few words, as you would to someone who can\u0027t see it.",
+        "Ask your developer to do the same for images in the page design, and to mark decoration as such (an empty \u0022alt\u0022)."
+      ],
+      "fixer": "you",
+      "plainPassed": "No image is missing its description",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "image-alt-too-long",
+      "category": "images",
+      "severity": "notice",
+      "title": "Alt text too long",
+      "description": "The page has images whose alt text is longer than 125 characters (the default, which can be changed in the analysis settings).",
+      "fix": "Cut the alt text to a short description of what the image conveys, and move longer descriptions, such as a chart\u0027s data, into a caption or the page text.",
+      "why": "W3C\u0027s guidance is that alt text should be the most concise description of the image\u0027s purpose, and anything longer than a short phrase or sentence belongs in a caption or the surrounding text. Screen reader users hear alt text in one go and can\u0027t skim it, and Google warns that alt text stuffed with keywords can make a site look spammy. 125 characters is a common convention, not a standard.",
+      "learnMore": "https://www.w3.org/WAI/tutorials/images/tips/",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Image descriptions that are too long",
+      "plainWhat": [
+        "Some images on these pages have a description, the text that says what an image shows, of more than 125 characters.",
+        "A screen reader reads the whole description aloud in one go, and its user can\u0027t skim it.",
+        "The limit is a rule of thumb, so a description just over it that reads well is fine to leave."
+      ],
+      "plainFix": [
+        "Open the page in your site\u0027s editor, select the image and find its description box, often called \u0022Alt text\u0022.",
+        "Cut it to a short phrase that says what the image shows.",
+        "Move longer detail, such as the figures in a chart, into a caption or the text beside the image."
+      ],
+      "fixer": "you",
+      "plainPassed": "No image description is too long",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "image-missing-dimensions",
+      "category": "images",
+      "severity": "notice",
+      "title": "Images without width and height attributes",
+      "description": "The page has \u003Cimg\u003E elements missing a width or height attribute, or both; 1\u00D71 tracking pixels don\u0027t count. Only the HTML is read, so images sized in CSS still appear here.",
+      "fix": "Add width and height attributes with the image\u0027s intrinsic size (CSS can still scale it), or give the image box an aspect-ratio or fixed size in CSS.",
+      "why": "Without both attributes, and unless CSS gives the image box a size or aspect-ratio, the browser can\u0027t reserve space before the image loads, so the content below jumps when it arrives. That layout shift annoys readers and counts towards Cumulative Layout Shift, one of Google\u0027s Core Web Vitals. If the CSS already reserves the space, nothing needs doing.",
+      "learnMore": "https://web.dev/articles/optimize-cls#images-without-dimensions",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Images with no width and height set",
+      "plainWhat": [
+        "Some images on these pages don\u0027t tell the browser their width and height.",
+        "The browser may not leave the right space, so text can jump down the page as each image arrives.",
+        "That annoys readers and counts against the page in Google\u0027s speed measures.",
+        "If your site\u0027s design already sets the size another way, there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Open one of the pages on a phone and watch whether the text jumps as the images appear.",
+        "If it does, ask your developer to add a width and height to the images in the page design."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No image is missing its width and height",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "image-broken",
+      "category": "images",
+      "severity": "error",
+      "title": "Broken images",
+      "description": "The page embeds images (\u003Cimg\u003E) whose URLs return a 4xx or 5xx error or don\u0027t respond, directly or after redirects. For images on other sites, statuses often sent only to crawlers (401, 403, 405, 429, 503, 999) don\u0027t count.",
+      "fix": "Fix the image URL or restore the file. If the image is gone, replace it or remove the \u003Cimg\u003E.",
+      "why": "Visitors see a broken-image icon or a gap, which makes the page look unfinished, and an image that can\u0027t be fetched can\u0027t appear in Google Images. A broken image in a template shows up on every page that uses it, so fix those first.",
+      "learnMore": null,
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Images that don\u0027t load",
+      "plainWhat": [
+        "Some images on these pages don\u0027t load: the image file can\u0027t be found, or fails with an error.",
+        "Visitors see a gap or a broken-image icon, which makes the page look unfinished.",
+        "An image in the page design, such as a logo, shows broken on every page that uses it."
+      ],
+      "plainFix": [
+        "Open one of the pages in your browser and look for the gap where the image should be.",
+        "Upload the image again in your site\u0027s editor, or choose another one.",
+        "Remove the image from the page if it\u0027s no longer needed.",
+        "Ask your developer to fix it in the page design if the same image is missing on most pages."
+      ],
+      "fixer": "you",
+      "plainPassed": "No image fails to load",
+      "plainOneFix": "That\u0027s almost certainly an image in your page design, such as a logo or icon, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "image-too-large",
+      "category": "images",
+      "severity": "warning",
+      "title": "Large images",
+      "description": "The page embeds images whose files, after any redirects, are over 200 KB as transferred (the default, which can be changed in the analysis settings).",
+      "fix": "Resize images to the largest size they\u0027re displayed at (with srcset for different screens), compress them, and use WebP or AVIF where you can.",
+      "why": "Images are often the largest part of a page\u0027s weight, and a big one costs visitors time and data, especially on mobile connections. It matters most above the fold, such as a hero image that\u0027s the page\u0027s Largest Contentful Paint; a large image lazy-loaded far down the page costs much less. The usual causes are photos uploaded straight from a camera and images far larger than the size they\u0027re shown at.",
+      "learnMore": "https://web.dev/articles/optimize-lcp#reduce-size",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Large images that slow pages down",
+      "plainWhat": [
+        "Some pages show images whose files are over 200 KB.",
+        "Big images are the most common reason a page feels slow, most of all on a phone, and people leave slow pages.",
+        "Photos uploaded straight from a camera or phone are the usual cause."
+      ],
+      "plainFix": [
+        "Resize each image so it\u0027s no bigger than it\u0027s shown on the page.",
+        "Save it as a compressed JPEG or WebP, then upload it in place of the old one.",
+        "If your site has an image-optimising setting or plugin, turn it on so new uploads are shrunk for you."
+      ],
+      "fixer": "you",
+      "plainPassed": "No image is too big to load quickly",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "hreflang-invalid-code",
+      "category": "hreflang",
+      "severity": "error",
+      "title": "Invalid hreflang code",
+      "description": "An hreflang value on this indexable page isn\u0027t a valid code. Valid codes are an ISO 639-1 language, optionally followed by a four-letter script and an ISO 3166-1 alpha-2 region (en, en-GB, zh-Hant-TW), or x-default. UN M.49 numeric regions such as es-419 aren\u0027t supported.",
+      "fix": "Correct the code to the language-REGION form, such as en-GB or de-AT, on every page in the set.",
+      "why": "Google supports only ISO 639-1 languages and ISO 3166-1 alpha-2 regions, and says other codes, such as es-419, aren\u0027t supported, so the entry is ignored. An unknown language makes it useless. A reserved region such as UK, EU or UN is different: Google ignores the region and the code still works as the language alone, so en-UK only works as plain en and doesn\u0027t target the United Kingdom (whose code is GB). A country code on its own isn\u0027t valid either: hreflang=\u0022be\u0022 means Belarusian, not Belgium.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions#language-codes",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Language versions labelled with an invalid code",
+      "plainWhat": [
+        "These pages list their versions in other languages, but label one with an invalid language or country code.",
+        "Google ignores that entry (an \u0022hreflang\u0022 link), or reads only its language, so searchers may be shown the wrong version.",
+        "A common slip is \u0022en-UK\u0022: the code for the United Kingdom is \u0022GB\u0022."
+      ],
+      "plainFix": [
+        "Look at the codes the list shows for each page.",
+        "Send the list to your developer and ask for each code in the form language, then country, such as \u0022en-GB\u0022 or \u0022de-AT\u0022.",
+        "Ask them to correct it on every page that lists the same versions, not only the ones shown here."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No language version is labelled with an invalid code",
+      "plainOneFix": "That\u0027s almost certainly the list of language versions in your page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "hreflang-missing-self",
+      "category": "hreflang",
+      "severity": "warning",
+      "title": "Hreflang without a self-reference",
+      "description": "This indexable page lists hreflang alternates, but none of them is the page\u0027s own URL exactly as crawled.",
+      "fix": "Add an hreflang entry for the page\u0027s own URL, written exactly as the page is served (scheme, host, path, trailing slash and any query string), alongside the entries for the other versions.",
+      "why": "Google\u0027s rule is that each language version must list itself as well as all the other versions, with the same set of links on every page. Without the self-reference the set breaks that rule and may not be used as intended. Often the self-reference is there but in a different form of the URL, such as http instead of https, without the trailing slash or with a tracking parameter.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions#all-method-guidelines",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Language versions that don\u0027t list themselves",
+      "plainWhat": [
+        "These pages list their versions in other languages, but leave their own address out of the list.",
+        "Google expects every version to name itself as well as the others, and may ignore a list that doesn\u0027t.",
+        "Often the page is in its list, but written slightly differently, such as \u0022http\u0022 for \u0022https\u0022 or without the final slash."
+      ],
+      "plainFix": [
+        "Send the list to your developer: this is a change to the code of your pages.",
+        "Ask them to add each page\u0027s own address to its list of language versions (its \u0022hreflang\u0022 links).",
+        "Ask them to write it exactly as the page is addressed, with the same \u0022https\u0022, \u0022www\u0022 and final slash."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No language version leaves itself out of its list",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "hreflang-missing-return",
+      "category": "hreflang",
+      "severity": "warning",
+      "title": "Hreflang without return links",
+      "description": "This indexable page names alternates on the site that are indexable but don\u0027t list it in their own hreflang annotations. The detail says how many.",
+      "fix": "Give every page in the set the same complete list of hreflang entries, including one that points back to this page with exactly this URL.",
+      "why": "Google requires hreflang to be confirmed from both sides: if page X lists page Y, Y must list X. Where it isn\u0027t, Google says the annotations may be ignored or not interpreted correctly, so searchers may be shown the wrong language version. It usually means the sets differ between pages, for example after a new version was added to some templates but not others.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions#common-mistakes",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Language versions that don\u0027t link back",
+      "plainWhat": [
+        "These pages name versions in other languages that don\u0027t name them back.",
+        "Google needs both pages to agree before it trusts the pairing, so searchers may be shown the wrong language.",
+        "It usually means a new language was added to some pages\u0027 lists but not to others."
+      ],
+      "plainFix": [
+        "Open one of the pages and a version it names, to confirm that both exist.",
+        "Send the list to your developer and ask them to give every version the same full list (of \u0022hreflang\u0022 links).",
+        "Ask them to make sure each list includes the page itself, at its exact address."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No language version is missing its link back",
+      "plainOneFix": "That\u0027s almost certainly one entry in the list of language versions in your page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "hreflang-broken-target",
+      "category": "hreflang",
+      "severity": "error",
+      "title": "Hreflang points to a broken URL",
+      "description": "This indexable page has hreflang entries whose URLs return a 4xx or 5xx error or don\u0027t respond.",
+      "fix": "Point the entry at the working page for that language, or remove it from every page in the set if that version no longer exists.",
+      "why": "An alternate that doesn\u0027t load can\u0027t be shown to anyone and can\u0027t confirm the return link, so the entry for that language does nothing, and anyone sent there gets an error. Usually it\u0027s a version that was removed or moved without the annotations being updated.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Language versions that lead to a broken page",
+      "plainWhat": [
+        "These pages list a version in another language at an address that doesn\u0027t work.",
+        "Searchers sent to that version get an error, and the entry for that language does nothing.",
+        "Usually the version was removed or moved, and the lists (of \u0022hreflang\u0022 links) were never updated."
+      ],
+      "plainFix": [
+        "Open the broken address the list shows in your browser, to see the error.",
+        "If that version has moved, ask your developer to point the entry at its new address.",
+        "If it\u0027s gone, ask them to remove the entry from every page that lists it."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No language version leads to a broken page",
+      "plainOneFix": "That\u0027s almost certainly one entry in the list of language versions in your page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "hreflang-to-non-indexable",
+      "category": "hreflang",
+      "severity": "warning",
+      "title": "Hreflang points to a non-indexable URL",
+      "description": "This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by robots.txt (or, on this site, by a firewall).",
+      "fix": "Replace each entry with the alternate\u0027s final, canonical, indexable URL, and keep the list identical on every page in the set.",
+      "why": "Google generally shows each version\u0027s canonical, indexable URL in results, so hreflang should name exactly those URLs. An alternate that redirects or is canonicalised elsewhere isn\u0027t the URL that gets indexed, and one that\u0027s noindex or blocked can\u0027t be shown at all, so the entry for that language is unreliable. Google specifically warns against listing HTTP URLs in hreflang when the pages are on HTTPS.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Language versions that search engines can\u0027t show",
+      "plainWhat": [
+        "These pages list a version in another language at an address that can\u0027t itself appear in search results.",
+        "That address forwards elsewhere, is told to stay out of search, or names another page as its main version.",
+        "Search engines can\u0027t show it, so the entry for that language (an \u0022hreflang\u0022 link) can\u0027t be relied on."
+      ],
+      "plainFix": [
+        "Open the address the list shows in your browser, and see whether it moves you on to a different address.",
+        "If it does, ask your developer to list that final address instead.",
+        "If it doesn\u0027t, ask them to list a version that can appear in search, or to let that one appear."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No language version leads to a page search can\u0027t show",
+      "plainOneFix": "That\u0027s almost certainly one entry in the list of language versions in your page design, which every page shares.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "hreflang-duplicate-code",
+      "category": "hreflang",
+      "severity": "warning",
+      "title": "Conflicting hreflang entries",
+      "description": "This indexable page has the same hreflang code (compared ignoring case) pointing to two or more different URLs. The detail lists the codes.",
+      "fix": "Keep one URL per code. If two pages really target the same audience, choose one, or give them different regions.",
+      "why": "Each language or language-region code should name exactly one URL; when a code names several, search engines can\u0027t tell which to show for that audience. It\u0027s usually two systems adding hreflang, such as a plugin and the theme, or the HTML and an HTTP header, or a copy-paste mistake in the set.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions#html",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Two addresses listed for the same language",
+      "plainWhat": [
+        "These pages list two or more different addresses for the same language or country.",
+        "Search engines can\u0027t tell which one to show searchers in that language.",
+        "It usually means two parts of your site each add a list (of \u0022hreflang\u0022 links), such as a plugin and the page design."
+      ],
+      "plainFix": [
+        "Look at the codes the list shows: each is a language that has more than one address.",
+        "Check whether your site has two translation or SEO plugins that each add language versions, and turn one off.",
+        "Ask your developer to keep one address for each language, if the lists are written in the page design."
+      ],
+      "fixer": "either",
+      "plainPassed": "No language is listed at two different addresses",
+      "plainOneFix": "That\u0027s almost certainly the list of language versions in your page design, which every page shares.",
+      "plainLooksFor": "Languages listed at more than one address"
+    },
+    {
+      "id": "hreflang-missing-x-default",
+      "category": "hreflang",
+      "severity": "notice",
+      "title": "Hreflang without x-default",
+      "description": "This indexable page has hreflang annotations but no x-default entry.",
+      "fix": "Add \u003Clink rel=\u0022alternate\u0022 hreflang=\u0022x-default\u0022 href=\u0022...\u0022\u003E pointing at your selector page or default version, on every page in the set.",
+      "why": "x-default names the page for searchers whose language or region isn\u0027t in your list, usually a language selector or the main international version. Google suggests adding one, especially on language or country selectors and home pages that redirect by locale, but it\u0027s optional.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions#xdefault",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Language versions with no fallback page",
+      "plainWhat": [
+        "These pages list their versions in other languages, but name no fallback for everyone else.",
+        "The fallback (called \u0022x-default\u0022) is the page search engines show when a searcher\u0027s language isn\u0027t in the list.",
+        "Google suggests one but doesn\u0027t require it, so if your versions cover your visitors there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Pick the page for visitors whose language you don\u0027t cover: usually your language chooser or your main version.",
+        "Ask your developer to add it to every page\u0027s list of language versions, labelled \u0022x-default\u0022."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No list of language versions is missing a fallback page",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "hreflang-outside-head",
+      "category": "hreflang",
+      "severity": "warning",
+      "title": "Hreflang outside \u003Chead\u003E",
+      "description": "Some of this indexable page\u0027s hreflang links are in the \u003Cbody\u003E as browsers parse it.",
+      "fix": "Move the hreflang links into the \u003Chead\u003E above anything that could close it early, or declare them in HTTP Link headers or the XML sitemap instead.",
+      "why": "Google requires hreflang \u003Clink\u003E elements to be inside a well-formed \u003Chead\u003E, so these entries don\u0027t count and the set is incomplete, which can also break return links from the other versions. Usually the tags are in the head in the source, but an element that doesn\u0027t belong there, such as an \u003Cimg\u003E, a \u003Cdiv\u003E or stray text, ends the head early.",
+      "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions#html",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Language versions written in the wrong part of the page",
+      "plainWhat": [
+        "These pages list some or all of their language versions in a part of the page where search engines ignore them.",
+        "The entries there (they\u0027re \u0022hreflang\u0022 links) don\u0027t count, so searchers may be shown the wrong language.",
+        "It usually means something added near the top of the page\u0027s code, by a plugin or script, has pushed them out of place."
+      ],
+      "plainFix": [
+        "Note any plugin, tracking code or banner added to the site lately, as one of them may be the cause.",
+        "Send the list to your developer: the hreflang links must sit in the page\u0027s \u0022head\u0022 section.",
+        "Ask them to move or remove whatever ends that section early."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No language version is written in the wrong part of the page",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "structured-data-invalid",
+      "category": "structuredData",
+      "severity": "error",
+      "title": "Invalid JSON-LD",
+      "description": "A JSON-LD block (\u003Cscript type=\u0022application/ld\u002Bjson\u0022\u003E) on the page isn\u0027t valid JSON. The detail shows the parser\u0027s first error.",
+      "fix": "Fix the syntax where the detail points (often an unescaped quote, a trailing or missing comma, or a comment left in by a template), then test the page with Google\u0027s Rich Results Test.",
+      "why": "JSON-LD has to be valid JSON: a trailing comma or a comment is enough for Google to drop the whole block, and its Unparsable structured data report lists the error a trailing comma produces. Nothing in the block is used, so it can\u0027t produce a rich result. Other valid blocks on the page still work. A single template error usually breaks the same block on every page that uses it.",
+      "learnMore": "https://support.google.com/webmasters/answer/9166415",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Details for search engines that can\u0027t be read",
+      "plainWhat": [
+        "Some pages carry details for search engines, such as a product\u0027s price, in code that has a mistake in it.",
+        "Google ignores the broken details (they\u0027re called \u0022structured data\u0022), so the page may lose extras such as star ratings in its results.",
+        "One mistake in the page design usually breaks it on every page of that kind."
+      ],
+      "plainFix": [
+        "Test one of the pages in Google\u0027s Rich Results Test, a free tool on the web, to see the error.",
+        "Send the list to your developer: it shows the first error in each page\u0027s code (a \u0022JSON-LD\u0022 block).",
+        "Ask them to fix the page design that writes it, then test the page again."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No details for search engines have a mistake in them",
+      "plainOneFix": "That\u0027s almost certainly one mistake in your page design, which writes the same code on every page.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "structured-data-missing-required",
+      "category": "structuredData",
+      "severity": "warning",
+      "title": "Structured data missing required properties",
+      "description": "A top-level schema.org item on this indexable page lacks a property Google requires for that type\u0027s rich result. The detail names the type and the missing properties.",
+      "fix": "Add the missing properties with values that match what\u0027s visible on the page, then test it with the Rich Results Test.",
+      "why": "Google says items missing required properties aren\u0027t eligible for rich results, so the markup does nothing for that feature. Recommended properties aren\u0027t checked, since they don\u0027t affect eligibility. FAQPage isn\u0027t checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#completeness",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Details for search engines with parts missing",
+      "plainWhat": [
+        "Some pages describe a product, event or similar for search engines, but leave out a detail Google requires.",
+        "Without it, Google won\u0027t add the extras to your search result, such as stars, prices or dates (a \u0022rich result\u0022).",
+        "Even complete details only make the extras possible: Google decides whether to show them."
+      ],
+      "plainFix": [
+        "Look at what the list says is missing on each page, such as \u0022Product: needs name\u0022.",
+        "Fill in that detail in your site\u0027s editor or shop settings if it\u0027s something you enter, such as a price or a date.",
+        "If it isn\u0027t, ask your developer to add it to the page\u0027s \u0022structured data\u0022, then test the page in Google\u0027s Rich Results Test."
+      ],
+      "fixer": "either",
+      "plainPassed": "No details for search engines are missing a needed part",
+      "plainOneFix": "That\u0027s almost certainly your page design, which leaves the same detail out of every page of one kind.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "no-https",
+      "category": "security",
+      "severity": "error",
+      "title": "Site not on HTTPS",
+      "description": "The home page (the start URL after its redirects) is served over plain HTTP. Reported once, on the home page.",
+      "fix": "Install a TLS certificate (free from Let\u0027s Encrypt or most hosts), serve every page over HTTPS and 301-redirect each HTTP URL to its HTTPS equivalent. Then update internal links, canonicals and sitemaps, and add HSTS.",
+      "why": "Browsers label HTTP pages \u0022Not secure\u0022, and anything visitors send, such as form data, can be read or changed on the way. Google has used HTTPS as a lightweight ranking signal since 2014 and prefers HTTPS URLs as canonical when both versions exist. Fix this first.",
+      "learnMore": "https://web.dev/articles/enable-https",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": true,
+      "reportedOnce": true,
+      "plainTitle": "Your site isn\u0027t secure (no HTTPS)",
+      "plainWhat": [
+        "Your site doesn\u0027t use HTTPS, the secure connection, so nothing sent to or from it is protected.",
+        "Browsers label every page \u0022Not secure\u0022, and anything a visitor types, such as a password, can be read on the way.",
+        "Google prefers the secure version of a page when it has the choice.",
+        "This is one fault for the whole site, and the first thing to fix."
+      ],
+      "plainFix": [
+        "Open your site with \u0022https://\u0022 in front of its address, to see whether a secure version already exists.",
+        "Ask your hosting company to switch on HTTPS: most include a free certificate.",
+        "Ask them, or your developer, to forward every \u0022http\u0022 address to its \u0022https\u0022 version (a \u0022301 redirect\u0022).",
+        "Check the site again, and update any links and settings that still say \u0022http\u0022."
+      ],
+      "fixer": "developer",
+      "plainPassed": "The site loads over HTTPS",
+      "plainOneFix": null,
+      "plainLooksFor": "A site that isn\u0027t secure (no HTTPS)"
+    },
+    {
+      "id": "http-page",
+      "category": "security",
+      "severity": "warning",
+      "title": "HTTP page on an HTTPS site",
+      "description": "This internal page answers over plain HTTP with a page of its own, while the site\u0027s home page is on HTTPS.",
+      "fix": "301-redirect the HTTP URL to its HTTPS version, ideally for the whole http:// origin at once, and update the links that point at http://.",
+      "why": "Visitors who reach it get an unencrypted page that browsers label \u0022Not secure\u0022, and if an HTTPS version also exists, the two are duplicates for Google to sort out. Usually internal links or a sitemap still point at the http:// URL and the server doesn\u0027t redirect it.",
+      "learnMore": "https://web.dev/articles/enable-https#redirect-to-https",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages still on the insecure address",
+      "plainWhat": [
+        "These pages still load over \u0022http\u0022, without the secure connection the rest of your site uses.",
+        "Browsers label them \u0022Not secure\u0022, and if an \u0022https\u0022 copy exists too, search engines see two copies of the page.",
+        "Usually an old link or sitemap entry still points at the \u0022http\u0022 address, and nothing forwards it on."
+      ],
+      "plainFix": [
+        "Open one of the addresses in your browser and look for \u0022Not secure\u0022 beside it.",
+        "Ask your developer or hosting company to forward every \u0022http\u0022 address to its \u0022https\u0022 version (a \u0022301 redirect\u0022).",
+        "Change the links and sitemap entries that still use \u0022http\u0022, so they point at the \u0022https\u0022 address."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page is left on the insecure address",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "mixed-content",
+      "category": "security",
+      "severity": "error",
+      "title": "Mixed content",
+      "description": "This HTTPS page loads images, scripts, stylesheets, iframes, audio or video from http:// URLs.",
+      "fix": "Change the resource URLs to https:// or relative paths, and host copies of resources whose servers don\u0027t support HTTPS. A Content-Security-Policy with upgrade-insecure-requests is a useful safety net.",
+      "why": "Browsers block insecure scripts, stylesheets and frames on HTTPS pages, which can break layout and features, and upgrade images, audio and video to HTTPS, which then fail to load if the server doesn\u0027t offer them that way. Google also lists insecure dependencies other than images among the things that can stop it preferring a page\u0027s HTTPS version.",
+      "learnMore": "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Secure pages that load insecure files",
+      "plainWhat": [
+        "These secure pages load some of their files, such as images or scripts, over an insecure \u0022http\u0022 address.",
+        "Browsers block some of these files (they call it \u0022mixed content\u0022), so parts of the page can break or go missing.",
+        "It\u0027s usually an old \u0022http\u0022 address left in the page or its design."
+      ],
+      "plainFix": [
+        "Open one of the pages in your browser and look for missing images, or a warning beside the address.",
+        "Change each address the list shows from \u0022http\u0022 to \u0022https\u0022, in your site\u0027s editor.",
+        "If the file is in your page design, ask your developer to change it there.",
+        "If the other site has no \u0022https\u0022 version, copy the file to your own site or replace it."
+      ],
+      "fixer": "either",
+      "plainPassed": "No secure page loads an insecure file",
+      "plainOneFix": "That\u0027s almost certainly a file your page design loads on every page, such as a script, style file or logo.",
+      "plainLooksFor": null
+    },
+    {
+      "id": "security-headers-missing",
+      "category": "security",
+      "severity": "notice",
+      "title": "Security headers missing",
+      "description": "The home page\u0027s response lacks one or more of Strict-Transport-Security (checked on HTTPS only), X-Content-Type-Options, Content-Security-Policy, X-Frame-Options (or a CSP frame-ancestors rule) and Referrer-Policy. The detail lists which.",
+      "fix": "Add the missing headers in the server, CDN or framework configuration, starting with X-Content-Type-Options and Referrer-Policy, which rarely break anything. Roll out CSP in report-only mode first, and enable HSTS only once HTTPS works everywhere on the site.",
+      "why": "These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites. Google doesn\u0027t document them as a ranking factor. Only the home page is checked, as they\u0027re normally set site-wide.",
+      "learnMore": "https://web.dev/articles/security-headers",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "Recommended security settings are missing",
+      "plainWhat": [
+        "Your site doesn\u0027t send some of the settings that tell browsers how to protect visitors (its \u0022security headers\u0022).",
+        "They guard against attacks such as someone showing your site inside a fake one.",
+        "Only your home page is checked, as these are set once for the whole site.",
+        "Search isn\u0027t affected and many sites run without them, so this can wait until your developer next works on the site."
+      ],
+      "plainFix": [
+        "Send this to your developer or hosting company: the list names the missing settings.",
+        "Ask them to add the simple ones first (X-Content-Type-Options and Referrer-Policy), and to test the others before switching them on."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No recommended security setting is missing",
+      "plainOneFix": null,
+      "plainLooksFor": "Missing security settings"
+    },
+    {
+      "id": "url-uppercase",
+      "category": "urls",
+      "severity": "notice",
+      "title": "Uppercase characters in URL",
+      "description": "This indexable page\u0027s URL path contains uppercase letters (percent-escapes such as %2F don\u0027t count).",
+      "fix": "Use lowercase for new URLs. Change an existing one only if it causes duplicates or broken links, with a 301 redirect to the lowercase version and updated internal links.",
+      "why": "Google treats URLs as case-sensitive, so /Page and /page are different URLs: if the server serves both, mixed-case links create duplicates, and if it doesn\u0027t, links typed in lowercase break. Lowercase URLs avoid both. An established URL that works and is linked consistently is fine to leave, since changing it needs redirects.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/url-structure#be-aware-that-urls-are-case-sensitive",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Addresses with capital letters",
+      "plainWhat": [
+        "These pages have capital letters in their address, such as /About-Us.",
+        "Capitals count in an address: /Page and /page are two different addresses, so a link typed in small letters can miss.",
+        "An address that works and is always linked the same way is fine to leave, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Use small letters only in the address of every new page.",
+        "Leave an existing address alone unless it causes broken links or copies of the page.",
+        "If it does, ask your developer to forward it to the small-letter version (a \u0022301 redirect\u0022), and update your links."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page address has capital letters",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "url-underscores",
+      "category": "urls",
+      "severity": "notice",
+      "title": "Underscores in URL",
+      "description": "This indexable page\u0027s URL path contains underscores.",
+      "fix": "Use hyphens between words in new URLs. Rename existing ones only as part of a wider URL change, with 301 redirects.",
+      "why": "Google recommends hyphens to separate words in URLs, because underscores are commonly read as joining words (as in format_date) rather than separating them, and hyphens help users and search engines identify the words. The effect is small, so don\u0027t change established URLs for this alone.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/url-structure#use-hyphens-to-separate-words",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Addresses with underscores",
+      "plainWhat": [
+        "These pages have underscores in their address, such as /garden_chairs.",
+        "Google recommends hyphens instead, as in /garden-chairs, because it reads them as gaps between words.",
+        "The gain is small, so there\u0027s nothing to do for addresses that already exist."
+      ],
+      "plainFix": [
+        "Use hyphens between words in the address of every new page.",
+        "Leave existing addresses alone, unless you\u0027re changing them for another reason.",
+        "If you do change one, ask your developer to forward the old address to the new one (a \u0022301 redirect\u0022)."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page address has underscores",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "url-too-long",
+      "category": "urls",
+      "severity": "notice",
+      "title": "Long URL",
+      "description": "This indexable page\u0027s URL is longer than 115 characters (the default, which can be changed in the analysis settings), counted as people read it: escapes decoded and an internationalised host in its own script.",
+      "fix": "Use short, descriptive paths for new pages and keep tracking parameters out of internal links. Shorten existing URLs only with 301 redirects.",
+      "why": "Google doesn\u0027t document a length limit that affects search, and results usually show the domain and a breadcrumb made from parts of the URL rather than the whole thing. Long URLs are mainly harder to read, share and type, and they often point to deep folder structures, keyword-stuffed slugs or tracking parameters worth cleaning up.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/url-structure#use-descriptive-urls",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Very long addresses",
+      "plainWhat": [
+        "These pages have an address of more than 115 characters.",
+        "Search isn\u0027t affected, but long addresses are harder to read, share and type.",
+        "They often come from folders inside folders, or from tracking codes added to links.",
+        "An address that works is fine to leave, and then there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Keep the address short and readable when you make a new page.",
+        "Remove tracking codes, such as \u0022?utm_source=newsletter\u0022, from links between your own pages.",
+        "Leave existing addresses alone, or ask your developer to forward the old address if you shorten one (a \u0022301 redirect\u0022)."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page address is very long",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "slow-response",
+      "category": "performance",
+      "severity": "warning",
+      "title": "Slow response",
+      "description": "The crawler took more than 1,000 ms (the default, which can be changed in the analysis settings) to receive this page\u0027s HTML, from request to last byte. The detail also gives the time to first byte.",
+      "fix": "If the first byte is slow, find what the server waits on: add caching, speed up database queries and back-end calls, and serve from a CDN near your visitors. If the download after it is slow, reduce the HTML size.",
+      "why": "Nothing on the page can render until its HTML arrives, so a slow response delays everything visitors see; web.dev\u0027s rough guide is a time to first byte of 0.8 seconds or less. Google also crawls less when a site\u0027s response times get longer, which matters mainly for large sites. Times depend on the crawler\u0027s location and speed preset, so recheck a few slow pages before acting.",
+      "learnMore": "https://web.dev/articles/ttfb",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that are slow to answer",
+      "plainWhat": [
+        "These pages took more than 1 second to arrive when the check asked for them.",
+        "Nothing can appear on screen until the page arrives, so visitors wait, and Google visits slow sites less often.",
+        "One slow reading can be a blip, so try the pages yourself before acting."
+      ],
+      "plainFix": [
+        "Open two or three of the pages in your browser and see whether they\u0027re slow for you too.",
+        "If they are, send the list to your developer or hosting company and ask what the server is waiting for.",
+        "Ask about page caching and a faster hosting plan: they\u0027re the usual fixes."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page is slow to answer",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "large-page",
+      "category": "performance",
+      "severity": "notice",
+      "title": "Large HTML",
+      "description": "This page\u0027s HTML is larger than 1 MB once decompressed (the default, which can be changed in the analysis settings). Images, scripts and stylesheets loaded as separate files don\u0027t count.",
+      "fix": "Move inline scripts, styles, framework data and base64 images into separate cacheable files, paginate very long lists, and keep the main content and links early in the HTML.",
+      "why": "Large HTML takes longer to download and parse, especially on phones. Googlebot reads only the first 2 MB of an HTML file, measured uncompressed, for Google Search, and ignores the rest; a page past that limit is reported on its own. The bulk is usually inline scripts, framework state data, inline SVG or base64 images.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages with a lot of code to download",
+      "plainWhat": [
+        "These pages have more than 1 MB of code in the page itself, before any images or other files.",
+        "A page that heavy takes longer to arrive and to appear, most of all on a phone.",
+        "Google also stops reading a page at 2 MB, which is listed as a problem of its own.",
+        "Below 2 MB, a page that still feels quick on a phone needs nothing done."
+      ],
+      "plainFix": [
+        "Open one of the pages on a phone and see whether it\u0027s slow to appear.",
+        "If it is, send the list to your developer: it shows each page\u0027s size.",
+        "Ask them to move scripts, styles and images that are written into the page out into separate files, and to split very long lists."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page has too much code to download",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "html-past-crawl-limit",
+      "category": "performance",
+      "severity": "warning",
+      "title": "HTML past Google\u0027s crawl limit",
+      "description": "This page\u0027s HTML is larger than 2 MB once decompressed, which is as far as Googlebot reads a file for Google Search. Images, scripts and stylesheets loaded as separate files don\u0027t count. The limit is Google\u0027s, not an analysis setting.",
+      "fix": "Move inline scripts, styles, framework data and base64 images into separate files, and keep the main content and links within the first 2 MB.",
+      "why": "Googlebot stops at the first 2 MB of the uncompressed file and ignores everything after it, so content and links past that point aren\u0027t indexed or followed for Google Search. Other Google fetchers use different limits. The usual cause is inline scripts, framework data, inline SVG or base64 images pushing the real content past the cut-off.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages too big for Google to read in full",
+      "plainWhat": [
+        "These pages have more than 2 MB of code in the page itself, which is as far as Google reads.",
+        "Google ignores everything after that point, so text and links near the end of the page aren\u0027t seen.",
+        "The bulk is usually scripts, styles or images written into the page instead of loaded as separate files."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it shows each page\u0027s size.",
+        "Ask them to move scripts, styles and images that are written into the page out into separate files.",
+        "Ask them to put the main text and links early in the page, within the first 2 MB."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page is too big for Google to read in full",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "viewport-missing",
+      "category": "html",
+      "severity": "warning",
+      "title": "Missing viewport",
+      "description": "The page has no viewport meta tag (\u003Cmeta name=\u0022viewport\u0022\u003E) with content.",
+      "fix": "Add \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1\u0022\u003E to the \u003Chead\u003E, then check the layout really adapts to small screens.",
+      "why": "Without it, mobile browsers lay the page out at a desktop width (about 980 pixels) and shrink it to fit, so text is tiny and visitors have to zoom and pan. Google indexes pages as its smartphone crawler sees them, and its page experience guidance asks whether content displays well on mobile devices.",
+      "learnMore": "https://web.dev/articles/responsive-web-design-basics#viewport",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages not set up for phones",
+      "plainWhat": [
+        "These pages lack the line of code that tells a phone to fit the page to its screen.",
+        "Phones show them as a tiny copy of the desktop page, so visitors must zoom and scroll sideways to read.",
+        "Google reads every page as a phone would, so this is the version it judges."
+      ],
+      "plainFix": [
+        "Open one of the pages on a phone and see whether the text is too small to read.",
+        "Ask your developer to add the missing line (a \u0022viewport\u0022 setting) to the page design.",
+        "Ask them to check the page design really adapts to small screens, as the line alone won\u0027t do it."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page is missing its phone-screen setting",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "lang-missing",
+      "category": "html",
+      "severity": "notice",
+      "title": "Missing lang attribute",
+      "description": "The page\u0027s \u003Chtml\u003E element has no lang attribute, or it\u0027s empty.",
+      "fix": "Add the page\u0027s main language to the \u003Chtml\u003E element, such as \u003Chtml lang=\u0022en-GB\u0022\u003E, and mark passages in other languages with their own lang.",
+      "why": "Screen readers use lang to choose the right voice and pronunciation, and WCAG requires the page\u0027s language to be set this way; browsers use it too, for example for hyphenation. Google doesn\u0027t: it detects the language from the visible content, so this is about accessibility, not search.",
+      "learnMore": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/lang#accessibility_concerns",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that don\u0027t say what language they\u0027re in",
+      "plainWhat": [
+        "These pages don\u0027t state in their code which language they\u0027re written in.",
+        "Screen readers use that to pick the right voice, so without it they may read the page in the wrong accent.",
+        "Google works the language out from the text itself, so search isn\u0027t affected and this can wait."
+      ],
+      "plainFix": [
+        "Check your site\u0027s settings for a \u0022site language\u0022 option, and set it if it\u0027s empty.",
+        "Ask your developer to add the language to the page design (a \u0022lang\u0022 setting, such as \u0022en-GB\u0022) if there\u0027s no such option."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page says what language it is in",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "charset-missing",
+      "category": "html",
+      "severity": "notice",
+      "title": "Missing character encoding",
+      "description": "Nothing declares the page\u0027s character encoding: no byte-order mark at the start of the file, no meta tag (\u003Cmeta charset\u003E or http-equiv Content-Type) and no charset in the Content-Type header.",
+      "fix": "Add \u003Cmeta charset=\u0022utf-8\u0022\u003E as the first element in the \u003Chead\u003E, within the first 1024 bytes of the file, or send Content-Type: text/html; charset=utf-8 from the server.",
+      "why": "Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn\u0027t reported; a crawl made before the crawler recorded the mark still reports such a page, until it\u0027s crawled again.",
+      "learnMore": "https://www.w3.org/International/questions/qa-html-encoding-declarations",
+      "grouping": "none",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages at risk of showing garbled characters",
+      "plainWhat": [
+        "These pages don\u0027t tell browsers how their letters and symbols were saved.",
+        "Browsers have to guess, and a wrong guess turns accents, \u00A3 signs and curly quotes into nonsense.",
+        "Pages that look right today can wait, but the one-line fix removes the risk."
+      ],
+      "plainFix": [
+        "Open one of the pages and look for odd symbols where accents, \u00A3 signs or quote marks should be.",
+        "Ask your developer to state the character set in the page design (a \u0022charset\u0022 line, set to \u0022utf-8\u0022)."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No page leaves browsers guessing its characters",
+      "plainOneFix": null,
+      "plainLooksFor": null
+    },
+    {
+      "id": "open-graph-missing",
+      "category": "html",
+      "severity": "notice",
+      "title": "Open Graph tags missing",
+      "description": "This indexable page lacks og:title, og:description or og:image, or has them empty. The detail says which are missing and which are empty.",
+      "fix": "Add og:title, og:description and og:image (an absolute URL to a representative image, not the site logo) to the \u003Chead\u003E; most SEO plugins can fill them from the page\u0027s title, description and featured image.",
+      "why": "Social networks and chat apps build link previews from Open Graph tags; without them they guess the title and image or show a bare link. Google also lists og:title among its sources for title links and accepts og:image as a way to suggest a page\u0027s preferred image. Low priority for pages nobody shares.",
+      "learnMore": "https://ogp.me/",
+      "grouping": "detail",
+      "subject": "page",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pages that won\u0027t preview well when shared",
+      "plainWhat": [
+        "These pages lack the title, description or image that apps show when someone shares a link.",
+        "Without them (they\u0027re called \u0022Open Graph tags\u0022), the preview is a guess, or a bare link.",
+        "It matters only for pages people are likely to share: for the rest there\u0027s nothing to do."
+      ],
+      "plainFix": [
+        "Find the page\u0027s \u0022social sharing\u0022 or \u0022social preview\u0022 settings in your site\u0027s editor.",
+        "Add a title, a short description and an image.",
+        "If there\u0027s no such setting, ask your developer to add Open Graph tags to the page design."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page has its sharing preview details",
+      "plainOneFix": "That\u0027s almost certainly your page design, which leaves the same details out of every page.",
+      "plainLooksFor": null
+    }
+  ]
+}

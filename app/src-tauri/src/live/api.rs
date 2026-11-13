@@ -1,5 +1,6 @@
-//! The few sidecar calls the shell makes itself: the event stream, a crawl's library item, and pause or resume from
-//! the tray. Plain HTTP to 127.0.0.1, never through a proxy, with the bearer token and no Origin header.
+//! The few sidecar calls the shell makes itself: the event stream, a crawl's library item, an export's file, pause or
+//! resume from the tray, and a crawl's problems for Simple's notice. Plain HTTP to 127.0.0.1, never through a proxy,
+//! with the bearer token and no Origin header.
 
 use std::fmt;
 use std::time::Duration;
@@ -7,6 +8,10 @@ use std::time::Duration;
 use ureq::unversioned::resolver::DefaultResolver;
 use ureq::unversioned::transport::{Buffers, ConnectionDetails, Connector, NextTimeout, TcpConnector, Transport};
 use ureq::{Agent, BodyReader};
+
+use std::collections::{HashMap, HashSet};
+
+use serde::Deserialize;
 
 use super::model::{CrawlItem, ExportJob};
 use crate::sidecar::Connection;
@@ -121,14 +126,26 @@ impl Api {
     /// `GET /api/exports/{id}`: one running, or one of the last 64 that ended.
     pub fn export(&self, connection: &Connection, id: &str) -> Result<ExportJob, ApiError> {
         let path = format!("/api/exports/{}", checked_id(id)?);
-        let body = self
+        Ok(serde_json::from_str(&self.get(connection, &path)?)?)
+    }
+
+    /// The crawl's problems as Simple counts them, from `GET /api/checks` and its `GET /api/crawls/{id}/analysis`: the
+    /// checks with issues that are Errors or Warnings, less those the user has hidden (`hidden`).
+    pub fn problems(&self, connection: &Connection, id: &str, hidden: &[String]) -> Result<u64, ApiError> {
+        let checks: Catalog = serde_json::from_str(&self.get(connection, "/api/checks")?)?;
+        let path = format!("/api/crawls/{}/analysis", checked_id(id)?);
+        let analysis: AnalysisCounts = serde_json::from_str(&self.get(connection, &path)?)?;
+        Ok(problems(&checks, &analysis, hidden))
+    }
+
+    fn get(&self, connection: &Connection, path: &str) -> Result<String, ApiError> {
+        Ok(self
             .calls
-            .get(url(connection, &path))
+            .get(url(connection, path))
             .header("Authorization", bearer(connection))
             .call()?
             .body_mut()
-            .read_to_string()?;
-        Ok(serde_json::from_str(&body)?)
+            .read_to_string()?)
     }
 
     /// `POST /api/crawls/{id}/pause` or `/resume`.
@@ -141,6 +158,54 @@ impl Api {
         self.calls.post(url(connection, &path)).header("Authorization", bearer(connection)).send_empty()?;
         Ok(())
     }
+}
+
+/// The catalog, as far as counting problems needs it: each check's severity.
+#[derive(Deserialize)]
+struct Catalog {
+    checks: Vec<CatalogCheck>,
+}
+
+#[derive(Deserialize)]
+struct CatalogCheck {
+    id: String,
+    severity: String,
+}
+
+/// An analysis, as far as counting problems needs it: what each check found, and which were skipped.
+#[derive(Deserialize)]
+struct AnalysisCounts {
+    counts: Vec<CheckCount>,
+    #[serde(default)]
+    skipped: Vec<SkippedCheck>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CheckCount {
+    check_id: String,
+    count: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkippedCheck {
+    check_id: String,
+}
+
+/// The checks that found something and are an Error or a Warning, as the page's check entries count them
+/// (screens/issues/checkList.ts): a skipped check found nothing, and a hidden one isn't counted.
+fn problems(checks: &Catalog, analysis: &AnalysisCounts, hidden: &[String]) -> u64 {
+    let counts: HashMap<&str, u64> =
+        analysis.counts.iter().map(|entry| (entry.check_id.as_str(), entry.count)).collect();
+    let skipped: HashSet<&str> = analysis.skipped.iter().map(|entry| entry.check_id.as_str()).collect();
+    let found = checks.checks.iter().filter(|check| {
+        (check.severity == "error" || check.severity == "warning")
+            && !skipped.contains(check.id.as_str())
+            && !hidden.contains(&check.id)
+            && counts.get(check.id.as_str()).is_some_and(|count| *count > 0)
+    });
+    found.count() as u64
 }
 
 fn url(connection: &Connection, path: &str) -> String {
@@ -210,6 +275,32 @@ mod tests {
 
     fn connection(port: u16) -> Connection {
         Connection { generation: 1, port, token: "t0ken".into() }
+    }
+
+    #[test]
+    fn problems_are_the_errors_and_warnings_that_found_something_less_the_hidden_ones() {
+        let checks: Catalog = serde_json::from_value(serde_json::json!({ "checks": [
+            { "id": "broken-internal-links", "severity": "error" },
+            { "id": "title-duplicate", "severity": "warning" },
+            { "id": "slow-response", "severity": "warning" },
+            { "id": "image-missing-alt", "severity": "notice" },
+            { "id": "orphan-pages", "severity": "warning" },
+            { "id": "no-https", "severity": "error" },
+        ], "categories": [] }))
+        .unwrap();
+        let analysis: AnalysisCounts = serde_json::from_value(serde_json::json!({
+            "counts": [
+                { "checkId": "broken-internal-links", "count": 5 },
+                { "checkId": "title-duplicate", "count": 6 },
+                { "checkId": "slow-response", "count": 3 },
+                { "checkId": "image-missing-alt", "count": 40 },
+                { "checkId": "no-https", "count": 0 },
+            ],
+            "skipped": [{ "checkId": "orphan-pages", "reason": { "code": "no-sitemap" } }],
+        }))
+        .unwrap();
+        assert_eq!(problems(&checks, &analysis, &[]), 3);
+        assert_eq!(problems(&checks, &analysis, &["slow-response".to_owned()]), 2);
     }
 
     #[test]

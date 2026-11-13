@@ -520,6 +520,7 @@ screen, and one that a second screen needs moves here.
 | A choice | `Checkbox` for a form's choice, `Switch` for one that applies at once, `SegmentedControl` for one of a few in view (counts and icon-only segments, a `description` per segment for what it means; the arrows choose), `Select` for one of a short list, `Tabs` for views of one thing |
 | More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`; a `MenuItem`'s `detail` is what it would give (a facet value's count), read with its name. `Popover` for content from a button, or from an `anchor` that something else opens (a filter chip's editor; focus goes back to the anchor); it opens with the keyboard in the first control of what it holds, or the one its content marks `data-autofocus` (the value of a filter being changed), never on its head's Close button; `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone (a failed action keeps it open, saying why inside it) |
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
+| Severity in Simple | `SeverityWord` (Serious, Worth fixing, Worth a look, Couldn't check, Nothing wrong, with Error's, Warning's and Notice's shapes and colours; `badge`, `large`, `inline`, or `mark` named in the word), `plainSeverityCount` ("2 serious problems"); `SeverityMark` takes a `label` for a name other than Advanced's word. `PlainCheckRow` is a check in Simple (its named mark, plain title, `OneFixTag`, first sentence, count and share, a place number in Fix first), a link with `asChild`, in a `PlainCheckList` |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
 | Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
 | Charts | `Sparkline` and `LineChart` (lines over time, drawn with visx in real pixels: the plot measures its box with `useElementSize`, so strokes keep their weight; no tweening), `StatusSplit` (the magnified status bar: the full bar, and the share that didn't answer 2xx across the full width beneath), `ColumnChart` (counts side by side; a number wider than its column is measured and written shorter, "313k", the whole number staying the column's name and tooltip), `StackBar` with `Legend` (a whole in a few parts). Every part that counts URLs is a `ChartLink` (the router's link) with its name and number, so a chart is never read by colour or by its bars alone; each chart says itself in words (`label`). Bars are elements, not SVG, so parts are real links with focus rings and names that wrap; under forced colours parts are told apart by their gaps and a hatch stays a hatch |
@@ -1627,9 +1628,8 @@ Analysis (E6), with what Links and the URL grid lacked of E6's link ends. `app/s
   titles) and registers Export with `useExportCommand(offer, deps, { group })` (Ctrl+E, the palette's "Export this
   view…" and, on Overview and Issues, "Save the report…" and "Save the spreadsheet of everything…" from
   `CRAWL_FILE_COMMANDS`); `ExportButton` is its button. `openExportDialog(offer, { choiceId })` opens the one
-  `ExportDialogHost` (in `AppShell`). **The Report screen (round 4) should call `openExportDialog` with
-  `crawlFileChoices(item, simple)` for Save and Spreadsheet of everything, or `beginExport` directly with a path, and
-  get the same toast.**
+  `ExportDialogHost` (in `AppShell`). The Report screen and one problem in Simple (round 4) use the same dialog
+  and toast: [one export flow](#the-shared-pieces).
 - **The dialog** asks what (a grid's view; Issues' this check, the open group's pages, the report in its two cuts,
   every check) and as what (CSV or Excel; Full report or Summary page), then the shell's native save dialog asks where,
   opened on `<site> <crawl's date> <view>.<ext>` in the folder the last export went to (`settings.exportFolder`; the
@@ -1711,3 +1711,158 @@ URL grid (112,577 URLs) as Excel from Export to Saved 889 ms in the page, the to
   open in its program, both closed again by `scripts/shell-opened.ps1`). **The native save dialog and the
   notification** are not driven anywhere: the walk can't operate a native dialog, and the notification is covered by
   the shell's unit tests of its words.
+
+## Simple mode (round 4)
+
+Simple's screens ([Simple mode](v2-ui-simple.md)), built by three parts at once (Home and checking a site; the
+Summary, What to fix and one problem; the Report and the score in Advanced) and joined here. They are in
+`app/src/simple/` and `app/src/screens/report/`, with the shared pieces in `app/src/ui/`, plugged in as four rows of
+the routes' table (`app/simpleScreens.ts`):
+
+| Row | Simple screen | |
+| --- | --- | --- |
+| `home` | `simple/home/SimpleHome` | Check a website, and Your sites |
+| `overview` | `simple/SimpleOverview` | Checking a site while it runs, then the Summary (`simple/SummaryScreen`) in place |
+| `issues` | `simple/WhatToFixScreen` | What to fix, and one problem (`simple/ProblemScreen`) when the route names a check |
+| `report` | `screens/report/ReportScreen` | The Report, the same screen in both modes |
+
+### The shared pieces
+
+- **The score ring** (`ui/ScoreRing.tsx`, its words in `ui/score.ts`): the accent's arc on a neutral track, never a
+  severity colour; `partial` dashes the arc (one dash array, no mask, so no id to keep unique) and says "so far" in
+  the ring and its word; `null` is a dashed track and "–". Sizes are the `--ring-*` tokens: `lg` the Summary's, `md`
+  the breakdown's and Advanced's Overview's, `sm` Home's rows. One image to a screen reader: "Score 85 out of 100,
+  Good" ("Score 71 out of 100 so far, Good so far"). `simple/plainWords.ts`'s `bandWord` is the ring's `scoreWord`.
+- **The severity word and the plain check row** (`ui/SeverityWord.tsx`, `ui/PlainCheckRow.tsx`, words in
+  `ui/severity.ts`): Serious, Worth fixing, Worth a look, Couldn't check and Nothing wrong, one to one with Error,
+  Warning, Notice, skipped and passed; `SeverityMark` takes the word as its label in Simple.
+- **The score's breakdown** (`simple/ScoreBreakdownDialog.tsx`): one dialog in both modes, `ScoreBreakdownFromRoute`,
+  open while Overview's route has `score=1`, so Back keeps it; Esc, Close and ✕ take `score` off the address. The
+  Summary renders it, and so does Advanced's Overview, which passes `onCloseAutoFocus` so focus goes back to its
+  score, after a deep link too. The engine's lines, the sum ("100 − 15"), what it covers, the bands and the version;
+  its points table is version 1's and shows only for a score of version 1.
+- **One export flow.** Every file Simple saves goes through the hand-over's pieces (`app/src/export/`, above): the
+  Report's Save and Spreadsheet of everything call `openExportDialog(overviewOffer(item, crawling, simple), {
+  choiceId, cut })` with `report` or `workbook`, the report in the cut shown; one problem's Save as a spreadsheet
+  opens it on `checkSheetOffer(item, check)` (`simple/handOver.ts`: the `check` choice alone, titled "Save as a
+  spreadsheet", the file named by the plain title). Then the native save dialog, `beginExport` and the export's
+  toast, with Open file and Open folder through the shell's one `reveal_export_file` and `open_export_file`, and the
+  in-progress list in the sidebar.
+
+### Home and checking a site
+
+- **Home**: the field ("Web address", Enter starts the check with the saved defaults, as Advanced's Home does), and
+  the line under it from `GET /api/crawl-options/defaults` against the app's copy of the engine's
+  (`simple/home/savedSettings.ts`). Your sites (`simple/home/sites.ts`) groups the library by site, the newest check
+  the row and the older ones folded under it, the checks running now pinned above. A row's kind decides its words
+  and its one action: live (progress), scored, stopped early (dashed, "so far", Continue), never worked out (Work
+  out the results), worked out by an engine before the score (Update the results), no pages read, file not found
+  (Locate the file…, in the shell), unreadable. What needs fixing counts the problems as What to fix does: the
+  library's Error and Warning counts, or, with checks hidden, the row's analysis read and the hidden ones left out.
+  Each row has the site's icon (`CrawlFavicon`: the letter while it comes, or where there's none), and its menu has
+  Advanced's actions in Simple's words, Open the report among them. The pages beside the score, on a row and in the
+  Summary's head, are those the score covers (`scoredPages`: the library's `pagesAnalyzed`, or `pageCount` before the
+  first analysis; the crawl's count also has Cloudflare's `/cdn-cgi/` pages, which the analysis doesn't audit).
+- **Checking a site** (`simple/checking/CheckingScreen`, which `SimpleOverview` shows while the crawl runs, is paused
+  or stopping, while its results are worked out, and for up to 1.5 s after a crawl completes before its analysis
+  begins, `HAND_OVER_GRACE_MS`, so it never flashes "never analysed"): three steps, three figures taken from one
+  progress event (or, once the crawl has ended, the crawl file's stats), one bar, and the time left as a floor: what's
+  queued over the current rate, said as "at least" ("about" when the URL limit is nearer than the queue's end). What's
+  in the way (`simple/checking/checkingWords.ts`) is the design's table: the alerts of the current run and the
+  progress's waits, one line a kind, in a log so a new one is read once, each action landing where Advanced's alert
+  does and saying "in Advanced" when it leads there. The figures aren't links (the design draws them plain, and the
+  screens they'd open are Advanced only): the end-to-end test holds them, paused, to the URL grid's crawled count,
+  the queue and the pages read.
+- **The hand-over**: when the check ends, the Summary takes the checking screen's place on the same route, and focus
+  that was on it (Pause, Cancel) goes to the Summary's title (`useFocusRescue`), never to the page.
+- **The finished toast** (`live/liveBridge.ts`, words in `simple/finishedWords.ts`): in Simple "{site} is checked",
+  "Score 85: 6 problems to fix", with Open the report (the action) and See the summary; in Advanced its words, and
+  Open the report as its second action. A stopped check has Simple's words too. The problems leave out hidden checks,
+  reading the analysis afresh when there are some.
+- **The system notification** (`src-tauri/src/live/notify.rs`): the same words in Simple, from the mode and the
+  hidden checks the page stored (`settings::preferences`, read as the page reads them: nothing stored is Simple), the
+  library item's `score` and `pageCount`, and, with checks hidden, `/api/checks` and the analysis's counts. The
+  notification plugin has no buttons on the desktop, so See the summary and Open the report are the toast's only.
+
+### The Summary, What to fix and one problem
+
+- **One model.** `simple/results.ts` (`plainResults`) makes everything the three screens count from the catalog, the
+  last analysis and the checks hidden in Advanced, through Issues' `checkEntries` and `rankChecksToFix`: the problems
+  by severity in the engine's `fixFirst` order, the five to fix first (errors and warnings only), what couldn't run
+  grouped by its reason, what passed, the categories with nothing found, a serious fault of the whole site. Hidden
+  checks are left out of every list and count, as Advanced leaves them out; the score is the engine's and counts them,
+  so "Fixing these five takes the score from 85 to 98" is said only when the engine's `ifFixed.checkIds` are the five
+  shown. The sidebar's What to fix count comes from the same entries.
+- **Words.** `simple/plainWords.ts` builds every sentence that isn't a check's from counts only: the Summary's sentence
+  (band lead, problems, "so far", a site-wide fault leading by its plain title, nothing to fix), what the score covers
+  (pages, checks, robots.txt, a tiny site), a count's share ("9 of 4,521 addresses", "The whole site", "Once, for the
+  whole site", by the check's `subject`, `siteWide` and `reportedOnce`, out of the analysis's own totals), points and
+  who fixes it. A check's own words are the engine's; a check with no plain words shows its technical ones.
+- **Every figure lands on itself.** The five counts beside the score open their part of What to fix by its hash
+  (`simple/fixSections.ts`: `#serious`, `#worth-fixing`, `#worth-a-look`, `#couldnt-check`, `#nothing-wrong`); a part
+  that folds opens when it's landed on, and its heading takes focus. A count of 0 is no link. Each problem's row opens
+  its page, whose head says the same count and whose Where it is lists exactly that many.
+- **Open the report** is the Summary's primary action, in its header, and again on the report's card; What to fix
+  has it beside Copy this list.
+- **One problem**: what's wrong (`plainWhat`), how to fix it (`plainFix`, numbered), who fixes it (`fixer`), points,
+  the One fix callout when the check's largest group is `likelyTemplate` (`plainOneFix`), Where it is
+  (`simple/WhereItIs.tsx`: the check's groups 25 at a time to 200, each cause with its first three pages by title then
+  address and Show them; a check that doesn't group lists its pages flat with what was measured; past 200, "See all N
+  in Advanced"), Copy the list (Ctrl+Shift+C: both titles, the site and date, the steps, then each cause with its full
+  addresses, read with the rows' cursor), Save as a spreadsheet (Ctrl+E, the export dialog above) and See it in
+  Advanced (`switchMode`, the same route). A skipped check's page says what it looks for, why it couldn't run and what
+  would let it; a passed check's says its good news.
+- **States**: first load (the skeleton after 150 ms), done, perfect, nothing but things worth a look, stopped early,
+  at its limit, turned away part way, failed, results that couldn't be worked out (the live `error` of a crawl that
+  didn't fail), out of date with its reasons, never analysed, scored by an earlier engine (no score), nothing read
+  (`simple/nothingRead.ts`, Simple's words for how the start address answered). Each is a story under
+  **Screens/Simple results**, over `test/simpleSidecar.ts`: the catalog with its plain words and the garden crawl's
+  analysis with its score, captured from today's engine (`test/simple/*.json`), and the states made from them.
+
+### The Report, and the score in Advanced
+
+- **The document** is `GET /report?cut=`, read as text (`reportQuery.ts`, under the crawl's key, so whatever reads the
+  crawl again reads it again) into `ReportFrame`: an `iframe` with `srcdoc`, `sandbox="allow-same-origin
+  allow-modals"` (scripts off; the page may reach the frame to print it, and the frame may open the print dialog),
+  light in both themes (`--color-paper`, `scheme-light`), as wide as `--paper-width`. It's read only once the analysis
+  is (a crawl never analysed has none). Switching the cut keeps the sheet up, as refreshing, and the other cut is
+  fetched once the first is in, so a switch is about 50 ms.
+- **The toolbar**: "Report", then the site, the crawl's date ("checked" in Simple, "crawled" in Advanced) and the
+  pages the analysis read, the figure the document's head gives too; Full report | Summary page; Spreadsheet of
+  everything…; Save…; Print or save as PDF, the primary action. Its commands (`report.print` on Ctrl+P, `report.save`
+  on Ctrl+E, `report.workbook`, `report.cut.full`, `report.cut.summary`) are in the palette's View group. Save and
+  Spreadsheet of everything are the one export flow above.
+- **States**: building (`ReportSheetSkeleton`, a blank sheet with the first page's shape, past the skeleton's delay);
+  never analysed (Work out the results, or Analyse it, or Continue for an interrupted crawl); never analysed while it
+  runs (the report comes when it ends); analysing (progress and Cancel over the sheet, or in its place); out of date
+  (why, over the sheet, with the action; the document gives its date); a read that failed; a file that can't be read.
+  Stopped early, no score and the rest are the document's own to say. Words in each mode: `reportWords.ts`.
+- **Printing in the shell** is walked by `npm run smoke:shell` (step "the Report shows the engine’s report styled, and
+  prints the frame alone", after the export step): the report's sheet applies under the shell's own `style-src` (read
+  from the page's response), and the print dialog opens on the frame and closes on Esc.
+- **The score on Advanced's Overview** (`screens/overview/OverviewScore.tsx`): in the page header beside the answer
+  and the export button, the ring (`md`) with its word ("Score: Good", "Score so far: …" for a partial one), a link
+  to `?score=1`, which opens the breakdown over Overview; Esc closes it (the search param goes, replacing the entry)
+  and focus goes back to the score. No score says why (`noScoreReason`) and opens nothing. A sidecar from before the
+  score shows nothing.
+
+### Keys
+
+J and K on What to fix move through the problems (the row the keys are on is `aria-current`, its link focused, so
+Enter opens it); Ctrl+Shift+C and Ctrl+E on a problem; Ctrl+P and Ctrl+E on the Report; Esc closes the breakdown.
+Registered by the screens, so they're there in the mode that shows them only. Ctrl+1 to Ctrl+3 are Simple's three
+sections (Summary, What to fix, Report), Ctrl+8 Advanced's Report.
+
+### Tests
+
+- **Unit**: the screens through the whole app run in the `app` project only (`simple/tableStubbed.ts`, the Report's
+  `beforeEach`): the `filled` project serves every row as a stub, by design, so the screens aren't drawn there. What
+  the frame does with the rows set (the sidebar's Report, the keys, the toast's and Home's Open the report) is
+  asserted in both projects.
+- **End to end**: `e2e/simple-home.spec.ts` (Home's rows; a live check through its three steps to the Summary, focus
+  on its title; the finished toast's Open the report in both modes), `e2e/simple-results.spec.ts` (every figure of
+  the Summary, What to fix and one problem), `e2e/report.spec.ts` (the frame, the cuts, printing, both files saved
+  through the export dialog, Overview's score), and `e2e/simple-links.spec.ts`, the links between the parts: Home's
+  row and the Summary to the Report, the Summary's counts to What to fix, Ctrl+1 to Ctrl+3 and Ctrl+8, Overview's
+  score to the breakdown and back, the Report's Save into the export dialog. Each runs on the seeded crawl, or on a
+  real one with `SI_E2E_CRAWL`.

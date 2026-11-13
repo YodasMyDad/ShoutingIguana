@@ -5,7 +5,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/errors';
 import { api } from '../api/client';
-import { gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
+import { analysisQuery, checksQuery, gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
 import { getTransport } from '../api/transport';
 import type { CrawlEvent, CrawlListItem, CrawlStatus } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
@@ -14,6 +14,15 @@ import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback/notify';
 import { formatCountOf } from '../lib/format';
+import { getMode } from '../mode/mode';
+import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
+import { getSettings } from '../settings/settingsStore';
+import {
+  simpleFailedTitle,
+  simpleFinishedWords,
+  simpleStoppedWords,
+  simpleUnworkedWords,
+} from '../simple/finishedWords';
 import { getConnection, subscribeSidecarStatus } from '../shell/connection';
 import { liveStore, type LiveState, type LiveStore } from './liveStore';
 import { startEventStream } from './sse';
@@ -25,8 +34,8 @@ export const LIVE_GRID_REFRESH_MS = 1_000;
 
 export interface LiveBridgeOptions {
   queryClient: QueryClient;
-  /** Opens a crawl's view from a toast's action. */
-  openCrawl: (id: string, view: 'overview' | 'issues') => void;
+  /** Opens a crawl's view from a toast's action: its Summary or Overview, Issues, or the Report. */
+  openCrawl: (id: string, view: 'overview' | 'issues' | 'report') => void;
   store?: LiveStore;
 }
 
@@ -195,7 +204,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   }
 
   async function announceStatus(crawlId: string, status: CrawlStatus) {
-    announce(statusAnnouncement(crawlName(await itemOf(crawlId)), status));
+    announce(statusAnnouncement(crawlName(await itemOf(crawlId)), status, getMode()));
   }
 
   /**
@@ -227,7 +236,11 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         notifyError(new CrawlFailure(event.error ?? 'The engine didn’t say why.', retry !== undefined), {
           id: crawlToast(crawlId, 'failed'),
           title:
-            status === 'failed' ? `${crawlName(item)}: the crawl failed` : `${crawlName(item)}: the analysis failed`,
+            getMode() === 'simple'
+              ? simpleFailedTitle(crawlName(item), status === 'failed')
+              : status === 'failed'
+                ? `${crawlName(item)}: the crawl failed`
+                : `${crawlName(item)}: the analysis failed`,
           ...(retry ? { retry } : {}),
         }),
       );
@@ -263,6 +276,36 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     // An analysis that stored nothing was cancelled: nothing to announce.
     if (!crawled && before !== undefined && item?.analyzedAt === before) return;
     const name = crawlName(item);
+    // The Report: the report a check ends in, in both modes.
+    const report = { label: 'Open the report', onClick: () => openCrawl(crawlId, 'report') };
+    if (getMode() === 'simple') {
+      const summary = { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') };
+      // Read, but its results not worked out: the first analysis was cancelled (or stored nothing new), or never began.
+      if (crawled && item && (!item.analyzedAt || item.analyzedAt === before)) {
+        const words = simpleUnworkedWords(name);
+        notifyResult(words.title, {
+          id: crawlToast(crawlId, 'finished'),
+          description: words.description,
+          secondary: summary,
+          action: { label: 'Work out the results', onClick: () => void analyseCrawl(crawlId) },
+        });
+        return;
+      }
+      const words = simpleFinishedWords({
+        site: name,
+        crawled,
+        score: item?.score,
+        problems: await problemsOf(crawlId, item),
+        pageCount: item?.pageCount ?? null,
+      });
+      notifyResult(words.title, {
+        id: crawlToast(crawlId, 'finished'),
+        description: words.description,
+        secondary: summary,
+        action: report,
+      });
+      return;
+    }
     const checks = item?.issues ? item.issues.error + item.issues.warning + item.issues.notice : null;
     const found =
       checks === null
@@ -275,16 +318,48 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       id: crawlToast(crawlId, 'finished'),
       description: [name, [urls, found].filter(Boolean).join(', ')].filter(Boolean).join(': '),
       action: { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') },
+      secondary: report,
     });
+  }
+
+  /**
+   * The problems Simple counts for the check: its checks with issues that are Serious or Worth fixing, less the ones
+   * the user has hidden, as What to fix counts them. With none hidden, the library's counts; else the analysis, read
+   * afresh. Null when there are none to count, or they couldn't be read.
+   */
+  async function problemsOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+    if (!item?.issues) return null;
+    const hidden = getSettings().hiddenChecks;
+    if (hidden.length === 0) return item.issues.error + item.issues.warning;
+    try {
+      const [checks, analysis] = await Promise.all([
+        queryClient.query(checksQuery()),
+        queryClient.query({ ...analysisQuery(crawlId), staleTime: 0 }),
+      ]);
+      const { error, warning } = foundBySeverity(checkEntries(checks, analysis, new Set(hidden)));
+      return error + warning;
+    } catch {
+      return null;
+    }
   }
 
   async function toastStopped(crawlId: string) {
     const item = await itemOf(crawlId);
     const name = crawlName(item);
+    const continueAction = { label: 'Continue', onClick: () => void continueCrawl(crawlId) };
+    if (getMode() === 'simple') {
+      const words = simpleStoppedWords(name, item ? (crawledUrls(item) ?? 0) : null);
+      notifyResult(words.title, {
+        id: crawlToast(crawlId, 'stopped'),
+        description: words.description,
+        action: continueAction,
+      });
+      return;
+    }
     notifyResult('Crawl stopped', {
       id: crawlToast(crawlId, 'stopped'),
       description: item ? `${name}: ${formatCountOf(crawledUrls(item) ?? 0, 'URL')}. You can continue it later.` : name,
-      action: { label: 'Continue', onClick: () => void continueCrawl(crawlId) },
+      action: continueAction,
     });
   }
 

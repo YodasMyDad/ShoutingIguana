@@ -1,0 +1,400 @@
+/*
+  Simple's results (round 4, part B): the severity word, the plain check row, and the Summary's, What to fix's, one
+  problem's and the score breakdown's own pieces. From app/design/simple/simple.css, in tokens only. Under forced
+  colours (the end of this file) edges and tags are redrawn in system colours.
+*/
+
+:root {
+  --simple-max: 1040px; /* Simple's reading column */
+  --row-simple: 72px; /* a problem's row */
+  --plain-number-width: var(--space-5); /* a row's place in "Fix these first" */
+  --tally-columns: var(--icon-lg) var(--space-8) minmax(0, 1fr); /* a count beside the score: mark, number, words */
+  --score-hero-columns: minmax(0, 1.55fr) minmax(0, 1fr); /* the score and its sentence, then the five counts */
+  --explain-two-columns: minmax(0, 1fr) minmax(0, 1fr); /* what's wrong, then how to fix it */
+  --dialog-width-wide: 760px; /* the score's breakdown */
+  --step-number: var(--space-6); /* a numbered step's disc */
+}
+
+@layer components {
+  /* ------------------------------------------------------------------------------------- The severity word */
+  .si-sev-badge--lg {
+    height: var(--control-height-sm);
+    padding: 0 var(--space-3) 0 var(--space-2);
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+  }
+
+  /* ------------------------------------------------------------------------------------- The plain check row */
+  .si-plain-list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .si-plain-list > li + li {
+    border-top: var(--hairline) solid var(--color-border-subtle);
+  }
+
+  .si-plain-row {
+    display: grid;
+    grid-template-columns: var(--icon-lg) minmax(0, 1fr) auto var(--icon-md);
+    align-items: center;
+    column-gap: var(--space-4);
+    min-height: var(--row-simple);
+    padding: var(--space-3) var(--space-6);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .si-plain-row--numbered {
+    grid-template-columns: var(--plain-number-width) var(--icon-lg) minmax(0, 1fr) auto var(--icon-md);
+  }
+
+  a.si-plain-row {
+    cursor: pointer;
+  }
+
+  a.si-plain-row:hover {
+    background: var(--color-surface-hover);
+  }
+
+  .si-plain-row:focus-visible {
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  /* The row the keys are on (J and K on What to fix): the tint and the accent rule, never the tint alone. */
+  .si-plain-row[aria-current='true'] {
+    background: var(--color-surface-selected);
+    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+  }
+
+  .si-plain-row__number {
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-muted);
+    text-align: right;
+  }
+
+  .si-plain-row__mark {
+    display: inline-flex;
+  }
+
+  .si-plain-row__text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0-5);
+    min-width: 0;
+  }
+
+  .si-plain-row__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2-5);
+    font-size: var(--text-16);
+    line-height: var(--leading-16);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-plain-row__title-words {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .si-plain-row--quiet .si-plain-row__title {
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-plain-row__summary {
+    overflow: hidden;
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    color: var(--color-text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-plain-row__count {
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    color: var(--color-text-secondary);
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-plain-row__count b {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
+  }
+
+  .si-plain-row__chevron {
+    color: var(--color-text-muted);
+  }
+
+  /* "One fix": the accent's tint and edge, as a label, never a severity. */
+  .si-onefix-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: var(--badge-height);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-full);
+    background: var(--color-accent-subtle);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-accent-border);
+    color: var(--color-accent-text);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+  }
+
+  /* --------------------------------------------------------------------------------------- Simple's pages */
+  .si-simple-page {
+    box-sizing: content-box;
+    max-width: var(--simple-max);
+    margin: 0 auto;
+    padding: var(--space-8) var(--page-gutter) var(--space-12);
+    font-size: var(--text-16);
+    line-height: var(--leading-16);
+  }
+
+  .si-simple-title {
+    font-size: var(--text-28);
+    line-height: var(--leading-28);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-tight);
+    overflow-wrap: anywhere;
+  }
+
+  .si-simple-h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    font-size: var(--text-18);
+    line-height: var(--leading-18);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-simple-h2__count {
+    font-weight: var(--font-weight-regular);
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .si-simple-h2__meta {
+    font-size: var(--text-14);
+    font-weight: var(--font-weight-regular);
+    color: var(--color-text-muted);
+  }
+
+  /* The score and its counts. */
+  .si-score-hero {
+    display: grid;
+    grid-template-columns: var(--score-hero-columns);
+  }
+
+  .si-tally {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--space-4);
+    border-left: var(--hairline) solid var(--color-border-subtle);
+  }
+
+  .si-tally__row {
+    display: grid;
+    grid-template-columns: var(--tally-columns);
+    align-items: center;
+    column-gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+
+  a.si-tally__row:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .si-tally__n {
+    font-size: var(--text-18);
+    line-height: var(--leading-18);
+    font-weight: var(--font-weight-medium);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--color-text);
+    text-align: right;
+  }
+
+  .si-tally__row--zero .si-tally__n {
+    color: var(--color-text-muted);
+  }
+
+  .si-tally__row--zero .si-sev-mark {
+    opacity: var(--opacity-zero);
+  }
+
+  /* What's wrong, then how to fix it. */
+  .si-explain2 {
+    display: grid;
+    grid-template-columns: var(--explain-two-columns);
+  }
+
+  .si-explain2__col {
+    padding: var(--space-6) var(--space-7);
+  }
+
+  .si-explain2__col + .si-explain2__col {
+    border-left: var(--hairline) solid var(--color-border-subtle);
+  }
+
+  .si-steps {
+    display: grid;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: si-step;
+  }
+
+  .si-steps > li {
+    display: grid;
+    grid-template-columns: var(--step-number) minmax(0, 1fr);
+    gap: var(--space-3);
+    counter-increment: si-step;
+  }
+
+  .si-steps > li::before {
+    content: counter(si-step);
+    display: grid;
+    place-items: center;
+    width: var(--step-number);
+    height: var(--step-number);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-hover);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    font-weight: var(--font-weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Where a problem is: the cause, then the pages. */
+  .si-where-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+  }
+
+  .si-where-table th {
+    padding: var(--space-2-5) var(--space-6);
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
+    background: var(--color-surface-sunken);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+    text-align: left;
+  }
+
+  .si-where-table td {
+    padding: var(--space-3) var(--space-6);
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .si-where-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  /* The score's breakdown: as wide as the design's dialog, a line for each check that cost points, the sum, and the
+     points for each problem. */
+  .si-dialog.si-score-dialog {
+    width: var(--dialog-width-wide);
+  }
+
+  .si-score-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+  }
+
+  .si-score-table th,
+  .si-score-table td {
+    padding: var(--space-2-5) var(--space-3);
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
+    font-weight: var(--font-weight-regular);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .si-score-table thead th {
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-score-table tbody td,
+  .si-score-table--bands tbody td {
+    color: var(--color-text-secondary);
+  }
+
+  .si-score-table tfoot th,
+  .si-score-table tfoot td {
+    border-bottom: 0;
+    font-size: var(--text-16);
+    line-height: var(--leading-16);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-score-table__num {
+    text-align: right !important;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-score-table__check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  a.si-score-table__check:hover {
+    color: var(--color-accent-text);
+    text-decoration: underline;
+    text-underline-offset: var(--underline-offset);
+  }
+
+  .si-score-table--bands th,
+  .si-score-table--bands td {
+    padding: var(--space-1-5) var(--space-3);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+}
+
+@media (forced-colors: active) {
+  .si-onefix-tag {
+    border: var(--hairline) solid CanvasText;
+  }
+
+  .si-plain-row[aria-current='true'] {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-tally__row--zero .si-sev-mark {
+    opacity: 1;
+  }
+}

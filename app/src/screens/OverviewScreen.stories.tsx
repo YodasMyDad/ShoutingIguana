@@ -802,3 +802,57 @@ export const Unreadable: Story = {
   ],
   render: () => <OverviewApp />,
 };
+
+// ---------------------------------------------------------------------------------------- The score (round 4, part C)
+
+/** A score as the engine stores it: 85, Good, from two lines that cost points. */
+const SCORE: NonNullable<Analysis['score']> = {
+  version: 1,
+  value: 85,
+  band: 'good',
+  lost: 15,
+  beforeCeiling: 85,
+  heldBySerious: false,
+  partial: false,
+  covers: { pages: 6, urls: 40, checksRun: 3, checksSkipped: 1, complete: true, reason: null, blockedByRobots: 0 },
+  lines: [
+    { checkId: 'internal-client-error', severity: 'error', count: 2, of: 40, unit: 'urls', extent: 'some', points: 4 },
+    { checkId: 'empty-anchor-text', severity: 'warning', count: 6, of: 6, unit: 'pages', extent: 'most', points: 4 },
+    { checkId: 'title-too-long', severity: 'notice', count: 3, of: 6, unit: 'pages', extent: 'most', points: 0 },
+  ],
+  ifFixed: { checkIds: ['internal-client-error', 'empty-anchor-text'], value: 100 },
+};
+
+/** The score beside the answer, with its word: it opens how it's worked out. */
+export const Score: Story = {
+  loaders: [() => own({ analysis: { ...ISSUES_ANALYSIS, score: SCORE, noScoreReason: null } })],
+  render: () => <OverviewApp />,
+};
+
+/** A crawl that didn't read all of the site: the score "so far", on a dashed ring. */
+export const ScoreSoFar: Story = {
+  loaders: [
+    () =>
+      own({
+        analysis: {
+          ...ISSUES_ANALYSIS,
+          score: { ...SCORE, partial: true, covers: { ...SCORE.covers, complete: false, reason: 'stopped' } },
+          noScoreReason: null,
+        },
+        item: { status: 'stopped' },
+      }),
+  ],
+  render: () => <OverviewApp />,
+};
+
+/** No score, and why: analysed by an engine from before scores. It opens nothing. */
+export const NoScore: Story = {
+  loaders: [() => own({ analysis: { ...ISSUES_ANALYSIS, score: null, noScoreReason: 'notScored' } })],
+  render: () => <OverviewApp />,
+};
+
+/** How the score is worked out, over Overview (`?score=1`): Esc closes it. */
+export const ScoreBreakdown: Story = {
+  loaders: [() => own({ analysis: { ...ISSUES_ANALYSIS, score: SCORE, noScoreReason: null } })],
+  render: () => <OverviewApp path={`${OVERVIEW}?score=1`} />,
+};
