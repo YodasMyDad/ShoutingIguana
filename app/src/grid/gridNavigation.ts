@@ -179,7 +179,12 @@ export function gridKey(state: GridNavState, input: KeyInput, dims: GridDims): G
  * back to them and acts there. Null for a key the header doesn't use.
  */
 export type HeaderKeyResult =
-  { type: 'move'; col: number } | { type: 'sort'; col: number } | { type: 'rows' } | { type: 'pass' } | null;
+  | { type: 'move'; col: number }
+  /** `add`: Shift+Enter, which adds the column to the sort as a further key rather than sort by it alone. */
+  | { type: 'sort'; col: number; add?: boolean }
+  | { type: 'rows' }
+  | { type: 'pass' }
+  | null;
 
 export function headerKey(col: number, input: KeyInput, colCount: number): HeaderKeyResult {
   if (input.alt || colCount <= 0) return null;
@@ -203,7 +208,8 @@ export function headerKey(col: number, input: KeyInput, colCount: number): Heade
     case 'PageDown':
       return { type: 'pass' };
     case 'Enter':
-      return plain ? { type: 'sort', col: here } : null;
+      if (plain) return { type: 'sort', col: here };
+      return input.shift && !input.mod ? { type: 'sort', col: here, add: true } : null;
     case ' ':
       // Shift+Space selects rows: on the header there's no row to select.
       return input.mod ? null : input.shift ? { type: 'move', col: here } : { type: 'sort', col: here };

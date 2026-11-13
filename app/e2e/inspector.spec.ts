@@ -496,6 +496,9 @@ test('at 200% the sheet docked at the bottom still leaves a row of the view', as
   await page.setViewportSize({ width: 640, height: 360 });
   const main = page.locator('#main');
   await expect.poll(async () => (await boxOf(main)).height).toBe(152);
+  // The URL grid's toolbars (presets, facets) are taller than that at this width: the view scrolls to its grid, as a
+  // screen of toolbars over a grid does in a short window (GridScreen), and a row of it fits.
+  await page.getByRole('grid', { name: 'URLs' }).getByRole('row').nth(1).scrollIntoViewIfNeeded();
   const row = await boxOf(page.getByRole('grid', { name: 'URLs' }).getByRole('row').nth(1));
   const view = await boxOf(main);
   expect(row.height).toBeGreaterThan(0);

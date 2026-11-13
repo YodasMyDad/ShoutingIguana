@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, Link2Off, RefreshCw } from 'lucide-react';
+import { Copy, Link2Off, PanelRight, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
@@ -26,6 +26,9 @@ import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridSc
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { RefusedFilter } from '../grid/RefusedFilter';
+import { searchCommand } from '../grid/searchCommand';
+import { RowMenu, UrlRowItems } from '../grid/RowMenu';
+import { copyRowUrls, rowMenuLabel, useRowMenu } from '../grid/rowMenuState';
 import { nextSort, useHeaderHandoff } from '../grid/sort';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
@@ -41,11 +44,11 @@ import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
 import { LiveBadge } from '../ui/LiveBadge';
-import { DropdownMenu, MenuItem } from '../ui/Menu';
+import { DropdownMenu, MenuItem, MenuSeparator } from '../ui/Menu';
 import { GridHeader, ResultCount } from '../ui/PageHeader';
 import { SearchField } from '../ui/SearchField';
 import { Tooltip } from '../ui/Tooltip';
-import { siteOriginOf } from '../ui/urlText';
+import { siteOriginOf, urlDisplay } from '../ui/urlText';
 import { FACET_TITLES, LINK_FACET_IDS, buildFacets, withFacetValue, type FacetValue } from './links/facets';
 import {
   DEFAULT_LINK_COLUMNS,
@@ -209,17 +212,19 @@ export function LinksScreen() {
   };
   // The same of a view that arrives sorted by a column it doesn't show (a link made by hand, or by a version with
   // other columns): the sort is dropped from the route, in place, and never read for.
-  const hiddenSort = sortShown(sort, shown) === undefined && sort.length > 0;
+  const hiddenSort = (sortShown(sort, shown)?.length ?? 0) !== sort.length;
   useEffect(() => {
-    if (hiddenSort) void navigate({ search: (previous) => ({ ...previous, sort: undefined }), replace: true });
-  }, [hiddenSort, navigate]);
+    if (hiddenSort) {
+      void navigate({ search: (previous) => ({ ...previous, sort: sortShown(previous.sort, shown) }), replace: true });
+    }
+  }, [hiddenSort, navigate, shown]);
 
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();
   const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK);
   const columns = useMemo(
-    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth }),
-    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth],
+    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling }),
+    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling],
   );
 
   const summary = first?.summary;
@@ -345,18 +350,13 @@ export function LinksScreen() {
   const copyOneColumnTitle = copyColumnTitle(copyColumn ? linkColumnName(copyColumn) : undefined, copyPart);
   useCommands(
     (): Command[] => [
-      {
+      searchCommand({
         id: 'links.search',
         title: 'Search the links',
         group: 'Links',
-        keys: ['mod+f'],
-        inInputs: true,
-        keywords: ['find', 'filter', 'anchor text', 'url'],
-        run: () => {
-          searchRef.current?.focus();
-          searchRef.current?.select();
-        },
-      },
+        field: searchRef,
+        keywords: ['anchor text', 'url'],
+      }),
       {
         id: 'links.addFilter',
         title: 'Add a filter to the links',
@@ -437,6 +437,15 @@ export function LinksScreen() {
       </Button>
     ) : null;
   const chooseFacet = (value: FacetValue) => setFilters(withFacetValue(filters, value.filter));
+  // A row's menu acts on the end of the link the menu was opened in: the page it's on from one of its columns, the
+  // target from anywhere else, as Enter does.
+  const rowMenu = useRowMenu<LinkRow>();
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
+  const menuEnd: 'from' | 'to' =
+    rowMenu.state && endColumn(columns[rowMenu.state.column]?.id ?? '')?.end === 'from' ? 'from' : 'to';
+  const menuUrl = menuRow?.[`${menuEnd}.url`];
+  const menuCount = rowMenu.state?.menu.indices.length ?? 1;
   const noLinks = noLinksWords(crawling);
 
   return (
@@ -627,6 +636,9 @@ export function LinksScreen() {
               if (inspecting && index !== null) openRow(rows.getRow(index), inspectedEnd);
             }}
             onActiveColumnChange={setCursorColumn}
+            onContextMenu={rowMenu.onContextMenu}
+            // The cursor is on a link, not at a row number: a running crawl's refresh that moves rows keeps it there.
+            rowKey={(row) => row.id}
             // Live refreshes update in place: the progress line is for a refresh the user asked for.
             busy={rows.isRefreshing && !crawling}
             loadingNote={waiting ? slowWords : undefined}
@@ -652,6 +664,34 @@ export function LinksScreen() {
           />
         </GridScreenBody>
       )}
+      <RowMenu
+        state={rowMenu.state}
+        onOpenChange={rowMenu.onOpenChange}
+        label={rowMenuLabel(
+          menuCount,
+          typeof menuUrl === 'string'
+            ? `the link ${menuEnd === 'from' ? 'on' : 'to'} ${urlDisplay(menuUrl, siteOrigin).shown}`
+            : undefined,
+          ['link', 'links'],
+        )}
+      >
+        <UrlRowItems
+          count={menuCount}
+          url={typeof menuUrl === 'string' ? menuUrl : undefined}
+          onCopyUrls={() => {
+            if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row[`${menuEnd}.url`]);
+          }}
+          onCopyRows={() => void rowMenu.state?.menu.copy()}
+          rowNoun={['link', 'links']}
+        />
+        <MenuSeparator />
+        <MenuItem icon={PanelRight} disabled={!menuRow} onSelect={() => openRow(menuRow, 'from')}>
+          Inspect the source page
+        </MenuItem>
+        <MenuItem icon={PanelRight} disabled={!menuRow} onSelect={() => openRow(menuRow, 'to')}>
+          Inspect the target
+        </MenuItem>
+      </RowMenu>
     </GridScreen>
   );
 }

@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridQuery, SummaryState, UrlRow } from '../api/grids';
 import { answerGridQuery } from '../api/mock/gridQuery';
+import { URL_COLUMNS } from '../api/mock/urlColumns';
 import { gridPagesOf } from '../api/queries';
 import { setTransport, type TransportRequest } from '../api/transport';
 import type { Checks, CrawlStatus } from '../api/types';
@@ -62,6 +63,7 @@ function sidecar(options: {
       },
     ],
     ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse],
+    ['GET', /^\/api\/url-columns$/, () => json(URL_COLUMNS)],
     [
       'GET',
       /^\/api\/checks$/,
@@ -105,12 +107,11 @@ describe('the URL grid without the URL summary', () => {
   it('says why the analysis’s columns are empty, and offers to analyse the crawl', async () => {
     const { analyse } = sidecar({ analyzedAt: null, summary: { available: false, reason: 'notAnalyzed' } });
     await open(URLS);
-    const notice = await screen.findByText(/Inlinks and Issues need an analysis: this crawl hasn’t been analysed yet/);
-    expect(await screen.findByText('https://example.com/a')).toBeVisible();
+    await screen.findByText(/Inlinks and Issues need an analysis: this crawl hasn’t been analysed yet/);
     // The crawl's own columns are there; the analysis's are a dash, not a 0.
-    const row = screen.getByText('https://example.com/a').closest<HTMLElement>('[role="row"]')!;
+    const row = (await screen.findByRole('gridcell', { name: /\/a$/ })).closest<HTMLElement>('[role="row"]')!;
     expect(within(row).getAllByText('–').length).toBeGreaterThanOrEqual(2);
-    fireEvent.click(within(notice).getByRole('button', { name: 'Analyse it' }));
+    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Analyse it' }));
     await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
   });
 
@@ -157,8 +158,8 @@ describe('the URL grid without the URL summary', () => {
 
   it('turns a query the engine can’t run into a plain sentence, with a way back', async () => {
     sidecar({ summary: { available: true, reason: null } });
-    // `outcome` filters, but doesn't sort.
-    const { router } = await open(`${URLS}?sort=-outcome`);
+    // `outcome` filters, but doesn't sort: shown, a sort by it is the engine's to refuse.
+    const { router } = await open(`${URLS}?cols=url,outcome&sort=-outcome`);
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
     // With what the engine said of it, in place: not only behind Details.
     expect(screen.getByText('The view can’t be sorted by “outcome”.')).toBeVisible();
@@ -305,7 +306,7 @@ describe('the URL grid opened from a check’s group', () => {
     await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(slow))}`);
     const chips = await screen.findByRole('group', { name: 'Filters' });
     expect(
-      within(chips).getByRole('button', { name: 'Remove the filter Response is at least 1,000 ms' }),
+      within(chips).getByRole('button', { name: 'Remove the filter Response time is at least 1,000 ms' }),
     ).toBeVisible();
     cleanup();
     sidecar({ summary: { available: true, reason: null } });
@@ -313,7 +314,7 @@ describe('the URL grid opened from a check’s group', () => {
     await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(band))}`);
     expect(
       within(await screen.findByRole('group', { name: 'Filters' })).getByRole('button', {
-        name: 'Remove the filter Response is between 250 ms and 499 ms',
+        name: 'Remove the filter Response time is between 250 ms and 499 ms',
       }),
     ).toBeVisible();
   });
