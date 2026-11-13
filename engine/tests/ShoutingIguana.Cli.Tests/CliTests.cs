@@ -267,6 +267,32 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Contains("<h2>What to fix</h2>", document, StringComparison.Ordinal);
         Assert.DoesNotContain("<h2>What to fix</h2>", await File.ReadAllTextAsync(summary), StringComparison.Ordinal);
         Assert.Equal(0, (await RunAsync("report", crawl, "--out", summary, "--cut", "summary", "--examples", "2", "--look-examples", "0")).ExitCode);
+
+        // The two lists, as their screens list them: the sitemaps, and the origins searched and filtered.
+        var sitemaps = Path.Combine(_folder, "sitemaps.csv");
+        var listed = await RunAsync("export", crawl, "--kind", "sitemaps", "--out", sitemaps);
+        Assert.True(listed.ExitCode == 0, listed.Error);
+        var sitemapLines = await File.ReadAllLinesAsync(sitemaps);
+        Assert.Equal("Sitemap,Index,Listed by,Found via,Status,Error,Listed,Crawled,Blocked by robots.txt,Not crawled,Indexable,Non-indexable,Redirecting or broken",
+            sitemapLines[0].TrimStart((char)0xFEFF));
+        Assert.Equal(SitemapListReader.Read(crawl).Sitemaps.Count, sitemapLines.Length - 1);
+
+        var host = _server.BaseUri.Host;
+        var origins = Path.Combine(_folder, "origins.xlsx");
+        var asked = await RunAsync("export", crawl, "--kind", "robotsOrigins", "--out", origins, "--search", host, "--blocked", "false");
+        Assert.True(asked.ExitCode == 0, asked.Error);
+        var matching = RobotsReader.ReadOrigins(crawl, new RobotsOriginQuery { Search = host, Blocked = false, Limit = 1_000 }).Matching;
+        Assert.True(matching > 0);
+        Assert.Contains($"Wrote {matching:N0} {(matching == 1 ? "row" : "rows")} to {origins}", asked.Output);
+
+        // The URL grid narrowed to a links view's targets, as the grid narrows to them.
+        var targets = Path.Combine(_folder, "targets.csv");
+        var narrowed = await RunAsync("export", crawl, "--kind", "urls", "--out", targets, "--link-ends", "to", "--link-filter", "kind:in:hyperlink", "--link-search", "/");
+        Assert.True(narrowed.ExitCode == 0, narrowed.Error);
+        var ends = new UrlLinkEnds(LinkEnd.To, [new UrlFilter("kind", FilterOperator.In) { Values = [FilterValue.Of("hyperlink")] }], "/");
+        var hyperlinked = UrlGridReader.Query(crawl, new UrlQuery { LinkEnds = ends, Limit = 1 }).Matching;
+        Assert.True(hyperlinked > 0 && hyperlinked < UrlGridReader.Query(crawl, new UrlQuery { Limit = 1 }).Matching);
+        Assert.Equal(hyperlinked, (await File.ReadAllLinesAsync(targets)).Length - 1);
         Assert.Empty(Directory.GetFiles(_folder, "*.tmp*"));
     }
 
@@ -341,6 +367,14 @@ public sealed class CliTests : IAsyncLifetime
             "--sort isn't for an export of robotsBlocked");
         AssertFails(await RunAsync("export", crawl, "--kind", "workbook", "--out", Path.Combine(_folder, "w.xlsx"), "--examples", "2"), "--examples isn't for an export of workbook: it belongs to report.");
         AssertFails(await RunAsync("export", crawl, "--kind", "check", "--check", "title-too-long", "--out", csv, "--filter", "depth:eq:1"), "--filter isn't for an export of check");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--blocked", "true"), "--blocked isn't for an export of urls: it belongs to robotsOrigins.");
+        AssertFails(await RunAsync("export", crawl, "--kind", "links", "--out", csv, "--link-ends", "to"), "--link-ends isn't for an export of links: it belongs to urls.");
+        AssertFails(await RunAsync("export", crawl, "--kind", "sitemaps", "--out", csv, "--search", "x"), "--search isn't for an export of sitemaps");
+        AssertFails(await RunAsync("export", crawl, "--kind", "robotsOrigins", "--out", csv, "--sort", "origin"), "--sort isn't for an export of robotsOrigins");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--link-filter", "kind:in:hyperlink"), "give it, as from or to");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--link-ends", "sideways"), "--link-ends must be from");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--link-ends", "to", "--link-filter", "nope:in:x"), "linkEnds.filters[0].column");
+        AssertFails(await RunAsync("export", crawl, "--kind", "robotsOrigins", "--out", csv, "--search", new string('a', 1_001)), "search: Search for at most 1,000 characters.");
         Assert.False(File.Exists(csv));
 
         // The crawl itself is never an export's file, whatever it's called.

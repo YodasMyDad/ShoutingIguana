@@ -25,5 +25,11 @@ public enum ExportKind
     Workbook,
 
     /// <summary>The report: one self-contained HTML document.</summary>
-    Report
+    Report,
+
+    /// <summary>The list of sitemaps the crawl looked for, as the Sitemaps screen lists them: each with what became of it and its URLs counted.</summary>
+    Sitemaps,
+
+    /// <summary>The origins the crawl asked for a robots.txt, as the robots.txt screen lists them: all, or those a search and a filter match.</summary>
+    RobotsOrigins
 }

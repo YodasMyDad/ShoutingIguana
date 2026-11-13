@@ -20,7 +20,7 @@ const offer = (crawling = false) =>
     search: undefined,
     rows: 3,
     viewName: null,
-    linkEnds: false,
+    linkEnds: undefined,
   });
 
 const started = (request: TransportRequest) =>
@@ -95,6 +95,39 @@ describe('the export dialog', () => {
     expect(screen.getByRole('radio', { name: 'CSV' })).toBeChecked();
     fireEvent.change(field, { target: { value: 'C:\\x\\mine.xlsx' } });
     expect(screen.getByRole('radio', { name: 'Excel' })).toBeChecked();
+  });
+
+  it('exports the two lists as every grid is exported: their default names in the same pattern, and their requests', async () => {
+    const { robotsOriginsOffer, sitemapsOffer } = await import('./offers');
+    const transport = fakeSidecar([['POST', /\/export$/, started]]);
+    setTransport(transport);
+    render(<ExportDialogHost />);
+    for (const [listOffer, name, kind] of [
+      [sitemapsOffer({ item, crawling: false, rows: 4 }), 'sitemaps', 'sitemaps'],
+      [
+        robotsOriginsOffer({ item, crawling: false, rows: 2, blocked: true }),
+        'robots.txt origins that blocked a URL',
+        'robotsOrigins',
+      ],
+    ] as const) {
+      openExportDialog(listOffer);
+      const field = await screen.findByRole('textbox', { name: 'Save as' });
+      expect((field as HTMLInputElement).value).toMatch(
+        new RegExp(`(^|[\\\\/])example\\.com 2026-11-01 ${name}\\.(xlsx|csv)$`),
+      );
+      expect(screen.getByRole('radio', { name: 'CSV' })).toBeVisible();
+      expect(screen.getByRole('radio', { name: 'Excel' })).toBeVisible();
+      fireEvent.change(field, { target: { value: `C:\\x\\${kind}.xlsx` } });
+      fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+      await waitFor(() => expect(getExportDialog()).toBeNull());
+      const sent = transport.requests.filter((request) => request.path.endsWith('/export')).at(-1);
+      expect(sent?.body).toEqual({
+        kind,
+        format: 'xlsx',
+        path: `C:\\x\\${kind}.xlsx`,
+        ...(kind === 'robotsOrigins' ? { blocked: true } : {}),
+      });
+    }
   });
 
   it('offers the analysis in place of the report for a crawl never analysed', async () => {

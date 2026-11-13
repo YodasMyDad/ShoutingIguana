@@ -7,6 +7,8 @@ import {
   linkExportColumns,
   linksOffer,
   robotsBlockedOffer,
+  robotsOriginsOffer,
+  sitemapsOffer,
   sitemapUrlsOffer,
   urlExportColumns,
   urlGridOffer,
@@ -40,7 +42,7 @@ const view = {
 
 describe('a grid’s export is the grid’s own read', () => {
   it('URLs: its columns, filters, search and sort, and no page', () => {
-    const offer = urlGridOffer({ ...view, viewName: null, linkEnds: false });
+    const offer = urlGridOffer({ ...view, viewName: null, linkEnds: undefined });
     expect(offer.choices[0]?.build(as())).toEqual({
       kind: 'urls',
       format: 'xlsx',
@@ -55,7 +57,7 @@ describe('a grid’s export is the grid’s own read', () => {
   });
 
   it('in crawl order when asked, and while crawling says a sort by what the crawl changes is refused', () => {
-    const offer = urlGridOffer({ ...view, crawling: true, viewName: 'Thin pages', linkEnds: false });
+    const offer = urlGridOffer({ ...view, crawling: true, viewName: 'Thin pages', linkEnds: undefined });
     expect(offer.choices[0]?.build(as({ crawlOrder: true }))).not.toHaveProperty('sort');
     expect(offer.choices[0]?.sortedWhileCrawling).toBe(true);
     expect(offer.note).toMatch(/as it is when the export begins/);
@@ -65,13 +67,40 @@ describe('a grid’s export is the grid’s own read', () => {
       sort: [{ column: 'url', desc: false }],
       crawling: true,
       viewName: null,
-      linkEnds: false,
+      linkEnds: undefined,
     });
     expect(byUrl.choices[0]?.sortedWhileCrawling).toBe(false);
   });
 
-  it('a view narrowed to a links view’s pages can’t be exported, and says so', () => {
-    expect(urlGridOffer({ ...view, viewName: null, linkEnds: true }).choices[0]?.unavailable).toMatch(/can’t export/);
+  it('a view narrowed to a links view’s pages or targets is exported narrowed to them, and its name says which', () => {
+    const ends = {
+      end: 'to' as const,
+      filters: [{ column: 'kind', op: 'in' as const, values: ['hyperlink'] }],
+      search: '',
+    };
+    const targets = urlGridOffer({ ...view, viewName: null, linkEnds: ends });
+    expect(targets.choices[0]?.unavailable).toBeUndefined();
+    expect(targets.choices[0]?.build(as())).toEqual({
+      kind: 'urls',
+      format: 'xlsx',
+      path: 'C:\\x\\a.xlsx',
+      columns: ['url', 'statusCode', 'outcome', 'title'],
+      filters: [{ column: 'type', op: 'in', values: ['page'] }],
+      search: 'rattan',
+      sort: [{ column: 'inlinks', desc: true }],
+      // Only the links' fields given: an empty search is every link, and isn't sent.
+      linkEnds: { end: 'to', filters: [{ column: 'kind', op: 'in', values: ['hyperlink'] }] },
+    });
+    expect(targets.choices[0]?.fileView).toBe('URLs link targets');
+    expect(targets.choices[0]?.description).toBe(
+      '264 URLs: this filter, this search, this sort, these 4 columns, only the URLs a links view’s links lead to',
+    );
+    const pages = urlGridOffer({ ...view, viewName: 'Thin pages', linkEnds: { end: 'from', search: 'sale' } });
+    expect(pages.choices[0]?.build(as())).toMatchObject({ linkEnds: { end: 'from', search: 'sale' } });
+    expect(pages.choices[0]?.fileView).toBe('URLs Thin pages pages with the links');
+    expect(urlGridOffer({ ...view, viewName: null, linkEnds: undefined }).choices[0]?.build(as())).not.toHaveProperty(
+      'linkEnds',
+    );
   });
 
   it('writes a status shown as words beside its code, and the follow column as its four flags', () => {
@@ -103,6 +132,49 @@ describe('a grid’s export is the grid’s own read', () => {
       line: 4,
     });
     expect(blocked.choices[0]?.fileView).toBe('blocked by example.com robots.txt line 4');
+  });
+});
+
+describe('the two lists', () => {
+  it('Sitemaps: the list, as CSV or Excel, with no field of a grid’s', () => {
+    const offer = sitemapsOffer({ item, crawling: false, rows: 12 });
+    expect(offer.title).toBe('Export sitemaps');
+    expect(offer.choices.map((choice) => [choice.id, choice.formats, choice.unavailable])).toEqual([
+      ['view', ['csv', 'xlsx'], undefined],
+    ]);
+    expect(offer.choices[0]?.build(as())).toEqual({ kind: 'sitemaps', format: 'xlsx', path: 'C:\\x\\a.xlsx' });
+    expect(offer.choices[0]?.build(as({ format: 'csv' }))).toMatchObject({ format: 'csv' });
+    expect(offer.choices[0]?.description).toBe('12 sitemaps: what became of each, and its URLs counted');
+    expect(offer.choices[0]?.fileView).toBe('sitemaps');
+    expect(sitemapsOffer({ item, crawling: true, rows: null }).note).toMatch(/as it is when the export begins/);
+  });
+
+  it('robots.txt: the origins, with the list’s search and filter when it has them', () => {
+    const all = robotsOriginsOffer({ item, crawling: false, rows: 17 });
+    expect(all.title).toBe('Export robots.txt');
+    expect(all.choices[0]?.build(as({ format: 'csv' }))).toEqual({
+      kind: 'robotsOrigins',
+      format: 'csv',
+      path: 'C:\\x\\a.xlsx',
+    });
+    expect(all.choices[0]?.description).toBe('17 origins: what each answer meant, and the URLs it blocked');
+    expect(all.choices[0]?.fileView).toBe('robots.txt origins');
+
+    const narrowed = robotsOriginsOffer({ item, crawling: false, rows: 1, search: 'example', blocked: true });
+    expect(narrowed.choices[0]?.build(as())).toEqual({
+      kind: 'robotsOrigins',
+      format: 'xlsx',
+      path: 'C:\\x\\a.xlsx',
+      search: 'example',
+      blocked: true,
+    });
+    expect(narrowed.choices[0]?.description).toBe(
+      '1 origin that blocked a URL, whose name has “example”: what each answer meant, and the URLs it blocked',
+    );
+    expect(narrowed.choices[0]?.fileView).toBe('robots.txt origins that blocked a URL');
+    expect(
+      robotsOriginsOffer({ item, crawling: false, rows: null, blocked: false }).choices[0]?.build(as()),
+    ).toMatchObject({ blocked: false });
   });
 });
 

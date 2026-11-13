@@ -48,6 +48,8 @@ internal static class ExportRequests
         Only(body.Filters is not null, "filters");
         Only(body.Search is not null, "search");
         Only(body.Sort is not null, "sort");
+        Only(body.LinkEnds is not null, "linkEnds");
+        Only(body.Blocked is not null, "blocked");
         Only(body.Group is not null, "group");
         Only(body.SitemapId is not null, "sitemapId");
         Only(body.Origin is not null, "origin");
@@ -83,8 +85,9 @@ internal static class ExportRequests
             Kind = kind,
             Format = format,
             Query = GRIDS.Contains(kind)
-                ? GridRequests.Query(new GridQueryRequest { Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort })
-                : new UrlQuery(),
+                ? GridRequests.Query(new GridQueryRequest { Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort, LinkEnds = body.LinkEnds })
+                : new UrlQuery { Search = body.Search },
+            Blocked = body.Blocked,
             SitemapId = sitemap,
             Origin = body.Origin,
             Line = body.Line,

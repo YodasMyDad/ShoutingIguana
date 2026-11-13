@@ -2,11 +2,20 @@
 // path the user chose in a native save dialog; an export is a job, as an analysis is: `startExport` answers at once
 // with the job, `export` events on the live stream carry it as it goes on and as it ends, and `exportJob` reads it.
 import { parseProblem, type ProblemBody } from './errors';
-import type { CheckGroupRef, GridFilter, GridSort, RobotsBlockReason } from './grids';
+import type { CheckGroupRef, GridFilter, GridSort, LinkEnds, RobotsBlockReason } from './grids';
 
-/** What an export writes. */
+/** What an export writes. `sitemaps` and `robotsOrigins` (E7) are the two lists, as their screens list them. */
 export type ExportKind =
-  'urls' | 'links' | 'sitemapUrls' | 'robotsBlocked' | 'issueRows' | 'check' | 'workbook' | 'report';
+  | 'urls'
+  | 'links'
+  | 'sitemapUrls'
+  | 'robotsBlocked'
+  | 'issueRows'
+  | 'check'
+  | 'workbook'
+  | 'report'
+  | 'sitemaps'
+  | 'robotsOrigins';
 
 /** The grids write `csv` or `xlsx`; `check` either; `workbook` is `xlsx` and `report` is `html`. */
 export type ExportFormat = 'csv' | 'xlsx' | 'html';
@@ -45,7 +54,9 @@ interface ExportTarget {
  * (`invalid-export`), not ignored.
  */
 export type ExportRequest =
-  | ({ kind: 'urls' | 'links'; format: 'csv' | 'xlsx' } & ExportTarget & ExportGridQuery)
+  /** E7: the URL grid narrowed to a links view's pages or targets, as its read takes `linkEnds`. */
+  | ({ kind: 'urls'; format: 'csv' | 'xlsx'; linkEnds?: LinkEnds } & ExportTarget & ExportGridQuery)
+  | ({ kind: 'links'; format: 'csv' | 'xlsx' } & ExportTarget & ExportGridQuery)
   | ({ kind: 'sitemapUrls'; format: 'csv' | 'xlsx'; sitemapId: number } & ExportTarget & ExportGridQuery)
   | ({ kind: 'issueRows'; format: 'csv' | 'xlsx'; checkId: string; group?: CheckGroupRef } & ExportTarget &
       ExportGridQuery)
@@ -58,7 +69,11 @@ export type ExportRequest =
     } & ExportTarget)
   | ({ kind: 'check'; format: 'xlsx' | 'csv'; checkId: string } & ExportTarget)
   | ({ kind: 'workbook'; format: 'xlsx' } & ExportTarget)
-  | ({ kind: 'report'; format: 'html' } & ExportTarget & ReportOptions);
+  | ({ kind: 'report'; format: 'html' } & ExportTarget & ReportOptions)
+  /** E7: every sitemap the crawl looked for, as `GET /sitemaps` lists them, in the list's words. */
+  | ({ kind: 'sitemaps'; format: 'csv' | 'xlsx' } & ExportTarget)
+  /** E7: the origins' robots.txt, as `POST /robots` lists them, with its `search` and `blocked` filter. */
+  | ({ kind: 'robotsOrigins'; format: 'csv' | 'xlsx'; search?: string; blocked?: boolean } & ExportTarget);
 
 /** What a finished export wrote. */
 export interface ExportResult {
@@ -118,6 +133,8 @@ const EXPORT_KINDS: readonly ExportKind[] = [
   'check',
   'workbook',
   'report',
+  'sitemaps',
+  'robotsOrigins',
 ];
 const EXPORT_FORMATS: readonly ExportFormat[] = ['csv', 'xlsx', 'html'];
 const EXPORT_STATUSES: readonly ExportStatus[] = ['running', 'done', 'cancelled', 'failed'];

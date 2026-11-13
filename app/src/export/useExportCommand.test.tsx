@@ -15,7 +15,7 @@ const offer = urlGridOffer({
   search: undefined,
   rows: 3,
   viewName: null,
-  linkEnds: false,
+  linkEnds: undefined,
 });
 
 function Screen() {

@@ -32,8 +32,19 @@ internal static class ExportCommand
             Description = "A grid's filter, as column:operator[:value], any number of times: statusClass:in:4xx,5xx  depth:lte:3  title:contains:garden  title:isEmpty  responseMs:between:500..2000",
             AllowMultipleArgumentsPerToken = false
         };
-        var search = new Option<string?>("--search") { Description = "A grid's quick search." };
+        var search = new Option<string?>("--search") { Description = "A grid's quick search; for robotsOrigins, the origins whose name contains it." };
         var sort = new Option<string[]>("--sort") { Description = "A grid's sort, as column or column:desc, up to three times." };
+        var linkEnds = new Option<string?>("--link-ends")
+        {
+            Description = "For urls: only the URLs at one end of the links --link-filter and --link-search match: from (the pages they're on) or to (the URLs they lead to)."
+        };
+        var linkFilters = new Option<string[]>("--link-filter")
+        {
+            Description = "With --link-ends: a links grid's filter, as --filter takes one, any number of times: kind:in:hyperlink  to.statusClass:in:4xx",
+            AllowMultipleArgumentsPerToken = false
+        };
+        var linkSearch = new Option<string?>("--link-search") { Description = "With --link-ends: the links grid's quick search." };
+        var blocked = new Option<bool?>("--blocked") { Description = "For robotsOrigins: true for only the origins that blocked a URL, false for only those that blocked none." };
         var sitemap = new Option<int?>("--sitemap") { Description = "For sitemapUrls: the sitemap's id." };
         var origin = new Option<string?>("--origin") { Description = "For robotsBlocked: the origin, such as https://www.example.com." };
         var line = new Option<int?>("--line") { Description = "For robotsBlocked: only the URLs this line of robots.txt refused." };
@@ -47,7 +58,8 @@ internal static class ExportCommand
         };
         var command = new Command("export", "Write what a crawl holds to a file: a grid as CSV or Excel, the workbook of everything, or the report.")
         {
-            database, kind, output, format, columns, filters, search, sort, sitemap, origin, line, reason, check, cut, examples, lookExamples
+            database, kind, output, format, columns, filters, search, sort, linkEnds, linkFilters, linkSearch, blocked, sitemap, origin, line, reason, check, cut, examples,
+            lookExamples
         };
 
         command.SetAction((parse, cancellationToken) => Task.FromResult(CommandErrors.Run(() =>
@@ -68,8 +80,9 @@ internal static class ExportCommand
             // An option that belongs to another kind is refused, never ignored, as the API refuses its field: by the same list.
             (Option Option, string Field)[] owned =
             [
-                (columns, "columns"), (filters, "filters"), (search, "search"), (sort, "sort"), (sitemap, "sitemapId"), (origin, "origin"), (line, "line"), (reason, "reason"),
-                (check, "checkId"), (cut, "cut"), (examples, "examples"), (lookExamples, "lookExamples")
+                (columns, "columns"), (filters, "filters"), (search, "search"), (sort, "sort"), (linkEnds, "linkEnds"), (linkFilters, "linkEnds"), (linkSearch, "linkEnds"),
+                (blocked, "blocked"), (sitemap, "sitemapId"), (origin, "origin"), (line, "line"), (reason, "reason"), (check, "checkId"), (cut, "cut"), (examples, "examples"),
+                (lookExamples, "lookExamples")
             ];
             var misplaced = owned.Where(option => parse.GetResult(option.Option) is { Implicit: false } && !ExportFields.Takes(exportKind, option.Field)).ToList();
             foreach (var (option, field) in misplaced)
@@ -84,7 +97,8 @@ internal static class ExportCommand
             }
 
             if (!TryReason(parse.GetValue(reason), out var blockReason) || !TryCut(parse.GetValue(cut), out var reportCut) ||
-                Query(exportKind, parse.GetValue(columns), parse.GetValue(filters) ?? [], parse.GetValue(search), parse.GetValue(sort) ?? []) is not { } query)
+                Query(exportKind, parse.GetValue(columns), parse.GetValue(filters) ?? [], parse.GetValue(search), parse.GetValue(sort) ?? []) is not { } query ||
+                !TryLinkEnds(parse.GetValue(linkEnds), parse.GetValue(linkFilters) ?? [], parse.GetValue(linkSearch), out var ends))
             {
                 return 2;
             }
@@ -93,7 +107,8 @@ internal static class ExportCommand
             {
                 Kind = exportKind,
                 Format = exportFormat,
-                Query = query,
+                Query = query with { LinkEnds = ends },
+                Blocked = parse.GetValue(blocked),
                 SitemapId = parse.GetValue(sitemap),
                 Origin = parse.GetValue(origin),
                 Line = parse.GetValue(line),
@@ -238,6 +253,47 @@ internal static class ExportCommand
             return false;
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// The links view whose pages or targets the URL grid is narrowed to, as the grid's <c>linkEnds</c> takes it: none
+    /// without <c>--link-ends</c>; false, with why on stderr, when an option can't be read.
+    /// </summary>
+    private static bool TryLinkEnds(string? end, string[] filters, string? search, out UrlLinkEnds? ends)
+    {
+        ends = null;
+        if (end is null)
+        {
+            if (filters.Length > 0 || search is not null)
+            {
+                Console.Error.WriteLine("--link-filter and --link-search narrow the links of --link-ends: give it, as from or to.");
+                return false;
+            }
+
+            return true;
+        }
+
+        LinkEnd? which = end.ToLowerInvariant() switch { "from" => LinkEnd.From, "to" => LinkEnd.To, _ => null };
+        if (which is null)
+        {
+            Console.Error.WriteLine("--link-ends must be from (the pages the links are on) or to (the URLs they lead to).");
+            return false;
+        }
+
+        List<UrlFilter> parsed = [];
+        foreach (var text in filters)
+        {
+            if (Filter(text, LinkGridReader.Columns) is not { } filter)
+            {
+                Console.Error.WriteLine($"--link-filter '{Format.Printable(text)}' isn't column:operator[:value], as --filter takes one.");
+                return false;
+            }
+
+            parsed.Add(filter);
+        }
+
+        ends = new UrlLinkEnds(which.Value, parsed, search);
         return true;
     }
 

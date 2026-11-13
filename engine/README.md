@@ -1000,11 +1000,18 @@ si export example.sicrawl --kind links --out broken-links.xlsx --filter to.statu
 si export example.sicrawl --kind issueRows --check title-too-long --out long-titles.csv
 si export example.sicrawl --kind workbook --out everything.xlsx     # a summary sheet, and a sheet for each check
 si report example.sicrawl --out report.html                         # the report; --cut summary for its first page
+si export example.sicrawl --kind sitemaps --out sitemaps.xlsx       # the list of sitemaps, as the Sitemaps screen lists them
+si export example.sicrawl --kind robotsOrigins --out origins.csv --blocked true --search example
+si export example.sicrawl --kind urls --out broken-targets.csv --link-ends to --link-filter kind:in:hyperlink \
+    --link-filter to.statusClass:in:4xx                             # the URLs the broken hyperlinks lead to
 ```
 
 | `--kind` | Writes | As |
 | --- | --- | --- |
-| `urls`, `links` | The URL grid, the links grid | `.csv`, `.xlsx` |
+| `urls` (`--link-ends from\|to`, with `--link-filter` and `--link-search`, to narrow it to a links view's ends) | The URL grid | `.csv`, `.xlsx` |
+| `links` | The links grid | `.csv`, `.xlsx` |
+| `sitemaps` (E7) | The list of sitemaps, in the Sitemaps screen's words | `.csv`, `.xlsx` |
+| `robotsOrigins` (E7; `--search`, `--blocked true\|false` to narrow it) | The origins' robots.txt, in the robots.txt screen's words | `.csv`, `.xlsx` |
 | `sitemapUrls` (`--sitemap <id>`) | One sitemap's URLs | `.csv`, `.xlsx` |
 | `robotsBlocked` (`--origin`, with `--line` or `--reason` to narrow) | The URLs robots.txt kept the crawl from on an origin | `.csv`, `.xlsx` |
 | `issueRows` (`--check <id>`) | A check's rows, with any of the grid's columns | `.csv`, `.xlsx` |
@@ -1019,6 +1026,21 @@ value is of its column's type, not of what it looks like: `title:eq:404` is the 
 number, `isInternal:is:false` a boolean. An option that belongs to another kind (`--check` for `urls`, `--cut` for
 anything but the report) is refused, never ignored, by the same list the API refuses a field of another kind by
 (`Export/ExportFields`).
+
+**A URL export narrowed to a links view's ends** (`--link-ends`) is the URL grid's `linkEnds`: `to` for the URLs the
+view's links lead to, `from` for the pages they're on, where `--link-filter` (the links grid's filters, as `--filter`
+takes them, any number of times) and `--link-search` (its search) are the view, and none of either is every link. It
+narrows beside `--filter` and `--search`, as one more filter. `--link-filter` and `--link-search` without
+`--link-ends` are refused.
+
+**The two lists** (E7) aren't grids, and take no `--columns`, `--filter` or `--sort`: their columns are their screens'
+(`Export/ListExport`), and their words are the screens' cells' (`Export/SitemapListWords`, `Export/RobotsOriginWords`),
+"Read in part: 404 Not Found", "Couldn’t be read: URLs refused". `sitemaps` writes every sitemap the crawl looked for,
+in the order it found them, with the index that lists it ("Listed by"), how it was found, what became of it and its URLs
+counted (empty where the list shows a dash: an index until every sitemap under it is read). `robotsOrigins` writes the
+origins in the list's order, each with what its answer meant, its status or error, the URLs it blocked, when it was read
+(a date, in this computer's time) and its size; `--search` and `--blocked` narrow it as the list's search and filter do.
+Each is read whole, from one snapshot of the file, so a running crawl's file is of one moment of it.
 
 **How an export reads.** A page of rows at a time, each page the grid's own read (`Storage/GridExportReader` calls
 the readers the grids call, with the grid's cursor), on a snapshot it lets go of before the next:

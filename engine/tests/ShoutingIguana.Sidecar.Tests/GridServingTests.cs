@@ -162,6 +162,44 @@ public sealed class GridServingTests(GridSidecar grid) : IClassFixture<GridSidec
     }
 
     /// <summary>
+    /// The library says two counts of pages, each true by its own definition, so a screen can put the right one beside
+    /// the score: <c>pageCount</c>, every internal HTML page the crawl parsed (live and once it has ended), and
+    /// <c>pagesAnalyzed</c>, the pages the last analysis audited, which its score covers. They differ by the pages the
+    /// analysis doesn't audit: Cloudflare's own <c>/cdn-cgi/</c> endpoints, of which the synthetic site serves one, as
+    /// the 100k crawl's 101,107 and 101,106 do.
+    /// </summary>
+    [Fact]
+    public async Task TheLibrarySaysThePagesTheCrawlParsedAndThePagesItsAnalysisAudited()
+    {
+        var item = await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}");
+        var analysis = await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis");
+        var expected = grid.Site.Site.GetExpectations();
+        Assert.Equal(expected.HtmlPages, (long)item["pageCount"]!);
+        Assert.Equal(expected.AnalysedPages, (long)analysis["pagesAnalyzed"]!);
+        Assert.Equal((long)analysis["pagesAnalyzed"]!, (long?)item["pagesAnalyzed"]);
+        Assert.Equal((long)analysis["score"]!["covers"]!["pages"]!, (long?)item["pagesAnalyzed"]);
+
+        // The one page between them is the one the analysis leaves out.
+        long unaudited;
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = grid.Path, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT COUNT(*) FROM urls u JOIN responses r ON r.url_id = u.id WHERE {CRAWL_PAGE} AND instr(u.url, '/cdn-cgi/') > 0";
+            unaudited = (long)command.ExecuteScalar()!;
+        }
+
+        Assert.Equal(1, unaudited);
+        Assert.Equal((long)item["pageCount"]! - unaudited, (long?)item["pagesAnalyzed"]);
+
+        // A crawl never analysed has no analysis's count: null, never 0.
+        Assert.Null((await Sidecar.GetJsonAsync($"api/crawls/{grid.FreshId}"))["pagesAnalyzed"]);
+    }
+
+    /// <summary>A page as every crawl count of pages has it (the engine's <c>CrawlSchema.PAGE</c>).</summary>
+    private const string CRAWL_PAGE = "u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL";
+
+    /// <summary>
     /// The crawl's headline numbers are read as a grid is, in a read slot with its request's token, and kept with the
     /// grids' counts: read once while the crawl stands still, and again once a run has stamped it.
     /// </summary>

@@ -87,6 +87,11 @@ public static class CrawlExporter
                 Within(request.Report.Examples, "examples");
                 Within(request.Report.LookExamples, "lookExamples");
                 break;
+            case ExportKind.RobotsOrigins:
+                Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+                RobotsReader.ValidateSearch(request.Query.Search, errors);
+                UrlGridReader.ThrowIfInvalid(errors);
+                break;
         }
     }
 
@@ -140,6 +145,14 @@ public static class CrawlExporter
                 case ExportKind.Check:
                     table = Table(request.Format, target);
                     WorkbookExport.WriteCheck(run, table);
+                    break;
+                case ExportKind.Sitemaps:
+                    table = Table(request.Format, target);
+                    ListExport.WriteSitemaps(run, table);
+                    break;
+                case ExportKind.RobotsOrigins:
+                    table = Table(request.Format, target);
+                    ListExport.WriteOrigins(run, table);
                     break;
                 default:
                     table = Table(request.Format, target);

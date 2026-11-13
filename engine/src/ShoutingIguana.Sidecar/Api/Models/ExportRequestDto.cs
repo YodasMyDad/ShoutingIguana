@@ -10,7 +10,10 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ExportRequestDto
 {
-    /// <summary><c>urls</c>, <c>links</c>, <c>sitemapUrls</c>, <c>robotsBlocked</c>, <c>issueRows</c>, <c>check</c>, <c>workbook</c> or <c>report</c>.</summary>
+    /// <summary>
+    /// <c>urls</c>, <c>links</c>, <c>sitemapUrls</c>, <c>robotsBlocked</c>, <c>issueRows</c>, <c>check</c>, <c>workbook</c>,
+    /// <c>report</c>, <c>sitemaps</c> or <c>robotsOrigins</c>.
+    /// </summary>
     public string? Kind { get; init; }
 
     /// <summary><c>csv</c>, <c>xlsx</c> or <c>html</c>.</summary>
@@ -26,6 +29,12 @@ internal sealed record ExportRequestDto
     public string? Search { get; init; }
 
     public IReadOnlyList<UrlSortDto>? Sort { get; init; }
+
+    /// <summary>For <c>urls</c>: the grid narrowed to one end of a links view's links, as the URL grid's call takes it.</summary>
+    public LinkEndsDto? LinkEnds { get; init; }
+
+    /// <summary>For <c>robotsOrigins</c>: only the origins that blocked something (true), or nothing (false). Its <c>search</c> is the list's.</summary>
+    public bool? Blocked { get; init; }
 
     /// <summary>For <c>issueRows</c>: one of the check's groups.</summary>
     public IssueGroupKeyDto? Group { get; init; }

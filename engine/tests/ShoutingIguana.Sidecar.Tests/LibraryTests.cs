@@ -54,6 +54,8 @@ public sealed class LibraryTests : IAsyncLifetime
         Assert.Equal(stats.Outcomes.Values.Sum(), (long?)a["fetchedUrlCount"]);
         Assert.Equal(stats.Outcomes.Values.Sum() - stats.NotCheckedCount, (long?)a["crawledUrlCount"]);
         Assert.Equal(stats.HtmlPageCount, (long?)a["pageCount"]);
+
+        Assert.Equal(IssueReader.ReadAnalysis(inData)!.PagesAnalyzed, (long?)a["pagesAnalyzed"]);
         Assert.Equal(new FileInfo(inData).Length, (long?)a["sizeBytes"]);
         Assert.NotNull(a["startedAt"]);
         Assert.NotNull(a["finishedAt"]);
@@ -68,6 +70,7 @@ public sealed class LibraryTests : IAsyncLifetime
         Assert.Equal(outside, (string?)opened.Body!["path"]);
         Assert.Null(opened.Body["issues"]);
         Assert.Null(opened.Body["analyzedAt"]);
+        Assert.Null(opened.Body["pagesAnalyzed"]);
         var b = (string)opened.Body["id"]!;
         Assert.Equal(new[] { CrawlIds.For(inData), b }.Order(StringComparer.Ordinal), (await ListAsync()).Select(item => (string)item["id"]!).Order(StringComparer.Ordinal));
 

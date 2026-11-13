@@ -48,7 +48,7 @@ describe('the export dialog in the shell', () => {
         search: undefined,
         rows: 3,
         viewName: null,
-        linkEnds: false,
+        linkEnds: undefined,
       }),
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Export…' }));

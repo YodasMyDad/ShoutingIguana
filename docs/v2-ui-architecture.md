@@ -1657,9 +1657,11 @@ Analysis (E6), with what Links and the URL grid lacked of E6's link ends. `app/s
   (`kind: check`); of a check listed flat it is that list as the grid shows it, in its sort (`issueRows`, `url` and
   `detail`). Ctrl+E works from a text field too (every grid has its search field). `export-busy` is one type for three
   causes, told apart by the engine's title: a file being written, four exports running, the engine shutting down.
-  Not exportable, said by Ctrl+E: the list of sitemaps and robots.txt's origins (the engine has no kind for them), and
-  a URL view narrowed to a links view's ends (export takes no `linkEnds`). The URL grid's status column goes out with
-  `outcome` beside `statusCode`, and the links grid's follow column as its four flags.
+  Since E7 also the list of sitemaps (`sitemapsOffer`, "… sitemaps.xlsx"), robots.txt's origins (`robotsOriginsOffer`,
+  "… robots.txt origins.csv", with the list's search and filter when it has them) and a URL view narrowed to a links
+  view's ends (its `linkEnds` in the request; "… URLs link targets.csv" or "… URLs pages with the links.csv"). The URL
+  grid's status column goes out with `outcome` beside `statusCode`, and the links grid's follow column as its four
+  flags.
 
 ### The palette's search
 
@@ -1704,8 +1706,6 @@ URL grid (112,577 URLs) as Excel from Export to Saved 889 ms in the page, the to
 
 ### Not done, and why
 
-- **No export of the sitemaps' list or robots.txt's origins**, nor of a URL view narrowed to link ends: the engine has
-  no kind for the first two and its export takes no `linkEnds`. Asked of the engine.
 - **Open file and Open folder** are driven in the release build by `npm run smoke:shell` (its export step: an export
   started through the engine, the toast's Open folder seen as an Explorer window on the folder, Open file as the CSV
   open in its program, both closed again by `scripts/shell-opened.ps1`). **The native save dialog and the

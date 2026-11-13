@@ -11,6 +11,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { onAnnounce } from '../feedback/announce';
+import { SKELETON_DELAY_MS } from '../feedback/useDelayedLoading';
 import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { inspectFromGrid } from '../routing/inspector';
@@ -1301,13 +1302,39 @@ describe('walking the site', () => {
 
 describe('loading, failing and not there', () => {
   it('shows the summary’s skeleton only once a load has taken a moment', async () => {
-    const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: 'pending' } });
-    expect(within(inspector).queryByRole('status', { name: 'Loading the summary' })).toBeNull();
-    expect(await within(inspector).findByRole('status', { name: 'Loading the summary' })).toBeVisible();
-    // The frame is there meanwhile: the actions, and the tabs.
-    expect(within(inspector).getByRole('button', { name: 'Close the inspector' })).toBeEnabled();
-    expect(within(inspector).getByRole('button', { name: 'Copy the URL' })).toBeDisabled();
-    expect(within(inspector).getAllByRole('tab')).toHaveLength(9);
+    // The app's clock moves only when the test moves it, so "a moment" is the skeleton's own delay however long the
+    // machine takes to mount the app: with the real clock a loaded machine can spend that long before the first look,
+    // and the skeleton was already up. Zero-delay timers (the query client's notifications) still run as time stands.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    try {
+      sidecar = fakeSidecar([...inspectorRoutes({ urls: { 2: 'pending' } }), ...issuesRoutes({})]);
+      setTransport(sidecar);
+      const queryClient = createQueryClient();
+      const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [`${URLS}?inspect=2`] }));
+      render(<App router={router} queryClient={queryClient} />);
+      await act(() => router.load());
+      let inspector: HTMLElement | null = null;
+      for (let turn = 0; inspector === null && turn < 200; turn++) {
+        await act(() => vi.advanceTimersByTimeAsync(0));
+        inspector = screen.queryByRole('complementary', { name: 'Inspector' });
+      }
+      if (inspector === null) throw new Error('The inspector never opened with the clock standing still.');
+      const skeleton = () => within(inspector).queryByRole('status', { name: 'Loading the summary' });
+
+      // Loading, and no skeleton yet: not as it opens, nor a millisecond short of the delay.
+      expect(skeleton()).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(SKELETON_DELAY_MS - 1));
+      expect(skeleton()).toBeNull();
+      // Once the load has taken its moment, the skeleton.
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(skeleton()).toBeVisible();
+      // The frame is there meanwhile: the actions, and the tabs.
+      expect(within(inspector).getByRole('button', { name: 'Close the inspector' })).toBeEnabled();
+      expect(within(inspector).getByRole('button', { name: 'Copy the URL' })).toBeDisabled();
+      expect(within(inspector).getAllByRole('tab')).toHaveLength(9);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says a stale id isn’t in the crawl, and offers to close', async () => {
