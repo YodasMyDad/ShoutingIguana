@@ -18,7 +18,13 @@ run() {
   echo "$name exit=$code $(( $(date +%s) - start ))s" >> "$logs/summary.txt"
 }
 
-run ci npm ci
+# npm ci can meet a native module that another process (an editor's Tailwind server) has loaded for a moment:
+# try three times, 20 s apart, before calling the install failed.
+for attempt in 1 2 3; do
+  run ci npm ci
+  grep -q "^ci exit=0 " "$logs/summary.txt" && break
+  [ "$attempt" -lt 3 ] && sleep 20
+done
 # A failed install leaves node_modules half-made: every later step would fail for that reason alone.
 if ! grep -q "^ci exit=0 " "$logs/summary.txt"; then echo "ABORT: npm ci failed; nothing after it was run" >> "$logs/summary.txt"; exit 1; fi
 run typecheck npm run typecheck
