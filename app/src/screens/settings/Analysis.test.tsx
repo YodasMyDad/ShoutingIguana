@@ -7,6 +7,7 @@ import type { AnalysisLimit, AnalysisSettings } from '../../api/types';
 import { App } from '../../app/App';
 import { createQueryClient } from '../../app/queryClient';
 import { createAppRouter } from '../../app/router';
+import { onAnnounce } from '../../feedback/announce';
 import { replaceSettings } from '../../settings/settingsStore';
 import { fakeSidecar, json, problem, standardRoutes } from '../../test/fakeSidecar';
 import { changeOf, draftOf, limitName, rangeWords, sameAsSaved, splitErrors, valueWords } from './analysisLimits';
@@ -199,5 +200,52 @@ describe('Settings, Analysis', () => {
     await waitFor(() => expect(field).toHaveValue('60'));
     expect(resets()).toHaveLength(2);
     expect(resets().at(-1)?.body).toBeUndefined();
+  });
+
+  it('says why when the engine keys a refusal on a limit the user didn’t touch (the review’s finding 1)', async () => {
+    const transport = sidecar();
+    await open();
+    const shortest = await screen.findByRole('textbox', { name: 'Shortest title' });
+    // The engine reports a shortest above the longest on the longest.
+    fireEvent.change(shortest, { target: { value: '70' } });
+    const longest = screen.getByRole('textbox', { name: 'Longest title' });
+    await waitFor(() => expect(longest).toHaveAttribute('aria-invalid', 'true'), { timeout: 2_000 });
+    expect(longest).toHaveAccessibleDescription(/must be more than the shortest \(70\)/);
+    // Above the form too, named, as the limit wasn't the one changed.
+    expect(screen.getByText('These limits can’t be saved together').closest('[role="alert"]')).toHaveTextContent(
+      'Longest title: The longest title allowed must be more than the shortest (70).',
+    );
+    expect(transport.requests.some((request) => request.method === 'PUT')).toBe(false);
+  });
+
+  it('doesn’t say a save of an older draft is saved once more has been typed (the review’s finding 7)', async () => {
+    const said: string[] = [];
+    const off = onAnnounce((message) => said.push(message));
+    let release: (() => void) | null = null;
+    const transport = fakeSidecar([
+      ...standardRoutes(),
+      ['GET', /^\/api\/analysis-settings$/, () => json(settingsOf({}))],
+      ['POST', /^\/api\/analysis-settings\/validate$/, () => json({ errors: {} })],
+      [
+        'PUT',
+        /^\/api\/analysis-settings$/,
+        (request: TransportRequest) =>
+          new Promise<Response>((resolve) => {
+            release = () => resolve(json(settingsOf(request.body as Record<string, number>)));
+          }),
+      ],
+    ]);
+    setTransport(transport);
+    await open();
+    const field = await screen.findByRole('textbox', { name: 'Longest title' });
+    fireEvent.change(field, { target: { value: '70' } });
+    await waitFor(() => expect(release).not.toBeNull(), { timeout: 2_000 });
+    // More is typed while the save of 70 is on its way; then the engine answers it.
+    fireEvent.change(field, { target: { value: '75' } });
+    act(() => release?.());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(said.filter((message) => message.startsWith('Saved'))).toEqual([]);
+    expect(screen.queryByText('Saved', { exact: true })).toBeNull();
+    off();
   });
 });

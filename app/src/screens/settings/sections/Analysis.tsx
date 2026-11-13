@@ -80,14 +80,18 @@ export function LimitsForm({
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<LimitDraft>(() => ({ ...draftOf(settings.limits), ...initialDraft }));
   const [errors, setErrors] = useState<Record<string, string[]>>({});
+  /** The limits the user has changed here: an error the engine keys on another limit is also said above the form. */
   const [touched, setTouched] = useState<ReadonlySet<string>>(() => new Set(Object.keys(initialDraft ?? {})));
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const limits = settings.limits;
   const ids = limits.map((limit) => limit.id);
   const key = JSON.stringify(changeOf(draft));
   const unchanged = sameAsSaved(draft, limits);
-  // Each check's answer for the draft it was asked about: an answer for an older draft is no answer.
-  const checkedKey = useRef<string | null>(null);
+  // The draft as it is now, for a save's answer that arrives after more typing: it isn't news of what's shown.
+  const draftKey = useRef(key);
+  useEffect(() => {
+    draftKey.current = key;
+  }, [key]);
 
   /** Takes the engine's limits as the saved ones, and tells every crawl's reads they may now be out of date. */
   const took = (next: AnalysisSettings) => {
@@ -101,8 +105,9 @@ export function LimitsForm({
     setState('saving');
     try {
       const next = await api.saveAnalysisSettings(changeOf(values));
-      if (JSON.stringify(changeOf(values)) !== saving) return;
+      // What the engine keeps now, whatever has been typed since: the next save is of the newer draft.
       took(next);
+      if (draftKey.current !== saving) return;
       setState('saved');
       announce('Saved. Crawls analysed with other limits are out of date until they’re analysed again.');
     } catch (error) {
@@ -121,7 +126,6 @@ export function LimitsForm({
       api
         .validateAnalysisSettings(JSON.parse(key) as Record<string, number | null>, controller.signal)
         .then((result) => {
-          checkedKey.current = key;
           setErrors(result.errors);
           if (Object.keys(result.errors).length === 0) {
             saveTimer = setTimeout(() => void save(draft, key), SAVE_DELAY_MS - CHECK_DELAY_MS);
@@ -168,14 +172,23 @@ export function LimitsForm({
   };
 
   const { byLimit, whole } = splitErrors(errors, ids);
-  const shownError = (limit: AnalysisLimit) => (touched.has(limit.id) ? (byLimit[limit.id] ?? null) : null);
+  // Every error is beside its limit. One on a limit the user didn't change (the engine keys "the longest must be more
+  // than the shortest" on the longest, whichever was changed) is said above the form too, named, as that's where
+  // the eye is.
+  const shownError = (limit: AnalysisLimit) => byLimit[limit.id] ?? null;
+  const elsewhere = Object.entries(byLimit)
+    .filter(([id]) => !touched.has(id))
+    .map(([id, message]) => `${limitName(id)}: ${message}`);
+  const above = [...whole, ...elsewhere];
   const invalid = Object.keys(errors).length > 0;
 
   return (
     <div className="flex flex-col gap-6">
-      {whole.length > 0 ? (
+      {above.length > 0 ? (
         <Callout tone="error" role="alert" title="These limits can’t be saved together">
-          {whole.join(' ')}
+          {above.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </Callout>
       ) : null}
       <div className="flex flex-col gap-5">

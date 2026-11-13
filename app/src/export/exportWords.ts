@@ -247,11 +247,21 @@ export function exportProblemWords(
   const results = context.simple ? 'work out the results' : 'analyse the crawl';
   switch (problem.type) {
     case 'export-busy':
-      return {
-        sentence:
-          'Four exports are running already, or one is writing this file now. Try again once one has finished, or save to another file.',
-        remedies: ['tryAgain', 'chooseAnother'],
-      };
+      // One type, three causes, told apart only by the engine's title (ExportManager): this file being written, four
+      // exports running, or the engine shutting down. One this app has no words for is said in the engine's own.
+      if (/writing this file/i.test(problem.title)) {
+        return {
+          sentence: 'Another export is writing that file now. Wait for it to finish, or save to another file.',
+          remedies: ['tryAgain', 'chooseAnother'],
+        };
+      }
+      if (/exports are running/i.test(problem.title)) {
+        return {
+          sentence: 'Four exports are running already, the most at once. Try again once one has finished.',
+          remedies: ['tryAgain'],
+        };
+      }
+      return { sentence: problem.title, remedies: [] };
     case 'export-not-writable':
       return {
         sentence: 'That folder isn’t there, or this account can’t save files in it. Choose another folder.',

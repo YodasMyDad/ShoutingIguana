@@ -140,4 +140,31 @@ describe('the export dialog', () => {
     expect(screen.getByRole('button', { name: 'Work out the results' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Export' })).toBeNull();
   });
+
+  it('Export as CSV after a too-large refusal sends the CSV’s path, not the Excel one (the review’s finding 5)', async () => {
+    let tries = 0;
+    const transport = fakeSidecar([
+      [
+        'POST',
+        /\/export$/,
+        (request) => {
+          tries += 1;
+          return tries === 1
+            ? problem({ type: 'export-too-large', title: 'Too many rows for Excel.', status: 422 })
+            : started(request);
+        },
+      ],
+    ]);
+    setTransport(transport);
+    render(<ExportDialogHost />);
+    openExportDialog(offer());
+    fireEvent.click(await screen.findByRole('radio', { name: 'Excel' }));
+    const field = await screen.findByRole('textbox', { name: 'Save as' });
+    fireEvent.change(field, { target: { value: 'C:/x/view.xlsx' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export as CSV…' }));
+    await waitFor(() => expect(transport.requests.filter((r) => r.path.endsWith('/export'))).toHaveLength(2));
+    const sent = transport.requests.filter((r) => r.path.endsWith('/export'));
+    expect(sent[1]?.body).toMatchObject({ format: 'csv', path: 'C:/x/view.csv' });
+  });
 });

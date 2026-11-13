@@ -72,14 +72,17 @@ export function ExportDialog({ state }: { state: ExportDialogState }) {
     if (!working) closeExportDialog();
   };
 
-  const start = async (options: { samePath?: boolean; crawlOrder?: boolean; format?: ExportFormat } = {}) => {
+  const start = async (
+    options: { samePath?: boolean; crawlOrder?: boolean; format?: ExportFormat; path?: string } = {},
+  ) => {
     if (!choice || choice.unavailable) return;
     const useFormat = options.format ?? format;
     const order = options.crawlOrder ?? crawlOrder;
     setWorking(true);
     setRefusal(null);
+    // The path asked for: the field's (or the one given), or the save dialog's answer. A refusal is worded by it.
+    let target: string | null = (options.path ?? path).trim();
     try {
-      let target: string | null = path.trim();
       if (isTauri && !options.samePath) target = await chooseSavePath(offer, choice, useFormat, cut);
       if (!target) {
         // Cancelled in the save dialog: nothing happens, and the dialog stays for another go.
@@ -92,7 +95,7 @@ export function ExportDialog({ state }: { state: ExportDialogState }) {
       closeExportDialog();
     } catch (error) {
       setWorking(false);
-      const words = exportErrorWords(error, { path, format: useFormat, simple });
+      const words = exportErrorWords(error, { path: target ?? path, format: useFormat, simple });
       setRefusal(words ?? { sentence: errorTitle(error), remedies: [] });
     }
   };
@@ -103,11 +106,14 @@ export function ExportDialog({ state }: { state: ExportDialogState }) {
         closeExportDialog();
         void analyseCrawl(offer.crawlId);
         return;
-      case 'asCsv':
+      case 'asCsv': {
+        // The same name as CSV; in the shell the save dialog asks again, on the CSV's name.
+        const csv = path.trim().replace(/\.xlsx$/i, '.csv');
         setFormat('csv');
-        syncPath(choice, 'csv', cut);
-        void start({ format: 'csv' });
+        setPath(csv);
+        void start({ format: 'csv', path: csv, samePath: !isTauri });
         return;
+      }
       case 'crawlOrder':
         setCrawlOrder(true);
         void start({ crawlOrder: true, samePath: true });

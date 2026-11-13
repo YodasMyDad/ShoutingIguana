@@ -438,9 +438,18 @@ export function LinksScreen() {
       void navigate({
         to: '/crawls/$crawl/urls',
         params: { crawl: crawlId },
-        search: { links: { end, ...(filters.length > 0 ? { filter: [...filters] } : {}), ...(q ? { q } : {}) } },
+        search: {
+          links: {
+            end,
+            ...(filters.length > 0 ? { filter: [...filters] } : {}),
+            ...(q ? { q } : {}),
+            // The view's sort and columns go too, so Back to the links lands on it as it was.
+            ...(sort.length > 0 ? { sort: [...sort] } : {}),
+            ...(search.cols ? { cols: [...search.cols] } : {}),
+          },
+        },
       }),
-    [navigate, crawlId, filters, q],
+    [navigate, crawlId, filters, q, sort, search.cols],
   );
   useCommands(
     (): Command[] => [

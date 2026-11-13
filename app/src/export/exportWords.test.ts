@@ -176,7 +176,6 @@ describe('each problem', () => {
     exportProblemWords({ type, title: 'The engine’s title.', ...extra });
 
   it('has a sentence of the app’s and the action that helps', () => {
-    expect(words('export-busy').remedies).toEqual(['tryAgain', 'chooseAnother']);
     expect(words('export-not-writable').remedies).toEqual(['chooseAnother']);
     expect(words('export-file-in-use').sentence).toMatch(/Another program has that file open/);
     expect(words('export-disk-full').remedies[0]).toBe('chooseAnother');
@@ -186,6 +185,18 @@ describe('each problem', () => {
     expect(words('check-skipped').remedies).toEqual(['analyse']);
     expect(words('needs-analysis', { reason: 'crawling' }).remedies).toEqual([]);
     expect(words('needs-analysis', { reason: 'notAnalyzed' }).remedies).toEqual(['analyse']);
+  });
+
+  it('tells the three causes of export-busy apart by the engine’s title (the review’s finding 9)', () => {
+    const busy = (title: string) => exportProblemWords({ type: 'export-busy', title });
+    expect(busy('Another export is writing this file. Wait for it to finish, or cancel it.')).toEqual({
+      sentence: 'Another export is writing that file now. Wait for it to finish, or save to another file.',
+      remedies: ['tryAgain', 'chooseAnother'],
+    });
+    expect(busy('4 exports are running already. Wait for one to finish, or cancel one.').remedies).toEqual([
+      'tryAgain',
+    ]);
+    expect(busy('The engine is shutting down.')).toEqual({ sentence: 'The engine is shutting down.', remedies: [] });
   });
 
   it('says a refused sort of a running crawl, with the export in crawl order', () => {

@@ -1652,8 +1652,12 @@ Analysis (E6), with what Links and the URL grid lacked of E6's link ends. `app/s
 - **Exports in progress** (`export/ExportsInProgress.tsx`) are listed at the bottom of the sidebar under the running
   crawls; a press brings the toast back. The shell's own event stream tells an export that was saved or failed while
   the window was hidden or not focused, once (`live/notify.rs`, `export_notice`).
-- **Every grid**: URLs, Links, one sitemap's URLs, an origin's blocked URLs (all or one line's), Issues and Overview;
-  and since E7 the list of sitemaps (`sitemapsOffer`, "… sitemaps.xlsx"), robots.txt's origins (`robotsOriginsOffer`,
+- **Every grid**: URLs, Links, one sitemap's URLs, an origin's blocked URLs (all, one line's or one reason's, each
+  named by it), Issues and Overview. On Issues, "This check" of a check that groups is its sheet of the workbook
+  (`kind: check`); of a check listed flat it is that list as the grid shows it, in its sort (`issueRows`, `url` and
+  `detail`). Ctrl+E works from a text field too (every grid has its search field). `export-busy` is one type for three
+  causes, told apart by the engine's title: a file being written, four exports running, the engine shutting down.
+  Since E7 also the list of sitemaps (`sitemapsOffer`, "… sitemaps.xlsx"), robots.txt's origins (`robotsOriginsOffer`,
   "… robots.txt origins.csv", with the list's search and filter when it has them) and a URL view narrowed to a links
   view's ends (its `linkEnds` in the request; "… URLs link targets.csv" or "… URLs pages with the links.csv"). The URL
   grid's status column goes out with `outcome` beside `statusCode`, and the links grid's follow column as its four
@@ -1678,7 +1682,9 @@ failure or an image that can't be drawn (`Favicon`'s `onError`) keep the letter 
 `screens/settings/sections/Analysis.tsx`: every limit from `GET /api/analysis-settings` with its description, its
 unit and its range (`analysisLimits.ts` names each and words the range), checked by `validate` 250 ms after a change
 (what's typed sent as typed, so text gets the engine's own message), saved 600 ms after when nothing is wrong. Errors
-by a limit's name go beside it; `settings` and `limits[n]` above the form. Put back one limit, or every limit, each
+by a limit's name go beside it whichever limit was changed (the engine keys "the longest must be more than the
+shortest" on the longest), and above the form too, named, when the limit wasn't the one changed; `settings` and
+`limits[n]` above the form. A save's answer that arrives after more typing isn't said saved: the newer draft is next. Put back one limit, or every limit, each
 with Undo. A save reads the library and every crawl's reads again: a crawl analysed with other limits reads "Analysis
 out of date" and its analysis's `settingsChanged` reason, where the app shows that.
 
@@ -1687,7 +1693,8 @@ out of date" and its analysis's `settingsChanged` reason, where the app shows th
 The URL grid slice hadn't built it. Links has **Show in URLs** (their targets, or the pages they're on), each counted
 as the menu opens (`POST /links/ends`, `limit: 1`). The URL grid takes `links: { end, filter, q }` in its route, as
 `linkEnds` beside its own filters in its reads, facets and copies, with a line saying which end of which links ("Only
-the URLs that the broken links lead to, each once."), Back to the links and Show every URL.
+the URLs that the broken links lead to, each once."), Back to the links (to the links view's filters, search, sort and
+columns) and Show every URL. A saved view keeps the narrowing: it is part of the view's route.
 
 ### Measured
 
@@ -1699,6 +1706,8 @@ URL grid (112,577 URLs) as Excel from Export to Saved 889 ms in the page, the to
 
 ### Not done, and why
 
-- **The native save dialog, Open file, Open folder and the notification** are proven by the shell's unit tests (the
-  commands' path rule, the notice's words) and by `cargo test`'s capability check; the e2e runs in a browser, so they
-  weren't driven end to end in the built shell.
+- **Open file and Open folder** are driven in the release build by `npm run smoke:shell` (its export step: an export
+  started through the engine, the toast's Open folder seen as an Explorer window on the folder, Open file as the CSV
+  open in its program, both closed again by `scripts/shell-opened.ps1`). **The native save dialog and the
+  notification** are not driven anywhere: the walk can't operate a native dialog, and the notification is covered by
+  the shell's unit tests of its words.

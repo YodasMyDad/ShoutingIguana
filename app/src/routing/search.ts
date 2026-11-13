@@ -249,6 +249,9 @@ export interface LinkEndsSearch {
   end: 'from' | 'to';
   filter?: GridFilter[] | undefined;
   q?: string | undefined;
+  /** The links view's own sort and columns, so Back to the links lands on it as it was: they narrow nothing. */
+  sort?: GridSort[] | undefined;
+  cols?: string[] | undefined;
 }
 
 /** The URL and link grids. */
@@ -284,7 +287,15 @@ export function parseLinkEnds(value: unknown): LinkEndsSearch | undefined {
   if (record.end !== 'from' && record.end !== 'to') return undefined;
   const filter = parseFilters(record.filter, linkColumnName);
   const q = text(record.q);
-  return { end: record.end, ...(filter?.length ? { filter } : {}), ...(q ? { q } : {}) };
+  const sort = parseSort(record.sort, linkColumnName)?.slice(0, 1);
+  const cols = list<string>(record.cols, linkColumnName)?.filter((name, index, all) => all.indexOf(name) === index);
+  return {
+    end: record.end,
+    ...(filter?.length ? { filter } : {}),
+    ...(q ? { q } : {}),
+    ...(sort?.length ? { sort } : {}),
+    ...(cols?.length ? { cols } : {}),
+  };
 }
 
 // ----------------------------------------------------------------------------------------------------------- Links

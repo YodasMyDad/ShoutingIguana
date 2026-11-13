@@ -34,7 +34,12 @@ const SORT = [
   { column: 'depth', desc: true },
   { column: 'url', desc: false },
 ];
-const VIEW = `?filter=${encodeURIComponent(JSON.stringify(FILTERS))}&sort=${encodeURIComponent(JSON.stringify(SORT))}`;
+/** The view's columns, in the order shown: the file's are these, the status's outcome beside its code. */
+const COLS = ['url', 'statusCode', 'title', 'depth', 'responseMs'];
+const EXPORTED = ['url', 'statusCode', 'outcome', 'title', 'depth', 'responseMs'];
+const VIEW = `?filter=${encodeURIComponent(JSON.stringify(FILTERS))}&sort=${encodeURIComponent(
+  JSON.stringify(SORT),
+)}&cols=${encodeURIComponent(JSON.stringify(COLS))}`;
 
 const toasts = (page: Page) => page.getByRole('region', { name: /Notifications/ });
 const dialog = (page: Page, name: string | RegExp = /^Export/) => page.getByRole('dialog', { name });
@@ -87,11 +92,13 @@ for (const format of ['CSV', 'Excel'] as const) {
     // Every row the grid has, in its order: the URL is the first column.
     expect(data.map((row) => row[0])).toEqual(expected);
     await expect(toast).toContainText(`${expected.length.toLocaleString('en-GB')} URLs`);
-    // The header row is the engine's titles for the grid's columns, a unit in brackets.
+    // The header row is the engine's titles for the grid's columns, in the grid's order, a unit in brackets.
     const catalogue = await read<UrlColumn[]>('/api/url-columns');
-    const titles = catalogue.map((column) => (column.unit ? `${column.title} (${column.unit})` : column.title));
-    expect(header[0]).toBe(catalogue.find((column) => column.id === 'url')?.title);
-    for (const title of header) expect(titles).toContain(title);
+    const titleOf = (id: string) => {
+      const column = catalogue.find((candidate) => candidate.id === id);
+      return column?.unit ? `${column.title} (${column.unit})` : column?.title;
+    };
+    expect(header).toEqual(EXPORTED.map(titleOf));
     // The next export's default name is in the folder this one went to.
     await page.keyboard.press('Control+e');
     await expect(dialog(page, 'Export URLs').getByRole('textbox', { name: 'Save as' })).toHaveValue(
@@ -320,4 +327,52 @@ test('screenshots: the dialog and a finished export at 1280x720 in both themes a
     await page.screenshot({ path: `${SHOTS}/saved-${tag}.png` });
     if (scheme === 'dark') await expectNoViolations(page);
   }
+});
+
+test('a check that doesn’t group exports its list in the grid’s sort (the review’s finding 2)', async ({ page }) => {
+  // A check of the seeded crawl that lists its pages flat, with more than one page.
+  const checks = await read<{ checks: { id: string; grouping: string }[] }>('/api/checks');
+  const analysis = await read<{ counts: { checkId: string; count: number }[] }>(`/api/crawls/${crawl}/analysis`);
+  const flat = checks.checks.find(
+    (check) =>
+      check.grouping === 'none' && (analysis.counts.find((found) => found.checkId === check.id)?.count ?? 0) > 1,
+  );
+  if (!flat) throw new Error('The seeded crawl has no flat check with more than one page');
+  const sort = [{ column: 'url', desc: true }];
+  await page.goto(`/crawls/${crawl}/issues/${flat.id}?sort=${encodeURIComponent(JSON.stringify(sort))}`);
+  await expect(page.getByRole('main').getByRole('grid').getByRole('row').nth(2)).toBeVisible();
+  await page.keyboard.press('Control+e');
+  const box = dialog(page, 'Export issues');
+  await box.getByRole('radio', { name: /^This check/ }).check();
+  await box.getByRole('radio', { name: 'CSV' }).check();
+  const file = path.join(folder, 'flat-check.csv');
+  await box.getByRole('textbox', { name: 'Save as' }).fill(file);
+  await box.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(
+    toasts(page).locator('.si-export-toast').filter({ hasText: 'flat-check.csv' }).getByText('Saved', { exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
+  const [, ...data] = readCsv(file);
+  const rows: { url: string }[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const page_ = await read<{ rows: { url: string }[] }>(`/api/crawls/${crawl}/issues/${flat.id}/rows`, {
+      columns: ['url', 'detail'],
+      filters: [],
+      sort,
+      offset,
+      limit: 500,
+    });
+    rows.push(...page_.rows);
+    if (page_.rows.length < 500) break;
+  }
+  expect(data.map((row) => row[0])).toEqual(rows.map((row) => row.url));
+});
+
+test('Ctrl+E opens Export from a grid’s search field (the review’s finding 3)', async ({ page }) => {
+  await openView(page);
+  const field = page.getByRole('main').getByRole('searchbox', { name: 'Search URLs and titles' });
+  await field.fill('c');
+  await field.focus();
+  await page.keyboard.press('Control+e');
+  await expect(dialog(page, 'Export URLs')).toBeVisible();
+  await page.keyboard.press('Escape');
 });

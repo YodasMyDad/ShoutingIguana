@@ -199,7 +199,13 @@ export const ToastDoneWithNotes = toastOf(
   done({ truncatedCells: 3, unavailableColumns: ['inlinks', 'issues'], crawlWasRunning: true, sheets: 2 }, 1_200_000),
 );
 export const ToastCancelled = toastOf({ status: 'cancelled', rowsWritten: 41_000, rowsExpected: 112_590 });
-export const ToastFailedBusy = toastOf(failed({ type: 'export-busy', title: 'Too many exports.', status: 409 }));
+export const ToastFailedBusy = toastOf(
+  failed({
+    type: 'export-busy',
+    title: '4 exports are running already. Wait for one to finish, or cancel one.',
+    status: 409,
+  }),
+);
 export const ToastFailedNotWritable = toastOf(
   failed({ type: 'export-not-writable', title: 'The folder can’t be written to.', status: 409 }),
 );

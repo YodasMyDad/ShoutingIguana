@@ -261,6 +261,66 @@ try {
     ).replace(/\s+/g, ' ');
   });
 
+  await walk.step('an export’s toast: Open folder shows the file in Explorer, Open file opens it', async () => {
+    // Started through the engine with a path, as the save dialog's answer would be: a native dialog is no page to drive.
+    // The toast is the app's from there: it hears the export on its event stream, as every export.
+    const folder = path.join(temp, 'exports');
+    mkdirSync(folder, { recursive: true });
+    const file = path.join(folder, 'smoke-walk URLs.csv');
+    const crawlId = /\/crawls\/([0-9a-f]{16})/.exec(page.url())?.[1];
+    expectThat(crawlId, `no crawl in ${page.url()}`);
+    const started = await engine(`/api/crawls/${crawlId}/export`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'urls', format: 'csv', path: file }),
+    });
+    expectThat(started.status === 201, `the export wasn't started: ${started.status} ${await started.text()}`);
+    const toast = page.locator('.si-export-toast').filter({ hasText: 'smoke-walk URLs.csv' });
+    await toast.getByText('Saved', { exact: true }).waitFor({ timeout: 30_000 });
+    await picture('06b-export-saved');
+    const opened = (what, target) =>
+      execFileSync(
+        'powershell',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          path.join(appRoot, 'scripts', 'shell-opened.ps1'),
+          what,
+          target,
+        ],
+        { encoding: 'utf8' },
+      ).trim();
+    await toast.getByRole('button', { name: 'Open folder' }).click();
+    await until('Explorer showing the export’s folder', () => opened('folder', folder) === 'yes', 20_000);
+    const asked = Date.now();
+    await toast.getByRole('button', { name: 'Open file' }).click();
+    const program = await until(
+      'the export’s file open in its program',
+      () => {
+        const found = opened('file', file);
+        return found === 'no' ? null : found;
+      },
+      45_000,
+    );
+    const closed = execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        path.join(appRoot, 'scripts', 'shell-opened.ps1'),
+        'close-file',
+        file,
+        String(asked - 1_000),
+      ],
+      { encoding: 'utf8' },
+    ).trim();
+    expectThat(closed === 'closed', `the export's file couldn't be closed again: ${closed}`);
+    return `Open folder showed ${folder} in Explorer (closed again); Open file opened the CSV in ${program} (closed again)`;
+  });
+
   await walk.step('the palette (Ctrl+K), "Go to URL…" and the shortcut sheet (?)', async () => {
     await page.keyboard.press('Control+k');
     await palette.waitFor();

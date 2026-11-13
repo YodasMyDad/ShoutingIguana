@@ -178,6 +178,25 @@ describe('the two lists', () => {
   });
 });
 
+it('names an origin’s blocked URLs narrowed by their reason (the review’s finding 8)', () => {
+  const offer = robotsBlockedOffer({
+    item,
+    crawling: false,
+    origin: 'https://example.com',
+    reason: 'unreachable',
+    rows: null,
+  });
+  const choice = offer.choices[0];
+  expect(choice?.title).toBe('Refused as robots.txt couldn’t be read');
+  expect(choice?.description).toMatch(/every URL refused because its robots\.txt couldn’t be read/);
+  expect(choice?.fileView).toBe('refused by example.com robots.txt unread');
+  expect(choice?.build(as())).toMatchObject({ kind: 'robotsBlocked', reason: 'unreachable' });
+  expect(
+    robotsBlockedOffer({ item, crawling: false, origin: 'https://example.com', reason: 'unknown', rows: 2 }).choices[0]
+      ?.title,
+  ).toBe('Blocked with no rule kept');
+});
+
 describe('Issues and Overview', () => {
   it('offer the check, the open group, the report and every check', () => {
     const offer = issuesOffer({
@@ -206,6 +225,32 @@ describe('Issues and Overview', () => {
       cut: 'summary',
     });
     expect(offer.choices[3]?.build(as())).toEqual({ kind: 'workbook', format: 'xlsx', path: 'C:\\x\\a.xlsx' });
+  });
+
+  it('a check that doesn’t group exports its list as the grid shows it, in the grid’s sort (the review’s finding 2)', () => {
+    const offer = issuesOffer({
+      item,
+      crawling: false,
+      simple: false,
+      check: {
+        id: 'not-in-sitemap',
+        title: 'Not in a sitemap',
+        urls: 9,
+        flat: true,
+        sort: [{ column: 'url', desc: true }],
+      },
+      group: null,
+    });
+    expect(offer.choices[0]?.build(as({ format: 'csv' }))).toEqual({
+      kind: 'issueRows',
+      format: 'csv',
+      path: 'C:\\x\\a.xlsx',
+      checkId: 'not-in-sitemap',
+      columns: ['url', 'detail'],
+      filters: [],
+      sort: [{ column: 'url', desc: true }],
+    });
+    expect(offer.choices[0]?.build(as({ format: 'csv', crawlOrder: true }))).not.toHaveProperty('sort');
   });
 
   it('a crawl never analysed offers the analysis in place of the report and the workbook', () => {

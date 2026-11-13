@@ -210,17 +210,42 @@ export function robotsBlockedOffer(args: {
   rows: number | null;
 }): ExportOffer {
   const host = args.origin.replace(/^[a-z]+:\/\//i, '');
-  const which = args.line !== undefined ? `what line ${formatCount(args.line)} blocked` : 'every URL it blocked';
+  // What the list is narrowed to, as its title, its description and its file's name say it.
+  const narrowed =
+    args.line !== undefined
+      ? {
+          title: `What line ${formatCount(args.line)} blocked`,
+          which: `what line ${formatCount(args.line)} blocked`,
+          file: `blocked by ${host} robots.txt line ${args.line}`,
+        }
+      : args.reason === 'unreachable'
+        ? {
+            title: 'Refused as robots.txt couldn’t be read',
+            which: 'every URL refused because its robots.txt couldn’t be read',
+            file: `refused by ${host} robots.txt unread`,
+          }
+        : args.reason === 'unknown'
+          ? {
+              title: 'Blocked with no rule kept',
+              which: 'every URL blocked whose rule the crawl didn’t keep',
+              file: `blocked by ${host} robots.txt no rule kept`,
+            }
+          : args.reason === 'rule'
+            ? {
+                title: 'Blocked by a rule',
+                which: 'every URL a rule blocked',
+                file: `blocked by ${host} robots.txt rules`,
+              }
+            : { title: 'The blocked URLs', which: 'every URL it blocked', file: `blocked by ${host} robots.txt` };
   const view: ExportChoice = {
     id: 'view',
-    title: args.line !== undefined ? `What line ${formatCount(args.line)} blocked` : 'The blocked URLs',
+    title: narrowed.title,
     description:
       args.rows === null
-        ? `${host}’s robots.txt: ${which}, with the line that decided each`
-        : `${formatCountOf(args.rows, 'URL')}: ${which}, with the line that decided each`,
+        ? `${host}’s robots.txt: ${narrowed.which}, with the line that decided each`
+        : `${formatCountOf(args.rows, 'URL')}: ${narrowed.which}, with the line that decided each`,
     formats: ['csv', 'xlsx'],
-    fileView:
-      args.line !== undefined ? `blocked by ${host} robots.txt line ${args.line}` : `blocked by ${host} robots.txt`,
+    fileView: narrowed.file,
     build: ({ format, path }) => ({
       kind: 'robotsBlocked',
       format: format === 'xlsx' ? 'xlsx' : 'csv',
@@ -287,7 +312,11 @@ export function issuesOffer(args: {
   item: CrawlListItem;
   crawling: boolean;
   simple: boolean;
-  check: { id: string; title: string; urls: number | null } | null;
+  /**
+   * The check selected. `flat` is a check whose pages the screen lists as they are (its grid, sorted as its route
+   * says), not in groups: its export is that list, in that order.
+   */
+  check: { id: string; title: string; urls: number | null; flat?: boolean; sort?: readonly GridSort[] } | null;
   /** The open group, with its pages' count and its words. */
   group: { ref: CheckGroupRef; pages: number | null; words: string } | null;
 }): ExportOffer {
@@ -303,12 +332,26 @@ export function issuesOffer(args: {
           : `${check.title}: ${formatCountOf(check.urls, 'page')}, with what was found on each`,
       formats: ['xlsx', 'csv'],
       fileView: check.title,
-      build: ({ format, path }) => ({
-        kind: 'check',
-        format: format === 'csv' ? 'csv' : 'xlsx',
-        path,
-        checkId: check.id,
-      }),
+      sortedWhileCrawling: check.flat === true && sortedWhileCrawling(args.crawling, check.sort ?? []),
+      build: ({ format, path, crawlOrder }) =>
+        check.flat
+          ? {
+              // The grid's own read: its two columns, in its order.
+              kind: 'issueRows',
+              format: format === 'csv' ? 'csv' : 'xlsx',
+              path,
+              checkId: check.id,
+              columns: ['url', 'detail'],
+              filters: [],
+              ...(crawlOrder || !check.sort?.length ? {} : { sort: [...check.sort] }),
+            }
+          : {
+              // The check's sheet of the workbook, as a file of its own.
+              kind: 'check',
+              format: format === 'csv' ? 'csv' : 'xlsx',
+              path,
+              checkId: check.id,
+            },
     });
     if (args.group) {
       const group = args.group;
