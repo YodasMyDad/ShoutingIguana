@@ -230,3 +230,40 @@ test('the finished toast in Advanced keeps its words', async ({ page }) => {
   await expect(toast).toBeVisible({ timeout: 150_000 });
   await expect(toast.getByRole('button', { name: 'View issues' })).toBeVisible();
 });
+
+test('the switch on Home shows its other view within 100 ms', async ({ page }) => {
+  await page.goto('/');
+  await expect(rowOf(page, site())).toBeVisible();
+  const modeSwitch = page.getByRole('banner').getByRole('radiogroup', { name: 'Mode' });
+  const timings: number[] = [];
+  for (let round = 0; round < 5; round++) {
+    for (const [target, title] of [
+      ['Advanced', 'Crawl a site'],
+      ['Simple', 'Check a website'],
+    ] as const) {
+      const elapsed = await modeSwitch.getByRole('radio', { name: target }).evaluate(
+        (element, heading) =>
+          new Promise<number>((resolve) => {
+            const started = performance.now();
+            const done = () => document.querySelector('#main h1')?.textContent === heading;
+            const observer = new MutationObserver(() => {
+              if (!done()) return;
+              observer.disconnect();
+              requestAnimationFrame(() => resolve(performance.now() - started));
+            });
+            observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+            (element as HTMLElement).click();
+          }),
+        title,
+      );
+      timings.push(elapsed);
+    }
+  }
+  timings.sort((a, b) => a - b);
+  const median = timings[Math.floor(timings.length / 2)] ?? 0;
+  test.info().annotations.push({
+    type: 'Home switch-ms',
+    description: `median ${median.toFixed(1)}, max ${(timings.at(-1) ?? 0).toFixed(1)}`,
+  });
+  expect(median).toBeLessThan(100);
+});
