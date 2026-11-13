@@ -160,7 +160,10 @@ from its brief.
    Also green on `96576cd`: `e2e:filled` 29, round 4's specs x5 105, the full e2e 188 (2 skipped). The three
    story runs found ONE violation, the same in each: the fixer's new `SavedSettingRefused` story's "Options…" link
    in running text was told apart by colour alone in the dark theme (axe `link-in-text-block`). Fixed on
-   `ui/step-3` after the merge (`si-link--inline`, as every other link in running text). The whole-suite verify
+   `ui/step-3` after the merge (`si-link--inline`, as every other link in running text); the stories then ran clean
+   in the dark theme (488, no violations). If a test file fails to load with "Vitest failed to find the runner",
+   the worktree's Vite cache is stale: move `app/node_modules/.vite`, `.vite-temp` and `.vitest-cache` aside and
+   run it again. The whole-suite verify
    still has to be seen green on the merged head. The engine: last green on `3ebd565` (the 100k bench and
    `readbench --gate`); round 4 didn't touch the engine, so its half is a formality.
 2. **The release build and the shell's smoke test** (needs the desktop session): in `app/`,
