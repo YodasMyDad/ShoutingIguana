@@ -180,16 +180,16 @@ test('in Advanced, Report is the eighth section, and the Overview’s score open
   const score = page.getByRole('link', { name: /How it’s worked out/ });
   if (analysis.score) {
     await expect(score).toContainText(String(analysis.score.value));
-    await score.click();
-    const dialog = page.getByRole('dialog', { name: 'How the score is worked out' });
-    await expect(dialog).toBeVisible();
-    await expect(page).toHaveURL(/\?score=1$/);
-    await expect(dialog).toContainText(`100 − ${analysis.score.lost}`);
     // On the garden crawl, the design's own numbers (docs/v2-ui-simple.md, Worked examples): 85, Good, 100 − 15.
     if (crawl.site === 'gardenfurnituresets.co.uk') {
       expect([analysis.score.value, analysis.score.band, analysis.score.lost]).toEqual([85, 'good', 15]);
       await expect(score).toContainText('Score: Good');
     }
+    await score.click();
+    const dialog = page.getByRole('dialog', { name: 'How the score is worked out' });
+    await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(/\?score=1$/);
+    await expect(dialog).toContainText(`100 − ${analysis.score.lost}`);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(score).toBeFocused();
