@@ -25,6 +25,8 @@ import { TextLink } from '../../ui/TextLink';
 import { CountSentence } from '../SentenceWithCounts';
 import { pressedRow, rememberPlace, rememberedKey, rememberedPlace } from '../listPlace';
 import { IGNORED, answerParts, stateWords } from './robotsWords';
+import { notExportableOffer } from '../../export/offers';
+import { useExportCommand } from '../../export/useExportCommand';
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
@@ -54,6 +56,19 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
   const title = useRef<HTMLHeadingElement>(null);
+  // Ctrl+E here says where an export is: the engine exports an origin's blocked URLs, not the list of origins.
+  useExportCommand(
+    () =>
+      crawl.item
+        ? notExportableOffer(
+            crawl.item,
+            'Export robots.txt',
+            'The engine can’t export the list of origins yet. Open an origin to export the URLs its robots.txt blocked.',
+          )
+        : null,
+    [crawl.item],
+    { group: 'robots.txt' },
+  );
 
   const queryKey = useMemo(() => robotsKeys.origins(crawlId), [crawlId]);
   const fetchPage = useCallback(

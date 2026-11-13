@@ -10,7 +10,11 @@ import { ErrorState } from '../feedback/ErrorState';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { useElementWidth } from '../grid/useElementWidth';
+import { overviewOffer } from '../export/offers';
+import { ExportButton } from '../export/ExportButton';
+import { CRAWL_FILE_COMMANDS, useExportCommand } from '../export/useExportCommand';
 import { useCommands } from '../keyboard/registry';
+import { useMode } from '../mode/mode';
 import { formatCount, formatCountOf, formatDuration, formatExactTime } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { useSettings } from '../settings/settingsStore';
@@ -130,6 +134,14 @@ export function OverviewScreen() {
     ],
     [analysing, control.cancelling, crawlId, firstId, crawling],
   );
+
+  // Export (Ctrl+E): the report and the spreadsheet of everything; a crawl never analysed offers its analysis instead.
+  const simple = useMode() === 'simple';
+  useExportCommand(() => (item ? overviewOffer(item, crawling, simple) : null), [item, crawling, simple], {
+    group: 'Crawl',
+    title: 'Export…',
+    choices: CRAWL_FILE_COMMANDS,
+  });
 
   const answerLoading =
     !crawling &&
@@ -279,6 +291,7 @@ export function OverviewScreen() {
           badge={crawling ? <LiveBadge /> : null}
           subtitle={subtitle}
           titleRef={control.titleRef}
+          actions={item ? <ExportButton /> : null}
         />
         {body}
       </div>

@@ -1786,6 +1786,7 @@
     align-items: center;
     gap: var(--space-2-5);
     min-width: 0;
+    font-weight: var(--font-weight-regular);
   }
 
   .si-share .si-bar-track {
@@ -2420,6 +2421,45 @@
   .si-nav-item--collapsed {
     justify-content: center;
     padding: 0;
+  }
+
+  /* ------------------------------------------- Exports in progress (sidebar) */
+  .si-export-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    width: 100%;
+    min-height: var(--nav-item-height);
+    padding: var(--space-1) var(--space-2-5);
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-instant) var(--ease-out),
+      color var(--duration-instant) var(--ease-out);
+  }
+
+  .si-export-item:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .si-export-item--collapsed {
+    justify-content: center;
+    padding: 0;
+  }
+
+  /* An export's toast: its file, its state, its bar and its actions, stacked in the toast's width. */
+  .si-export-toast {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2-5);
+    min-width: 0;
   }
 
   /* -------------------------------------------------------------- List rows */

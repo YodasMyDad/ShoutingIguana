@@ -99,3 +99,84 @@ pub async fn reveal_crawl_file(app: AppHandle, crawl_id: String) -> Result<(), S
         error.to_string()
     })
 }
+
+/// The extensions an export writes (the engine refuses any other): the only files Open file opens.
+const EXPORT_EXTENSIONS: &[&str] = &["csv", "xlsx", "html", "htm"];
+
+/// The file a finished export wrote, as the engine says: the page names the export, never a path, so it can open or
+/// reveal only what an export of this engine wrote, and only once it is whole.
+async fn exported_file(app: &AppHandle, export_id: String) -> Result<String, String> {
+    const NO_ENGINE: &str = "The engine isn't running.";
+    let shell = app.try_state::<Shell>().ok_or(NO_ENGINE)?;
+    let connection = shell.sidecar.link().current().ok_or(NO_ENGINE)?;
+    let api = Arc::clone(&shell.api);
+    let job = tauri::async_runtime::spawn_blocking(move || api.export(&connection, &export_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| format!("The export couldn't be found: {error}"))?;
+    exported_path(&job)
+}
+
+/// The path of an export that left a file of a kind exports write, or why there's none to open.
+fn exported_path(job: &crate::live::model::ExportJob) -> Result<String, String> {
+    if job.status != "done" {
+        return Err("The export didn't save a file.".to_owned());
+    }
+    let extension = std::path::Path::new(&job.path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if job.path.is_empty() || !EXPORT_EXTENSIONS.contains(&extension.as_str()) {
+        return Err("The engine didn't say where the export's file is.".to_owned());
+    }
+    Ok(job.path.clone())
+}
+
+/// Shows a finished export's file in Explorer or Finder. Takes the export's id: the engine says where its file is.
+#[tauri::command]
+pub async fn reveal_export_file(app: AppHandle, export_id: String) -> Result<(), String> {
+    let path = exported_file(&app, export_id).await?;
+    app.opener().reveal_item_in_dir(&path).map_err(|error| {
+        log::info!("Couldn't show an export's file in its folder: {error}");
+        error.to_string()
+    })
+}
+
+/// Opens a finished export's file in the program the system gives its kind (a spreadsheet, a browser). Takes the
+/// export's id: the engine says where its file is, and only a CSV, Excel or HTML file an export wrote is opened.
+#[tauri::command]
+pub async fn open_export_file(app: AppHandle, export_id: String) -> Result<(), String> {
+    let path = exported_file(&app, export_id).await?;
+    app.opener().open_path(&path, None::<&str>).map_err(|error| {
+        log::info!("Couldn't open an export's file: {error}");
+        error.to_string()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::live::model::ExportJob;
+
+    fn job(status: &str, path: &str) -> ExportJob {
+        ExportJob {
+            export_id: "3f9a61c2d0b4e87a".into(),
+            status: status.into(),
+            path: path.into(),
+            ..ExportJob::default()
+        }
+    }
+
+    #[test]
+    fn only_a_finished_exports_own_kind_of_file_is_opened() {
+        assert_eq!(exported_path(&job("done", r"C:\a\b.XLSX")), Ok(r"C:\a\b.XLSX".to_owned()));
+        assert!(exported_path(&job("done", "/home/me/report.htm")).is_ok());
+        for status in ["running", "failed", "cancelled"] {
+            assert!(exported_path(&job(status, r"C:\a\b.csv")).is_err(), "{status}");
+        }
+        for path in ["", r"C:\a\b.exe", r"C:\a\b", r"C:\a\b.csv.lnk", r"C:\a\b.bat"] {
+            assert!(exported_path(&job("done", path)).is_err(), "{path}");
+        }
+    }
+}

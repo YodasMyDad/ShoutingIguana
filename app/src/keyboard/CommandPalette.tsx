@@ -1,18 +1,23 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { errorTitle } from '../api/errors';
 import { checksQuery, libraryQuery } from '../api/queries';
 import { afterFocusReturns, restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatRelativeTime } from '../lib/format';
 import { useMode } from '../mode/mode';
+import { goToUrl } from '../routing/inspector';
 import { Kbd } from '../ui/Kbd';
+import { Spinner } from '../ui/Spinner';
 import { GoToUrl } from './GoToUrl';
 import { groupTitle, listedIn } from './modeWords';
 import { setPaletteMode, usePaletteMode } from './paletteMode';
 import { looksLikeUrl, searchPalette, type PaletteEntry } from './paletteSearch';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
+import { markMatch, resultStatusWords, useUrlSearch, type MarkedPart } from './urlSearch';
+import type { SearchResult } from '../api/grids';
 
 const RECENT_CRAWLS = 8;
 const PAGE_STEP = 8;
@@ -20,8 +25,13 @@ const PAGE_STEP = 8;
 const ANNOUNCE_DELAY_MS = 400;
 const GROUP_ORDER = [...COMMAND_GROUPS.filter((group) => group !== 'In grids'), 'Checks', 'Recent crawls'];
 
+/** The open crawl's URLs, found by E6's search, under the commands. */
+export const URL_RESULTS_GROUP = 'URLs in this crawl';
+
 export interface PaletteItem extends PaletteEntry {
   hint?: ReactNode;
+  /** What the option shows, in place of its title (a URL's title and address, the match marked). */
+  render?: ReactNode;
   run: () => unknown;
   /** Runs with the palette still open: it changes what the palette shows ("Go to URL…"). */
   stay?: boolean;
@@ -46,6 +56,7 @@ export function CommandPalette() {
   const library = useQuery({ ...libraryQuery(), enabled: open }).data;
   const checks = useQuery({ ...checksQuery(), enabled: open && crawlId !== undefined }).data;
   const appMode = useMode();
+  const router = useRouter();
 
   const entries = useMemo<PaletteItem[]>(() => {
     const list: PaletteItem[] = commands
@@ -134,6 +145,17 @@ export function CommandPalette() {
             <PaletteBody
               entries={entries}
               onChoose={choose}
+              // The open crawl's URLs, as typed: Advanced's, as the inspector they open in is.
+              urlSearch={
+                crawlId && appMode === 'advanced'
+                  ? {
+                      crawlId,
+                      onOpen: (urlId) => void goToUrl(router, crawlId, urlId),
+                      onShowAll: (text) =>
+                        void navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { q: text } }),
+                    }
+                  : undefined
+              }
               // A URL or a path typed here is offered as somewhere to go, in the open crawl.
               onUrl={crawlId ? (text) => setPaletteMode({ kind: 'url', text }) : undefined}
             />
@@ -148,19 +170,57 @@ export function PaletteBody({
   entries,
   onChoose,
   onUrl,
+  urlSearch,
+  initialQuery = '',
 }: {
   entries: readonly PaletteItem[];
   onChoose: (entry: PaletteItem) => void;
   /** Given where there's a crawl to look a URL up in: text that reads as a URL is offered as "Go to URL". */
   onUrl?: ((text: string) => void) | undefined;
+  /** Given where the open crawl's URLs can be searched (E6): each keystroke searches them, and Enter inspects one. */
+  urlSearch?:
+    | {
+        crawlId: string;
+        onOpen: (urlId: number) => void;
+        /** The URL grid searched for the text: "All 412 in URLs". */
+        onShowAll: (text: string) => void;
+      }
+    | undefined;
+  /** What the field holds as it opens: a story's search. */
+  initialQuery?: string | undefined;
 }) {
   const id = useId();
   const appMode = useMode();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [highlight, setHighlight] = useState(0);
+  const search = useUrlSearch(urlSearch?.crawlId ?? null, query);
+  const urlEntries = useMemo<PaletteItem[]>(() => {
+    if (!urlSearch || !search.results || search.text === null) return [];
+    const { results, matching } = search.results;
+    const text = search.text;
+    const found = results.map((result): PaletteItem => ({
+      id: `url:${result.id}`,
+      group: URL_RESULTS_GROUP,
+      title: result.title ?? result.url,
+      render: <UrlResultOption result={result} query={text} />,
+      run: () => urlSearch.onOpen(result.id),
+    }));
+    return matching > results.length
+      ? [
+          ...found,
+          {
+            id: 'url:all',
+            group: URL_RESULTS_GROUP,
+            title: `All ${formatCount(matching)} in URLs`,
+            run: () => urlSearch.onShowAll(text),
+          },
+        ]
+      : found;
+  }, [urlSearch, search.results, search.text]);
   const results = useMemo(() => {
-    const found = searchPalette(entries, query, GROUP_ORDER);
+    const commandsFound = searchPalette(entries, query, GROUP_ORDER);
     const text = query.trim();
+    const found = text === '' ? commandsFound : [...commandsFound, ...urlEntries];
     if (!onUrl || !looksLikeUrl(text)) return found;
     const go: PaletteItem = {
       id: 'url:go',
@@ -171,7 +231,10 @@ export function PaletteBody({
     };
     // Unmistakably a URL (a scheme, or a path), it leads; a bare host could be a word with a dot, so it follows.
     return /^(https?:)?\//i.test(text) ? [go, ...found] : [...found, go];
-  }, [entries, query, onUrl]);
+  }, [entries, query, onUrl, urlEntries]);
+  const typed = urlSearch !== undefined && query.trim() !== '';
+  const searching = typed && search.pending && search.results === null;
+  const searchFailed = typed && search.error !== null;
   const active = results.length === 0 ? -1 : Math.min(highlight, results.length - 1);
   // By the entry, not its place: when typing changes what's highlighted, the attribute changes too, and screen
   // readers hear the new option.
@@ -265,16 +328,24 @@ export function PaletteBody({
                 if (index !== active) setHighlight(index);
               }}
               onClick={() => onChoose(entry)}
-              className="si-palette-item"
+              className={entry.render ? 'si-palette-item si-palette-item--url' : 'si-palette-item'}
             >
-              <span className="truncate">{entry.title}</span>
+              {entry.render ?? <span className="truncate">{entry.title}</span>}
               <span className="sr-only">, {groupTitle(entry.group, appMode)}</span>
               {entry.hint ? <span className="ml-auto">{entry.hint}</span> : null}
             </div>
           </div>
         ))}
       </div>
-      {results.length === 0 ? (
+      {searching ? (
+        <p className="flex items-center justify-center gap-2 px-3 pb-4 text-13 text-text-muted">
+          <Spinner size="sm" /> Searching the crawl’s URLs…
+        </p>
+      ) : searchFailed ? (
+        <p className="px-3 pb-4 text-center text-13 text-message-failure">
+          The crawl’s URLs couldn’t be searched. {errorTitle(search.error)}
+        </p>
+      ) : results.length === 0 ? (
         <p aria-hidden="true" className="px-3 pb-6 text-center text-13 text-text-muted">
           Nothing matches that.
         </p>
@@ -300,4 +371,42 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
     return () => clearTimeout(timer);
   }, [value, delayMs]);
   return settled;
+}
+
+/** Text with the part that matched marked. */
+function Marked({ parts }: { parts: readonly MarkedPart[] }) {
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.marked ? (
+          <mark key={index} className="si-palette-mark">
+            {part.text}
+          </mark>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+/** A URL the search found: its title, its address under it, the match marked in either, and its status in words. */
+export function UrlResultOption({ result, query }: { result: SearchResult; query: string }) {
+  return (
+    <>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate">
+          {result.title ? (
+            <Marked parts={markMatch(result.title, query)} />
+          ) : (
+            <span className="text-text-muted">No title</span>
+          )}
+        </span>
+        <span className="truncate font-mono text-12 text-text-secondary">
+          <Marked parts={markMatch(result.url, query)} />
+        </span>
+      </span>
+      <span className="shrink-0 text-12 text-text-secondary">{resultStatusWords(result)}</span>
+    </>
+  );
 }

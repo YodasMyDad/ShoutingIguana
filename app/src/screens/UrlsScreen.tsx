@@ -34,6 +34,10 @@ import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfN
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
+import { ExportButton } from '../export/ExportButton';
+import { useExportCommand } from '../export/useExportCommand';
+import { urlExportColumns, urlGridOffer } from '../export/offers';
+import { linkEndsOf, linkEndsWords } from './urls/linkEnds';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
@@ -103,6 +107,9 @@ export function UrlsScreen() {
   const sort = useMemo(() => search.sort ?? [], [search.sort]);
   const filters = useMemo(() => search.filter ?? [], [search.filter]);
   const q = search.q;
+  // Narrowed to one end of a links view's links ("Show these pages in URLs" on Links): beside the filters, as one more.
+  const linkEnds = useMemo(() => linkEndsOf(search.links), [search.links]);
+  const endsPart = useMemo(() => (linkEnds ? { linkEnds } : {}), [linkEnds]);
 
   const item = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
@@ -119,17 +126,22 @@ export function UrlsScreen() {
   const queryColumns = useMemo(() => urlQueryColumns(shown), [shown]);
 
   const view = useMemo(
-    () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '' })}`,
-    [crawlId, sort, filters, q],
+    () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '', ends: linkEnds ?? null })}`,
+    [crawlId, sort, filters, q, linkEnds],
   );
   const queryKey = useMemo(
-    () => ['grid', 'urls', crawlId, { columns: queryColumns, sort, filters, q: q ?? '' }] as const,
-    [crawlId, queryColumns, sort, filters, q],
+    () =>
+      ['grid', 'urls', crawlId, { columns: queryColumns, sort, filters, q: q ?? '', ends: linkEnds ?? null }] as const,
+    [crawlId, queryColumns, sort, filters, q, linkEnds],
   );
   const fetchPage = useCallback(
     (offset: number, limit: number, signal: AbortSignal) =>
-      api.urls(crawlId, { columns: queryColumns, offset, limit, sort, filters, ...(q ? { search: q } : {}) }, signal),
-    [crawlId, queryColumns, sort, filters, q],
+      api.urls(
+        crawlId,
+        { columns: queryColumns, offset, limit, sort, filters, ...(q ? { search: q } : {}), ...endsPart },
+        signal,
+      ),
+    [crawlId, queryColumns, sort, filters, q, endsPart],
   );
   const rows = usePagedRows<UrlRow>({
     queryKey,
@@ -171,7 +183,10 @@ export function UrlsScreen() {
   // and nothing on the screen but an open menu shows it. While a menu is open a running crawl's refresh keeps its
   // counts fresh; closed, they're only marked stale, and read again on opening.
   const [openFacet, setOpenFacet] = useState<FacetId | null>(null);
-  const facetsQuery = useMemo(() => ({ filters: [...filters], ...(q ? { search: q } : {}) }), [filters, q]);
+  const facetsQuery = useMemo(
+    () => ({ filters: [...filters], ...(q ? { search: q } : {}), ...endsPart }),
+    [filters, q, endsPart],
+  );
   const facetsRead = useQuery({ ...urlGridFacetsQuery(crawlId, facetsQuery), enabled: openFacet !== null });
   const facets = useMemo(
     () =>
@@ -214,6 +229,22 @@ export function UrlsScreen() {
     },
     [navigate],
   );
+  /** The links view these URLs are one end of. */
+  const backToLinks = () => {
+    const links = search.links;
+    void navigate({
+      to: '/crawls/$crawl/links',
+      params: { crawl: crawlId },
+      search: {
+        ...(links?.filter ? { filter: links.filter } : {}),
+        ...(links?.q ? { q: links.q } : {}),
+        ...(links?.sort ? { sort: links.sort } : {}),
+        ...(links?.cols ? { cols: links.cols } : {}),
+      },
+    });
+  };
+  /** The narrowing to the links' ends gone; the view's own filters, search and sort stay. */
+  const showEveryUrl = () => void navigate({ search: (previous) => ({ ...previous, links: undefined }) });
   /** Every URL again, in crawl order, with the columns as they are. */
   const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
   const setColumns = useCallback(
@@ -304,7 +335,7 @@ export function UrlsScreen() {
   const refusedOne = refused ? filters[refused.index] : undefined;
 
   // Saved views: the route's view under a name, with the app's preferences.
-  const saved = useSavedViews({ filter: search.filter, sort: search.sort, cols: search.cols, q });
+  const saved = useSavedViews({ filter: search.filter, sort: search.sort, cols: search.cols, q, links: search.links });
   const [naming, setNaming] = useState<{ kind: 'save' } | { kind: 'rename'; view: SavedView } | null>(null);
   const openSaved = useCallback(
     (saved: SavedView) =>
@@ -314,6 +345,7 @@ export function UrlsScreen() {
           sort: saved.search.sort,
           cols: saved.search.cols,
           q: saved.search.q,
+          links: saved.search.links,
         },
       }),
     [navigate],
@@ -328,10 +360,18 @@ export function UrlsScreen() {
       (after, limit, signal) =>
         api.urls(
           crawlId,
-          { columns: [...asked], sort, filters, limit, ...(q ? { search: q } : {}), ...(after ? { after } : {}) },
+          {
+            columns: [...asked],
+            sort,
+            filters,
+            limit,
+            ...(q ? { search: q } : {}),
+            ...endsPart,
+            ...(after ? { after } : {}),
+          },
           signal,
         ),
-    [crawlId, sort, filters, q],
+    [crawlId, sort, filters, q, endsPart],
   );
   const copyPart = rowCount !== null && rowCount > MAX_COPY_ROWS;
   const copyUrlsTitle = copyPart
@@ -501,6 +541,27 @@ export function UrlsScreen() {
     ],
   );
 
+  // Export (Ctrl+E): the view as it is when it's pressed, its columns, filters, search and sort.
+  useExportCommand(
+    () =>
+      item
+        ? urlGridOffer({
+            item,
+            crawling,
+            columns: urlExportColumns(shown),
+            filters,
+            sort,
+            search: q,
+            rows: rowCount,
+            catalogue: catalogue.data,
+            viewName: saved.current?.name ?? null,
+            linkEnds: linkEnds !== undefined,
+          })
+        : null,
+    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, saved.current, linkEnds],
+    { group: 'URLs' },
+  );
+
   // A button that goes with the state it was in, without a navigation (Try again, once the read works), leaves the
   // keyboard in the grid that comes, never on the page.
   const frame = useRef<HTMLDivElement>(null);
@@ -614,8 +675,9 @@ export function UrlsScreen() {
             <MenuItem command="urls.copyUrls">{copyUrlsTitle}</MenuItem>
             <MenuItem command="urls.copyColumn">{copyColumnTitle}</MenuItem>
           </DropdownMenu>
-          {/* Export (Ctrl+E) takes this place once the engine's export is in: nothing is offered until it works. */}
-          <div data-slot="export" className="contents" />
+          <div data-slot="export" className="contents">
+            <ExportButton />
+          </div>
         </div>
       </div>
       <FilterBar
@@ -648,6 +710,25 @@ export function UrlsScreen() {
           />
         ))}
       </FilterBar>
+      {search.links ? (
+        <Banner
+          inset
+          role="none"
+          className="mx-6 mb-3"
+          actions={
+            <>
+              <Button size="sm" variant="ghost" onClick={backToLinks}>
+                Back to the links
+              </Button>
+              <Button size="sm" onClick={showEveryUrl}>
+                Show every URL
+              </Button>
+            </>
+          }
+        >
+          {linkEndsWords(search.links)}
+        </Banner>
+      ) : null}
       {catalogue.isError ? (
         <Banner
           inset

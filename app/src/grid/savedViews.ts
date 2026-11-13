@@ -4,7 +4,7 @@
 // are the same, and what's wrong with a name, all unit-tested. Stored values come from disk: each is checked here.
 import type { GridFilter, GridSort } from '../api/grids';
 import { sameFilters } from '../screens/links/presets';
-import { validateGridSearch } from '../routing/search';
+import { validateGridSearch, type LinkEndsSearch } from '../routing/search';
 
 /** The grids that keep saved views. Only the URL grid does for now; the field keeps room for the others. */
 export type SavedViewGrid = 'urls';
@@ -16,6 +16,8 @@ export interface SavedViewSearch {
   /** The columns shown, in order; undefined for the grid's default set. */
   cols?: string[] | undefined;
   q?: string | undefined;
+  /** Narrowed to one end of a links view's links: part of the view, as the route has it. */
+  links?: LinkEndsSearch | undefined;
 }
 
 export interface SavedView {
@@ -54,6 +56,7 @@ export function viewSearchOf(search: SavedViewSearch): SavedViewSearch {
     ...(search.sort && search.sort.length > 0 ? { sort: search.sort } : {}),
     ...(search.cols && search.cols.length > 0 ? { cols: search.cols } : {}),
     ...(search.q ? { q: search.q } : {}),
+    ...(search.links ? { links: search.links } : {}),
   };
 }
 
@@ -65,16 +68,26 @@ function sameList<T>(a: readonly T[] | undefined, b: readonly T[] | undefined, s
   );
 }
 
+const sameSort = (a: readonly GridSort[] | undefined, b: readonly GridSort[] | undefined) =>
+  sameList(a, b, (x, y) => x.column === y.column && x.desc === y.desc);
+
+/** The same end of the same links (its view's filters in any order, and its search), or neither narrowed. */
+function sameLinks(a: LinkEndsSearch | undefined, b: LinkEndsSearch | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  return a.end === b.end && sameFilters(a.filter ?? [], b.filter ?? []) && (a.q ?? '') === (b.q ?? '');
+}
+
 /**
  * Whether two views show the same rows the same way: the same filters (in any order), the same sort keys in the same
- * order, the same columns in the same order, and the same search.
+ * order, the same columns in the same order, the same search, and the same links' ends, if any.
  */
 export function sameView(a: SavedViewSearch, b: SavedViewSearch): boolean {
   return (
     sameFilters(a.filter ?? [], b.filter ?? []) &&
-    sameList(a.sort, b.sort, (x, y) => x.column === y.column && x.desc === y.desc) &&
+    sameSort(a.sort, b.sort) &&
     sameList(a.cols, b.cols, (x, y) => x === y) &&
-    (a.q ?? '') === (b.q ?? '')
+    (a.q ?? '') === (b.q ?? '') &&
+    sameLinks(a.links, b.links)
   );
 }
 
@@ -106,6 +119,7 @@ function biggestPart(search: SavedViewSearch): string {
     ['its search takes', search.q ? jsonBytes(search.q) : 0],
     ['its columns take', search.cols ? jsonBytes(search.cols) : 0],
     ['its sort takes', search.sort ? jsonBytes(search.sort) : 0],
+    ['its links take', search.links ? jsonBytes(search.links) : 0],
   ];
   const [words] = parts.reduce((most, part) => (part[1] > most[1] ? part : most));
   return words;
@@ -158,7 +172,13 @@ export function readSavedViews(value: unknown): SavedView[] {
       id,
       grid: 'urls',
       name,
-      search: viewSearchOf({ filter: checked.filter, sort: checked.sort, cols: checked.cols, q: checked.q }),
+      search: viewSearchOf({
+        filter: checked.filter,
+        sort: checked.sort,
+        cols: checked.cols,
+        q: checked.q,
+        links: checked.links,
+      }),
     };
     // Only what the app could have saved: within a view's room, and the views' room all together.
     if (jsonBytes(view.search) > MAX_VIEW_LENGTH || jsonBytes([...views, view]) > MAX_VIEWS_BYTES) continue;

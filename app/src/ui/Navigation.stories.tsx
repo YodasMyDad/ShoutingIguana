@@ -6,6 +6,7 @@ import { AddFilterChip, FilterChip } from './FilterChip';
 import { Button } from './Button';
 import { Fact, Facts } from './Facts';
 import { Favicon } from './Favicon';
+import { SYNTHETIC_FAVICON } from '../api/mock/e6';
 import { LiveBadge } from './LiveBadge';
 import { ListHeading, ListRow } from './ListRow';
 import { NavItem } from './NavItem';
@@ -17,6 +18,11 @@ import { SeverityMark } from './SeverityMark';
 import { StatusCode } from './StatusCode';
 import { TextLink } from './TextLink';
 import { Url } from './Url';
+
+/** The synthetic site's icon, as the engine serves it: a 32 px PNG. */
+const ICON = `data:image/png;base64,${btoa(String.fromCharCode(...SYNTHETIC_FAVICON))}`;
+/** A PNG's signature and nothing after it: an image the browser can't draw. */
+const BROKEN_ICON = 'data:image/png;base64,iVBORw0KGgo=';
 
 const meta = { title: 'Design system/Navigation, lists and URLs' } satisfies Meta;
 export default meta;
@@ -108,6 +114,15 @@ export const Urls: Story = {
           <Favicon site="gardenfurnituresets.co.uk" size="sm" />
           <Favicon site="https://www.kestrel-legal.example/" size="md" />
           <Favicon site="127.0.0.1:50196" size="lg" />
+        </StateRow>
+        <StateRow label="The site's icon, loaded · sm · md · lg">
+          <Favicon site="127.0.0.1:50196" src={ICON} size="sm" />
+          <Favicon site="127.0.0.1:50196" src={ICON} size="md" />
+          <Favicon site="127.0.0.1:50196" src={ICON} size="lg" />
+        </StateRow>
+        <StateRow label="An icon that can't be drawn: the letter, the same size">
+          <Favicon site="gardenfurnituresets.co.uk" src={BROKEN_ICON} size="md" />
+          <Favicon site="gardenfurnituresets.co.uk" src={BROKEN_ICON} size="lg" />
         </StateRow>
       </StorySection>
     </StoryFrame>

@@ -21,7 +21,11 @@ import { ErrorState } from '../feedback/ErrorState';
 import { notifyUndo } from '../feedback/notify';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { searchCommand } from '../grid/searchCommand';
+import { issuesOffer } from '../export/offers';
+import { ExportButton } from '../export/ExportButton';
+import { CRAWL_FILE_COMMANDS, useExportCommand } from '../export/useExportCommand';
 import { useCommands } from '../keyboard/registry';
+import { useMode } from '../mode/mode';
 import { formatCountOf } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { updateSettings, useSettings } from '../settings/settingsStore';
@@ -410,6 +414,39 @@ export function IssuesScreen() {
     ],
   );
 
+  // Export (Ctrl+E): this check, the open group's pages, the report and every check (the spreadsheet of everything).
+  const simple = useMode() === 'simple';
+  useExportCommand(
+    () =>
+      item
+        ? issuesOffer({
+            item,
+            crawling,
+            simple,
+            check:
+              selected && found
+                ? {
+                    id: selected.check.id,
+                    title: (simple ? selected.check.plainTitle : null) ?? selected.check.title,
+                    urls: selected.count,
+                    // A check that doesn't group is its sorted list: its export is that list, in that order.
+                    flat: selected.check.grouping === 'none',
+                    sort,
+                  }
+                : null,
+            group: placed
+              ? {
+                  ref: groupRefOf(placed),
+                  pages: placed.pages,
+                  words: placed.detail ? `“${placed.detail}”` : 'the group’s pages',
+                }
+              : null,
+          })
+        : null,
+    [item, crawling, simple, selected, found, placed, sort],
+    { group: 'Issues', title: 'Export…', choices: CRAWL_FILE_COMMANDS },
+  );
+
   const loading = (checks.isPending || (analysis.isPending && !rereading)) && !checks.error && !analysis.error;
   const skeleton = useDelayedLoading(loading);
 
@@ -541,7 +578,12 @@ export function IssuesScreen() {
   return (
     <div className="@container h-full">
       <div className="flex h-full min-h-0 flex-col gap-5 px-(--page-gutter) pt-7 pb-6 @max-split:h-auto">
-        <PageHeader title="Issues" subtitle={subtitle} titleRef={pageTitleRef} />
+        <PageHeader
+          title="Issues"
+          subtitle={subtitle}
+          titleRef={pageTitleRef}
+          actions={item ? <ExportButton /> : null}
+        />
         {body}
       </div>
     </div>

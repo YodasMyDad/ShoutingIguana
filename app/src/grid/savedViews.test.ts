@@ -96,6 +96,29 @@ describe('a saved view', () => {
   });
 });
 
+describe('a view narrowed to a links view’s ends (the review’s finding 4)', () => {
+  const ends = { end: 'to' as const, filter: [{ column: 'to.statusClass', op: 'in' as const, values: ['4xx'] }] };
+
+  it('is another view than the same filters without it, and the same with it', () => {
+    const narrowed = { ...broken.search, links: ends };
+    expect(sameView(broken.search, narrowed)).toBe(false);
+    expect(currentSavedView([broken], 'urls', narrowed)).toBeNull();
+    expect(sameView({ ...narrowed, links: { ...ends, sort: [{ column: 'to.url', desc: true }] } }, narrowed)).toBe(
+      true,
+    );
+    expect(sameView(narrowed, { ...broken.search, links: { ...ends, end: 'from' } })).toBe(false);
+  });
+
+  it('is saved with its narrowing, and read back with it', () => {
+    expect(viewSearchOf({ filter: broken.search.filter, links: ends })).toEqual({
+      filter: broken.search.filter,
+      links: ends,
+    });
+    const [read] = readSavedViews([{ ...broken, search: { ...broken.search, links: ends } }]);
+    expect(read?.search.links).toEqual(ends);
+  });
+});
+
 describe('saved views as stored', () => {
   it('are checked as a route is, and what can’t be read is dropped', () => {
     const views = readSavedViews([

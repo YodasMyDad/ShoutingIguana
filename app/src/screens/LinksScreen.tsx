@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, Link2Off, PanelRight, RefreshCw } from 'lucide-react';
+import { Copy, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
@@ -35,8 +35,11 @@ import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
+import { ExportButton } from '../export/ExportButton';
+import { useExportCommand } from '../export/useExportCommand';
+import { linkExportColumns, linksOffer } from '../export/offers';
 import { useCommands, type Command } from '../keyboard/registry';
-import { formatCount, formatShownOf } from '../lib/format';
+import { formatCount, formatCountOf, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { useInspector } from '../routing/inspector';
 import { MAX_FILTERS } from '../routing/search';
@@ -52,6 +55,7 @@ import { siteOriginOf, urlDisplay } from '../ui/urlText';
 import { FACET_TITLES, LINK_FACET_IDS, buildFacets, withFacetValue, type FacetValue } from './links/facets';
 import {
   DEFAULT_LINK_COLUMNS,
+  FOLLOW_PARTS,
   LINK_FILTER_GROUPS,
   endUrls,
   linkChooserGroups,
@@ -61,7 +65,7 @@ import {
   sharedUrlWidth,
   shownLinkColumns,
 } from './links/linkColumns';
-import { endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
+import { FOLLOW_COLUMN, endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
 import { LINK_PRESETS, activePreset, sortShown } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './links/states';
@@ -417,6 +421,78 @@ export function LinksScreen() {
     [view, columns, editor, chooserGroups, hasRows, copying, copyPart, copyOneColumnTitle, clearView, navigate],
   );
 
+  // "Show these pages in URLs" (E6's link ends): the URL grid narrowed to the view's targets, or the pages its links
+  // are on, each once. How many is read as the menu opens: the pages take a pass over every link.
+  const [endsOpen, setEndsOpen] = useState(false);
+  const endsQuery = (end: 'from' | 'to') => ({
+    queryKey: ['crawl', crawlId, 'linkEnds', end, { filters, q: q ?? '' }],
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      api.linkEnds(crawlId, { end, filters: [...filters], ...(q ? { search: q } : {}), limit: 1 }, signal),
+    enabled: endsOpen && hasRows,
+    staleTime: crawling ? 0 : Number.POSITIVE_INFINITY,
+  });
+  const targetsCount = useQuery(endsQuery('to')).data?.total;
+  const sourcesCount = useQuery(endsQuery('from')).data?.total;
+  const showEnds = useCallback(
+    (end: 'from' | 'to') =>
+      void navigate({
+        to: '/crawls/$crawl/urls',
+        params: { crawl: crawlId },
+        search: {
+          links: {
+            end,
+            ...(filters.length > 0 ? { filter: [...filters] } : {}),
+            ...(q ? { q } : {}),
+            // The view's sort and columns go too, so Back to the links lands on it as it was.
+            ...(sort.length > 0 ? { sort: [...sort] } : {}),
+            ...(search.cols ? { cols: [...search.cols] } : {}),
+          },
+        },
+      }),
+    [navigate, crawlId, filters, q, sort, search.cols],
+  );
+  useCommands(
+    (): Command[] => [
+      {
+        id: 'links.showTargets',
+        title: 'Show these links’ targets in URLs',
+        group: 'Links',
+        keywords: ['urls', 'targets', 'pages', 'link ends'],
+        enabled: () => hasRows,
+        run: () => showEnds('to'),
+      },
+      {
+        id: 'links.showSources',
+        title: 'Show the pages these links are on in URLs',
+        group: 'Links',
+        keywords: ['urls', 'sources', 'pages', 'link ends'],
+        enabled: () => hasRows,
+        run: () => showEnds('from'),
+      },
+    ],
+    [hasRows, showEnds],
+  );
+
+  // Export (Ctrl+E): the view as it is when it's pressed, its columns, filters, search and sort.
+  useExportCommand(
+    () =>
+      item
+        ? linksOffer({
+            item,
+            crawling,
+            columns: linkExportColumns(shown, FOLLOW_COLUMN, FOLLOW_PARTS),
+            filters,
+            sort,
+            search: q,
+            rows: rowCount,
+            catalogue: catalogue.data,
+            viewName: preset && preset.id !== 'all' ? preset.title : null,
+          })
+        : null,
+    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, preset],
+    { group: 'Links' },
+  );
+
   // A button that goes with the state it was in, without a navigation (Try again, once the read works), leaves the
   // keyboard in the grid that comes, never on the page. One that clears the view navigates, and the shell does the
   // same for it.
@@ -519,6 +595,30 @@ export function LinksScreen() {
             <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
             <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
           </DropdownMenu>
+          <DropdownMenu
+            align="end"
+            open={endsOpen}
+            onOpenChange={setEndsOpen}
+            trigger={
+              <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
+                Show in URLs
+              </Button>
+            }
+          >
+            <MenuItem
+              command="links.showTargets"
+              detail={targetsCount === undefined ? undefined : formatCountOf(targetsCount, 'URL')}
+            >
+              Their targets
+            </MenuItem>
+            <MenuItem
+              command="links.showSources"
+              detail={sourcesCount === undefined ? undefined : formatCountOf(sourcesCount, 'page')}
+            >
+              The pages they’re on
+            </MenuItem>
+          </DropdownMenu>
+          <ExportButton />
         </div>
       </div>
       <FilterBar

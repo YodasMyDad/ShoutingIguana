@@ -23,6 +23,9 @@ import { usePagedRows } from '../../grid/usePagedRows';
 import { SourcePane } from '../../inspector/SourcePane';
 import { SourceSkeleton } from '../../inspector/SourceSection';
 import { useSourceViewer } from '../../inspector/sourceViewerLoader';
+import { robotsBlockedOffer } from '../../export/offers';
+import { ExportButton } from '../../export/ExportButton';
+import { useExportCommand } from '../../export/useExportCommand';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
 import { withRecorded } from '../../lib/failure';
@@ -221,6 +224,23 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
       },
     ],
     [data, narrowing, blockedCount, copying, missing, searchable, crawlId, origin, navigate],
+  );
+
+  // Export (Ctrl+E): the blocked URLs listed, all of the origin's or one line's, each with the line that decided it.
+  useExportCommand(
+    () =>
+      crawl.item && !missing && blockedCount > 0
+        ? robotsBlockedOffer({
+            item: crawl.item,
+            crawling: crawl.crawling,
+            origin,
+            line: narrowing.by === 'line' ? narrowing.line : undefined,
+            reason: narrowing.by === 'reason' ? narrowing.reason : undefined,
+            rows: narrowing.by === 'none' ? blockedCount : null,
+          })
+        : null,
+    [crawl.item, crawl.crawling, missing, blockedCount, origin, narrowing],
+    { group: 'robots.txt' },
   );
 
   const back = (
@@ -572,16 +592,19 @@ function BlockedUrls({
           )
         }
         actions={
-          <Button
-            size="sm"
-            icon={Copy}
-            command="robots.copyBlocked"
-            disabled={(rows.rowCount ?? 0) === 0}
-            loading={copying}
-            onClick={onCopy}
-          >
-            Copy URLs
-          </Button>
+          <>
+            <Button
+              size="sm"
+              icon={Copy}
+              command="robots.copyBlocked"
+              disabled={(rows.rowCount ?? 0) === 0}
+              loading={copying}
+              onClick={onCopy}
+            >
+              Copy URLs
+            </Button>
+            <ExportButton />
+          </>
         }
       />
       {/* Two lines' room, whatever it holds: the note wraps in a narrow pane, and comes once the crawl is first kept

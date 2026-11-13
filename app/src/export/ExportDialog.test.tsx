@@ -1,0 +1,137 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { TransportRequest } from '../api/transport';
+import { setTransport } from '../api/transport';
+import { fakeSidecar, json, problem, testCrawlItem } from '../test/fakeSidecar';
+import { replaceSettings } from '../settings/settingsStore';
+import { ExportDialogHost } from './ExportDialog';
+import { closeExportDialog, getExportDialog, openExportDialog } from './exportFlow';
+import { exportStore } from './exportStore';
+import { urlExportColumns, urlGridOffer } from './offers';
+
+const item = testCrawlItem();
+const offer = (crawling = false) =>
+  urlGridOffer({
+    item,
+    crawling,
+    columns: urlExportColumns(['url', 'statusCode']),
+    filters: [],
+    sort: [{ column: 'inlinks', desc: true }],
+    search: undefined,
+    rows: 3,
+    viewName: null,
+    linkEnds: false,
+  });
+
+const started = (request: TransportRequest) =>
+  json(
+    {
+      exportId: '3f9a61c2d0b4e87a',
+      crawlId: item.id,
+      kind: 'urls',
+      format: 'csv',
+      path: (request.body as { path: string }).path,
+      status: 'running',
+      rowsWritten: 0,
+      rowsExpected: null,
+      startedAt: '2026-11-13T10:00:00Z',
+      finishedAt: null,
+      result: null,
+      error: null,
+    },
+    201,
+  );
+
+afterEach(() => {
+  closeExportDialog();
+  exportStore.clear();
+  setTransport(fakeSidecar([]));
+});
+
+describe('the export dialog', () => {
+  it('says a refusal in place, and its action sends the export again as it says', async () => {
+    let tries = 0;
+    const transport = fakeSidecar([
+      [
+        'POST',
+        /\/export$/,
+        (request) => {
+          tries += 1;
+          return tries === 1
+            ? problem({
+                type: 'invalid-query',
+                title: 'A running crawl can’t be sorted by that.',
+                status: 422,
+                errors: { sort: ['Sort by url or id while the crawl runs.'] },
+              })
+            : started(request);
+        },
+      ],
+    ]);
+    setTransport(transport);
+    render(<ExportDialogHost />);
+    openExportDialog(offer(true));
+    const field = await screen.findByRole('textbox', { name: 'Save as' });
+    fireEvent.change(field, { target: { value: 'C:\\x\\view.csv' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(await screen.findByText(/an export is in crawl order or by URL/)).toBeVisible();
+    expect(screen.getByRole('dialog')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export in crawl order' }));
+    await waitFor(() => expect(getExportDialog()).toBeNull());
+    const sent = transport.requests.filter((request) => request.path.endsWith('/export'));
+    expect(sent[0]?.body).toMatchObject({ kind: 'urls', format: 'csv', sort: [{ column: 'inlinks', desc: true }] });
+    expect(sent[1]?.body).not.toHaveProperty('sort');
+    expect(exportStore.get('3f9a61c2d0b4e87a')?.label).toBe('This view');
+  });
+
+  it('takes the format from a typed extension, and the default name from the site, the crawl’s date and the view', async () => {
+    setTransport(fakeSidecar([]));
+    render(<ExportDialogHost />);
+    openExportDialog(offer());
+    const field = await screen.findByRole('textbox', { name: 'Save as' });
+    expect((field as HTMLInputElement).value).toMatch(/(^|[\\/])example\.com 2026-11-01 URLs\.(xlsx|csv)$/);
+    fireEvent.change(field, { target: { value: 'C:\\x\\mine.csv' } });
+    expect(screen.getByRole('radio', { name: 'CSV' })).toBeChecked();
+    fireEvent.change(field, { target: { value: 'C:\\x\\mine.xlsx' } });
+    expect(screen.getByRole('radio', { name: 'Excel' })).toBeChecked();
+  });
+
+  it('offers the analysis in place of the report for a crawl never analysed', async () => {
+    const { crawlFileChoices, overviewOffer } = await import('./offers');
+    const never = { ...item, analyzedAt: null };
+    replaceSettings({ mode: 'simple' });
+    render(<ExportDialogHost />);
+    openExportDialog({ ...overviewOffer(never, false, true), choices: crawlFileChoices(never, true) });
+    expect(await screen.findByText(/Work out the results first/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Work out the results' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Export' })).toBeNull();
+  });
+
+  it('Export as CSV after a too-large refusal sends the CSV’s path, not the Excel one (the review’s finding 5)', async () => {
+    let tries = 0;
+    const transport = fakeSidecar([
+      [
+        'POST',
+        /\/export$/,
+        (request) => {
+          tries += 1;
+          return tries === 1
+            ? problem({ type: 'export-too-large', title: 'Too many rows for Excel.', status: 422 })
+            : started(request);
+        },
+      ],
+    ]);
+    setTransport(transport);
+    render(<ExportDialogHost />);
+    openExportDialog(offer());
+    fireEvent.click(await screen.findByRole('radio', { name: 'Excel' }));
+    const field = await screen.findByRole('textbox', { name: 'Save as' });
+    fireEvent.change(field, { target: { value: 'C:/x/view.xlsx' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export as CSV…' }));
+    await waitFor(() => expect(transport.requests.filter((r) => r.path.endsWith('/export'))).toHaveLength(2));
+    const sent = transport.requests.filter((r) => r.path.endsWith('/export'));
+    expect(sent[1]?.body).toMatchObject({ format: 'csv', path: 'C:/x/view.csv' });
+  });
+});

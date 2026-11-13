@@ -2,6 +2,7 @@ import { Outlet, useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useEffect } from 'react';
 import { focusFallback, useModalOpen, useOverlay } from '../app/overlays';
+import { ExportDialogHost } from '../export/ExportDialog';
 import { setCrawlSettingsOpener } from '../crawl/actions';
 import { Announcer } from '../feedback/Announcer';
 import { AppToaster } from '../feedback/AppToaster';
@@ -82,6 +83,7 @@ export function AppShell() {
       {palette}
       {shortcuts}
       <StoppingOverlay />
+      <ExportDialogHost />
       <AppToaster />
       <Announcer />
     </>

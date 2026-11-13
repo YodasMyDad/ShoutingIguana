@@ -56,20 +56,23 @@ describe('Settings, in each mode', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'General' })).toBeVisible();
     expect(sections()).toEqual(['General', 'Data folder', 'Updates', 'About']);
     const note = screen.getByText(/are Advanced settings/);
-    // Only the sections there are: Analysis arrives with its slice.
-    expect(note).toHaveTextContent('Crawl defaults, shortcuts and diagnostics are Advanced settings.');
+    // Only the sections there are, Analysis among them as the checks' limits.
+    expect(note).toHaveTextContent(
+      'Crawl defaults, the checks’ limits, shortcuts and diagnostics are Advanced settings.',
+    );
     fireEvent.click(within(note).getByRole('button', { name: 'Show them in Advanced' }));
     expect(getSettings().mode).toBe('advanced');
     await waitFor(() => expect(screen.getByRole('link', { name: 'Crawl defaults' })).toHaveFocus());
   });
 
-  it('lists every section there is in Advanced, and no Analysis until it can be set', async () => {
+  it('lists every section there is in Advanced, Analysis among them', async () => {
     sidecar();
     await open('/settings', 'advanced');
     await screen.findByRole('heading', { level: 1, name: 'General' });
     expect(sections()).toEqual([
       'General',
       'Crawl defaults',
+      'Analysis',
       'Data folder',
       'Shortcuts',
       'Diagnostics',

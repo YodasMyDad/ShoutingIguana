@@ -62,11 +62,49 @@ pub struct CrawlChange {
     pub error: Option<String>,
 }
 
+/// `export` (E5): an export as it stands, whole. The shell reads it for the notification as one ends, and
+/// `GET /api/exports/{id}` reads the same object for Open file and Open folder.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportJob {
+    pub export_id: String,
+    #[serde(default)]
+    pub kind: String,
+    /// The file it writes, as the sidecar resolved the path it was given.
+    #[serde(default)]
+    pub path: String,
+    /// `running`, then `done`, `cancelled` or `failed`.
+    pub status: String,
+    pub result: Option<ExportResult>,
+    pub error: Option<ExportError>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+pub struct ExportResult {
+    #[serde(default)]
+    pub rows: u64,
+}
+
+/// The problem a failed export ended in: its `title` is a plain sentence, the app's own words for it aside.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ExportError {
+    #[serde(default)]
+    pub title: String,
+}
+
+impl ExportJob {
+    /// The file's name, without its folder: what a notification names.
+    pub fn file_name(&self) -> &str {
+        self.path.rsplit(['\\', '/']).next().filter(|name| !name.is_empty()).unwrap_or(&self.path)
+    }
+}
+
 #[derive(Debug)]
 pub enum Event {
     Hello(Hello),
     Progress(Progress),
     Crawl(CrawlChange),
+    Export(ExportJob),
     /// `alert`, `library` and anything newer: the tray has no use for them.
     Other,
 }
@@ -77,6 +115,7 @@ impl Event {
             "hello" => Self::Hello(serde_json::from_str(data)?),
             "progress" => Self::Progress(serde_json::from_str(data)?),
             "crawl" => Self::Crawl(serde_json::from_str(data)?),
+            "export" => Self::Export(serde_json::from_str(data)?),
             _ => Self::Other,
         })
     }
@@ -467,6 +506,25 @@ mod tests {
         assert!(matches!(crawl, Event::Crawl(CrawlChange { error: Some(error), .. }) if error == "Boom"));
         assert!(matches!(Event::parse("library", "{}").unwrap(), Event::Other));
         assert!(Event::parse("crawl", "{}").is_err());
+    }
+
+    #[test]
+    fn export_events_parse_as_the_job_whole() {
+        let data = r#"{"exportId":"3f9a61c2d0b4e87a","crawlId":"c","kind":"urls","format":"xlsx",
+            "path":"C:\\Users\\me\\Documents\\example.com 2026-10-31 URLs.xlsx","status":"done","rowsWritten":12,
+            "rowsExpected":12,"startedAt":"2026-11-01T17:42:00.118Z","finishedAt":"2026-11-01T17:42:01.000Z",
+            "result":{"rows":12,"bytes":900,"sheets":1,"unavailableColumns":[],"truncatedCells":0,"crawlWasRunning":false},
+            "error":null}"#;
+        let Event::Export(job) = Event::parse("export", data).unwrap() else { panic!("not an export") };
+        assert_eq!((job.status.as_str(), job.result.map(|result| result.rows)), ("done", Some(12)));
+        assert_eq!(job.file_name(), "example.com 2026-10-31 URLs.xlsx");
+        let failed = r#"{"exportId":"9c04e1b7a25d3f68","crawlId":"c","kind":"urls","format":"csv","path":"/home/me/a.csv",
+            "status":"failed","rowsWritten":0,"rowsExpected":null,"startedAt":"x","finishedAt":"y","result":null,
+            "error":{"type":"export-disk-full","title":"The disk is full.","status":507}}"#;
+        let Event::Export(job) = Event::parse("export", failed).unwrap() else { panic!("not an export") };
+        assert_eq!(job.file_name(), "a.csv");
+        assert_eq!(job.error.map(|error| error.title), Some("The disk is full.".to_owned()));
+        assert!(Event::parse("export", "{}").is_err());
     }
 
     #[test]

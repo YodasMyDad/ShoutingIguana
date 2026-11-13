@@ -18,7 +18,7 @@ import { useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
 import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
-import { Favicon } from '../ui/Favicon';
+import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { Kbd } from '../ui/Kbd';
 import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
@@ -276,7 +276,7 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
           than its least (min-w), so a narrow window's other columns can't squeeze it out. */}
       <td className={clsx('max-w-0 min-w-(--library-site-min)', CELL)}>
         <div className="flex min-w-0 items-center gap-3">
-          <Favicon site={item.site ?? crawlName(item)} size="md" />
+          <CrawlFavicon item={item} size="md" />
           <div className="flex min-w-0 flex-col">
             <TextLink
               variant="subtle"

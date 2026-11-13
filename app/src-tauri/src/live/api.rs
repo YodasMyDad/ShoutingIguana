@@ -8,7 +8,7 @@ use ureq::unversioned::resolver::DefaultResolver;
 use ureq::unversioned::transport::{Buffers, ConnectionDetails, Connector, NextTimeout, TcpConnector, Transport};
 use ureq::{Agent, BodyReader};
 
-use super::model::CrawlItem;
+use super::model::{CrawlItem, ExportJob};
 use crate::sidecar::Connection;
 
 /// The sidecar sends a comment every 15 s on an idle stream; this long without a byte and the stream is dead.
@@ -108,6 +108,19 @@ impl Api {
     /// `GET /api/crawls/{id}`.
     pub fn crawl(&self, connection: &Connection, id: &str) -> Result<CrawlItem, ApiError> {
         let path = format!("/api/crawls/{}", checked_id(id)?);
+        let body = self
+            .calls
+            .get(url(connection, &path))
+            .header("Authorization", bearer(connection))
+            .call()?
+            .body_mut()
+            .read_to_string()?;
+        Ok(serde_json::from_str(&body)?)
+    }
+
+    /// `GET /api/exports/{id}`: one running, or one of the last 64 that ended.
+    pub fn export(&self, connection: &Connection, id: &str) -> Result<ExportJob, ApiError> {
+        let path = format!("/api/exports/{}", checked_id(id)?);
         let body = self
             .calls
             .get(url(connection, &path))

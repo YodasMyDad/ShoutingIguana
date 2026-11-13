@@ -31,6 +31,8 @@ import {
   coverageWords,
   tallyOf,
 } from './sitemapWords';
+import { notExportableOffer } from '../../export/offers';
+import { useExportCommand } from '../../export/useExportCommand';
 
 const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 
@@ -52,6 +54,19 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
   const title = useRef<HTMLHeadingElement>(null);
   // A banner's button goes once its action has worked (Analyse again, Continue): focus goes to the page's title.
   useFocusRescue(container, () => title.current);
+  // Ctrl+E here says where an export is: the engine exports a sitemap's URLs, not the list of sitemaps.
+  useExportCommand(
+    () =>
+      crawl.item
+        ? notExportableOffer(
+            crawl.item,
+            'Export sitemaps',
+            'The engine can’t export the list of sitemaps yet. Open a sitemap to export the URLs it lists.',
+          )
+        : null,
+    [crawl.item],
+    { group: 'Sitemaps' },
+  );
 
   const data = list.data;
   const loading = list.isPending;

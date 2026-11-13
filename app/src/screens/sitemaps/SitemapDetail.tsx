@@ -25,6 +25,9 @@ import { MAX_COPY_ROWS } from '../../grid/tsv';
 import type { GridColumn } from '../../grid/types';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { useSearchText } from '../../grid/useSearchText';
+import { sitemapUrlsOffer, urlExportColumns } from '../../export/offers';
+import { ExportButton } from '../../export/ExportButton';
+import { useExportCommand } from '../../export/useExportCommand';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
 import { statusWords, withRecorded } from '../../lib/failure';
@@ -249,6 +252,27 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
     [sitemap, quick, stale, crawlId, navigate],
   );
 
+  // Export (Ctrl+E): the sitemap's URLs as the grid shows them, its filters, search and sort.
+  useExportCommand(
+    () =>
+      crawl.item && sitemap && !stale
+        ? sitemapUrlsOffer({
+            item: crawl.item,
+            crawling: crawl.crawling,
+            sitemapId: sitemap.id,
+            sitemapName: sitemapFileName(sitemap.url),
+            columns: urlExportColumns(URL_GRID_COLUMNS.map((column) => column.id)),
+            filters,
+            sort,
+            search: q,
+            rows: rows.rowCount,
+            catalogue: sortable,
+          })
+        : null,
+    [crawl.item, crawl.crawling, sitemap, stale, filters, sort, q, rows.rowCount, sortable],
+    { group: 'Sitemaps' },
+  );
+
   const count =
     rows.rowCount === null || rows.unfilteredTotal === null ? null : (
       <ResultCount shown={rows.rowCount} total={rows.unfilteredTotal} noun="URL" />
@@ -348,6 +372,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
               disabled={!sitemap}
               onClick={() => (sitemap ? void openInBrowser(sitemap.url) : undefined)}
             />
+            <ExportButton />
           </>
         }
       />
@@ -635,4 +660,14 @@ function SitemapFacts({
       {sitemap.foundVia === null ? <p className="pt-1 text-12 text-text-secondary">{found.sentence}</p> : null}
     </div>
   );
+}
+
+/** A sitemap's file name, for an export's default name: the last part of its path ("sitemap-products.xml"). */
+function sitemapFileName(url: string): string {
+  try {
+    const path = new URL(url).pathname.split('/').filter(Boolean);
+    return path.at(-1) ?? new URL(url).host;
+  } catch {
+    return 'sitemap';
+  }
 }

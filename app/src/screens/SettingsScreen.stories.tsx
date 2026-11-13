@@ -1,12 +1,35 @@
 // Settings in each mode (docs/v2-ui-simple.md, Settings in each mode): every section, Simple's four and its note.
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from '../app/queryClient';
 import type { Mode } from '../mode/mode';
 import { AT_200_PERCENT, ScreenApp, freshStory, ownSidecar } from '../test/ScreenStory';
-import { problem, standardRoutes } from '../test/fakeSidecar';
+import { json, problem, standardRoutes, type FakeRoute } from '../test/fakeSidecar';
+import { ANALYSIS_LIMITS } from '../api/mock/e6';
+import type { AnalysisSettings } from '../api/types';
+import { LimitsForm } from './settings/sections/Analysis';
 
 const meta = { title: 'Screens/Settings' } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+/** The engine's limits, some changed from its own. */
+function analysisSettingsOf(changed: Record<string, number>): AnalysisSettings {
+  const limits = ANALYSIS_LIMITS.map((limit) => ({ ...limit, value: changed[limit.id] ?? limit.default }));
+  return {
+    settings: Object.fromEntries(limits.map((limit) => [limit.id, limit.value])),
+    limits,
+    isDefault: Object.keys(changed).length === 0,
+  };
+}
+
+/** The engine's limits, some changed, and what a check of them says (field by field, and of the whole). */
+function analysisRoutes(errors: Record<string, string[]>, changed: Record<string, number> = {}): FakeRoute[] {
+  return [
+    ['GET', /^\/api\/analysis-settings$/, () => json(analysisSettingsOf(changed))],
+    ['POST', /^\/api\/analysis-settings\/validate$/, () => json({ errors })],
+  ];
+}
 
 const at = (path: string, mode: Mode, setup: () => void = freshStory, at200 = false): Story => ({
   loaders: [setup],
@@ -49,3 +72,42 @@ export const CrawlDefaultsFailed = at('/settings/crawl-defaults', 'advanced', ()
 );
 export const GeneralSimpleAt200 = at('/settings', 'simple', freshStory, true);
 export const CrawlDefaultsAt200 = at('/settings/crawl-defaults', 'advanced', freshStory, true);
+
+/** Analysis: every limit the checks judge by, with what it does, its unit and its range. */
+export const Analysis = at('/settings/analysis', 'advanced');
+/** A limit the engine refuses, said beside it as it's typed; the limits together, above the form. */
+export const AnalysisRefused: Story = {
+  loaders: [
+    () =>
+      ownSidecar([
+        ...analysisRoutes({
+          titleMaxLength: ['The longest title allowed must be more than the shortest (30).'],
+          settings: ['These limits can’t all hold at once.'],
+        }),
+        ...standardRoutes(),
+      ]),
+  ],
+  render: () => (
+    <QueryClientProvider client={createQueryClient()}>
+      <div className="max-w-(--form-max) p-6">
+        <LimitsForm settings={analysisSettingsOf({})} initialDraft={{ titleMaxLength: '20' }} />
+      </div>
+    </QueryClientProvider>
+  ),
+};
+/** Limits changed from the engine's: each with Put back. */
+export const AnalysisChanged = at('/settings/analysis', 'advanced', () =>
+  ownSidecar([...analysisRoutes({}, { titleMaxLength: 70, slowResponseMs: 2_000 }), ...standardRoutes()]),
+);
+/** The limits couldn't be read. */
+export const AnalysisFailed = at('/settings/analysis', 'advanced', () =>
+  ownSidecar([
+    [
+      'GET',
+      /^\/api\/analysis-settings$/,
+      () => problem({ type: 'file-error', title: 'The engine couldn’t read its limits.', status: 400 }),
+    ],
+    ...standardRoutes(),
+  ]),
+);
+export const AnalysisAt200 = at('/settings/analysis', 'advanced', freshStory, true);

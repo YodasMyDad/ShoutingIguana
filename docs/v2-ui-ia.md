@@ -70,7 +70,7 @@ links and "reopen where I left off" all work.
 | `/crawls/:crawl` | Goes to the crawl's last view: Overview the first time |
 | `/crawls/:crawl/overview` | Live crawl, then the answer. Params: `score` (`1`: the score's breakdown, open) |
 | `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `category` (one category's checks, by its id in the catalog: where Overview's category counts lead), `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
-| `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
+| `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect`, `links` (one end of a links view's links: `{ end, filter, q }`, with the links view's `sort` and `cols` for Back to the links) |
 | `/crawls/:crawl/links` | Links. Params: `filter`, `sort` (one key: crawl order, or a column of the target), `cols`, `q`, `inspect`, over the links' columns, either end's included (`to.statusClass`, `from.depth`); `end=from` with `inspect` when the URL inspected is the page a link is on (a target, the default, has no word) |
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps: the list, and one sitemap's URLs (its id in the path). Params on one sitemap: `filter`, `sort`, `q`, `inspect`, as URLs. On the list: `url`, a sitemap's address, which goes on to that sitemap |
 | `/crawls/:crawl/robots/:origin?` | robots.txt: the origins, and one origin's file with the URLs it blocked (the origin in the path). Params on one origin: `line` (the line chosen), `reason` (`unreachable` or `unknown`: the blocked URLs no line accounts for), `inspect` |
@@ -164,8 +164,8 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 - Its rows are grouped by detail or by the other URL involved, as the catalog says for each check, so a template
   fault is one row with its count; open a group for its first pages and all of them in URLs. A check whose detail is a
   measurement lists its URLs flat. One group is open at a time.
-- Actions: copy URLs (the check's, or the open group's), hide the check (remembered, with Undo). Export comes with the
-  engine's export (E5).
+- Actions: copy URLs (the check's, or the open group's), hide the check (remembered, with Undo), and Export (Ctrl+E):
+  this check, the open group's pages, the report and every check (the spreadsheet of everything).
 
 **URLs.**
 
@@ -200,8 +200,10 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
   address. The inspector's Inlinks and Outlinks open here: "All N in Links" ("Show it in Links" for one).
 - A sort is by a column the grid shows: hiding the column drops the sort.
 - Copy: the selected rows, the column the cursor is in, the view's source or target URLs. A copy reads the view's
-  first 10,000 links, and says so on a bigger view ("Copy the first 10,000 links' target URLs"). Export comes with the
-  engine's export (E5).
+  first 10,000 links, and says so on a bigger view ("Copy the first 10,000 links' target URLs"). Export (Ctrl+E) writes
+  the view as CSV or Excel.
+- Show in URLs: the view's targets, or the pages its links are on, each once, counted as the menu opens: the URL grid
+  narrowed to them (its `links` param), with Back to the links and Show every URL.
 - In a window too short for the toolbars and the grid (200% zoom), the screen scrolls: the grid keeps five rows.
 
 **Sitemaps.**
@@ -281,7 +283,11 @@ in [Simple mode](v2-ui-simple.md#the-report).
 5. **Hand over.**
    - On any grid, Export (Ctrl+E) offers CSV or Excel of what you see: these filters, these columns.
    - On Issues, it offers this check, or every check with a summary sheet.
-   - A native save dialog, then a toast with progress, Cancel and "Open folder".
+   - A native save dialog, then a toast with progress, Cancel, then "Open folder" and "Open file". An export outlives
+     its screen and a reload: the sidebar lists those in progress, under the crawls running, and a press brings back
+     its toast. One that ends while the window is out of sight is a system notification.
+   - Sitemaps' list and robots.txt's origins have no export: the engine has none for them. Ctrl+E there says where one
+     is (a sitemap's URLs, an origin's blocked URLs).
    - Ctrl+C copies the selected rows as tab-separated text for Excel.
    - On Overview and Issues, Export also offers the report and the spreadsheet of everything (Simple).
 

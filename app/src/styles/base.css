@@ -414,6 +414,21 @@
     cursor: default;
   }
 
+  /* A URL the search found: its title over its address. */
+  .si-palette-item--url {
+    gap: var(--space-3);
+    height: auto;
+    min-height: var(--list-row-height);
+    padding-block: var(--space-1-5);
+  }
+
+  .si-palette-mark {
+    border-radius: var(--radius-sm);
+    background: var(--color-code-match);
+    color: inherit;
+    font-weight: var(--font-weight-semibold);
+  }
+
   .si-palette-item[aria-selected='true'] {
     background: var(--color-surface-selected);
     box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
