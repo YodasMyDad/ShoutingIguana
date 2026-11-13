@@ -125,6 +125,27 @@ describe('how long is left', () => {
     );
   });
 
+  it('says the limit is what’s left when it’s nearer than the end of the queue, as "about"', () => {
+    // 5,933 queued, but the limit lets it read 1,141 more: 1,141 at 16 a second is 1.2 minutes.
+    expect(
+      timeLeftWords({
+        status: 'running',
+        queued: 5933,
+        urlsPerSecond: 16,
+        atLimit: false,
+        limit: 1500,
+        limitLeft: 1141,
+      }),
+    ).toEqual({
+      lead: 'About 1 minute to go.',
+      rest: 'It stops at its limit of 1,500 addresses. It’s reading about 16 addresses a second.',
+    });
+    expect(
+      timeLeftWords({ status: 'running', queued: 100, urlsPerSecond: 1, atLimit: false, limit: 1500, limitLeft: 1141 })
+        .lead,
+    ).toBe('At least 1 minute to go.');
+  });
+
   it('has its own sentence for each state that has no pace', () => {
     expect(timeLeftWords({ status: 'running', queued: 10, urlsPerSecond: 0, atLimit: false }).lead).toBe(
       'Working out how long it will take.',

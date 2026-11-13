@@ -115,6 +115,11 @@ export function CheckingScreen({
     queued,
     urlsPerSecond: progress?.urlsPerSecond,
     atLimit: atUrlLimit(progress),
+    limit: progress?.maxUrls,
+    limitLeft:
+      progress?.maxUrls && typeof progress.internalFetched === 'number'
+        ? Math.max(0, progress.maxUrls - progress.internalFetched)
+        : null,
   });
 
   return (
@@ -200,7 +205,16 @@ export function CheckingScreen({
               value={<Num value={pages} />}
               context={checkCount ? `Each one is checked for ${formatCount(checkCount)} things` : 'Each one is checked'}
             />
-            <Stat compact label="Still to check" value={<Num value={queued} />} context="It finds more as it reads" />
+            <Stat
+              compact
+              label="Still to check"
+              value={<Num value={queued} />}
+              context={
+                progress?.maxUrls
+                  ? `It stops at its limit of ${formatCount(progress.maxUrls)}`
+                  : 'It finds more as it reads'
+              }
+            />
           </Stats>
         </div>
 

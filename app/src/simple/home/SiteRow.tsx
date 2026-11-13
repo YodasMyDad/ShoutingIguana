@@ -145,7 +145,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
                   aria-expanded={open}
                   aria-controls={open ? earlierId : undefined}
                   onClick={() => setOpen((shown) => !shown)}
-                  className="si-link relative inline-flex items-center gap-0.5 text-12"
+                  className="si-link relative inline-flex min-h-6 items-center gap-0.5 text-12"
                 >
                   · {formatCount(earlier.length)} {earlier.length === 1 ? 'earlier check' : 'earlier checks'}
                   {open ? (

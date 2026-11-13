@@ -432,7 +432,7 @@
   --topbar-section-min: 72px; /* the section you're on, cut as short as this and no shorter, before it goes */
   --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
   /* Simple's Your sites: the site, its score, what to fix, when, and the row's action. */
-  --site-row-columns: minmax(0, 1fr) minmax(0, 152px) minmax(0, 208px) minmax(0, 136px) auto;
+  --site-row-columns: minmax(0, 1fr) minmax(0, 152px) minmax(0, 208px) minmax(0, 120px) 200px;
   --site-row-columns-narrow: minmax(0, 1fr) auto; /* the same at 200% zoom: the score and the fixes under the site */
   --library-site-min: 144px; /* Home's Site column never gives up more of its room than this */
   --settings-nav-width: 192px;

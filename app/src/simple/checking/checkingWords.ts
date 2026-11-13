@@ -205,12 +205,18 @@ export function timeLeftWords({
   queued,
   urlsPerSecond,
   atLimit,
+  limit = null,
+  limitLeft = null,
 }: {
   status: CrawlStatus | null;
   queued: number | null | undefined;
   urlsPerSecond: number | null | undefined;
   /** It has read as many addresses as its limit allows. */
   atLimit: boolean;
+  /** Its URL limit, null without one. */
+  limit?: number | null | undefined;
+  /** How many more of the site's addresses its limit lets it read; null without a limit. */
+  limitLeft?: number | null;
 }): TimeLeftWords {
   if (status === 'paused') return { lead: 'Paused.', rest: 'The time left starts again when you resume the check.' };
   if (status === 'stopping') return { lead: 'Stopping.', rest: 'The pages on their way are finishing.' };
@@ -221,6 +227,15 @@ export function timeLeftWords({
   }
   const reading = `It’s reading about ${formatCount(Math.max(1, Math.round(rate)))} ${Math.round(rate) <= 1 ? 'address' : 'addresses'} a second.`;
   if (queued === 0) return { lead: 'Nearly done.', rest: `The last addresses are being read. ${reading}` };
+  // With a limit nearer than the end of the queue, the limit is what's left: no more can be found to read, so it's
+  // said as "about", not as a floor.
+  if (limit && limitLeft !== null && limitLeft <= queued) {
+    const left = Math.floor(limitLeft / rate / 60);
+    const stops = `It stops at its limit of ${formatCount(limit)} addresses.`;
+    return left < 1
+      ? { lead: 'Under a minute to go.', rest: `${stops} ${reading}` }
+      : { lead: `About ${minutesInWords(left)} to go.`, rest: `${stops} ${reading}` };
+  }
   const minutes = Math.floor(queued / rate / 60);
   const grow = 'It’s still finding new pages, so this can grow.';
   return minutes < 1
