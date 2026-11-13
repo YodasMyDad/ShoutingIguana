@@ -171,6 +171,7 @@ export function PaletteBody({
   onChoose,
   onUrl,
   urlSearch,
+  initialQuery = '',
 }: {
   entries: readonly PaletteItem[];
   onChoose: (entry: PaletteItem) => void;
@@ -185,10 +186,12 @@ export function PaletteBody({
         onShowAll: (text: string) => void;
       }
     | undefined;
+  /** What the field holds as it opens: a story's search. */
+  initialQuery?: string | undefined;
 }) {
   const id = useId();
   const appMode = useMode();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [highlight, setHighlight] = useState(0);
   const search = useUrlSearch(urlSearch?.crawlId ?? null, query);
   const urlEntries = useMemo<PaletteItem[]>(() => {
