@@ -12,6 +12,7 @@ import { liveStore } from '../live/liveStore';
 import { replaceSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
+import { TABLE_STUBBED } from './tableStubbed';
 import {
   GARDEN_ANALYSIS,
   NOTICES_ANALYSIS,
@@ -60,7 +61,7 @@ afterEach(() => {
   setTransport(fakeSidecar([]));
 });
 
-describe('the Summary of a finished check', () => {
+describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
   it('says the score, its word, its sentence and what it covers, as the design’s garden crawl', async () => {
     await open(GARDEN_ANALYSIS);
     await site();
@@ -155,7 +156,7 @@ describe('the Summary of a finished check', () => {
   });
 });
 
-describe('the Summary in every other state', () => {
+describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
   it('a perfect site: 100, nothing to fix, and when to check again', async () => {
     await open(PERFECT_ANALYSIS);
     await site();

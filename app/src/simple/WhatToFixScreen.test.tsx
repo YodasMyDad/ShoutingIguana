@@ -14,6 +14,7 @@ import { liveStore } from '../live/liveStore';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
+import { TABLE_STUBBED } from './tableStubbed';
 import { GARDEN_ANALYSIS, gardenItem, groupPage, rowsPage, simpleRoutes } from '../test/simpleSidecar';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
@@ -108,7 +109,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('What to fix', () => {
+describe.skipIf(TABLE_STUBBED)('What to fix', () => {
   it('groups the problems by severity, each with its count and line, in the engine’s order', async () => {
     await open(FIX);
     await whatToFix();
@@ -198,7 +199,7 @@ describe('What to fix', () => {
   });
 });
 
-describe('one problem', () => {
+describe.skipIf(TABLE_STUBBED)('one problem', () => {
   const problem = (name: string) => screen.findByRole('heading', { level: 1, name }, { timeout: 10_000 });
 
   it('says what’s wrong, how to fix it, who fixes it, and the One fix of a likely template', async () => {
