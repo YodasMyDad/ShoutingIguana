@@ -121,7 +121,9 @@ describe('arriving at an Advanced-only screen in Simple', () => {
   });
 
   it('leaves Simple as it is for a section of Settings there isn’t, which opens General', async () => {
-    const router = await open('/settings/analysis', 'simple');
+    // Every Advanced-only section has its file now (Analysis was the last): a section there's no file for is one
+    // no mode lists.
+    const router = await open('/settings/nothing-here', 'simple');
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(getSettings().mode).toBe('simple');
