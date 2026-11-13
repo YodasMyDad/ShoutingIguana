@@ -105,6 +105,18 @@ pub struct CrawlItem {
     pub out_of_date: bool,
 }
 
+/// An export (`GET /api/exports/{id}`), as far as the shell reads it: the file it wrote, once it's done.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportItem {
+    pub export_id: String,
+    /// The file it writes, as the sidecar resolved the path the save dialog gave.
+    #[serde(default)]
+    pub path: String,
+    /// `running`, then `done`, `cancelled` or `failed`. Only `done` left a file.
+    pub status: String,
+}
+
 /// Checks with at least one issue, by severity.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct IssueCounts {

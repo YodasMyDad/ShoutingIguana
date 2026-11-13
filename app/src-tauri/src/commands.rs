@@ -99,3 +99,25 @@ pub async fn reveal_crawl_file(app: AppHandle, crawl_id: String) -> Result<(), S
         error.to_string()
     })
 }
+
+/// Shows an export's file in Explorer or Finder: the toast's "Open folder" once a report or a spreadsheet is saved. The
+/// page names the export and the engine says which file it wrote, so the page can't reveal anything else on disk. Only
+/// a finished export left a file.
+#[tauri::command]
+pub async fn reveal_export_file(app: AppHandle, export_id: String) -> Result<(), String> {
+    const NO_ENGINE: &str = "The engine isn't running.";
+    let shell = app.try_state::<Shell>().ok_or(NO_ENGINE)?;
+    let connection = shell.sidecar.link().current().ok_or(NO_ENGINE)?;
+    let api = Arc::clone(&shell.api);
+    let item = tauri::async_runtime::spawn_blocking(move || api.export(&connection, &export_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| format!("The export couldn't be found: {error}"))?;
+    if item.status != "done" || item.path.is_empty() {
+        return Err("The export didn't leave a file.".to_owned());
+    }
+    app.opener().reveal_item_in_dir(&item.path).map_err(|error| {
+        log::info!("Couldn't show export {} in its folder: {error}", item.export_id);
+        error.to_string()
+    })
+}

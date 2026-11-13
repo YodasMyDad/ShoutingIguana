@@ -1,0 +1,48 @@
+import { useImperativeHandle, useRef, type Ref } from 'react';
+
+export interface ReportFrameHandle {
+  /** Opens the system's print dialog on the report alone: how it's printed, and how it becomes a PDF. */
+  print: () => boolean;
+}
+
+/**
+ * The engine's report in a sandboxed frame (docs/v2-sidecar-api.md, "Report (E5)", "Showing it"): its document as
+ * `srcdoc`, scripts off. `allow-same-origin` lets the page reach the frame to print it, and `allow-modals` lets the
+ * frame open the print dialog; neither lets anything run, and the report has no script. Its links open nothing here
+ * (they would need `allow-popups`): in the saved file they work. It is light in both themes, as paper is.
+ */
+export function ReportFrame({
+  document: text,
+  title,
+  ref,
+}: {
+  /** The report's HTML, as the engine wrote it. */
+  document: string;
+  /** The frame's accessible name: "The report for gardenfurnituresets.co.uk". */
+  title: string;
+  ref?: Ref<ReportFrameHandle> | undefined;
+}) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  useImperativeHandle(
+    ref,
+    () => ({
+      print: () => {
+        const view = frameRef.current?.contentWindow;
+        if (!view) return false;
+        view.focus();
+        view.print();
+        return true;
+      },
+    }),
+    [],
+  );
+  return (
+    <iframe
+      ref={frameRef}
+      srcDoc={text}
+      title={title}
+      sandbox="allow-same-origin allow-modals"
+      className="block h-full w-full max-w-(--paper-width) rounded-t-xs border-0 bg-(--color-paper) scheme-light shadow-2"
+    />
+  );
+}

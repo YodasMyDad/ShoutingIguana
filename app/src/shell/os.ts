@@ -27,6 +27,16 @@ export async function showInFolder(crawlId: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Shows the file a finished export wrote (a report, a spreadsheet) in Explorer or Finder. It takes the export's id,
+ * not a path: the shell asks the engine which file it wrote. Not possible from a plain browser.
+ */
+export async function showExportInFolder(exportId: string): Promise<boolean> {
+  if (!isTauri) return false;
+  await ipc.revealExportFile(exportId);
+  return true;
+}
+
 /** The native open dialog for crawl files. Null when cancelled, or outside the shell. */
 export async function pickCrawlFiles(): Promise<string[] | null> {
   if (!isTauri) return null;

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { alertsQuery, analysisQuery, checksQuery, crawlQuery, startUrlQuery, statsQuery } from '../api/queries';
@@ -44,7 +44,9 @@ import { DepthCard, IndexabilityCard, ResponseCard, StatusCodesCard } from './ov
 import { emptyCrawl, isEmptyCrawl, type EmptyCrawl } from './overview/emptyCrawl';
 import { LiveOverview } from './overview/LiveOverview';
 import { linkProps } from './overview/overviewLinks';
+import { OverviewScore } from './overview/OverviewScore';
 import { OverviewSkeleton } from './overview/OverviewSkeleton';
+import { ScoreBreakdownStandIn } from './overview/ScoreBreakdownStandIn';
 import { crawledCount } from './overview/statusSplit';
 import { useCrawlFacets } from './overview/useCrawlFacets';
 
@@ -64,6 +66,8 @@ const TWO_COLUMNS_BELOW = 720;
 export function OverviewScreen() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
   const navigate = useNavigate({ from: ROUTE });
+  const { score: scoreOpen } = useSearch({ from: ROUTE });
+  const scoreRef = useRef<HTMLAnchorElement>(null);
   const item = useQuery(crawlQuery(crawlId)).data;
   // Only the live crawl's status and its analysis's progress here: the figures are LiveOverview's, so the answer
   // isn't drawn again on every progress event of a crawl that's being analysed or has just stopped.
@@ -279,8 +283,28 @@ export function OverviewScreen() {
           badge={crawling ? <LiveBadge /> : null}
           subtitle={subtitle}
           titleRef={control.titleRef}
+          actions={
+            // The score beside the answer, once there is one to show: it opens its breakdown.
+            !crawling && !empty && analysis.data && totals ? (
+              <OverviewScore crawlId={crawlId} analysis={analysis.data} linkRef={scoreRef} />
+            ) : null
+          }
         />
         {body}
+        {analysis.data && !crawling ? (
+          <ScoreBreakdownStandIn
+            open={scoreOpen === 1}
+            onClose={() => void navigate({ search: (previous) => ({ ...previous, score: undefined }), replace: true })}
+            analysis={analysis.data}
+            checks={checks.data}
+            onCloseAutoFocus={(event) => {
+              if (scoreRef.current) {
+                event.preventDefault();
+                scoreRef.current.focus();
+              }
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

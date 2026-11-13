@@ -10,6 +10,7 @@ fn main() {
         "settings_read",
         "settings_write",
         "reveal_crawl_file",
+        "reveal_export_file",
     ])))
     .expect("the Tauri build script failed");
 }

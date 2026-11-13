@@ -1,5 +1,5 @@
-//! The few sidecar calls the shell makes itself: the event stream, a crawl's library item, and pause or resume from
-//! the tray. Plain HTTP to 127.0.0.1, never through a proxy, with the bearer token and no Origin header.
+//! The few sidecar calls the shell makes itself: the event stream, a crawl's library item, an export's file, and pause
+//! or resume from the tray. Plain HTTP to 127.0.0.1, never through a proxy, with the bearer token and no Origin header.
 
 use std::fmt;
 use std::time::Duration;
@@ -8,7 +8,7 @@ use ureq::unversioned::resolver::DefaultResolver;
 use ureq::unversioned::transport::{Buffers, ConnectionDetails, Connector, NextTimeout, TcpConnector, Transport};
 use ureq::{Agent, BodyReader};
 
-use super::model::CrawlItem;
+use super::model::{CrawlItem, ExportItem};
 use crate::sidecar::Connection;
 
 /// The sidecar sends a comment every 15 s on an idle stream; this long without a byte and the stream is dead.
@@ -31,6 +31,7 @@ pub enum ApiError {
     Http(ureq::Error),
     Json(serde_json::Error),
     BadCrawlId,
+    BadExportId,
 }
 
 impl fmt::Display for ApiError {
@@ -39,6 +40,7 @@ impl fmt::Display for ApiError {
             Self::Http(error) => write!(formatter, "{error}"),
             Self::Json(error) => write!(formatter, "unexpected JSON: {error}"),
             Self::BadCrawlId => formatter.write_str("not a crawl id"),
+            Self::BadExportId => formatter.write_str("not an export id"),
         }
     }
 }
@@ -111,6 +113,22 @@ impl Api {
         let body = self
             .calls
             .get(url(connection, &path))
+            .header("Authorization", bearer(connection))
+            .call()?
+            .body_mut()
+            .read_to_string()?;
+        Ok(serde_json::from_str(&body)?)
+    }
+
+    /// `GET /api/exports/{id}`: an export the sidecar is writing, or one of the last it wrote.
+    pub fn export(&self, connection: &Connection, id: &str) -> Result<ExportItem, ApiError> {
+        let valid = id.len() == 16 && id.bytes().all(|byte| byte.is_ascii_hexdigit());
+        if !valid {
+            return Err(ApiError::BadExportId);
+        }
+        let body = self
+            .calls
+            .get(url(connection, &format!("/api/exports/{id}")))
             .header("Authorization", bearer(connection))
             .call()?
             .body_mut()
