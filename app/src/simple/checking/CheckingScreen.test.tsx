@@ -112,6 +112,32 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     expect(main().queryByText(/Nothing so far\./)).toBeNull();
   });
 
+  it('says the pages read before the site turned the check away as they were then, not as they grow', async () => {
+    await open();
+    await heard(
+      progress(100, { htmlPages: 312 }),
+      message(
+        'alert',
+        alert({
+          id: 1,
+          code: 'blocked',
+          level: 'error',
+          at: '2026-11-01T10:17:00.000Z',
+          data: { host: 'example.com' },
+        }),
+      ),
+    );
+    expect(await main().findByText(/312 pages were read first\./)).toBeVisible();
+    await heard(progress(110, { htmlPages: 340 }));
+    // Another alert redraws what's in the way, with the pages read by now.
+    await heard(
+      progress(120, { htmlPages: 365 }),
+      message('alert', alert({ id: 2, code: 'sitemaps-failed', at: '2026-11-01T10:19:00.000Z' })),
+    );
+    expect(main().getByText(/312 pages were read first\./)).toBeVisible();
+    expect(main().queryByText(/365 pages were read first/)).toBeNull();
+  });
+
   it('says a slowdown from the progress’s waits', async () => {
     await open();
     await heard(progress(100, { waits: [{ reason: 'backoff', host: 'example.com', durationMs: 4000 }] }));
