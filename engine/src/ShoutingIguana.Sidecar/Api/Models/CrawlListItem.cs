@@ -37,8 +37,17 @@ internal sealed record CrawlListItem
     /// <summary>The URLs crawled, as the URL grid counts them (fetched); live, the crawl's progress.</summary>
     public long CrawledUrlCount { get; init; }
 
-    /// <summary>Internal HTML pages fetched and parsed.</summary>
+    /// <summary>
+    /// Internal HTML pages fetched and parsed, as the crawl counts them (live, its progress): every one, Cloudflare's own
+    /// <c>/cdn-cgi/</c> endpoints included, which the analysis doesn't audit. So it can be more than <see cref="PagesAnalyzed"/>.
+    /// </summary>
     public long PageCount { get; init; }
+
+    /// <summary>
+    /// The pages the last analysis audited, which its score covers: the analysis's own <c>pagesAnalyzed</c>, as it stood
+    /// when it ran. The count to put beside the score. Null before the first analysis.
+    /// </summary>
+    public long? PagesAnalyzed { get; init; }
 
     /// <summary>Null before the first analysis.</summary>
     public IssueCountsDto? Issues { get; init; }
