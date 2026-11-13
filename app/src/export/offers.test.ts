@@ -136,6 +136,32 @@ describe('Issues and Overview', () => {
     expect(offer.choices[3]?.build(as())).toEqual({ kind: 'workbook', format: 'xlsx', path: 'C:\\x\\a.xlsx' });
   });
 
+  it('a check that doesn’t group exports its list as the grid shows it, in the grid’s sort (the review’s finding 2)', () => {
+    const offer = issuesOffer({
+      item,
+      crawling: false,
+      simple: false,
+      check: {
+        id: 'not-in-sitemap',
+        title: 'Not in a sitemap',
+        urls: 9,
+        flat: true,
+        sort: [{ column: 'url', desc: true }],
+      },
+      group: null,
+    });
+    expect(offer.choices[0]?.build(as({ format: 'csv' }))).toEqual({
+      kind: 'issueRows',
+      format: 'csv',
+      path: 'C:\\x\\a.xlsx',
+      checkId: 'not-in-sitemap',
+      columns: ['url', 'detail'],
+      filters: [],
+      sort: [{ column: 'url', desc: true }],
+    });
+    expect(offer.choices[0]?.build(as({ format: 'csv', crawlOrder: true }))).not.toHaveProperty('sort');
+  });
+
   it('a crawl never analysed offers the analysis in place of the report and the workbook', () => {
     const never = { ...item, analyzedAt: null };
     const [report, workbook] = crawlFileChoices(never, true);

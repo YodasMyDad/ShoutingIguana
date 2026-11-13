@@ -44,6 +44,8 @@ export function useExportCommand(
         title: options.title ?? 'Export this view…',
         group: options.group,
         keys: ['mod+e'],
+        // From a grid's search or filter field too: every grid has one, and Ctrl+E types nothing.
+        inInputs: true,
         keywords: ['export', 'csv', 'excel', 'xlsx', 'download', 'save', 'spreadsheet'],
         enabled: () => offer() !== null,
         run: () => {

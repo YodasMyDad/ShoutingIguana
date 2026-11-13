@@ -429,6 +429,9 @@ export function IssuesScreen() {
                     id: selected.check.id,
                     title: (simple ? selected.check.plainTitle : null) ?? selected.check.title,
                     urls: selected.count,
+                    // A check that doesn't group is its sorted list: its export is that list, in that order.
+                    flat: selected.check.grouping === 'none',
+                    sort,
                   }
                 : null,
             group: placed
@@ -440,7 +443,7 @@ export function IssuesScreen() {
               : null,
           })
         : null,
-    [item, crawling, simple, selected, found, placed],
+    [item, crawling, simple, selected, found, placed, sort],
     { group: 'Issues', title: 'Export…', choices: CRAWL_FILE_COMMANDS },
   );
 
