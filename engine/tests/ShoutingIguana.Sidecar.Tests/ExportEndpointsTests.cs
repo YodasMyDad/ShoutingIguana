@@ -149,7 +149,7 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     public async Task TheListsAndALinksViewsEndsAreExportedAsTheirCallsListThem()
     {
         static List<string> Column(string path) =>
-            [.. File.ReadAllText(path).TrimStart('﻿').Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Skip(1).Select(line => line.Split(',')[0])];
+            [.. File.ReadAllText(path).TrimStart('\uFEFF').Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Skip(1).Select(line => line.Split(',')[0])];
 
         // The origins, searched and filtered as the list is.
         foreach (var filter in new[] { new JsonObject(), new JsonObject { ["blocked"] = true }, new JsonObject { ["blocked"] = false, ["search"] = "www" } })
