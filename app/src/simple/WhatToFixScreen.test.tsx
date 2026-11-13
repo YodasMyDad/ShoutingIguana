@@ -12,7 +12,7 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem as problemResponse, type FakeRoute } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
 import { GARDEN_ANALYSIS, gardenItem, groupPage, rowsPage, simpleRoutes } from '../test/simpleSidecar';
@@ -91,9 +91,14 @@ const PROBLEM_IDS = [
   'slow-response',
 ];
 
-async function open(path: string, analysis: Analysis = GARDEN_ANALYSIS, hidden: string[] = []) {
+async function open(
+  path: string,
+  analysis: Analysis = GARDEN_ANALYSIS,
+  hidden: string[] = [],
+  extra: FakeRoute[] = [],
+) {
   replaceSettings({ mode: 'simple', hiddenChecks: hidden });
-  const sidecar = fakeSidecar([...problemRoutes(), ...simpleRoutes(gardenItem(), analysis)]);
+  const sidecar = fakeSidecar([...extra, ...problemRoutes(), ...simpleRoutes(gardenItem(), analysis)]);
   setTransport(sidecar);
   const queryClient = createQueryClientWithoutBackoff();
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
@@ -288,6 +293,19 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     fireEvent.click(main().getByRole('button', { name: 'See it in Advanced' }));
     await waitFor(() => expect(getSettings().mode).toBe('advanced'));
     expect(router.state.location.pathname).toBe(`${FIX}/orphan-page`);
+  });
+
+  it('says nothing of how many are shown until the list is read, nor when it couldn’t be', async () => {
+    const failing: FakeRoute = [
+      'POST',
+      /\/issues\/broken-internal-links\/groups$/,
+      () => problemResponse({ type: 'internal', title: 'Something went wrong.', status: 500 }),
+    ];
+    await open(`${FIX}/broken-internal-links`, GARDEN_ANALYSIS, [], [failing]);
+    await problem('Links that lead to broken pages');
+    const where = within(main().getByRole('region', { name: 'Where it is' }));
+    expect(await where.findByText(/The list couldn’t be read/, undefined, { timeout: 5_000 })).toBeVisible();
+    expect(where.queryByText(/are shown|is shown|Showing/)).toBeNull();
   });
 
   it('a skipped check never states its fault as a fact of the site', async () => {
