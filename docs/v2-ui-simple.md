@@ -878,8 +878,9 @@ Round 4 built the design above; where it differs, this is what holds (settled, a
   "12 pages" is the printed length, which isn't known until it's printed and changes with the paper.
 - **The Summary's report card** has Open the report only: Save as PDF is the Report's Print or save as PDF.
 - **A row on Home** opens the check where it was last left (the Summary the first time, and whenever the last view
-  was one Simple doesn't have), as `/crawls/:crawl` does in both modes; Open the report is in its menu. Its pages are
-  the library's count, as Advanced's Home and Overview say them.
+  was one Simple doesn't have), as `/crawls/:crawl` does in both modes; Open the report is in its menu. Its pages, as
+  the Summary's head says them, are those the score covers: the library's `pagesAnalyzed`, the crawl's count before
+  the first analysis (the crawl's has Cloudflare's `/cdn-cgi/` pages too, which the analysis doesn't audit).
 - **The time left** says "at least" as designed, and "about" when the check's address limit is nearer than the end of
   its queue (nothing more can be found to read then). The three figures aren't links, as the design draws them.
 - **The system notification** has the toast's words but no buttons (the desktop's notifications have none here):

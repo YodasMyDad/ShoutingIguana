@@ -1,6 +1,6 @@
 // Home and checking a site in Simple (docs/v2-ui-simple.md, Home; While it checks the site; The report at the end),
 // against the real sidecar and the engine's synthetic site (never a real site). Every figure of a row lands on itself:
-// the score is the analysis's, the problems are What to fix's count, the pages are the crawl's. A check started from
+// the score is the analysis's, the problems are What to fix's count, the pages are those the score covers. A check started from
 // Home is watched through its three steps to the Summary, with the finished toast. Run on a dev crawl's copy with
 // SI_E2E_CRAWL (garden, the 100k synthetic crawl): on garden the row also has the mockup's numbers (85, Good, 2
 // serious, 4 worth fixing, 265 pages). Writes this slice's screenshots to test-results/r4-home/.
@@ -73,15 +73,19 @@ test('each row of Your sites lands on itself: its score, its problems and its pa
       .join(', ');
     await expect(row.getByRole('img', { name: words })).toBeVisible();
   }
+  // The pages beside the score are those it covers: the analysis's, which the library gives as pagesAnalyzed (the
+  // crawl's pageCount also has Cloudflare's /cdn-cgi/ pages, which the analysis doesn't audit).
+  expect(item.pagesAnalyzed).toBe(analysis.pagesAnalyzed);
+  const pages = item.pagesAnalyzed ?? item.pageCount;
   await expect(
-    row.getByText(`${item.pageCount.toLocaleString('en-GB')} ${item.pageCount === 1 ? 'page' : 'pages'}`, {
+    row.getByText(`${pages.toLocaleString('en-GB')} ${pages === 1 ? 'page' : 'pages'}`, {
       exact: false,
     }),
   ).toBeVisible();
 
   // On the garden crawl, the mockup's numbers.
   if (site() === 'gardenfurnituresets.co.uk') {
-    expect([score.value, score.band, serious, worthFixing, item.pageCount]).toEqual([85, 'good', 2, 4, 265]);
+    expect([score.value, score.band, serious, worthFixing, pages]).toEqual([85, 'good', 2, 4, 265]);
   }
 
   await expectNoViolations(page);
@@ -94,8 +98,7 @@ test('each row of Your sites lands on itself: its score, its problems and its pa
   if (serious + worthFixing > 0) {
     await expect(whatToFix).toHaveAccessibleName(new RegExp(`\\b${serious + worthFixing}\\b`));
   }
-  // Home's pages are the library's, as Overview's "pages read" and Advanced's Home say them. The analysis's own count,
-  // which the score covers, is said beside it: the engine has given them apart (reported).
+  // The library's two counts and the score's, for the record.
   test.info().annotations.push({
     type: 'pages',
     description: `library pageCount ${item.pageCount}, analysis pagesAnalyzed ${analysis.pagesAnalyzed}, score covers ${score.covers.pages}`,

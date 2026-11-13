@@ -77,6 +77,13 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(main().getByText(/Shouting Iguana read 265 pages and checked 4,521 addresses in all/)).toBeVisible();
   });
 
+  it('says beside the score the pages the analysis audited, not the crawl’s count with its /cdn-cgi/ pages', async () => {
+    await open(GARDEN_ANALYSIS, gardenItem({ pageCount: 268, pagesAnalyzed: 265 }));
+    await site();
+    expect(main().getByText(/Checked on 31 October 2026\. 265 pages read in 37 min/)).toBeVisible();
+    expect(main().queryByText(/268 pages/)).toBeNull();
+  });
+
   it('lands each count on exactly its part of What to fix, and a count of 0 on nothing', async () => {
     await open(NOTICES_ANALYSIS);
     await site();

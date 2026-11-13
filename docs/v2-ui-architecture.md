@@ -1760,7 +1760,9 @@ the routes' table (`app/simpleScreens.ts`):
   (Locate the file…, in the shell), unreadable. What needs fixing counts the problems as What to fix does: the
   library's Error and Warning counts, or, with checks hidden, the row's analysis read and the hidden ones left out.
   Each row has the site's icon (`CrawlFavicon`: the letter while it comes, or where there's none), and its menu has
-  Advanced's actions in Simple's words, Open the report among them.
+  Advanced's actions in Simple's words, Open the report among them. The pages beside the score, on a row and in the
+  Summary's head, are those the score covers (`scoredPages`: the library's `pagesAnalyzed`, or `pageCount` before the
+  first analysis; the crawl's count also has Cloudflare's `/cdn-cgi/` pages, which the analysis doesn't audit).
 - **Checking a site** (`simple/checking/CheckingScreen`, which `SimpleOverview` shows while the crawl runs, is paused
   or stopping, while its results are worked out, and for up to 1.5 s after a crawl completes before its analysis
   begins, `HAND_OVER_GRACE_MS`, so it never flashes "never analysed"): three steps, three figures taken from one

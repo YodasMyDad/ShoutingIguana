@@ -82,10 +82,20 @@ export function rowScore(item: CrawlListItem, status: CrawlStatus): ScoreSummary
   return { ...item.score, partial: item.score.partial || stoppedEarly(status) };
 }
 
+/**
+ * The pages to say beside a score: those the last analysis audited, which the score covers (`pagesAnalyzed`), or,
+ * before the first analysis, those the crawl read. The crawl's count also has Cloudflare's `/cdn-cgi/` pages, which the
+ * analysis doesn't audit.
+ */
+export function scoredPages(item: Pick<CrawlListItem, 'pageCount' | 'pagesAnalyzed'>): number {
+  return item.pagesAnalyzed ?? item.pageCount;
+}
+
 /** The line under the site's name: "265 pages", "Stopped early · 312 pages read", "File not found". */
 export function rowMeta(item: CrawlListItem, status: CrawlStatus, earlier: number): string {
   const more = earlier > 0 ? ` · ${formatCountOf(earlier, 'earlier check')}` : '';
-  const pages = `${formatCount(item.pageCount)} ${item.pageCount === 1 ? 'page' : 'pages'}`;
+  const count = scoredPages(item);
+  const pages = `${formatCount(count)} ${count === 1 ? 'page' : 'pages'}`;
   switch (rowKind(item, status)) {
     case 'missing':
       return `File not found${more}`;

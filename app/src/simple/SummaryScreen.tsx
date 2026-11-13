@@ -33,6 +33,7 @@ import { factsWords } from './plainWords';
 import { plainResults } from './results';
 import { ScoreBreakdownFromRoute } from './ScoreBreakdownDialog';
 import { ScoreRing } from '../ui/ScoreRing';
+import { scoredPages } from './home/sites';
 import { FixFirstCard, ScoreHero, SummaryCards } from './SummaryParts';
 
 const ROUTE = '/crawls/$crawl/overview';
@@ -195,7 +196,9 @@ function SummaryHeader({
   titleRef: React.RefObject<HTMLHeadingElement | null>;
 }) {
   const when = item?.finishedAt ?? item?.startedAt ?? null;
-  const pages = item ? (item.pageCount === 1 ? '1 page' : `${formatCount(item.pageCount)} pages`) : null;
+  // Beside the score: the pages it covers, the analysis's (the crawl's before the first analysis).
+  const count = item ? scoredPages(item) : 0;
+  const pages = count === 1 ? '1 page' : `${formatCount(count)} pages`;
   const took = item?.crawlingMs ? ` in ${formatDuration(item.crawlingMs)}` : '';
   return (
     <header className="flex flex-wrap items-end gap-x-5 gap-y-3">

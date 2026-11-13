@@ -59,6 +59,9 @@ describe('Your sites', () => {
     expect(rowKind(unscored, 'completed')).toBe('notScored');
 
     expect(rowMeta(crawl({}), 'completed', 2)).toBe('265 pages · 2 earlier checks');
+    // Beside the score, the pages the analysis audited, which the score covers; the crawl's read before it's analysed.
+    expect(rowMeta(crawl({ pageCount: 268, pagesAnalyzed: 265 }), 'completed', 0)).toBe('265 pages');
+    expect(rowMeta(crawl({ pageCount: 268, pagesAnalyzed: null }), 'completed', 0)).toBe('268 pages');
     expect(rowMeta(crawl({ pageCount: 312 }), 'stopped', 0)).toBe('Stopped early · 312 pages read');
     expect(rowMeta(crawl({ pageCount: 1 }), 'failed', 0)).toBe('Couldn’t finish · 1 page read');
     expect(rowMeta(crawl({ score: { value: 90, band: 'veryGood', partial: true } }), 'completed', 0)).toBe(

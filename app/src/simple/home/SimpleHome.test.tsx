@@ -89,6 +89,13 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     );
   });
 
+  it('says beside the score the pages the analysis audited, which the score covers, not the crawl’s count', async () => {
+    await open([{ ...garden, pageCount: 268, pagesAnalyzed: 265 }]);
+    const row = await rowOf('gardenfurnituresets.co.uk');
+    expect(within(row).getByText('265 pages')).toBeInTheDocument();
+    expect(row).not.toHaveTextContent('268');
+  });
+
   it('gives each state of a check its own words and its one action', async () => {
     const stopped = testCrawlItem({
       id: '1111111111111111',
