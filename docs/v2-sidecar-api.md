@@ -3484,3 +3484,67 @@ its own agreed. All six are fixed, each with a test seen failing without its fix
   worded when read, and so changes for every crawl: `/robots/blocked`'s `error` for a URL refused by an origin whose
   robots.txt couldn't be read, where the crawl stored no reason with the URL (an earlier engine's), now
   "503 Service Unavailable" from the origin's stored status.
+
+## Engine changes E7 made
+
+What the hand-over UI found the engine couldn't export, and one count the library and the analysis told apart.
+Every addition is a new export kind, a new field or a new option; nothing was renamed or taken away. Each has its own
+tests, and each was seen to fail without what it tests.
+
+- **The list of sitemaps** (`sitemaps`) **and robots.txt's origins** (`robotsOrigins`) are export kinds, with the
+  same job, events, problems and formats as every other ([Export](#export-e5)), and `si export --kind sitemaps` and
+  `--kind robotsOrigins` (with `--search` and `--blocked true|false`). Each writes its screen's columns in its cells'
+  words (`Export/ListExport`; the words in `Export/SitemapListWords`, `RobotsOriginWords` and `FailureWords`, the
+  app's own `sitemapWords.ts`, `sitemapTree.ts`, `sitemapLinks.ts`, `robotsWords.ts` and `failure.ts` said again in
+  C#), in the order its read lists them. Each list is small (a crawl reads at most 1,000 sitemaps; it asks some
+  thousands of origins at most), so it is read whole, from one snapshot of the file
+  (`SitemapListReader.ReadWithMoment`, `RobotsReader.ReadEveryOrigin`, both the screens' own reads): a running
+  crawl's file is of one moment of it, and says so (`crawlWasRunning`); no crawl can change under it, so neither ends
+  with `export-crawl-changed`. `robotsOrigins`' `search` is refused past 1,000 characters (`invalid-query` on
+  `search`), before anything is written, as `/robots` refuses it. The tests read each file back, as CSV and as a
+  workbook, row for row against the screen's read (the origins searched and filtered five ways), hold every word to
+  a literal, and export a running crawl's list ("Not read yet" where a stopped crawl says "Never read").
+- **`linkEnds` on a URL export**: `urls` takes the URL grid's `linkEnds` as the grid's read takes it, beside its own
+  filters, search and sort (`Export/ExportFields` lists it as the `urls` kind's alone; another kind is refused
+  `invalid-export` on `linkEnds`, and what the grid would refuse is `invalid-query` under `linkEnds.`). `si export
+  --kind urls` takes `--link-ends from|to`, `--link-filter` (any number) and `--link-search`. The engine's export
+  already read a `UrlQuery` whole, `LinkEnds` included: what was missing was the field in the API's body, its owner in
+  `ExportFields` and the options. The tests export the grid narrowed to both ends, alone and beside a filter, a search
+  and a sort, row for row against the grid's read, through the engine, the sidecar and `si export`.
+- **The library's two counts of pages.** The seeded synthetic crawl's `pageCount` was 156 against the analysis's
+  `pagesAnalyzed` of 155, the 100k crawl's 101,107 against 101,106, the garden crawl's 265 and 265. The page between
+  them is `/cdn-cgi/l/email-protection`, the synthetic site's Cloudflare endpoint: an internal HTML page the crawler
+  parsed, so every crawl count of pages has it (`CrawlSchema.PAGE`: `si stats`, a running crawl's `htmlPages`, the
+  history, the benchmark's expectation `HtmlPages`), and one the analysis doesn't audit (`AnalysisReader.SITE_PAGE`,
+  the synthetic site's `AnalysedPages`). Both counts are right by their definitions, so neither changed: **the library
+  item gains `pagesAnalyzed`**, the last analysis's own (the score's `covers.pages`), null before the first analysis,
+  for a screen to show beside the score; `pageCount` and the `page` subject now say which they count. Taking the
+  endpoint out of the crawl's count instead would have moved the live progress, the history and the benchmark's
+  expectations for a page that is the crawler's to have read. The test (`GridServingTests`) failed with the field
+  missing, on a crawl of the synthetic site reading 176 against 175.
+- **In the app**: the two lists and a URL view narrowed to a links view's ends are offered on Ctrl+E as every grid is
+  (`sitemapsOffer`, `robotsOriginsOffer`, `urlGridOffer` with its `linkEnds`), through the shared dialog and toast,
+  their files named "… sitemaps", "… robots.txt origins" (and "that blocked a URL", "that blocked nothing") and
+  "… URLs link targets" or "… URLs pages with the links"; the "can't be exported" paths are gone. The types have the
+  two kinds, `linkEnds` on a `urls` request and the library's `pagesAnalyzed`. The mock transport answers no export
+  of any kind (export is the real sidecar's, end to end), so it gained no route; its simulated crawl's item gains
+  `pagesAnalyzed` once analysed.
+**Measured on the 100k benchmark crawl** (110,268 URLs fetched, 5,054,148 links), with `si export` from the Release
+build: the list of sitemaps (13) as Excel in 0.22 s, its 13 rows as the list has them ("Read, 11 of its 12 sitemaps"
+and no counts for the index, whose planted missing sitemap the crawl couldn't read); the origins (3) as CSV in 0.17 s;
+the URLs the hyperlinks to 4xx URLs lead to (4,572, the link ends' `total` above) in 0.21 s, and the pages those links
+are on (4,540, which takes the pass over every link) in 0.68 s; each the whole command, process start included.
+
+**The checks on the last commit's code.** The Release build has no warning; the engine's tests (1,428), the sidecar's
+(267) and the CLI's (28) pass. `si bench --pages 100000` completed and found every planted issue and nothing else:
+101,115 of 101,115 pages in 38.3 s, 2,642 pages/s, a peak of 194 MB and +0 MB over the crawl, a 477 MB file, analysed
+in 14.4 s. `si readbench --gate` on that crawl failed once, on the links grid's "not followed" half way down (p50
+58.7 ms, p95 554 ms against a gate of 200, one slow run of ten on a machine other agents were loading; E7 changed no
+link read), and passed every class when run again (that read 43 ms at p95). The app's `npm ci`, `typecheck`, `lint`,
+`format:check` and its 3,212 tests (both projects) pass; `build-storybook`, and the 410 stories in both themes with
+no axe violation, plainly, under forced colours and with reduced motion; `build:sidecar`; the end-to-end suite, 167
+passed and the 2 measurements skipped as they are without `SI_E2E_MEASURE`.
+
+Not verified: the exports' new words against every state a real site gives (the tests hold each word to a literal and
+the synthetic crawls' rows to the screens' reads; the garden crawl's lists weren't exported); a crawl of a million
+URLs; anything on CI's runners, as nothing was pushed.
