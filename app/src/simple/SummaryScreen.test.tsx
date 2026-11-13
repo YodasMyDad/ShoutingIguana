@@ -212,6 +212,13 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     await open(NOTICES_ANALYSIS);
     await site();
     expect(main().getByText('Nothing needs fixing. 3 things are worth a look when you have a moment.')).toBeVisible();
+    const list = within(main().getByRole('region', { name: 'Fix these first' }));
+    expect(list.getByText(/There are 3 things worth a look below/)).toBeVisible();
+    const rows = list.getAllByRole('link').filter((link) => link.getAttribute('href')?.includes('/issues/'));
+    expect(rows.map((row) => row.getAttribute('href'))).toEqual(
+      ['empty-anchor-text', 'image-missing-dimensions', 'description-too-long'].map((id) => `${FIX}/${id}`),
+    );
+    expect(rows[0]).toHaveAccessibleName(/Worth a look .* 265 of 265 pages$/);
   });
 
   it('stopped early: a banner with what it read and what was left, Continue checking, and a score so far', async () => {

@@ -23,7 +23,7 @@ import {
   skippedTitles,
   summarySentence,
 } from './plainWords';
-import { siteWideLead, type PlainResults } from './results';
+import { FIX_FIRST_COUNT, siteWideLead, type PlainResults } from './results';
 import { ScoreRing } from '../ui/ScoreRing';
 import { useOneFix } from './useOneFix';
 import type { CheckEntry } from '../screens/issues/checkList';
@@ -175,9 +175,11 @@ export function FixFirstCard({
   results: PlainResults;
   score: Score | null;
 }) {
-  const oneFix = useOneFix(crawlId, results.fixFirst);
   const problems = results.counts.error + results.counts.warning;
   const notices = results.counts.notice;
+  // With nothing to fix, the things worth a look are listed in its place.
+  const worthALook = results.fixFirst.length > 0 ? [] : results.found.notice.slice(0, FIX_FIRST_COUNT);
+  const oneFix = useOneFix(crawlId, results.fixFirst.length > 0 ? results.fixFirst : worthALook);
   return (
     <Card as="section" aria-labelledby="summary-fix-first" className="overflow-hidden">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-6 pt-5 pb-3">
@@ -203,15 +205,25 @@ export function FixFirstCard({
           ))}
         </PlainCheckList>
       ) : (
-        <p className="border-t border-border-subtle px-6 py-5 text-16">
-          <strong className="font-semibold">Nothing to fix.</strong>{' '}
-          <span className="text-text-secondary">
-            {notices > 0
-              ? `${notices === 1 ? 'There is 1 thing' : `There are ${formatCount(notices)} things`} worth a look below, when you have a moment. `
-              : ''}
-            Check the site again after you change it, or every few months.
-          </span>
-        </p>
+        <>
+          <p className="border-t border-border-subtle px-6 py-5 text-16">
+            <strong className="font-semibold">Nothing to fix.</strong>{' '}
+            <span className="text-text-secondary">
+              {notices > 0 ? `${worthALookBelow(notices)}, when you have a moment. ` : ''}
+              Check the site again after you change it, or every few months.
+            </span>
+          </p>
+          {worthALook.length > 0 ? (
+            // The things worth a look, under it, as the design draws them: the first five, the rest behind See all.
+            <PlainCheckList className="border-t border-border-subtle">
+              {worthALook.map((entry) => (
+                <li key={entry.check.id}>
+                  <ProblemRow crawlId={crawlId} entry={entry} results={results} oneFix={oneFix.has(entry.check.id)} />
+                </li>
+              ))}
+            </PlainCheckList>
+          ) : null}
+        </>
       )}
       {problems + notices > 0 ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle bg-surface-sunken px-6 py-4 text-14 text-text-secondary">
@@ -229,6 +241,13 @@ export function FixFirstCard({
       ) : null}
     </Card>
   );
+}
+
+function worthALookBelow(notices: number): string {
+  if (notices === 1) return 'There is 1 thing worth a look below';
+  return notices > FIX_FIRST_COUNT
+    ? `There are ${formatCount(notices)} things worth a look, the first ${FIX_FIRST_COUNT} below`
+    : `There are ${formatCount(notices)} things worth a look below`;
 }
 
 function seeAllWords(problems: number, notices: number): string {
