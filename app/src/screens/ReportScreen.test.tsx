@@ -1,6 +1,6 @@
 import { createMemoryHistory } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTransport } from '../api/transport';
 import type { Analysis, CrawlListItem } from '../api/types';
 import { App } from '../app/App';
@@ -59,6 +59,12 @@ const reportCalls = (transport: FakeSidecar) =>
   transport.requests.filter((request) => request.path.includes('/report')).map((request) => request.path);
 
 afterEach(() => setTransport(fakeSidecar([])));
+
+// The Report is the same screen in both modes, so the `filled` project's stub stands in for it in Advanced too: these
+// tests are of the screen itself, and the frame's with a stub in its row are app/simpleScreens.test.tsx's.
+beforeEach((context) => {
+  if (context.task.file.projectName === 'filled') context.skip();
+});
 
 describe('the Report screen', () => {
   it('shows the engine’s document in a frame that runs nothing, under a toolbar that says what it’s of', async () => {
