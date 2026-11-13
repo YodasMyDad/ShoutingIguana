@@ -10,7 +10,7 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings, updateSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
 import {
@@ -24,15 +24,32 @@ import {
 } from '../test/simpleSidecar';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
+const NEVER = { analyzedAt: null, issues: null, score: null } as const;
+const BLOCKED: FakeRoute = [
+  'GET',
+  /^\/api\/crawls\/[0-9a-f]{16}\/alerts$/,
+  () =>
+    json([
+      {
+        crawlId: TEST_CRAWL_ID,
+        id: 1,
+        level: 'error',
+        code: 'blocked',
+        message: 'The site is refusing the crawler.',
+        at: '2026-10-31T14:40:00Z',
+      },
+    ]),
+];
 const FIX = `${CRAWL}/issues`;
 
 async function open(
   analysis: Analysis | 'not-analyzed',
   item: CrawlListItem = gardenItem(),
   path = `${CRAWL}/overview`,
+  extra: FakeRoute[] = [],
 ) {
   replaceSettings({ mode: 'simple', hiddenChecks: [] });
-  setTransport(fakeSidecar(simpleRoutes(item, analysis)));
+  setTransport(fakeSidecar([...extra, ...simpleRoutes(item, analysis)]));
   const queryClient = createQueryClientWithoutBackoff();
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   render(<App router={router} queryClient={queryClient} />);
@@ -207,6 +224,60 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     expect(main().getByText('The results haven’t been worked out for this check.')).toBeVisible();
     expect(main().getByRole('button', { name: 'Work out the results' })).toBeVisible();
     expect(main().getByText(/Shouting Iguana read 265 pages/)).toBeVisible();
+  });
+
+  it('stopped early and never analysed: the stopped banner and Continue checking, above No score yet', async () => {
+    await open('not-analyzed', gardenItem({ ...NEVER, status: 'stopped' }));
+    await site();
+    expect(
+      await main().findByText(
+        'This check was stopped early. It read 265 pages and still had 1,380 addresses to check. Work out the results to see what it found.',
+      ),
+    ).toBeVisible();
+    expect(main().getByRole('button', { name: /Continue checking/ })).toBeVisible();
+    expect(main().getByRole('heading', { name: 'No score yet' })).toBeVisible();
+    expect(main().getByRole('button', { name: 'Work out the results' })).toBeVisible();
+  });
+
+  it('failed and never analysed: couldn’t finish, its cause and Try again, above No score yet', async () => {
+    await open('not-analyzed', gardenItem({ ...NEVER, status: 'failed', error: 'Connection refused' }));
+    await site();
+    expect(
+      await main().findByText(/The site check couldn’t finish\. What it read before it stopped is kept: work out/),
+    ).toBeVisible();
+    expect(main().getByRole('link', { name: 'Try again' })).toBeVisible();
+    expect(main().getByRole('heading', { name: 'No score yet' })).toBeVisible();
+    expect(main().getByRole('button', { name: 'Work out the results' })).toBeVisible();
+  });
+
+  it('turned away and never analysed: the turned-away banner above No score yet', async () => {
+    await open('not-analyzed', gardenItem({ ...NEVER, status: 'stopped' }), `${CRAWL}/overview`, [BLOCKED]);
+    await site();
+    expect(await main().findByText(/^The site turned the check away after 265 pages/)).toBeVisible();
+    expect(main().getByRole('heading', { name: 'No score yet' })).toBeVisible();
+  });
+
+  it('stopped early: the banner’s pages are the head’s, the pages the results cover', async () => {
+    await open(STOPPED_ANALYSIS, gardenItem({ status: 'stopped', pageCount: 268, pagesAnalyzed: 265 }));
+    await site();
+    expect(
+      await main().findByText(
+        'This check was stopped early. It read 265 pages and still had 1,380 addresses to check. Everything below covers only what it read.',
+      ),
+    ).toBeVisible();
+    expect(main().queryByText(/268/)).toBeNull();
+  });
+
+  it('turned away: what was fetched is said apart from the pages the results cover', async () => {
+    await open(STOPPED_ANALYSIS, gardenItem({ status: 'stopped', pageCount: 268, pagesAnalyzed: 265 }), undefined, [
+      BLOCKED,
+    ]);
+    await site();
+    expect(
+      await main().findByText(
+        'The site turned the check away after 268 pages had been fetched, so the rest wasn’t read. Everything below covers the 265 of them the results look at.',
+      ),
+    ).toBeVisible();
   });
 
   it('out of date: a banner with its reason and Update the results; the score stays', async () => {

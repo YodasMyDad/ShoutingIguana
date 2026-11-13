@@ -125,12 +125,25 @@ function Summary({
         The results couldn’t be worked out.
       </Banner>
     ) : (
-      <NoScoreYet
-        canAnalyse={controls.canAnalyse}
-        onAnalyse={control.analyse}
-        words="The results haven’t been worked out for this check."
-        action="Work out the results"
-      />
+      <>
+        {/* A check stopped, turned away or failed before its results were worked out still says so, above No score yet. */}
+        <StateBanners
+          crawlId={crawlId}
+          item={item}
+          status={status}
+          analysis={null}
+          canContinue={controls.canContinue}
+          canAnalyse={controls.canAnalyse}
+          onAnalyse={control.analyse}
+          failure={failure}
+        />
+        <NoScoreYet
+          canAnalyse={controls.canAnalyse}
+          onAnalyse={control.analyse}
+          words="The results haven’t been worked out for this check."
+          action="Work out the results"
+        />
+      </>
     );
   } else if (analysis.error || !results || !analysis.data || !checks.data) {
     body = (
@@ -243,7 +256,13 @@ const OUT_OF_DATE: Record<OutOfDateReason, string> = {
 
 /**
  * What the check's state asks of the user, above the score: out of date, stopped early, stopped at its limit, turned
- * away part way, failed. None is a live region: the live bridge announces a check's status as it changes.
+ * away part way, failed. None is a live region: the live bridge announces a check's status as it changes. With no
+ * analysis (never worked out), only what the crawl itself says: stopped early, turned away, failed, each pointing at
+ * Work out the results below rather than at results that aren't there.
+ *
+ * Its counts: a sentence about the pages in the results says the head's figure (`scoredPages`); one about the moment
+ * the site turned the check away says what had been fetched by then (`pageCount`, which has the host's `/cdn-cgi/`
+ * pages too), worded as fetched, and the pages the results cover beside it when the two differ.
  */
 function StateBanners({
   crawlId,
@@ -258,14 +277,14 @@ function StateBanners({
   crawlId: string;
   item: CrawlListItem;
   status: CrawlStatus | null;
-  analysis: Analysis;
+  analysis: Analysis | null;
   canContinue: boolean;
   canAnalyse: boolean;
   onAnalyse: () => void;
   failure: string | null;
 }) {
   const unfinished = status === 'stopped' || status === 'interrupted';
-  const reason = analysis.score?.covers.reason ?? null;
+  const reason = analysis?.score?.covers.reason ?? null;
   const limited = reason === 'urlLimit' || reason === 'depthLimit';
   const liveQueued = useLive((state) => state.crawls[crawlId]?.progress?.queued ?? null);
   const stats = useQuery({ ...statsQuery(crawlId), enabled: unfinished && liveQueued === null }).data;
@@ -273,7 +292,9 @@ function StateBanners({
   const alerts = useQuery({ ...alertsQuery(crawlId), enabled: unfinished }).data;
   const blocked = unfinished && (alerts ?? []).some((alert) => alert.code === 'blocked');
   const queued = liveQueued ?? stats?.queuedCount ?? null;
-  const pages = item.pageCount === 1 ? '1 page' : `${formatCount(item.pageCount)} pages`;
+  const scored = scoredPages(item);
+  const pages = pagesWord(scored);
+  const below = analysis ? 'Everything below covers only what it read.' : 'Work out the results to see what it found.';
   const proceed = canContinue ? (
     <Button
       size="sm"
@@ -287,7 +308,7 @@ function StateBanners({
   ) : null;
   const banners: ReactNode[] = [];
 
-  if (analysis.outOfDate) {
+  if (analysis?.outOfDate) {
     banners.push(
       <Banner
         key="out-of-date"
@@ -325,7 +346,9 @@ function StateBanners({
           ) : null
         }
       >
-        The site check couldn’t finish. What it read before it stopped is below, as a check stopped early.
+        {analysis
+          ? 'The site check couldn’t finish. What it read before it stopped is below, as a check stopped early.'
+          : 'The site check couldn’t finish. What it read before it stopped is kept: work out the results to see it.'}
       </Banner>,
     );
   } else if (blocked) {
@@ -346,8 +369,9 @@ function StateBanners({
           </>
         }
       >
-        The site turned the check away after {pages}, so the rest wasn’t read. Everything below covers only what it
-        read.
+        {item.pageCount === scored
+          ? `The site turned the check away after ${pages}, so the rest wasn’t read. ${below}`
+          : `The site turned the check away after ${pagesWord(item.pageCount)} had been fetched, so the rest wasn’t read. Everything below covers the ${formatCount(scored)} of them the results look at.`}
       </Banner>,
     );
   } else if (unfinished) {
@@ -358,7 +382,7 @@ function StateBanners({
     banners.push(
       <Banner key="stopped" inset role="none" actions={proceed}>
         This check was stopped early. It read {pages}
-        {left}. Everything below covers only what it read.
+        {left}. {below}
       </Banner>,
     );
   } else if (limited) {
@@ -391,6 +415,10 @@ function StateBanners({
     );
   }
   return banners.length > 0 ? <>{banners}</> : null;
+}
+
+function pagesWord(count: number): string {
+  return count === 1 ? '1 page' : `${formatCount(count)} pages`;
 }
 
 /** No score: the dashed ring, why, and the one action that gives one. */
