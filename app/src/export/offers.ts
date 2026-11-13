@@ -188,17 +188,42 @@ export function robotsBlockedOffer(args: {
   rows: number | null;
 }): ExportOffer {
   const host = args.origin.replace(/^[a-z]+:\/\//i, '');
-  const which = args.line !== undefined ? `what line ${formatCount(args.line)} blocked` : 'every URL it blocked';
+  // What the list is narrowed to, as its title, its description and its file's name say it.
+  const narrowed =
+    args.line !== undefined
+      ? {
+          title: `What line ${formatCount(args.line)} blocked`,
+          which: `what line ${formatCount(args.line)} blocked`,
+          file: `blocked by ${host} robots.txt line ${args.line}`,
+        }
+      : args.reason === 'unreachable'
+        ? {
+            title: 'Refused as robots.txt couldn’t be read',
+            which: 'every URL refused because its robots.txt couldn’t be read',
+            file: `refused by ${host} robots.txt unread`,
+          }
+        : args.reason === 'unknown'
+          ? {
+              title: 'Blocked with no rule kept',
+              which: 'every URL blocked whose rule the crawl didn’t keep',
+              file: `blocked by ${host} robots.txt no rule kept`,
+            }
+          : args.reason === 'rule'
+            ? {
+                title: 'Blocked by a rule',
+                which: 'every URL a rule blocked',
+                file: `blocked by ${host} robots.txt rules`,
+              }
+            : { title: 'The blocked URLs', which: 'every URL it blocked', file: `blocked by ${host} robots.txt` };
   const view: ExportChoice = {
     id: 'view',
-    title: args.line !== undefined ? `What line ${formatCount(args.line)} blocked` : 'The blocked URLs',
+    title: narrowed.title,
     description:
       args.rows === null
-        ? `${host}’s robots.txt: ${which}, with the line that decided each`
-        : `${formatCountOf(args.rows, 'URL')}: ${which}, with the line that decided each`,
+        ? `${host}’s robots.txt: ${narrowed.which}, with the line that decided each`
+        : `${formatCountOf(args.rows, 'URL')}: ${narrowed.which}, with the line that decided each`,
     formats: ['csv', 'xlsx'],
-    fileView:
-      args.line !== undefined ? `blocked by ${host} robots.txt line ${args.line}` : `blocked by ${host} robots.txt`,
+    fileView: narrowed.file,
     build: ({ format, path }) => ({
       kind: 'robotsBlocked',
       format: format === 'xlsx' ? 'xlsx' : 'csv',

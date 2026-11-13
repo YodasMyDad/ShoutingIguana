@@ -106,6 +106,25 @@ describe('a grid’s export is the grid’s own read', () => {
   });
 });
 
+it('names an origin’s blocked URLs narrowed by their reason (the review’s finding 8)', () => {
+  const offer = robotsBlockedOffer({
+    item,
+    crawling: false,
+    origin: 'https://example.com',
+    reason: 'unreachable',
+    rows: null,
+  });
+  const choice = offer.choices[0];
+  expect(choice?.title).toBe('Refused as robots.txt couldn’t be read');
+  expect(choice?.description).toMatch(/every URL refused because its robots\.txt couldn’t be read/);
+  expect(choice?.fileView).toBe('refused by example.com robots.txt unread');
+  expect(choice?.build(as())).toMatchObject({ kind: 'robotsBlocked', reason: 'unreachable' });
+  expect(
+    robotsBlockedOffer({ item, crawling: false, origin: 'https://example.com', reason: 'unknown', rows: 2 }).choices[0]
+      ?.title,
+  ).toBe('Blocked with no rule kept');
+});
+
 describe('Issues and Overview', () => {
   it('offer the check, the open group, the report and every check', () => {
     const offer = issuesOffer({
