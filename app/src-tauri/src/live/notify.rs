@@ -64,11 +64,11 @@ pub fn notice(
         "completed" if ended.crawled => {
             let issues =
                 item.current_issue_checks().map(|checks| format!(", {}", checks_found(checks))).unwrap_or_default();
-            Some(Notice::new("Crawl finished", format!("{name}: {}{issues}", urls(item.fetched()))))
+            Some(Notice::new("Crawl finished", format!("{name}: {}{issues}", urls(item.crawled()))))
         }
         "stopped" if ended.crawled && !ended.was_analysing => Some(Notice::new(
             "Crawl stopped",
-            format!("{name}: {}. Continue it from the library.", urls(item.fetched())),
+            format!("{name}: {}. Continue it from the library.", urls(item.crawled())),
         )),
         "completed" | "stopped" if ended.was_analysing => {
             if stored_nothing(item, analysed_before) {
@@ -108,10 +108,14 @@ fn simple_notice(
         }
     }
     match item.status.as_str() {
+        // Read, but its results not worked out: its first analysis was cancelled (or stored nothing), or never began.
+        "completed" if ended.crawled && (item.analyzed_at.is_none() || stored_nothing(item, analysed_before)) => {
+            Some(Notice::new(format!("{name} is checked"), UNWORKED))
+        }
         "completed" if ended.crawled => Some(Notice::new(format!("{name} is checked"), result_words(item, problems))),
         "stopped" if ended.crawled && !ended.was_analysing => Some(Notice::new(
             format!("The check of {name} was stopped"),
-            format!("{} checked. Continue it from Your sites.", addresses(item.fetched())),
+            format!("{} checked. Continue it from Your sites.", addresses(item.crawled())),
         )),
         "completed" | "stopped" if ended.was_analysing => {
             if stored_nothing(item, analysed_before) {
@@ -122,6 +126,9 @@ fn simple_notice(
         _ => None,
     }
 }
+
+/// A check read but its results not worked out, as the toast says it (src/simple/finishedWords.ts).
+const UNWORKED: &str = "Its results weren't worked out. Work out the results to see its score and what to fix.";
 
 /// "Score 85: 6 problems to fix", "Score 71 so far: 1 problem to fix", or why there's no score.
 fn result_words(item: &CrawlItem, problems: Option<u64>) -> String {
@@ -416,6 +423,51 @@ mod tests {
         let before = Some("2026-11-01T10:30:00Z".to_owned());
         assert_eq!(notice(&ended("completed", true, false), &item("completed"), Some(&before), simple(None)), None);
         assert_eq!(notice(&ended("completed", false, true), &item("analyzing"), None, simple(None)), None);
+    }
+
+    /// The review's finding 2: a first analysis cancelled stored nothing, so nothing is ready to see.
+    #[test]
+    fn simple_says_a_check_whose_results_werent_worked_out_so() {
+        let unworked = "Its results weren't worked out. Work out the results to see its score and what to fix.";
+        let mut cancelled = item("completed");
+        cancelled.analyzed_at = None;
+        cancelled.issues = None;
+        assert_eq!(
+            notice(&ended("completed", true, true), &cancelled, Some(&None), simple(None)),
+            told("example.com is checked", unworked)
+        );
+        assert_eq!(
+            notice(&ended("completed", false, true), &cancelled, None, simple(None)),
+            told("example.com is checked", unworked)
+        );
+        // A later analysis cancelled after the check was continued: the results are the old ones, not of this check.
+        let before = Some("2026-11-01T10:30:00Z".to_owned());
+        assert_eq!(
+            notice(&ended("completed", true, true), &item("completed"), Some(&before), simple(Some(6))),
+            told("example.com is checked", unworked)
+        );
+    }
+
+    /// The review's finding 15: the addresses checked are the library's `crawledUrlCount`, as the toast and Home say
+    /// them, not the URLs fetched (which count those that weren't checked too).
+    #[test]
+    fn a_stopped_check_counts_the_addresses_checked_as_the_toast_does() {
+        let mut stopped = item("stopped");
+        stopped.fetched_url_count = Some(1_300);
+        stopped.crawled_url_count = Some(1_234);
+        assert_eq!(
+            notice(&ended("stopped", false, true), &stopped, None, simple(None)),
+            told("The check of example.com was stopped", "1,234 addresses checked. Continue it from Your sites.")
+        );
+        assert_eq!(
+            notice(&ended("stopped", false, true), &stopped, None, Words::Advanced),
+            told("Crawl stopped", "example.com: 1,234 URLs. Continue it from the library.")
+        );
+        stopped.crawled_url_count = None;
+        assert_eq!(
+            body(notice(&ended("stopped", false, true), &stopped, None, simple(None))).as_deref(),
+            Some("1,300 addresses checked. Continue it from Your sites.")
+        );
     }
 
     #[test]

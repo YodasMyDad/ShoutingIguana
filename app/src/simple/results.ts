@@ -2,7 +2,7 @@
 // last analysis and the checks the user hid in Advanced. One model, so the Summary's counts, its five fixes, What to
 // fix's groups and the sidebar's count are the same entries and can't disagree. Hidden checks are left out of every
 // list and count, as Advanced leaves them out; the score is the engine's and counts them.
-import type { Analysis, Check, Checks, Severity, SkipReason } from '../api/types';
+import type { Analysis, Checks, Severity, SkipReason } from '../api/types';
 import { checkEntries, rankChecksToFix, type CheckEntry } from '../screens/issues/checkList';
 import { plainTitle, wholesOf, type ProblemCounts, type Wholes } from './plainWords';
 
@@ -17,8 +17,6 @@ export interface SkippedGroup {
 }
 
 export interface PlainResults {
-  /** Every check of the catalog as it came out, hidden ones included, in catalog order. */
-  all: CheckEntry[];
   /** Checks that found something and aren't hidden, by severity, each in the engine's order to fix them. */
   found: Record<Severity, CheckEntry[]>;
   /** Checks with problems, by severity: the Summary's counts and What to fix's groups. */
@@ -85,7 +83,6 @@ export function plainResults(checks: Checks, analysis: Analysis, hidden: Readonl
   const siteWideSerious = found.error.find((entry) => entry.check.siteWide) ?? null;
 
   return {
-    all,
     found,
     counts: { error: found.error.length, warning: found.warning.length, notice: found.notice.length },
     fixFirst,
@@ -99,16 +96,6 @@ export function plainResults(checks: Checks, analysis: Analysis, hidden: Readonl
     siteWideSerious,
     wholes: wholesOf(analysis),
   };
-}
-
-/** The checks What to fix lists for one severity, or every problem's, in order: what J and K move through. */
-export function problemsInOrder(results: PlainResults): CheckEntry[] {
-  return [...results.found.error, ...results.found.warning, ...results.found.notice];
-}
-
-/** A check of the catalog by its id. */
-export function checkById(checks: Checks, id: string): Check | undefined {
-  return checks.checks.find((check) => check.id === id);
 }
 
 /** The Summary's sentence's lead for a site-wide serious fault: its plain title. */

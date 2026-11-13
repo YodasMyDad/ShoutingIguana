@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { analyseCrawl, cancelAnalysis } from '../../crawl/actions';
 import { announce } from '../../feedback/announce';
+import { getMode, type Mode } from '../../mode/mode';
 
 export interface AnalysisControl {
   /** The page's title: where focus goes when the progress banner, which had it, goes. */
@@ -14,6 +15,18 @@ export interface AnalysisControl {
   cancel: (() => void) | null;
   /** Cancel was pressed, and the engine is stopping the analysis. */
   cancelling: boolean;
+}
+
+/** What a cancel says, in the mode's words: a first analysis cancelled leaves none; a later one, the last. */
+function cancelledWords(neverAnalysed: boolean, mode: Mode): string {
+  if (mode === 'simple') {
+    return neverAnalysed
+      ? 'Working out the results was cancelled. The results haven’t been worked out for this check.'
+      : 'Working out the results was cancelled. These are the results worked out before.';
+  }
+  return neverAnalysed
+    ? 'Analysis cancelled. This crawl still hasn’t been analysed.'
+    : 'Analysis cancelled. These are the issues from the last analysis.';
 }
 
 /**
@@ -47,13 +60,7 @@ export function useAnalysisControl(crawlId: string, analysing: boolean, neverAna
       startedHere.current = false;
       return;
     }
-    if (cancelRequested.current) {
-      announce(
-        neverAnalysed
-          ? 'Analysis cancelled. This crawl still hasn’t been analysed.'
-          : 'Analysis cancelled. These are the issues from the last analysis.',
-      );
-    }
+    if (cancelRequested.current) announce(cancelledWords(neverAnalysed, getMode()));
     cancelRequested.current = false;
     if (focusLost) titleRef.current?.focus();
   }, [analysing, neverAnalysed]);

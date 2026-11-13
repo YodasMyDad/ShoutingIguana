@@ -1,6 +1,6 @@
 // Checking a site in Simple's words (docs/v2-ui-simple.md, "While it checks the site"): what's in the way, said
 // plainly with what to do about it; how long is left, as a floor; and the analysis's phases. Pure.
-import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait } from '../../api/types';
+import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait, HistoryPoint } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { formatCount, formatCountOf } from '../../lib/format';
 
@@ -52,6 +52,24 @@ export function blockedMessage(site: string, pages: number | null): string {
     `The site’s security turned it away${pages === null ? '' : ` after ${formatCountOf(pages, 'page')}`}, taking it for a robot.`,
     'Could you let it through the firewall or rate limit while I check the site, or tell me what it needs to send to be let in?',
   ].join(' ');
+}
+
+/** An alert as one thing, across reads: its number and its time (E4). */
+export function alertKey(alert: Pick<AlertEvent, 'id' | 'code' | 'at'>): string {
+  return `${alert.id ?? alert.code}@${alert.at}`;
+}
+
+/**
+ * The pages read at a moment, from the crawl's history: its last point at or before it. Null when the history doesn't
+ * reach that moment (it ends before it, or starts after it), so it can't say.
+ */
+export function pagesWhenRaised(points: readonly HistoryPoint[] | undefined, at: string): number | null {
+  const moment = instant(at);
+  if (!points?.length || Number.isNaN(moment)) return null;
+  const last = points.at(-1);
+  if (!last || instant(last.at) < moment) return null;
+  const before = points.filter((point) => instant(point.at) <= moment).at(-1);
+  return before ? before.htmlPages : null;
 }
 
 function alertWords(
@@ -149,6 +167,7 @@ export function inTheWay({
   runStartedAt,
   site,
   pages,
+  pagesOf,
 }: {
   alerts: readonly AlertEvent[];
   waits: readonly CrawlWait[];
@@ -156,6 +175,8 @@ export function inTheWay({
   runStartedAt: string | null;
   site: string;
   pages: number | null;
+  /** The pages read when an alert was raised, which its words quote ("312 pages were read first"); `pages` without. */
+  pagesOf?: ((alert: AlertEvent) => number | null) | undefined;
 }): SimpleAlert[] {
   const from = runStartedAt === null ? null : instant(runStartedAt);
   const seen = new Set<Kind>();
@@ -164,7 +185,7 @@ export function inTheWay({
     .filter((alert) => from === null || instant(alert.at) >= from)
     .sort((a, b) => instant(b.at) - instant(a.at) || (b.id ?? 0) - (a.id ?? 0));
   for (const alert of newestFirst) {
-    const words = alertWords(alert, { site, pages });
+    const words = alertWords(alert, { site, pages: pagesOf?.(alert) ?? pages });
     if (!words || (words.kind !== 'note' && seen.has(words.kind))) continue;
     seen.add(words.kind);
     entries.push({ key: `${words.kind}:${alert.id ?? alert.code}@${alert.at}`, ...words });
@@ -207,6 +228,7 @@ export function timeLeftWords({
   atLimit,
   limit = null,
   limitLeft = null,
+  internalFound = null,
 }: {
   status: CrawlStatus | null;
   queued: number | null | undefined;
@@ -217,6 +239,8 @@ export function timeLeftWords({
   limit?: number | null | undefined;
   /** How many more of the site's addresses its limit lets it read; null without a limit. */
   limitLeft?: number | null;
+  /** The site's own addresses found so far (the limit counts only these); null when not known. */
+  internalFound?: number | null | undefined;
 }): TimeLeftWords {
   if (status === 'paused') return { lead: 'Paused.', rest: 'The time left starts again when you resume the check.' };
   if (status === 'stopping') return { lead: 'Stopping.', rest: 'The pages on their way are finishing.' };
@@ -227,9 +251,10 @@ export function timeLeftWords({
   }
   const reading = `It’s reading about ${formatCount(Math.max(1, Math.round(rate)))} ${Math.round(rate) <= 1 ? 'address' : 'addresses'} a second.`;
   if (queued === 0) return { lead: 'Nearly done.', rest: `The last addresses are being read. ${reading}` };
-  // With a limit nearer than the end of the queue, the limit is what's left: no more can be found to read, so it's
-  // said as "about", not as a floor.
-  if (limit && limitLeft !== null && limitLeft <= queued) {
+  // Once the site has more addresses of its own than its limit (the limit counts only these, as Advanced's time left
+  // does, overview/liveFigures.ts), the limit is what's left: no more can be found to read, so it's said as "about",
+  // not as a floor. The queue alone can't say so: it holds other sites' addresses too.
+  if (limit && limitLeft !== null && internalFound !== null && internalFound >= limit && limitLeft <= queued) {
     const left = Math.floor(limitLeft / rate / 60);
     const stops = `It stops at its limit of ${formatCount(limit)} addresses.`;
     return left < 1

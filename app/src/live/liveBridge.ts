@@ -17,7 +17,12 @@ import { formatCountOf } from '../lib/format';
 import { getMode } from '../mode/mode';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
 import { getSettings } from '../settings/settingsStore';
-import { simpleFinishedWords, simpleStoppedWords } from '../simple/finishedWords';
+import {
+  simpleFailedTitle,
+  simpleFinishedWords,
+  simpleStoppedWords,
+  simpleUnworkedWords,
+} from '../simple/finishedWords';
 import { getConnection, subscribeSidecarStatus } from '../shell/connection';
 import { liveStore, type LiveState, type LiveStore } from './liveStore';
 import { startEventStream } from './sse';
@@ -29,7 +34,7 @@ export const LIVE_GRID_REFRESH_MS = 1_000;
 
 export interface LiveBridgeOptions {
   queryClient: QueryClient;
-  /** Opens a crawl's view from a toast's action: the Report only once its screen exists. */
+  /** Opens a crawl's view from a toast's action: its Summary or Overview, Issues, or the Report. */
   openCrawl: (id: string, view: 'overview' | 'issues' | 'report') => void;
   store?: LiveStore;
 }
@@ -199,7 +204,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   }
 
   async function announceStatus(crawlId: string, status: CrawlStatus) {
-    announce(statusAnnouncement(crawlName(await itemOf(crawlId)), status));
+    announce(statusAnnouncement(crawlName(await itemOf(crawlId)), status, getMode()));
   }
 
   /**
@@ -231,7 +236,11 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         notifyError(new CrawlFailure(event.error ?? 'The engine didn’t say why.', retry !== undefined), {
           id: crawlToast(crawlId, 'failed'),
           title:
-            status === 'failed' ? `${crawlName(item)}: the crawl failed` : `${crawlName(item)}: the analysis failed`,
+            getMode() === 'simple'
+              ? simpleFailedTitle(crawlName(item), status === 'failed')
+              : status === 'failed'
+                ? `${crawlName(item)}: the crawl failed`
+                : `${crawlName(item)}: the analysis failed`,
           ...(retry ? { retry } : {}),
         }),
       );
@@ -270,6 +279,18 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     // The Report: the report a check ends in, in both modes.
     const report = { label: 'Open the report', onClick: () => openCrawl(crawlId, 'report') };
     if (getMode() === 'simple') {
+      const summary = { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') };
+      // Read, but its results not worked out: the first analysis was cancelled (or stored nothing new), or never began.
+      if (crawled && item && (!item.analyzedAt || item.analyzedAt === before)) {
+        const words = simpleUnworkedWords(name);
+        notifyResult(words.title, {
+          id: crawlToast(crawlId, 'finished'),
+          description: words.description,
+          secondary: summary,
+          action: { label: 'Work out the results', onClick: () => void analyseCrawl(crawlId) },
+        });
+        return;
+      }
       const words = simpleFinishedWords({
         site: name,
         crawled,
@@ -277,7 +298,6 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         problems: await problemsOf(crawlId, item),
         pageCount: item?.pageCount ?? null,
       });
-      const summary = { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') };
       notifyResult(words.title, {
         id: crawlToast(crawlId, 'finished'),
         description: words.description,

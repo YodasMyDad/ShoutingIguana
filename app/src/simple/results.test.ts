@@ -117,6 +117,24 @@ describe('the Summary’s sentence in every state', () => {
     expect(results.ifFixed).toBeNull();
   });
 
+  it('nothing to fix with checks hidden: among the checks shown, and how many are hidden', () => {
+    const counts = { error: 0, warning: 0, notice: 0 };
+    expect(summarySentence({ band: 'good', partial: false, counts, siteWideSerious: null, hidden: 1 })).toBe(
+      'Nothing to fix among the checks you show. 1 check is hidden.',
+    );
+    expect(
+      summarySentence({
+        band: 'good',
+        partial: true,
+        counts: { ...counts, notice: 2 },
+        siteWideSerious: null,
+        hidden: 3,
+      }),
+    ).toBe(
+      'On the pages read so far, nothing needs fixing among the checks you show. 2 things are worth a look when you have a moment. 3 checks are hidden.',
+    );
+  });
+
   it('nothing but things worth a look', () => {
     const results = plainResults(SIMPLE_CHECKS, NOTICES_ANALYSIS, NONE);
     expect(summarySentence({ band: 'veryGood', partial: false, counts: results.counts, siteWideSerious: null })).toBe(
@@ -162,5 +180,10 @@ describe('the Summary’s sentence in every state', () => {
       'Only 5 pages were found. If your site has more, its links may need JavaScript, which this version doesn’t run.',
     );
     expect(sentences.some((sentence) => sentence.includes('1,080 addresses, which weren’t read'))).toBe(true);
+  });
+
+  it('a check that ended before reading the whole site doesn’t say only a few pages were found', () => {
+    const covers = { ...GARDEN_ANALYSIS.score!.covers, pages: 6, complete: false, reason: 'stopped' as const };
+    expect(coverageSentences(covers).join(' ')).not.toMatch(/Only 6 pages were found/);
   });
 });

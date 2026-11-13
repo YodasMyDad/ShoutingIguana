@@ -82,6 +82,11 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
     () => (checks.data && analysis.data ? plainResults(checks.data, analysis.data, hidden) : null),
     [checks.data, analysis.data, hidden],
   );
+  // The checks hidden in Advanced that the catalog has (an id it no longer has hides nothing). While they're shown,
+  // results.hidden is empty, so they're counted from the catalog.
+  const hiddenCount = showHidden
+    ? (checks.data?.checks.filter((check) => hiddenIds.includes(check.id)).length ?? 0)
+    : (results?.hidden.length ?? 0);
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => titleRef.current);
 
@@ -168,7 +173,7 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
       <FixLists
         crawlId={crawlId}
         results={results}
-        hiddenCount={hiddenIds.length}
+        hiddenCount={hiddenCount}
         showHidden={showHidden}
         onShowHidden={setShowHidden}
         onUnhide={() => updateSettings({ hiddenChecks: [] })}
@@ -311,11 +316,18 @@ function FixLists({
       {nothingAbove ? (
         <Card className="mb-4 px-6 py-5">
           <p className="text-16">
-            <strong className="font-semibold">Nothing to fix.</strong>{' '}
+            <strong className="font-semibold">
+              {hiddenCount > 0 && !showHidden ? 'Nothing to fix among the checks you show.' : 'Nothing to fix.'}
+            </strong>{' '}
             <span className="text-text-secondary">
-              {results.counts.notice > 0
-                ? `Every serious problem and every problem worth fixing is clear. ${plainSeverityCount('notice', results.counts.notice)} below ${results.counts.notice === 1 ? 'is' : 'are'} often fine as ${results.counts.notice === 1 ? 'it is' : 'they are'}.`
-                : 'Every check that ran found nothing wrong.'}
+              {hiddenCount > 0 && !showHidden
+                ? // How many are hidden is the list's last line, with Show.
+                  results.counts.notice > 0
+                  ? `${plainSeverityCount('notice', results.counts.notice)} below ${results.counts.notice === 1 ? 'is' : 'are'} often fine as ${results.counts.notice === 1 ? 'it is' : 'they are'}.`
+                  : ''
+                : results.counts.notice > 0
+                  ? `Every serious problem and every problem worth fixing is clear. ${plainSeverityCount('notice', results.counts.notice)} below ${results.counts.notice === 1 ? 'is' : 'are'} often fine as ${results.counts.notice === 1 ? 'it is' : 'they are'}.`
+                  : 'Every check that ran found nothing wrong.'}
             </span>
           </p>
         </Card>

@@ -14,6 +14,8 @@ import {
 import { type Analysis, type CrawlListItem, type CrawlStatus, type OutOfDateReason } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { overviewOffer } from '../export/offers';
+import { CRAWL_FILE_COMMANDS, useExportCommand } from '../export/useExportCommand';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
@@ -78,6 +80,14 @@ function Summary({
   );
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => control.titleRef.current);
+  // Ctrl+E saves the report (docs/v2-ui-simple.md, Keys): the export dialog on the report, as Open the report's
+  // Save… does. The Summary is only drawn once the check has ended, so nothing is crawling.
+  useExportCommand(() => (item ? overviewOffer(item, false, true) : null), [item], {
+    group: 'Crawl',
+    title: 'Save the report…',
+    // The report is Ctrl+E's own: the palette's other choice is the spreadsheet of everything.
+    choices: CRAWL_FILE_COMMANDS.filter((choice) => choice.choiceId !== 'report'),
+  });
 
   const loading =
     item === undefined ||
@@ -125,12 +135,25 @@ function Summary({
         The results couldn’t be worked out.
       </Banner>
     ) : (
-      <NoScoreYet
-        canAnalyse={controls.canAnalyse}
-        onAnalyse={control.analyse}
-        words="The results haven’t been worked out for this check."
-        action="Work out the results"
-      />
+      <>
+        {/* A check stopped, turned away or failed before its results were worked out still says so, above No score yet. */}
+        <StateBanners
+          crawlId={crawlId}
+          item={item}
+          status={status}
+          analysis={null}
+          canContinue={controls.canContinue}
+          canAnalyse={controls.canAnalyse}
+          onAnalyse={control.analyse}
+          failure={failure}
+        />
+        <NoScoreYet
+          canAnalyse={controls.canAnalyse}
+          onAnalyse={control.analyse}
+          words="The results haven’t been worked out for this check."
+          action="Work out the results"
+        />
+      </>
     );
   } else if (analysis.error || !results || !analysis.data || !checks.data) {
     body = (
@@ -180,7 +203,8 @@ function Summary({
         {body}
         {item && !loading && item.pageCount > 0 ? <FactsLine item={item} analysis={analysis.data} /> : null}
       </div>
-      <ScoreBreakdownFromRoute crawlId={crawlId} />
+      {/* Only over results: a check never worked out has no score to break down (Advanced's Overview does the same). */}
+      {analysis.data ? <ScoreBreakdownFromRoute crawlId={crawlId} /> : null}
     </div>
   );
 }
@@ -243,7 +267,13 @@ const OUT_OF_DATE: Record<OutOfDateReason, string> = {
 
 /**
  * What the check's state asks of the user, above the score: out of date, stopped early, stopped at its limit, turned
- * away part way, failed. None is a live region: the live bridge announces a check's status as it changes.
+ * away part way, failed. None is a live region: the live bridge announces a check's status as it changes. With no
+ * analysis (never worked out), only what the crawl itself says: stopped early, turned away, failed, each pointing at
+ * Work out the results below rather than at results that aren't there.
+ *
+ * Its counts: a sentence about the pages in the results says the head's figure (`scoredPages`); one about the moment
+ * the site turned the check away says what had been fetched by then (`pageCount`, which has the host's `/cdn-cgi/`
+ * pages too), worded as fetched, and the pages the results cover beside it when the two differ.
  */
 function StateBanners({
   crawlId,
@@ -258,14 +288,14 @@ function StateBanners({
   crawlId: string;
   item: CrawlListItem;
   status: CrawlStatus | null;
-  analysis: Analysis;
+  analysis: Analysis | null;
   canContinue: boolean;
   canAnalyse: boolean;
   onAnalyse: () => void;
   failure: string | null;
 }) {
   const unfinished = status === 'stopped' || status === 'interrupted';
-  const reason = analysis.score?.covers.reason ?? null;
+  const reason = analysis?.score?.covers.reason ?? null;
   const limited = reason === 'urlLimit' || reason === 'depthLimit';
   const liveQueued = useLive((state) => state.crawls[crawlId]?.progress?.queued ?? null);
   const stats = useQuery({ ...statsQuery(crawlId), enabled: unfinished && liveQueued === null }).data;
@@ -273,7 +303,9 @@ function StateBanners({
   const alerts = useQuery({ ...alertsQuery(crawlId), enabled: unfinished }).data;
   const blocked = unfinished && (alerts ?? []).some((alert) => alert.code === 'blocked');
   const queued = liveQueued ?? stats?.queuedCount ?? null;
-  const pages = item.pageCount === 1 ? '1 page' : `${formatCount(item.pageCount)} pages`;
+  const scored = scoredPages(item);
+  const pages = pagesWord(scored);
+  const below = analysis ? 'Everything below covers only what it read.' : 'Work out the results to see what it found.';
   const proceed = canContinue ? (
     <Button
       size="sm"
@@ -287,7 +319,7 @@ function StateBanners({
   ) : null;
   const banners: ReactNode[] = [];
 
-  if (analysis.outOfDate) {
+  if (analysis?.outOfDate) {
     banners.push(
       <Banner
         key="out-of-date"
@@ -325,7 +357,9 @@ function StateBanners({
           ) : null
         }
       >
-        The site check couldn’t finish. What it read before it stopped is below, as a check stopped early.
+        {analysis
+          ? 'The site check couldn’t finish. What it read before it stopped is below, as a check stopped early.'
+          : 'The site check couldn’t finish. What it read before it stopped is kept: work out the results to see it.'}
       </Banner>,
     );
   } else if (blocked) {
@@ -346,8 +380,9 @@ function StateBanners({
           </>
         }
       >
-        The site turned the check away after {pages}, so the rest wasn’t read. Everything below covers only what it
-        read.
+        {item.pageCount === scored
+          ? `The site turned the check away after ${pages}, so the rest wasn’t read. ${below}`
+          : `The site turned the check away after ${pagesWord(item.pageCount)} had been fetched, so the rest wasn’t read. Everything below covers the ${formatCount(scored)} of them the results look at.`}
       </Banner>,
     );
   } else if (unfinished) {
@@ -358,7 +393,7 @@ function StateBanners({
     banners.push(
       <Banner key="stopped" inset role="none" actions={proceed}>
         This check was stopped early. It read {pages}
-        {left}. Everything below covers only what it read.
+        {left}. {below}
       </Banner>,
     );
   } else if (limited) {
@@ -391,6 +426,10 @@ function StateBanners({
     );
   }
   return banners.length > 0 ? <>{banners}</> : null;
+}
+
+function pagesWord(count: number): string {
+  return count === 1 ? '1 page' : `${formatCount(count)} pages`;
 }
 
 /** No score: the dashed ring, why, and the one action that gives one. */
@@ -520,7 +559,9 @@ function FactsLine({ item, analysis }: { item: CrawlListItem; analysis: Analysis
   const pages = analysis?.score?.covers.pages ?? analysis?.pagesAnalyzed ?? item.pageCount;
   const urls =
     analysis?.score?.covers.urls ?? analysis?.crawledUrlCount ?? item.crawledUrlCount ?? item.fetchedUrlCount;
-  const when = item.startedAt ? `, on ${longDate(item.startedAt)}` : '';
+  // The head's date: the day the check finished, or the day it started while it has none.
+  const day = item.finishedAt ?? item.startedAt;
+  const when = day ? `, on ${longDate(day)}` : '';
   return (
     <p className="text-13 text-text-muted">
       {factsWords({ pages, urls })}

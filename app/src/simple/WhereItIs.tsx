@@ -131,6 +131,9 @@ export function WhereItIs({
       ? `${formatCount(total)} ${noun(total)}`
       : `${causes === 1 ? '1 cause' : `${formatCount(causes)} causes`}, on ${formatCount(total)} ${noun(total)}`;
   const error = grouped ? groups.error : rows.error;
+  // How many are shown, and the ways to more, only once the list is read: before then a grouped check's count of
+  // causes isn't known, and "All 0 are shown" would be false.
+  const read = (grouped ? groups.data : rows.data) !== undefined && !error;
 
   return (
     <Card as="section" aria-labelledby="where-it-is" className="mt-4 overflow-hidden">
@@ -181,24 +184,31 @@ export function WhereItIs({
           </tbody>
         </table>
       )}
-      <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle bg-surface-sunken px-6 py-3 text-14 text-text-secondary">
-        <span>
-          {listed >= all
-            ? `${all === 1 ? 'It is' : `All ${formatCount(all)} are`} shown.`
-            : `Showing ${formatCount(listed)} of ${formatCount(all)}.`}
-          {origin ? ` Addresses are on ${site}.` : ''}
-        </span>
-        {listed < all && limit < WHERE_MAX ? (
-          <Button variant="ghost" size="sm" icon={ChevronDown} onClick={() => setLimit((value) => value + WHERE_STEP)}>
-            Show {formatCount(Math.min(WHERE_STEP, all - listed))} more
-          </Button>
-        ) : null}
-        {listed < all && limit >= WHERE_MAX ? (
-          <Button variant="ghost" size="sm" iconEnd={ArrowUpRight} onClick={() => switchMode(router, 'advanced')}>
-            See all {formatCount(all)} in Advanced
-          </Button>
-        ) : null}
-      </div>
+      {read ? (
+        <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle bg-surface-sunken px-6 py-3 text-14 text-text-secondary">
+          <span>
+            {listed >= all
+              ? `${all === 1 ? 'It is' : `All ${formatCount(all)} are`} shown.`
+              : `Showing ${formatCount(listed)} of ${formatCount(all)}.`}
+            {origin ? ` Addresses are on ${site}.` : ''}
+          </span>
+          {listed < all && limit < WHERE_MAX ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={ChevronDown}
+              onClick={() => setLimit((value) => value + WHERE_STEP)}
+            >
+              Show {formatCount(Math.min(WHERE_STEP, all - listed))} more
+            </Button>
+          ) : null}
+          {listed < all && limit >= WHERE_MAX ? (
+            <Button variant="ghost" size="sm" iconEnd={ArrowUpRight} onClick={() => switchMode(router, 'advanced')}>
+              See all {formatCount(all)} in Advanced
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </Card>
   );
 }

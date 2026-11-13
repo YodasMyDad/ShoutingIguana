@@ -12,7 +12,7 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem as problemResponse, type FakeRoute } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
 import { GARDEN_ANALYSIS, gardenItem, groupPage, rowsPage, simpleRoutes } from '../test/simpleSidecar';
@@ -81,9 +81,24 @@ function problemRoutes(): FakeRoute[] {
   ];
 }
 
-async function open(path: string, analysis: Analysis = GARDEN_ANALYSIS, hidden: string[] = []) {
+/** The garden crawl's six problems: its serious ones and those worth fixing. */
+const PROBLEM_IDS = [
+  'internal-client-error',
+  'broken-internal-links',
+  'title-duplicate',
+  'description-duplicate',
+  'image-too-large',
+  'slow-response',
+];
+
+async function open(
+  path: string,
+  analysis: Analysis = GARDEN_ANALYSIS,
+  hidden: string[] = [],
+  extra: FakeRoute[] = [],
+) {
   replaceSettings({ mode: 'simple', hiddenChecks: hidden });
-  const sidecar = fakeSidecar([...problemRoutes(), ...simpleRoutes(gardenItem(), analysis)]);
+  const sidecar = fakeSidecar([...extra, ...problemRoutes(), ...simpleRoutes(gardenItem(), analysis)]);
   setTransport(sidecar);
   const queryClient = createQueryClientWithoutBackoff();
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
@@ -164,6 +179,21 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));
     expect(main().getByRole('heading', { name: 'Worth fixing 4' })).toBeVisible();
+  });
+
+  it('counts only the hidden checks the catalog has, as hidden', async () => {
+    await open(FIX, GARDEN_ANALYSIS, ['image-too-large', 'a-check-no-longer-in-the-catalog']);
+    await whatToFix();
+    expect(main().getByText(/^1 check is hidden\./)).toBeVisible();
+  });
+
+  it('with every problem hidden: nothing to fix among the checks shown, never that every check found nothing', async () => {
+    await open(FIX, GARDEN_ANALYSIS, PROBLEM_IDS);
+    await screen.findByRole('heading', { level: 1, name: 'What to fix' }, { timeout: 10_000 });
+    await main().findByRole('heading', { level: 2, name: /^Worth a look/ });
+    expect(main().getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
+    expect(main().queryByText(/Every serious problem and every problem worth fixing is clear/)).toBeNull();
+    expect(main().getByText(/^6 checks are hidden\./)).toBeVisible();
   });
 
   it('moves through the problems with J and K, which Enter then opens', async () => {
@@ -265,9 +295,32 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(router.state.location.pathname).toBe(`${FIX}/orphan-page`);
   });
 
+  it('says nothing of how many are shown until the list is read, nor when it couldn’t be', async () => {
+    const failing: FakeRoute = [
+      'POST',
+      /\/issues\/broken-internal-links\/groups$/,
+      () => problemResponse({ type: 'internal', title: 'Something went wrong.', status: 500 }),
+    ];
+    await open(`${FIX}/broken-internal-links`, GARDEN_ANALYSIS, [], [failing]);
+    await problem('Links that lead to broken pages');
+    const where = within(main().getByRole('region', { name: 'Where it is' }));
+    expect(await where.findByText(/The list couldn’t be read/, undefined, { timeout: 5_000 })).toBeVisible();
+    expect(where.queryByText(/are shown|is shown|Showing/)).toBeNull();
+  });
+
+  it('a skipped check never states its fault as a fact of the site', async () => {
+    await open(`${FIX}/orphan-page`);
+    await problem('Pages in your sitemap that nothing links to');
+    expect(main().queryByText(/No page on your site links to these pages/)).toBeNull();
+  });
+
   it('a passed check says its good news', async () => {
     await open(`${FIX}/title-missing`);
     await problem('Every page has a title');
     expect(main().getByText('Nothing wrong')).toBeVisible();
+    // What it looks for, never what's wrong with pages it found nothing wrong with.
+    const looksFor = within(main().getByRole('region', { name: 'What it looks for' }));
+    expect(looksFor.getByText('Pages with no title')).toBeVisible();
+    expect(main().queryByText(/These pages have no title/)).toBeNull();
   });
 });

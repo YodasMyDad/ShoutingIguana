@@ -24,13 +24,14 @@ export function SimpleOverview() {
   const { item, status, crawling, analysing } = useCrawlState(crawlId);
   const handingOver = useHandOver(crawlId, status, crawling, analysing);
   const checking = crawling || analysing || handingOver;
-  const control = useAnalysisControl(crawlId, analysing, false);
+  // A first analysis cancelled leaves no results: the library's item says whether there were any before it.
+  const control = useAnalysisControl(crawlId, analysing, item !== undefined && !item.analyzedAt);
   // The checking screen goes when the crawl ends: focus that was on it (Resume, Cancel) goes to the title of what
   // replaces it, never to the page.
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => screenRef.current?.querySelector<HTMLElement>('h1') ?? null);
 
-  // Registered only while this screen shows it: the Summary has its own.
+  // Registered only while the checking screen shows: the Summary registers its own (Ctrl+E, Save the report).
   useCommands(
     () =>
       checking

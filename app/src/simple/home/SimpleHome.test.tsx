@@ -5,7 +5,7 @@ import type { CrawlListItem } from '../../api/types';
 import { ENGINE_DEFAULTS } from '../../crawl/options/engineDefaults';
 import { getMode } from '../../mode/mode';
 import { replaceSettings } from '../../settings/settingsStore';
-import { json, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
+import { json, problem, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
 import { ownSidecar, ScreenApp } from '../../test/ScreenStory';
 import { TABLE_STUBBED } from '../tableStubbed';
 
@@ -42,11 +42,18 @@ function routes(library: CrawlListItem[], defaults = ENGINE_DEFAULTS as object):
   ];
 }
 
-async function open(library: CrawlListItem[], defaults?: object) {
-  ownSidecar(routes(library, defaults));
+async function open(library: CrawlListItem[], defaults?: object, extra: FakeRoute[] = []) {
+  ownSidecar([...extra, ...routes(library, defaults)]);
   render(<ScreenApp path="/" mode="simple" />);
   return screen.findByRole('heading', { level: 1, name: 'Check a website' });
 }
+
+/** The engine refusing the check's options, with each field's problem. */
+const refused = (errors: Record<string, string[]>): FakeRoute => [
+  'POST',
+  /^\/api\/crawls$/,
+  () => problem({ type: 'invalid-options', title: 'The crawl options are invalid.', status: 400, errors }),
+];
 
 const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!;
 
@@ -64,6 +71,42 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     ).toBeInTheDocument();
     await userEvent.click(check);
     expect(screen.getByText('Type or paste the address of the site to check.')).toBeInTheDocument();
+  });
+
+  it('says a bad address in Simple’s words, under the field', async () => {
+    await open([garden], undefined, [refused({ startUrl: ['Start URL must be an absolute http or https URL.'] })]);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Web address' }), 'my shop{Enter}');
+    const field = screen.getByRole('textbox', { name: 'Web address' });
+    expect(
+      await screen.findByText('That isn’t a web address. Type one such as www.example.co.uk.'),
+    ).toBeInTheDocument();
+    expect(field).toHaveAccessibleDescription(/That isn’t a web address/);
+    expect(screen.queryByText(/Start URL/)).toBeNull();
+  });
+
+  it('says an address with a user name and password in it can’t be checked, in Simple’s words', async () => {
+    await open([garden], undefined, [
+      refused({ startUrl: ['Start URL can’t include a user name or password. They would be stored…'] }),
+    ]);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Web address' }), 'https://me:secret@example.com{Enter}');
+    expect(
+      await screen.findByText(
+        'Leave out the user name and password: they would be kept in the check’s file. A site that asks for a password can be checked in Advanced.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Start URL/)).toBeNull();
+  });
+
+  it('says a saved setting that stops the check with Options… as where to fix it, not under the address', async () => {
+    await open([garden], undefined, [refused({ concurrency: ['Concurrency must be between 1 and 100.'] })]);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Web address' }), 'example.com{Enter}');
+    const said = await screen.findByText(/One of your saved settings can’t be used, so the check didn’t start\./);
+    expect(said).toHaveTextContent(
+      'One of your saved settings can’t be used, so the check didn’t start. Open Options… to fix it.',
+    );
+    expect(within(said).getByRole('link', { name: 'Options…' })).toHaveAttribute('href', '/new?url=example.com');
+    expect(screen.getByRole('textbox', { name: 'Web address' })).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(/Concurrency/)).toBeNull();
   });
 
   it('says the saved settings instead when they differ from the engine’s', async () => {

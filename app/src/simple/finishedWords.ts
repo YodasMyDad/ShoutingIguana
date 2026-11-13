@@ -47,6 +47,22 @@ export function simpleFinishedWords({
   return { title, description: 'The results are ready.' };
 }
 
+/**
+ * A check that read the site but whose results weren't worked out: its first analysis was cancelled, or never began.
+ * Nothing is ready to see, so it says so and offers to work them out.
+ */
+export function simpleUnworkedWords(site: string): FinishedWords {
+  return {
+    title: `${site} is checked`,
+    description: 'Its results weren’t worked out. Work out the results to see its score and what to fix.',
+  };
+}
+
+/** A check that couldn't finish, or whose results couldn't be worked out: the shell's notice's titles. */
+export function simpleFailedTitle(site: string, crawlFailed: boolean): string {
+  return crawlFailed ? `The check of ${site} couldn’t finish` : `The results for ${site} couldn’t be worked out`;
+}
+
 /** A check stopped part way: "The check of {site} was stopped", with what it read. */
 export function simpleStoppedWords(site: string, checked: number | null): FinishedWords {
   return {

@@ -3,6 +3,7 @@ import type { Ref } from 'react';
 import type { Analysis, NoScoreReason } from '../../api/types';
 import { bandWord } from '../../ui/score';
 import { ScoreRing } from '../../ui/ScoreRing';
+import { openedHereState } from '../../simple/scoreHistory';
 
 /** Why there's no score, in Advanced's words. */
 const NO_SCORE: Record<NoScoreReason, string> = {
@@ -47,6 +48,7 @@ export function OverviewScore({
       to="/crawls/$crawl/overview"
       params={{ crawl: crawlId }}
       search={(previous) => ({ ...previous, score: 1 })}
+      state={openedHereState}
       title="How the score is worked out"
       className="flex items-center gap-3 rounded-lg py-2 pr-4 pl-2.5 hover:bg-surface-hover"
     >

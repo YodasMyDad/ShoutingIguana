@@ -24,7 +24,9 @@ import { StackBar } from '../../ui/StackBar';
 import { Stat, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
 import {
+  alertKey,
   inTheWay,
+  pagesWhenRaised,
   simplePhaseProgress,
   simplePhaseWords,
   timeLeftWords,
@@ -80,7 +82,8 @@ export function CheckingScreen({
   // Once the crawl has ended, its figures are the file's, read once, unless this window watched it to its end.
   const stats = useQuery({ ...statsQuery(crawlId), enabled: analysing && !progress });
   const checkCount = useQuery(checksQuery()).data?.checks.length;
-  const history = useQuery(historyQuery(crawlId)).data;
+  const historyState = useQuery(historyQuery(crawlId));
+  const history = historyState.data;
   const fileAlerts = useQuery(alertsQuery(crawlId)).data;
   const site = crawlName(item);
 
@@ -90,19 +93,32 @@ export function CheckingScreen({
   const queued = progress ? progress.queued : (stats.data?.queuedCount ?? null);
 
   const runStartedAt = history?.runs?.at(-1)?.startedAt ?? null;
+  const alerts = useMemo(() => [...(fileAlerts ?? []), ...(live?.alerts ?? [])], [fileAlerts, live?.alerts]);
+  // The pages read when each alert was raised, held still once known: "312 pages were read first" doesn't climb as
+  // the check reads on. From the history where it reaches the alert's moment, else the pages read when it was first
+  // seen here (an alert raised as this screen watches). Not before the history is read, which may know better.
+  const [pagesWhenSeen, setPagesWhenSeen] = useState<ReadonlyMap<string, number | null>>(() => new Map());
+  const historyRead = !historyState.isPending || historyState.isError;
+  const unseen = historyRead ? alerts.filter((alert) => !pagesWhenSeen.has(alertKey(alert))) : [];
+  if (unseen.length > 0) {
+    const next = new Map(pagesWhenSeen);
+    for (const alert of unseen) next.set(alertKey(alert), pagesWhenRaised(history?.points, alert.at) ?? pages);
+    setPagesWhenSeen(next);
+  }
   const obstacles = useMemo(
     () =>
       inTheWay({
-        alerts: [...(fileAlerts ?? []), ...(live?.alerts ?? [])],
+        alerts,
         waits: status === 'running' ? (progress?.waits ?? []) : [],
         runStartedAt,
         site,
         pages,
+        pagesOf: (alert) => pagesWhenSeen.get(alertKey(alert)) ?? null,
       }),
-    // `pages` moves with every figure: what's in the way is drawn again when an alert or a wait changes, and the
-    // count it quotes catches up then.
+    // `pages` moves with every figure: what's in the way is drawn again when an alert or a wait changes. An alert's
+    // own count is held in `pagesWhenSeen`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fileAlerts, live?.alerts, progress?.waits, runStartedAt, site, status],
+    [alerts, progress?.waits, runStartedAt, site, status, pagesWhenSeen],
   );
   const onStop = useCallback(() => void stopCrawl(crawlId), [crawlId]);
   const onContinue = useCallback(() => void continueCrawl(crawlId), [crawlId]);
@@ -120,6 +136,7 @@ export function CheckingScreen({
       progress?.maxUrls && typeof progress.internalFetched === 'number'
         ? Math.max(0, progress.maxUrls - progress.internalFetched)
         : null,
+    internalFound: progress?.internalFound,
   });
 
   return (

@@ -6,6 +6,7 @@ import {
   minutesInWords,
   simplePhaseProgress,
   simplePhaseWords,
+  pagesWhenRaised,
   timeLeftWords,
 } from './checkingWords';
 
@@ -135,6 +136,7 @@ describe('how long is left', () => {
         atLimit: false,
         limit: 1500,
         limitLeft: 1141,
+        internalFound: 1600,
       }),
     ).toEqual({
       lead: 'About 1 minute to go.',
@@ -144,6 +146,22 @@ describe('how long is left', () => {
       timeLeftWords({ status: 'running', queued: 100, urlsPerSecond: 1, atLimit: false, limit: 1500, limitLeft: 1141 })
         .lead,
     ).toBe('At least 1 minute to go.');
+  });
+
+  it('says "about" and the limit only once the site has more addresses of its own than the limit, as Advanced does', () => {
+    // 5,933 queued, most of them other sites' (links out): the site's own found so far, 1,200, is under the limit
+    // of 1,500, so the limit isn't what's left, and the queue's floor stands.
+    const words = timeLeftWords({
+      status: 'running',
+      queued: 5933,
+      urlsPerSecond: 16,
+      atLimit: false,
+      limit: 1500,
+      limitLeft: 1141,
+      internalFound: 1200,
+    });
+    expect(words.lead).toBe('At least 6 minutes to go.');
+    expect(words.rest).not.toMatch(/limit/);
   });
 
   it('has its own sentence for each state that has no pace', () => {
@@ -173,5 +191,26 @@ describe('working out the results', () => {
     expect(simplePhaseWords('somethingNew')).toBe('Working out the results');
     expect(simplePhaseProgress({ phase: 'reading', done: 1204, total: 4521 })).toBe('1,204 of 4,521 addresses');
     expect(simplePhaseProgress({ phase: 'writing', done: 0, total: 1 })).toBeNull();
+  });
+});
+
+describe('the pages read when an alert was raised', () => {
+  const point = (at: string, htmlPages: number) =>
+    ({ at, htmlPages, fetched: 0, internalFetched: 0, internalFound: 0, errors: 0, blocked: 0 }) as const;
+  const points = [
+    point('2026-11-01T10:00:00Z', 100),
+    point('2026-11-01T10:10:00Z', 250),
+    point('2026-11-01T10:20:00Z', 400),
+  ];
+
+  it('is the history’s last point at or before it', () => {
+    expect(pagesWhenRaised(points, '2026-11-01T10:15:00Z')).toBe(250);
+    expect(pagesWhenRaised(points, '2026-11-01T10:10:00.000Z')).toBe(250);
+  });
+
+  it('is unknown where the history doesn’t reach that moment', () => {
+    expect(pagesWhenRaised(points, '2026-11-01T10:25:00Z')).toBeNull();
+    expect(pagesWhenRaised(points, '2026-11-01T09:00:00Z')).toBeNull();
+    expect(pagesWhenRaised(undefined, '2026-11-01T10:15:00Z')).toBeNull();
   });
 });

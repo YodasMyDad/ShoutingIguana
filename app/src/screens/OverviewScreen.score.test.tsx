@@ -71,6 +71,8 @@ describe('the score on Advanced’s Overview', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(router.state.location.search).toEqual({});
     await waitFor(() => expect(score).toHaveFocus());
+    // Closed by going back to the entry it opened on: Back from here leaves Overview, as it would have before.
+    expect(router.history.canGoBack()).toBe(false);
   });
 
   it('says "so far" for a crawl that didn’t read all of the site', async () => {

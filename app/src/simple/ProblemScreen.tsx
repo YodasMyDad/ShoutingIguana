@@ -366,12 +366,9 @@ function SkippedProblem({
 }) {
   return (
     <>
+      {/* The title says what it looks for: its plain words of what's wrong would state a fault it couldn't look for. */}
       <ProblemHead titleRef={titleRef} outcome="skipped" title={looksForWords(check)} />
       <Card className="flex flex-col gap-4 px-7 py-6">
-        <section>
-          <h2 className="text-14 font-semibold">What it looks for</h2>
-          <p className="mt-1 text-16 text-text-secondary">{check.plainWhat?.[0] ?? check.description}</p>
-        </section>
         <section>
           <h2 className="text-14 font-semibold">Why it couldn’t run</h2>
           <p className="mt-1 text-16 text-text-secondary">
@@ -397,10 +394,12 @@ function PassedProblem({ titleRef, check }: { titleRef: React.RefObject<HTMLHead
     <>
       <ProblemHead titleRef={titleRef} outcome="passed" title={passedWords(check)} />
       <Card className="flex flex-col gap-4 px-7 py-6">
-        <section>
-          <h2 className="text-14 font-semibold">What it looks for</h2>
-          <p className="mt-1 text-16 text-text">{plainTitle(check)}</p>
-          <p className="mt-1 text-16 text-text-secondary">{check.plainWhat?.[0] ?? check.description}</p>
+        {/* What it looks for, never its words of what's wrong: it found nothing wrong. */}
+        <section aria-labelledby="problem-looks-for">
+          <h2 id="problem-looks-for" className="text-14 font-semibold">
+            What it looks for
+          </h2>
+          <p className="mt-1 text-16 text-text">{looksForWords(check)}</p>
         </section>
       </Card>
     </>
