@@ -163,4 +163,9 @@ describe('the Summary’s sentence in every state', () => {
     );
     expect(sentences.some((sentence) => sentence.includes('1,080 addresses, which weren’t read'))).toBe(true);
   });
+
+  it('a check that ended before reading the whole site doesn’t say only a few pages were found', () => {
+    const covers = { ...GARDEN_ANALYSIS.score!.covers, pages: 6, complete: false, reason: 'stopped' as const };
+    expect(coverageSentences(covers).join(' ')).not.toMatch(/Only 6 pages were found/);
+  });
 });

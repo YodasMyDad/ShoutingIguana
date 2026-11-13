@@ -180,7 +180,8 @@ export const TINY_SITE_PAGES = 10;
 
 /**
  * What the score covers, as sentences (docs/v2-ui-simple.md, "The score": What it covers): the pages and checks it is
- * built from, the checks that couldn't run, what robots.txt kept out, and a tiny site's caution.
+ * built from, the checks that couldn't run, what robots.txt kept out, and a tiny site's caution (only when the check
+ * read all it found).
  */
 export function coverageSentences(covers: Score['covers']): string[] {
   const total = covers.checksRun + covers.checksSkipped;
@@ -206,7 +207,8 @@ export function coverageSentences(covers: Score['covers']): string[] {
       `The site’s rules file for search engines (its “robots.txt”) keeps them out of ${formatCount(covers.blockedByRobots)} ${covers.blockedByRobots === 1 ? 'address, which wasn’t' : 'addresses, which weren’t'} read.`,
     );
   }
-  if (covers.pages < TINY_SITE_PAGES) {
+  // Only for a check that read all it could find: one that ended early read few pages because it ended.
+  if (covers.complete && covers.pages < TINY_SITE_PAGES) {
     sentences.push(
       `Only ${covers.pages === 1 ? '1 page was' : `${formatCount(covers.pages)} pages were`} found. If your site has more, its links may need JavaScript, which this version doesn’t run.`,
     );
