@@ -160,7 +160,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
         </div>
 
         {kind === 'live' ? (
-          <LiveProgress item={item} />
+          <LiveProgress item={item} analysing={status === 'analyzing'} />
         ) : (
           <>
             <div className={clsx('min-w-0', FOLDS)}>
@@ -243,10 +243,9 @@ function FixCell({
 }
 
 /** A check running now: its progress across the score's and the fixes' columns, and when its results come. */
-function LiveProgress({ item }: { item: CrawlListItem }) {
+function LiveProgress({ item, analysing }: { item: CrawlListItem; analysing: boolean }) {
   const live = useLiveCrawl(item.id);
   const progress = live?.progress ?? null;
-  const analysing = live?.status === 'analyzing';
   const checked = progress ? crawledSoFar(progress) : crawledUrls(item);
   const queued = progress?.queued ?? null;
   const total = checked !== null && queued !== null ? checked + queued : null;
