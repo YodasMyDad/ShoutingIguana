@@ -1652,10 +1652,12 @@ Analysis (E6), with what Links and the URL grid lacked of E6's link ends. `app/s
 - **Exports in progress** (`export/ExportsInProgress.tsx`) are listed at the bottom of the sidebar under the running
   crawls; a press brings the toast back. The shell's own event stream tells an export that was saved or failed while
   the window was hidden or not focused, once (`live/notify.rs`, `export_notice`).
-- **Every grid**: URLs, Links, one sitemap's URLs, an origin's blocked URLs (all or one line's), Issues and Overview.
-  Not exportable, said by Ctrl+E: the list of sitemaps and robots.txt's origins (the engine has no kind for them), and
-  a URL view narrowed to a links view's ends (export takes no `linkEnds`). The URL grid's status column goes out with
-  `outcome` beside `statusCode`, and the links grid's follow column as its four flags.
+- **Every grid**: URLs, Links, one sitemap's URLs, an origin's blocked URLs (all or one line's), Issues and Overview;
+  and since E7 the list of sitemaps (`sitemapsOffer`, "… sitemaps.xlsx"), robots.txt's origins (`robotsOriginsOffer`,
+  "… robots.txt origins.csv", with the list's search and filter when it has them) and a URL view narrowed to a links
+  view's ends (its `linkEnds` in the request; "… URLs link targets.csv" or "… URLs pages with the links.csv"). The URL
+  grid's status column goes out with `outcome` beside `statusCode`, and the links grid's follow column as its four
+  flags.
 
 ### The palette's search
 
@@ -1697,8 +1699,6 @@ URL grid (112,577 URLs) as Excel from Export to Saved 889 ms in the page, the to
 
 ### Not done, and why
 
-- **No export of the sitemaps' list or robots.txt's origins**, nor of a URL view narrowed to link ends: the engine has
-  no kind for the first two and its export takes no `linkEnds`. Asked of the engine.
 - **The native save dialog, Open file, Open folder and the notification** are proven by the shell's unit tests (the
   commands' path rule, the notice's words) and by `cargo test`'s capability check; the e2e runs in a browser, so they
   weren't driven end to end in the built shell.

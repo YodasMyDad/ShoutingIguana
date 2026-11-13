@@ -236,8 +236,9 @@ Built in stages:
   the check's issues group: see [Issue groups](#issue-groups-e3a).
 - **`subject`** (E3b) is what the check's flagged URLs are, so the UI can say "pages affected, of the N pages crawled"
   only where that's true:
-  - `page`: every URL it flags is a page, as `pageCount` counts them: an internal URL that answered with HTML the
-    crawler read. Its count is a part of the pages crawled.
+  - `page`: every URL it flags is a page, as the analysis counts them (`pagesAnalyzed`): an internal URL that answered
+    with HTML the crawler read, and that the analysis audits. Its count is a part of the pages the analysis read. (The
+    library's `pageCount` counts Cloudflare's `/cdn-cgi/` endpoints too, which no check flags: E7.)
   - `url`: it can flag any URL the crawl has: a file (`internal-client-error` flags a missing image, as its text says),
     a redirect, a URL that didn't answer or wasn't fetched, a URL on another of the site's versions. Its count is of
     URLs, not of pages, and may be more than the pages crawled.
@@ -322,7 +323,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 ```json
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
- "crawlingMs":41250,"fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
+ "crawlingMs":41250,"fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"pagesAnalyzed":265,"issues":{"error":3,"warning":12,"notice":7},
  "analyzedAt":"…","score":{"value":85,"band":"good","partial":false},"outOfDate":false,"sizeBytes":18276352,"hasFavicon":true,"missing":false}
 ```
 
@@ -348,7 +349,13 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   client makes with it, the UI's own among them, to save one subtraction; so the count that leaves it out has its own
   name.
 - **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed — as in `si stats`, and the same
-  definition a running crawl's `htmlPages` uses, so the count doesn't shift when a crawl ends.
+  definition a running crawl's `htmlPages` uses, so the count doesn't shift when a crawl ends. **It counts every page
+  the crawl parsed, Cloudflare's own `/cdn-cgi/` endpoints among them, which the analysis doesn't audit**, so it can be
+  more than the analysis's pages: the synthetic site serves one (`/cdn-cgi/l/email-protection`), so its seeded crawl
+  reads 156 against 155, and the 100k crawl 101,107 against 101,106; the garden crawl, which has none, 265 and 265.
+- **`pagesAnalyzed`** (E7) is the pages the last analysis audited, which its score covers: the analysis's own
+  `pagesAnalyzed` and the score's `covers.pages`, as they stood when it ran. **Beside the score, show this one**, not
+  `pageCount`. Null before the first analysis; a sidecar from before E7 doesn't send it.
 - **`status`** is one of:
 
   | Status | Meaning |
@@ -1932,7 +1939,7 @@ An export only reads the crawl.
 
   | `kind` | Writes | `format` | Takes |
   | --- | --- | --- | --- |
-  | `urls` | The URL grid | `csv`, `xlsx` | `columns`, `filters`, `search`, `sort` |
+  | `urls` | The URL grid | `csv`, `xlsx` | `columns`, `filters`, `search`, `sort`, and `linkEnds` (E7) as the grid takes it |
   | `links` | The links grid | `csv`, `xlsx` | The same, over the links grid's columns; one sort key |
   | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's four |
   | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's four, the check's own columns among them |
@@ -1940,6 +1947,8 @@ An export only reads the crawl.
   | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId` |
   | `workbook` | The spreadsheet of everything | `xlsx` | Nothing |
   | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples` |
+  | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
+  | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
 
 - **`columns`** are the file's columns, in the order given; without any, the grid's own (`url`; for `issueRows`,
   `url`, `detail` and `relatedUrl`; for `links`, `from.url`, `to.url`, `kind` and `text`). The id is a column only
@@ -1967,7 +1976,20 @@ A link's own columns have their titles ("Kind", "Anchor or alt text", "Links to 
 the URL grid's under "Source" or "Target": `from.url` is "Source URL", `to.statusCode` "Target status". The fixed
 kinds have fixed headers: `robotsBlocked` writes "Blocked URL", "Blocked by" ("A rule", "robots.txt couldn’t be read"
 or "No rule kept"), "Line", "Rule" and "Error"; `check` and the workbook's sheets write "Address", "Page title", "What
-was found" and "Other address".
+was found" and "Other address". The two lists (E7) write their screens' columns, in their cells' words:
+
+- `sitemaps`: "Sitemap", "Index" (Yes or No), "Listed by" (the index that lists it), "Found via" ("robots.txt",
+  "Crawl settings", "Default location", "Sitemap index", "Not known"), "Status" ("Read", "Read in part: its XML is
+  broken at line 17", "Couldn’t be read: 404 Not Found", "None there: 404 Not Found", "Left unread", "Not read yet",
+  "Never read", "Read, 11 of its 12 sitemaps"…), "Error" (what the crawl recorded), then the counts "Listed",
+  "Crawled", "Blocked by robots.txt", "Not crawled", "Indexable", "Non-indexable" and "Redirecting or broken". A count
+  is empty where the list shows a dash: a sitemap whose URLs aren't known, and an index until the crawl has read every
+  sitemap under it. "Crawled" is `fetched` less `robotsDisallowed`, and "Not crawled" `listed` less `fetched`. The rows
+  are the list's, in its order (the order the crawl found them), not the tree's: "Listed by" carries the tree.
+- `robotsOrigins`: "Origin", "This site" (Yes or No), "robots.txt" ("Read", "Read: empty", "Read: rules ignored",
+  "Missing: nothing refused", "Missing when last asked", "Couldn’t be read: URLs refused", "Couldn’t be read: ignored",
+  "No answer: crawled anyway", "No answer when last asked", "No answer: ignored", "None kept"), "Status", "Error",
+  "Blocked URLs", "Read" (a date, in the computer's own time) and "Size (bytes)", in the list's order.
 
 #### The files
 
