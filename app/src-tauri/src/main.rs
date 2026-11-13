@@ -60,6 +60,8 @@ fn main() {
             commands::settings_read,
             commands::settings_write,
             commands::reveal_crawl_file,
+            commands::reveal_export_file,
+            commands::open_export_file,
         ])
         .on_window_event(window::on_event)
         .setup({

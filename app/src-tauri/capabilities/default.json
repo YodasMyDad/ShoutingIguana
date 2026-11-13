@@ -21,6 +21,8 @@
     "allow-take-pending-open-files",
     "allow-settings-read",
     "allow-settings-write",
-    "allow-reveal-crawl-file"
+    "allow-reveal-crawl-file",
+    "allow-reveal-export-file",
+    "allow-open-export-file"
   ]
 }

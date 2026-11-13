@@ -125,4 +125,8 @@ export const ipc = {
   settingsWrite: (settings: string): Promise<void> => invoke('settings_write', { settings }),
   /** Shows a library crawl's file in Explorer or Finder. The shell finds the file from the crawl's id. */
   revealCrawlFile: (crawlId: string): Promise<void> => invoke('reveal_crawl_file', { crawlId }),
+  /** Shows a finished export's file in Explorer or Finder. The shell asks the engine where the export wrote it. */
+  revealExportFile: (exportId: string): Promise<void> => invoke('reveal_export_file', { exportId }),
+  /** Opens a finished export's file in the program the system gives its kind. Only a file an export wrote. */
+  openExportFile: (exportId: string): Promise<void> => invoke('open_export_file', { exportId }),
 };

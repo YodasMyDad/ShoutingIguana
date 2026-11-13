@@ -6,8 +6,8 @@ use std::collections::HashSet;
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
-use super::model::{CrawlItem, Ended, LiveStatus};
-use crate::tray::text::{checks_found, urls};
+use super::model::{CrawlItem, Ended, ExportJob, LiveStatus};
+use crate::tray::text::{checks_found, thousands, urls};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Notice {
@@ -74,6 +74,32 @@ pub fn interrupted<'a>(
 
 /// The library's status for a crawl whose sidecar stopped while it ran.
 const INTERRUPTED: &str = "interrupted";
+
+/// What to tell about an export that ended: saved, with its rows, or failed, with the engine's plain sentence. None
+/// while it runs, and for one cancelled: the user did that themselves.
+pub fn export_notice(job: &ExportJob) -> Option<Notice> {
+    let name = job.file_name();
+    match job.status.as_str() {
+        "done" => {
+            let rows = job.result.map(|result| result.rows).filter(|_| job.kind != "report");
+            let body = match rows {
+                Some(1) => format!("{name}: 1 row"),
+                Some(rows) => format!("{name}: {} rows", thousands(rows)),
+                None => name.to_owned(),
+            };
+            Some(Notice { title: "Export saved", body })
+        }
+        "failed" => {
+            let why = job.error.as_ref().map(|error| error.title.trim()).filter(|title| !title.is_empty());
+            let body = format!(
+                "{name}: {}. Nothing was saved.",
+                why.unwrap_or("it couldn't be written").trim_end_matches('.')
+            );
+            Some(Notice { title: "Export failed", body })
+        }
+        _ => None,
+    }
+}
 
 /// What identifies one ending of a crawl, so the same one is never told twice.
 pub fn ending_key(item: &CrawlItem) -> (String, Option<String>, Option<String>) {
@@ -228,5 +254,37 @@ mod tests {
     fn crawls_taken_over_or_interrupted_tell_nothing() {
         assert_eq!(notice(&ended("inUse", false, true), &item("inUse"), None), None);
         assert_eq!(notice(&ended("interrupted", false, true), &item("interrupted"), None), None);
+    }
+
+    #[test]
+    fn exports_tell_their_file_and_rows_once_ended() {
+        use crate::live::model::{ExportError, ExportResult};
+        let job = |status: &str, kind: &str| ExportJob {
+            export_id: "3f9a61c2d0b4e87a".into(),
+            kind: kind.into(),
+            path: r"C:\Users\me\example.com 2026-10-31 URLs.xlsx".into(),
+            status: status.into(),
+            ..ExportJob::default()
+        };
+        assert_eq!(export_notice(&job("running", "urls")), None);
+        assert_eq!(export_notice(&job("cancelled", "urls")), None);
+        let mut done = job("done", "urls");
+        done.result = Some(ExportResult { rows: 112_590 });
+        assert_eq!(
+            export_notice(&done),
+            Some(Notice { title: "Export saved", body: "example.com 2026-10-31 URLs.xlsx: 112,590 rows".into() })
+        );
+        let mut report = job("done", "report");
+        report.result = Some(ExportResult { rows: 0 });
+        assert_eq!(export_notice(&report).map(|notice| notice.body), Some("example.com 2026-10-31 URLs.xlsx".into()));
+        let mut failed = job("failed", "urls");
+        failed.error = Some(ExportError { title: "The disk is full.".into() });
+        assert_eq!(
+            export_notice(&failed),
+            Some(Notice {
+                title: "Export failed",
+                body: "example.com 2026-10-31 URLs.xlsx: The disk is full. Nothing was saved.".into()
+            })
+        );
     }
 }

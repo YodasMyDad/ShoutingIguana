@@ -37,6 +37,7 @@ pub fn start(app: AppHandle, shell: &Shell) {
         told: HashMap::new(),
         baselines: HashMap::new(),
         lost: HashSet::new(),
+        exports_told: HashSet::new(),
     };
     if let Err(error) = thread::Builder::new().name("live-events".to_owned()).spawn(move || follower.run()) {
         log::error!("Couldn't start the thread that follows the engine's events: {error}");
@@ -55,6 +56,9 @@ struct Follower {
     baselines: HashMap<String, Option<String>>,
     /// Crawls that were crawling when their sidecar went: told about once the next one says they were interrupted.
     lost: HashSet<String>,
+    /// Exports whose ending has been told (or seen in front of the window): a stream that connects again replays an
+    /// export's latest event, which must not be told twice.
+    exports_told: HashSet<String>,
 }
 
 impl Follower {
@@ -187,6 +191,7 @@ impl Follower {
                 let change = lock(&self.view).crawl(&crawl);
                 self.apply(connection, change);
             }
+            Event::Export(job) => self.export_ended(&job),
             Event::Other => {}
         }
     }
@@ -216,6 +221,23 @@ impl Follower {
             self.baselines.insert(id.to_owned(), item.analyzed_at.clone());
         }
         view.set_name(id, item.display_name())
+    }
+
+    /// An export that ended while the window was out of sight is told once: saved, or failed. The page's toast says it
+    /// when the window is in front; one cancelled was the user's own doing.
+    fn export_ended(&mut self, job: &model::ExportJob) {
+        let Some(notice) = notify::export_notice(job) else { return };
+        if !self.exports_told.insert(job.export_id.clone()) {
+            return;
+        }
+        if self.app.try_state::<Shell>().is_none_or(|shell| shell.is_quitting()) {
+            return;
+        }
+        if window::is_in_front(&self.app) {
+            log::debug!("No notification for \"{}\": the window is in front and says it itself", notice.title);
+            return;
+        }
+        notify::show(&self.app, notice.title, &notice.body);
     }
 
     /// A crawl left the live ones: tell the user if the window can't, once its outcome is settled.
