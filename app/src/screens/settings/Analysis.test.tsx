@@ -46,9 +46,7 @@ describe('the limits’ words', () => {
     expect(limitName('titleMaxLength')).toBe('Longest title');
     expect(limitName('someNewLimit')).toBe('Some new limit');
     expect(rangeWords(LIMITS[1]!)).toBe('From 1 to 10,000 characters. The engine’s is 60 characters.');
-    expect(rangeWords(LIMITS[2]!)).toBe(
-      'From 1 to 10,737,418,240 bytes (10 GB). The engine’s is 200 KB.',
-    );
+    expect(rangeWords(LIMITS[2]!)).toBe('From 1 to 10,737,418,240 bytes (10 GB). The engine’s is 200 KB.');
     expect(valueWords(1, 'words')).toBe('1 word');
   });
 
@@ -166,10 +164,10 @@ describe('Settings, Analysis', () => {
     const queryClient = await open();
     const invalidated: unknown[] = [];
     const invalidate = queryClient.invalidateQueries.bind(queryClient);
-    queryClient.invalidateQueries = ((filters, options) => {
+    queryClient.invalidateQueries = (filters, options) => {
       invalidated.push(filters);
       return invalidate(filters, options);
-    });
+    };
     const field = await screen.findByRole('textbox', { name: 'Longest title' });
     fireEvent.change(field, { target: { value: '70' } });
     await waitFor(

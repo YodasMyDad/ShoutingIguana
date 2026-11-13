@@ -57,7 +57,9 @@ describe('Settings, in each mode', () => {
     expect(sections()).toEqual(['General', 'Data folder', 'Updates', 'About']);
     const note = screen.getByText(/are Advanced settings/);
     // Only the sections there are, Analysis among them as the checks' limits.
-    expect(note).toHaveTextContent('Crawl defaults, the checks’ limits, shortcuts and diagnostics are Advanced settings.');
+    expect(note).toHaveTextContent(
+      'Crawl defaults, the checks’ limits, shortcuts and diagnostics are Advanced settings.',
+    );
     fireEvent.click(within(note).getByRole('button', { name: 'Show them in Advanced' }));
     expect(getSettings().mode).toBe('advanced');
     await waitFor(() => expect(screen.getByRole('link', { name: 'Crawl defaults' })).toHaveFocus());

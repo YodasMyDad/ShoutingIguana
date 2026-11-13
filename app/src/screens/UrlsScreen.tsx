@@ -37,6 +37,7 @@ import { usePagedRows } from '../grid/usePagedRows';
 import { ExportButton } from '../export/ExportButton';
 import { useExportCommand } from '../export/useExportCommand';
 import { urlExportColumns, urlGridOffer } from '../export/offers';
+import { linkEndsOf, linkEndsWords } from './urls/linkEnds';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
@@ -106,6 +107,9 @@ export function UrlsScreen() {
   const sort = useMemo(() => search.sort ?? [], [search.sort]);
   const filters = useMemo(() => search.filter ?? [], [search.filter]);
   const q = search.q;
+  // Narrowed to one end of a links view's links ("Show these pages in URLs" on Links): beside the filters, as one more.
+  const linkEnds = useMemo(() => linkEndsOf(search.links), [search.links]);
+  const endsPart = useMemo(() => (linkEnds ? { linkEnds } : {}), [linkEnds]);
 
   const item = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
@@ -122,17 +126,22 @@ export function UrlsScreen() {
   const queryColumns = useMemo(() => urlQueryColumns(shown), [shown]);
 
   const view = useMemo(
-    () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '' })}`,
-    [crawlId, sort, filters, q],
+    () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '', ends: linkEnds ?? null })}`,
+    [crawlId, sort, filters, q, linkEnds],
   );
   const queryKey = useMemo(
-    () => ['grid', 'urls', crawlId, { columns: queryColumns, sort, filters, q: q ?? '' }] as const,
-    [crawlId, queryColumns, sort, filters, q],
+    () =>
+      ['grid', 'urls', crawlId, { columns: queryColumns, sort, filters, q: q ?? '', ends: linkEnds ?? null }] as const,
+    [crawlId, queryColumns, sort, filters, q, linkEnds],
   );
   const fetchPage = useCallback(
     (offset: number, limit: number, signal: AbortSignal) =>
-      api.urls(crawlId, { columns: queryColumns, offset, limit, sort, filters, ...(q ? { search: q } : {}) }, signal),
-    [crawlId, queryColumns, sort, filters, q],
+      api.urls(
+        crawlId,
+        { columns: queryColumns, offset, limit, sort, filters, ...(q ? { search: q } : {}), ...endsPart },
+        signal,
+      ),
+    [crawlId, queryColumns, sort, filters, q, endsPart],
   );
   const rows = usePagedRows<UrlRow>({
     queryKey,
@@ -174,7 +183,10 @@ export function UrlsScreen() {
   // and nothing on the screen but an open menu shows it. While a menu is open a running crawl's refresh keeps its
   // counts fresh; closed, they're only marked stale, and read again on opening.
   const [openFacet, setOpenFacet] = useState<FacetId | null>(null);
-  const facetsQuery = useMemo(() => ({ filters: [...filters], ...(q ? { search: q } : {}) }), [filters, q]);
+  const facetsQuery = useMemo(
+    () => ({ filters: [...filters], ...(q ? { search: q } : {}), ...endsPart }),
+    [filters, q, endsPart],
+  );
   const facetsRead = useQuery({ ...urlGridFacetsQuery(crawlId, facetsQuery), enabled: openFacet !== null });
   const facets = useMemo(
     () =>
@@ -217,6 +229,17 @@ export function UrlsScreen() {
     },
     [navigate],
   );
+  /** The links view these URLs are one end of. */
+  const backToLinks = () => {
+    const links = search.links;
+    void navigate({
+      to: '/crawls/$crawl/links',
+      params: { crawl: crawlId },
+      search: { ...(links?.filter ? { filter: links.filter } : {}), ...(links?.q ? { q: links.q } : {}) },
+    });
+  };
+  /** The narrowing to the links' ends gone; the view's own filters, search and sort stay. */
+  const showEveryUrl = () => void navigate({ search: (previous) => ({ ...previous, links: undefined }) });
   /** Every URL again, in crawl order, with the columns as they are. */
   const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
   const setColumns = useCallback(
@@ -331,10 +354,18 @@ export function UrlsScreen() {
       (after, limit, signal) =>
         api.urls(
           crawlId,
-          { columns: [...asked], sort, filters, limit, ...(q ? { search: q } : {}), ...(after ? { after } : {}) },
+          {
+            columns: [...asked],
+            sort,
+            filters,
+            limit,
+            ...(q ? { search: q } : {}),
+            ...endsPart,
+            ...(after ? { after } : {}),
+          },
           signal,
         ),
-    [crawlId, sort, filters, q],
+    [crawlId, sort, filters, q, endsPart],
   );
   const copyPart = rowCount !== null && rowCount > MAX_COPY_ROWS;
   const copyUrlsTitle = copyPart
@@ -518,10 +549,10 @@ export function UrlsScreen() {
             rows: rowCount,
             catalogue: catalogue.data,
             viewName: saved.current?.name ?? null,
-            linkEnds: false,
+            linkEnds: linkEnds !== undefined,
           })
         : null,
-    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, saved.current],
+    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, saved.current, linkEnds],
     { group: 'URLs' },
   );
 
@@ -673,6 +704,25 @@ export function UrlsScreen() {
           />
         ))}
       </FilterBar>
+      {search.links ? (
+        <Banner
+          inset
+          role="none"
+          className="mx-6 mb-3"
+          actions={
+            <>
+              <Button size="sm" variant="ghost" onClick={backToLinks}>
+                Back to the links
+              </Button>
+              <Button size="sm" onClick={showEveryUrl}>
+                Show every URL
+              </Button>
+            </>
+          }
+        >
+          {linkEndsWords(search.links)}
+        </Banner>
+      ) : null}
       {catalogue.isError ? (
         <Banner
           inset

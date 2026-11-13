@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, Link2Off, PanelRight, RefreshCw } from 'lucide-react';
+import { Copy, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
@@ -39,7 +39,7 @@ import { ExportButton } from '../export/ExportButton';
 import { useExportCommand } from '../export/useExportCommand';
 import { linkExportColumns, linksOffer } from '../export/offers';
 import { useCommands, type Command } from '../keyboard/registry';
-import { formatCount, formatShownOf } from '../lib/format';
+import { formatCount, formatCountOf, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { useInspector } from '../routing/inspector';
 import { MAX_FILTERS } from '../routing/search';
@@ -421,6 +421,49 @@ export function LinksScreen() {
     [view, columns, editor, chooserGroups, hasRows, copying, copyPart, copyOneColumnTitle, clearView, navigate],
   );
 
+  // "Show these pages in URLs" (E6's link ends): the URL grid narrowed to the view's targets, or the pages its links
+  // are on, each once. How many is read as the menu opens: the pages take a pass over every link.
+  const [endsOpen, setEndsOpen] = useState(false);
+  const endsQuery = (end: 'from' | 'to') => ({
+    queryKey: ['crawl', crawlId, 'linkEnds', end, { filters, q: q ?? '' }],
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      api.linkEnds(crawlId, { end, filters: [...filters], ...(q ? { search: q } : {}), limit: 1 }, signal),
+    enabled: endsOpen && hasRows,
+    staleTime: crawling ? 0 : Number.POSITIVE_INFINITY,
+  });
+  const targetsCount = useQuery(endsQuery('to')).data?.total;
+  const sourcesCount = useQuery(endsQuery('from')).data?.total;
+  const showEnds = useCallback(
+    (end: 'from' | 'to') =>
+      void navigate({
+        to: '/crawls/$crawl/urls',
+        params: { crawl: crawlId },
+        search: { links: { end, ...(filters.length > 0 ? { filter: [...filters] } : {}), ...(q ? { q } : {}) } },
+      }),
+    [navigate, crawlId, filters, q],
+  );
+  useCommands(
+    (): Command[] => [
+      {
+        id: 'links.showTargets',
+        title: 'Show these links’ targets in URLs',
+        group: 'Links',
+        keywords: ['urls', 'targets', 'pages', 'link ends'],
+        enabled: () => hasRows,
+        run: () => showEnds('to'),
+      },
+      {
+        id: 'links.showSources',
+        title: 'Show the pages these links are on in URLs',
+        group: 'Links',
+        keywords: ['urls', 'sources', 'pages', 'link ends'],
+        enabled: () => hasRows,
+        run: () => showEnds('from'),
+      },
+    ],
+    [hasRows, showEnds],
+  );
+
   // Export (Ctrl+E): the view as it is when it's pressed, its columns, filters, search and sort.
   useExportCommand(
     () =>
@@ -542,6 +585,29 @@ export function LinksScreen() {
             <MenuItem command="links.copyTargets">{copyTargetsTitle}</MenuItem>
             <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
             <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
+          </DropdownMenu>
+          <DropdownMenu
+            align="end"
+            open={endsOpen}
+            onOpenChange={setEndsOpen}
+            trigger={
+              <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
+                Show in URLs
+              </Button>
+            }
+          >
+            <MenuItem
+              command="links.showTargets"
+              detail={targetsCount === undefined ? undefined : formatCountOf(targetsCount, 'URL')}
+            >
+              Their targets
+            </MenuItem>
+            <MenuItem
+              command="links.showSources"
+              detail={sourcesCount === undefined ? undefined : formatCountOf(sourcesCount, 'page')}
+            >
+              The pages they’re on
+            </MenuItem>
           </DropdownMenu>
           <ExportButton />
         </div>

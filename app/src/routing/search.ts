@@ -240,6 +240,17 @@ export function validateIssuesSearch(search: Record<string, unknown>): IssuesSea
   });
 }
 
+/**
+ * The URL grid narrowed to one end of a links view's links (E6's `linkEnds`): the targets (`to`) or the pages they're on
+ * (`from`) of the links that view's filters and search match. In the route as the links view's own words, so "back to
+ * the links" lands on the same view.
+ */
+export interface LinkEndsSearch {
+  end: 'from' | 'to';
+  filter?: GridFilter[] | undefined;
+  q?: string | undefined;
+}
+
 /** The URL and link grids. */
 export interface GridSearch {
   /** A column preset or saved view. */
@@ -250,6 +261,8 @@ export interface GridSearch {
   cols?: string[] | undefined;
   q?: string | undefined;
   inspect?: number | undefined;
+  /** The URL grid only: narrowed to one end of a links view's links. */
+  links?: LinkEndsSearch | undefined;
 }
 
 export function validateGridSearch(search: Record<string, unknown>): GridSearch {
@@ -260,7 +273,18 @@ export function validateGridSearch(search: Record<string, unknown>): GridSearch 
     cols: list<string>(search.cols, urlColumnName),
     q: text(search.q),
     inspect: positiveInteger(search.inspect),
+    links: parseLinkEnds(search.links),
   });
+}
+
+/** One end of a links view's links, as the route holds it; anything else gives none, and the grid every URL. */
+export function parseLinkEnds(value: unknown): LinkEndsSearch | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.end !== 'from' && record.end !== 'to') return undefined;
+  const filter = parseFilters(record.filter, linkColumnName);
+  const q = text(record.q);
+  return { end: record.end, ...(filter?.length ? { filter } : {}), ...(q ? { q } : {}) };
 }
 
 // ----------------------------------------------------------------------------------------------------------- Links
