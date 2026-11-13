@@ -102,6 +102,9 @@ describe('progress', () => {
   it('says how far it has got in rows, and nothing for the report', () => {
     expect(progressWords(job({ rowsWritten: 41_000, rowsExpected: 112_590 }))).toBe('41,000 of 112,590 URLs');
     expect(progressWords(job({ kind: 'links', rowsWritten: 1, rowsExpected: 1 }))).toBe('1 of 1 link');
+    // The two lists count what they list.
+    expect(progressWords(job({ kind: 'sitemaps', rowsWritten: 3, rowsExpected: 12 }))).toBe('3 of 12 sitemaps');
+    expect(progressWords(job({ kind: 'robotsOrigins', rowsWritten: 0, rowsExpected: 1 }))).toBe('0 of 1 origin');
     expect(progressWords(job())).toBeNull();
     expect(progressWords(job({ kind: 'report' }))).toBeNull();
   });

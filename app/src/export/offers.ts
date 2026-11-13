@@ -1,7 +1,7 @@
 // What each screen offers to export, built from what it shows (docs/v2-ui-ia.md, flow 5): a grid's own view as CSV or
 // Excel (its columns, filters, search and sort, exactly as its read takes them), a check, and on Overview and Issues
 // the report and the spreadsheet of everything. Pure: each screen hands in its state, and the tests hold every request.
-import type { CheckGroupRef, GridFilter, GridSort, RobotsBlockReason } from '../api/grids';
+import type { CheckGroupRef, GridFilter, GridSort, LinkEnds, RobotsBlockReason } from '../api/grids';
 import type { CrawlListItem } from '../api/types';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatCountOf } from '../lib/format';
@@ -114,27 +114,49 @@ function gridDescription(args: GridViewArgs, noun: [string, string]): string {
     : `${formatCountOf(args.rows, noun[0], noun[1])}: ${what}`;
 }
 
-/** URLs: the view, as CSV or Excel. A view narrowed to a links view's pages (`linkEnds`) the engine can't export. */
-export function urlGridOffer(args: GridViewArgs & { viewName: string | null; linkEnds: boolean }): ExportOffer {
+/** A view narrowed to a links view's ends, in its description and in its file's name. */
+const LINK_ENDS_WORDS: Record<LinkEnds['end'], { description: string; file: string }> = {
+  to: { description: 'only the URLs a links view’s links lead to', file: 'link targets' },
+  from: { description: 'only the pages a links view’s links are on', file: 'pages with the links' },
+};
+
+/**
+ * URLs: the view, as CSV or Excel. A view narrowed to a links view's pages or targets (`linkEnds`) is exported
+ * narrowed to them, as the grid reads it (E7), and its file's name says which.
+ */
+export function urlGridOffer(
+  args: GridViewArgs & { viewName: string | null; linkEnds: LinkEnds | undefined },
+): ExportOffer {
+  const ends = args.linkEnds;
+  const narrowed = ends ? LINK_ENDS_WORDS[ends.end] : null;
   const view: ExportChoice = {
     id: 'view',
     title: 'This view',
-    description: gridDescription(args, ['URL', 'URLs']),
+    description: narrowed
+      ? `${gridDescription(args, ['URL', 'URLs'])}, ${narrowed.description}`
+      : gridDescription(args, ['URL', 'URLs']),
     formats: ['csv', 'xlsx'],
-    fileView: args.viewName ? `URLs ${args.viewName}` : 'URLs',
+    fileView: [args.viewName ? `URLs ${args.viewName}` : 'URLs', narrowed?.file].filter(Boolean).join(' '),
     columnTitles: titlesOf(args.catalogue),
     sortedWhileCrawling: sortedWhileCrawling(args.crawling, args.sort),
-    unavailable: args.linkEnds
-      ? 'The engine can’t export a view narrowed to a links view’s pages yet. Export the links view itself from Links, or take its pages out of this view’s filters to export the rest.'
-      : null,
     build: ({ format, path, crawlOrder }) => ({
       kind: 'urls',
       format: format === 'xlsx' ? 'xlsx' : 'csv',
       path,
       ...gridQuery(args, crawlOrder),
+      ...(ends ? { linkEnds: linkEndsOf(ends) } : {}),
     }),
   };
   return { ...base(args.item, 'Export URLs', args.crawling), choices: [view] };
+}
+
+/** A links view's ends as the export's request takes them: the fields given, and only those. */
+function linkEndsOf(ends: LinkEnds): LinkEnds {
+  return {
+    end: ends.end,
+    ...(ends.filters && ends.filters.length > 0 ? { filters: [...ends.filters] } : {}),
+    ...(ends.search ? { search: ends.search } : {}),
+  };
 }
 
 /** Links: the view, as CSV or Excel. */
@@ -313,21 +335,54 @@ export function issuesOffer(args: {
   return { ...base(args.item, 'Export issues', args.crawling), choices: [...choices, ...files] };
 }
 
-/** A list the engine has no export for (the sitemaps, the robots.txt origins): said, with where an export is. */
-export function notExportableOffer(item: CrawlListItem, title: string, why: string): ExportOffer {
-  return {
-    ...base(item, title, false),
-    choices: [
-      {
-        id: 'view',
-        title: 'This list',
-        formats: ['csv'],
-        fileView: 'list',
-        unavailable: why,
-        build: () => {
-          throw new Error('This list has no export');
-        },
-      },
-    ],
+/**
+ * Sitemaps: the list, as CSV or Excel (E7): every sitemap the crawl looked for, in the order it found them, each with
+ * the index that lists it, how it was found, what became of it and its URLs counted, in the list's own words.
+ */
+export function sitemapsOffer(args: { item: CrawlListItem; crawling: boolean; rows: number | null }): ExportOffer {
+  const view: ExportChoice = {
+    id: 'view',
+    title: 'The list of sitemaps',
+    description:
+      args.rows === null
+        ? 'Every sitemap the crawl looked for, with what became of it and its URLs counted'
+        : `${formatCountOf(args.rows, 'sitemap')}: what became of each, and its URLs counted`,
+    formats: ['csv', 'xlsx'],
+    fileView: 'sitemaps',
+    build: ({ format, path }) => ({ kind: 'sitemaps', format: format === 'xlsx' ? 'xlsx' : 'csv', path }),
   };
+  return { ...base(args.item, 'Export sitemaps', args.crawling), choices: [view] };
+}
+
+/**
+ * robots.txt: the origins, as CSV or Excel (E7): each origin's answer, what it meant to the crawl and the URLs it
+ * blocked, in the list's order; the list's search and its filter (`blocked`) narrow it, as they narrow the list.
+ */
+export function robotsOriginsOffer(args: {
+  item: CrawlListItem;
+  crawling: boolean;
+  rows: number | null;
+  search?: string | undefined;
+  blocked?: boolean | undefined;
+}): ExportOffer {
+  const which = args.blocked === true ? ' that blocked a URL' : args.blocked === false ? ' that blocked nothing' : '';
+  const searched = args.search ? `, whose name has “${args.search}”` : '';
+  const view: ExportChoice = {
+    id: 'view',
+    title: 'The origins',
+    description:
+      args.rows === null
+        ? `Every origin the crawl asked for robots.txt${which}${searched}, with what its answer meant`
+        : `${formatCountOf(args.rows, 'origin')}${which}${searched}: what each answer meant, and the URLs it blocked`,
+    formats: ['csv', 'xlsx'],
+    fileView: `robots.txt origins${which}`,
+    build: ({ format, path }) => ({
+      kind: 'robotsOrigins',
+      format: format === 'xlsx' ? 'xlsx' : 'csv',
+      path,
+      ...(args.search ? { search: args.search } : {}),
+      ...(args.blocked !== undefined ? { blocked: args.blocked } : {}),
+    }),
+  };
+  return { ...base(args.item, 'Export robots.txt', args.crawling), choices: [view] };
 }

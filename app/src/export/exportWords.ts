@@ -79,6 +79,10 @@ export function rowNoun(kind: ExportKind): { one: string; many: string } {
       return { one: 'row', many: 'rows' };
     case 'report':
       return { one: 'page', many: 'pages' };
+    case 'sitemaps':
+      return { one: 'sitemap', many: 'sitemaps' };
+    case 'robotsOrigins':
+      return { one: 'origin', many: 'origins' };
   }
 }
 
@@ -101,6 +105,10 @@ export function kindTitle(kind: ExportKind): string {
       return 'Spreadsheet of everything';
     case 'report':
       return 'The report';
+    case 'sitemaps':
+      return 'The list of sitemaps';
+    case 'robotsOrigins':
+      return 'The robots.txt origins';
   }
 }
 

@@ -101,6 +101,99 @@ for (const format of ['CSV', 'Excel'] as const) {
   });
 }
 
+/** Ctrl+E on a screen, its dialog, a format and a path: the file once its toast says it's saved. */
+async function exportFrom(page: Page, title: string, format: 'CSV' | 'Excel', file: string) {
+  await page.keyboard.press('Control+e');
+  const box = dialog(page, title);
+  await expect(box).toBeVisible();
+  await box.getByRole('radio', { name: format }).check();
+  await box.getByRole('textbox', { name: 'Save as' }).fill(file);
+  await box.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(box).toBeHidden();
+  await expect(
+    toasts(page)
+      .locator('.si-export-toast')
+      .filter({ hasText: path.basename(file) })
+      .getByText('Saved', { exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
+  return format === 'CSV' ? readCsv(file) : (readXlsx(file)[0]?.rows ?? []);
+}
+
+test('exports the sitemaps and the robots.txt origins as their screens list them, row for row their reads', async ({
+  page,
+}) => {
+  await page.goto(`/crawls/${crawl}/sitemaps`);
+  await expect(page.getByRole('treegrid', { name: 'Sitemaps' }).getByRole('row').nth(1)).toBeVisible();
+  const [sitemapHeader = [], ...sitemapRows] = await exportFrom(
+    page,
+    'Export sitemaps',
+    'CSV',
+    path.join(folder, 'sitemaps.csv'),
+  );
+  expect(sitemapHeader).toEqual([
+    'Sitemap',
+    'Index',
+    'Listed by',
+    'Found via',
+    'Status',
+    'Error',
+    'Listed',
+    'Crawled',
+    'Blocked by robots.txt',
+    'Not crawled',
+    'Indexable',
+    'Non-indexable',
+    'Redirecting or broken',
+  ]);
+  const sitemaps = await read<{ sitemaps: { url: string }[] }>(`/api/crawls/${crawl}/sitemaps`);
+  expect(sitemapRows.map((row) => row[0])).toEqual(sitemaps.sitemaps.map((sitemap) => sitemap.url));
+
+  await page.goto(`/crawls/${crawl}/robots`);
+  await expect(page.getByRole('grid', { name: 'Origins' }).getByRole('row').nth(1)).toBeVisible();
+  const [originHeader = [], ...originRows] = await exportFrom(
+    page,
+    'Export robots.txt',
+    'Excel',
+    path.join(folder, 'origins.xlsx'),
+  );
+  expect(originHeader).toEqual([
+    'Origin',
+    'This site',
+    'robots.txt',
+    'Status',
+    'Error',
+    'Blocked URLs',
+    'Read',
+    'Size (bytes)',
+  ]);
+  const origins = await read<{ origins: { origin: string }[] }>(`/api/crawls/${crawl}/robots`, { limit: 1_000 });
+  expect(originRows.map((row) => row[0])).toEqual(origins.origins.map((origin) => origin.origin));
+});
+
+test('exports a URL view narrowed to a links view’s targets, row for row the grid’s', async ({ page }) => {
+  const links = { end: 'to' as const, filters: [{ column: 'kind', op: 'in', values: ['hyperlink'] }] };
+  await page.goto(
+    `/crawls/${crawl}/urls?links=${encodeURIComponent(JSON.stringify({ end: links.end, filter: links.filters }))}`,
+  );
+  await expect(page.getByRole('grid', { name: 'URLs' }).getByRole('row').nth(1)).toBeVisible();
+  const [, ...rows] = await exportFrom(page, 'Export URLs', 'CSV', path.join(folder, 'targets.csv'));
+  const expected: string[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const read500 = await read<UrlPage>(`/api/crawls/${crawl}/urls`, {
+      columns: ['url'],
+      linkEnds: links,
+      offset,
+      limit: 500,
+    });
+    expected.push(...read500.rows.map((row) => row.url));
+    if (expected.length >= read500.matching || read500.rows.length === 0) break;
+  }
+  const all = await read<UrlPage>(`/api/crawls/${crawl}/urls`, { columns: ['url'], limit: 1 });
+  expect(expected.length).toBeGreaterThan(0);
+  expect(expected.length).toBeLessThan(all.matching);
+  expect(rows.map((row) => row[0])).toEqual(expected);
+});
+
 test('says a refused path in the dialog, in the app’s words, and exports nothing', async ({ page }) => {
   await openView(page);
   await page.keyboard.press('Control+e');

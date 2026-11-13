@@ -12,7 +12,14 @@ import { ExportsInProgress } from './ExportsInProgress';
 import { ExportStore, type ExportMeta } from './exportStore';
 import { showExportToast } from './exportToasts';
 import { exportProblemWords } from './exportWords';
-import { crawlFileChoices, issuesOffer, notExportableOffer, urlExportColumns, urlGridOffer } from './offers';
+import {
+  crawlFileChoices,
+  issuesOffer,
+  robotsOriginsOffer,
+  sitemapsOffer,
+  urlExportColumns,
+  urlGridOffer,
+} from './offers';
 
 const meta = { title: 'Design system/Export' } satisfies Meta;
 export default meta;
@@ -28,7 +35,7 @@ const view = {
   search: 'rattan',
   rows: 264,
   viewName: null,
-  linkEnds: false,
+  linkEnds: undefined,
 };
 
 /** 200% zoom of a 1280x720 window, as the app's own zoom draws it. */
@@ -64,16 +71,19 @@ export const DialogNeverAnalysed = dialog({
     choices: crawlFileChoices({ ...item, analyzedAt: null }, true),
   },
 });
-/** A list the engine has no export for: where the export is instead. */
-export const DialogNotExportable = dialog({
-  offer: notExportableOffer(
-    item,
-    'Export sitemaps',
-    'The engine can’t export the list of sitemaps yet. Open a sitemap to export the URLs it lists.',
-  ),
+/** Sitemaps: the list itself, as the list shows it. */
+export const DialogSitemaps = dialog({ offer: sitemapsOffer({ item, crawling: false, rows: 12 }) });
+/** robots.txt: the origins, narrowed as the list is narrowed (here, those that blocked a URL, by a search). */
+export const DialogRobotsOrigins = dialog({
+  offer: robotsOriginsOffer({ item, crawling: false, rows: 3, search: 'garden', blocked: true }),
 });
-/** A view narrowed to a links view's pages, which the engine's export doesn't take. */
-export const DialogLinkEnds = dialog({ offer: urlGridOffer({ ...view, linkEnds: true }) });
+/** A view narrowed to a links view's targets: exported narrowed to them, and its file named for them. */
+export const DialogLinkEnds = dialog({
+  offer: urlGridOffer({
+    ...view,
+    linkEnds: { end: 'to', filters: [{ column: 'to.statusClass', op: 'in', values: ['4xx'] }] },
+  }),
+});
 /** Refused at once: another program has the file open. Said in the dialog, with what helps. */
 export const DialogRefusedFileInUse = dialog({
   offer: urlGridOffer(view),
