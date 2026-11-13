@@ -263,6 +263,9 @@ export function ExportDialog({ state }: { state: ExportDialogState }) {
                   setPath(event.target.value);
                   setPathEdited(true);
                   setRefusal(null);
+                  // A name typed with the other format's extension is that format: the engine writes what the name says.
+                  const typed = /\.(csv|xlsx)$/i.exec(event.target.value.trim())?.[1]?.toLowerCase();
+                  if ((typed === 'csv' || typed === 'xlsx') && choice?.formats.includes(typed)) setFormat(typed);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
