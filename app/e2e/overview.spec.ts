@@ -144,7 +144,20 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   // F7 pauses, from anywhere; the screen's banner carries Resume.
   await page.keyboard.press('F7');
   await expect(main(page).getByText('The crawl is paused.', { exact: false })).toBeVisible();
-  const paused = await crawled(page);
+  // The figure updates at most four times a second, and on a loaded machine its last update before the pause can
+  // land after the banner: take the paused count once two reads a second apart agree.
+  let paused = await crawled(page);
+  await expect
+    .poll(
+      async () => {
+        const now = await crawled(page);
+        const settled = now === paused;
+        paused = now;
+        return settled;
+      },
+      { intervals: [1_000], timeout: 15_000 },
+    )
+    .toBe(true);
   await page.emulateMedia({ colorScheme: 'dark' });
   await expectNoViolations(page);
   await page.emulateMedia({ colorScheme: 'light', forcedColors: 'active' });
