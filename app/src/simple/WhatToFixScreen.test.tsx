@@ -265,9 +265,19 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(router.state.location.pathname).toBe(`${FIX}/orphan-page`);
   });
 
+  it('a skipped check never states its fault as a fact of the site', async () => {
+    await open(`${FIX}/orphan-page`);
+    await problem('Pages in your sitemap that nothing links to');
+    expect(main().queryByText(/No page on your site links to these pages/)).toBeNull();
+  });
+
   it('a passed check says its good news', async () => {
     await open(`${FIX}/title-missing`);
     await problem('Every page has a title');
     expect(main().getByText('Nothing wrong')).toBeVisible();
+    // What it looks for, never what's wrong with pages it found nothing wrong with.
+    const looksFor = within(main().getByRole('region', { name: 'What it looks for' }));
+    expect(looksFor.getByText('Pages with no title')).toBeVisible();
+    expect(main().queryByText(/These pages have no title/)).toBeNull();
   });
 });
