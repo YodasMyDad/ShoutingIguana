@@ -1,5 +1,5 @@
 import { Columns3 } from 'lucide-react';
-import { useId, useRef, useState } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Popover } from '../ui/Popover';
@@ -35,6 +35,8 @@ export interface ColumnChooserProps {
   command?: string | undefined;
   /** There are no columns to choose from yet (their list isn't read): the button is there, and can't be pressed. */
   disabled?: boolean | undefined;
+  /** How the view shows its columns, under them ("Show full URLs"): options that apply at once, as a tick does. */
+  options?: ReactNode;
 }
 
 const sameColumns = (a: readonly string[], b: readonly string[]) =>
@@ -54,6 +56,7 @@ export function ColumnChooser({
   onOpenChange,
   command,
   disabled = false,
+  options,
 }: ColumnChooserProps) {
   const id = useId();
   const findRef = useRef<HTMLInputElement>(null);
@@ -114,6 +117,7 @@ export function ColumnChooser({
             ))
           )}
         </div>
+        {options ? <div className="flex flex-col gap-2 border-t border-border pt-3">{options}</div> : null}
         <div className="flex justify-end">
           <Button
             size="sm"

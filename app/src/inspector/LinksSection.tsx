@@ -25,6 +25,7 @@ import {
   chosenLinkKind,
   followWords,
   linkStatusWords,
+  linkRowKey,
   rememberLinkRow,
   rememberedLinkRow,
   type KindChoice,
@@ -255,6 +256,8 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
               if (row) walk(row.id);
             }}
             startRow={rememberedLinkRow(gridKey)}
+            // The cursor is on a link, not at a row number: a running crawl that adds links above it keeps it there.
+            rowKey={linkRowKey}
             onActiveRowChange={(row) => rememberLinkRow(gridKey, row)}
             // A crawl's refreshes update in place: the progress line is for a refresh the user asked for.
             busy={rows.isRefreshing && !crawling}

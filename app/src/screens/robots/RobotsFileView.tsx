@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { ArrowLeft, Copy, ExternalLink, FileX } from 'lucide-react';
+import { ArrowLeft, Copy, ExternalLink, FileX, ListFilter } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { api } from '../../api/client';
 import { isProblem, missingPlaceWords } from '../../api/errors';
@@ -15,6 +15,8 @@ import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { GridCore } from '../../grid/GridCore';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
+import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
+import { copyRowUrls, rowMenuLabel, useRowMenu } from '../../grid/rowMenuState';
 import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
@@ -24,7 +26,7 @@ import { useSourceViewer } from '../../inspector/sourceViewerLoader';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
 import { withRecorded } from '../../lib/failure';
-import { formatBytes, formatCountOf, formatExactTime, formatShownOf } from '../../lib/format';
+import { formatBytes, formatCount, formatCountOf, formatExactTime, formatShownOf } from '../../lib/format';
 import { useInspector } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
 import { Banner } from '../../ui/Banner';
@@ -35,10 +37,12 @@ import { FilterChip } from '../../ui/FilterChip';
 import { Icon } from '../../ui/Icon';
 import { IconButton } from '../../ui/IconButton';
 import { LiveBadge } from '../../ui/LiveBadge';
+import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { GridHeader, ResultCount, SectionHeader } from '../../ui/PageHeader';
 import { RelativeTime } from '../../ui/RelativeTime';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
+import { urlDisplay } from '../../ui/urlText';
 import { copyUrls } from '../issues/copyUrls';
 import { blockedUrlsReader } from './copyBlocked';
 import {
@@ -473,6 +477,7 @@ function BlockedUrls({
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
   const inspector = useInspector();
+  const rowMenu = useRowMenu<RobotsBlockedUrl>();
   const query = useMemo(() => blockedQueryOf(origin, narrowing), [origin, narrowing]);
   const queryKey = useMemo(() => robotsKeys.blocked(crawlId, query), [crawlId, query]);
   const fetchPage = useCallback(
@@ -481,6 +486,8 @@ function BlockedUrls({
     [crawlId, query],
   );
   const rows = usePagedRows<RobotsBlockedUrl>({ queryKey, fetchPage, rowHeight });
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
 
   // The list is read again each second while a crawl runs, and says how many URLs the origin blocked in all. The
   // file says the same, with each line's share: when the two differ the file is behind, and is read again, once.
@@ -633,6 +640,7 @@ function BlockedUrls({
             onCursor(row);
             if (row && inspecting) inspector.open(row.id);
           }}
+          onContextMenu={rowMenu.onContextMenu}
           busy={rows.isRefreshing && !crawl.crawling}
           emptyState={
             narrowing.by === 'none' ? (
@@ -654,6 +662,35 @@ function BlockedUrls({
           className="mx-2 mb-2 flex-1 rounded-md border border-border"
         />
       )}
+      <RowMenu
+        state={rowMenu.state}
+        onOpenChange={rowMenu.onOpenChange}
+        label={rowMenuLabel(
+          rowMenu.state?.menu.indices.length ?? 1,
+          menuRow ? urlDisplay(menuRow.url, origin).shown : undefined,
+          ['URL', 'URLs'],
+        )}
+      >
+        <UrlRowItems
+          count={rowMenu.state?.menu.indices.length ?? 1}
+          url={menuRow?.url}
+          onInspect={() => {
+            if (menuRow) inspector.open(menuRow.id);
+          }}
+          onCopyUrls={() => {
+            if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row.url);
+          }}
+          onCopyRows={() => void rowMenu.state?.menu.copy()}
+        />
+        {menuRow?.reason === 'rule' && menuRow.line !== null ? (
+          <>
+            <MenuSeparator />
+            <MenuItem icon={ListFilter} onSelect={() => onNarrow({ by: 'line', line: menuRow.line ?? 1 })}>
+              {`List what line ${formatCount(menuRow.line)} blocked`}
+            </MenuItem>
+          </>
+        ) : null}
+      </RowMenu>
       {file?.fetchedAt ? <span className="sr-only">Read {formatExactTime(file.fetchedAt)}</span> : null}
     </div>
   );

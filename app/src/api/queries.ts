@@ -81,6 +81,11 @@ export const queryKeys = {
    * refresh moves the counts with the rows, and whatever changes the crawl refreshes both.
    */
   linkFacets: (id: string, query: LinkFacetsQuery) => ['grid', 'linkFacets', id, query] as const,
+  /**
+   * The URL grid's facets, among the grids' reads: while a facet menu is open a running crawl's refresh keeps its
+   * counts fresh, and with every menu closed (the query disabled) it only marks them stale.
+   */
+  urlGridFacets: (id: string, query: FacetsQuery) => ['grid', 'urlFacets', id, query] as const,
 };
 
 /** Every page of every grid of one crawl: what a change to the crawl makes stale. */
@@ -172,6 +177,14 @@ export const historyQuery = (id: string) =>
 export const urlFacetsQuery = (id: string, query: FacetsQuery) =>
   queryOptions({
     queryKey: queryKeys.urlFacets(id, query),
+    queryFn: ({ signal }) => api.urlFacets(id, query, signal),
+    staleTime: Infinity,
+  });
+
+/** The URL grid's facets, read while one of its menus is open (`queryKeys.urlGridFacets`). */
+export const urlGridFacetsQuery = (id: string, query: FacetsQuery) =>
+  queryOptions({
+    queryKey: queryKeys.urlGridFacets(id, query),
     queryFn: ({ signal }) => api.urlFacets(id, query, signal),
     staleTime: Infinity,
   });

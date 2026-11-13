@@ -5,6 +5,7 @@ import type { GridFilter, LinkRow } from '../../api/grids';
 import { LINK_COLUMNS, answerLinkFacets, answerLinkQuery } from '../../api/mock/linkGrid';
 import { filterSentences } from '../../grid/filterSentence';
 import { LINKS_COUNTS, testLinkRows } from '../../test/linksSidecar';
+import { urlStatusWords } from '../urls/urlColumns';
 import { FACET_TITLES, buildFacets, facetValueWords, withFacetValue } from './facets';
 import {
   DEFAULT_LINK_COLUMNS,
@@ -422,6 +423,7 @@ describe('the links’ columns', () => {
       'to.statusCode',
       'to.outcome',
       'to.fetched',
+      'to.statusClass',
     ]);
     // Every column asked for is one the engine has.
     const answer = answerLinkQuery(
@@ -436,10 +438,13 @@ describe('the links’ columns', () => {
     const row = (to: number) => rows.find((candidate) => candidate['to.id'] === to)!;
     expect(endStatusWords(row(4), 'to')).toBe('404');
     expect(endStatusWords(row(6), 'to')).toBe('Blocked by robots.txt');
-    expect(endStatusWords(row(7), 'to')).toBe('Not fetched');
+    // In the URL grid's words for the same URL: one helper for both.
+    expect(endStatusWords(row(7), 'to')).toBe('Not crawled');
+    expect(endStatusWords(row(7), 'to', true)).toBe('Not crawled so far');
     expect(endStatusWords({ id: 1, 'to.statusCode': null, 'to.outcome': null, 'to.fetched': true }, 'to')).toBe(
-      'No status',
+      urlStatusWords({ id: 1, statusCode: null, outcome: null, fetched: true }, false),
     );
+    expect(endStatusWords({ id: 1, 'to.statusCode': null, 'to.statusClass': 'noResponse' }, 'to')).toBe('No response');
     expect(
       endStatusWords({ id: 1, 'to.statusCode': null, 'to.outcome': 'notChecked', 'to.fetched': false }, 'to'),
     ).toBe('Not checked');

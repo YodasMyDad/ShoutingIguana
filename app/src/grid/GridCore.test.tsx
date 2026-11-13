@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { announce } from '../feedback/announce';
 import { notifyError } from '../feedback/notify';
 import { commands } from '../keyboard/registry';
-import { GridCore } from './GridCore';
+import { GridCore, type GridMenuContext } from './GridCore';
 import type { RowWindowModel } from './rowWindow';
 import type { GridColumn } from './types';
 
@@ -678,7 +678,7 @@ describe('GridCore as a tree', () => {
     const header = screen.getByRole('columnheader', { name: 'Name' });
     expect(header).toHaveAttribute('aria-sort', 'ascending');
     fireEvent.click(screen.getByRole('button', { name: 'Size' }));
-    expect(sort).toHaveBeenCalledWith('size', false);
+    expect(sort).toHaveBeenCalledWith('size', false, false);
   });
 });
 
@@ -695,12 +695,12 @@ describe('GridCore with columns that sort', () => {
     expect(activeCell()).toHaveAttribute('role', 'columnheader');
     expect(activeCell()).toHaveTextContent('URL');
     fireEvent.keyDown(grid, { key: 'Enter' });
-    expect(onSort).toHaveBeenLastCalledWith('url', true);
+    expect(onSort).toHaveBeenLastCalledWith('url', true, false);
     expect(onActivate).not.toHaveBeenCalled();
     fireEvent.keyDown(grid, { key: 'ArrowRight' });
     expect(activeCell()).toHaveTextContent('Status');
     fireEvent.keyDown(grid, { key: ' ' });
-    expect(onSort).toHaveBeenLastCalledWith('status', true);
+    expect(onSort).toHaveBeenLastCalledWith('status', true, false);
     // Space sorted: it selected no row.
     expect(grid.querySelectorAll('[aria-selected="true"]')).toHaveLength(0);
     fireEvent.keyDown(grid, { key: 'ArrowDown' });
@@ -729,7 +729,7 @@ describe('GridCore with columns that sort', () => {
     fireEvent.mouseDown(button);
     fireEvent.click(button);
     expect(grid).toHaveFocus();
-    expect(onSort).toHaveBeenCalledWith('status', true);
+    expect(onSort).toHaveBeenCalledWith('status', true, false);
     expect(activeCell()).toHaveTextContent('Status');
   });
 
@@ -807,7 +807,7 @@ describe('GridCore with columns that sort', () => {
       // The next header sorts, and says nothing more.
       fireEvent.keyDown(grid, { key: 'ArrowRight' });
       fireEvent.keyDown(grid, { key: 'Enter' });
-      expect(onSort).toHaveBeenCalledWith('status', true);
+      expect(onSort).toHaveBeenCalledWith('status', true, false);
       expect(announce).toHaveBeenCalledTimes(2);
     });
 
@@ -842,5 +842,81 @@ describe('GridCore with columns that sort', () => {
         vi.useRealTimers();
       }
     });
+  });
+});
+
+describe('GridCore with a sort of several keys', () => {
+  const sortable: GridColumn<Row>[] = columns.map((column) => ({ ...column, sortable: true }));
+
+  it('adds a key with Shift+Enter on a header, and Shift+click', () => {
+    const onSort = vi.fn();
+    const { grid } = setup({ columns: sortable, onSort });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    fireEvent.keyDown(grid, { key: 'Enter', shiftKey: true });
+    expect(onSort).toHaveBeenLastCalledWith('url', true, true);
+    fireEvent.click(screen.getByRole('button', { name: 'Status' }), { shiftKey: true });
+    expect(onSort).toHaveBeenLastCalledWith('status', true, true);
+  });
+
+  it('marks the first key with aria-sort, and says the others’ places in words', () => {
+    setup({
+      columns: [
+        { ...sortable[0]!, sort: 'descending', sortOrder: 1 },
+        { ...sortable[1]!, sort: 'ascending', sortOrder: 2 },
+      ],
+      onSort: vi.fn(),
+    });
+    const [url, status] = screen.getAllByRole('columnheader');
+    expect(url).toHaveAttribute('aria-sort', 'descending');
+    expect(status).not.toHaveAttribute('aria-sort');
+    expect(status).toHaveTextContent('Status2, sorted second, ascending');
+  });
+});
+
+describe('GridCore’s row menu', () => {
+  it('is for the selection the row is in, else the row, and copies those rows', async () => {
+    const onContextMenu = vi.fn();
+    const { grid, writeText } = setup({ onContextMenu });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(grid, { key: 'F10', shiftKey: true });
+    const menu = onContextMenu.mock.lastCall?.[3] as GridMenuContext<Row>;
+    expect(onContextMenu.mock.lastCall?.slice(0, 2)).toEqual([1, 0]);
+    expect(menu.indices).toEqual([0, 1]);
+    expect((await menu.rows()).map((row) => row?.id)).toEqual([0, 1]);
+    await act(() => menu.copy());
+    expect(writeText).toHaveBeenLastCalledWith(
+      'URL\tStatus\r\nhttps://example.com/0\t404\r\nhttps://example.com/1\t200',
+    );
+    // A right-click outside the selection makes that row the selection, and the menu is its.
+    const cell = grid.querySelector('[data-row="5"][data-col="1"]')!;
+    fireEvent.contextMenu(cell);
+    expect((onContextMenu.mock.lastCall?.[3] as GridMenuContext<Row>).indices).toEqual([5]);
+  });
+
+  it('keeps the browser’s own menu away from a grid whose rows have one', () => {
+    setup({ onContextMenu: vi.fn() });
+    const grid = screen.getByRole('grid', { name: 'URLs' });
+    expect(fireEvent.contextMenu(grid)).toBe(false);
+  });
+});
+
+describe('GridCore’s row menu from a right-click inside the selection', () => {
+  it('keeps the selection and moves the cursor to the row clicked, telling the move', () => {
+    const onContextMenu = vi.fn();
+    const onActiveRowChange = vi.fn();
+    const { grid, activeCell } = setup({ onContextMenu, onActiveRowChange });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(grid, { key: 'ArrowDown', shiftKey: true });
+    expect(activeCell()?.closest('[role="row"]')).toHaveAttribute('aria-rowindex', '4');
+    onActiveRowChange.mockClear();
+    fireEvent.contextMenu(grid.querySelector('[data-row="0"][data-col="1"]')!);
+    expect((onContextMenu.mock.lastCall?.[3] as GridMenuContext<Row>).indices).toEqual([0, 1, 2]);
+    expect(grid.querySelectorAll('[role="row"][aria-selected="true"]')).toHaveLength(3);
+    // The cursor is on the row the menu is for: with the inspector open, it follows it there.
+    expect(activeCell()?.closest('[role="row"]')).toHaveAttribute('aria-rowindex', '2');
+    expect(onActiveRowChange).toHaveBeenLastCalledWith(0);
   });
 });
