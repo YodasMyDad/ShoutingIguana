@@ -1,5 +1,7 @@
 // Settings in each mode (docs/v2-ui-simple.md, Settings in each mode): every section, Simple's four and its note.
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from '../app/queryClient';
 import type { Mode } from '../mode/mode';
 import { AT_200_PERCENT, ScreenApp, freshStory, ownSidecar } from '../test/ScreenStory';
 import { json, problem, standardRoutes, type FakeRoute } from '../test/fakeSidecar';
@@ -86,9 +88,11 @@ export const AnalysisRefused: Story = {
       ]),
   ],
   render: () => (
-    <div className="max-w-(--form-max) p-6">
-      <LimitsForm settings={analysisSettingsOf({})} initialDraft={{ titleMaxLength: '20' }} />
-    </div>
+    <QueryClientProvider client={createQueryClient()}>
+      <div className="max-w-(--form-max) p-6">
+        <LimitsForm settings={analysisSettingsOf({})} initialDraft={{ titleMaxLength: '20' }} />
+      </div>
+    </QueryClientProvider>
   ),
 };
 /** Limits changed from the engine's: each with Put back. */
