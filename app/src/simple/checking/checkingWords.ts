@@ -1,0 +1,251 @@
+// Checking a site in Simple's words (docs/v2-ui-simple.md, "While it checks the site"): what's in the way, said
+// plainly with what to do about it; how long is left, as a floor; and the analysis's phases. Pure.
+import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait } from '../../api/types';
+import type { SettingFocus } from '../../routing/search';
+import { formatCount, formatCountOf } from '../../lib/format';
+
+/** What a plain alert offers. Each lands where Advanced's alert does; one to an Advanced-only screen says so. */
+export type SimpleAlertAction =
+  /** The crawl's settings (Advanced only), on one setting. */
+  | { kind: 'crawlSettings'; label: string; focus: SettingFocus }
+  /** New crawl, from another address: in Simple it's Check a website. */
+  | { kind: 'newCrawl'; label: string; url: string }
+  /** Sitemaps (Advanced only), on the sitemap the alert is about. */
+  | { kind: 'sitemaps'; label: string; url?: string }
+  /** Text to copy: what to tell whoever runs the site. */
+  | { kind: 'copy'; label: string; text: string }
+  /** The top bar's Stop, here too. */
+  | { kind: 'stop'; label: string }
+  | { kind: 'continue'; label: string };
+
+export interface SimpleAlert {
+  /** One of each kind is shown: the slowdown, the block, robots.txt, the site down. */
+  key: string;
+  level: AlertLevel;
+  text: string;
+  actions: SimpleAlertAction[];
+}
+
+/** What gives a site's alert its kind: a wait and an alert of one kind say the same thing, so it's said once. */
+type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'note';
+
+const SLOW = 'The site is answering slowly, so the check has slowed down to match. It will take longer.';
+const DELAY = 'The site asks visitors like this one to go slowly, so the check waits between pages.';
+const ROBOTS =
+  'The site’s rules file for search engines isn’t answering, so the check can’t tell where it may go. It’s waiting, and will try again.';
+const DOWN = 'The site has stopped answering. The check is waiting, and will carry on by itself when it’s back.';
+const STOP: SimpleAlertAction = { kind: 'stop', label: 'Stop' };
+
+/** "example.org", from an address: the host, without "www.". */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '');
+  } catch {
+    return url;
+  }
+}
+
+/** What to send whoever runs a site that turns the check away: what happened, and what would let it in. */
+export function blockedMessage(site: string, pages: number | null): string {
+  return [
+    `I checked ${site} with Shouting Iguana, a site checker that reads pages the way a search engine does.`,
+    `The site’s security turned it away${pages === null ? '' : ` after ${formatCountOf(pages, 'page')}`}, taking it for a robot.`,
+    'Could you let it through the firewall or rate limit while I check the site, or tell me what it needs to send to be let in?',
+  ].join(' ');
+}
+
+function alertWords(
+  alert: AlertEvent,
+  { site, pages }: { site: string; pages: number | null },
+): { kind: Kind; level: AlertLevel; text: string; actions: SimpleAlertAction[] } | null {
+  switch (alert.code) {
+    case 'blocked':
+    case 'mostly-forbidden':
+      return {
+        kind: 'blocked',
+        level: 'error',
+        text: `The site is turning the check away: its security takes it for a robot.${
+          pages === null ? '' : ` ${formatCountOf(pages, 'page')} ${pages === 1 ? 'was' : 'were'} read first.`
+        }`,
+        actions: [
+          { kind: 'crawlSettings', label: 'Continue more gently (Polite), in Advanced', focus: 'speed' },
+          { kind: 'copy', label: 'What to tell whoever runs the site', text: blockedMessage(site, pages) },
+          { kind: 'crawlSettings', label: 'More ways in Advanced', focus: 'headers' },
+        ],
+      };
+    case 'start-redirects-away': {
+      const url = alert.data?.url;
+      if (!url) return { kind: 'away', level: 'warning', text: 'This address forwards to another site.', actions: [] };
+      const host = hostOf(url);
+      return {
+        kind: 'away',
+        level: 'warning',
+        text: `This address forwards to another site, ${host}.`,
+        actions: [{ kind: 'newCrawl', label: `Check ${host} instead`, url }],
+      };
+    }
+    case 'robots-unreachable':
+      return { kind: 'robots', level: 'warning', text: ROBOTS, actions: [STOP] };
+    case 'site-unreachable':
+      return { kind: 'down', level: 'warning', text: DOWN, actions: [STOP] };
+    case 'site-down':
+      return {
+        kind: 'stopped',
+        level: 'error',
+        text: 'The site stopped answering for too long, so the check stopped. It can carry on from where it stopped once the site is back.',
+        actions: [{ kind: 'continue', label: 'Continue checking' }],
+      };
+    case 'sitemaps-failed':
+    case 'sitemaps-not-read': {
+      const url = alert.code === 'sitemaps-not-read' ? alert.data?.url : undefined;
+      return {
+        kind: 'sitemaps',
+        level: 'info',
+        text: 'The site’s sitemap, its list of pages for search engines, couldn’t be read. The checks that compare pages with it may not run.',
+        actions: [{ kind: 'sitemaps', label: 'See it in Advanced', ...(url ? { url } : {}) }],
+      };
+    }
+    case 'sitemaps':
+      // Good news, not something in the way.
+      return null;
+    default:
+      // A code from a newer engine: its own words, which it writes for people.
+      return { kind: 'note', level: alert.level, text: alert.message, actions: [] };
+  }
+}
+
+function waitWords(wait: CrawlWait): { kind: Kind; text: string; actions: SimpleAlertAction[] } | null {
+  switch (wait.reason) {
+    case 'backoff':
+    case 'heldBack':
+      return { kind: 'slow', text: SLOW, actions: [] };
+    case 'crawlDelay':
+      return { kind: 'delay', text: DELAY, actions: [] };
+    case 'siteDown':
+      return { kind: 'down', text: DOWN, actions: [STOP] };
+    case 'robotsTxtCoolDown':
+      return { kind: 'robots', text: ROBOTS, actions: [STOP] };
+    // Reading robots.txt first is how every check starts, and other sites' rules hold nothing of this one's up.
+    case 'robotsTxt':
+    case 'otherSitesRobotsTxt':
+      return null;
+  }
+}
+
+/** An alert's time as an instant, never as text (a time without its trailing zeros sorts wrongly as text). */
+const instant = (iso: string) => {
+  const at = Date.parse(iso);
+  return Number.isNaN(at) ? 0 : at;
+};
+
+/**
+ * What's in the way now, in plain words: the alerts of this run (an earlier run's block or outage isn't in the way of
+ * this one), newest first, then what holds the check up at this moment (the progress's waits). One of each kind: a
+ * site that stopped answering is one line, whether an alert or a wait said so.
+ */
+export function inTheWay({
+  alerts,
+  waits,
+  runStartedAt,
+  site,
+  pages,
+}: {
+  alerts: readonly AlertEvent[];
+  waits: readonly CrawlWait[];
+  /** When this run began; alerts before it are an earlier run's. Null when it isn't known: then every alert counts. */
+  runStartedAt: string | null;
+  site: string;
+  pages: number | null;
+}): SimpleAlert[] {
+  const from = runStartedAt === null ? null : instant(runStartedAt);
+  const seen = new Set<Kind>();
+  const entries: SimpleAlert[] = [];
+  const newestFirst = [...alerts]
+    .filter((alert) => from === null || instant(alert.at) >= from)
+    .sort((a, b) => instant(b.at) - instant(a.at) || (b.id ?? 0) - (a.id ?? 0));
+  for (const alert of newestFirst) {
+    const words = alertWords(alert, { site, pages });
+    if (!words || (words.kind !== 'note' && seen.has(words.kind))) continue;
+    seen.add(words.kind);
+    entries.push({ key: `${words.kind}:${alert.id ?? alert.code}@${alert.at}`, ...words });
+  }
+  for (const wait of waits) {
+    const words = waitWords(wait);
+    if (!words || seen.has(words.kind)) continue;
+    seen.add(words.kind);
+    entries.push({ key: `wait:${words.kind}`, level: words.kind === 'down' ? 'warning' : 'info', ...words });
+  }
+  return entries;
+}
+
+// -------------------------------------------------------------------------------------------------- Time left
+
+/** "12 minutes", "1 hour and 5 minutes", "2 hours". */
+export function minutesInWords(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const h = hours === 0 ? '' : `${formatCount(hours)} ${hours === 1 ? 'hour' : 'hours'}`;
+  const m = minutes === 0 ? '' : `${formatCount(minutes)} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  return h && m ? `${h} and ${m}` : h || m;
+}
+
+export interface TimeLeftWords {
+  /** In bold: "At least 12 minutes to go." */
+  lead: string;
+  /** After it: "It's still finding new pages, so this can grow. It's reading about 2 addresses a second." */
+  rest: string;
+}
+
+/**
+ * How long is left, said as a floor (docs/v2-ui-simple.md): what is still to check over the current pace. The total
+ * isn't known until the end, as the check finds more as it reads, so there's no percentage and no "about".
+ */
+export function timeLeftWords({
+  status,
+  queued,
+  urlsPerSecond,
+  atLimit,
+}: {
+  status: CrawlStatus | null;
+  queued: number | null | undefined;
+  urlsPerSecond: number | null | undefined;
+  /** It has read as many addresses as its limit allows. */
+  atLimit: boolean;
+}): TimeLeftWords {
+  if (status === 'paused') return { lead: 'Paused.', rest: 'The time left starts again when you resume the check.' };
+  if (status === 'stopping') return { lead: 'Stopping.', rest: 'The pages on their way are finishing.' };
+  if (atLimit) return { lead: 'Nearly done.', rest: 'It has read as many addresses as its limit allows.' };
+  const rate = urlsPerSecond ?? 0;
+  if (queued === null || queued === undefined || rate <= 0) {
+    return { lead: 'Working out how long it will take.', rest: 'It needs a few seconds of reading to tell.' };
+  }
+  const reading = `It’s reading about ${formatCount(Math.max(1, Math.round(rate)))} ${Math.round(rate) <= 1 ? 'address' : 'addresses'} a second.`;
+  if (queued === 0) return { lead: 'Nearly done.', rest: `The last addresses are being read. ${reading}` };
+  const minutes = Math.floor(queued / rate / 60);
+  const grow = 'It’s still finding new pages, so this can grow.';
+  return minutes < 1
+    ? { lead: 'Under a minute for what it has found so far.', rest: `${grow} ${reading}` }
+    : { lead: `At least ${minutesInWords(minutes)} to go.`, rest: `${grow} ${reading}` };
+}
+
+// ------------------------------------------------------------------------------------------- Working it out
+
+const SIMPLE_PHASES: Record<string, { words: string; unit: readonly [string, string] | null }> = {
+  reading: { words: 'Reading what it found', unit: ['address', 'addresses'] },
+  pageRules: { words: 'Checking each page', unit: ['page', 'pages'] },
+  siteRules: { words: 'Checking across the pages', unit: ['check', 'checks'] },
+  urlSummary: { words: 'Summing up each address', unit: ['address', 'addresses'] },
+  writing: { words: 'Saving the results', unit: null },
+};
+
+/** The analysis's phase in Simple's words: "Checking each page"; "Working out the results" for one this app doesn't know. */
+export function simplePhaseWords(phase: string | null): string {
+  return (phase ? SIMPLE_PHASES[phase]?.words : undefined) ?? 'Working out the results';
+}
+
+/** "1,204 of 4,521 pages", or null where the phase counts nothing worth saying. */
+export function simplePhaseProgress(event: { phase: string; done: number; total: number } | null): string | null {
+  const unit = event ? SIMPLE_PHASES[event.phase]?.unit : null;
+  if (!event || !unit || event.total <= 0) return null;
+  return `${formatCount(event.done)} of ${formatCount(event.total)} ${event.total === 1 ? unit[0] : unit[1]}`;
+}

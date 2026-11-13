@@ -140,6 +140,8 @@
   --container-content: 1136px;
   /* Issues stacks its checks list over the selected check in a main area narrower than this (200% zoom at 1280 px). */
   --container-split: 880px;
+  /* Simple's Your sites in a card narrower than this (200% zoom): a row's score and what to fix go under its name. */
+  --container-sites: 640px;
   /*
     A top bar narrower than these (200% zoom) gives its crawl controls' room to where you are: their keys go first,
     then their words (still their names), leaving the icons.
@@ -429,6 +431,9 @@
   --topbar-site-min: 112px; /* how short it's cut, the bar short of room, before it goes */
   --topbar-section-min: 72px; /* the section you're on, cut as short as this and no shorter, before it goes */
   --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
+  /* Simple's Your sites: the site, its score, what to fix, when, and the row's action. */
+  --site-row-columns: minmax(0, 1fr) minmax(0, 152px) minmax(0, 208px) minmax(0, 136px) auto;
+  --site-row-columns-narrow: minmax(0, 1fr) auto; /* the same at 200% zoom: the score and the fixes under the site */
   --library-site-min: 144px; /* Home's Site column never gives up more of its room than this */
   --settings-nav-width: 192px;
   --choice-card-min: 200px; /* a choice card's least width (the speed presets): narrower, they stack */
