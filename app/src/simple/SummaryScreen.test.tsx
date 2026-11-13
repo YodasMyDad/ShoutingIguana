@@ -306,6 +306,14 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     ).toBeVisible();
   });
 
+  it('never analysed: a link to the score’s breakdown opens nothing, as there’s no score', async () => {
+    await open('not-analyzed', gardenItem({ ...NEVER }), `${CRAWL}/overview?score=1`);
+    await site();
+    expect(await main().findByRole('heading', { name: 'No score yet' })).toBeVisible();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByText('Reading the score…')).toBeNull();
+  });
+
   it('out of date: a banner with its reason and Update the results; the score stays', async () => {
     await open({ ...GARDEN_ANALYSIS, outOfDate: true, outOfDateReasons: ['engineChanged'] });
     await site();

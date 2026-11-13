@@ -202,7 +202,8 @@ function Summary({
         {body}
         {item && !loading && item.pageCount > 0 ? <FactsLine item={item} analysis={analysis.data} /> : null}
       </div>
-      <ScoreBreakdownFromRoute crawlId={crawlId} />
+      {/* Only over results: a check never worked out has no score to break down (Advanced's Overview does the same). */}
+      {analysis.data ? <ScoreBreakdownFromRoute crawlId={crawlId} /> : null}
     </div>
   );
 }

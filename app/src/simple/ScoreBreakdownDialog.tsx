@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { analysisQuery, checksQuery } from '../api/queries';
 import type { Analysis, Checks, Score, ScoreLine, Severity } from '../api/types';
+import { isProblem } from '../api/errors';
+import { ErrorState } from '../feedback/ErrorState';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -75,6 +77,19 @@ export function ScoreBreakdownDialog({ crawlId, open, onOpenChange, onCloseAutoF
         <p className="text-14 text-text-secondary">
           There’s no score for this site check: {noScoreWords(analysis.data)}
         </p>
+      ) : isProblem(analysis.error, 'not-analyzed') ? (
+        // A check never worked out answers its analysis with a 404: an answer, not a failure.
+        <p className="text-14 text-text-secondary">
+          There’s no score for this site check: its results haven’t been worked out yet. Work out the results to give it
+          one.
+        </p>
+      ) : analysis.error || checks.error ? (
+        <ErrorState
+          flush
+          error={analysis.error ?? checks.error}
+          title="The score couldn’t be read."
+          onRetry={() => void (analysis.error ? analysis.refetch() : checks.refetch())}
+        />
       ) : (
         <p className="text-14 text-text-secondary">Reading the score…</p>
       )}
