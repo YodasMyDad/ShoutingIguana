@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Download, Play, Printer, RefreshCw, Sheet } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { ReportCut } from '../../api/exports';
 import { analysisQuery, crawlQuery } from '../../api/queries';
 import { isCrawling, type Analysis, type AnalysisEvent, type CrawlListItem } from '../../api/types';
@@ -9,6 +9,8 @@ import { continueCrawl } from '../../crawl/actions';
 import { analysisPhaseWords, analysisProgressText } from '../../crawl/analysis';
 import { crawlControls, crawlName, effectiveStatus } from '../../crawl/status';
 import { ErrorState } from '../../feedback/ErrorState';
+import { openExportDialog } from '../../export/exportFlow';
+import { overviewOffer } from '../../export/offers';
 import { useDelayedLoading } from '../../feedback/useDelayedLoading';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { useCommands } from '../../keyboard/registry';
@@ -24,12 +26,10 @@ import { ProgressBar, RefreshLine } from '../../ui/ProgressBar';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { useAnalysisAnswer } from '../issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../issues/useAnalysisControl';
-import { reportFileName, type ReportFileKind } from './reportFile';
 import { ReportFrame, type ReportFrameHandle } from './ReportFrame';
 import { reportDocumentQuery } from './reportQuery';
 import { ReportSheetSkeleton } from './ReportSheetSkeleton';
 import { outOfDateText, reportWords, type ReportWords } from './reportWords';
-import { saveReportFile } from './saveReportFile';
 
 const ROUTE = '/crawls/$crawl/report';
 
@@ -92,7 +92,6 @@ export function ReportScreen() {
   useFocusRescue(screenRef, () => control.titleRef.current);
   const frameRef = useRef<ReportFrameHandle>(null);
   const printRef = useRef<HTMLButtonElement>(null);
-  const [saving, setSaving] = useState<ReportFileKind | null>(null);
 
   const documentText = report.data ?? null;
   const ready = documentText !== null;
@@ -101,16 +100,10 @@ export function ReportScreen() {
   const print = () => {
     if (frameRef.current?.print()) printRef.current?.focus();
   };
-  const save = (kind: ReportFileKind) => {
-    if (saving !== null) return;
-    setSaving(kind);
-    void saveReportFile({
-      crawlId,
-      kind,
-      cut,
-      fileName: reportFileName(item, kind, cut),
-      documentText,
-    }).finally(() => setSaving(null));
+  // Save and Spreadsheet of everything are the app's one export flow: the export dialog on that choice (the report in
+  // the cut shown), then the native save dialog, then the export's toast, as Overview's and Issues' are.
+  const save = (choiceId: 'report' | 'workbook') => {
+    if (item) openExportDialog(overviewOffer(item, crawling, mode === 'simple'), { choiceId, cut });
   };
   const setCut = (next: ReportCut) =>
     void navigate({ search: (previous) => ({ ...previous, cut: next === 'full' ? undefined : next }), replace: true });
@@ -139,7 +132,7 @@ export function ReportScreen() {
         group: 'View',
         keys: ['mod+e'],
         keywords: ['export', 'html', 'report', 'file'],
-        enabled: () => ready && saving === null,
+        enabled: () => ready,
         run: () => save('report'),
       },
       {
@@ -147,7 +140,7 @@ export function ReportScreen() {
         title: 'Spreadsheet of everything…',
         group: 'View',
         keywords: ['excel', 'xlsx', 'workbook', 'export', 'spreadsheet'],
-        enabled: () => ready && saving === null,
+        enabled: () => ready,
         run: () => save('workbook'),
       },
       {
@@ -165,7 +158,7 @@ export function ReportScreen() {
         run: () => setCut('summary'),
       },
     ],
-    [ready, saving, cut, crawlId, documentText, item, mode, analysing, control.cancelling],
+    [ready, cut, crawlId, item, crawling, mode, analysing, control.cancelling],
   );
 
   const loading =
@@ -254,7 +247,6 @@ export function ReportScreen() {
           cut={cut}
           onCut={setCut}
           ready={ready}
-          saving={saving}
           onSave={save}
           onPrint={print}
           printRef={printRef}
@@ -274,7 +266,6 @@ function ReportBar({
   cut,
   onCut,
   ready,
-  saving,
   onSave,
   onPrint,
   printRef,
@@ -286,8 +277,7 @@ function ReportBar({
   cut: ReportCut;
   onCut: (cut: ReportCut) => void;
   ready: boolean;
-  saving: ReportFileKind | null;
-  onSave: (kind: ReportFileKind) => void;
+  onSave: (choiceId: 'report' | 'workbook') => void;
   onPrint: () => void;
   printRef: React.RefObject<HTMLButtonElement | null>;
   titleRef: React.RefObject<HTMLHeadingElement | null>;
@@ -312,22 +302,10 @@ function ReportBar({
         </p>
       </div>
       <SegmentedControl label="How much of the report" options={CUTS} value={cut} onValueChange={onCut} wrap />
-      <Button
-        icon={Sheet}
-        command="report.workbook"
-        disabled={!ready}
-        loading={saving === 'workbook'}
-        onClick={() => onSave('workbook')}
-      >
+      <Button icon={Sheet} command="report.workbook" disabled={!ready} onClick={() => onSave('workbook')}>
         Spreadsheet of everything…
       </Button>
-      <Button
-        icon={Download}
-        command="report.save"
-        disabled={!ready}
-        loading={saving === 'report'}
-        onClick={() => onSave('report')}
-      >
+      <Button icon={Download} command="report.save" disabled={!ready} onClick={() => onSave('report')}>
         Save…
       </Button>
       <Button

@@ -1,22 +1,19 @@
 // A problem, handed on (docs/v2-ui-simple.md, "One problem": A list to send on). Copy the list puts it on the clipboard
 // as plain text: the plain title and the technical one, the site and the date, how to fix it, then each cause with
 // the addresses it's on, in full. Save as a spreadsheet writes this check's sheet of the workbook (E5's `check`
-// export) through the native save dialog, with its progress and its end in a toast.
-//
-// TODO(round4-merge): the hand-over slice brings the export dialog and toast every grid uses; until it's merged this
-// calls the API client directly with the existing save dialog (shell/os.ts) and the progress toast (feedback/notify.ts).
+// export) through the app's one export flow: the export dialog, the native save dialog, and the export's toast.
 import { api } from '../api/client';
-import { isAbort, ProblemError } from '../api/errors';
+import { isAbort } from '../api/errors';
 import type { CheckGrouping, IssueRow } from '../api/grids';
-import type { ExportJob } from '../api/exports';
-import type { Check } from '../api/types';
+import type { Check, CrawlListItem } from '../api/types';
 import { announce } from '../feedback/announce';
 import { notifyError, notifyProgress, notifyResult } from '../feedback/notify';
 import { copyText } from '../lib/clipboard';
 import { formatCount } from '../lib/format';
-import { liveStore } from '../live/liveStore';
-import { pickSavePath } from '../shell/os';
-import { fileDate, longDate } from './dates';
+import { openExportDialog } from '../export/exportFlow';
+import type { ExportOffer } from '../export/exportOffer';
+import { issuesOffer } from '../export/offers';
+import { longDate } from './dates';
 import { plainTitle } from './plainWords';
 
 /** The most rows one read asks for (the contract's limit). */
@@ -130,91 +127,27 @@ export async function copyProblemList(
   }
 }
 
-/** A file's name from a title: the characters Windows and macOS refuse in a name are left out. */
-export function safeFileName(name: string): string {
-  return name
-    .replace(/[<>:"/\\|?*]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** "gardenfurnituresets.co.uk 2026-10-31 Links that lead to broken pages.xlsx". */
-export function sheetFileName(context: Pick<ProblemListContext, 'site' | 'checkedAt' | 'check'>): string {
-  return safeFileName(`${context.site} ${fileDate(context.checkedAt)} ${plainTitle(context.check)}`) + '.xlsx';
-}
-
-/** How an export's end reaches this module: the live stream's `export` events, by the export's id. */
-function whenExportEnds(exportId: string, onEnd: (job: ExportJob) => void): () => void {
-  return liveStore.onEvent((event) => {
-    if (event.type !== 'export' || event.data.exportId !== exportId || event.data.status === 'running') return;
-    onEnd(event.data);
-  });
-}
-
 /**
- * Save as a spreadsheet: this check's sheet of the workbook, where the user chooses, with the export's progress and
- * its end in one toast. Nothing happens when the dialog is cancelled; outside the desktop app there's no dialog.
+ * Save as a spreadsheet: this check's sheet of the workbook (E5's `check` export), offered as the export dialog every
+ * screen uses, named by the check's plain title ("gardenfurnituresets.co.uk 2026-10-31 Links that lead to broken
+ * pages.xlsx"). The dialog asks as what, the save dialog where, and the export's toast follows it from there.
  */
-export async function saveCheckSheet(
-  context: Pick<ProblemListContext, 'crawlId' | 'check' | 'site' | 'checkedAt'>,
-  pick: typeof pickSavePath = pickSavePath,
-): Promise<void> {
-  let path: string | null;
-  try {
-    path = await pick({
-      title: 'Save as a spreadsheet',
-      defaultPath: sheetFileName(context),
-      filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
-    });
-  } catch (error) {
-    notifyError(error, { title: 'The save dialog couldn’t open' });
-    return;
-  }
-  if (path === null) return;
-  let exportId: string | null = null;
-  const progress = notifyProgress('Saving the spreadsheet…', {
-    onCancel: () => {
-      if (exportId) void api.cancelExport(exportId);
-    },
+export function checkSheetOffer(item: CrawlListItem, check: Check, crawling = false): ExportOffer {
+  const offer = issuesOffer({
+    item,
+    crawling,
+    simple: true,
+    check: { id: check.id, title: plainTitle(check), urls: null },
+    group: null,
   });
-  let ended = false;
-  const finish = (job: ExportJob) => {
-    if (ended) return;
-    ended = true;
-    if (job.status === 'done') {
-      const rows = job.result?.rows ?? job.rowsWritten;
-      const words = `Saved the spreadsheet: ${rows === 1 ? '1 row' : `${formatCount(rows)} rows`}`;
-      progress.done(words);
-      announce(words);
-    } else if (job.status === 'cancelled') {
-      progress.dismiss();
-    } else {
-      progress.fail(job.error ? new ProblemError(job.error) : new Error('The spreadsheet couldn’t be saved'));
-    }
+  return {
+    ...offer,
+    title: 'Save as a spreadsheet',
+    choices: offer.choices.filter((choice) => choice.id === 'check'),
   };
-  try {
-    const job = await api.startExport(context.crawlId, {
-      kind: 'check',
-      format: 'xlsx',
-      checkId: context.check.id,
-      path,
-    });
-    exportId = job.exportId;
-    if (job.status !== 'running') {
-      finish(job);
-      return;
-    }
-    const stop = whenExportEnds(job.exportId, (endedJob) => {
-      stop();
-      finish(endedJob);
-    });
-    // The end may have come before the listener: read the job once to be sure.
-    const now = await api.exportJob(job.exportId);
-    if (now.status !== 'running') {
-      stop();
-      finish(now);
-    }
-  } catch (error) {
-    progress.fail(error);
-  }
+}
+
+/** Opens the export dialog on this check's sheet. */
+export function saveCheckSheet(item: CrawlListItem, check: Check, crawling = false): void {
+  openExportDialog(checkSheetOffer(item, check, crawling), { choiceId: 'check' });
 }

@@ -1,9 +1,10 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTransport } from '../api/transport';
 import type { Analysis, CrawlListItem } from '../api/types';
 import { App } from '../app/App';
+import { closeExportDialog } from '../export/exportFlow';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import type { Mode } from '../mode/mode';
@@ -161,5 +162,26 @@ describe('the Report screen', () => {
     await frame();
     const current = screen.getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'page');
     expect(current.map((link) => link.textContent)).toContain('Report');
+  });
+
+  it('Save and Spreadsheet of everything open the app’s one export dialog, on their choice and the cut shown', async () => {
+    sidecar();
+    await open(`${REPORT}?cut=summary`);
+    await frame();
+    fireEvent.click(screen.getByRole('button', { name: /^Save…/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('radio', { name: /The report/ })).toBeChecked();
+    expect(within(dialog).getByRole('radio', { name: 'Summary page' })).toBeChecked();
+    expect(within(dialog).getByRole('textbox', { name: 'Save as' })).toHaveValue(
+      'gardenfurnituresets.co.uk 2026-10-31 report summary.html',
+    );
+    act(() => closeExportDialog());
+    fireEvent.click(screen.getByRole('button', { name: /Spreadsheet of everything/ }));
+    const again = await screen.findByRole('dialog');
+    expect(within(again).getByRole('radio', { name: /Spreadsheet of everything/ })).toBeChecked();
+    expect(within(again).getByRole('textbox', { name: 'Save as' })).toHaveValue(
+      'gardenfurnituresets.co.uk 2026-10-31 report.xlsx',
+    );
+    act(() => closeExportDialog());
   });
 });

@@ -6,12 +6,3 @@ export function longDate(iso: string): string {
   const time = Date.parse(iso);
   return Number.isNaN(time) ? '' : LONG_DATE.format(time);
 }
-
-/** "2026-10-31", for a file's name: the day in the user's time zone. */
-export function fileDate(iso: string | null | undefined): string {
-  const time = iso ? Date.parse(iso) : Number.NaN;
-  if (Number.isNaN(time)) return '';
-  const date = new Date(time);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}

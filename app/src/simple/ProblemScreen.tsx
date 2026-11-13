@@ -252,7 +252,7 @@ function FoundProblem({
     share: share.text,
   };
   const copyList = () => void copyProblemList(context);
-  const saveSheet = () => void saveCheckSheet(context);
+  const saveSheet = () => saveCheckSheet(item, check);
   useCommands(
     () => [
       {
@@ -272,7 +272,7 @@ function FoundProblem({
         run: saveSheet,
       },
     ],
-    [crawlId, check.id, share.text],
+    [crawlId, check.id, share.text, item],
   );
   const noun = (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses';
   const what = check.plainWhat ?? [check.description];

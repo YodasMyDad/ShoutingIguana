@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { setTransport, type TransportRequest } from '../api/transport';
-import type { ExportJob } from '../api/exports';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setTransport } from '../api/transport';
+import { closeExportDialog, defaultFileName, getExportDialog } from '../export/exportFlow';
 import { liveStore } from '../live/liveStore';
-import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
 import { SIMPLE_CHECKS } from '../test/simpleSidecar';
-import { problemListText, safeFileName, saveCheckSheet, sheetFileName } from './handOver';
+import { checkSheetOffer, problemListText, saveCheckSheet } from './handOver';
 import { nothingRead } from './nothingRead';
 
 const check = (id: string) => SIMPLE_CHECKS.checks.find((candidate) => candidate.id === id)!;
@@ -54,58 +54,32 @@ describe('Copy the list', () => {
 });
 
 describe('Save as a spreadsheet', () => {
-  it('names the file by the site, the day and the plain title, without characters a file can’t have', () => {
-    expect(sheetFileName(context)).toMatch(
-      /^gardenfurnituresets\.co\.uk 2026-10-31 Links that lead to broken pages\.xlsx$/,
-    );
-    expect(safeFileName('a: b/c "d" <e>?')).toBe('a bc d e');
-  });
+  const item = testCrawlItem({ site: 'gardenfurnituresets.co.uk', startedAt: '2026-10-31T14:51:00Z' });
 
-  it('exports this check’s sheet to the path chosen, and ends with the export’s event', async () => {
-    const requests: TransportRequest[] = [];
-    const running: ExportJob = {
-      exportId: 'e1',
-      crawlId: TEST_CRAWL_ID,
-      kind: 'check',
-      format: 'xlsx',
-      path: 'C:\\out\\sheet.xlsx',
-      status: 'running',
-      rowsWritten: 0,
-      rowsExpected: null,
-      startedAt: '2026-11-12T00:00:00Z',
-      finishedAt: null,
-      result: null,
-      error: null,
-    };
-    setTransport(
-      fakeSidecar([
-        [
-          'POST',
-          /\/export$/,
-          (request) => {
-            requests.push(request);
-            return json(running);
-          },
-        ],
-        ['GET', /\/api\/exports\/e1$/, () => json(running)],
-      ]),
+  afterEach(() => closeExportDialog());
+
+  it('offers this check’s sheet alone, named by the site, the day and the plain title', () => {
+    const offer = checkSheetOffer(item, context.check);
+    expect(offer.title).toBe('Save as a spreadsheet');
+    expect(offer.choices.map((choice) => choice.id)).toEqual(['check']);
+    const choice = offer.choices[0]!;
+    expect(defaultFileName(offer, choice, 'xlsx', 'full')).toBe(
+      'gardenfurnituresets.co.uk 2026-10-31 Links that lead to broken pages.xlsx',
     );
-    const pick = vi.fn(() => Promise.resolve('C:\\out\\sheet.xlsx'));
-    await saveCheckSheet(context, pick);
-    expect(pick).toHaveBeenCalledWith(expect.objectContaining({ title: 'Save as a spreadsheet' }));
-    expect(requests[0]?.body).toEqual({
+    const path = String.raw`C:\out\sheet.xlsx`;
+    expect(choice.build({ format: 'xlsx', path, cut: 'full', crawlOrder: false })).toEqual({
       kind: 'check',
       format: 'xlsx',
       checkId: 'broken-internal-links',
-      path: 'C:\\out\\sheet.xlsx',
+      path,
     });
   });
 
-  it('does nothing when the dialog is cancelled', async () => {
-    const requests: TransportRequest[] = [];
-    setTransport(fakeSidecar([['POST', /\/export$/, (request) => (requests.push(request), json({}))]]));
-    await saveCheckSheet(context, () => Promise.resolve(null));
-    expect(requests).toHaveLength(0);
+  it('opens the app’s one export dialog on it', () => {
+    saveCheckSheet(item, context.check);
+    const state = getExportDialog();
+    expect(state?.choiceId).toBe('check');
+    expect(state?.offer.crawlId).toBe(item.id);
   });
 });
 
