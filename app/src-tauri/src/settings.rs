@@ -77,7 +77,9 @@ pub fn read(path: &Path) -> Option<Value> {
 }
 
 /// Replaces the stored preferences with `settings`, a JSON object as text. The file is written whole and then moved
-/// into place, so a crash mid-write leaves the previous preferences, never half of them.
+/// into place, so a crash mid-write leaves the previous preferences, never half of them. It's written compact, and
+/// refused when the file it would make is over the limit `read` holds a file to: a write that's accepted is always
+/// read back at the next start.
 pub fn write(path: &Path, settings: &str) -> Result<(), SettingsError> {
     if settings.len() > MAX_BYTES {
         return Err(SettingsError::TooLarge(settings.len()));
@@ -87,7 +89,10 @@ pub fn write(path: &Path, settings: &str) -> Result<(), SettingsError> {
         return Err(SettingsError::NotAnObject);
     }
     let document = Value::Object(Map::from_iter([(KEY.to_owned(), value)]));
-    let bytes = serde_json::to_vec_pretty(&document).map_err(SettingsError::NotJson)?;
+    let bytes = serde_json::to_vec(&document).map_err(SettingsError::NotJson)?;
+    if bytes.len() > MAX_BYTES {
+        return Err(SettingsError::TooLarge(bytes.len()));
+    }
     let _guard = lock(&FILE);
     if let Some(folder) = path.parent() {
         fs::create_dir_all(folder).map_err(SettingsError::Io)?;
@@ -144,6 +149,31 @@ mod tests {
         let large = format!("{{\"padding\":\"{}\"}}", "x".repeat(MAX_BYTES));
         assert!(matches!(write(&path, &large), Err(SettingsError::TooLarge(_))));
         assert!(!path.exists(), "nothing was written");
+    }
+
+    /// Many short preferences are much longer pretty-printed than compact: one that's accepted must still be read
+    /// back, and one whose file would be over the limit is refused on writing, never ignored on the next start.
+    #[test]
+    fn a_write_that_is_accepted_is_read_back() {
+        let path = temp_file("accepted");
+        let many: Map<String, Value> = (0..5_000).map(|index| (format!("k{index:04}"), Value::from(1))).collect();
+        let settings = Value::Object(many).to_string();
+        assert!(settings.len() < MAX_BYTES);
+        assert!(
+            serde_json::to_vec_pretty(&serde_json::json!({ KEY: serde_json::from_str::<Value>(&settings).unwrap() }))
+                .unwrap()
+                .len()
+                > MAX_BYTES
+        );
+        write(&path, &settings).unwrap();
+        assert!(fs::metadata(&path).unwrap().len() <= MAX_BYTES as u64);
+        assert_eq!(read(&path), Some(serde_json::from_str::<Value>(&settings).unwrap()));
+        // Just under the limit as sent, over it once stored under its key: refused, and the file left as it was.
+        let edge = format!("{{\"p\":\"{}\"}}", "x".repeat(MAX_BYTES - 10));
+        assert!(edge.len() <= MAX_BYTES);
+        assert!(matches!(write(&path, &edge), Err(SettingsError::TooLarge(_))));
+        assert_eq!(read(&path), Some(serde_json::from_str::<Value>(&settings).unwrap()));
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]

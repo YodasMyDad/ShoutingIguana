@@ -85,10 +85,18 @@ export function buildFacets(page: LinkFacetsPage, filters: readonly GridFilter[]
 }
 
 /**
- * The view's filters with a facet's value added. A filter the view already has on the same column goes first: the
- * values counted are the ones still in view under it, so the new filter says all the old one did, and two chips on
- * one column would read as a contradiction. Either way the links it leaves are exactly the value's count.
+ * The view's filters with a facet's value added. The values were counted under the view's filters, so the value's own
+ * filter beside them leaves exactly its count. Only where it says all the old one did (the old filter is a list of
+ * values the new one's are among: "4xx or 5xx", then "4xx") does it take the old one's place, so the chips don't say
+ * the same thing twice; a filter it narrows another way stays ("Response time is over 300 ms" and "is 250-499 ms",
+ * which is 301-499 ms, the count the menu showed).
  */
 export function withFacetValue(filters: readonly GridFilter[], value: GridFilter): GridFilter[] {
-  return [...filters.filter((filter) => filter.column !== value.column), value];
+  const narrows = (filter: GridFilter) =>
+    filter.column === value.column &&
+    filter.op === 'in' &&
+    value.op === 'in' &&
+    !('group' in filter) &&
+    value.values.every((item) => filter.values.includes(item));
+  return [...filters.filter((filter) => !narrows(filter)), value];
 }

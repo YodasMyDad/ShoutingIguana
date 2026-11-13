@@ -6,12 +6,19 @@ import type { Check } from '../../api/types';
 import { affectedWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
+import { useRowMenu } from '../../grid/rowMenuState';
 import { useGridMetrics } from '../../grid/metrics';
 import { nextSort, useHeaderHandoff } from '../../grid/sort';
 import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { Url } from '../../ui/Url';
+import { IssuePageMenu } from './IssuePageMenu';
+
+/** An issue's identity among a check's rows: a URL can be flagged more than once, by detail or by related URL. */
+function issueRowKey(row: IssueRow): string {
+  return `${row.id}|${row.detail ?? ''}|${row.relatedUrlId ?? ''}`;
+}
 
 const DETAIL_WIDTH = 260;
 const MIN_URL_WIDTH = 240;
@@ -60,6 +67,9 @@ export function IssueRowsGrid({
   );
   const rows = usePagedRows<IssueRow>({ queryKey, fetchPage, rowHeight });
   const handoff = useHeaderHandoff(sort);
+  const rowMenu = useRowMenu<IssueRow>();
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
 
   const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 720) - DETAIL_WIDTH - FRAME_SLACK);
   const columns = useMemo<GridColumn<IssueRow>[]>(() => {
@@ -120,8 +130,20 @@ export function IssueRowsGrid({
           const row = onFollow && index !== null ? rows.getRow(index) : undefined;
           if (row) onFollow?.(row.id);
         }}
+        // The cursor is on an issue, not at a row number: the rows read again (an analysis) keep it on its own.
+        rowKey={issueRowKey}
+        onContextMenu={rowMenu.onContextMenu}
         busy={rows.isRefreshing}
         className="flex-1 rounded-md border border-border"
+      />
+      <IssuePageMenu<IssueRow>
+        crawlId={crawlId}
+        state={rowMenu.state}
+        onOpenChange={rowMenu.onOpenChange}
+        siteOrigin={siteOrigin}
+        page={menuRow?.url ? { id: menuRow.id, url: menuRow.url } : null}
+        urlOf={(row) => row.url}
+        onInspect={onInspect}
       />
     </div>
   );

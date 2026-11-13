@@ -83,11 +83,12 @@ export function activePreset(filters: readonly GridFilter[], search: string | un
 }
 
 /**
- * A view's sort while its column is shown, and no sort (undefined, as the route has it) once it isn't. A sort is seen
- * and changed at its column's header: by a hidden column the rows would be in an order nothing on the screen
- * explains, under a view that reads as "All links".
+ * A view's sort keys whose columns are shown, in their order, and no sort (undefined, as the route has it) once none
+ * is. A sort is seen and changed at its column's header: by a hidden column the rows would be in an order nothing on
+ * the screen explains, under a view that reads as "All links". Hiding one key's column drops that key alone.
  */
 export function sortShown(sort: readonly GridSort[] | undefined, shown: readonly string[]): GridSort[] | undefined {
   const kept = (sort ?? []).filter((key) => shown.includes(key.column));
-  return kept.length > 0 && kept.length === (sort ?? []).length ? kept : undefined;
+  // The keys whose columns are still shown stay, in their order: hiding one column drops its key, not the others.
+  return kept.length > 0 ? kept : undefined;
 }

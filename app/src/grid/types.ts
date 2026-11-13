@@ -13,6 +13,13 @@ export interface GridColumn<Row> {
   mono?: boolean;
   /** `ascending` or `descending` when the grid is sorted by this column. */
   sort?: 'ascending' | 'descending';
+  /**
+   * Its place in a sort of more than one key (1 to 3), shown beside its arrow; left out when the grid sorts by one
+   * column or none. Only the first key's header carries `aria-sort`; the others say their place in words.
+   */
+  sortOrder?: number;
+  /** Words after the header's own, quieter: what the column's values have in common ("on example.com"). Not copied. */
+  headerDetail?: string;
   /** Its header is a button that sorts by it (the grid's `onSort`). */
   sortable?: boolean;
   /**

@@ -3,6 +3,7 @@
 // before the first render (so the theme never flashes), then written behind a short debounce on every change.
 import { useSyncExternalStore } from 'react';
 import { isTauri } from '../lib/platform';
+import { notifyError } from '../feedback/notify';
 import { ipc } from '../shell/ipc';
 import { DEFAULT_SETTINGS, readSettings, type Settings } from './schema';
 
@@ -41,6 +42,36 @@ export const shellBackend: SettingsBackend = {
 
 let backend: SettingsBackend = isTauri ? shellBackend : localStorageBackend;
 let current: Settings = DEFAULT_SETTINGS;
+/**
+ * What the stored preferences hold that this version doesn't know (a later version's), written back as it was: going
+ * back to an older version never deletes what a newer one keeps there.
+ */
+let unknown: Record<string, unknown> = {};
+/** The last write failed: said once, until a write works again. */
+let failing = false;
+
+const SAVE_FAILED = 'settings.save';
+
+/** The preferences as written: this version's, and what it found there and doesn't know. */
+function stored(settings: Settings): Settings {
+  return { ...unknown, ...settings };
+}
+
+/** Writes the preferences, saying once (not on every change after) when they can't be written. */
+async function save(): Promise<void> {
+  try {
+    await backend.save(stored(current));
+    failing = false;
+  } catch (error) {
+    if (failing) return;
+    failing = true;
+    notifyError(error, {
+      id: SAVE_FAILED,
+      title: 'Your preferences couldn’t be saved',
+      description: 'What you change now lasts until the app closes.',
+    });
+  }
+}
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
 
@@ -48,9 +79,15 @@ const listeners = new Set<() => void>();
 export async function loadSettings(override?: SettingsBackend): Promise<Settings> {
   if (override) backend = override;
   try {
-    current = readSettings(await backend.load());
+    const raw = await backend.load();
+    current = readSettings(raw);
+    unknown =
+      typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+        ? Object.fromEntries(Object.entries(raw).filter(([key]) => !(key in DEFAULT_SETTINGS)))
+        : {};
   } catch {
     current = DEFAULT_SETTINGS;
+    unknown = {};
   }
   listeners.forEach((listener) => listener());
   return current;
@@ -67,7 +104,7 @@ export function updateSettings(patch: Partial<Settings> | ((settings: Settings) 
   current = next;
   listeners.forEach((listener) => listener());
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => void backend.save(current).catch(() => undefined), SAVE_DELAY_MS);
+  saveTimer = setTimeout(() => void save(), SAVE_DELAY_MS);
 }
 
 /**
@@ -84,7 +121,7 @@ export async function flushSettings(): Promise<void> {
   if (saveTimer === undefined) return;
   clearTimeout(saveTimer);
   saveTimer = undefined;
-  await backend.save(current);
+  await backend.save(stored(current));
 }
 
 export function subscribeSettings(listener: () => void): () => void {

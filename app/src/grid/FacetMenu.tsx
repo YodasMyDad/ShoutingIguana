@@ -24,6 +24,11 @@ export interface FacetMenuProps<Value extends FacetMenuValue> {
   /** The counts couldn't be read: the menu says so, with Try again. */
   failed?: boolean | undefined;
   onRetry?: (() => void) | undefined;
+  /**
+   * Why these values can't be counted now, in words ("Counted by the analysis: this crawl hasn’t been analysed yet"):
+   * the menu says it in place of the values. A facet the analysis counts, on a crawl without one.
+   */
+  unavailable?: string | undefined;
   /** A value was chosen: the view narrows to it. */
   onChoose: (value: Value) => void;
   /** Whether the menu is open, when something other than its button says (a story). */
@@ -51,6 +56,7 @@ export function FacetMenu<Value extends FacetMenuValue>({
   onChoose,
   open,
   onOpenChange,
+  unavailable,
 }: FacetMenuProps<Value>) {
   return (
     <DropdownMenu
@@ -67,7 +73,9 @@ export function FacetMenu<Value extends FacetMenuValue>({
           ? title
           : `${title}, of ${formatCount(matching)} ${matching === 1 ? noun : `${noun}s`}`}
       </MenuLabel>
-      {failed ? (
+      {unavailable ? (
+        <MenuItem disabled>{unavailable}</MenuItem>
+      ) : failed ? (
         <>
           <MenuItem disabled>The counts couldn’t be read.</MenuItem>
           {onRetry ? (

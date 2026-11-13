@@ -9,6 +9,13 @@ import {
   linkFilterColumns,
 } from '../screens/links/linkColumns';
 import { linkFilterWords } from '../screens/links/linkWords';
+import { URL_COLUMNS } from '../api/mock/urlColumns';
+import { SavedViewsMenu, ViewNameDialog } from '../screens/urls/SavedViews';
+import { DEFAULT_URL_COLUMNS, urlChooserGroups } from '../screens/urls/urlColumns';
+import { Checkbox } from '../ui/Checkbox';
+import { MenuAt } from '../ui/Menu';
+import { UrlRowItems } from './RowMenu';
+import type { SavedView } from './savedViews';
 import { StateRow, StoryFrame, StorySection } from '../test/StoryFrame';
 import { FilterChip } from '../ui/FilterChip';
 import { Popover } from '../ui/Popover';
@@ -262,6 +269,102 @@ export const FacetMenuStates: Story = {
           <FacetMenu open title="Nothing" noun="link" values={[]} matching={0} onChoose={() => undefined} />
         </div>
       </div>
+    </StoryFrame>
+  ),
+};
+
+/** The URL grid's chooser: its six groups, with "Show full URLs" under the columns. */
+export const UrlColumnChooserOpen: Story = {
+  render: function UrlColumnChooserOpen() {
+    const [shown, setShown] = useState<readonly string[]>(DEFAULT_URL_COLUMNS);
+    const [full, setFull] = useState(false);
+    return (
+      <StoryFrame sheet>
+        <div className="flex min-h-(--dialog-width) justify-end">
+          <ColumnChooser
+            open
+            groups={urlChooserGroups(URL_COLUMNS, true)}
+            shown={shown}
+            onChange={setShown}
+            defaults={DEFAULT_URL_COLUMNS}
+            options={
+              <Checkbox
+                label="Show full URLs"
+                description="With the host, rather than as paths on example.com"
+                checked={full}
+                onCheckedChange={setFull}
+              />
+            }
+          />
+        </div>
+      </StoryFrame>
+    );
+  },
+};
+
+/** A row's menu on a grid of URLs: the items every such grid shares, for one row and for a selection of twelve. */
+export const RowMenuOfUrls: Story = {
+  render: () => (
+    <StoryFrame sheet>
+      <div className="min-h-(--dialog-width)">
+        <MenuAt at={{ x: 40, y: 40 }} open onOpenChange={() => undefined} label="Menu for 12 URLs">
+          <UrlRowItems
+            count={12}
+            url="https://example.com/garden/"
+            onInspect={() => undefined}
+            onCopyUrls={() => undefined}
+            onCopyRows={() => undefined}
+          />
+        </MenuAt>
+      </div>
+    </StoryFrame>
+  ),
+};
+
+const SAVED: SavedView[] = [
+  {
+    id: 'v-broken',
+    grid: 'urls',
+    name: 'Broken pages',
+    search: { filter: [{ column: 'statusClass', op: 'in', values: ['4xx', '5xx'] }] },
+  },
+  { id: 'v-thin', grid: 'urls', name: 'Thin content by depth', search: { sort: [{ column: 'depth', desc: false }] } },
+];
+
+/** Saved views: the menu on a view that is one of them (ticked, renamed or deleted from here), and the name dialog. */
+export const SavedViewsOpen: Story = {
+  render: () => (
+    <StoryFrame sheet>
+      <div className="flex min-h-(--dialog-width) justify-end">
+        <SavedViewsMenu
+          views={SAVED}
+          current={SAVED[0] ?? null}
+          problem={null}
+          onOpen={() => undefined}
+          onSave={() => undefined}
+          onRename={() => undefined}
+          onDelete={() => undefined}
+        />
+      </div>
+    </StoryFrame>
+  ),
+  play: ({ canvasElement }) => {
+    canvasElement
+      .querySelector<HTMLButtonElement>('button')
+      ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+  },
+};
+
+/** Naming a view, with what's wrong with the name said under the field. */
+export const SaveViewDialog: Story = {
+  render: () => (
+    <StoryFrame sheet>
+      <ViewNameDialog
+        mode={{ kind: 'rename', view: SAVED[1]! }}
+        views={SAVED}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+      />
     </StoryFrame>
   ),
 };
