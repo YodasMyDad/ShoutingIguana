@@ -99,6 +99,8 @@ try {
         new AxeBuilder({ page })
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
           .exclude('#storybook-docs')
+          // A sandboxed frame with scripts off (the Report's document) can't run axe: checking it never ends.
+          .exclude('iframe[sandbox]')
           .analyze(),
       );
       for (const violation of results.violations) {
