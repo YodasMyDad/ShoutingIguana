@@ -185,6 +185,36 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(dialog?.offer.initialChoice ?? dialog?.offer.choices[0]?.id).toBe('report');
   });
 
+  it('closes the breakdown opened here by going back, so Back then leaves the Summary', async () => {
+    replaceSettings({ mode: 'simple', hiddenChecks: [] });
+    setTransport(fakeSidecar(simpleRoutes(gardenItem(), GARDEN_ANALYSIS)));
+    const queryClient = createQueryClientWithoutBackoff();
+    const router = createAppRouter(
+      queryClient,
+      createMemoryHistory({ initialEntries: [`${CRAWL}/issues`, `${CRAWL}/overview`], initialIndex: 1 }),
+    );
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    await site();
+    fireEvent.click(main().getByRole('link', { name: 'How the score is worked out' }));
+    await screen.findByRole('dialog', { name: 'How the score is worked out' });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(router.state.location.pathname).toBe(`${CRAWL}/overview`);
+    expect(router.state.location.search).toEqual({});
+    act(() => router.history.back());
+    await waitFor(() => expect(router.state.location.pathname).toBe(FIX));
+  });
+
+  it('closes the breakdown of a link from elsewhere in place, leaving the Summary', async () => {
+    const router = await open(GARDEN_ANALYSIS, gardenItem(), `${CRAWL}/overview?score=1`);
+    await screen.findByRole('dialog', { name: 'How the score is worked out' }, { timeout: 10_000 });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(router.state.location.pathname).toBe(`${CRAWL}/overview`);
+    expect(router.state.location.search).toEqual({});
+  });
+
   it('leaves hidden checks out of the counts, and says nothing of five fixed that aren’t the engine’s five', async () => {
     replaceSettings({ mode: 'simple' });
     setTransport(fakeSidecar(simpleRoutes(gardenItem(), GARDEN_ANALYSIS)));

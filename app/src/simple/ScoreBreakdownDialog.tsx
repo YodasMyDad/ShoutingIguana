@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useRouter, useRouterState, useSearch } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { analysisQuery, checksQuery } from '../api/queries';
 import type { Analysis, Checks, Score, ScoreLine, Severity } from '../api/types';
@@ -13,13 +13,15 @@ import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount } from '../ui/severity';
 import { coverageSentences, lineShareWords, plainTitle } from './plainWords';
 import { ScoreRing } from '../ui/ScoreRing';
+import './scoreHistory';
 
 const OVERVIEW = '/crawls/$crawl/overview';
 
 /**
  * "How the score is worked out" (docs/v2-ui-simple.md, "How the score is worked out"), over the Summary in Simple and
  * over Overview in Advanced: open while the route's search has `score=1`, so Back and a reopened session keep it. Esc,
- * Close and the ✕ take `score` off the address.
+ * Close and the ✕ take `score` off the address: opened from a link in the app, by going back to the entry it opened on
+ * (so Back from there leaves the screen, as it would have before); from a deep link, in place.
  */
 export function ScoreBreakdownFromRoute({
   crawlId,
@@ -31,12 +33,16 @@ export function ScoreBreakdownFromRoute({
 }) {
   const { score } = useSearch({ from: OVERVIEW });
   const navigate = useNavigate({ from: OVERVIEW });
+  const router = useRouter();
+  const openedHere = useRouterState({ select: (state) => state.location.state.scoreOpenedHere === true });
   return (
     <ScoreBreakdownDialog
       crawlId={crawlId}
       open={score === 1}
       onOpenChange={(open) => {
-        if (!open) void navigate({ search: (previous) => ({ ...previous, score: undefined }), replace: true });
+        if (open) return;
+        if (openedHere && router.history.canGoBack()) router.history.back();
+        else void navigate({ search: (previous) => ({ ...previous, score: undefined }), replace: true });
       }}
       onCloseAutoFocus={onCloseAutoFocus}
     />

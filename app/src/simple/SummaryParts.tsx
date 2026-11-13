@@ -25,6 +25,7 @@ import {
 } from './plainWords';
 import { FIX_FIRST_COUNT, siteWideLead, type PlainResults } from './results';
 import { ScoreRing } from '../ui/ScoreRing';
+import { openedHereState } from './scoreHistory';
 import { useOneFix } from './useOneFix';
 import type { CheckEntry } from '../screens/issues/checkList';
 
@@ -72,6 +73,7 @@ export function ScoreHero({ crawlId, score, results }: { crawlId: string; score:
               to="/crawls/$crawl/overview"
               params={{ crawl: crawlId }}
               search={{ score: 1 }}
+              state={openedHereState}
               className="si-link inline-flex items-center gap-1"
             >
               How the score is worked out
