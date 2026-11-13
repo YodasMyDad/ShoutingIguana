@@ -1,0 +1,223 @@
+import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { CrawlListItem } from '../../api/types';
+import { SIMPLE_SCREENS } from '../../app/simpleScreens';
+import { ENGINE_DEFAULTS } from '../../crawl/options/engineDefaults';
+import { getMode } from '../../mode/mode';
+import { replaceSettings } from '../../settings/settingsStore';
+import { json, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
+import { ownSidecar, ScreenApp } from '../../test/ScreenStory';
+import { TABLE_STUBBED } from '../tableStubbed';
+
+const PRESETS = [
+  { id: 'polite', concurrency: 2, maxRequestsPerSecond: 2 },
+  { id: 'standard', concurrency: 5, maxRequestsPerSecond: 0 },
+  { id: 'fast', concurrency: 16, maxRequestsPerSecond: 0 },
+];
+
+const garden = testCrawlItem({
+  id: '62cb879ef60639d5',
+  site: 'gardenfurnituresets.co.uk',
+  startUrl: 'https://www.gardenfurnituresets.co.uk/',
+  fileName: 'gardenfurnituresets.co.uk.sicrawl',
+  startedAt: '2026-10-31T14:13:00Z',
+  finishedAt: '2026-10-31T14:40:00Z',
+  fetchedUrlCount: 4521,
+  crawledUrlCount: 4521,
+  pageCount: 265,
+  issues: { error: 2, warning: 4, notice: 13 },
+  score: { value: 85, band: 'good', partial: false },
+});
+
+function routes(library: CrawlListItem[], defaults = ENGINE_DEFAULTS as object): FakeRoute[] {
+  return [
+    ['GET', /^\/api\/crawls$/, () => json(library)],
+    [
+      'GET',
+      /^\/api\/crawls\/([0-9a-f]{16})$/,
+      (_, match) => json(library.find((item) => item.id === match[1]) ?? library[0]),
+    ],
+    ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options: defaults, speedPresets: PRESETS })],
+    ['GET', /^\/api\/checks$/, () => json({ categories: [], checks: [] })],
+  ];
+}
+
+async function open(library: CrawlListItem[], defaults?: object) {
+  ownSidecar(routes(library, defaults));
+  render(<ScreenApp path="/" mode="simple" />);
+  return screen.findByRole('heading', { level: 1, name: 'Check a website' });
+}
+
+const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!;
+
+afterEach(() => replaceSettings({ mode: 'advanced', hiddenChecks: [] }));
+
+describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
+  it('asks for one thing, the address, and says what a bare Enter does', async () => {
+    await open([garden]);
+    expect(screen.getByRole('textbox', { name: 'Web address' })).toHaveAttribute('placeholder', 'www.example.co.uk');
+    const check = screen.getByRole('button', { name: 'Check site' });
+    expect(check).toHaveAttribute('aria-keyshortcuts', 'Enter');
+    expect(screen.getByRole('link', { name: 'Options…' })).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Checks the whole site, at a speed that’s safe for most hosting\./),
+    ).toBeInTheDocument();
+    await userEvent.click(check);
+    expect(screen.getByText('Type or paste the address of the site to check.')).toBeInTheDocument();
+  });
+
+  it('says the saved settings instead when they differ from the engine’s', async () => {
+    await open([garden], { ...ENGINE_DEFAULTS, concurrency: 2, maxRequestsPerSecond: 2, maxUrls: 5000, maxDepth: 3 });
+    expect(
+      await screen.findByText(
+        'Uses your saved settings: Polite speed, up to 5,000 addresses, and 1 more set in Advanced.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('lists each site with its score, its word and what needs fixing, never the issue count', async () => {
+    await open([garden]);
+    const row = await rowOf('gardenfurnituresets.co.uk');
+    expect(within(row).getByRole('img', { name: 'Score 85 out of 100, Good' })).toBeInTheDocument();
+    expect(within(row).getByRole('img', { name: '2 serious, 4 worth fixing' })).toBeInTheDocument();
+    expect(within(row).getByText('265 pages')).toBeInTheDocument();
+    expect(row).not.toHaveTextContent('19');
+    // The row opens the check: in Simple, its Summary.
+    expect(within(row).getByRole('link', { name: 'gardenfurnituresets.co.uk' })).toHaveAttribute(
+      'href',
+      '/crawls/62cb879ef60639d5',
+    );
+  });
+
+  it('gives each state of a check its own words and its one action', async () => {
+    const stopped = testCrawlItem({
+      id: '1111111111111111',
+      site: 'stopped.example',
+      status: 'stopped',
+      pageCount: 312,
+      issues: { error: 2, warning: 3, notice: 1 },
+      score: { value: 71, band: 'good', partial: true },
+      startedAt: '2026-10-15T10:00:00Z',
+    });
+    const unanalysed = testCrawlItem({
+      id: '2222222222222222',
+      site: 'new.example',
+      issues: null,
+      analyzedAt: null,
+      score: null,
+      startedAt: '2026-10-14T10:00:00Z',
+    });
+    const missing = testCrawlItem({
+      id: '3333333333333333',
+      site: 'gone.example',
+      missing: true,
+      startedAt: '2026-10-13T10:00:00Z',
+    });
+    const clean = testCrawlItem({
+      id: '4444444444444444',
+      site: 'clean.example',
+      issues: { error: 0, warning: 0, notice: 3 },
+      score: { value: 100, band: 'veryGood', partial: false },
+      startedAt: '2026-10-12T10:00:00Z',
+    });
+    await open([stopped, unanalysed, missing, clean]);
+
+    const stoppedRow = await rowOf('stopped.example');
+    expect(within(stoppedRow).getByText('Stopped early · 312 pages read')).toBeInTheDocument();
+    expect(
+      within(stoppedRow).getByRole('img', { name: 'Score 71 out of 100 so far, Good so far' }),
+    ).toBeInTheDocument();
+    expect(within(stoppedRow).getByRole('img', { name: '2 serious, 3 worth fixing so far' })).toBeInTheDocument();
+    expect(within(stoppedRow).getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+
+    const newRow = await rowOf('new.example');
+    expect(within(newRow).getByRole('img', { name: 'No score' })).toBeInTheDocument();
+    expect(within(newRow).getByText('Not worked out yet')).toBeInTheDocument();
+    expect(within(newRow).getByRole('button', { name: 'Work out the results' })).toBeInTheDocument();
+
+    const goneRow = await rowOf('gone.example');
+    expect(within(goneRow).getByText('File not found')).toBeInTheDocument();
+
+    const cleanRow = await rowOf('clean.example');
+    expect(within(cleanRow).getByText('Nothing to fix')).toBeInTheDocument();
+  });
+
+  it('folds a site’s older checks under its newest', async () => {
+    const older = testCrawlItem({
+      ...garden,
+      id: '5555555555555555',
+      startedAt: '2026-10-01T10:00:00Z',
+      score: { value: 80, band: 'good', partial: false },
+    });
+    await open([older, garden]);
+    const row = await rowOf('gardenfurnituresets.co.uk');
+    const toggle = within(row).getByRole('button', { name: /1 earlier check/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    const earlier = screen.getByRole('list', { name: 'Earlier checks of gardenfurnituresets.co.uk' });
+    expect(within(earlier).getByRole('img', { name: 'Score 80 out of 100, Good' })).toBeInTheDocument();
+  });
+
+  it('leaves the checks the user has hidden out of what needs fixing, as What to fix does', async () => {
+    const checks = {
+      categories: [],
+      checks: [
+        { id: 'broken-internal-links', severity: 'error' },
+        { id: 'slow-response', severity: 'warning' },
+      ],
+    };
+    const analysis = {
+      analyzedAt: garden.analyzedAt,
+      counts: [
+        { checkId: 'broken-internal-links', count: 5 },
+        { checkId: 'slow-response', count: 3 },
+      ],
+      skipped: [],
+    };
+    ownSidecar([
+      ['GET', /^\/api\/checks$/, () => json(checks)],
+      ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/analysis$/, () => json(analysis)],
+      ...routes([garden]),
+    ]);
+    replaceSettings({ hiddenChecks: ['slow-response'] });
+    render(<ScreenApp path="/" mode="simple" />);
+    const row = await rowOf('gardenfurnituresets.co.uk');
+    expect(await within(row).findByRole('img', { name: '1 serious' })).toBeInTheDocument();
+  });
+
+  it('lists every action of a row in Simple’s words', async () => {
+    await open([garden]);
+    const row = await rowOf('gardenfurnituresets.co.uk');
+    await userEvent.click(within(row).getByRole('button', { name: 'More for gardenfurnituresets.co.uk' }));
+    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent);
+    expect(items).toEqual([
+      'Open',
+      'Check again',
+      'Update the results',
+      ...(SIMPLE_SCREENS.report ? ['Open the report'] : []),
+      'Remove from Your sites',
+      'Delete file…',
+    ]);
+  });
+});
+
+describe.skipIf(TABLE_STUBBED)('Home in Simple, on a first start', () => {
+  it('shows three steps, and where Advanced and a crawl file are', async () => {
+    await open([]);
+    const steps = await screen.findByRole('region', { name: 'What happens' });
+    expect(
+      within(steps)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual([
+      'Step 1: Paste your web address',
+      'Step 2: It reads your site',
+      'Step 3: You get a score and a to-do list',
+    ]);
+    expect(screen.queryByRole('heading', { name: /Your sites/ })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Switch to Advanced' }));
+    await act(() => Promise.resolve());
+    expect(getMode()).toBe('advanced');
+  });
+});

@@ -21,13 +21,20 @@ export const TOAST_DURATION_MS = 5_000;
 export const UNDO_DURATION_MS = 8_000;
 export const ERROR_DURATION_MS = 10_000;
 
-/** A background result, usually with the action that follows from it. */
-export function notifyResult(title: string, options: { id?: string; description?: string; action?: ToastAction } = {}) {
+/**
+ * A background result, usually with the action that follows from it. `secondary` is a second way on, drawn before
+ * the action and quieter ("See the summary", then "Open the report").
+ */
+export function notifyResult(
+  title: string,
+  options: { id?: string; description?: string; action?: ToastAction; secondary?: ToastAction } = {},
+) {
   return toast(title, {
     duration: TOAST_DURATION_MS,
     ...(options.id ? { id: options.id } : {}),
     ...(options.description ? { description: options.description } : {}),
     ...(options.action ? { action: options.action } : {}),
+    ...(options.secondary ? { cancel: options.secondary } : {}),
   });
 }
 

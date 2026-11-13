@@ -1711,3 +1711,46 @@ URL grid (112,577 URLs) as Excel from Export to Saved 889 ms in the page, the to
   open in its program, both closed again by `scripts/shell-opened.ps1`). **The native save dialog and the
   notification** are not driven anywhere: the walk can't operate a native dialog, and the notification is covered by
   the shell's unit tests of its words.
+
+## Simple: Home, checking a site and the finished toast (round 4, part A)
+
+Simple's Home and its checking screen ([Simple mode](v2-ui-simple.md#home), "While it checks the site", "The report
+at the end"), in `app/src/simple/`, and the score ring in `app/src/ui/`.
+
+- **The rows set**: `home` is `simple/home/SimpleHome` and `overview` is `simple/SimpleOverview`, which shows the
+  checking screen (`simple/checking/CheckingScreen`) while the crawl runs, is paused or stopping, while its results
+  are worked out, and for up to 1.5 s after a crawl completes before its analysis begins (`HAND_OVER_GRACE_MS`, so it
+  never flashes "never analysed"); then the Summary in place, focus that was on the checking screen going to the
+  Summary's title. Until part B's Summary is merged, the Summary is Advanced's Overview (`TODO(round4-merge)`).
+- **The score ring** (`ui/ScoreRing.tsx`, the words in `ui/score.ts`): the accent's arc on a neutral track, never a
+  severity colour; `partial` dashes the arc (one dash array, no mask, so no id to keep unique) and says "so far" in
+  the ring and its word; `null` is a dashed track and "–". Sizes are the `--ring-*` tokens. One image to a screen
+  reader, with its word when `word` sets it beside the ring ("Score 85 out of 100, Good").
+- **Home**: the field ("Web address", Enter starts the check with the saved defaults, as Advanced's Home does), and
+  the line under it from `GET /api/crawl-options/defaults` against the app's copy of the engine's
+  (`simple/home/savedSettings.ts`). Your sites (`simple/home/sites.ts`) groups the library by site, the newest check
+  the row and the older ones folded under it, the checks running now pinned above. A row's kind decides its words
+  and its one action: live (progress), scored, stopped early (dashed, "so far", Continue), never worked out (Work
+  out the results), worked out by an engine before the score (Update the results), no pages read, file not found
+  (Locate the file…, in the shell), unreadable. What needs fixing counts the problems as What to fix does: the
+  library's Error and Warning counts, or, with checks hidden, the row's analysis read and the hidden ones left out.
+  The row's menu has Advanced's actions in Simple's words; Open the report only once the Report screen exists.
+- **Checking a site**: three steps, three figures taken from one progress event (or, once the crawl has ended, the
+  crawl file's stats), one bar, and the time left as a floor: what's queued over the current rate, said as "at least"
+  ("about" when the URL limit is nearer than the queue's end, as nothing more can be found to read then). What's in
+  the way (`simple/checking/checkingWords.ts`) is the design's table: the alerts of the current run (an earlier
+  run's are left out, by instant) and the progress's waits, one line a kind, in a log so a new one is read once,
+  each action landing where Advanced's alert does and saying "in Advanced" when it leads there. The figures aren't
+  links (the design draws them plain, and the screens they'd open are Advanced only): the end-to-end test holds
+  them, paused, to the URL grid's crawled count, the queue and the pages read.
+- **The finished toast** (`live/liveBridge.ts`, words in `simple/finishedWords.ts`): in Simple "{site} is checked",
+  "Score 85: 6 problems to fix", with See the summary and Open the report (the action, once the Report screen
+  exists; `notifyResult`'s new `secondary` is drawn before it); in Advanced its words, and Open the report as its
+  second action. A stopped check has Simple's words too. The problems leave out hidden checks, reading the analysis
+  afresh when there are some.
+- **The system notification** (`src-tauri/src/live/notify.rs`): the same words in Simple, from the mode and the
+  hidden checks the page stored (`settings::preferences`, read as the page reads them: nothing stored is Simple), the
+  library item's `score` and `pageCount`, and, with checks hidden, `/api/checks` and the analysis's counts. The
+  notification plugin has no buttons on the desktop, so See the summary and Open the report are the toast's only.
+- **Tests of these screens through the whole app** run in the `app` project only (`simple/tableStubbed.ts`): the
+  `filled` project's rows are stubs.

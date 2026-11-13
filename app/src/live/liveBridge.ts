@@ -5,7 +5,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/errors';
 import { api } from '../api/client';
-import { gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
+import { analysisQuery, checksQuery, gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
 import { getTransport } from '../api/transport';
 import type { CrawlEvent, CrawlListItem, CrawlStatus } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
@@ -14,6 +14,11 @@ import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback/notify';
 import { formatCountOf } from '../lib/format';
+import { SIMPLE_SCREENS } from '../app/simpleScreens';
+import { getMode } from '../mode/mode';
+import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
+import { getSettings } from '../settings/settingsStore';
+import { simpleFinishedWords, simpleStoppedWords } from '../simple/finishedWords';
 import { getConnection, subscribeSidecarStatus } from '../shell/connection';
 import { liveStore, type LiveState, type LiveStore } from './liveStore';
 import { startEventStream } from './sse';
@@ -25,8 +30,8 @@ export const LIVE_GRID_REFRESH_MS = 1_000;
 
 export interface LiveBridgeOptions {
   queryClient: QueryClient;
-  /** Opens a crawl's view from a toast's action. */
-  openCrawl: (id: string, view: 'overview' | 'issues') => void;
+  /** Opens a crawl's view from a toast's action: the Report only once its screen exists. */
+  openCrawl: (id: string, view: 'overview' | 'issues' | 'report') => void;
   store?: LiveStore;
 }
 
@@ -263,6 +268,26 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     // An analysis that stored nothing was cancelled: nothing to announce.
     if (!crawled && before !== undefined && item?.analyzedAt === before) return;
     const name = crawlName(item);
+    // The Report, once its screen exists (app/simpleScreens.ts): the report a check ends in, in both modes.
+    const report = SIMPLE_SCREENS.report
+      ? { label: 'Open the report', onClick: () => openCrawl(crawlId, 'report') }
+      : null;
+    if (getMode() === 'simple') {
+      const words = simpleFinishedWords({
+        site: name,
+        crawled,
+        score: item?.score,
+        problems: await problemsOf(crawlId, item),
+        pageCount: item?.pageCount ?? null,
+      });
+      const summary = { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') };
+      notifyResult(words.title, {
+        id: crawlToast(crawlId, 'finished'),
+        description: words.description,
+        ...(report ? { secondary: summary, action: report } : { action: summary }),
+      });
+      return;
+    }
     const checks = item?.issues ? item.issues.error + item.issues.warning + item.issues.notice : null;
     const found =
       checks === null
@@ -275,16 +300,48 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       id: crawlToast(crawlId, 'finished'),
       description: [name, [urls, found].filter(Boolean).join(', ')].filter(Boolean).join(': '),
       action: { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') },
+      ...(report ? { secondary: report } : {}),
     });
+  }
+
+  /**
+   * The problems Simple counts for the check: its checks with issues that are Serious or Worth fixing, less the ones
+   * the user has hidden, as What to fix counts them. With none hidden, the library's counts; else the analysis, read
+   * afresh. Null when there are none to count, or they couldn't be read.
+   */
+  async function problemsOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+    if (!item?.issues) return null;
+    const hidden = getSettings().hiddenChecks;
+    if (hidden.length === 0) return item.issues.error + item.issues.warning;
+    try {
+      const [checks, analysis] = await Promise.all([
+        queryClient.query(checksQuery()),
+        queryClient.query({ ...analysisQuery(crawlId), staleTime: 0 }),
+      ]);
+      const { error, warning } = foundBySeverity(checkEntries(checks, analysis, new Set(hidden)));
+      return error + warning;
+    } catch {
+      return null;
+    }
   }
 
   async function toastStopped(crawlId: string) {
     const item = await itemOf(crawlId);
     const name = crawlName(item);
+    const continueAction = { label: 'Continue', onClick: () => void continueCrawl(crawlId) };
+    if (getMode() === 'simple') {
+      const words = simpleStoppedWords(name, item ? (crawledUrls(item) ?? 0) : null);
+      notifyResult(words.title, {
+        id: crawlToast(crawlId, 'stopped'),
+        description: words.description,
+        action: continueAction,
+      });
+      return;
+    }
     notifyResult('Crawl stopped', {
       id: crawlToast(crawlId, 'stopped'),
       description: item ? `${name}: ${formatCountOf(crawledUrls(item) ?? 0, 'URL')}. You can continue it later.` : name,
-      action: { label: 'Continue', onClick: () => void continueCrawl(crawlId) },
+      action: continueAction,
     });
   }
 

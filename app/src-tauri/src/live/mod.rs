@@ -19,8 +19,10 @@ use crate::sidecar::{Connection, Link, Next};
 use crate::sync::lock;
 use crate::tray::TrayHandle;
 use crate::window;
+use crate::{profile, settings};
 use api::Api;
 use model::{Change, CrawlItem, Ended, Event, LiveStatus, LiveView};
+use notify::Words;
 use sse::SseParser;
 
 const MIN_BACKOFF: Duration = Duration::from_millis(250);
@@ -117,7 +119,8 @@ impl Follower {
         if self.app.try_state::<Shell>().is_none_or(|shell| shell.is_quitting()) {
             return;
         }
-        for (item, notice) in notify::interrupted(&lost, items) {
+        let simple = self.preferences().simple;
+        for (item, notice) in notify::interrupted(&lost, items, simple) {
             let key = notify::ending_key(item);
             if self.told.get(&item.id) == Some(&key) {
                 continue;
@@ -127,8 +130,33 @@ impl Follower {
                 log::debug!("No notification for \"{}\": the window is in front and says it itself", notice.title);
                 continue;
             }
-            notify::show(&self.app, notice.title, &notice.body);
+            notify::show(&self.app, &notice.title, &notice.body);
         }
+    }
+
+    /// The page's preferences as they are now: the mode the notices speak in, and the checks the user has hidden.
+    fn preferences(&self) -> settings::Preferences {
+        let stored =
+            profile::settings_folder(&self.app).and_then(|folder| settings::read(&folder.join(settings::FILE_NAME)));
+        settings::preferences(stored.as_ref())
+    }
+
+    /// The words a crawl's notice is in: Simple's carry its problems to fix, counted as What to fix counts them.
+    fn words(&self, connection: &Connection, item: &CrawlItem) -> Words {
+        let preferences = self.preferences();
+        if !preferences.simple {
+            return Words::Advanced;
+        }
+        let problems = item.issues.and_then(|issues| {
+            if preferences.hidden_checks.is_empty() {
+                return Some(issues.error + issues.warning);
+            }
+            self.api
+                .problems(connection, &item.id, &preferences.hidden_checks)
+                .inspect_err(|error| log::debug!("Couldn't count crawl {}'s problems: {error}", item.id))
+                .ok()
+        });
+        Words::Simple { problems }
     }
 
     /// Reads the stream until it ends. True if any event arrived.
@@ -262,12 +290,13 @@ impl Follower {
         if self.told.get(&ended.id) == Some(&key) {
             return;
         }
-        let Some(notice) = notify::notice(ended, &item, baseline.as_ref()) else { return };
+        let words = self.words(connection, &item);
+        let Some(notice) = notify::notice(ended, &item, baseline.as_ref(), words) else { return };
         self.told.insert(ended.id.clone(), key);
         if window::is_in_front(&self.app) {
             log::debug!("No notification for \"{}\": the window is in front and says it itself", notice.title);
             return;
         }
-        notify::show(&self.app, notice.title, &notice.body);
+        notify::show(&self.app, &notice.title, &notice.body);
     }
 }
