@@ -7,6 +7,7 @@ import type { Analysis, CrawlListItem } from '../api/types';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createAppRouter } from '../app/router';
+import { closeExportDialog, getExportDialog } from '../export/exportFlow';
 import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings, updateSettings } from '../settings/settingsStore';
@@ -74,6 +75,7 @@ beforeEach(() => {
   liveStore.reset();
 });
 afterEach(() => {
+  closeExportDialog();
   uninstall();
   setTransport(fakeSidecar([]));
 });
@@ -172,6 +174,15 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(router.state.location.search).toEqual({});
+  });
+
+  it('saves the report on Ctrl+E, as the Keys table says', async () => {
+    await open(GARDEN_ANALYSIS);
+    (await site()).focus();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'e', code: 'KeyE', ctrlKey: true });
+    const dialog = getExportDialog();
+    expect(dialog?.offer.title).toBe('Save the report');
+    expect(dialog?.offer.initialChoice ?? dialog?.offer.choices[0]?.id).toBe('report');
   });
 
   it('leaves hidden checks out of the counts, and says nothing of five fixed that aren’t the engine’s five', async () => {

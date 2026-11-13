@@ -30,7 +30,7 @@ export function SimpleOverview() {
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => screenRef.current?.querySelector<HTMLElement>('h1') ?? null);
 
-  // Registered only while this screen shows it: the Summary has its own.
+  // Registered only while the checking screen shows: the Summary registers its own (Ctrl+E, Save the report).
   useCommands(
     () =>
       checking

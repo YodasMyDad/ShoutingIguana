@@ -14,6 +14,8 @@ import {
 import { type Analysis, type CrawlListItem, type CrawlStatus, type OutOfDateReason } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { overviewOffer } from '../export/offers';
+import { CRAWL_FILE_COMMANDS, useExportCommand } from '../export/useExportCommand';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
@@ -78,6 +80,13 @@ function Summary({
   );
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => control.titleRef.current);
+  // Ctrl+E saves the report (docs/v2-ui-simple.md, Keys): the export dialog on the report, as Open the report's
+  // Save… does. The Summary is only drawn once the check has ended, so nothing is crawling.
+  useExportCommand(() => (item ? overviewOffer(item, false, true) : null), [item], {
+    group: 'Crawl',
+    title: 'Save the report…',
+    choices: CRAWL_FILE_COMMANDS,
+  });
 
   const loading =
     item === undefined ||
