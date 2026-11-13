@@ -6,7 +6,7 @@ import path from 'node:path';
 export const BROWSER_ARGUMENTS = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS';
 
 /** Virtual-key codes of the keys the walk presses in the webview itself (scripts/shell-window.ps1 `keys`). */
-export const VIRTUAL_KEYS = { F3: 0x72, F5: 0x74, F9: 0x78 };
+export const VIRTUAL_KEYS = { F3: 0x72, F5: 0x74, F9: 0x78, Escape: 0x1b };
 
 /**
  * The browser arguments with the debugging port set to `port`: any port already asked for is replaced, anything else

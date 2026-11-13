@@ -1,5 +1,6 @@
-//! The few sidecar calls the shell makes itself: the event stream, a crawl's library item, pause or resume from the
-//! tray, and a crawl's problems for Simple's notice. Plain HTTP to 127.0.0.1, never through a proxy, with the bearer token and no Origin header.
+//! The few sidecar calls the shell makes itself: the event stream, a crawl's library item, an export's file, pause or
+//! resume from the tray, and a crawl's problems for Simple's notice. Plain HTTP to 127.0.0.1, never through a proxy,
+//! with the bearer token and no Origin header.
 
 use std::fmt;
 use std::time::Duration;

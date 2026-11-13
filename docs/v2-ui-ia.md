@@ -75,7 +75,7 @@ links and "reopen where I left off" all work.
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps: the list, and one sitemap's URLs (its id in the path). Params on one sitemap: `filter`, `sort`, `q`, `inspect`, as URLs. On the list: `url`, a sitemap's address, which goes on to that sitemap |
 | `/crawls/:crawl/robots/:origin?` | robots.txt: the origins, and one origin's file with the URLs it blocked (the origin in the path). Params on one origin: `line` (the line chosen), `reason` (`unreachable` or `unknown`: the blocked URLs no line accounts for), `inspect` |
 | `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them. Params: `focus` (`speed`, `headers` or `proxy`: what Continue may change, in focus) |
-| `/crawls/:crawl/report` | Report (Simple): the engine's report in a frame, in both modes. Params: `cut` (`full` or `summary`). There once its screen is (round 4), not found until then |
+| `/crawls/:crawl/report` | Report (Simple): the engine's report in a frame, in both modes. Params: `cut` (`full` or `summary`; the full report when left out) |
 | `/settings/:section?` | App settings: `general` (none), `crawl-defaults`, `analysis`, `data`, `shortcuts`, `diagnostics`, `updates`, `about`. Analysis is listed once it can be set; a section there's none of opens General |
 
 **In Simple** the same routes show Simple's screens: `/` is its Home, `/new` its four questions, `overview` the
@@ -257,7 +257,11 @@ Actions: open in browser, copy the URL.
 
 **Report (Simple).** In both modes. A toolbar (Full report or Summary page; Spreadsheet of everything; Save; Print
 or save as PDF) over the engine's report, shown in a sandboxed frame. The document, its outline and its sizes are
-in [Simple mode](v2-ui-simple.md#the-report).
+in [Simple mode](v2-ui-simple.md#the-report). The toolbar's line says what it is of: the site, the crawl's date and
+the pages its analysis read, which the document's head says too. Ctrl+P prints the frame alone, Ctrl+E saves the
+report (both modes), and the palette has "Show the full report", "Show the summary page" and "Spreadsheet of
+everything…". A crawl never analysed has no report: it says so, with Work out the results (Analyse it in Advanced); a
+running one says the report comes when it ends; results out of date say why over the sheet.
 
 ## The five flows
 
@@ -311,7 +315,7 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Ctrl+1 to Ctrl+7 | The crawl's sections |
 | Ctrl+8 | Report (Simple). In Simple the sections are three: Ctrl+1 to Ctrl+3 |
 | Ctrl+Shift+A | Switch between Simple and Advanced, from a text field too |
-| Ctrl+P | Print or save as PDF, on the Report screen (Simple) |
+| Ctrl+P | Print or save as PDF, on the Report screen (both modes) |
 | F7 | Pause or resume |
 | F8 | Stop |
 | Alt+Left, Alt+Right, mouse back and forward | Back and forward |

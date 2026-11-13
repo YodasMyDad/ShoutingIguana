@@ -410,6 +410,11 @@
   --robots-columns: minmax(0, 11fr) minmax(0, 9fr); /* the file, then the URLs it blocked */
   /* The note over the blocked URLs: room for two lines of 12px text, so the list never moves when it wraps or comes. */
   --robots-note-height: calc(2 * var(--leading-12) + var(--space-3));
+  /* The Report screen (round 4). */
+  --paper-width: 860px; /* the report's sheet on the canvas: a page's width, with room either side of its text */
+  --report-bar-text: 200px; /* the toolbar's title and line, before its controls go under them */
+  --report-sheet-min: 320px; /* the sheet keeps this much, however short the window: the screen scrolls instead */
+  --color-paper: #ffffff; /* the sheet, light in both themes as paper is: the report is light only */
   --divider-height: 20px;
   --spark-height: 28px;
   --spark-height-lg: 36px;

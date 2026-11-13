@@ -85,7 +85,9 @@ switch ($Command) {
     $webview = Get-CimInstance Win32_Process -Filter "ParentProcessId=$AppPid AND Name='msedgewebview2.exe'" | Select-Object -First 1
     # The webview's own top-level windows: a find bar, a print or downloads window, DevTools. None when idle.
     $extra = if ($webview) { @([ShellWindow]::TopLevel($webview.ProcessId) | Where-Object { [ShellWindow]::Visible($_) }).Count } else { 0 }
-    @{ window = [ShellWindow]::Visible($main); dialog = if ($dialog) { [ShellWindow]::Text($dialog) } else { $null }; webviewWindows = $extra } | ConvertTo-Json -Compress
+    # The webview's surfaces inside the window: one for the page, and one more while WebView2's print dialog is up.
+    $surfaces = @([ShellWindow]::Children($main) | Where-Object { [ShellWindow]::Class($_) -eq 'Chrome_RenderWidgetHostHWND' -and [ShellWindow]::Visible($_) }).Count
+    @{ window = [ShellWindow]::Visible($main); dialog = if ($dialog) { [ShellWindow]::Text($dialog) } else { $null }; webviewWindows = $extra; surfaces = $surfaces } | ConvertTo-Json -Compress
   }
   'keys' {
     $target = [ShellWindow]::Children($main) | Where-Object { [ShellWindow]::Class($_) -eq 'Chrome_WidgetWin_1' } | Select-Object -First 1

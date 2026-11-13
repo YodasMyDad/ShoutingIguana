@@ -39,7 +39,7 @@ export const SIMPLE_SCREENS: SimpleScreens = {
 
   // `/crawls/:crawl/report`: the Report screen, the same in both modes. Its sidebar item (third in Simple, eighth in
   // Advanced), its key (Ctrl+3, Ctrl+8) and its route appear once this is set.
-  report: null,
+  report: simpleScreen(() => import('../screens/report/ReportScreen'), 'ReportScreen'),
 };
 
 export type SimpleScreenKey = keyof SimpleScreens;
