@@ -1,6 +1,6 @@
 // The finished toast in each mode (docs/v2-ui-simple.md, "The report at the end" 2), through the real toaster: in
 // Simple "{site} is checked", "Score 85: 6 problems to fix", with See the summary and Open the report; in Advanced its
-// own words, gaining Open the report. Open the report is there once the Report screen is (app/simpleScreens.ts).
+// own words, gaining Open the report.
 import { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

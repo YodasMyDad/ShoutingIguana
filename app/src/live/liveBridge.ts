@@ -34,7 +34,7 @@ export const LIVE_GRID_REFRESH_MS = 1_000;
 
 export interface LiveBridgeOptions {
   queryClient: QueryClient;
-  /** Opens a crawl's view from a toast's action: the Report only once its screen exists. */
+  /** Opens a crawl's view from a toast's action: its Summary or Overview, Issues, or the Report. */
   openCrawl: (id: string, view: 'overview' | 'issues' | 'report') => void;
   store?: LiveStore;
 }
