@@ -132,51 +132,77 @@ the three audit sites above.
 Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3`. `v2` and `master`
 were not moved. This section is the place to resume. Merging to `master` or releasing still needs an explicit yes.
 
-**Paused on 2026-11-13 by the owner, to save usage** ("finish off as we are running out of usage, then save where
-you get to"). Step 3 is about nine-tenths done: every screen of both modes is built, and all but round 4 is merged.
-Nothing new was started after the pause; the one agent at work (round 4's integration) stopped at a clean point,
-committed and wrote a HANDOFF. No agent is running. (The orchestrator's last verify run, of `e350053`, was left to
-finish on its own; its result isn't recorded: run it again.)
+**Stopped for the day on 2026-11-13 (evening), at the owner's word** ("merge and push so everything is on github,
+then get all docs up to date so I can continue tomorrow"). **Every screen of both modes is built, reviewed, fixed
+and merged into `ui/step-3` (`8fd6c66`, pushed).** Round 4 went in that day: integrated, reviewed with fresh eyes
+(20 findings, no defect at the seams), 19 fixed with a test seen failing per fix and one judged moot, merged. Every
+local `ui/*` branch is on GitHub. What's left is checking the merged whole, the release build's smoke test, the
+closing audit and the gallery. No agent is running.
 
 **A new session needs** this section and the folder [`docs/handoff/2026-11-13/`](handoff/2026-11-13/): every brief
-of this session (`brief-*.md`), every review's findings with the orchestrator's decisions (`reviews/`), each
-agent's own checkpoint (`checkpoint-<name>.md`; `checkpoint-r4-integrate.md` starts with its HANDOFF), the
-orchestrator's log (`checkpoint.md`), and `tools/verify-app.sh` and `tools/verify-engine.sh` (the app's now retries
-`npm ci` and stops when it fails). The 2026-11-11 folder keeps `ui-slice-rules.md`, which every UI brief cites.
-Subagents can't be resumed across sessions: relaunch each from its brief and its checkpoint.
+(`brief-*.md`; round 4's review and fixer are `brief-round4-review.md`, `brief-round4-fixes.md`), every review's
+findings with the orchestrator's decisions (`reviews/`; round 4's is `round4-review-findings.md`), each agent's
+checkpoint (`checkpoint-<name>.md`), the orchestrator's logs (`checkpoint.md`, and `checkpoint-session-2.md` for the
+evening), and `tools/verify-app.sh`, `tools/verify-engine.sh`, `tools/r4-integrate-checks.sh`. The 2026-11-11 folder
+keeps `ui-slice-rules.md`, which every UI brief cites. Subagents can't be resumed across sessions: relaunch each
+from its brief.
 
-### To resume, in this order (2026-11-13)
+### To resume, in this order (from 2026-11-14)
 
-1. **Round 4's integration** (`ui/r4-integrate`, worktree `r4-integrate`, brief `brief-round4-integrate.md`):
-   merge `ui/r4-home`, `ui/r4-summary`, `ui/r4-report` (each built, checked green by its builder, NOT reviewed),
-   settle the `overview` row (Part A's dispatcher with Part B's Summary), replace every `TODO(round4-merge)` (A's
-   `ScoreRing`, B's breakdown dialog, the hand-over's `app/src/export/` pieces, ONE `reveal_export_file` in the
-   shell: the hand-over's), favicons and `pagesAnalyzed` on Simple's Home, then every check and `smoke:shell`.
-   **At the pause it was at `37a58c3` (pushed), all seven items done in code, no stand-in left, `ui/step-3` at
-   e350053 merged in.** Green there: typecheck, lint, format, unit x3 (3,394), script tests, build-storybook, cargo.
-   Not yet run there: the three story runs, `e2e:filled`, the full e2e, the parts' specs x5, the release build and
-   `smoke:shell` (the report's print step). Its HANDOFF (`checkpoint-r4-integrate.md`) has the exact next steps and
-   its check script is `tools/r4-integrate-checks.sh`.
-2. **A fresh-eyes review of round 4 as integrated** (write its brief from `brief-round3-review.md`'s pattern), a
-   fixer, the merge into `ui/step-3`, both verify scripts, push.
-3. **The verify of `e350053`** (E7 merged): it was running at the pause. Its engine half finished green on its
-   own (on `3ebd565`, docs only after `e350053`: build, tests, the 100k bench, `readbench --gate`). Its app half
-   stopped after build-storybook (all green to there); the full check run on `ui/r4-integrate`, which holds
-   `e350053`, stands in for the rest.
-4. **The closing audit** (`brief-closing-audit.md`, read-only, both modes) and **the gallery re-shoot**
+1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
+   time (the app's takes ~2.5 h; run it in the background):
+   `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
+   `bash docs/handoff/2026-11-13/tools/verify-app.sh <repo>/app <logs> 51874 5956` (copy the git-ignored fixtures
+   into `app/design/data/` first: `cp -r` from another worktree's `app/design/data/fixtures`, or regenerate them).
+   What's known green: on round 4's integration with its fixes (`96576cd`, the same app and shell code as
+   `8fd6c66`): typecheck, lint, format, script tests 43, unit 3,437 (75 skipped), `cargo fmt`/`clippy`/`test`
+   (120 + 3), build-storybook. On `37a58c3`, before the fixes: stories 482 x 2 themes and forced colours clean.
+   **Not yet seen to finish on the fixed code:** the three story runs, `e2e:filled`, round 4's specs x5, the full
+   e2e (a run on `96576cd` was under way when the day ended; its logs are in the session scratchpad only, so treat
+   it as not run). The engine: last green on `3ebd565` (the 100k bench and `readbench --gate`); round 4 didn't
+   touch the engine, so its half is a formality.
+2. **The release build and the shell's smoke test** (needs the desktop session): in `app/`,
+   `npm run tauri build -- --no-bundle` (after `npm run build:sidecar`), then `npm run smoke:shell`: the export step
+   (Open folder, Open file) and the Report's print step. Never yet run on round 4's code.
+3. **The closing audit** (`brief-closing-audit.md`, read-only, both modes) and **the gallery re-shoot**
    (`brief-gallery.md`, builds into `.claude/worktrees/_gallery/site/` so the private page
    https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR keeps its address; the orchestrator views every image before
-   publishing). They can run at once.
-5. Fix what the audit finds that blocks "finished"; then tell the owner step 3 is finished. Step 3b, the check
+   publishing). They can run at once, once 1 is green. Update both briefs' base commit to `ui/step-3`'s head.
+4. Fix what the audit finds that blocks "finished"; then tell the owner step 3 is finished. Step 3b, the check
    audit on real sites, follows.
+
+**Round 4, as merged** (`ui/r4-integrate` into `ui/step-3`): three parts, each checked by its builder, integrated
+on the hand-over UI and E7. A: Simple's Home, the checking screen, `ui/ScoreRing`, the shell's notification in
+Simple's words. B: the Summary, What to fix, the score's breakdown. C: the Report in both modes (printing), the
+score on Advanced's Overview. The integration settled the `overview` row (A's dispatcher showing B's Summary),
+replaced every stand-in, kept ONE `reveal_export_file` in the shell, and put favicons and `pagesAnalyzed` on
+Home. The review's fixes (`ui/r4-fixes`): an unanalysed stopped or failed check says so on the Summary (Continue
+checking, Try again with the cause); a cancelled first analysis isn't announced as ready (toast and OS notice);
+Simple's words in its toasts and screen-reader announcements; Ctrl+E on the Summary; a passed check says what it
+looks for; things worth a look listed when there's nothing to fix; the breakdown never loads for ever and closes
+back through history; Home words a refused address in Simple's words; hidden checks counted honestly; one date and
+one page count per sentence; the time-left estimate and the blocked callout's count fixed; dead code removed. The
+moot one: passing `crawling` to a problem's export, whose page is never drawn while crawling.
 
 Small things owed: the design fixtures' regeneration cross-check reads a library field (`urlCount`) that no longer
 exists (5 false mismatches); the `link-pass-split` and read gates have never run on CI; `readbench`'s links "not
-followed" half-way read missed its gate once under load (554 ms against 200; 43 ms on the rerun).
+followed" half-way read missed its gate once under load (554 ms against 200; 43 ms on the rerun); the score
+breakdown dialog's new "not analysed" and "couldn't be read" fallbacks have no story (no route can open them now).
+
+The earlier history of 2026-11-13 (the pause in the morning) follows; it is done and kept for the record.
+
+### The morning of 2026-11-13 (history)
+
+Paused that morning by the owner to save usage, about nine-tenths done, round 4 unmerged at `37a58c3`; resumed the
+same day ("continue."). The resume list then was: round 4's integration checks, a fresh-eyes review, the verify of
+`e350053` (its engine half then finished green on its own; its app half stopped after build-storybook, green to
+there), the closing audit and the gallery. The first two are done (above); the rest moved into today's list.
 
 **Merged on 2026-11-13**, each reviewed (but E7), fixed with a test seen failing per fix, merged, and verified again
 by the orchestrator:
 
+- **Round 4, Simple's screens** (`ui/r4-integrate` with `ui/r4-fixes`, `8fd6c66`), with its review's 19 fixes:
+  see "Round 4, as merged" above. Its whole-suite verify on the merge is the first step of the resume list.
 - **Round 3's UI** (`ui/round3`), with its review's 20 fixes: the mode (`settings.mode`, `useMode()`), the switch
   (Ctrl+Shift+A), the mode table `app/src/app/simpleScreens.ts` that round 4 fills one row a screen (a `filled`
   vitest project and `npm run e2e:filled` run everything with every row stubbed), Simple's sidebar, the top bar's

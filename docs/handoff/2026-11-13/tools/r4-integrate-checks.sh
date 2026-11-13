@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs one named step of the final checks in app/, logging to the scratch folder; prints "<step> <exit>" and a summary.
-L=/c/Users/LeeMessenger/AppData/Local/Temp/claude/e2e5beaddde4c070/8e7045a4-9ede-460a-be29-971bc406a6c0/scratchpad/r4-integrate
+L="${L:-$(pwd)/r4-checks-logs}"; mkdir -p "$L/tmp"
 export SI_DEV_SERVER_PORT=51874 SI_DEV_SIDECAR_PORT=51875 SI_PREVIEW_PORT=51876 SI_E2E_SIDECAR_PORT=51877 SI_STORYBOOK_PORT=5956
 export TEMP=$L/tmp TMP=$L/tmp
 cd /c/Projects/ShoutingIguana/.claude/worktrees/r4-integrate/app || exit 1
