@@ -278,3 +278,9 @@ exit=0). Unmerged: `ui/sitemaps-robots` fe51eb0, `ui/e5` 03877b6, `ui/e6` 87e3ff
   the whole app run not finished at the time of the pause. RESUME: run both verify scripts on ui/step-3 again.
 - Status doc rewritten ("Where step 3 stands (2026-11-13)", "To resume, in this order"); handoff folder
   `docs/handoff/2026-11-13/` committed on ui/step-3; every working branch pushed.
+- (pause) R4 INTEGRATION STOPPED CLEAN: `ui/r4-integrate` 37a58c3, tree clean, pushed by me. All 7 brief items done
+  in code (no TODO(round4-merge) left; one reveal_export_file; pagesAnalyzed on Home and the Summary); step-3
+  e350053 merged in. Green on 37a58c3: typecheck, lint, format, unit x3 (3,394), scripts, build-storybook, cargo.
+  NOT RUN on 37a58c3: the three story runs (clean on 4c34de7), e2e:filled, full e2e, specs x5, release build +
+  smoke:shell. Its HANDOFF: `docs/handoff/2026-11-13/checkpoint-r4-integrate.md`; its check script
+  `tools/r4-integrate-checks.sh`. My verify of e350053 left running to finish on its own (logs `S3\verify-e7-*`).

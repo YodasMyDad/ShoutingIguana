@@ -134,8 +134,9 @@ were not moved. This section is the place to resume. Merging to `master` or rele
 
 **Paused on 2026-11-13 by the owner, to save usage** ("finish off as we are running out of usage, then save where
 you get to"). Step 3 is about nine-tenths done: every screen of both modes is built, and all but round 4 is merged.
-Nothing new was started after the pause; the one agent at work (round 4's integration) was told to stop at a clean
-point, commit and write a HANDOFF. Nothing is running.
+Nothing new was started after the pause; the one agent at work (round 4's integration) stopped at a clean point,
+committed and wrote a HANDOFF. No agent is running. (The orchestrator's last verify run, of `e350053`, was left to
+finish on its own; its result isn't recorded: run it again.)
 
 **A new session needs** this section and the folder [`docs/handoff/2026-11-13/`](handoff/2026-11-13/): every brief
 of this session (`brief-*.md`), every review's findings with the orchestrator's decisions (`reviews/`), each
@@ -150,8 +151,12 @@ Subagents can't be resumed across sessions: relaunch each from its brief and its
    merge `ui/r4-home`, `ui/r4-summary`, `ui/r4-report` (each built, checked green by its builder, NOT reviewed),
    settle the `overview` row (Part A's dispatcher with Part B's Summary), replace every `TODO(round4-merge)` (A's
    `ScoreRing`, B's breakdown dialog, the hand-over's `app/src/export/` pieces, ONE `reveal_export_file` in the
-   shell: the hand-over's), favicons and `pagesAnalyzed` on Simple's Home, then every check and `smoke:shell`. Its
-   HANDOFF says how far it got.
+   shell: the hand-over's), favicons and `pagesAnalyzed` on Simple's Home, then every check and `smoke:shell`.
+   **At the pause it was at `37a58c3` (pushed), all seven items done in code, no stand-in left, `ui/step-3` at
+   e350053 merged in.** Green there: typecheck, lint, format, unit x3 (3,394), script tests, build-storybook, cargo.
+   Not yet run there: the three story runs, `e2e:filled`, the full e2e, the parts' specs x5, the release build and
+   `smoke:shell` (the report's print step). Its HANDOFF (`checkpoint-r4-integrate.md`) has the exact next steps and
+   its check script is `tools/r4-integrate-checks.sh`.
 2. **A fresh-eyes review of round 4 as integrated** (write its brief from `brief-round3-review.md`'s pattern), a
    fixer, the merge into `ui/step-3`, both verify scripts, push.
 3. **The verify of `e350053`** (E7 merged): it was running at the pause. If its logs aren't in the orchestrator's
