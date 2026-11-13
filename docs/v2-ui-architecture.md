@@ -520,6 +520,7 @@ screen, and one that a second screen needs moves here.
 | A choice | `Checkbox` for a form's choice, `Switch` for one that applies at once, `SegmentedControl` for one of a few in view (counts and icon-only segments, a `description` per segment for what it means; the arrows choose), `Select` for one of a short list, `Tabs` for views of one thing |
 | More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`; a `MenuItem`'s `detail` is what it would give (a facet value's count), read with its name. `Popover` for content from a button, or from an `anchor` that something else opens (a filter chip's editor; focus goes back to the anchor); it opens with the keyboard in the first control of what it holds, or the one its content marks `data-autofocus` (the value of a filter being changed), never on its head's Close button; `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone (a failed action keeps it open, saying why inside it) |
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
+| Severity in Simple | `SeverityWord` (Serious, Worth fixing, Worth a look, Couldn't check, Nothing wrong, with Error's, Warning's and Notice's shapes and colours; `badge`, `large`, `inline`, or `mark` named in the word), `plainSeverityCount` ("2 serious problems"); `SeverityMark` takes a `label` for a name other than Advanced's word. `PlainCheckRow` is a check in Simple (its named mark, plain title, `OneFixTag`, first sentence, count and share, a place number in Fix first), a link with `asChild`, in a `PlainCheckList` |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
 | Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
 | Charts | `Sparkline` and `LineChart` (lines over time, drawn with visx in real pixels: the plot measures its box with `useElementSize`, so strokes keep their weight; no tweening), `StatusSplit` (the magnified status bar: the full bar, and the share that didn't answer 2xx across the full width beneath), `ColumnChart` (counts side by side; a number wider than its column is measured and written shorter, "313k", the whole number staying the column's name and tooltip), `StackBar` with `Legend` (a whole in a few parts). Every part that counts URLs is a `ChartLink` (the router's link) with its name and number, so a chart is never read by colour or by its bars alone; each chart says itself in words (`label`). Bars are elements, not SVG, so parts are real links with focus rings and names that wrap; under forced colours parts are told apart by their gaps and a hatch stays a hatch |
@@ -1754,3 +1755,50 @@ at the end"), in `app/src/simple/`, and the score ring in `app/src/ui/`.
   notification plugin has no buttons on the desktop, so See the summary and Open the report are the toast's only.
 - **Tests of these screens through the whole app** run in the `app` project only (`simple/tableStubbed.ts`): the
   `filled` project's rows are stubs.
+
+## Simple's results (round 4, part B)
+
+The Summary, the score's breakdown, What to fix and one problem ([Simple mode](v2-ui-simple.md)), in `src/simple/`,
+plugged in as two rows of the routes' table: `overview` (`SummaryScreen`) and `issues` (`WhatToFixScreen`, which shows
+one problem when the route names a check).
+
+- **One model.** `simple/results.ts` (`plainResults`) makes everything the three screens count from the catalog, the
+  last analysis and the checks hidden in Advanced, through Issues' `checkEntries` and `rankChecksToFix`: the problems
+  by severity in the engine's `fixFirst` order, the five to fix first (errors and warnings only), what couldn't run
+  grouped by its reason, what passed, the categories with nothing found, a serious fault of the whole site. Hidden
+  checks are left out of every list and count, as Advanced leaves them out; the score is the engine's and counts them,
+  so "Fixing these five takes the score from 85 to 98" is said only when the engine's `ifFixed.checkIds` are the five
+  shown. The sidebar's What to fix count comes from the same entries.
+- **Words.** `simple/plainWords.ts` builds every sentence that isn't a check's from counts only: the Summary's sentence
+  (band lead, problems, "so far", a site-wide fault leading by its plain title, nothing to fix), what the score covers
+  (pages, checks, robots.txt, a tiny site), a count's share ("9 of 4,521 addresses", "The whole site", "Once, for the
+  whole site", by the check's `subject`, `siteWide` and `reportedOnce`, out of the analysis's own totals), points and
+  who fixes it. A check's own words are the engine's; a check with no plain words shows its technical ones.
+- **Every figure lands on itself.** The five counts beside the score open their part of What to fix by its hash
+  (`simple/fixSections.ts`: `#serious`, `#worth-fixing`, `#worth-a-look`, `#couldnt-check`, `#nothing-wrong`); a part
+  that folds opens when it's landed on, and its heading takes focus. A count of 0 is no link. Each problem's row opens
+  its page, whose head says the same count and whose Where it is lists exactly that many. `e2e/simple-results.spec.ts`
+  walks every figure on the seeded crawl, or on a real one with `SI_E2E_CRAWL`.
+- **The breakdown** is `ScoreBreakdownFromRoute` (`simple/ScoreBreakdownDialog.tsx`): open while Overview's route has
+  `score=1`, so Back keeps it; Esc, Close and ✕ take `score` off the address. Advanced's Overview renders the same
+  component (part C). Its points table is version 1's and shows only for a score of version 1.
+- **One problem**: what's wrong (`plainWhat`), how to fix it (`plainFix`, numbered), who fixes it (`fixer`), points,
+  the One fix callout when the check's largest group is `likelyTemplate` (`plainOneFix`), Where it is
+  (`simple/WhereItIs.tsx`: the check's groups 25 at a time to 200, each cause with its first three pages by title then
+  address and Show them; a check that doesn't group lists its pages flat with what was measured; past 200, "See all N in
+  Advanced"), Copy the list (Ctrl+Shift+C: both titles, the site and date, the steps, then each cause with its full
+  addresses, read with the rows' cursor), Save as a spreadsheet (Ctrl+E: E5's `check` export through the save dialog
+  and a progress toast, `simple/handOver.ts`) and See it in Advanced (`switchMode`, the same route). A skipped check's
+  page says what it looks for, why it couldn't run and what would let it; a passed check's says its good news.
+- **Keys**: J and K on What to fix move through the problems (the row the keys are on is `aria-current`, its link
+  focused, so Enter opens it); Ctrl+Shift+C and Ctrl+E on a problem; Esc closes the breakdown. Registered by the
+  screens, so they're there in Simple only.
+- **States**: first load (the skeleton after 150 ms), done, perfect, nothing but things worth a look, stopped early,
+  at its limit, turned away part way, failed, results that couldn't be worked out (the live `error` of a crawl that
+  didn't fail), out of date with its reasons, never analysed, scored by an earlier engine (no score), nothing read
+  (`simple/nothingRead.ts`, Simple's words for how the start address answered). Each is a story under
+  **Screens/Simple results**, over `test/simpleSidecar.ts`: the catalog with its plain words and the garden crawl's
+  analysis with its score, captured from today's engine (`test/simple/*.json`), and the states made from them.
+- **Stand-ins until the other parts merge** (`TODO(round4-merge)`): the score ring (`simple/ScoreRingStandIn.tsx`,
+  part A's), checking a site (a running or analysing crawl shows Advanced's live Overview, part A's), and the hand-over
+  slice's export dialog and toast.

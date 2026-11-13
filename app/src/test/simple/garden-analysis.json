@@ -1,0 +1,361 @@
+{
+  "analyzedAt": "2026-11-12T23:52:09.116Z",
+  "engineVersion": "2.0.0-alpha.1",
+  "pagesAnalyzed": 265,
+  "durationMs": 360,
+  "isPartial": true,
+  "outOfDate": false,
+  "outOfDateReasons": [],
+  "notes": [
+    "No sitemap could be read, so orphan pages and pages missing from the sitemaps weren\u0027t checked.",
+    "The site\u0027s other versions (www or not, http or https) weren\u0027t all checked, so duplicate versions of the site weren\u0027t looked for.",
+    "Near-duplicate content wasn\u0027t checked: this crawl was made by an earlier version, which didn\u0027t record what the check needs. Crawl again to check it."
+  ],
+  "counts": [
+    { "checkId": "internal-client-error", "count": 9 },
+    { "checkId": "internal-server-error", "count": 0 },
+    { "checkId": "internal-unreachable", "count": 0 },
+    { "checkId": "internal-blocked", "count": 0 },
+    { "checkId": "soft-404", "count": 0 },
+    { "checkId": "redirect-chain", "count": 0 },
+    { "checkId": "redirect-loop", "count": 0 },
+    { "checkId": "redirect-broken", "count": 0 },
+    { "checkId": "redirect-temporary", "count": 0 },
+    { "checkId": "redirect-downgrade", "count": 0 },
+    { "checkId": "meta-refresh", "count": 0 },
+    { "checkId": "broken-internal-links", "count": 5 },
+    { "checkId": "broken-external-links", "count": 0 },
+    { "checkId": "links-to-redirects", "count": 0 },
+    { "checkId": "internal-nofollow-links", "count": 0 },
+    { "checkId": "empty-anchor-text", "count": 265 },
+    { "checkId": "broken-fragment-links", "count": 0 },
+    { "checkId": "noindex-page", "count": 0 },
+    { "checkId": "nofollow-page", "count": 0 },
+    { "checkId": "blocked-by-robots", "count": 0 },
+    { "checkId": "snippet-blocked", "count": 0 },
+    { "checkId": "robots-txt-unreachable", "count": 0 },
+    { "checkId": "robots-txt-unreachable-other-origin", "count": 0 },
+    { "checkId": "robots-txt-missing", "count": 0 },
+    { "checkId": "site-hidden-from-search", "count": 0 },
+    { "checkId": "canonicalised-page", "count": 1 },
+    { "checkId": "canonical-missing", "count": 8 },
+    { "checkId": "canonical-multiple", "count": 0 },
+    { "checkId": "canonical-broken", "count": 0 },
+    { "checkId": "canonical-to-redirect", "count": 0 },
+    { "checkId": "canonical-to-non-indexable", "count": 0 },
+    { "checkId": "canonical-outside-head", "count": 0 },
+    { "checkId": "canonical-relative", "count": 0 },
+    { "checkId": "canonical-invalid", "count": 0 },
+    { "checkId": "noindex-with-canonical", "count": 0 },
+    { "checkId": "sitemap-non-indexable", "count": 0 },
+    { "checkId": "sitemap-error", "count": 0 },
+    { "checkId": "sitemap-missing", "count": 1 },
+    { "checkId": "sitemap-url-other-host", "count": 0 },
+    { "checkId": "title-missing", "count": 0 },
+    { "checkId": "title-multiple", "count": 0 },
+    { "checkId": "title-too-long", "count": 86 },
+    { "checkId": "title-too-short", "count": 9 },
+    { "checkId": "title-duplicate", "count": 6 },
+    { "checkId": "description-missing", "count": 11 },
+    { "checkId": "description-multiple", "count": 0 },
+    { "checkId": "description-too-long", "count": 210 },
+    { "checkId": "description-too-short", "count": 0 },
+    { "checkId": "description-duplicate", "count": 8 },
+    { "checkId": "h1-missing", "count": 1 },
+    { "checkId": "h1-multiple", "count": 0 },
+    { "checkId": "h1-duplicate", "count": 0 },
+    { "checkId": "low-word-count", "count": 7 },
+    { "checkId": "duplicate-content", "count": 0 },
+    { "checkId": "image-missing-alt", "count": 0 },
+    { "checkId": "image-alt-too-long", "count": 0 },
+    { "checkId": "image-missing-dimensions", "count": 230 },
+    { "checkId": "image-broken", "count": 0 },
+    { "checkId": "image-too-large", "count": 61 },
+    { "checkId": "hreflang-invalid-code", "count": 0 },
+    { "checkId": "hreflang-missing-self", "count": 0 },
+    { "checkId": "hreflang-missing-return", "count": 0 },
+    { "checkId": "hreflang-broken-target", "count": 0 },
+    { "checkId": "hreflang-to-non-indexable", "count": 0 },
+    { "checkId": "hreflang-duplicate-code", "count": 0 },
+    { "checkId": "hreflang-missing-x-default", "count": 0 },
+    { "checkId": "hreflang-outside-head", "count": 0 },
+    { "checkId": "structured-data-invalid", "count": 0 },
+    { "checkId": "structured-data-missing-required", "count": 0 },
+    { "checkId": "no-https", "count": 0 },
+    { "checkId": "http-page", "count": 0 },
+    { "checkId": "mixed-content", "count": 0 },
+    { "checkId": "security-headers-missing", "count": 1 },
+    { "checkId": "url-uppercase", "count": 0 },
+    { "checkId": "url-underscores", "count": 0 },
+    { "checkId": "url-too-long", "count": 0 },
+    { "checkId": "slow-response", "count": 3 },
+    { "checkId": "large-page", "count": 0 },
+    { "checkId": "html-past-crawl-limit", "count": 0 },
+    { "checkId": "viewport-missing", "count": 0 },
+    { "checkId": "lang-missing", "count": 0 },
+    { "checkId": "charset-missing", "count": 0 },
+    { "checkId": "open-graph-missing", "count": 11 }
+  ],
+  "skipped": [
+    {
+      "checkId": "orphan-page",
+      "reason": {
+        "code": "no-sitemap",
+        "text": "No sitemap could be read.",
+        "plainText": "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
+        "plainAction": "Add a sitemap, or fix the one that can\u0027t be read, then check the site again."
+      }
+    },
+    {
+      "checkId": "not-in-sitemap",
+      "reason": {
+        "code": "no-sitemap",
+        "text": "No sitemap could be read.",
+        "plainText": "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
+        "plainAction": "Add a sitemap, or fix the one that can\u0027t be read, then check the site again."
+      }
+    },
+    {
+      "checkId": "near-duplicate-content",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "duplicate-site-version",
+      "reason": {
+        "code": "site-versions-unchecked",
+        "text": "The site\u0027s other versions (www or not, http or https) weren\u0027t all checked.",
+        "plainText": "The site\u0027s other addresses (with and without www, http and https) couldn\u0027t all be tried.",
+        "plainAction": "Check the site again to include it."
+      }
+    }
+  ],
+  "crawledUrlCount": 4521,
+  "fixFirst": [
+    "internal-client-error",
+    "broken-internal-links",
+    "image-too-large",
+    "description-duplicate",
+    "title-duplicate",
+    "slow-response",
+    "empty-anchor-text",
+    "image-missing-dimensions",
+    "description-too-long",
+    "title-too-long",
+    "description-missing",
+    "open-graph-missing",
+    "title-too-short",
+    "canonical-missing",
+    "low-word-count",
+    "canonicalised-page",
+    "sitemap-missing",
+    "h1-missing",
+    "security-headers-missing"
+  ],
+  "score": {
+    "version": 1,
+    "value": 85,
+    "band": "good",
+    "lost": 15,
+    "beforeCeiling": 85,
+    "heldBySerious": false,
+    "partial": false,
+    "covers": {
+      "pages": 265,
+      "urls": 4521,
+      "checksRun": 83,
+      "checksSkipped": 4,
+      "complete": true,
+      "reason": null,
+      "blockedByRobots": 0
+    },
+    "lines": [
+      {
+        "checkId": "internal-client-error",
+        "severity": "error",
+        "count": 9,
+        "of": 4521,
+        "unit": "urls",
+        "extent": "few",
+        "points": 2
+      },
+      {
+        "checkId": "broken-internal-links",
+        "severity": "error",
+        "count": 5,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 4
+      },
+      {
+        "checkId": "image-too-large",
+        "severity": "warning",
+        "count": 61,
+        "of": 265,
+        "unit": "pages",
+        "extent": "many",
+        "points": 3
+      },
+      {
+        "checkId": "description-duplicate",
+        "severity": "warning",
+        "count": 8,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 2
+      },
+      {
+        "checkId": "title-duplicate",
+        "severity": "warning",
+        "count": 6,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 2
+      },
+      {
+        "checkId": "slow-response",
+        "severity": "warning",
+        "count": 3,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 2
+      },
+      {
+        "checkId": "empty-anchor-text",
+        "severity": "notice",
+        "count": 265,
+        "of": 265,
+        "unit": "pages",
+        "extent": "most",
+        "points": 0
+      },
+      {
+        "checkId": "image-missing-dimensions",
+        "severity": "notice",
+        "count": 230,
+        "of": 265,
+        "unit": "pages",
+        "extent": "most",
+        "points": 0
+      },
+      {
+        "checkId": "description-too-long",
+        "severity": "notice",
+        "count": 210,
+        "of": 265,
+        "unit": "pages",
+        "extent": "most",
+        "points": 0
+      },
+      {
+        "checkId": "title-too-long",
+        "severity": "notice",
+        "count": 86,
+        "of": 265,
+        "unit": "pages",
+        "extent": "many",
+        "points": 0
+      },
+      {
+        "checkId": "description-missing",
+        "severity": "notice",
+        "count": 11,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 0
+      },
+      {
+        "checkId": "open-graph-missing",
+        "severity": "notice",
+        "count": 11,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 0
+      },
+      {
+        "checkId": "title-too-short",
+        "severity": "notice",
+        "count": 9,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 0
+      },
+      {
+        "checkId": "canonical-missing",
+        "severity": "notice",
+        "count": 8,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 0
+      },
+      {
+        "checkId": "low-word-count",
+        "severity": "notice",
+        "count": 7,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 0
+      },
+      {
+        "checkId": "canonicalised-page",
+        "severity": "notice",
+        "count": 1,
+        "of": 265,
+        "unit": "pages",
+        "extent": "few",
+        "points": 0
+      },
+      {
+        "checkId": "sitemap-missing",
+        "severity": "notice",
+        "count": 1,
+        "of": 4521,
+        "unit": "urls",
+        "extent": "few",
+        "points": 0
+      },
+      {
+        "checkId": "h1-missing",
+        "severity": "notice",
+        "count": 1,
+        "of": 265,
+        "unit": "pages",
+        "extent": "few",
+        "points": 0
+      },
+      {
+        "checkId": "security-headers-missing",
+        "severity": "notice",
+        "count": 1,
+        "of": 265,
+        "unit": "pages",
+        "extent": "few",
+        "points": 0
+      }
+    ],
+    "ifFixed": {
+      "checkIds": [
+        "internal-client-error",
+        "broken-internal-links",
+        "image-too-large",
+        "description-duplicate",
+        "title-duplicate"
+      ],
+      "value": 98
+    }
+  },
+  "noScoreReason": null
+}

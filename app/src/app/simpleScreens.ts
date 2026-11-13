@@ -35,7 +35,7 @@ export const SIMPLE_SCREENS: SimpleScreens = {
   overview: simpleScreen(() => import('../simple/SimpleOverview'), 'SimpleOverview'),
 
   // `/crawls/:crawl/issues/:check?`: What to fix, and one problem.
-  issues: null,
+  issues: simpleScreen(() => import('../simple/WhatToFixScreen'), 'WhatToFixScreen'),
 
   // `/crawls/:crawl/report`: the Report screen, the same in both modes. Its sidebar item (third in Simple, eighth in
   // Advanced), its key (Ctrl+3, Ctrl+8) and its route appear once this is set.
