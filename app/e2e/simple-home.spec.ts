@@ -209,6 +209,11 @@ test('a check started from Home with Enter goes through its three steps to the S
   await expect(main(page).getByRole('heading', { level: 1, name: /^Checking / })).toBeHidden({ timeout: 200_000 });
   await expect(page.getByRole('list', { name: 'Steps' })).toBeHidden({ timeout: 120_000 });
   await expect(page).toHaveURL(new RegExp(`/crawls/${id}/overview$`));
+  // The Summary, part B's, in its place: focus that was on the checking screen (Pause) is on its title, and it has
+  // its score and its Open the report.
+  await expect(main(page).locator('h1.si-simple-title')).toBeFocused();
+  await expect(main(page).getByRole('img', { name: /^Score \d+ out of 100/ })).toBeVisible({ timeout: 20_000 });
+  await expect(main(page).getByRole('link', { name: 'Open the report' })).toBeVisible();
   const item = await read<CrawlListItem>(`/api/crawls/${id}`);
   expect(item.score).toBeTruthy();
   const problems = (item.issues?.error ?? 0) + (item.issues?.warning ?? 0);
@@ -217,6 +222,12 @@ test('a check started from Home with Enter goes through its three steps to the S
   await expect(toast).toBeVisible();
   await expect(toast).toContainText(`Score ${item.score!.value}${item.score!.partial ? ' so far' : ''}: ${toFix}`);
   await expect(toast.getByRole('button', { name: 'See the summary' })).toBeVisible();
+  // The toast's Open the report lands on the Report screen, part C's.
+  await toast.getByRole('button', { name: 'Open the report' }).click();
+  await expect(page).toHaveURL(new RegExp(`/crawls/${id}/report$`));
+  await expect(page.frameLocator('iframe[title^="The report for"]').getByRole('heading', { level: 1 })).toBeVisible({
+    timeout: 20_000,
+  });
 });
 
 test('the finished toast in Advanced keeps its words', async ({ page }) => {
@@ -230,6 +241,11 @@ test('the finished toast in Advanced keeps its words', async ({ page }) => {
   const toast = page.locator('.si-toast').filter({ hasText: 'Crawl finished' });
   await expect(toast).toBeVisible({ timeout: 150_000 });
   await expect(toast.getByRole('button', { name: 'View issues' })).toBeVisible();
+  await toast.getByRole('button', { name: 'Open the report' }).click();
+  await expect(page).toHaveURL(new RegExp(`/crawls/${started.id}/report$`));
+  await expect(page.frameLocator('iframe[title^="The report for"]').getByRole('heading', { level: 1 })).toBeVisible({
+    timeout: 60_000,
+  });
 });
 
 test('the switch on Home shows its other view within 100 ms', async ({ page }) => {

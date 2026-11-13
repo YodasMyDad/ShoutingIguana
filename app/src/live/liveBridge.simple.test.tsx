@@ -6,7 +6,6 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTransport, type Transport } from '../api/transport';
 import type { CrawlListItem } from '../api/types';
-import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { AppToaster } from '../feedback/AppToaster';
 import { dismissToast } from '../feedback/notify';
 import { replaceSettings } from '../settings/settingsStore';
@@ -16,7 +15,6 @@ import { LiveStore, type LiveStoreClock } from './liveStore';
 vi.mock('../feedback/announce', () => ({ announce: vi.fn() }));
 
 const ID = '0123456789abcdef';
-const REPORT = SIMPLE_SCREENS.report !== null;
 let item: CrawlListItem;
 const asked: string[] = [];
 
@@ -127,7 +125,7 @@ describe('the finished toast in Simple', () => {
     expect(screen.getByText('Score 85: 6 problems to fix')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'See the summary' }));
     expect(openCrawl).toHaveBeenCalledWith(ID, 'overview');
-    expect(screen.queryAllByRole('button', { name: 'Open the report' })).toHaveLength(REPORT ? 1 : 0);
+    expect(screen.queryAllByRole('button', { name: 'Open the report' })).toHaveLength(1);
     stop();
   });
 
@@ -183,7 +181,7 @@ describe('the finished toast in Advanced', () => {
     expect(screen.getByText('gardenfurnituresets.co.uk: 4,521 URLs, 19 checks found issues')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'View issues' }));
     expect(openCrawl).toHaveBeenCalledWith(ID, 'issues');
-    expect(screen.queryAllByRole('button', { name: 'Open the report' })).toHaveLength(REPORT ? 1 : 0);
+    expect(screen.queryAllByRole('button', { name: 'Open the report' })).toHaveLength(1);
     stop();
   });
 });

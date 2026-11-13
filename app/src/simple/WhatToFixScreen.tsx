@@ -4,7 +4,6 @@ import { ChevronDown, Copy, FileText } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
 import { isCrawling, type Severity } from '../api/types';
-import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { crawlName, crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -197,13 +196,11 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
               <Button icon={Copy} onClick={copyList}>
                 Copy this list
               </Button>
-              {SIMPLE_SCREENS.report ? (
-                <Button icon={FileText} asChild>
-                  <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }}>
-                    Open the report
-                  </Link>
-                </Button>
-              ) : null}
+              <Button icon={FileText} asChild>
+                <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }}>
+                  Open the report
+                </Link>
+              </Button>
             </div>
           ) : null}
         </header>

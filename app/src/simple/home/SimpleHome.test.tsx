@@ -2,7 +2,6 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CrawlListItem } from '../../api/types';
-import { SIMPLE_SCREENS } from '../../app/simpleScreens';
 import { ENGINE_DEFAULTS } from '../../crawl/options/engineDefaults';
 import { getMode } from '../../mode/mode';
 import { replaceSettings } from '../../settings/settingsStore';
@@ -195,7 +194,7 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
       'Open',
       'Check again',
       'Update the results',
-      ...(SIMPLE_SCREENS.report ? ['Open the report'] : []),
+      'Open the report',
       'Remove from Your sites',
       'Delete file…',
     ]);

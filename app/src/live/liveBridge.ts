@@ -14,7 +14,6 @@ import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback/notify';
 import { formatCountOf } from '../lib/format';
-import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { getMode } from '../mode/mode';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
 import { getSettings } from '../settings/settingsStore';
@@ -268,10 +267,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     // An analysis that stored nothing was cancelled: nothing to announce.
     if (!crawled && before !== undefined && item?.analyzedAt === before) return;
     const name = crawlName(item);
-    // The Report, once its screen exists (app/simpleScreens.ts): the report a check ends in, in both modes.
-    const report = SIMPLE_SCREENS.report
-      ? { label: 'Open the report', onClick: () => openCrawl(crawlId, 'report') }
-      : null;
+    // The Report: the report a check ends in, in both modes.
+    const report = { label: 'Open the report', onClick: () => openCrawl(crawlId, 'report') };
     if (getMode() === 'simple') {
       const words = simpleFinishedWords({
         site: name,
@@ -284,7 +281,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       notifyResult(words.title, {
         id: crawlToast(crawlId, 'finished'),
         description: words.description,
-        ...(report ? { secondary: summary, action: report } : { action: summary }),
+        secondary: summary,
+        action: report,
       });
       return;
     }
@@ -300,7 +298,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       id: crawlToast(crawlId, 'finished'),
       description: [name, [urls, found].filter(Boolean).join(', ')].filter(Boolean).join(': '),
       action: { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') },
-      ...(report ? { secondary: report } : {}),
+      secondary: report,
     });
   }
 

@@ -19,7 +19,7 @@ import { useId, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { analysisQuery, checksQuery, queryKeys } from '../../api/queries';
 import type { CrawlListItem } from '../../api/types';
-import { SIMPLE_SCREENS } from '../../app/simpleScreens';
+import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
 import { crawlControls, crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
@@ -33,7 +33,6 @@ import { useSettings } from '../../settings/settingsStore';
 import { pickCrawlFiles, showInFolder } from '../../shell/os';
 import { Button } from '../../ui/Button';
 import { ConfirmDialog } from '../../ui/Dialog';
-import { Favicon } from '../../ui/Favicon';
 import { IconButton } from '../../ui/IconButton';
 import { LiveDot } from '../../ui/LiveBadge';
 import { DropdownMenu, MenuItem, MenuSeparator } from '../../ui/Menu';
@@ -121,8 +120,8 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
         )}
       >
         <div className="flex min-w-0 items-center gap-3">
-          {/* The letter: the favicons slice (hasFavicon, api.favicon) isn't merged yet. */}
-          <Favicon site={item.site ?? name} size="lg" />
+          {/* The site's icon (`hasFavicon`), or its letter while it comes or where it has none. */}
+          <CrawlFavicon item={item} site={name} size="lg" />
           <div className="flex min-w-0 flex-col">
             {/* The row's link: stretched over the whole row, so a press anywhere on it opens the check. */}
             <TextLink
@@ -300,7 +299,7 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
   const [confirming, setConfirming] = useState(false);
   const name = crawlName(item);
   const busy = kind === 'live';
-  const report = SIMPLE_SCREENS.report !== null && (kind === 'scored' || kind === 'notScored' || kind === 'noPages');
+  const report = kind === 'scored' || kind === 'notScored' || kind === 'noPages';
 
   const refreshLibrary = () => queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
   const remove = async () => {
