@@ -281,11 +281,18 @@ export function CheckingScreen({
           <ul className="flex flex-col gap-2.5 text-13 text-text-secondary">
             <li className="flex items-start gap-2.5">
               <Pause aria-hidden className="mt-0.5 size-(--icon-sm) flex-none text-text-muted" />
-              <span>
-                <b className="font-semibold text-text">Pause</b> holds the check.{' '}
-                <b className="font-semibold text-text">Stop</b> ends it and keeps what it found, and you can continue it
-                later. Both are at the top right.
-              </span>
+              {analysing ? (
+                <span>
+                  <b className="font-semibold text-text">Cancel</b> stops working out the results. What was read is
+                  kept, and the results can be worked out later.
+                </span>
+              ) : (
+                <span>
+                  <b className="font-semibold text-text">Pause</b> holds the check.{' '}
+                  <b className="font-semibold text-text">Stop</b> ends it and keeps what it found, and you can continue
+                  it later. Both are at the top right.
+                </span>
+              )}
             </li>
             <li className="flex items-start gap-2.5">
               <Bell aria-hidden className="mt-0.5 size-(--icon-sm) flex-none text-text-muted" />
