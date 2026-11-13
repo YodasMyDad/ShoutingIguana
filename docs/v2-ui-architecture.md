@@ -1518,3 +1518,48 @@ touch the same lines:
   Test button.
 - **The engine's own defaults** once the user has saved theirs: `GET /api/crawl-options/defaults` gives one or the
   other. The app keeps a copy, checked end to end.
+
+## The Report screen, and the score in Advanced (round 4, part C)
+
+[The Report screen](v2-ui-simple.md#the-report-screen): one screen in both modes, `screens/report/ReportScreen.tsx`,
+in the routes' table's `report` row, so the route, its sidebar item (third in Simple, eighth in Advanced) and Ctrl+3 /
+Ctrl+8 are there.
+
+- **The document** is `GET /report?cut=`, read as text (`reportQuery.ts`, under the crawl's key, so whatever reads the
+  crawl again reads it again) into `ReportFrame`: an `iframe` with `srcdoc`, `sandbox="allow-same-origin
+  allow-modals"` (scripts off; the page may reach the frame to print it, and the frame may open the print dialog),
+  light in both themes (`--color-paper`, `scheme-light`), as wide as `--paper-width`. It's read only once the analysis
+  is (a crawl never analysed has none). Switching the cut keeps the sheet up, as refreshing, and the other cut is
+  fetched once the first is in, so a switch is about 50 ms.
+- **The toolbar**: "Report", then the site, the crawl's date ("checked" in Simple, "crawled" in Advanced) and the
+  pages the analysis read, the figure the document's head gives too (the mockup's "12 pages" is the printed length,
+  which isn't known until it's printed, and changes with the paper); Full report | Summary page; Spreadsheet of
+  everything…; Save…; Print or save as PDF, the primary action. Its commands (`report.print` on Ctrl+P, `report.save`
+  on Ctrl+E, `report.workbook`, `report.cut.full`, `report.cut.summary`) are in the palette's View group.
+- **States**: building (`ReportSheetSkeleton`, a blank sheet with the first page's shape, past the skeleton's delay);
+  never analysed (Work out the results, or Analyse it, or Continue for an interrupted crawl); never analysed while it
+  runs (the report comes when it ends); analysing (progress and Cancel over the sheet, or in its place); out of date
+  (why, over the sheet, with the action; the document gives its date); a read that failed; a file that can't be read.
+  Stopped early, no score and the rest are the document's own to say. Words in each mode: `reportWords.ts`.
+- **Save and Spreadsheet of everything** (`saveReportFile.ts`): the native save dialog with the default name
+  (`reportFile.ts`: "gardenfurnituresets.co.uk 2026-10-31 report.html", the workbook beside it as "… report.xlsx", the
+  summary as "… report summary.html"), then E5's export (`report` in the cut shown, or `workbook`) told in one progress
+  toast: rows of the workbook as they're written (never backwards), Cancel (honoured even before the engine has
+  answered), the engine's own sentence when it fails, and "Open folder" when it's done. The toast follows the job by
+  its `export` events, and reads it every 2 s in case they don't come; it outlives the screen. The hand-over slice's
+  dialog and toast replace this when they land.
+- **Open folder** is a shell command, `reveal_export_file(exportId)`: the page names the export, the shell asks the
+  engine (`GET /api/exports/{id}`) which file it wrote, and shows it only once the export is `done`. No command takes a
+  path.
+- **In a plain browser** there's no save dialog: Save downloads the document shown, and the spreadsheet says it's saved
+  from the app. The e2e build (`--mode e2e` only) takes a folder from `localStorage['si.e2e.saveFolder']` instead, so
+  `e2e/report.spec.ts` saves both files through the real export and reads them back.
+- **Printing in the shell** is walked by `npm run smoke:shell` (step "the Report shows the engine’s report styled, and
+  prints the frame alone"): the report's sheet applies under the shell's own `style-src` (read from the page's
+  response), and the print dialog opens on the frame and closes on Esc.
+
+**The score on Advanced's Overview** (`screens/overview/OverviewScore.tsx`): in the page header beside the answer, the
+analysis's score with its word ("Score: Good", "Score so far: …" for a partial one), a link to `?score=1`, which opens
+the breakdown over Overview; Esc closes it (the search param goes, replacing the entry) and focus goes back to the
+score. No score says why (`noScoreReason`) and opens nothing. A sidecar from before the score shows nothing. The ring
+and the dialog are part A's and part B's: until they're merged here, stand-ins marked `TODO(round4-merge)`.
