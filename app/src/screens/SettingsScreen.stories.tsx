@@ -4,23 +4,27 @@ import type { Mode } from '../mode/mode';
 import { AT_200_PERCENT, ScreenApp, freshStory, ownSidecar } from '../test/ScreenStory';
 import { json, problem, standardRoutes, type FakeRoute } from '../test/fakeSidecar';
 import { ANALYSIS_LIMITS } from '../api/mock/e6';
+import type { AnalysisSettings } from '../api/types';
+import { LimitsForm } from './settings/sections/Analysis';
 
 const meta = { title: 'Screens/Settings' } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** The engine's limits, some changed from its own. */
+function analysisSettingsOf(changed: Record<string, number>): AnalysisSettings {
+  const limits = ANALYSIS_LIMITS.map((limit) => ({ ...limit, value: changed[limit.id] ?? limit.default }));
+  return {
+    settings: Object.fromEntries(limits.map((limit) => [limit.id, limit.value])),
+    limits,
+    isDefault: Object.keys(changed).length === 0,
+  };
+}
+
 /** The engine's limits, some changed, and what a check of them says (field by field, and of the whole). */
 function analysisRoutes(errors: Record<string, string[]>, changed: Record<string, number> = {}): FakeRoute[] {
-  const read = () => {
-    const limits = ANALYSIS_LIMITS.map((limit) => ({ ...limit, value: changed[limit.id] ?? limit.default }));
-    return {
-      settings: Object.fromEntries(limits.map((limit) => [limit.id, limit.value])),
-      limits,
-      isDefault: Object.keys(changed).length === 0,
-    };
-  };
   return [
-    ['GET', /^\/api\/analysis-settings$/, () => json(read())],
+    ['GET', /^\/api\/analysis-settings$/, () => json(analysisSettingsOf(changed))],
     ['POST', /^\/api\/analysis-settings\/validate$/, () => json({ errors })],
   ];
 }
@@ -69,16 +73,24 @@ export const CrawlDefaultsAt200 = at('/settings/crawl-defaults', 'advanced', fre
 
 /** Analysis: every limit the checks judge by, with what it does, its unit and its range. */
 export const Analysis = at('/settings/analysis', 'advanced');
-/** A limit the engine refuses, said beside it; the limits together, above the form. */
-export const AnalysisRefused = at('/settings/analysis', 'advanced', () =>
-  ownSidecar([
-    ...analysisRoutes({
-      titleMaxLength: ['The longest title allowed must be more than the shortest (30).'],
-      settings: ['These limits can’t all hold at once.'],
-    }),
-    ...standardRoutes(),
-  ]),
-);
+/** A limit the engine refuses, said beside it as it's typed; the limits together, above the form. */
+export const AnalysisRefused: Story = {
+  loaders: [
+    () =>
+      ownSidecar([
+        ...analysisRoutes({
+          titleMaxLength: ['The longest title allowed must be more than the shortest (30).'],
+          settings: ['These limits can’t all hold at once.'],
+        }),
+        ...standardRoutes(),
+      ]),
+  ],
+  render: () => (
+    <div className="max-w-(--form-max) p-6">
+      <LimitsForm settings={analysisSettingsOf({})} initialDraft={{ titleMaxLength: '20' }} />
+    </div>
+  ),
+};
 /** Limits changed from the engine's: each with Put back. */
 export const AnalysisChanged = at('/settings/analysis', 'advanced', () =>
   ownSidecar([...analysisRoutes({}, { titleMaxLength: 70, slowResponseMs: 2_000 }), ...standardRoutes()]),

@@ -69,11 +69,18 @@ export function Section() {
   );
 }
 
-export function LimitsForm({ settings }: { settings: AnalysisSettings }) {
+export function LimitsForm({
+  settings,
+  initialDraft,
+}: {
+  settings: AnalysisSettings;
+  /** What the fields hold as the form opens, where it isn't what's saved (a story's value being typed). */
+  initialDraft?: LimitDraft | undefined;
+}) {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<LimitDraft>(() => draftOf(settings.limits));
+  const [draft, setDraft] = useState<LimitDraft>(() => ({ ...draftOf(settings.limits), ...initialDraft }));
   const [errors, setErrors] = useState<Record<string, string[]>>({});
-  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const [touched, setTouched] = useState<ReadonlySet<string>>(() => new Set(Object.keys(initialDraft ?? {})));
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const limits = settings.limits;
   const ids = limits.map((limit) => limit.id);
