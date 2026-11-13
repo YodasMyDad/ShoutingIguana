@@ -20,9 +20,11 @@ import { Card } from '../../ui/Card';
 import { Kbd } from '../../ui/Kbd';
 import { PageHeader } from '../../ui/PageHeader';
 import { RefreshLine } from '../../ui/ProgressBar';
+import { SeverityMark } from '../../ui/SeverityMark';
 import { TextField } from '../../ui/TextField';
 import { ENGINE_LINE, savedSettingsLine } from './savedSettings';
 import { siteGroups } from './sites';
+import { startUrlWords } from './startWords';
 import { SiteRow } from './SiteRow';
 
 /**
@@ -60,6 +62,8 @@ function CheckForm({ first }: { first: boolean }) {
   const defaults = useQuery(crawlOptionDefaultsQuery()).data;
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** A saved setting (not the address) stopped the check: said under the form, with Options… where to fix it. */
+  const [settingsRefused, setSettingsRefused] = useState(false);
   const [starting, setStarting] = useState(false);
   const line = defaults ? savedSettingsLine(defaults) : ENGINE_LINE;
 
@@ -72,13 +76,18 @@ function CheckForm({ first }: { first: boolean }) {
       return;
     }
     setStarting(true);
-    const result = await startCrawl(withScheme(address));
+    const startUrl = withScheme(address);
+    const result = await startCrawl(startUrl);
     setStarting(false);
     if (result.ok) {
       setError(null);
+      setSettingsRefused(false);
       void navigate({ to: '/crawls/$crawl/overview', params: { crawl: result.item.id } });
     } else {
-      setError(result.fieldErrors.startUrl?.[0] ?? Object.values(result.fieldErrors)[0]?.[0] ?? null);
+      // In Simple's words: the address's problem under the field, any other field's (a saved setting) under the form.
+      const { startUrl: addressErrors, ...others } = result.fieldErrors;
+      setError(addressErrors?.length ? startUrlWords(startUrl) : null);
+      setSettingsRefused(Object.values(others).some((messages) => messages.length > 0));
     }
   };
 
@@ -99,6 +108,7 @@ function CheckForm({ first }: { first: boolean }) {
           onChange={(event) => {
             setUrl(event.target.value);
             setError(null);
+            setSettingsRefused(false);
           }}
           error={error}
           className="flex-1"
@@ -116,6 +126,18 @@ function CheckForm({ first }: { first: boolean }) {
           </Link>
         </Button>
       </div>
+      {settingsRefused ? (
+        <p role="alert" className="si-field-error">
+          <SeverityMark severity="error" size="sm" decorative />
+          <span>
+            One of your saved settings can’t be used, so the check didn’t start. Open{' '}
+            <Link to="/new" search={url.trim() ? { url: url.trim() } : {}} className="si-link">
+              Options…
+            </Link>{' '}
+            to fix it.
+          </span>
+        </p>
+      ) : null}
       <p className="flex items-center gap-2 text-13 text-text-secondary">
         <Check aria-hidden className="size-(--icon-sm) flex-none text-text-muted" />
         <span>

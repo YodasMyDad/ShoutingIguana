@@ -193,6 +193,55 @@ export const SavedSettings: Story = {
   render: () => <ScreenApp path="/" mode="simple" />,
 };
 
+/** Types an address into Home's field and presses Check site, once the field is there. */
+async function checkAddress(root: HTMLElement, address: string) {
+  for (let tries = 0; tries < 50; tries++) {
+    const field = root.querySelector<HTMLInputElement>('input[type="url"]');
+    if (field) {
+      // A controlled field: set its value as the browser would, then tell React.
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, address);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.form?.requestSubmit();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/** The engine refusing the check's options, with each field's problem. */
+const refused = (errors: Record<string, string[]>): FakeRoute => [
+  'POST',
+  /^\/api\/crawls$/,
+  () => problem({ type: 'invalid-options', title: 'The crawl options are invalid.', status: 400, errors }),
+];
+
+/** An address that isn't one: said under the field in Simple's words, never the engine's. */
+export const AddressRefused: Story = {
+  loaders: [
+    () =>
+      ownSidecar([
+        refused({ startUrl: ['Start URL must be an absolute http or https URL.'] }),
+        ...routes(SITES.slice(1, 3)),
+      ]),
+  ],
+  render: () => <ScreenApp path="/" mode="simple" />,
+  play: async ({ canvasElement }) => {
+    await checkAddress(canvasElement, 'my shop');
+  },
+};
+
+/** A saved setting the engine refuses: said under the form, with Options… where to fix it. */
+export const SavedSettingRefused: Story = {
+  loaders: [
+    () =>
+      ownSidecar([refused({ concurrency: ['Concurrency must be between 1 and 100.'] }), ...routes(SITES.slice(1, 3))]),
+  ],
+  render: () => <ScreenApp path="/" mode="simple" />,
+  play: async ({ canvasElement }) => {
+    await checkAddress(canvasElement, 'www.example.co.uk');
+  },
+};
+
 /** Your sites being read: a skeleton in the list's shape, after 150 ms. */
 export const Loading: Story = {
   loaders: [() => ownSidecar(routes('pending'))],
