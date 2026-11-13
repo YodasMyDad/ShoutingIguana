@@ -103,6 +103,21 @@ pub struct CrawlItem {
     pub finished_at: Option<String>,
     #[serde(default)]
     pub out_of_date: bool,
+    /// The score in brief, for Simple's notice ("Score 85: 6 problems to fix"). None before an analysis, with no
+    /// page read, or from a sidecar from before the score.
+    #[serde(default)]
+    pub score: Option<ScoreSummary>,
+    /// The pages it read: none means no score can be given.
+    #[serde(default)]
+    pub page_count: Option<u64>,
+}
+
+/// A library item's score: its value, and whether it covers only part of the site ("so far").
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct ScoreSummary {
+    pub value: u64,
+    #[serde(default)]
+    pub partial: bool,
 }
 
 /// Checks with at least one issue, by severity.

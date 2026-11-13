@@ -76,6 +76,28 @@ pub fn read(path: &Path) -> Option<Value> {
     }
 }
 
+/// What the shell's own words need of the page's preferences: the mode, and the checks the user has hidden.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Preferences {
+    /// Simple mode: the system notifications say a crawl's end in Simple's words.
+    pub simple: bool,
+    /// The checks the user has hidden, which Simple's count of problems leaves out.
+    pub hidden_checks: Vec<String>,
+}
+
+/// The preferences as `read` gives them. Read as the page reads them (settings/schema.ts): nothing stored is a first
+/// start, which is Simple; preferences stored before the mode existed, or with a mode this app doesn't know, are
+/// Advanced.
+pub fn preferences(stored: Option<&Value>) -> Preferences {
+    let Some(stored) = stored else { return Preferences { simple: true, hidden_checks: Vec::new() } };
+    let hidden_checks = stored
+        .get("hiddenChecks")
+        .and_then(Value::as_array)
+        .map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+        .unwrap_or_default();
+    Preferences { simple: stored.get("mode").and_then(Value::as_str) == Some("simple"), hidden_checks }
+}
+
 /// Replaces the stored preferences with `settings`, a JSON object as text. The file is written whole and then moved
 /// into place, so a crash mid-write leaves the previous preferences, never half of them.
 pub fn write(path: &Path, settings: &str) -> Result<(), SettingsError> {
@@ -106,6 +128,20 @@ fn partial_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preferences_read_the_mode_and_the_hidden_checks_as_the_page_does() {
+        assert_eq!(preferences(None), Preferences { simple: true, hidden_checks: Vec::new() });
+        let simple = serde_json::json!({ "mode": "simple", "hiddenChecks": ["slow-response", 3] });
+        assert_eq!(
+            preferences(Some(&simple)),
+            Preferences { simple: true, hidden_checks: vec!["slow-response".to_owned()] }
+        );
+        assert!(!preferences(Some(&serde_json::json!({ "mode": "advanced" }))).simple);
+        // Stored before the mode existed: someone who has used the app as it was.
+        assert!(!preferences(Some(&serde_json::json!({ "theme": "dark" }))).simple);
+        assert!(!preferences(Some(&serde_json::json!({ "mode": "expert" }))).simple);
+    }
 
     fn temp_file(name: &str) -> PathBuf {
         let folder = std::env::temp_dir().join(format!("si-settings-{name}-{}", std::process::id()));
