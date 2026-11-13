@@ -195,7 +195,7 @@ pub fn export_notice(job: &ExportJob) -> Option<Notice> {
                 Some(rows) => format!("{name}: {} rows", thousands(rows)),
                 None => name.to_owned(),
             };
-            Some(Notice { title: "Export saved", body })
+            Some(Notice::new("Export saved", body))
         }
         "failed" => {
             let why = job.error.as_ref().map(|error| error.title.trim()).filter(|title| !title.is_empty());
@@ -203,7 +203,7 @@ pub fn export_notice(job: &ExportJob) -> Option<Notice> {
                 "{name}: {}. Nothing was saved.",
                 why.unwrap_or("it couldn't be written").trim_end_matches('.')
             );
-            Some(Notice { title: "Export failed", body })
+            Some(Notice::new("Export failed", body))
         }
         _ => None,
     }
@@ -440,7 +440,7 @@ mod tests {
         done.result = Some(ExportResult { rows: 112_590 });
         assert_eq!(
             export_notice(&done),
-            Some(Notice { title: "Export saved", body: "example.com 2026-10-31 URLs.xlsx: 112,590 rows".into() })
+            Some(Notice::new("Export saved", "example.com 2026-10-31 URLs.xlsx: 112,590 rows"))
         );
         let mut report = job("done", "report");
         report.result = Some(ExportResult { rows: 0 });
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(
             export_notice(&failed),
             Some(Notice {
-                title: "Export failed",
+                title: "Export failed".into(),
                 body: "example.com 2026-10-31 URLs.xlsx: The disk is full. Nothing was saved.".into()
             })
         );

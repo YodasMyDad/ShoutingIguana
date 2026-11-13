@@ -265,7 +265,7 @@ impl Follower {
             log::debug!("No notification for \"{}\": the window is in front and says it itself", notice.title);
             return;
         }
-        notify::show(&self.app, notice.title, &notice.body);
+        notify::show(&self.app, &notice.title, &notice.body);
     }
 
     /// A crawl left the live ones: tell the user if the window can't, once its outcome is settled.
