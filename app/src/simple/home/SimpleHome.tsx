@@ -131,7 +131,7 @@ function CheckForm({ first }: { first: boolean }) {
           <SeverityMark severity="error" size="sm" decorative />
           <span>
             One of your saved settings can’t be used, so the check didn’t start. Open{' '}
-            <Link to="/new" search={url.trim() ? { url: url.trim() } : {}} className="si-link">
+            <Link to="/new" search={url.trim() ? { url: url.trim() } : {}} className="si-link si-link--inline">
               Options…
             </Link>{' '}
             to fix it.

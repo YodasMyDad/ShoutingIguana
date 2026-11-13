@@ -157,10 +157,12 @@ from its brief.
    What's known green: on round 4's integration with its fixes (`96576cd`, the same app and shell code as
    `8fd6c66`): typecheck, lint, format, script tests 43, unit 3,437 (75 skipped), `cargo fmt`/`clippy`/`test`
    (120 + 3), build-storybook. On `37a58c3`, before the fixes: stories 482 x 2 themes and forced colours clean.
-   **Not yet seen to finish on the fixed code:** the three story runs, `e2e:filled`, round 4's specs x5, the full
-   e2e (a run on `96576cd` was under way when the day ended; its logs are in the session scratchpad only, so treat
-   it as not run). The engine: last green on `3ebd565` (the 100k bench and `readbench --gate`); round 4 didn't
-   touch the engine, so its half is a formality.
+   Also green on `96576cd`: `e2e:filled` 29, round 4's specs x5 105, the full e2e 188 (2 skipped). The three
+   story runs found ONE violation, the same in each: the fixer's new `SavedSettingRefused` story's "Options…" link
+   in running text was told apart by colour alone in the dark theme (axe `link-in-text-block`). Fixed on
+   `ui/step-3` after the merge (`si-link--inline`, as every other link in running text). The whole-suite verify
+   still has to be seen green on the merged head. The engine: last green on `3ebd565` (the 100k bench and
+   `readbench --gate`); round 4 didn't touch the engine, so its half is a formality.
 2. **The release build and the shell's smoke test** (needs the desktop session): in `app/`,
    `npm run tauri build -- --no-bundle` (after `npm run build:sidecar`), then `npm run smoke:shell`: the export step
    (Open folder, Open file) and the Report's print step. Never yet run on round 4's code.
