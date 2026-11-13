@@ -444,7 +444,7 @@ function NothingReadCard({
   );
   return (
     <Card className="flex flex-wrap items-center gap-7 px-8 py-7">
-      <ScoreRingStandIn value={null} label="No score" />
+      <ScoreRingStandIn value={null} label="No score" noScoreWords="No score" />
       <div className="basis-64 flex min-w-0 flex-1 flex-col gap-3">
         <h2 className="text-28 font-semibold">No pages could be read</h2>
         <p className="text-16 text-text-secondary">{reason.why}</p>
@@ -534,7 +534,7 @@ function FactsLine({ item, analysis }: { item: CrawlListItem; analysis: Analysis
 /** The Summary's shape while it loads: the ring's outline, three lines, five rows. */
 function SummarySkeleton({ visible }: { visible: boolean }) {
   return (
-    <div aria-busy="true" aria-label="Loading the summary" className={visible ? '' : 'invisible'}>
+    <div role="status" aria-busy="true" aria-label="Loading the summary" className={visible ? '' : 'invisible'}>
       <Card className="flex items-center gap-7 px-8 py-7">
         <Skeleton className="size-(--ring-lg) rounded-full" />
         <div className="flex flex-1 flex-col gap-3">

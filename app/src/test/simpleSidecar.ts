@@ -2,7 +2,7 @@
 // with its score, as today's engine answers them (src/test/simple/*.json, captured from the sidecar on the garden
 // crawl analysed by engine 2.0.0-alpha.1), and the states made from them that no fixture holds: perfect, nothing but
 // things worth a look, stopped early, a serious fault of the whole site, no score.
-import type { GridPage, IssueGroup, IssueGroupPage, IssueRow } from '../api/grids';
+import type { CheckGroupRef, GridPage, IssueGroup, IssueGroupPage, IssueRow } from '../api/grids';
 import type { Analysis, Checks, CrawlListItem, Score, ScoreLine } from '../api/types';
 import { json, problem, testCrawlItem, type FakeRoute } from './fakeSidecar';
 import engineChecks from './simple/engine-checks.json';
@@ -174,6 +174,137 @@ export function simpleRoutes(item: CrawlListItem, analysis: Analysis | 'not-anal
       'GET',
       /^\/api\/health$/,
       () => json({ version: 'test', engineVersion: 'test', dataDir: 'C:\\data', stateDir: 'C:\\state', pid: 1 }),
+    ],
+  ];
+}
+
+const SITE = 'https://www.gardenfurnituresets.co.uk';
+
+/** A page as a check's rows carry it. */
+export function issuePage(id: number, path: string, title: string | null, related: string | null = null): IssueRow {
+  return { id, url: `${SITE}${path}`, title, detail: null, relatedUrl: related };
+}
+
+/** The template fault: the logo's link to the home page, on 264 pages. */
+export const HOME_GROUP: IssueGroup = {
+  detail: null,
+  relatedUrlId: 1,
+  relatedUrl: `${SITE}/`,
+  pages: 264,
+  urls: 264,
+  share: 264 / 265,
+  likelyTemplate: true,
+};
+
+const linkGroup = (id: number, path: string): IssueGroup => ({
+  detail: null,
+  relatedUrlId: id,
+  relatedUrl: `${SITE}${path}`,
+  pages: 1,
+  urls: 1,
+  share: 1 / 265,
+  likelyTemplate: false,
+});
+
+const BROKEN = ['/edale-4-seater-sofa-set/', '/berlin-cushion-box/', '/wentworth-cube-dining-set/'];
+
+/**
+ * Groups and rows for the problems the stories and tests open: `empty-anchor-text` (a template fault),
+ * `broken-internal-links` (broken addresses, each with its 404), `image-too-large` (126 causes, more than a page) and
+ * `slow-response` (a check that doesn't group, with what was measured).
+ */
+export function problemRoutes(): FakeRoute[] {
+  const many = Array.from({ length: 126 }, (_, index) => linkGroup(1_000 + index, `/media/${index}/photo.jpg`));
+  return [
+    [
+      'POST',
+      /\/issues\/empty-anchor-text\/groups$/,
+      () => json(groupPage('empty-anchor-text', [HOME_GROUP, linkGroup(28, '/greenhouses/')], 265)),
+    ],
+    [
+      'POST',
+      /\/issues\/empty-anchor-text\/rows$/,
+      (request) => {
+        const body = request.body as { group?: CheckGroupRef; limit: number };
+        if (body.group?.relatedUrlId === 28) {
+          return json(rowsPage([issuePage(1, '/', 'Home', `${SITE}/greenhouses/`)], 1));
+        }
+        const rows = Array.from({ length: Math.min(body.limit, 264) }, (_, index) =>
+          issuePage(index + 2, `/page-${index}/`, `Page ${index}`, `${SITE}/`),
+        );
+        return json(rowsPage(rows, 264));
+      },
+    ],
+    [
+      'POST',
+      /\/issues\/broken-internal-links\/groups$/,
+      () =>
+        json(
+          groupPage(
+            'broken-internal-links',
+            BROKEN.map((path, index) => linkGroup(40 + index, path)),
+            5,
+          ),
+        ),
+    ],
+    [
+      'POST',
+      /\/issues\/broken-internal-links\/rows$/,
+      (request) => {
+        const body = request.body as { group?: CheckGroupRef };
+        const index = (body.group?.relatedUrlId ?? 40) - 40;
+        return json(
+          rowsPage(
+            [
+              {
+                ...issuePage(
+                  10 + index,
+                  '/blog/best-rattan-patio-sets/',
+                  'Best Rattan Patio Sets - Hand Picked by Experts',
+                ),
+                relatedUrl: `${SITE}${BROKEN[index] ?? '/'}`,
+                relatedStatusCode: 404,
+                detail: '1 broken URL',
+              },
+            ],
+            1,
+          ),
+        );
+      },
+    ],
+    [
+      'POST',
+      /\/issues\/image-too-large\/groups$/,
+      (request) => {
+        const body = request.body as { offset: number; limit: number };
+        return json({
+          ...groupPage('image-too-large', many.slice(body.offset, body.offset + body.limit), 61),
+          groupCount: 126,
+        });
+      },
+    ],
+    [
+      'POST',
+      /\/issues\/image-too-large\/rows$/,
+      () => json(rowsPage([issuePage(5, '/monaco-2-seat-bistro-set/', 'Monaco 2 Seat Bistro Set')], 1)),
+    ],
+    [
+      'POST',
+      /\/issues\/slow-response\/rows$/,
+      () =>
+        json(
+          rowsPage(
+            [
+              { ...issuePage(99, '/login/?register=true', 'Login'), detail: '5,476 ms (first byte after 5,475 ms)' },
+              {
+                ...issuePage(202, '/burford-natural-table/', 'Burford Dining Table'),
+                detail: '5,217 ms (first byte after 5,214 ms)',
+              },
+              { ...issuePage(7, '/contact-us/', null), detail: '1,204 ms' },
+            ],
+            3,
+          ),
+        ),
     ],
   ];
 }

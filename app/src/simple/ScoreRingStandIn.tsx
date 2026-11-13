@@ -9,13 +9,21 @@ export interface ScoreRingStandInProps {
   size?: 'lg' | 'md' | undefined;
   /** Its name: "Score 85 out of 100, Good". */
   label: string;
+  /** Under a missing score: "No score yet" by default. */
+  noScoreWords?: string | undefined;
 }
 
 const RADIUS = 44;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 /** The score as a ring in the accent blue, never a severity's colour, after `app/design/simple`'s mockups. */
-export function ScoreRingStandIn({ value, partial = false, size = 'lg', label }: ScoreRingStandInProps) {
+export function ScoreRingStandIn({
+  value,
+  partial = false,
+  size = 'lg',
+  label,
+  noScoreWords = 'No score yet',
+}: ScoreRingStandInProps) {
   const arc = value === null ? 0 : (Math.max(0, Math.min(100, value)) / 100) * CIRCUMFERENCE;
   return (
     <span role="img" aria-label={label} className={clsx('si-ring-standin', `si-ring-standin--${size}`)}>
@@ -45,7 +53,7 @@ export function ScoreRingStandIn({ value, partial = false, size = 'lg', label }:
         {value ?? '–'}
         {size === 'lg' ? (
           <span className="si-ring-standin__of">
-            {value === null ? 'No score yet' : partial ? 'so far' : 'out of 100'}
+            {value === null ? noScoreWords : partial ? 'so far' : 'out of 100'}
           </span>
         ) : null}
       </span>
