@@ -235,7 +235,12 @@ export function UrlsScreen() {
     void navigate({
       to: '/crawls/$crawl/links',
       params: { crawl: crawlId },
-      search: { ...(links?.filter ? { filter: links.filter } : {}), ...(links?.q ? { q: links.q } : {}) },
+      search: {
+        ...(links?.filter ? { filter: links.filter } : {}),
+        ...(links?.q ? { q: links.q } : {}),
+        ...(links?.sort ? { sort: links.sort } : {}),
+        ...(links?.cols ? { cols: links.cols } : {}),
+      },
     });
   };
   /** The narrowing to the links' ends gone; the view's own filters, search and sort stay. */
@@ -330,7 +335,7 @@ export function UrlsScreen() {
   const refusedOne = refused ? filters[refused.index] : undefined;
 
   // Saved views: the route's view under a name, with the app's preferences.
-  const saved = useSavedViews({ filter: search.filter, sort: search.sort, cols: search.cols, q });
+  const saved = useSavedViews({ filter: search.filter, sort: search.sort, cols: search.cols, q, links: search.links });
   const [naming, setNaming] = useState<{ kind: 'save' } | { kind: 'rename'; view: SavedView } | null>(null);
   const openSaved = useCallback(
     (saved: SavedView) =>
@@ -340,6 +345,7 @@ export function UrlsScreen() {
           sort: saved.search.sort,
           cols: saved.search.cols,
           q: saved.search.q,
+          links: saved.search.links,
         },
       }),
     [navigate],

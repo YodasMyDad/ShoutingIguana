@@ -10,6 +10,11 @@ describe('the URL grid narrowed to a links view’s ends', () => {
     expect(parseLinkEnds({ end: 'from' })).toEqual({ end: 'from' });
     expect(parseLinkEnds({ end: 'sideways' })).toBeUndefined();
     expect(parseLinkEnds('to')).toBeUndefined();
+    // The links view's sort and columns, for Back to the links (the review's finding 10): they narrow nothing.
+    expect(
+      parseLinkEnds({ end: 'to', sort: [{ column: 'to.url', desc: true }], cols: ['from.url', 'to.url', 'from.url'] }),
+    ).toEqual({ end: 'to', sort: [{ column: 'to.url', desc: true }], cols: ['from.url', 'to.url'] });
+    expect(linkEndsOf({ end: 'to', sort: [{ column: 'to.url', desc: true }] })).toEqual({ end: 'to' });
     expect(validateGridSearch({ links: { end: 'to', filter: BROKEN } }).links).toEqual({ end: 'to', filter: BROKEN });
   });
 
