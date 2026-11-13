@@ -864,6 +864,30 @@ Simple itself.
 9. **The states, keys, palette entries and stories** the definition of done asks of each screen, in both themes,
    forced colours, 200% zoom and reduced motion.
 
+### As built
+
+Round 4 built the design above; where it differs, this is what holds (settled, and in
+[the architecture](v2-ui-architecture.md#simple-mode-round-4)):
+
+- **Saving goes through the app's one export dialog.** The Report's Save… and Spreadsheet of everything…, and one
+  problem's Save as a spreadsheet, open the export dialog every screen uses, on that choice (the report in the cut
+  shown), then the native save dialog, then the export's toast with Open file and Open folder. The default names are
+  the design's, and the summary page's is "… report summary.html"; a problem's sheet is named by its plain title
+  ("gardenfurnituresets.co.uk 2026-10-31 Links that lead to broken pages.xlsx") and can be CSV too.
+- **The Report's page count** is the pages the analysis read, the figure the document's head gives. The mockup's
+  "12 pages" is the printed length, which isn't known until it's printed and changes with the paper.
+- **The Summary's report card** has Open the report only: Save as PDF is the Report's Print or save as PDF.
+- **A row on Home** opens the check where it was last left (the Summary the first time, and whenever the last view
+  was one Simple doesn't have), as `/crawls/:crawl` does in both modes; Open the report is in its menu. Its pages are
+  the library's count, as Advanced's Home and Overview say them.
+- **The time left** says "at least" as designed, and "about" when the check's address limit is nearer than the end of
+  its queue (nothing more can be found to read then). The three figures aren't links, as the design draws them.
+- **The system notification** has the toast's words but no buttons (the desktop's notifications have none here):
+  See the summary and Open the report are the toast's.
+- **Where it is** heads its two columns by how the check groups (the cause, and where it is), not by words of each
+  check's own: the engine has none. **The One fix callout** says the engine's `plainOneFix`; the mockup's middle
+  sentence ("That's almost certainly your logo…") is one check's, which the engine doesn't give.
+
 ## What the engine needs
 
 | Need | For | Shape |
