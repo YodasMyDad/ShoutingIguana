@@ -15,7 +15,7 @@ import { isMac } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
 import { useMode, type Mode } from '../mode/mode';
 import { Button } from '../ui/Button';
-import { Favicon } from '../ui/Favicon';
+import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
 import { Kbd } from '../ui/Kbd';
@@ -158,7 +158,7 @@ export function TopBar() {
                 className="flex max-w-(--topbar-site-max) items-center gap-2 px-1.5 font-medium text-text group-data-give-7/topbar:min-w-(--topbar-site-min) group-data-give-7/topbar:shrink group-data-give-8/topbar:sr-only"
                 title={crawl?.startUrl ?? site ?? undefined}
               >
-                <Favicon site={crawl?.site ?? site ?? ''} size="md" />
+                <CrawlFavicon item={crawl} site={site ?? ''} size="md" />
                 <span className="min-w-0 truncate">{site}</span>
               </li>
               {date ? (

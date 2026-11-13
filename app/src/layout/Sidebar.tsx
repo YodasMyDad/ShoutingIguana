@@ -28,7 +28,7 @@ import { formatExactTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useMode } from '../mode/mode';
 import { useSettings } from '../settings/settingsStore';
-import { Favicon } from '../ui/Favicon';
+import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
 import { NavItem } from '../ui/NavItem';
@@ -108,7 +108,7 @@ export function Sidebar() {
       {crawlId ? (
         <section aria-label={crawlName(crawl)} className="flex flex-col gap-1.5">
           <div className={clsx('flex items-center gap-2.5 py-1', collapsed ? 'justify-center' : 'px-2')}>
-            <Favicon site={crawl?.site ?? crawlName(crawl)} size="lg" />
+            <CrawlFavicon item={crawl} size="lg" />
             {collapsed ? null : (
               <div className="flex min-w-0 flex-col">
                 <h2 className="truncate text-13 font-semibold" title={crawl?.startUrl ?? undefined}>
