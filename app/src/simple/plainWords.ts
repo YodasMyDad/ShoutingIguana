@@ -145,19 +145,35 @@ export function summarySentence({
   partial,
   counts,
   siteWideSerious,
+  hidden = 0,
 }: {
   band: ScoreBand;
   partial: boolean;
   counts: ProblemCounts;
   /** The plain title of a serious problem of the whole site that stands, which leads the sentence. */
   siteWideSerious: string | null;
+  /** The checks the user hid in Advanced: with any, nothing to fix is said of the checks shown only. */
+  hidden?: number;
 }): string {
   if (counts.error + counts.warning === 0) {
-    const opening = partial ? 'On the pages read so far, nothing needs fixing.' : 'Nothing needs fixing.';
-    if (counts.notice > 0) {
-      const things = counts.notice === 1 ? '1 thing is' : `${formatCount(counts.notice)} things are`;
-      return `${opening} ${things} worth a look when you have a moment.`;
+    const among = hidden > 0 ? ' among the checks you show' : '';
+    const opening = partial
+      ? `On the pages read so far, nothing needs fixing${among}.`
+      : `Nothing needs fixing${among}.`;
+    const things =
+      counts.notice === 0
+        ? ''
+        : ` ${counts.notice === 1 ? '1 thing is' : `${formatCount(counts.notice)} things are`} worth a look when you have a moment.`;
+    if (hidden > 0) {
+      const nothing =
+        counts.notice > 0
+          ? opening
+          : partial
+            ? `Nothing to fix${among} on the pages read so far.`
+            : `Nothing to fix${among}.`;
+      return `${nothing}${things} ${hiddenWords(hidden)}`;
     }
+    if (counts.notice > 0) return `${opening}${things}`;
     return partial
       ? 'Nothing to fix on the pages read so far. Every check that ran found nothing wrong.'
       : 'Nothing to fix. Every check that ran found nothing wrong.';
@@ -165,6 +181,11 @@ export function summarySentence({
   const problems = problemsSentence(counts, partial ? 'soFar' : 'there');
   if (siteWideSerious) return `${siteWideSerious}. That holds everything else back. ${problems}`;
   return partial ? problems : `${BAND_LEADS[band]} ${problems}`;
+}
+
+/** "1 check is hidden.", "6 checks are hidden.": the checks hidden in Advanced, as What to fix's last line says them. */
+export function hiddenWords(hidden: number): string {
+  return hidden === 1 ? '1 check is hidden.' : `${formatCount(hidden)} checks are hidden.`;
 }
 
 /** Why a partial score covers only part of the site, after "the N pages read". */

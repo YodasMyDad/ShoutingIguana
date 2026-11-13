@@ -117,6 +117,24 @@ describe('the Summary’s sentence in every state', () => {
     expect(results.ifFixed).toBeNull();
   });
 
+  it('nothing to fix with checks hidden: among the checks shown, and how many are hidden', () => {
+    const counts = { error: 0, warning: 0, notice: 0 };
+    expect(summarySentence({ band: 'good', partial: false, counts, siteWideSerious: null, hidden: 1 })).toBe(
+      'Nothing to fix among the checks you show. 1 check is hidden.',
+    );
+    expect(
+      summarySentence({
+        band: 'good',
+        partial: true,
+        counts: { ...counts, notice: 2 },
+        siteWideSerious: null,
+        hidden: 3,
+      }),
+    ).toBe(
+      'On the pages read so far, nothing needs fixing among the checks you show. 2 things are worth a look when you have a moment. 3 checks are hidden.',
+    );
+  });
+
   it('nothing but things worth a look', () => {
     const results = plainResults(SIMPLE_CHECKS, NOTICES_ANALYSIS, NONE);
     expect(summarySentence({ band: 'veryGood', partial: false, counts: results.counts, siteWideSerious: null })).toBe(

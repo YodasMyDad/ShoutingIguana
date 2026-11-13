@@ -81,6 +81,16 @@ function problemRoutes(): FakeRoute[] {
   ];
 }
 
+/** The garden crawl's six problems: its serious ones and those worth fixing. */
+const PROBLEM_IDS = [
+  'internal-client-error',
+  'broken-internal-links',
+  'title-duplicate',
+  'description-duplicate',
+  'image-too-large',
+  'slow-response',
+];
+
 async function open(path: string, analysis: Analysis = GARDEN_ANALYSIS, hidden: string[] = []) {
   replaceSettings({ mode: 'simple', hiddenChecks: hidden });
   const sidecar = fakeSidecar([...problemRoutes(), ...simpleRoutes(gardenItem(), analysis)]);
@@ -164,6 +174,21 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));
     expect(main().getByRole('heading', { name: 'Worth fixing 4' })).toBeVisible();
+  });
+
+  it('counts only the hidden checks the catalog has, as hidden', async () => {
+    await open(FIX, GARDEN_ANALYSIS, ['image-too-large', 'a-check-no-longer-in-the-catalog']);
+    await whatToFix();
+    expect(main().getByText(/^1 check is hidden\./)).toBeVisible();
+  });
+
+  it('with every problem hidden: nothing to fix among the checks shown, never that every check found nothing', async () => {
+    await open(FIX, GARDEN_ANALYSIS, PROBLEM_IDS);
+    await screen.findByRole('heading', { level: 1, name: 'What to fix' }, { timeout: 10_000 });
+    await main().findByRole('heading', { level: 2, name: /^Worth a look/ });
+    expect(main().getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
+    expect(main().queryByText(/Every serious problem and every problem worth fixing is clear/)).toBeNull();
+    expect(main().getByText(/^6 checks are hidden\./)).toBeVisible();
   });
 
   it('moves through the problems with J and K, which Enter then opens', async () => {

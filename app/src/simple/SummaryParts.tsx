@@ -15,6 +15,7 @@ import {
   categoriesWords,
   checksWord,
   coverageSentences,
+  hiddenWords,
   ifFixedLead,
   looksForWords,
   plainSummary,
@@ -42,6 +43,7 @@ export function ScoreHero({ crawlId, score, results }: { crawlId: string; score:
     partial: score.partial,
     counts: results.counts,
     siteWideSerious: siteWideLead(results),
+    hidden: results.hidden.length,
   });
   const tally: { outcome: CheckOutcome; count: number; words: string }[] = [
     { outcome: 'error', count: results.counts.error, words: countWords('error', results.counts.error) },
@@ -209,8 +211,11 @@ export function FixFirstCard({
       ) : (
         <>
           <p className="border-t border-border-subtle px-6 py-5 text-16">
-            <strong className="font-semibold">Nothing to fix.</strong>{' '}
+            <strong className="font-semibold">
+              {results.hidden.length > 0 ? 'Nothing to fix among the checks you show.' : 'Nothing to fix.'}
+            </strong>{' '}
             <span className="text-text-secondary">
+              {results.hidden.length > 0 ? `${hiddenWords(results.hidden.length)} ` : ''}
               {notices > 0 ? `${worthALookBelow(notices)}, when you have a moment. ` : ''}
               Check the site again after you change it, or every few months.
             </span>

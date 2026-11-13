@@ -242,6 +242,37 @@ export const WhatToFixWithAHiddenCheck: Story = {
   render: () => <ScreenApp path={FIX} mode="simple" />,
 };
 
+/** Every problem's check hidden in Advanced: nothing to fix among the checks shown, and how many are hidden. */
+const EVERY_PROBLEM = [
+  'internal-client-error',
+  'broken-internal-links',
+  'title-duplicate',
+  'description-duplicate',
+  'image-too-large',
+  'slow-response',
+];
+
+export const WhatToFixEveryProblemHidden: Story = {
+  loaders: [
+    () => {
+      own(GARDEN_ANALYSIS);
+      updateSettings({ hiddenChecks: EVERY_PROBLEM });
+    },
+  ],
+  render: () => <ScreenApp path={FIX} mode="simple" />,
+};
+
+/** The Summary with every problem's check hidden: nothing to fix among the checks shown; the score is the engine's. */
+export const SummaryEveryProblemHidden: Story = {
+  loaders: [
+    () => {
+      own(GARDEN_ANALYSIS);
+      updateSettings({ hiddenChecks: EVERY_PROBLEM });
+    },
+  ],
+  render: () => <ScreenApp path={SUMMARY} mode="simple" />,
+};
+
 /** Nothing to fix: the things worth a look, all of them. */
 export const WhatToFixNothingToFix: Story = story(FIX, NOTICES_ANALYSIS);
 

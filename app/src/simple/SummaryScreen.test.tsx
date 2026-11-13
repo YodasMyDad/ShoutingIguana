@@ -215,6 +215,34 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(router.state.location.search).toEqual({});
   });
 
+  it('with every problem hidden: nothing to fix among the checks shown, and how many are hidden', async () => {
+    replaceSettings({ mode: 'simple' });
+    setTransport(fakeSidecar(simpleRoutes(gardenItem(), GARDEN_ANALYSIS)));
+    updateSettings({
+      hiddenChecks: [
+        'internal-client-error',
+        'broken-internal-links',
+        'title-duplicate',
+        'description-duplicate',
+        'image-too-large',
+        'slow-response',
+      ],
+    });
+    const queryClient = createQueryClientWithoutBackoff();
+    const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [`${CRAWL}/overview`] }));
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    await site();
+    expect(
+      main().getByText(
+        'Nothing needs fixing among the checks you show. 13 things are worth a look when you have a moment. 6 checks are hidden.',
+      ),
+    ).toBeVisible();
+    const list = within(main().getByRole('region', { name: 'Fix these first' }));
+    expect(list.getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
+    expect(list.getByText(/6 checks are hidden\./)).toBeVisible();
+  });
+
   it('leaves hidden checks out of the counts, and says nothing of five fixed that aren’t the engine’s five', async () => {
     replaceSettings({ mode: 'simple' });
     setTransport(fakeSidecar(simpleRoutes(gardenItem(), GARDEN_ANALYSIS)));
