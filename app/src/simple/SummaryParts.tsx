@@ -8,6 +8,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Icon } from '../ui/Icon';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
+import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS } from './fixSections';
@@ -115,9 +116,8 @@ function TallyRow({
 }) {
   const content = (
     <>
-      <SeverityWord severity={outcome} variant="mark" size="md" className="justify-self-center" />
-      <span className="si-tally__n">{formatCount(count)}</span>
-      <span>{words}</span>
+      <SeverityMark severity={outcome} size="md" decorative className="justify-self-center" />
+      <span className="si-tally__n">{formatCount(count)}</span> <span>{words}</span>
     </>
   );
   if (count === 0) return <span className="si-tally__row si-tally__row--zero">{content}</span>;

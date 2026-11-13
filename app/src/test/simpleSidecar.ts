@@ -47,7 +47,7 @@ export function analysisWith(
 ): Analysis {
   const counts = GARDEN_ANALYSIS.counts.map((count) => ({ ...count, count: found[count.checkId] ?? 0 }));
   const fixFirst = GARDEN_ANALYSIS.fixFirst?.filter((id) => (found[id] ?? 0) > 0) ?? [];
-  const lines = (GARDEN_ANALYSIS.score!).lines.filter((line) => (found[line.checkId] ?? 0) > 0);
+  const lines = GARDEN_ANALYSIS.score!.lines.filter((line) => (found[line.checkId] ?? 0) > 0);
   return {
     ...GARDEN_ANALYSIS,
     counts,
@@ -75,9 +75,9 @@ export const STOPPED_ANALYSIS: Analysis = {
   ...GARDEN_ANALYSIS,
   isPartial: true,
   score: {
-    ...(GARDEN_ANALYSIS.score!),
+    ...GARDEN_ANALYSIS.score!,
     partial: true,
-    covers: { ...(GARDEN_ANALYSIS.score!).covers, complete: false, reason: 'stopped' },
+    covers: { ...GARDEN_ANALYSIS.score!.covers, complete: false, reason: 'stopped' },
   },
 };
 
@@ -108,7 +108,7 @@ export const SITE_WIDE_ANALYSIS: Analysis = (() => {
   return {
     ...analysis,
     fixFirst: ['no-https', 'broken-internal-links'],
-    score: { ...(analysis.score!), lines },
+    score: { ...analysis.score!, lines },
   };
 })();
 

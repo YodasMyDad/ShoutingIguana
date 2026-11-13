@@ -6,6 +6,7 @@ import type { Analysis, Checks, Score, ScoreLine, Severity } from '../api/types'
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
+import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount } from '../ui/severity';
 import { bandWord, coverageSentences, lineShareWords, plainTitle } from './plainWords';
@@ -197,7 +198,7 @@ function ZeroLine({ severity, count }: { severity: Severity; count: number }) {
     <tr>
       <th scope="row">
         <span className="si-score-table__check">
-          <SeverityWord severity={severity} variant="mark" size="sm" />
+          <SeverityMark severity={severity} size="sm" decorative />
           {words}
         </span>
       </th>
