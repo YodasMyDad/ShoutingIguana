@@ -1,8 +1,8 @@
 // The Report screen (docs/v2-ui-simple.md, "The Report screen") and the score on Advanced's Overview, against the real
 // sidecar: the engine's document in its sandboxed frame, the toolbar's figure against the document's own, the two
 // cuts, printing the frame alone, saving the report and the spreadsheet through the export job, and the score's
-// breakdown. A save has no dialog in a browser: the e2e build takes its folder from local storage
-// (`si.e2e.saveFolder`), and the file is looked for there under the default name.
+// breakdown. Save goes through the app's one export dialog, whose path field stands in for the save dialog a browser
+// doesn't have.
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,12 +51,6 @@ async function expectNoViolations(page: Page) {
       (violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join('; ')}`,
     ),
   ).toEqual([]);
-}
-
-async function saveFolder(page: Page): Promise<string> {
-  const folder = mkdtempSync(path.join(os.tmpdir(), 'si-e2e-report-'));
-  await page.evaluate((where) => localStorage.setItem('si.e2e.saveFolder', where), folder);
-  return folder;
 }
 
 test.describe('in Simple', () => {
@@ -129,25 +123,38 @@ test.describe('in Simple', () => {
     await page.addInitScript(() => localStorage.setItem('si.settings', JSON.stringify({ mode: 'simple' })));
     await page.goto(`/crawls/${crawl.id}/report`);
     await expect(sheet(page).getByRole('heading', { level: 1 })).toBeVisible();
-    const folder = await saveFolder(page);
+    const folder = mkdtempSync(path.join(os.tmpdir(), 'si-e2e-report-'));
+    // The app's one export dialog: a browser has no save dialog, so its field takes the path, opened on the default
+    // name. The toast says Saved with the file's name, and the file is the document the screen shows.
+    const dialog = page.getByRole('dialog');
+    const saveAs = async (button: RegExp, choice: RegExp, name: RegExp) => {
+      await page.getByRole('button', { name: button }).click();
+      await expect(dialog.getByRole('radio', { name: choice })).toBeChecked();
+      const field = dialog.getByRole('textbox', { name: 'Save as' });
+      const offered = await field.inputValue();
+      expect(offered).toMatch(name);
+      // The name it offers, in a folder of this test's own (no folder was saved to yet, so it's the name alone).
+      const file = path.join(folder, path.win32.basename(offered));
+      await field.fill(file);
+      await dialog.getByRole('button', { name: 'Export', exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await expect(
+        page
+          .locator('.si-export-toast')
+          .filter({ hasText: path.basename(file) })
+          .getByText('Saved', { exact: true }),
+      ).toBeVisible({ timeout: 30_000 });
+      return file;
+    };
     try {
-      await page.getByRole('button', { name: /^Save…/ }).click();
-      const saved = page.getByText(/^Report saved: /);
-      await expect(saved).toBeVisible();
-      const name = (await saved.innerText()).replace('Report saved: ', '');
-      expect(name).toMatch(/^.+ \d{4}-\d{2}-\d{2} report\.html$/);
-      const file = path.join(folder, name);
+      const file = await saveAs(/^Save…/, /The report/, /^.+ \d{4}-\d{2}-\d{2} report\.html$/);
       expect(existsSync(file)).toBe(true);
-      // The file is the document the screen shows.
       const shown = await frame(page).getAttribute('srcdoc');
       expect(readFileSync(file, 'utf8')).toBe(shown);
 
-      await page.getByRole('button', { name: /Spreadsheet of everything/ }).click();
-      const workbook = page.getByText(/^Spreadsheet saved: /);
-      await expect(workbook).toBeVisible({ timeout: 20_000 });
-      const workbookName = (await workbook.innerText()).replace('Spreadsheet saved: ', '');
-      expect(workbookName).toBe(name.replace(/\.html$/, '.xlsx'));
-      expect(readFileSync(path.join(folder, workbookName)).subarray(0, 2).toString()).toBe('PK');
+      const workbook = await saveAs(/Spreadsheet of everything/, /Spreadsheet of everything/, /^.+ report\.xlsx$/);
+      expect(path.basename(workbook)).toBe(path.basename(file).replace(/\.html$/, '.xlsx'));
+      expect(readFileSync(workbook).subarray(0, 2).toString()).toBe('PK');
     } finally {
       rmSync(folder, { recursive: true, force: true });
     }

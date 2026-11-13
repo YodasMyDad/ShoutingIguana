@@ -41,12 +41,10 @@ test.describe('in Simple', () => {
     await expect(page).toHaveURL(reportOf(crawl.id));
     await expect(sheet(page).getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
 
-    // The row itself opens the Summary, the crawl's own page in Simple.
-    await page.goto('/');
-    await main(page).getByRole('link', { name: site(), exact: true }).first().click();
-    await expect(page).toHaveURL(new RegExp(`/crawls/${crawl.id}(/overview)?$`));
+    // The Summary's Open the report, its primary action (the report's card below says it again).
+    await page.goto(`/crawls/${crawl.id}/overview`);
     await expect(main(page).getByRole('img', { name: /^Score \d+ out of 100/ })).toBeVisible({ timeout: 20_000 });
-    await main(page).getByRole('link', { name: 'Open the report' }).click();
+    await main(page).getByRole('link', { name: 'Open the report' }).first().click();
     await expect(page).toHaveURL(reportOf(crawl.id));
     await expect(sheet(page).getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
   });
@@ -113,7 +111,8 @@ test('in Advanced, the Overview’s score opens the breakdown the Summary opens,
   // Part B's dialog: its sum, its bands and its version, in Advanced as in Simple.
   await expect(dialog).toContainText(`100 − ${analysis.score!.lost}`);
   await expect(dialog).toContainText(`Score version ${analysis.score!.version}`);
-  await dialog.getByRole('button', { name: 'Close' }).click();
+  // Its footer's Close (the ✕ is named Close too).
+  await dialog.locator('button', { hasText: 'Close' }).click();
   await expect(dialog).toBeHidden();
   await expect(page).not.toHaveURL(/score=1/);
   await expect(score).toBeFocused();

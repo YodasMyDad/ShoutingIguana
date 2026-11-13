@@ -213,7 +213,7 @@ test('a check started from Home with Enter goes through its three steps to the S
   // its score and its Open the report.
   await expect(main(page).locator('h1.si-simple-title')).toBeFocused();
   await expect(main(page).getByRole('img', { name: /^Score \d+ out of 100/ })).toBeVisible({ timeout: 20_000 });
-  await expect(main(page).getByRole('link', { name: 'Open the report' })).toBeVisible();
+  await expect(main(page).getByRole('link', { name: 'Open the report' }).first()).toBeVisible();
   const item = await read<CrawlListItem>(`/api/crawls/${id}`);
   expect(item.score).toBeTruthy();
   const problems = (item.issues?.error ?? 0) + (item.issues?.warning ?? 0);
