@@ -100,3 +100,26 @@ test('a limit changed turns the crawl’s analysis out of date in the library, a
   await expect(page.getByRole('region', { name: 'Library' }).getByRole('table')).toBeVisible();
   await expect(library.getByText('Analysis out of date')).toBeHidden();
 });
+
+test('Show in URLs, then Back to the links, lands on the links view as it was, sort and columns too (the review’s finding 10)', async ({
+  page,
+}) => {
+  const filter = [{ column: 'kind', op: 'in', values: ['hyperlink'] }];
+  const sort = [{ column: 'to.url', desc: true }];
+  const cols = ['from.url', 'to.url', 'text'];
+  await page.goto(
+    `/crawls/${crawl}/links?filter=${encodeURIComponent(JSON.stringify(filter))}&sort=${encodeURIComponent(
+      JSON.stringify(sort),
+    )}&cols=${encodeURIComponent(JSON.stringify(cols))}`,
+  );
+  await expect(page.getByRole('grid', { name: 'Links' }).getByRole('row').nth(1)).toBeVisible();
+  await page.getByRole('button', { name: 'Show in URLs' }).click();
+  await page.getByRole('menuitem', { name: /^Their targets/ }).click();
+  await expect(page).toHaveURL(/\/urls\?links=/);
+  await page.getByRole('button', { name: 'Back to the links' }).click();
+  await expect(page).toHaveURL(/\/links\?/);
+  const search = new URL(page.url()).searchParams;
+  expect(JSON.parse(search.get('sort') ?? 'null')).toEqual(sort);
+  expect(JSON.parse(search.get('cols') ?? 'null')).toEqual(cols);
+  expect(JSON.parse(search.get('filter') ?? 'null')).toEqual(filter);
+});

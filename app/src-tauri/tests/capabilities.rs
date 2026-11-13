@@ -166,6 +166,8 @@ fn the_webview_still_gets_what_it_uses() {
         (APP, "settings_read"),
         (APP, "settings_write"),
         (APP, "reveal_crawl_file"),
+        (APP, "reveal_export_file"),
+        (APP, "open_export_file"),
         (APP, "take_pending_open_files"),
     ] {
         assert!(has(plugin, command), "the webview needs {plugin}|{command}");
