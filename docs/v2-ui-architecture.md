@@ -584,11 +584,9 @@ are drawn for the app and are never swapped for Lucide's.
   Simple's own screens are round 4's, each one row of `app/simpleScreens.ts`.
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
-- Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
-  offers Copy URLs and no Export button.
-- On every grid: column resize, reorder and pin, "filter by this value" and "exclude it" in the row menu, and export
-  (E5). None is built: a grid's columns are fixed widths in the order chosen, and the URL grid's header keeps the place
-  Export will take (nothing is registered for Ctrl+E until it works). Saved views are the URL grid's only.
+- On every grid: column resize, reorder and pin, "filter by this value" and "exclude it" in the row menu. None is
+  built: a grid's columns are fixed widths in the order chosen. Saved views are the URL grid's only. Export is built:
+  see [Hand over, search, favicons and the analysis's limits](#hand-over-search-favicons-and-the-analysiss-limits).
 - Each screen's own pieces, built from the components by its slice: the explanation band, charts. A piece two screens
   need joins `src/ui`.
 - Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
@@ -1143,8 +1141,8 @@ What it settled:
   and flags: two links alike in all of these are the same to the cursor). Each has a test seen failing without it.
 - **Ctrl+F** is one command shape on URLs, Links, one sitemap and Issues (`searchCommand`): the screen's field
   focused, its text selected, "filter this grid" among its palette words.
-- **Export's place** is kept at the end of the toolbar (`data-slot="export"`); nothing is offered until the engine's
-  export is in.
+- **Export** is at the end of the toolbar (`data-slot="export"`), with Ctrl+E: see
+  [Hand over](#hand-over-search-favicons-and-the-analysiss-limits).
 - **States**, each a story under Screens/URLs: the garden crawl and each preset, sorted by two keys, every kind of URL,
   full URLs, filtered, on a saved view, first load, refreshing, live (URLs sort in, the cursor stays), never analysed,
   continued since its analysis, being analysed, a filter that needs an analysis, a filter the engine refuses, a query
@@ -1615,3 +1613,92 @@ touch the same lines:
   Test button.
 - **The engine's own defaults** once the user has saved theirs: `GET /api/crawl-options/defaults` gives one or the
   other. The app keeps a copy, checked end to end.
+
+## Hand over, search, favicons and the analysis's limits
+
+Round 3's last slice: flow 5 of the IA ("Hand over"), the palette's search (E6), the sites' icons (E6) and Settings >
+Analysis (E6), with what Links and the URL grid lacked of E6's link ends. `app/src/export/`, `keyboard/urlSearch.ts`,
+`crawl/favicons.ts`, `screens/settings/sections/Analysis.tsx`, `screens/urls/linkEnds.ts`.
+
+### Export
+
+- **One dialog, one toast, one store: the shared pieces.** A screen builds an offer of what it shows
+  (`export/offers.ts`: its choices, each a request builder over the grid's own read, its file's words and its column
+  titles) and registers Export with `useExportCommand(offer, deps, { group })` (Ctrl+E, the palette's "Export this
+  view…" and, on Overview and Issues, "Save the report…" and "Save the spreadsheet of everything…" from
+  `CRAWL_FILE_COMMANDS`); `ExportButton` is its button. `openExportDialog(offer, { choiceId })` opens the one
+  `ExportDialogHost` (in `AppShell`). **The Report screen (round 4) should call `openExportDialog` with
+  `crawlFileChoices(item, simple)` for Save and Spreadsheet of everything, or `beginExport` directly with a path, and
+  get the same toast.**
+- **The dialog** asks what (a grid's view; Issues' this check, the open group's pages, the report in its two cuts,
+  every check) and as what (CSV or Excel; Full report or Summary page), then the shell's native save dialog asks where,
+  opened on `<site> <crawl's date> <view>.<ext>` in the folder the last export went to (`settings.exportFolder`; the
+  last grid format is `settings.exportFormat`). A browser has no save dialog: the dialog has a path field instead
+  (which the e2e uses). A refusal the engine gives before writing a row is said in the dialog, with its action; a
+  typed extension sets the format.
+- **The store** (`export/exportStore.ts`) keeps every export by id, from the call's answer, each `export` event and,
+  on every `hello`, `hello.exports` (read once each, so an export running before a reload keeps its toast; one the app
+  followed that is no longer running is read once to learn how it ended, and `export-not-found` is "lost"). A newer
+  read never takes an ended export back to running nor a running one back in rows; the bar's share (`peak`) never
+  goes back. `startExports()` (main.tsx) wires it.
+- **The toast** (`export/ExportToast.tsx`, shown by `showExportToast`) follows its export in the store: starting,
+  counting, writing (rows written of rows expected, the count text kept out of the live region: the bar's value),
+  then Saved with the rows and the engine's time (`finishedAt − startedAt`, the engine's clock), cut cells, empty
+  columns and "the crawl was running"; Cancelled; Stopped (lost); or the problem in the app's words
+  (`exportProblemWords`) with the actions that help (Choose another file…, Try again, Export again, Export as CSV…,
+  Analyse the crawl / Work out the results, Export in crawl order). Open file and Open folder are the shell's
+  (`open_export_file`, `reveal_export_file`: they take the export's id, and the shell asks the engine for its path,
+  only a done export's `.csv`, `.xlsx` or `.html`). Closing a running export's toast leaves the export going.
+- **Exports in progress** (`export/ExportsInProgress.tsx`) are listed at the bottom of the sidebar under the running
+  crawls; a press brings the toast back. The shell's own event stream tells an export that was saved or failed while
+  the window was hidden or not focused, once (`live/notify.rs`, `export_notice`).
+- **Every grid**: URLs, Links, one sitemap's URLs, an origin's blocked URLs (all or one line's), Issues and Overview.
+  Not exportable, said by Ctrl+E: the list of sitemaps and robots.txt's origins (the engine has no kind for them), and
+  a URL view narrowed to a links view's ends (export takes no `linkEnds`). The URL grid's status column goes out with
+  `outcome` beside `statusCode`, and the links grid's follow column as its four flags.
+
+### The palette's search
+
+`keyboard/urlSearch.ts`: as the palette opens (Advanced, on a crawl) an empty `POST /search` reads the crawl's text;
+then every keystroke searches, the one before aborted, no debounce. Results are under the commands as "URLs in this
+crawl": the title over the address, the typed text marked in each (ASCII case ignored, as the engine ignores it), the
+status in words ("404 Not Found", or the outcome's), and "All N in URLs" (the URL grid searched for the text, which
+lands on N). Enter opens the inspector (`goToUrl`). States: searching, results, none, failed (said in the palette).
+
+### Favicons
+
+`crawl/favicons.ts`: a crawl whose item says `hasFavicon` is asked for its icon once a session, whatever shows it
+(`CrawlFavicon` on Home's rows, the top bar's crumb and the sidebar's crawl); the bytes are an object URL. A 204, a
+failure or an image that can't be drawn (`Favicon`'s `onError`) keep the letter tile, the same size.
+
+### Settings > Analysis
+
+`screens/settings/sections/Analysis.tsx`: every limit from `GET /api/analysis-settings` with its description, its
+unit and its range (`analysisLimits.ts` names each and words the range), checked by `validate` 250 ms after a change
+(what's typed sent as typed, so text gets the engine's own message), saved 600 ms after when nothing is wrong. Errors
+by a limit's name go beside it; `settings` and `limits[n]` above the form. Put back one limit, or every limit, each
+with Undo. A save reads the library and every crawl's reads again: a crawl analysed with other limits reads "Analysis
+out of date" and its analysis's `settingsChanged` reason, where the app shows that.
+
+### Links to the URL grid (E6's link ends)
+
+The URL grid slice hadn't built it. Links has **Show in URLs** (their targets, or the pages they're on), each counted
+as the menu opens (`POST /links/ends`, `limit: 1`). The URL grid takes `links: { end, filter, q }` in its route, as
+`linkEnds` beside its own filters in its reads, facets and copies, with a line saying which end of which links ("Only
+the URLs that the broken links lead to, each once."), Back to the links and Show every URL.
+
+### Measured
+
+13 Nov 2026, this machine (shared with other agents), the production build in headless Chromium at 1280x720 against
+the real sidecar, on the 100k crawl (`e2e/handover-measure.spec.ts`, from the input to the frame after): Ctrl+E to the
+dialog 18 to 24 ms; a palette keystroke to its marked results 27 to 34 ms ("product", a letter at a time); the whole
+URL grid (112,577 URLs) as Excel from Export to Saved 889 ms in the page, the toast saying the engine's 862 ms, a
+10.1 MB file.
+
+### Not done, and why
+
+- **No export of the sitemaps' list or robots.txt's origins**, nor of a URL view narrowed to link ends: the engine has
+  no kind for the first two and its export takes no `linkEnds`. Asked of the engine.
+- **The native save dialog, Open file, Open folder and the notification** are proven by the shell's unit tests (the
+  commands' path rule, the notice's words) and by `cargo test`'s capability check; the e2e runs in a browser, so they
+  weren't driven end to end in the built shell.
