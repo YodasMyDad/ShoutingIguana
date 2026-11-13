@@ -1,8 +1,6 @@
 import { Link } from '@tanstack/react-router';
-import clsx from 'clsx';
 import { ChevronRight, CircleCheck, CircleDashed, FileText } from 'lucide-react';
 import type { Score, Severity } from '../api/types';
-import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -26,7 +24,7 @@ import {
   summarySentence,
 } from './plainWords';
 import { siteWideLead, type PlainResults } from './results';
-import { ScoreRingStandIn } from './ScoreRingStandIn';
+import { ScoreRing } from '../ui/ScoreRing';
 import { useOneFix } from './useOneFix';
 import type { CheckEntry } from '../screens/issues/checkList';
 
@@ -62,11 +60,7 @@ export function ScoreHero({ crawlId, score, results }: { crawlId: string; score:
   return (
     <Card as="section" aria-labelledby="summary-score" className="si-score-hero overflow-hidden @max-split:grid-cols-1">
       <div className="flex items-center gap-7 py-7 pr-7 pl-8 @max-split:flex-wrap">
-        <ScoreRingStandIn
-          value={score.value}
-          partial={score.partial}
-          label={`Score ${score.value} out of 100, ${band}`}
-        />
+        <ScoreRing value={score.value} band={score.band} partial={score.partial} />
         <div className="min-w-0">
           <h2 id="summary-score" className="text-28 font-semibold">
             {band}
@@ -248,9 +242,7 @@ function seeAllWords(problems: number, notices: number): string {
 /** What's fine, what couldn't be checked, and the report. */
 export function SummaryCards({ crawlId, results }: { crawlId: string; results: PlainResults }) {
   return (
-    <div
-      className={clsx('grid gap-4', SIMPLE_SCREENS.report ? 'grid-cols-3' : 'grid-cols-2', '@max-split:grid-cols-1')}
-    >
+    <div className="grid grid-cols-3 gap-4 @max-split:grid-cols-1">
       <Card as="section" aria-labelledby="summary-fine" className="flex flex-col px-6 pt-5 pb-6">
         <h2 id="summary-fine" className="flex items-center gap-2 text-16 font-semibold">
           <Icon icon={CircleCheck} className="text-text-muted" />
@@ -324,25 +316,23 @@ export function SummaryCards({ crawlId, results }: { crawlId: string; results: P
         ) : null}
       </Card>
 
-      {SIMPLE_SCREENS.report ? (
-        <Card as="section" aria-labelledby="summary-report" className="flex flex-col px-6 pt-5 pb-6">
-          <h2 id="summary-report" className="flex items-center gap-2 text-16 font-semibold">
-            <Icon icon={FileText} className="text-text-muted" />
-            The report
-          </h2>
-          <p className="mt-2 text-14 leading-body text-text-secondary">
-            Everything on this screen and behind it, in one document to keep, print or send to whoever looks after your
-            site.
-          </p>
-          <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
-            <Button size="sm" icon={FileText} asChild>
-              <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }}>
-                Open the report
-              </Link>
-            </Button>
-          </div>
-        </Card>
-      ) : null}
+      <Card as="section" aria-labelledby="summary-report" className="flex flex-col px-6 pt-5 pb-6">
+        <h2 id="summary-report" className="flex items-center gap-2 text-16 font-semibold">
+          <Icon icon={FileText} className="text-text-muted" />
+          The report
+        </h2>
+        <p className="mt-2 text-14 leading-body text-text-secondary">
+          Everything on this screen and behind it, in one document to keep, print or send to whoever looks after your
+          site.
+        </p>
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+          <Button size="sm" icon={FileText} asChild>
+            <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }}>
+              Open the report
+            </Link>
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

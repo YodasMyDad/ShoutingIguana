@@ -172,5 +172,8 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     await waitFor(() => expect(main().queryByRole('list', { name: 'Steps' })).toBeNull());
     await waitFor(() => expect(document.activeElement?.tagName).toBe('H1'));
     expect(screen.queryByRole('heading', { level: 1, name: /Checking|Working out/ })).toBeNull();
+    // The title is the Summary's (part B's), not Advanced's Overview, which stood in before the merge.
+    expect(document.activeElement).toHaveClass('si-simple-title');
+    expect(screen.queryByRole('heading', { level: 1, name: 'Overview' })).toBeNull();
   });
 });

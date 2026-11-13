@@ -75,7 +75,7 @@ describe('the score on Advanced’s Overview', () => {
 
   it('says "so far" for a crawl that didn’t read all of the site', async () => {
     await open({ ...ISSUES_ANALYSIS, score: { ...GARDEN_SCORE, partial: true }, noScoreReason: null });
-    expect(await screen.findByRole('link', { name: /Score 85 out of 100, so far.*Score so far: Good/ })).toBeVisible();
+    expect(await screen.findByRole('link', { name: /Score 85 out of 100 so far.*Score so far: Good/ })).toBeVisible();
   });
 
   it('says why there is no score, and opens nothing', async () => {

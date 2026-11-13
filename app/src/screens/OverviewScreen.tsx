@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { alertsQuery, analysisQuery, checksQuery, crawlQuery, startUrlQuery, statsQuery } from '../api/queries';
@@ -49,8 +49,8 @@ import { emptyCrawl, isEmptyCrawl, type EmptyCrawl } from './overview/emptyCrawl
 import { LiveOverview } from './overview/LiveOverview';
 import { linkProps } from './overview/overviewLinks';
 import { OverviewScore } from './overview/OverviewScore';
+import { ScoreBreakdownFromRoute } from '../simple/ScoreBreakdownDialog';
 import { OverviewSkeleton } from './overview/OverviewSkeleton';
-import { ScoreBreakdownStandIn } from './overview/ScoreBreakdownStandIn';
 import { crawledCount } from './overview/statusSplit';
 import { useCrawlFacets } from './overview/useCrawlFacets';
 
@@ -70,7 +70,6 @@ const TWO_COLUMNS_BELOW = 720;
 export function OverviewScreen() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
   const navigate = useNavigate({ from: ROUTE });
-  const { score: scoreOpen } = useSearch({ from: ROUTE });
   const scoreRef = useRef<HTMLAnchorElement>(null);
   const item = useQuery(crawlQuery(crawlId)).data;
   // Only the live crawl's status and its analysis's progress here: the figures are LiveOverview's, so the answer
@@ -309,11 +308,8 @@ export function OverviewScreen() {
         />
         {body}
         {analysis.data && !crawling ? (
-          <ScoreBreakdownStandIn
-            open={scoreOpen === 1}
-            onClose={() => void navigate({ search: (previous) => ({ ...previous, score: undefined }), replace: true })}
-            analysis={analysis.data}
-            checks={checks.data}
+          <ScoreBreakdownFromRoute
+            crawlId={crawlId}
             onCloseAutoFocus={(event) => {
               if (scoreRef.current) {
                 event.preventDefault();

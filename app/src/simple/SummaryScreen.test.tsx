@@ -180,7 +180,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
       ),
     ).toBeVisible();
     expect(main().getByRole('button', { name: /Continue checking/ })).toBeVisible();
-    expect(main().getByRole('img', { name: 'Score 85 out of 100, Good so far' })).toBeVisible();
+    expect(main().getByRole('img', { name: 'Score 85 out of 100 so far, Good so far' })).toBeVisible();
     expect(main().getByText(/On the pages read so far there are 2 serious problems/)).toBeVisible();
   });
 

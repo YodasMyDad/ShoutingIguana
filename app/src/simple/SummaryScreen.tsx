@@ -11,8 +11,7 @@ import {
   startUrlQuery,
   statsQuery,
 } from '../api/queries';
-import { isCrawling, type Analysis, type CrawlListItem, type CrawlStatus, type OutOfDateReason } from '../api/types';
-import { SIMPLE_SCREENS } from '../app/simpleScreens';
+import { type Analysis, type CrawlListItem, type CrawlStatus, type OutOfDateReason } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
@@ -21,7 +20,6 @@ import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { formatCount, formatDuration } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import { OverviewScreen } from '../screens/OverviewScreen';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
 import { useSettings } from '../settings/settingsStore';
@@ -34,7 +32,7 @@ import { nothingRead, type NothingRead } from './nothingRead';
 import { factsWords } from './plainWords';
 import { plainResults } from './results';
 import { ScoreBreakdownFromRoute } from './ScoreBreakdownDialog';
-import { ScoreRingStandIn } from './ScoreRingStandIn';
+import { ScoreRing } from '../ui/ScoreRing';
 import { FixFirstCard, ScoreHero, SummaryCards } from './SummaryParts';
 
 const ROUTE = '/crawls/$crawl/overview';
@@ -50,11 +48,8 @@ export function SummaryScreen() {
   const item = useQuery(crawlQuery(crawlId)).data;
   const liveStatus = useLive((state) => state.crawls[crawlId]?.status);
   const status = effectiveStatus(item, liveStatus === undefined ? undefined : { status: liveStatus });
-  const crawling = status !== null && isCrawling(status);
-  const analysing = status === 'analyzing';
-  // TODO(round4-merge): Part A (r4-home) builds "checking a site", the same route while the check runs and while its
-  // results are worked out; until it's merged the Advanced live Overview stands in for it.
-  if (crawling || analysing) return <OverviewScreen />;
+  // While the check runs and its results are worked out, the route shows the checking screen instead
+  // (simple/SimpleOverview): this is only ever drawn once it has ended.
   return <Summary crawlId={crawlId} item={item} status={status} />;
 }
 
@@ -224,7 +219,7 @@ function SummaryHeader({
               </Link>
             </Button>
           ) : null}
-          {SIMPLE_SCREENS.report && item.pageCount > 0 ? (
+          {item.pageCount > 0 ? (
             <Button variant="primary" icon={FileText} asChild>
               <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }}>
                 Open the report
@@ -409,7 +404,7 @@ function NoScoreYet({
 }) {
   return (
     <Card className="flex flex-wrap items-center gap-7 px-8 py-7">
-      <ScoreRingStandIn value={null} label="No score yet" />
+      <ScoreRing value={null} label="No score yet" />
       <div className="basis-64 flex min-w-0 flex-1 flex-col gap-3">
         <h2 className="text-28 font-semibold">No score yet</h2>
         <p className="text-16 text-text-secondary">{words}</p>
@@ -444,7 +439,7 @@ function NothingReadCard({
   );
   return (
     <Card className="flex flex-wrap items-center gap-7 px-8 py-7">
-      <ScoreRingStandIn value={null} label="No score" noScoreWords="No score" />
+      <ScoreRing value={null} />
       <div className="basis-64 flex min-w-0 flex-1 flex-col gap-3">
         <h2 className="text-28 font-semibold">No pages could be read</h2>
         <p className="text-16 text-text-secondary">{reason.why}</p>

@@ -1,20 +1,17 @@
 import { useParams } from '@tanstack/react-router';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CrawlStatus } from '../api/types';
 import { useCrawlState } from '../crawl/useCrawlState';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { useCommands } from '../keyboard/registry';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
 import { CheckingScreen } from './checking/CheckingScreen';
+import { SummaryScreen } from './SummaryScreen';
 
 const ROUTE = '/crawls/$crawl/overview';
 
 /** How long a crawl that has just ended waits for its analysis to begin before the Summary takes its place. */
 export const HAND_OVER_GRACE_MS = 1_500;
-
-// TODO(round4-merge): Part B's Summary (`simple/SummaryScreen`, SummaryScreen) takes this place once merged. Until
-// then a finished crawl shows Advanced's Overview, as a route without its Simple screen does.
-const Summary = lazy(() => import('../screens/OverviewScreen').then((module) => ({ default: module.OverviewScreen })));
 
 /**
  * `/crawls/:crawl/overview` in Simple: checking the site while it runs and while its results are worked out, then the
@@ -64,9 +61,7 @@ export function SimpleOverview() {
           titleRef={control.titleRef}
         />
       ) : (
-        <Suspense fallback={null}>
-          <Summary />
-        </Suspense>
+        <SummaryScreen />
       )}
     </div>
   );

@@ -9,8 +9,8 @@ import { Dialog } from '../ui/Dialog';
 import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount } from '../ui/severity';
-import { bandWord, coverageSentences, lineShareWords, plainTitle } from './plainWords';
-import { ScoreRingStandIn } from './ScoreRingStandIn';
+import { coverageSentences, lineShareWords, plainTitle } from './plainWords';
+import { ScoreRing } from '../ui/ScoreRing';
 
 const OVERVIEW = '/crawls/$crawl/overview';
 
@@ -19,7 +19,14 @@ const OVERVIEW = '/crawls/$crawl/overview';
  * over Overview in Advanced: open while the route's search has `score=1`, so Back and a reopened session keep it. Esc,
  * Close and the ✕ take `score` off the address.
  */
-export function ScoreBreakdownFromRoute({ crawlId }: { crawlId: string }) {
+export function ScoreBreakdownFromRoute({
+  crawlId,
+  onCloseAutoFocus,
+}: {
+  crawlId: string;
+  /** Where focus goes as it closes, when not back where it was as it opened (Overview's score, after a deep link). */
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
+}) {
   const { score } = useSearch({ from: OVERVIEW });
   const navigate = useNavigate({ from: OVERVIEW });
   return (
@@ -29,6 +36,7 @@ export function ScoreBreakdownFromRoute({ crawlId }: { crawlId: string }) {
       onOpenChange={(open) => {
         if (!open) void navigate({ search: (previous) => ({ ...previous, score: undefined }), replace: true });
       }}
+      onCloseAutoFocus={onCloseAutoFocus}
     />
   );
 }
@@ -37,10 +45,11 @@ export interface ScoreBreakdownDialogProps {
   crawlId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
 }
 
 /** The score's breakdown: the engine's stored lines, the sum, what it covers, the bands and the version. */
-export function ScoreBreakdownDialog({ crawlId, open, onOpenChange }: ScoreBreakdownDialogProps) {
+export function ScoreBreakdownDialog({ crawlId, open, onOpenChange, onCloseAutoFocus }: ScoreBreakdownDialogProps) {
   const checks = useQuery({ ...checksQuery(), enabled: open });
   const analysis = useQuery({ ...analysisQuery(crawlId), enabled: open });
   const score = analysis.data?.score ?? null;
@@ -52,6 +61,7 @@ export function ScoreBreakdownDialog({ crawlId, open, onOpenChange }: ScoreBreak
       size="wide"
       className="si-score-dialog"
       scrollLabel="How the score is worked out"
+      onCloseAutoFocus={onCloseAutoFocus}
       footer={
         <>
           {score ? <span className="mr-auto text-13 text-text-muted">Score version {score.version}</span> : null}
@@ -108,16 +118,10 @@ function Breakdown({
     const check = checks.checks.find((candidate) => candidate.id === line.checkId);
     return check ? plainTitle(check) : line.checkId;
   };
-  const band = bandWord(score.band, score.partial);
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-5">
-        <ScoreRingStandIn
-          value={score.value}
-          partial={score.partial}
-          size="md"
-          label={`Score ${score.value} out of 100, ${band}`}
-        />
+        <ScoreRing value={score.value} band={score.band} partial={score.partial} size="md" />
         <TwoSentences />
       </div>
 

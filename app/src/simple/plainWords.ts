@@ -5,6 +5,7 @@
 import type { Analysis, Check, CheckFixer, Score, ScoreBand, ScoreExtent, ScoreLine, Severity } from '../api/types';
 import { formatCount, formatList } from '../lib/format';
 import { plainSeverityCount } from '../ui/severity';
+import { scoreWord } from '../ui/score';
 
 /** A check's title in Simple: its plain title, or the technical one for a check newer than its plain words. */
 export function plainTitle(check: Check): string {
@@ -84,16 +85,9 @@ export function shareWords(check: Check, count: number, wholes: Wholes): ShareWo
 
 // ---------------------------------------------------------------------------------------------------- The score
 
-const BANDS: Record<ScoreBand, string> = {
-  veryGood: 'Very good',
-  good: 'Good',
-  needsWork: 'Needs work',
-  poor: 'Poor',
-};
-
-/** The score as a word: "Good", or "Good so far" for a crawl that didn't read all of the site. */
+/** The score as a word: "Good", or "Good so far" for a crawl that didn't read all of the site. The ring's words. */
 export function bandWord(band: ScoreBand, partial = false): string {
-  return partial ? `${BANDS[band]} so far` : BANDS[band];
+  return scoreWord(band, partial);
 }
 
 const EXTENTS: Record<ScoreExtent, string> = {
