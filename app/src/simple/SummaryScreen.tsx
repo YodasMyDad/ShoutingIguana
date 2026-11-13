@@ -85,7 +85,8 @@ function Summary({
   useExportCommand(() => (item ? overviewOffer(item, false, true) : null), [item], {
     group: 'Crawl',
     title: 'Save the report…',
-    choices: CRAWL_FILE_COMMANDS,
+    // The report is Ctrl+E's own: the palette's other choice is the spreadsheet of everything.
+    choices: CRAWL_FILE_COMMANDS.filter((choice) => choice.choiceId !== 'report'),
   });
 
   const loading =

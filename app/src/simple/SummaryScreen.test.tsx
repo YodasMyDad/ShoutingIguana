@@ -8,7 +8,7 @@ import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createAppRouter } from '../app/router';
 import { closeExportDialog, getExportDialog } from '../export/exportFlow';
-import { installKeyboard } from '../keyboard/registry';
+import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
@@ -183,6 +183,10 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     const dialog = getExportDialog();
     expect(dialog?.offer.title).toBe('Save the report');
     expect(dialog?.offer.initialChoice ?? dialog?.offer.choices[0]?.id).toBe('report');
+    // One command of each name in the palette: Ctrl+E's is the report's.
+    const titles = commands.list().map((command) => command.title);
+    expect(titles.filter((title) => title === 'Save the report…')).toHaveLength(1);
+    expect(titles).toContain('Save the spreadsheet of everything…');
   });
 
   it('closes the breakdown opened here by going back, so Back then leaves the Summary', async () => {
