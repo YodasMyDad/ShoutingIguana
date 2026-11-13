@@ -881,10 +881,33 @@ Round 4 built the design above; where it differs, this is what holds (settled, a
   was one Simple doesn't have), as `/crawls/:crawl` does in both modes; Open the report is in its menu. Its pages, as
   the Summary's head says them, are those the score covers: the library's `pagesAnalyzed`, the crawl's count before
   the first analysis (the crawl's has Cloudflare's `/cdn-cgi/` pages too, which the analysis doesn't audit).
-- **The time left** says "at least" as designed, and "about" when the check's address limit is nearer than the end of
-  its queue (nothing more can be found to read then). The three figures aren't links, as the design draws them.
+- **The time left** says "at least" as designed, and "about" once the site has more addresses of its own than the
+  check's limit (nothing more can be found to read then; the queue alone can't say, as it holds other sites'
+  addresses), as Advanced's time left does. The three figures aren't links, as the design draws them.
+- **"312 pages were read first"**, when the site turns the check away, is the pages read when the alert was raised
+  (from the crawl's history, else as first seen) and doesn't climb as the check reads on.
 - **The system notification** has the toast's words but no buttons (the desktop's notifications have none here):
-  See the summary and Open the report are the toast's.
+  See the summary and Open the report are the toast's. Both count the addresses checked as Home does
+  (`crawledUrlCount`).
+- **A check read but not worked out** (its first analysis cancelled, or none begun) ends in "{site} is checked. Its
+  results weren't worked out…", with Work out the results, never "The results are ready". In Simple, failures say
+  "The check of {site} couldn't finish" or "The results for {site} couldn't be worked out", status changes are
+  announced in Simple's words ("checking", "working out the results", "stopped early"), and a cancel says whether any
+  results are left.
+- **A check stopped, turned away or failed before its results were worked out** shows that state's banner above No
+  score yet, pointing at Work out the results. The stopped banner's pages are the head's (the pages the results
+  cover); the turned-away banner says the pages fetched by then, beside those the results cover when they differ.
+- **The Summary's line of facts** has the head's date (the day the check finished). **Ctrl+E** there opens the export
+  dialog on the report. With nothing to fix, the first five things worth a look are listed under it.
+- **Hidden checks:** with any hidden, nothing to fix is said "among the checks you show", with how many are hidden;
+  that count is of checks the catalog still has.
+- **The tiny-site line** is said only of a check that read all it found, not of one that ended early.
+- **The score's breakdown** opens only over results (a check never worked out has none) and says why when its read
+  fails. Opened from a link in the app, closing it goes back to the entry it opened on; from a deep link, in place.
+- **A passed or skipped check's page** says what the check looks for (`plainLooksFor`, else its plain title), never its
+  words of what's wrong. **Where it is** says how many are shown only once its list is read.
+- **Home** says why a check didn't start in Simple's words: a bad address under the field, a saved setting the
+  engine refuses under the form with Options… as where to fix it.
 - **Where it is** heads its two columns by how the check groups (the cause, and where it is), not by words of each
   check's own: the engine has none. **The One fix callout** says the engine's `plainOneFix`; the mockup's middle
   sentence ("That's almost certainly your logo…") is one check's, which the engine doesn't give.
