@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { SeverityBadge } from './SeverityBadge';
+import type { IconSize } from './Icon';
 import { SeverityMark } from './SeverityMark';
 import { plainOutcomeWord, type CheckOutcome } from './severity';
 
@@ -11,6 +12,8 @@ export interface SeverityWordProps {
    * row).
    */
   variant?: 'badge' | 'large' | 'inline' | 'mark' | undefined;
+  /** The mark's size, for `mark`: 20 px by default, a problem's row. */
+  size?: IconSize | undefined;
   className?: string | undefined;
 }
 
@@ -19,10 +22,10 @@ export interface SeverityWordProps {
  * Error's, Warning's and Notice's shapes and colours, one to one; Couldn't check and Nothing wrong for a skipped or a
  * passed check. Advanced keeps `SeverityBadge` and its own words.
  */
-export function SeverityWord({ severity, variant = 'badge', className }: SeverityWordProps) {
+export function SeverityWord({ severity, variant = 'badge', size = 'lg', className }: SeverityWordProps) {
   const word = plainOutcomeWord(severity);
   if (variant === 'mark') {
-    return <SeverityMark severity={severity} size="lg" label={word} className={className} />;
+    return <SeverityMark severity={severity} size={size} label={word} className={className} />;
   }
   return (
     <SeverityBadge

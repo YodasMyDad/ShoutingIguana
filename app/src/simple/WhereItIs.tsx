@@ -1,0 +1,282 @@
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useRouter } from '@tanstack/react-router';
+import { ArrowUpRight, ChevronDown, Copy, FileSpreadsheet } from 'lucide-react';
+import { useState } from 'react';
+import { api } from '../api/client';
+import type { CheckGroupRef, GridPage, IssueGroup, IssueGroupPage, IssueRow } from '../api/grids';
+import { queryKeys } from '../api/queries';
+import type { Check, CrawlListItem } from '../api/types';
+import { reasonPhrase } from '../inspector/words';
+import { formatCount } from '../lib/format';
+import { switchMode } from '../mode/switchMode';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { OneFixTag } from '../ui/PlainCheckRow';
+
+/** Causes (or pages, for a check that doesn't group) shown at a time. */
+export const WHERE_STEP = 25;
+/** The most "Show 25 more" goes to: past it, the spreadsheet and Advanced. */
+export const WHERE_MAX = 200;
+/** A cause on many pages names this many first. */
+const FIRST_PAGES = 3;
+
+const ROW_COLUMNS = ['url', 'title', 'detail', 'relatedUrl', 'relatedStatusCode'];
+
+const groupsQuery = (crawlId: string, checkId: string, limit: number) => ({
+  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-groups', limit] as const,
+  queryFn: ({ signal }: { signal: AbortSignal }): Promise<IssueGroupPage> =>
+    api.issueGroups(crawlId, checkId, { offset: 0, limit }, signal),
+  staleTime: Infinity,
+});
+
+const rowsQuery = (crawlId: string, checkId: string, group: CheckGroupRef | null, limit: number) => ({
+  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-rows', group, limit] as const,
+  queryFn: ({ signal }: { signal: AbortSignal }): Promise<GridPage<IssueRow>> =>
+    api.issueRows(
+      crawlId,
+      checkId,
+      { columns: ROW_COLUMNS, filters: [], sort: [], offset: 0, limit, ...(group ? { group } : {}) },
+      signal,
+    ),
+  staleTime: Infinity,
+});
+
+/** The site's origin, so its own addresses show as paths: "/blog/". */
+function originOf(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** An address as Where it is shows it: its path on the site's own origin, else in full; the full one is read. */
+function Address({ url, origin, small = false }: { url: string; origin: string | null; small?: boolean }) {
+  const shown = origin && url.startsWith(origin) ? url.slice(origin.length) || '/' : url;
+  return (
+    <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'} title={url}>
+      <span aria-hidden="true">{shown}</span>
+      <span className="sr-only">{url}</span>
+    </span>
+  );
+}
+
+/** A page: its title, then its address; an address alone when it has no title. */
+function PageLine({ row, origin }: { row: IssueRow; origin: string | null }) {
+  if (!row.url) return null;
+  return row.title ? (
+    <span className="block">
+      <span className="block font-medium">{row.title}</span>
+      <Address url={row.url} origin={origin} small />
+    </span>
+  ) : (
+    <Address url={row.url} origin={origin} />
+  );
+}
+
+function headings(check: Check): [string, string] {
+  const pages = (check.subject ?? 'page') === 'page';
+  if (check.grouping === 'none') return [pages ? 'Page' : 'Address', 'What was found'];
+  return [
+    check.grouping === 'relatedUrl' ? 'What it’s about' : 'What was found',
+    pages ? 'On these pages' : 'At these addresses',
+  ];
+}
+
+/**
+ * Where it is (docs/v2-ui-simple.md, "One problem"): the check's causes as Advanced groups them, the cause on the left
+ * and the pages it's on at the right, each page by its title and its address; a check that doesn't group lists its
+ * pages with what was measured. 25 at a time up to 200; past that, the spreadsheet and Advanced.
+ */
+export function WhereItIs({
+  crawlId,
+  item,
+  check,
+  total,
+  onCopy,
+  onSave,
+}: {
+  crawlId: string;
+  item: CrawlListItem;
+  check: Check;
+  /** The check's count: the URLs it flagged. */
+  total: number;
+  onCopy: () => void;
+  onSave: () => void;
+}) {
+  const router = useRouter();
+  const [limit, setLimit] = useState(WHERE_STEP);
+  const grouped = check.grouping !== 'none';
+  const groups = useQuery({
+    ...groupsQuery(crawlId, check.id, limit),
+    enabled: grouped,
+    placeholderData: keepPreviousData,
+  });
+  const rows = useQuery({
+    ...rowsQuery(crawlId, check.id, null, limit),
+    enabled: !grouped,
+    placeholderData: keepPreviousData,
+  });
+  const origin = originOf(item.startUrl);
+  const [left, right] = headings(check);
+  const pages = (check.subject ?? 'page') === 'page';
+  const noun = (count: number) => (pages ? (count === 1 ? 'page' : 'pages') : count === 1 ? 'address' : 'addresses');
+  const causes = grouped ? (groups.data?.groupCount ?? null) : null;
+  const listed = grouped ? (groups.data?.groups.length ?? 0) : (rows.data?.rows.length ?? 0);
+  const all = grouped ? (causes ?? 0) : total;
+  const site = item.site ?? origin ?? '';
+  const meta =
+    causes === null
+      ? `${formatCount(total)} ${noun(total)}`
+      : `${causes === 1 ? '1 cause' : `${formatCount(causes)} causes`}, on ${formatCount(total)} ${noun(total)}`;
+  const error = grouped ? groups.error : rows.error;
+
+  return (
+    <Card as="section" aria-labelledby="where-it-is" className="mt-4 overflow-hidden">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border py-4 pr-4 pl-6">
+        <h2 id="where-it-is" className="text-16 font-semibold">
+          Where it is
+        </h2>
+        <span className="text-14 text-text-muted">{meta}</span>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button size="sm" icon={Copy} command="problem.copyList" onClick={onCopy}>
+            Copy the list
+          </Button>
+          <Button size="sm" icon={FileSpreadsheet} command="problem.saveSheet" onClick={onSave}>
+            Save as a spreadsheet
+          </Button>
+        </div>
+      </div>
+      {error ? (
+        <p className="px-6 py-4 text-14 text-text-secondary">The list couldn’t be read. Try again in a moment.</p>
+      ) : (
+        <table className="si-where-table">
+          <thead>
+            <tr>
+              <th scope="col">{left}</th>
+              <th scope="col">{right}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grouped
+              ? (groups.data?.groups ?? []).map((group) => (
+                  <GroupRow
+                    key={`${group.detail ?? ''}|${group.relatedUrlId ?? ''}`}
+                    crawlId={crawlId}
+                    check={check}
+                    group={group}
+                    origin={origin}
+                    noun={noun}
+                  />
+                ))
+              : (rows.data?.rows ?? []).map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <PageLine row={row} origin={origin} />
+                    </td>
+                    <td className="text-text-secondary">{row.detail ?? ''}</td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      )}
+      <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle bg-surface-sunken px-6 py-3 text-14 text-text-secondary">
+        <span>
+          {listed >= all
+            ? `${all === 1 ? 'It is' : `All ${formatCount(all)} are`} shown.`
+            : `Showing ${formatCount(listed)} of ${formatCount(all)}.`}
+          {origin ? ` Addresses are on ${site}.` : ''}
+        </span>
+        {listed < all && limit < WHERE_MAX ? (
+          <Button variant="ghost" size="sm" icon={ChevronDown} onClick={() => setLimit((value) => value + WHERE_STEP)}>
+            Show {formatCount(Math.min(WHERE_STEP, all - listed))} more
+          </Button>
+        ) : null}
+        {listed < all && limit >= WHERE_MAX ? (
+          <Button variant="ghost" size="sm" iconEnd={ArrowUpRight} onClick={() => switchMode(router, 'advanced')}>
+            See all {formatCount(all)} in Advanced
+          </Button>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+/** One cause: what it is at the left; its first pages at the right, with "Show them" for the rest. */
+function GroupRow({
+  crawlId,
+  check,
+  group,
+  origin,
+  noun,
+}: {
+  crawlId: string;
+  check: Check;
+  group: IssueGroup;
+  origin: string | null;
+  noun: (count: number) => string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const count = group.urls ?? group.pages;
+  const ref: CheckGroupRef = { detail: group.detail, relatedUrlId: group.relatedUrlId };
+  const first = useQuery(rowsQuery(crawlId, check.id, ref, open ? WHERE_MAX : FIRST_PAGES));
+  const rows = first.data?.rows ?? [];
+  const status = rows[0]?.relatedStatusCode ?? null;
+  const many = count > FIRST_PAGES;
+  return (
+    <tr>
+      <td>
+        {group.relatedUrl ? (
+          <>
+            {origin && (group.relatedUrl === origin || group.relatedUrl === `${origin}/`) ? (
+              <span className="block font-medium">Your home page</span>
+            ) : null}
+            <Address url={group.relatedUrl} origin={origin} small={group.relatedUrl === `${origin ?? ''}/`} />
+            {status !== null && status >= 400 ? (
+              <span className="mt-1 block text-12 text-text-muted">
+                {status} {reasonPhrase(status) ?? ''}
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span>{group.detail ?? ''}</span>
+        )}
+      </td>
+      <td>
+        {many ? (
+          <span className="mb-1 flex flex-wrap items-center gap-2 font-medium">
+            {formatCount(count)} {noun(count)}
+            {group.likelyTemplate ? <OneFixTag /> : null}
+          </span>
+        ) : null}
+        {many && !open ? (
+          <span className="text-text-secondary">
+            {rows
+              .slice(0, FIRST_PAGES)
+              .map((row) => row.title ?? row.url ?? '')
+              .join(', ')}{' '}
+            and {formatCount(count - Math.min(rows.length, FIRST_PAGES))} more.{' '}
+            <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+              Show them
+            </Button>
+          </span>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {rows.map((row) => (
+              <li key={row.id}>
+                <PageLine row={row} origin={origin} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {open && count > WHERE_MAX ? (
+          <Button variant="ghost" size="sm" iconEnd={ArrowUpRight} onClick={() => switchMode(router, 'advanced')}>
+            See all {formatCount(count)} in Advanced
+          </Button>
+        ) : null}
+      </td>
+    </tr>
+  );
+}

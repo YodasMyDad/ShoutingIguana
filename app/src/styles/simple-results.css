@@ -313,6 +313,160 @@
   .si-where-table tr:last-child td {
     border-bottom: 0;
   }
+
+  /* The score's breakdown: as wide as the design's dialog, a line for each check that cost points, the sum, and the
+     points for each problem. */
+  .si-dialog.si-score-dialog {
+    width: var(--dialog-width-wide);
+  }
+
+  .si-score-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+  }
+
+  .si-score-table th,
+  .si-score-table td {
+    padding: var(--space-2-5) var(--space-3);
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
+    font-weight: var(--font-weight-regular);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .si-score-table thead th {
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-score-table tbody td,
+  .si-score-table--bands tbody td {
+    color: var(--color-text-secondary);
+  }
+
+  .si-score-table tfoot th,
+  .si-score-table tfoot td {
+    border-bottom: 0;
+    font-size: var(--text-16);
+    line-height: var(--leading-16);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-score-table__num {
+    text-align: right !important;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-score-table__check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  a.si-score-table__check:hover {
+    color: var(--color-accent-text);
+    text-decoration: underline;
+    text-underline-offset: var(--underline-offset);
+  }
+
+  .si-score-table--bands th,
+  .si-score-table--bands td {
+    padding: var(--space-1-5) var(--space-3);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+}
+
+/* TODO(round4-merge): Part A (r4-home) owns the score ring; these go with simple/ScoreRingStandIn.tsx. */
+:root {
+  --ring-lg: 136px;
+  --ring-md: 72px;
+}
+
+@layer components {
+  .si-ring-standin {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: var(--ring-lg);
+    height: var(--ring-lg);
+  }
+
+  .si-ring-standin--md {
+    width: var(--ring-md);
+    height: var(--ring-md);
+  }
+
+  .si-ring-standin svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  .si-ring-standin circle {
+    fill: none;
+    stroke-width: 8;
+  }
+
+  .si-ring-standin__track {
+    stroke: var(--color-chart-track);
+  }
+
+  .si-ring-standin__arc {
+    stroke: var(--color-accent);
+    stroke-linecap: round;
+  }
+
+  .si-ring-standin__cut {
+    stroke: var(--color-surface);
+  }
+
+  .si-ring-standin__value {
+    position: relative;
+    font-size: var(--text-48);
+    line-height: 1;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--tracking-figure);
+    font-variant-numeric: tabular-nums lining-nums;
+    text-align: center;
+  }
+
+  .si-ring-standin--md .si-ring-standin__value {
+    font-size: var(--text-21);
+  }
+
+  .si-ring-standin__of {
+    display: block;
+    margin-top: var(--space-1-5);
+    font-size: var(--text-12);
+    letter-spacing: 0;
+    font-weight: var(--font-weight-regular);
+    color: var(--color-text-muted);
+  }
+}
+
+@media (forced-colors: active) {
+  .si-ring-standin__arc {
+    stroke: Highlight;
+  }
+
+  .si-ring-standin__track {
+    stroke: GrayText;
+  }
+
+  .si-ring-standin__cut {
+    stroke: Canvas;
+  }
 }
 
 @media (forced-colors: active) {
