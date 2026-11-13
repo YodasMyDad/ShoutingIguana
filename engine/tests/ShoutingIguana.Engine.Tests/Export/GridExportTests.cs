@@ -174,6 +174,38 @@ public sealed class GridExportTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The URL grid narrowed to a links view's pages or targets (<c>linkEnds</c>) is exported as the grid reads it under
+    /// the same links, beside its own filter, search and sort, and the list of ends agrees on how many there are.
+    /// </summary>
+    [Theory]
+    [InlineData(LinkEnd.To, false)]
+    [InlineData(LinkEnd.From, false)]
+    [InlineData(LinkEnd.To, true)]
+    [InlineData(LinkEnd.From, true)]
+    public void TheUrlGridNarrowedToALinksViewsEndsIsExportedAsTheGridReadsIt(LinkEnd end, bool narrowed)
+    {
+        UrlLinkEnds ends = new(end, [Names("kind", FilterOperator.In, "hyperlink"), Text("to.url", FilterOperator.Contains, "/p/")]);
+        var query = narrowed
+            ? new UrlQuery { Columns = ["url", "statusCode", "title", "depth"], Filters = [Number("depth", FilterOperator.Gte, 1)], Search = "p", Sort = [new UrlSort("url", true)], LinkEnds = ends }
+            : new UrlQuery { Columns = ["url", "statusCode", "inlinks"], LinkEnds = ends };
+        var shown = Shown(query.Columns, UrlGridReader.Columns);
+        var expected = Rows(shown, at => Page(UrlGridReader.Query(_crawl.Path, at, _cache)), query);
+        var all = UrlGridReader.Query(_crawl.Path, new UrlQuery { Limit = 1 }).Matching;
+        Assert.True(expected.Count > GridExportReader.UrlPageRows && expected.Count < all, $"{expected.Count} of {all} rows.");
+        if (!narrowed)
+        {
+            Assert.Equal(LinkGridReader.Ends(_crawl.Path, new LinkEndQuery { End = end, Filters = ends.Filters }, _cache).Total, expected.Count);
+        }
+
+        foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+        {
+            var (result, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Urls, Format = format, Query = query }, "URLs");
+            AssertSame(shown, expected, rows, format);
+            Assert.Equal(expected.Count, result.Rows);
+        }
+    }
+
     [Fact]
     public void ASitemapsUrlsAreExportedAsItsGridReadsThem()
     {

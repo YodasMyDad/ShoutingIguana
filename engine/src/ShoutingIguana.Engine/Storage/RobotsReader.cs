@@ -46,27 +46,49 @@ public static class RobotsReader
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, after: null, errors);
-        if (query.Search is { Length: > UrlQueryCompiler.MAX_TEXT })
+        ValidateSearch(query.Search, errors);
+        UrlGridReader.ThrowIfInvalid(errors);
+        return GridReadContext.Read(databasePath, cache, cancellationToken, context => OriginPage(context, query, query.Limit));
+    }
+
+    /// <summary>
+    /// Every origin a search and a filter match, in the list's order, from one snapshot of the file: what an export of
+    /// the list writes, so a running crawl's file is of one moment of it. The paging asked for is ignored. Says whether
+    /// the crawl was running.
+    /// </summary>
+    /// <inheritdoc cref="ReadOrigins(string, RobotsOriginQuery, ReadCache?, CancellationToken)" path="/exception"/>
+    internal static (RobotsOriginPage Page, bool Live) ReadEveryOrigin(string databasePath, RobotsOriginQuery query, ReadCache? cache, CancellationToken cancellationToken)
+    {
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        ValidateSearch(query.Search, errors);
+        UrlGridReader.ThrowIfInvalid(errors);
+        return GridReadContext.Read(databasePath, cache, cancellationToken,
+            context => (OriginPage(context, query with { Offset = 0 }, int.MaxValue), context.Stamp!.Live));
+    }
+
+    /// <summary>What's wrong with a search of the origins, under <c>search</c>: only its length.</summary>
+    internal static void ValidateSearch(string? search, Dictionary<string, List<string>> errors)
+    {
+        if (search is { Length: > UrlQueryCompiler.MAX_TEXT })
         {
             UrlQueryCompiler.Add(errors, "search", $"Search for at most {UrlQueryCompiler.MAX_TEXT:N0} characters.");
         }
+    }
 
-        UrlGridReader.ThrowIfInvalid(errors);
-        return GridReadContext.Read(databasePath, cache, cancellationToken, context =>
+    private static RobotsOriginPage OriginPage(GridReadContext context, RobotsOriginQuery query, int limit)
+    {
+        var origins = Origins(context);
+        var searched = string.IsNullOrEmpty(query.Search)
+            ? origins
+            : [.. origins.Where(origin => origin.Origin.Contains(query.Search, StringComparison.OrdinalIgnoreCase))];
+        var blocking = searched.LongCount(origin => origin.Blocked > 0);
+        var matching = query.Blocked is { } blocked ? [.. searched.Where(origin => origin.Blocked > 0 == blocked)] : searched;
+        return new RobotsOriginPage(origins.Count, query.Offset, context.Options.RespectRobotsTxt, context.RobotsToken, origins.Sum(origin => origin.Blocked),
+            [.. matching.Skip(query.Offset).Take(limit)])
         {
-            var origins = Origins(context);
-            var searched = string.IsNullOrEmpty(query.Search)
-                ? origins
-                : [.. origins.Where(origin => origin.Origin.Contains(query.Search, StringComparison.OrdinalIgnoreCase))];
-            var blocking = searched.LongCount(origin => origin.Blocked > 0);
-            var matching = query.Blocked is { } blocked ? [.. searched.Where(origin => origin.Blocked > 0 == blocked)] : searched;
-            return new RobotsOriginPage(origins.Count, query.Offset, context.Options.RespectRobotsTxt, context.RobotsToken, origins.Sum(origin => origin.Blocked),
-                [.. matching.Skip(query.Offset).Take(query.Limit)])
-            {
-                Matching = matching.Count,
-                Counts = new RobotsOriginCounts(searched.Count, blocking, searched.Count - blocking)
-            };
-        });
+            Matching = matching.Count,
+            Counts = new RobotsOriginCounts(searched.Count, blocking, searched.Count - blocking)
+        };
     }
 
     /// <summary>

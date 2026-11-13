@@ -19,8 +19,10 @@ public static class ExportFields
     {
         ["columns"] = GRIDS,
         ["filters"] = GRIDS,
-        ["search"] = GRIDS,
+        ["search"] = [.. GRIDS, ExportKind.RobotsOrigins],
         ["sort"] = GRIDS,
+        ["linkEnds"] = [ExportKind.Urls],
+        ["blocked"] = [ExportKind.RobotsOrigins],
         ["group"] = [ExportKind.IssueRows],
         ["sitemapId"] = [ExportKind.SitemapUrls],
         ["origin"] = BLOCKED,

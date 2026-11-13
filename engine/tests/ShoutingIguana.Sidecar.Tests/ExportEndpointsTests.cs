@@ -98,6 +98,11 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"workbook","format":"xlsx"}""", "everything.xlsx")]
     [InlineData("""{"kind":"report","format":"html"}""", "report.html")]
     [InlineData("""{"kind":"report","format":"html","cut":"summary","examples":2,"lookExamples":0}""", "summary.html")]
+    [InlineData("""{"kind":"sitemaps","format":"csv"}""", "sitemaps.csv")]
+    [InlineData("""{"kind":"sitemaps","format":"xlsx"}""", "sitemaps.xlsx")]
+    [InlineData("""{"kind":"robotsOrigins","format":"csv"}""", "origins.csv")]
+    [InlineData("""{"kind":"robotsOrigins","format":"xlsx","search":"127","blocked":false}""", "origins.xlsx")]
+    [InlineData("""{"kind":"urls","format":"csv","linkEnds":{"end":"to","filters":[{"column":"kind","op":"in","values":["hyperlink"]}]}}""", "targets.csv")]
     public async Task EveryKindIsWrittenToItsFile(string body, string name)
     {
         var path = Path.Combine(_folder, name);
@@ -137,6 +142,56 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
         var done = await ExportAsync(grid.Id, new JsonObject { ["kind"] = "robotsBlocked", ["format"] = "csv", ["origin"] = (string)origin["origin"]! }.ToJsonString(), path);
         Assert.Equal((long)origin["blocked"]!, (long)done["result"]!["rows"]!);
         Assert.StartsWith("Blocked URL,Blocked by,Line,Rule,Error\r\n", (await File.ReadAllTextAsync(path)).TrimStart('\uFEFF'), StringComparison.Ordinal);
+    }
+
+    /// <summary>The lists that aren't grids, and the URL grid narrowed to a links view's ends: each file is what its screen's call lists, row for row.</summary>
+    [Fact]
+    public async Task TheListsAndALinksViewsEndsAreExportedAsTheirCallsListThem()
+    {
+        static List<string> Column(string path) =>
+            [.. File.ReadAllText(path).TrimStart('\uFEFF').Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Skip(1).Select(line => line.Split(',')[0])];
+
+        // The origins, searched and filtered as the list is.
+        foreach (var filter in new[] { new JsonObject(), new JsonObject { ["blocked"] = true }, new JsonObject { ["blocked"] = false, ["search"] = "www" } })
+        {
+            var asked = filter.DeepClone().AsObject();
+            asked["limit"] = 1_000;
+            var listed = (await Sidecar.PostAsync($"api/crawls/{grid.Id}/robots", asked)).Body!;
+            var body = filter.DeepClone().AsObject();
+            body["kind"] = "robotsOrigins";
+            body["format"] = "csv";
+            var path = Path.Combine(_folder, "origins.csv");
+            var done = await ExportAsync(grid.Id, body.ToJsonString(), path);
+            Assert.True((string?)done["status"] == "done", done.ToJsonString());
+            Assert.Equal(listed["origins"]!.AsArray().Select(origin => (string)origin!["origin"]!), Column(path));
+            Assert.Equal((long)listed["matching"]!, (long)done["result"]!["rows"]!);
+        }
+
+        // The sitemaps, in the list's order.
+        var sitemaps = await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/sitemaps");
+        var sitemapsPath = Path.Combine(_folder, "sitemaps.csv");
+        await ExportAsync(grid.Id, """{"kind":"sitemaps","format":"csv"}""", sitemapsPath);
+        Assert.Equal(sitemaps["sitemaps"]!.AsArray().Select(sitemap => (string)sitemap!["url"]!), Column(sitemapsPath));
+
+        // A links view's targets, beside a filter of the URL grid's own.
+        var query = JsonNode.Parse("""{"columns":["url"],"filters":[{"column":"type","op":"in","values":["page"]}],"linkEnds":{"end":"to","filters":[{"column":"kind","op":"in","values":["hyperlink"]}]}}""")!.AsObject();
+        var read = query.DeepClone().AsObject();
+        read["limit"] = 1_000;
+        var page = (await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls", read)).Body!;
+        var urlsPath = Path.Combine(_folder, "targets.csv");
+        var request = query.DeepClone().AsObject();
+        request["kind"] = "urls";
+        request["format"] = "csv";
+        var urls = await ExportAsync(grid.Id, request.ToJsonString(), urlsPath);
+        Assert.True((long)page["matching"]! > 0);
+        Assert.Equal((long)page["matching"]!, (long)urls["result"]!["rows"]!);
+        Assert.Equal(page["rows"]!.AsArray().Select(row => (string)row!["url"]!), Column(urlsPath));
+
+        // linkEnds that the grid would refuse is refused as the grid's call refuses it.
+        var bad = JsonNode.Parse("""{"kind":"urls","format":"csv","linkEnds":{"end":"sideways"}}""")!;
+        bad["path"] = Path.Combine(_folder, "bad.csv");
+        var problem = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/export", bad), HttpStatusCode.UnprocessableEntity, "invalid-query");
+        Assert.Equal(["linkEnds.end"], problem["errors"]!.AsObject().Select(error => error.Key));
     }
 
     [Fact]
@@ -204,6 +259,14 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"report","format":"html","cut":"half"}""", "cut")]
     [InlineData("""{"kind":"report","format":"html","examples":51}""", "examples")]
     [InlineData("""{"kind":"report","format":"html","lookExamples":-1}""", "lookExamples")]
+    [InlineData("""{"kind":"links","format":"csv","linkEnds":{"end":"to"}}""", "linkEnds")]
+    [InlineData("""{"kind":"sitemapUrls","format":"csv","sitemapId":1,"linkEnds":{"end":"to"}}""", "linkEnds")]
+    [InlineData("""{"kind":"urls","format":"csv","blocked":true}""", "blocked")]
+    [InlineData("""{"kind":"robotsBlocked","format":"csv","origin":"https://a.example","blocked":true}""", "blocked")]
+    [InlineData("""{"kind":"sitemaps","format":"csv","search":"x"}""", "search")]
+    [InlineData("""{"kind":"sitemaps","format":"html"}""", "format")]
+    [InlineData("""{"kind":"robotsOrigins","format":"csv","columns":["origin"]}""", "columns")]
+    [InlineData("""{"kind":"robotsOrigins","format":"csv","origin":"https://a.example"}""", "origin")]
     public async Task ARequestThatCannotBeAnExportIsRefusedByField(string body, string field)
     {
         var request = JsonNode.Parse(body)!;

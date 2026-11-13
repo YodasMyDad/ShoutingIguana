@@ -461,6 +461,8 @@ export function createMockTransport(): Transport {
       setStatus(simulation.crawlId, 'completed', {
         analyzedAt: new Date().toISOString(),
         issues: { error: 2, warning: 6, notice: 11 },
+        // The garden crawl it replays has no page the analysis leaves out (Cloudflare's /cdn-cgi/): every page is audited.
+        pagesAnalyzed: items.get(simulation.crawlId)?.pageCount ?? 0,
       }),
     );
   };

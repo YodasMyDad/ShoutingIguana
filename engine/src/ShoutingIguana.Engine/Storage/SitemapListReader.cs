@@ -22,6 +22,11 @@ public static class SitemapListReader
     public static SitemapList Read(string databasePath, ReadCache? cache = null, CancellationToken cancellationToken = default) =>
         GridReadContext.Read(databasePath, cache, cancellationToken, context => context.Cached("sitemaps", () => Read(context)));
 
+    /// <summary>The list as <see cref="Read(string, ReadCache?, CancellationToken)"/> gives it, and whether the crawl was running as it was read: for an export of it.</summary>
+    /// <inheritdoc cref="Read(string, ReadCache?, CancellationToken)" path="/exception"/>
+    internal static (SitemapList List, bool Live) ReadWithMoment(string databasePath, ReadCache? cache, CancellationToken cancellationToken) =>
+        GridReadContext.Read(databasePath, cache, cancellationToken, context => (context.Cached("sitemaps", () => Read(context)), context.Stamp!.Live));
+
     private static SitemapList Read(GridReadContext context)
     {
         // A file from before an index's own count was kept has no column for it, until it's continued.

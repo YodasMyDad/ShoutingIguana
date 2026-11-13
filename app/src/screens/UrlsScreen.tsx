@@ -555,7 +555,7 @@ export function UrlsScreen() {
             rows: rowCount,
             catalogue: catalogue.data,
             viewName: saved.current?.name ?? null,
-            linkEnds: linkEnds !== undefined,
+            linkEnds,
           })
         : null,
     [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, saved.current, linkEnds],

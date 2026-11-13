@@ -256,8 +256,16 @@ export interface CrawlListItem {
    * as an engine from before E3c doesn't send it.
    */
   crawledUrlCount?: number;
-  /** Internal URLs that returned HTML the crawler parsed. */
+  /**
+   * Internal URLs that returned HTML the crawler parsed, as the crawl counts them: every one, Cloudflare's own
+   * `/cdn-cgi/` endpoints included, which the analysis doesn't audit. So it can be more than `pagesAnalyzed`.
+   */
   pageCount: number;
+  /**
+   * The pages the last analysis audited, which its score covers: the count to show beside the score. Null before the
+   * first analysis; optional here, as a sidecar from before E7 doesn't send it.
+   */
+  pagesAnalyzed?: number | null;
   /** Null before the first analysis. */
   issues: IssueCounts | null;
   analyzedAt: string | null;
