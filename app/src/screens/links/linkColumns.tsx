@@ -34,7 +34,7 @@ export const DEFAULT_LINK_COLUMNS: readonly string[] = [
 ];
 
 /** The engine's columns the follow column is drawn from. */
-const FOLLOW_PARTS = ['followed', 'noFollow', 'sponsored', 'ugc'] as const;
+export const FOLLOW_PARTS = ['followed', 'noFollow', 'sponsored', 'ugc'] as const;
 
 /** Columns that are never one of the grid's own: an end's id opens it, and the follow column shows the flags. */
 const NOT_CHOSEN: ReadonlySet<string> = new Set(['from.id', 'to.id', ...FOLLOW_PARTS]);

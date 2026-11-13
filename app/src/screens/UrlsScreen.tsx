@@ -34,6 +34,9 @@ import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfN
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
+import { ExportButton } from '../export/ExportButton';
+import { useExportCommand } from '../export/useExportCommand';
+import { urlExportColumns, urlGridOffer } from '../export/offers';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
@@ -501,6 +504,27 @@ export function UrlsScreen() {
     ],
   );
 
+  // Export (Ctrl+E): the view as it is when it's pressed, its columns, filters, search and sort.
+  useExportCommand(
+    () =>
+      item
+        ? urlGridOffer({
+            item,
+            crawling,
+            columns: urlExportColumns(shown),
+            filters,
+            sort,
+            search: q,
+            rows: rowCount,
+            catalogue: catalogue.data,
+            viewName: saved.current?.name ?? null,
+            linkEnds: false,
+          })
+        : null,
+    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, saved.current],
+    { group: 'URLs' },
+  );
+
   // A button that goes with the state it was in, without a navigation (Try again, once the read works), leaves the
   // keyboard in the grid that comes, never on the page.
   const frame = useRef<HTMLDivElement>(null);
@@ -614,8 +638,9 @@ export function UrlsScreen() {
             <MenuItem command="urls.copyUrls">{copyUrlsTitle}</MenuItem>
             <MenuItem command="urls.copyColumn">{copyColumnTitle}</MenuItem>
           </DropdownMenu>
-          {/* Export (Ctrl+E) takes this place once the engine's export is in: nothing is offered until it works. */}
-          <div data-slot="export" className="contents" />
+          <div data-slot="export" className="contents">
+            <ExportButton />
+          </div>
         </div>
       </div>
       <FilterBar

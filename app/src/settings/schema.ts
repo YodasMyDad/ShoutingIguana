@@ -35,6 +35,10 @@ export interface Settings {
   savedViews: SavedView[];
   /** The URL grid's "Show full URLs": the crawl's own URLs whole, rather than as paths under a header naming the host. */
   showFullUrls: boolean;
+  /** The folder the last export was saved in, so the next save dialog opens there. Null until one is saved. */
+  exportFolder: string | null;
+  /** The format a grid was last exported as: the export dialog's choice next time. */
+  exportFormat: 'csv' | 'xlsx';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -51,6 +55,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hiddenChecks: [],
   savedViews: [],
   showFullUrls: false,
+  exportFolder: null,
+  exportFormat: 'xlsx',
 };
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
@@ -65,6 +71,8 @@ const MAX_REMEMBERED_CRAWLS = 200;
 /** The catalog has about 90 checks; ids are its kebab-case names. */
 const MAX_HIDDEN_CHECKS = 200;
 const CHECK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** A folder's path, as a save dialog gave it: long enough for any, short enough to leave the file room. */
+const MAX_FOLDER_LENGTH = 1_024;
 
 function oneOf<T extends string>(value: unknown, options: readonly T[], fallback: T): T {
   return options.includes(value as T) ? (value as T) : fallback;
@@ -116,5 +124,13 @@ export function readSettings(value: unknown): Settings {
       : DEFAULT_SETTINGS.hiddenChecks,
     savedViews: readSavedViews(stored.savedViews),
     showFullUrls: typeof stored.showFullUrls === 'boolean' ? stored.showFullUrls : DEFAULT_SETTINGS.showFullUrls,
+    exportFolder:
+      typeof stored.exportFolder === 'string' &&
+      stored.exportFolder.length > 0 &&
+      stored.exportFolder.length <= MAX_FOLDER_LENGTH &&
+      !/\p{Cc}/u.test(stored.exportFolder)
+        ? stored.exportFolder
+        : DEFAULT_SETTINGS.exportFolder,
+    exportFormat: oneOf(stored.exportFormat, ['csv', 'xlsx'], DEFAULT_SETTINGS.exportFormat),
   };
 }

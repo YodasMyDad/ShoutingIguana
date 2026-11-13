@@ -23,6 +23,7 @@ import { SIMPLE_SECTIONS } from '../app/modeRoutes';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import logoUrl from '../assets/iguana-64.png';
 import { crawlName, crawledUrls } from '../crawl/status';
+import { ExportsInProgress } from '../export/ExportsInProgress';
 import { formatExactTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useMode } from '../mode/mode';
@@ -149,6 +150,7 @@ export function Sidebar() {
 
       <div className="mt-auto flex flex-col gap-2">
         <RunningCrawls collapsed={collapsed} simple={mode === 'simple'} />
+        <ExportsInProgress collapsed={collapsed} />
         <div className="border-t border-border-subtle pt-2">
           <NavItem to="/settings/{-$section}" params={{}} label="Settings" icon={Settings} collapsed={collapsed} />
         </div>

@@ -35,6 +35,9 @@ import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
+import { ExportButton } from '../export/ExportButton';
+import { useExportCommand } from '../export/useExportCommand';
+import { linkExportColumns, linksOffer } from '../export/offers';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
@@ -52,6 +55,7 @@ import { siteOriginOf, urlDisplay } from '../ui/urlText';
 import { FACET_TITLES, LINK_FACET_IDS, buildFacets, withFacetValue, type FacetValue } from './links/facets';
 import {
   DEFAULT_LINK_COLUMNS,
+  FOLLOW_PARTS,
   LINK_FILTER_GROUPS,
   endUrls,
   linkChooserGroups,
@@ -61,7 +65,7 @@ import {
   sharedUrlWidth,
   shownLinkColumns,
 } from './links/linkColumns';
-import { endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
+import { FOLLOW_COLUMN, endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
 import { LINK_PRESETS, activePreset, sortShown } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './links/states';
@@ -417,6 +421,26 @@ export function LinksScreen() {
     [view, columns, editor, chooserGroups, hasRows, copying, copyPart, copyOneColumnTitle, clearView, navigate],
   );
 
+  // Export (Ctrl+E): the view as it is when it's pressed, its columns, filters, search and sort.
+  useExportCommand(
+    () =>
+      item
+        ? linksOffer({
+            item,
+            crawling,
+            columns: linkExportColumns(shown, FOLLOW_COLUMN, FOLLOW_PARTS),
+            filters,
+            sort,
+            search: q,
+            rows: rowCount,
+            catalogue: catalogue.data,
+            viewName: preset && preset.id !== 'all' ? preset.title : null,
+          })
+        : null,
+    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, preset],
+    { group: 'Links' },
+  );
+
   // A button that goes with the state it was in, without a navigation (Try again, once the read works), leaves the
   // keyboard in the grid that comes, never on the page. One that clears the view navigates, and the shell does the
   // same for it.
@@ -519,6 +543,7 @@ export function LinksScreen() {
             <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
             <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
           </DropdownMenu>
+          <ExportButton />
         </div>
       </div>
       <FilterBar

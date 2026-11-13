@@ -7,6 +7,7 @@ import { App } from './app/App';
 import { createQueryClient } from './app/queryClient';
 import { createAppRouter } from './app/router';
 import { setTransport } from './api/transport';
+import { startExports } from './export/startExports';
 import { notifyError } from './feedback/notify';
 import { commands, installKeyboard } from './keyboard/registry';
 import { isTauri } from './lib/platform';
@@ -54,6 +55,8 @@ async function start() {
         ? router.navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl } })
         : router.navigate({ to: '/crawls/$crawl/overview', params: { crawl } })),
   });
+  // Exports outlive the screen that started them: their toasts and the sidebar's list follow the live stream.
+  startExports();
   refetchFailedQueriesOnFirstReady(queryClient);
 
   createRoot(rootElement()).render(<App router={router} queryClient={queryClient} />);
