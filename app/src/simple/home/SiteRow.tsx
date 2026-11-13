@@ -129,7 +129,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
               variant="subtle"
               to={kind === 'live' ? '/crawls/$crawl/overview' : '/crawls/$crawl'}
               params={{ crawl: item.id }}
-              className="truncate text-14 font-semibold after:absolute after:inset-0"
+              className="block min-h-6 truncate text-14 leading-6 font-semibold after:absolute after:inset-0"
               title={item.startUrl ?? item.path}
             >
               {name}
