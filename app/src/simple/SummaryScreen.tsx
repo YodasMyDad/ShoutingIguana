@@ -548,7 +548,9 @@ function FactsLine({ item, analysis }: { item: CrawlListItem; analysis: Analysis
   const pages = analysis?.score?.covers.pages ?? analysis?.pagesAnalyzed ?? item.pageCount;
   const urls =
     analysis?.score?.covers.urls ?? analysis?.crawledUrlCount ?? item.crawledUrlCount ?? item.fetchedUrlCount;
-  const when = item.startedAt ? `, on ${longDate(item.startedAt)}` : '';
+  // The head's date: the day the check finished, or the day it started while it has none.
+  const day = item.finishedAt ?? item.startedAt;
+  const when = day ? `, on ${longDate(day)}` : '';
   return (
     <p className="text-13 text-text-muted">
       {factsWords({ pages, urls })}

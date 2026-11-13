@@ -101,6 +101,14 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(main().queryByText(/268 pages/)).toBeNull();
   });
 
+  it('says one date, the day the check finished, in the head and the line of facts', async () => {
+    await open(GARDEN_ANALYSIS, gardenItem({ startedAt: '2026-10-30T12:00:00Z', finishedAt: '2026-11-02T12:00:00Z' }));
+    await site();
+    expect(main().getByText(/^Checked on 2 November 2026\./)).toBeVisible();
+    expect(main().getByText(/addresses in all, on 2 November 2026\.$/)).toBeVisible();
+    expect(main().queryByText(/30 October/)).toBeNull();
+  });
+
   it('lands each count on exactly its part of What to fix, and a count of 0 on nothing', async () => {
     await open(NOTICES_ANALYSIS);
     await site();
