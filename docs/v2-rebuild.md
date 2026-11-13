@@ -159,8 +159,10 @@ Subagents can't be resumed across sessions: relaunch each from its brief and its
    its check script is `tools/r4-integrate-checks.sh`.
 2. **A fresh-eyes review of round 4 as integrated** (write its brief from `brief-round3-review.md`'s pattern), a
    fixer, the merge into `ui/step-3`, both verify scripts, push.
-3. **The verify of `e350053`** (E7 merged): it was running at the pause. If its logs aren't in the orchestrator's
-   checkpoint, run `tools/verify-engine.sh` and `tools/verify-app.sh` again on `ui/step-3` before anything merges.
+3. **The verify of `e350053`** (E7 merged): it was running at the pause. Its engine half finished green on its
+   own (on `3ebd565`, docs only after `e350053`: build, tests, the 100k bench, `readbench --gate`). Its app half
+   stopped after build-storybook (all green to there); the full check run on `ui/r4-integrate`, which holds
+   `e350053`, stands in for the rest.
 4. **The closing audit** (`brief-closing-audit.md`, read-only, both modes) and **the gallery re-shoot**
    (`brief-gallery.md`, builds into `.claude/worktrees/_gallery/site/` so the private page
    https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR keeps its address; the orchestrator views every image before
@@ -240,8 +242,10 @@ bar's switch never gives way, and at the smallest sizes Pause, Stop and search f
 the status pill shrinks to its dot; a settings file from before the mode existed opens in Advanced (only a first
 start is Simple); Copy diagnostics writes `%USERPROFILE%` for the user's profile path; grids keep the design's 32 px
 rows by default (Compact, 28 px, gives about 18 rows at 1280x720 against Screaming Frog's 20); a named URL whose
-fate isn't known says "Not fetched". Open for the owner: should the analysis count links on pages it doesn't audit
-(Cloudflare's `/cdn-cgi/` pages)? It would change inlink counts and possibly orphans.
+fate isn't known says "Not fetched". **Settled 2026-11-13 (the owner: "make the best choice for an SEO tool"):** links
+on pages the analysis doesn't audit (Cloudflare's `/cdn-cgi/` pages) stay out of inlink counts and orphan checks, as
+built. Those pages are made by Cloudflare, not the site: counting them as a source would let a real orphan look
+linked. Links *to* them (every obfuscated email links to `/cdn-cgi/l/email-protection`) are still stored and shown.
 
 ### The pause of 2026-11-11 (history)
 
