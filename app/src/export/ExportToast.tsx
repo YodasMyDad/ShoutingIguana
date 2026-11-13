@@ -108,7 +108,7 @@ export function ExportToastBody({ tracked, onClose }: { tracked: TrackedExport; 
           className={phase === 'failed' || phase === 'lost' ? 'text-message-failure' : 'text-text-secondary'}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <p className="si-toast-title truncate font-semibold" title={job.path}>
+          <p className="line-clamp-2 font-semibold break-all text-text" title={job.path}>
             {name}
           </p>
           <p className="text-12 text-text-secondary">{headline}</p>

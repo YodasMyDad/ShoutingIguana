@@ -5,6 +5,11 @@ import { exportStore, useExports, type ExportStore } from './exportStore';
 import { showExportToast } from './exportToasts';
 import { fileNameOf, progressWords } from './exportWords';
 
+/** A file's name without the site and the date the default names start with: what tells exports of one crawl apart. */
+function shortName(name: string): string {
+  return name.replace(/^\S+ \d{4}-\d{2}-\d{2} (?=\S)/, '');
+}
+
 /**
  * The exports in progress, at the bottom of the sidebar beside the crawls running in the background (docs/v2-ui-ia.md,
  * The shell): each its file and a thin bar, a press bringing its toast back, with Cancel, wherever the user has gone
@@ -40,7 +45,7 @@ export function ExportsInProgress({
                 <Icon icon={FileDown} className="shrink-0 text-text-secondary" />
                 {collapsed ? null : (
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="truncate text-12">{name}</span>
+                    <span className="truncate text-12">{shortName(name)}</span>
                     <span aria-hidden="true" className="si-bar-track si-bar-track--thin">
                       <span
                         className={clsx('si-bar-fill', known ? 'si-bar-fill--some' : 'si-bar-fill--indeterminate')}
