@@ -135,6 +135,7 @@ describe('how long is left', () => {
         atLimit: false,
         limit: 1500,
         limitLeft: 1141,
+        internalFound: 1600,
       }),
     ).toEqual({
       lead: 'About 1 minute to go.',
@@ -144,6 +145,22 @@ describe('how long is left', () => {
       timeLeftWords({ status: 'running', queued: 100, urlsPerSecond: 1, atLimit: false, limit: 1500, limitLeft: 1141 })
         .lead,
     ).toBe('At least 1 minute to go.');
+  });
+
+  it('says "about" and the limit only once the site has more addresses of its own than the limit, as Advanced does', () => {
+    // 5,933 queued, most of them other sites' (links out): the site's own found so far, 1,200, is under the limit
+    // of 1,500, so the limit isn't what's left, and the queue's floor stands.
+    const words = timeLeftWords({
+      status: 'running',
+      queued: 5933,
+      urlsPerSecond: 16,
+      atLimit: false,
+      limit: 1500,
+      limitLeft: 1141,
+      internalFound: 1200,
+    });
+    expect(words.lead).toBe('At least 6 minutes to go.');
+    expect(words.rest).not.toMatch(/limit/);
   });
 
   it('has its own sentence for each state that has no pace', () => {

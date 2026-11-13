@@ -120,6 +120,7 @@ export function CheckingScreen({
       progress?.maxUrls && typeof progress.internalFetched === 'number'
         ? Math.max(0, progress.maxUrls - progress.internalFetched)
         : null,
+    internalFound: progress?.internalFound,
   });
 
   return (

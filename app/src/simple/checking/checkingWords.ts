@@ -207,6 +207,7 @@ export function timeLeftWords({
   atLimit,
   limit = null,
   limitLeft = null,
+  internalFound = null,
 }: {
   status: CrawlStatus | null;
   queued: number | null | undefined;
@@ -217,6 +218,8 @@ export function timeLeftWords({
   limit?: number | null | undefined;
   /** How many more of the site's addresses its limit lets it read; null without a limit. */
   limitLeft?: number | null;
+  /** The site's own addresses found so far (the limit counts only these); null when not known. */
+  internalFound?: number | null | undefined;
 }): TimeLeftWords {
   if (status === 'paused') return { lead: 'Paused.', rest: 'The time left starts again when you resume the check.' };
   if (status === 'stopping') return { lead: 'Stopping.', rest: 'The pages on their way are finishing.' };
@@ -227,9 +230,10 @@ export function timeLeftWords({
   }
   const reading = `It’s reading about ${formatCount(Math.max(1, Math.round(rate)))} ${Math.round(rate) <= 1 ? 'address' : 'addresses'} a second.`;
   if (queued === 0) return { lead: 'Nearly done.', rest: `The last addresses are being read. ${reading}` };
-  // With a limit nearer than the end of the queue, the limit is what's left: no more can be found to read, so it's
-  // said as "about", not as a floor.
-  if (limit && limitLeft !== null && limitLeft <= queued) {
+  // Once the site has more addresses of its own than its limit (the limit counts only these, as Advanced's time left
+  // does, overview/liveFigures.ts), the limit is what's left: no more can be found to read, so it's said as "about",
+  // not as a floor. The queue alone can't say so: it holds other sites' addresses too.
+  if (limit && limitLeft !== null && internalFound !== null && internalFound >= limit && limitLeft <= queued) {
     const left = Math.floor(limitLeft / rate / 60);
     const stops = `It stops at its limit of ${formatCount(limit)} addresses.`;
     return left < 1
