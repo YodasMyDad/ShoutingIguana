@@ -110,7 +110,7 @@ export const OPS_BY_TYPE: Record<UrlColumnType, readonly GridFilterOp[]> = {
   number: ['eq', 'ne', 'lt', 'lte', 'gt', 'gte', 'between', 'in', 'notIn', 'isEmpty', 'isNotEmpty'],
   enum: ['in', 'notIn', 'isEmpty', 'isNotEmpty'],
   text: ['contains', 'notContains', 'startsWith', 'endsWith', 'eq', 'ne', 'regex', 'notRegex', 'isEmpty', 'isNotEmpty'],
-  boolean: ['is', 'isEmpty', 'isNotEmpty'],
+  boolean: ['is', 'isNot', 'isEmpty', 'isNotEmpty'],
 };
 
 /** A column by its id: a check's own columns only for its rows. */

@@ -1085,11 +1085,11 @@ of the file and holds it for that one page only.
   | text | `contains`, `notContains`, `startsWith`, `endsWith` | `value`, matched ignoring the case of ASCII letters |
   | text | `eq`, `ne` | `value`, matched exactly |
   | text | `regex`, `notRegex` | `value`, a .NET regular expression, case-sensitive unless it starts `(?i)` |
-  | boolean | `is` | `value`: true or false |
+  | boolean | `is`, `isNot` | `value`: true or false. `isNot` is the other value or unknown (round 5 review R1-2) |
   | every type | `isEmpty`, `isNotEmpty` | Nothing. Empty is unknown (null), and for text also `""` |
 
-  - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`) matches unknown values too, as "exclude this value"
-    should; add `isNotEmpty` to leave them out.
+  - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`, `isNot`) matches unknown values too, as "exclude
+    this value" should; add `isNotEmpty` to leave them out.
   - A field the operator doesn't take is refused, not ignored: `values` or `min` beside `eq`, `value` beside `in`.
     A null in `filters`, `columns` or `sort` is a field error (`filters[0]`).
   - Regular expressions run in .NET's non-backtracking mode, linear in the text. A pattern that needs backtracking

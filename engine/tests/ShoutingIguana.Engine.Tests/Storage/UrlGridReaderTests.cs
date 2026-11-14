@@ -103,6 +103,12 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         { "boolean true", [Boolean("indexable", true)] },
         { "boolean false", [Boolean("indexable", false)] },
         { "boolean empty", [new UrlFilter("indexable", FilterOperator.IsEmpty)] },
+        { "indexable is not true", [NotBoolean("indexable", true)] },
+        { "indexable is not false", [NotBoolean("indexable", false)] },
+        { "noindex is not false", [NotBoolean("noindex", false)] },
+        { "in sitemap is not true", [NotBoolean("inSitemap", true)] },
+        { "fetched is not true", [NotBoolean("fetched", true)] },
+        { "internal is not true", [NotBoolean("isInternal", true)] },
         { "boolean not empty", [new UrlFilter("inSitemap", FilterOperator.IsNotEmpty)] },
         { "indexable not empty", [new UrlFilter("indexable", FilterOperator.IsNotEmpty)] },
         { "fetched", [Boolean("fetched", false)] },
@@ -132,6 +138,18 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         { "ttfb", [Number("ttfbMs", FilterOperator.Gte, 0)] },
         { "h1 count", [Number("h1Count", FilterOperator.Ne, 1)] }
     };
+
+    /// <summary>
+    /// A URL with a status code has an outcome too, so the grid's "Not crawled" (no code, no outcome) is "outcome is
+    /// empty" alone, a filter that leaves out the URLs blocked by robots.txt, which have an outcome but no code (round 5
+    /// review R1-7).
+    /// </summary>
+    [Fact]
+    public void AUrlWithAStatusCodeHasAnOutcome()
+    {
+        Assert.Empty(crawl.Reference.Matching([new UrlFilter("statusCode", FilterOperator.IsNotEmpty), new UrlFilter("outcome", FilterOperator.IsEmpty)]));
+        Assert.NotEmpty(crawl.Reference.Matching([new UrlFilter("statusCode", FilterOperator.IsEmpty), new UrlFilter("outcome", FilterOperator.IsNotEmpty)]));
+    }
 
     [Theory]
     [MemberData(nameof(Filters))]

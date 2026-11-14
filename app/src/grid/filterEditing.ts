@@ -29,13 +29,13 @@ export interface FilterGroup {
  * What the editor's operator list holds. A yes-or-no column has "is yes" and "is no" in place of an operator and a
  * value; everything else is the contract's operator.
  */
-export type DraftOp = Exclude<GridFilter['op'], 'is'> | 'isYes' | 'isNo';
+export type DraftOp = Exclude<GridFilter['op'], 'is' | 'isNot'> | 'isYes' | 'isNo' | 'isNotYes' | 'isNotNo';
 
 const OPS: Record<UrlColumnType, readonly DraftOp[]> = {
   number: ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'between', 'isEmpty', 'isNotEmpty'],
   text: ['contains', 'notContains', 'startsWith', 'endsWith', 'eq', 'ne', 'regex', 'notRegex', 'isEmpty', 'isNotEmpty'],
   enum: ['in', 'notIn', 'isEmpty', 'isNotEmpty'],
-  boolean: ['isYes', 'isNo', 'isEmpty', 'isNotEmpty'],
+  boolean: ['isYes', 'isNo', 'isNotYes', 'isNotNo', 'isEmpty', 'isNotEmpty'],
 };
 
 /** The operators a column of this type takes, the commonest first. */
@@ -63,6 +63,8 @@ const OP_WORDS: Record<DraftOp, string> = {
   isNotEmpty: 'is not empty',
   isYes: 'is yes',
   isNo: 'is no',
+  isNotYes: 'is not yes',
+  isNotNo: 'is not no',
 };
 
 /** An operator as the editor lists it. Text that must be the whole value says so: "is exactly". */
@@ -76,7 +78,15 @@ export function opWords(op: DraftOp, type: UrlColumnType): string {
 export type DraftInput = 'none' | 'text' | 'number' | 'range' | 'values';
 
 export function inputFor(op: DraftOp, type: UrlColumnType): DraftInput {
-  if (op === 'isEmpty' || op === 'isNotEmpty' || op === 'isYes' || op === 'isNo') return 'none';
+  if (
+    op === 'isEmpty' ||
+    op === 'isNotEmpty' ||
+    op === 'isYes' ||
+    op === 'isNo' ||
+    op === 'isNotYes' ||
+    op === 'isNotNo'
+  )
+    return 'none';
   if (op === 'between') return 'range';
   if (op === 'in' || op === 'notIn') return 'values';
   return type === 'number' ? 'number' : 'text';
@@ -132,6 +142,8 @@ export function draftOf(filter: GridFilter, column: FilterColumn | undefined): F
   switch (filter.op) {
     case 'is':
       return column.type === 'boolean' ? { ...empty, op: filter.value ? 'isYes' : 'isNo' } : null;
+    case 'isNot':
+      return column.type === 'boolean' ? { ...empty, op: filter.value ? 'isNotYes' : 'isNotNo' } : null;
     case 'isEmpty':
     case 'isNotEmpty':
       return { ...empty, op: filter.op };
@@ -193,6 +205,8 @@ export function filterOf(draft: FilterDraft, column: FilterColumn): DraftResult 
     case 'none':
       if (draft.op === 'isYes' || draft.op === 'isNo')
         return { filter: { column: id, op: 'is', value: draft.op === 'isYes' } };
+      if (draft.op === 'isNotYes' || draft.op === 'isNotNo')
+        return { filter: { column: id, op: 'isNot', value: draft.op === 'isNotYes' } };
       return { filter: { column: id, op: draft.op === 'isEmpty' ? 'isEmpty' : 'isNotEmpty' } };
     case 'range': {
       const min = draft.min.trim() === '' ? undefined : numberOf(draft.min);

@@ -39,7 +39,7 @@ internal static class UrlQueryCompiler
         [UrlColumnType.Number] = [Eq, Ne, Lt, Lte, Gt, Gte, Between, In, NotIn, IsEmpty, IsNotEmpty],
         [UrlColumnType.Text] = [Contains, NotContains, StartsWith, EndsWith, Eq, Ne, FilterOperator.Regex, NotRegex, IsEmpty, IsNotEmpty],
         [UrlColumnType.Enum] = [In, NotIn, IsEmpty, IsNotEmpty],
-        [UrlColumnType.Boolean] = [Is, IsEmpty, IsNotEmpty]
+        [UrlColumnType.Boolean] = [Is, IsNot, IsEmpty, IsNotEmpty]
     };
 
     /// <summary>The operators an index can serve, when the column has one.</summary>
@@ -48,7 +48,7 @@ internal static class UrlQueryCompiler
     /// <summary>A negative operator's positive one: a negative matches every row the positive doesn't, unknown ones too.</summary>
     private static readonly IReadOnlyDictionary<FilterOperator, FilterOperator> POSITIVE = new Dictionary<FilterOperator, FilterOperator>
     {
-        [Ne] = Eq, [NotIn] = In, [NotContains] = Contains, [NotRegex] = FilterOperator.Regex
+        [Ne] = Eq, [NotIn] = In, [NotContains] = Contains, [NotRegex] = FilterOperator.Regex, [IsNot] = Is
     };
 
     /// <summary>
@@ -407,7 +407,7 @@ internal static class UrlQueryCompiler
                 Add(errors, $"{field}.value", $"{Name(filter.Operator)} needs a number.");
                 break;
             case UrlColumnType.Boolean when value?.Boolean is null:
-                Add(errors, $"{field}.value", "is needs true or false.");
+                Add(errors, $"{field}.value", $"{Name(filter.Operator)} needs true or false.");
                 break;
             case UrlColumnType.Text when value?.Text is null:
                 Add(errors, $"{field}.value", $"{Name(filter.Operator)} needs text.");
@@ -539,10 +539,15 @@ internal static class UrlQueryCompiler
             var condition = filter.Operator switch
             {
                 Is => filter.Value!.Value.Boolean!.Value ? $"{COLUMN} = 0" : $"{COLUMN} > 0",
+                // Anything but: the other value, or no reason at all (not judged).
+                IsNot => filter.Value!.Value.Boolean!.Value ? $"({COLUMN} IS NULL OR {COLUMN} > 0)" : $"({COLUMN} IS NULL OR {COLUMN} = 0)",
                 IsEmpty => $"{COLUMN} IS NULL",
                 _ => $"{COLUMN} IS NOT NULL"
             };
-            return Indexed(condition, "s.indexability_reason", parameters);
+            // "Is not" matches most rows, as a negative does: tested per row, never driving the read off the index.
+            return filter.Operator == IsNot
+                ? Plain(condition.Replace(COLUMN, "s.indexability_reason", StringComparison.Ordinal), parameters)
+                : Indexed(condition, "s.indexability_reason", parameters);
         }
 
         return column.Source switch
@@ -560,7 +565,10 @@ internal static class UrlQueryCompiler
         {
             var matched = Condition(filter, positive, column, urlId, parameter).Replace(COLUMN, sql, StringComparison.Ordinal);
             var subject = urlId ?? sql;
-            var negated = column.Nullable || urlId is not null ? $"({subject} IS NULL OR NOT ({matched}))" : $"NOT ({matched})";
+            // A boolean's "is not" is the other value or unknown, whatever the column says of its nulls.
+            var negated = column.Nullable || urlId is not null || filter.Operator == IsNot
+                ? $"({subject} IS NULL OR NOT ({matched}))"
+                : $"NOT ({matched})";
             return new GridPredicate(negated, negated, parameters, Driving: false, Key(negated, parameters));
         }
 

@@ -258,6 +258,7 @@ internal sealed class GridReference
         return filter.Operator switch
         {
             FilterOperator.Ne => !Positive(FilterOperator.Eq),
+            FilterOperator.IsNot => !Positive(FilterOperator.Is),
             FilterOperator.NotIn => !Positive(FilterOperator.In),
             FilterOperator.NotContains => !Positive(FilterOperator.Contains),
             FilterOperator.NotRegex => !Positive(FilterOperator.Regex),

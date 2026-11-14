@@ -24,7 +24,8 @@ export function valueFilters(column: string, type: UrlColumnType, value: unknown
   switch (type) {
     case 'boolean':
       return typeof value === 'boolean'
-        ? { only: { column, op: 'is', value }, except: { column, op: 'is', value: !value } }
+        ? // Excluded by "is not": the rows where it's unknown stay, as excluding any other value keeps them.
+          { only: { column, op: 'is', value }, except: { column, op: 'isNot', value } }
         : null;
     case 'number':
       return typeof value === 'number' && Number.isFinite(value)
@@ -63,7 +64,8 @@ export interface CellFilters {
 
 /**
  * The filters for the value in a row's cell, by the column's id in the engine's list (`catalogue`). A status with no
- * code is the URL's outcome ("Blocked by robots.txt"), so its filter is on the outcome; an end's the same
+ * code is the URL's outcome ("Blocked by robots.txt", or none: "Not crawled"), so its filter is on the outcome; an end's
+ * the same
  * (`to.statusCode`, `to.outcome`). A column the engine can't filter by, one that needs an analysis the crawl doesn't
  * have, and a value too long for a filter each say why.
  */
@@ -76,7 +78,10 @@ export function cellValueFilters(
   if (id === undefined || row === undefined || catalogue === undefined) return { filters: null };
   const status = /^((?:from|to)\.)?statusCode$/.exec(id);
   const outcome = status ? `${status[1] ?? ''}outcome` : null;
-  const target = outcome !== null && (row[id] === null || row[id] === undefined) && row[outcome] ? outcome : id;
+  // No code: the outcome says what the cell shows, "Blocked by robots.txt", or, with none, "Not crawled". A URL with a
+  // code always has an outcome, so "Not crawled" is the outcome being empty, never the code alone, which the URLs
+  // blocked by robots.txt share (round 5 review R1-7).
+  const target = outcome !== null && (row[id] === null || row[id] === undefined) && outcome in row ? outcome : id;
   const column = catalogue.find((entry) => entry.id === target);
   if (!column?.filterable) return { filters: null, unavailable: 'This column can’t be filtered by' };
   if (column.needsAnalysis && !summaryAvailable) {
