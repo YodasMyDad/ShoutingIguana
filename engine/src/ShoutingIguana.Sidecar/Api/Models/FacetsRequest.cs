@@ -13,4 +13,10 @@ internal sealed record FacetsRequest
 
     /// <summary>For the URL grid's facets (E6): only the URLs at one end of the links these link filters match.</summary>
     public LinkEndsDto? LinkEnds { get; init; }
+
+    /// <summary>
+    /// The checks the user hid, by id (round 5 review): the issue counts (<c>issues</c>, <c>errors</c>, <c>warnings</c>,
+    /// <c>notices</c>) leave their issues out wherever they're read, sorted or filtered, at either end of a link too.
+    /// </summary>
+    public IReadOnlyList<string>? HiddenChecks { get; init; }
 }

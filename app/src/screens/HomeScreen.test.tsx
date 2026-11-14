@@ -3,6 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { drawAsTheAppForTests } from '../crawl/fileOpening';
+import { setSecretsStore } from '../crawl/secrets';
 import { commands } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { message, progressAt } from '../test/overviewSidecar';
@@ -28,6 +29,7 @@ async function open(library: () => Response | Promise<Response>, routes: FakeRou
 const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('tr')!;
 
 afterEach(() => {
+  setSecretsStore(null);
   setTransport(fakeSidecar([]));
   liveStore.reset();
   drawAsTheAppForTests(null);
@@ -51,15 +53,40 @@ describe('Home’s URL field', () => {
 describe('Home’s URL field, an address without its scheme (round 5: A’s start address in B’s Home)', () => {
   it('starts the crawl where the site answers, http when only http does, never https added blindly', async () => {
     const started: unknown[] = [];
+    // The defaults' proxy has a password, kept in the credential store: the sidecar asks through it, password and all
+    // (round 5 review R2-1), never with the stored proxy's "***".
+    setSecretsStore({
+      read: (key) =>
+        Promise.resolve(
+          key === 'defaults'
+            ? JSON.stringify({ proxyUrl: 'http://me:pw@proxy.example:3128', headers: { Authorization: 'Basic eDp5' } })
+            : null,
+        ),
+      write: () => Promise.resolve(),
+    });
     const { router } = await open(
       () => json([]),
       [
-        ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options: {} })],
+        [
+          'GET',
+          /^\/api\/crawl-options\/defaults$/,
+          () =>
+            json({
+              options: {
+                proxyUrl: 'http://***@proxy.example:3128/',
+                hasRedactedProxyCredentials: true,
+                extraHeaders: { Authorization: '', 'X-Unsent': '' },
+              },
+            }),
+        ],
         [
           'POST',
           /^\/api\/crawl-options\/start-url$/,
           (request) => {
-            expect(request.body).toEqual({ address: 'plain-http.example' });
+            expect(request.body).toEqual({
+              address: 'plain-http.example',
+              options: { proxyUrl: 'http://me:pw@proxy.example:3128', extraHeaders: { Authorization: 'Basic eDp5' } },
+            });
             return json({ startUrl: 'http://plain-http.example/', reason: 'http' });
           },
         ],
@@ -312,7 +339,8 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
     liveStore.ingest(message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id })));
     await open(() => json([LATEST, RUNNING]));
     const card = await screen.findByRole('article', { name: 'garden.example' });
-    expect(screen.getByRole('heading', { level: 2, name: 'Crawling now' })).toBeVisible();
+    // The cards' heading, as the sidebar's says it.
+    expect(document.getElementById('running-title')).toHaveTextContent(/^1 crawling$/);
     expect(within(card).getByRole('button', { name: 'Pause garden.example' })).toBeVisible();
     expect(within(card).getByRole('button', { name: 'Stop garden.example' })).toBeVisible();
     expect(within(card).getByRole('link', { name: 'Open garden.example' })).toBeVisible();
@@ -338,5 +366,126 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
         ]),
       ),
     );
+  });
+});
+
+describe('Home’s Delete file…, while the library changes under it (round 5 review R1-1)', () => {
+  it('deletes the crawl the confirmation was opened for, when another crawl of its site becomes its latest', async () => {
+    const OLD = site('a000000000000002', 'garden.example', '2026-11-01T10:00:00Z');
+    let running = site('e000000000000001', 'garden.example', '2026-11-02T10:00:00Z', { status: 'running' });
+    liveStore.ingest(message('hello', { live: [running.id] }));
+    const queryClient = createQueryClient();
+    const sidecar = fakeSidecar([
+      ['GET', /^\/api\/crawls$/, () => json([OLD, running])],
+      ['POST', /\/delete-file$/, () => new Response(null, { status: 204 })],
+      ...standardRoutes(),
+    ]);
+    setTransport(sidecar);
+    const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: ['/'] }));
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    const library = await screen.findByRole('region', { name: 'Library' });
+    await userEvent.click(await within(library).findByRole('button', { name: 'Actions for garden.example' }));
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete file…' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(OLD.fileName);
+    // The running crawl of the same site finishes while the confirmation is open: it becomes the site's latest.
+    running = { ...running, status: 'completed', finishedAt: '2026-11-02T11:00:00Z' };
+    act(() => liveStore.ingest(message('hello', { live: [] })));
+    await act(() => queryClient.invalidateQueries());
+    await waitFor(() => expect(screen.queryByRole('article')).toBeNull());
+    // The site's row is its newest crawl now, the old one folded under it.
+    await waitFor(() =>
+      expect(within(library).getByRole('button', { name: /1 older crawl/, hidden: true })).toBeInTheDocument(),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent(OLD.fileName);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sidecar.requests.filter((request) => request.path.endsWith('/delete-file')).map((r) => r.path)).toEqual([
+      '/api/crawls/a000000000000002/delete-file',
+    ]);
+  });
+});
+
+describe('Home’s crawls running now, by what each is doing (round 5 review R1-3)', () => {
+  const LATEST = site('a000000000000002', 'garden.example', '2026-11-01T10:00:00Z');
+  const RUNNING = site('e000000000000001', 'garden.example', '2026-11-02T10:00:00Z', { status: 'running' });
+
+  it('heads a paused crawl’s card as the sidebar does, and its site’s row says it’s paused, not crawling', async () => {
+    liveStore.ingest(message('hello', { live: [RUNNING.id] }));
+    liveStore.ingest(
+      message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id, status: 'paused' })),
+    );
+    await open(() => json([LATEST, RUNNING]));
+    await screen.findByRole('article', { name: 'garden.example' });
+    // The cards' heading (the sidebar has one of its own, which says the same).
+    expect(document.getElementById('running-title')).toHaveTextContent(/^1 paused$/);
+    const library = screen.getByRole('region', { name: 'Library' });
+    const row = within(library).getByRole('link', { name: 'garden.example' }).closest('tr')!;
+    expect(within(row).getByText('Paused')).toBeVisible();
+    expect(within(row).queryByText('Crawling now')).toBeNull();
+  });
+
+  it('says what each of two crawls is doing', async () => {
+    const OTHER = site('e000000000000002', 'oakmere.example', '2026-11-02T11:00:00Z', { status: 'running' });
+    liveStore.ingest(message('hello', { live: [RUNNING.id, OTHER.id] }));
+    liveStore.ingest(
+      message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id, status: 'paused' })),
+    );
+    liveStore.ingest(message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: OTHER.id })));
+    await open(() => json([LATEST, RUNNING, OTHER]));
+    await screen.findByRole('article', { name: 'oakmere.example' });
+    expect(document.getElementById('running-title')).toHaveTextContent(/^1 crawling, 1 paused$/);
+  });
+});
+
+describe('Home’s card for a crawl being analysed, and its Crawled figure (round 5 review R1-4, R1-8)', () => {
+  it('shows a crawl only being analysed with the library’s figures: no queue, rate or bar', async () => {
+    const ANALYSING = site('e000000000000002', 'oakmere.example', '2026-11-02T10:00:00Z', {
+      fetchedUrlCount: 110_251,
+      crawledUrlCount: 110_251,
+      pageCount: 101_106,
+    });
+    liveStore.ingest(message('hello', { live: [], analyzing: [ANALYSING.id] }));
+    await open(() => json([ANALYSING]));
+    const card = await screen.findByRole('article', { name: 'oakmere.example' });
+    expect(within(card).getByText('110,251')).toBeVisible();
+    expect(within(card).getByText('101,106')).toBeVisible();
+    for (const word of ['Found', 'Queued', 'URLs a second']) expect(within(card).queryByText(word)).toBeNull();
+    expect(within(card).queryByText('–')).toBeNull();
+    expect(within(card).queryByRole('img', { name: /found/ })).toBeNull();
+  });
+
+  it('says what Crawled counts in Overview’s words, never a figure of the site’s own that leaves its probes out', async () => {
+    const RUNNING = site('e000000000000001', 'garden.example', '2026-11-02T10:00:00Z', { status: 'running' });
+    liveStore.ingest(message('hello', { live: [RUNNING.id] }));
+    liveStore.ingest(message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id })));
+    await open(() => json([RUNNING]));
+    const card = await screen.findByRole('article', { name: 'garden.example' });
+    expect(within(card).getByText('URLs the crawl asked for')).toBeVisible();
+    expect(within(card).queryByText(/on the site/)).toBeNull();
+  });
+});
+
+describe('Home’s library, a site by its host and port (round 5 integration’s leftover)', () => {
+  it('names two crawls of one host on different ports as two sites, each with its port', async () => {
+    const one = testCrawlItem({
+      id: 'a000000000000001',
+      site: '127.0.0.1',
+      startUrl: 'http://127.0.0.1:5001/',
+      fileName: 'one.sicrawl',
+    });
+    const two = testCrawlItem({
+      id: 'a000000000000002',
+      site: '127.0.0.1',
+      startUrl: 'http://127.0.0.1:5002/',
+      fileName: 'two.sicrawl',
+    });
+    await open(() => json([one, two]));
+    const library = await screen.findByRole('region', { name: 'Library' });
+    expect(await within(library).findByRole('link', { name: '127.0.0.1:5001' })).toBeVisible();
+    expect(within(library).getByRole('link', { name: '127.0.0.1:5002' })).toBeVisible();
+    expect(within(library).getByRole('button', { name: 'Actions for 127.0.0.1:5001' })).toBeVisible();
+    expect(within(library).getByText('2 sites, 2 crawls')).toBeVisible();
   });
 });

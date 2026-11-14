@@ -10,7 +10,8 @@ import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
 import { useVisibleIssueCounts } from '../../crawl/visibleIssues';
-import { crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { crawledUrls, effectiveStatus } from '../../crawl/status';
+import { siteName } from '../../simple/home/sites';
 import { formatBytes, formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
 import { useLiveCrawl } from '../../live/liveStore';
@@ -24,7 +25,7 @@ import { StatusPill } from '../../ui/StatusPill';
 import { TextLink } from '../../ui/TextLink';
 import { CrawlMenu } from './CrawlMenu';
 import { crawlLabel } from './libraryActions';
-import { analyseWords, crawlActions, crawlNote, neverAnalysed } from './library';
+import { analyseWords, crawlActions, crawlNote, neverAnalysed, runningBadge } from './library';
 
 /**
  * The library's table (docs/v2-ui-ia.md, Home; `clarity/home.html`): a row a site, its latest crawl's status, URLs,
@@ -33,7 +34,14 @@ import { analyseWords, crawlActions, crawlNote, neverAnalysed } from './library'
  * action in its menu. A narrow card (200% zoom) folds Pages and Started into second lines of URLs and Status, and
  * nothing scrolls sideways.
  */
-export function LibraryTable({ sites, running }: { sites: readonly SiteGroup[]; running: ReadonlySet<string> }) {
+export function LibraryTable({
+  sites,
+  running,
+}: {
+  sites: readonly SiteGroup[];
+  /** The crawl running now of each site that has one, by the site group's key (`runningBySite`). */
+  running: ReadonlyMap<string, string>;
+}) {
   return (
     // Should the card ever be narrower than its columns (the sidebar open at 200% zoom), the table scrolls in it, never
     // the page. Positioned, so what's placed absolutely inside it (the Actions header's hidden words) is held in it too.
@@ -57,7 +65,7 @@ export function LibraryTable({ sites, running }: { sites: readonly SiteGroup[]; 
         </thead>
         <tbody>
           {sites.map((group) => (
-            <SiteRows key={group.key} group={group} running={running.has(group.key)} />
+            <SiteRows key={group.key} group={group} runningId={running.get(group.key)} />
           ))}
         </tbody>
       </table>
@@ -102,7 +110,7 @@ const FOLDED = 'hidden text-12 text-text-muted @max-library/library:block';
 const CELL = `${CELL_BOX} whitespace-nowrap`;
 
 /** A site's row, its latest crawl, and its older crawls under it once unfolded. */
-function SiteRows({ group, running }: { group: SiteGroup; running: boolean }) {
+function SiteRows({ group, runningId }: { group: SiteGroup; runningId: string | undefined }) {
   const [open, setOpen] = useState(false);
   const olderId = useId();
   const older = group.earlier.length;
@@ -110,7 +118,7 @@ function SiteRows({ group, running }: { group: SiteGroup; running: boolean }) {
     <>
       <CrawlRow
         item={group.latest}
-        running={running}
+        runningId={runningId}
         older={
           older > 0 ? (
             <button
@@ -139,18 +147,29 @@ function SiteRows({ group, running }: { group: SiteGroup; running: boolean }) {
   );
 }
 
+/** What the site's crawl running now is doing, by its live status: crawling, paused, stopping or being analysed. */
+function RunningBadge({ id }: { id: string }) {
+  const status = useLiveCrawl(id)?.status;
+  return (
+    <Badge variant="accent" className="flex-none">
+      <LiveDot />
+      {runningBadge(status)}
+    </Badge>
+  );
+}
+
 function CrawlRow({
   item,
   nested = false,
-  running = false,
+  runningId,
   older = null,
   id,
 }: {
   item: CrawlListItem;
   /** An older crawl of its site, under the site's latest. */
   nested?: boolean;
-  /** Another crawl of the site is running now, in a card above. */
-  running?: boolean;
+  /** Another crawl of the site running now, in a card above: the row says what it's doing. */
+  runningId?: string | undefined;
   /** The toggle for the site's older crawls. */
   older?: ReactNode;
   id?: string | undefined;
@@ -181,14 +200,9 @@ function CrawlRow({
                 title={item.startUrl ?? item.path}
               >
                 {/* An older crawl is named by when it started, in full: its site is the row above's. */}
-                {nested ? label : crawlName(item)}
+                {nested ? label : siteName(item)}
               </TextLink>
-              {running ? (
-                <Badge variant="accent" className="flex-none">
-                  <LiveDot />
-                  Crawling now
-                </Badge>
-              ) : null}
+              {runningId ? <RunningBadge id={runningId} /> : null}
             </span>
             <span className="truncate font-mono text-12 text-text-muted" title={item.path}>
               {nested ? item.fileName : (item.startUrl ?? item.fileName)} · {formatBytes(item.sizeBytes)}
@@ -251,7 +265,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">
           {item.issues ? 'Analysed so far. ' : 'Part way. '}
-          <InlineAction words="Continue" crawl={crawlName(item)} onClick={() => void continueCrawl(item.id)} />
+          <InlineAction words="Continue" crawl={siteName(item)} onClick={() => void continueCrawl(item.id)} />
         </span>
       ) : null;
     case 'outOfDate':
@@ -260,8 +274,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
           Analysis out of date
           {actions.canAnalyse ? (
             <>
-              .{' '}
-              <InlineAction words="Analyse again" crawl={crawlName(item)} onClick={() => void analyseCrawl(item.id)} />
+              . <InlineAction words="Analyse again" crawl={siteName(item)} onClick={() => void analyseCrawl(item.id)} />
             </>
           ) : null}
         </span>
@@ -293,7 +306,7 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
         Not analysed yet.{' '}
         <InlineAction
           words={analyseWords(item, status)}
-          crawl={crawlName(item)}
+          crawl={siteName(item)}
           onClick={() => void analyseCrawl(item.id)}
         />
       </span>
@@ -329,5 +342,5 @@ function LocateButton({ item }: { item: CrawlListItem }) {
       void navigate({ to: '/crawls/$crawl', params: { crawl: opened.id } });
     });
   };
-  return <InlineAction words="Locate the file…" crawl={crawlName(item)} onClick={() => void locate()} />;
+  return <InlineAction words="Locate the file…" crawl={siteName(item)} onClick={() => void locate()} />;
 }

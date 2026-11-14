@@ -25,6 +25,10 @@ describe('a filter as a sentence', () => {
     expect(filterSentences({ column: 'statusCode', op: 'in', values: [301, 302, 308] }, words)).toEqual([
       { field: 'Status', op: 'is', value: '301, 302 or 308' },
     ]);
+    // An excluded yes-or-no value: the other value or unknown (round 5 review R1-2).
+    expect(filterSentences({ column: 'noindex', op: 'isNot', value: false }, words)).toEqual([
+      { field: 'noindex', op: 'is not', value: 'no' },
+    ]);
   });
 
   it('says what a column being empty means, where the view has plainer words for it', () => {

@@ -4,12 +4,7 @@
 // markup with the design system's classes (`fixture`), against the app's own stylesheet.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-
-const site = () => {
-  const value = process.env.SI_E2E_SITE;
-  if (!value) throw new Error('global-setup sets SI_E2E_SITE');
-  return value;
-};
+import { siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -97,7 +92,7 @@ const rings = (locator: Locator) =>
 
 async function openUrlGrid(page: Page) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/overview$/);
   // The crawl's commands (Ctrl+1 to Ctrl+7) are there once its view is.
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
@@ -362,8 +357,8 @@ test('toasts take the app’s look and focus ring, and follow the OS theme', asy
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
-  await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
-  await library.getByRole('button', { name: `Actions for ${site()}` }).click();
+  await expect(library.getByRole('link', { name: siteRow(), exact: true })).toBeVisible();
+  await library.getByRole('button', { name: `Actions for ${siteRow()}` }).click();
   await page.getByRole('menuitem', { name: 'Remove from library' }).click();
   const toast = page.locator('[data-sonner-toast]').first();
   await expect(toast).toBeVisible();
@@ -394,7 +389,7 @@ test('toasts take the app’s look and focus ring, and follow the OS theme', asy
   await expect(toast).toHaveCSS('opacity', '1');
   await expectNoViolations(page);
   await undo.click();
-  await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
+  await expect(library.getByRole('link', { name: siteRow(), exact: true })).toBeVisible();
 });
 
 // 200% zoom of a 1280 × 800 window: a viewport half as wide, in CSS pixels, as WCAG 1.4.4 and 1.4.10 measure it.
@@ -415,7 +410,7 @@ test('at 200% zoom, the top bar keeps the palette button in the window and its c
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
   await page.setViewportSize(ZOOMED);
   // The bar measures itself before the next frame is painted (layout/useGiveWay.ts): look at the frame that is.
@@ -659,7 +654,7 @@ test.describe('the design system’s states', () => {
 test('a crawl’s error in the library wraps in its status column instead of widening the page', async ({ page }) => {
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
-  const row = library.getByRole('row').filter({ has: page.getByRole('link', { name: site(), exact: true }) });
+  const row = library.getByRole('row').filter({ has: page.getByRole('link', { name: siteRow(), exact: true }) });
   await expect(row).toBeVisible();
   // The line a file that couldn't be read gets under its status (HomeScreen's LibraryRow), at its longest.
   const line = await row

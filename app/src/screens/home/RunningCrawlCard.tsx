@@ -4,9 +4,11 @@ import { useMemo } from 'react';
 import type { CrawlListItem } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { cancelAnalysis, pauseOrResume, stopCrawl } from '../../crawl/actions';
-import { crawlControls, crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { crawlControls, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { siteName } from '../../simple/home/sites';
 import { useElementWidth } from '../../grid/useElementWidth';
-import { formatCount, formatCountOf, formatDuration, formatRate } from '../../lib/format';
+import { useMinuteClock } from '../../lib/clock';
+import { formatCount, formatCountOf, formatDuration, formatRate, formatRelativeTime } from '../../lib/format';
 import { useLiveCrawl } from '../../live/liveStore';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
@@ -39,7 +41,7 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
   const status = effectiveStatus(item, live) ?? item.status;
   const controls = crawlControls(status, item);
   const progress = live?.progress ?? null;
-  const name = crawlName(item);
+  const name = siteName(item);
   const crawled = progress ? crawledSoFar(progress) : crawledUrls(item);
   const found = foundSplit(progress);
   const spark = useMemo(() => sparkOf(live?.history ?? []), [live?.history]);
@@ -48,6 +50,10 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
   const columns = width !== null && width > 0 && width < ONE_ROW_FROM ? 3 : 5;
   const analysing = status === 'analyzing';
   const titleId = `running-${item.id}`;
+  const clock = useMinuteClock();
+  const startedWords = `Started ${formatRelativeTime(item.startedAt, clock)}${
+    crawlingMs !== null ? `, ${formatDuration(crawlingMs)} spent crawling` : ''
+  }`;
 
   return (
     <Card as="article" aria-labelledby={titleId} className="flex flex-col">
@@ -60,10 +66,15 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
                 {name}
               </TextLink>
             </h3>
-            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-12 text-text-muted">
-              <StatusPill status={status} fetched={null} />
+            {/* One line, whatever arrives: a phase that comes and goes ("Starting") never wraps it onto a second line
+                and back, moving the Library (round 5 review R1-10). What doesn't fit is shortened, its words in full in
+                its tooltip and to a screen reader. */}
+            <span className="flex min-w-0 items-center gap-x-2 text-12 text-text-muted">
+              <span className="flex-none">
+                <StatusPill status={status} fetched={null} />
+              </span>
               {item.startedAt ? (
-                <span>
+                <span className="min-w-0 truncate" title={startedWords}>
                   Started <RelativeTime iso={item.startedAt} />
                   {crawlingMs !== null ? (
                     <>
@@ -72,10 +83,14 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
                   ) : null}
                 </span>
               ) : null}
-              {analysing ? <span>Analysing: its answer is ready soon</span> : null}
+              {analysing ? (
+                <span className="min-w-0 truncate" title="Analysing: its answer is ready soon">
+                  Analysing: its answer is ready soon
+                </span>
+              ) : null}
               {/* The phase, when it says more than Running does: reading robots.txt, the sitemaps, trying again. */}
               {!analysing && progress?.phase && progress.phase !== 'crawling' && status === 'running' ? (
-                <span>{activityWords(status, progress.phase)}</span>
+                <span className="flex-none">{activityWords(status, progress.phase)}</span>
               ) : null}
             </span>
           </div>
@@ -115,95 +130,118 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
         </div>
       </div>
       <div ref={widthRef} className="border-t border-border-subtle">
-        <Stats columns={columns} wrap={columns < 5}>
-          <StatLink
-            {...linkProps(item.id, { to: 'urls', filters: [{ column: 'fetched', op: 'is', value: true }] })}
-            size="sm"
-            label="Crawled"
-            value={<Num value={crawled} />}
-            context={
-              progress?.internalFetched != null ? `${formatCount(progress.internalFetched)} on the site` : 'URLs'
-            }
-          />
-          <StatLink
-            {...linkProps(item.id, { to: 'urls', filters: [] })}
-            size="sm"
-            label="Found"
-            value={<Num value={progress?.discovered} />}
-            context="URLs, crawled or not"
-          />
-          <Stat
-            size="sm"
-            label="Queued"
-            value={<Num value={progress?.queued} />}
-            context={
-              progress?.inFlight != null ? `${formatCount(progress.inFlight)} on their way` : 'Waiting their turn'
-            }
-          />
-          <StatLink
-            {...linkProps(item.id, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })}
-            size="sm"
-            label="Pages"
-            value={<Num value={progress ? progress.htmlPages : item.pageCount} />}
-            context="HTML pages read"
-          />
-          <Stat
-            size="sm"
-            label="URLs a second"
-            value={<Num value={progress?.urlsPerSecond} format="rate" />}
-            context={
-              <Sparkline
-                values={spark.values}
-                max={(spark.peak ?? 0) * SPARK_HEADROOM}
-                label={
-                  spark.now === null
-                    ? 'URLs a second: none yet'
-                    : `URLs a second over the last ${formatDuration(spark.spanMs)}: ${formatRate(spark.now)} now, ${formatRate(spark.peak)} at most`
-                }
-              />
-            }
-          />
-        </Stats>
+        {analysing ? (
+          // Being analysed, not crawled (Analyse again, or after a stop): what the crawl holds, no queue, rate or bar
+          // (round 5 review R1-4).
+          <Stats columns={2}>
+            <StatLink
+              {...linkProps(item.id, { to: 'urls', filters: [{ column: 'fetched', op: 'is', value: true }] })}
+              size="sm"
+              label="Crawled"
+              value={<Num value={crawled} />}
+              context="URLs the crawl asked for"
+            />
+            <StatLink
+              {...linkProps(item.id, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })}
+              size="sm"
+              label="Pages"
+              value={<Num value={progress ? progress.htmlPages : item.pageCount} />}
+              context="HTML pages read"
+            />
+          </Stats>
+        ) : (
+          <Stats columns={columns} wrap={columns < 5}>
+            <StatLink
+              {...linkProps(item.id, { to: 'urls', filters: [{ column: 'fetched', op: 'is', value: true }] })}
+              size="sm"
+              label="Crawled"
+              value={<Num value={crawled} />}
+              // Overview's words for its Crawled: the site's own URLs alone would leave out the crawler's probes of the
+              // site's other versions, which Overview's Internal counts (round 5 review R1-8).
+              context="URLs the crawl asked for"
+            />
+            <StatLink
+              {...linkProps(item.id, { to: 'urls', filters: [] })}
+              size="sm"
+              label="Found"
+              value={<Num value={progress?.discovered} />}
+              context="URLs, crawled or not"
+            />
+            <Stat
+              size="sm"
+              label="Queued"
+              value={<Num value={progress?.queued} />}
+              context={
+                progress?.inFlight != null ? `${formatCount(progress.inFlight)} on their way` : 'Waiting their turn'
+              }
+            />
+            <StatLink
+              {...linkProps(item.id, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })}
+              size="sm"
+              label="Pages"
+              value={<Num value={progress ? progress.htmlPages : item.pageCount} />}
+              context="HTML pages read"
+            />
+            <Stat
+              size="sm"
+              label="URLs a second"
+              value={<Num value={progress?.urlsPerSecond} format="rate" />}
+              context={
+                <Sparkline
+                  values={spark.values}
+                  max={(spark.peak ?? 0) * SPARK_HEADROOM}
+                  label={
+                    spark.now === null
+                      ? 'URLs a second: none yet'
+                      : `URLs a second over the last ${formatDuration(spark.spanMs)}: ${formatRate(spark.now)} now, ${formatRate(spark.peak)} at most`
+                  }
+                />
+              }
+            />
+          </Stats>
+        )}
       </div>
-      <div className="border-t border-border-subtle px-5 py-3">
-        <StackBar
-          label={
-            found
-              ? `Of ${formatCountOf(found.found, 'URL')} found: ${formatCount(found.crawled)} crawled, ${formatCount(found.queued)} queued, ${formatCount(found.notFollowed)} not followed`
-              : 'What was found: waiting for the crawl’s first figures'
-          }
-          parts={[
-            {
-              key: 'crawled',
-              label: 'Crawled',
-              value: found?.crawled ?? 0,
-              valueText: formatCount(found?.crawled),
-              tone: 'primary',
-            },
-            {
-              key: 'queued',
-              label: 'Queued',
-              value: found?.queued ?? 0,
-              valueText: formatCount(found?.queued),
-              tone: 'soft',
-            },
-            {
-              key: 'notFollowed',
-              label: 'Not followed',
-              value: found?.notFollowed ?? 0,
-              valueText: formatCount(found?.notFollowed),
-              tone: 'hatched',
-            },
-          ]}
-          total={
-            progress?.maxUrls
-              ? `A limit of ${formatCountOf(progress.maxUrls, 'URL')}`
-              : progress?.maxUrls === null
-                ? 'No URL limit set'
-                : undefined
-          }
-        />
-      </div>
+      {analysing ? null : (
+        <div className="border-t border-border-subtle px-5 py-3">
+          <StackBar
+            label={
+              found
+                ? `Of ${formatCountOf(found.found, 'URL')} found: ${formatCount(found.crawled)} crawled, ${formatCount(found.queued)} queued, ${formatCount(found.notFollowed)} not followed`
+                : 'What was found: waiting for the crawl’s first figures'
+            }
+            parts={[
+              {
+                key: 'crawled',
+                label: 'Crawled',
+                value: found?.crawled ?? 0,
+                valueText: formatCount(found?.crawled),
+                tone: 'primary',
+              },
+              {
+                key: 'queued',
+                label: 'Queued',
+                value: found?.queued ?? 0,
+                valueText: formatCount(found?.queued),
+                tone: 'soft',
+              },
+              {
+                key: 'notFollowed',
+                label: 'Not followed',
+                value: found?.notFollowed ?? 0,
+                valueText: formatCount(found?.notFollowed),
+                tone: 'hatched',
+              },
+            ]}
+            total={
+              progress?.maxUrls
+                ? `A limit of ${formatCountOf(progress.maxUrls, 'URL')}`
+                : progress?.maxUrls === null
+                  ? 'No URL limit set'
+                  : undefined
+            }
+          />
+        </div>
+      )}
     </Card>
   );
 }

@@ -80,6 +80,9 @@ export function filterSentences(
       return [words.empty?.(filter.column, false) ?? { field, op: 'is', value: 'not empty' }];
     case 'is':
       return [words.boolean?.(filter.column, filter.value) ?? { field, op: 'is', value: filter.value ? 'yes' : 'no' }];
+    case 'isNot':
+      // The other value or unknown: "Noindex is not yes".
+      return [{ field, op: 'is not', value: filter.value ? 'yes' : 'no' }];
     case 'between':
       // Each end in the column's own words, so a range of times has its unit on both.
       if (filter.min !== undefined && filter.max !== undefined)

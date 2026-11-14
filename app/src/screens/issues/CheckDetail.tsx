@@ -10,6 +10,7 @@ import { EmptyState, SkippedState } from '../../ui/EmptyState';
 import { IconButton } from '../../ui/IconButton';
 import { DropdownMenu, MenuItem } from '../../ui/Menu';
 import type { HiddenScope } from '../../settings/hiddenChecks';
+import { showCheckWords } from './showCheckWords';
 import { Num } from '../../ui/Num';
 import { SeverityBadge } from '../../ui/SeverityBadge';
 import { SeverityMark } from '../../ui/SeverityMark';
@@ -132,7 +133,7 @@ export function CheckDetail({
               <IconButton
                 size="sm"
                 icon={entry.hidden ? Eye : EyeOff}
-                label={entry.hidden ? 'Show this check in the list' : 'Hide this check'}
+                label={entry.hidden ? showCheckWords(hiddenScope ?? null) : 'Hide this check'}
                 command="issues.hideCheck"
                 onClick={() => onHideChange(!entry.hidden)}
               />

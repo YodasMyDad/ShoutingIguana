@@ -10,6 +10,9 @@ public sealed record UrlFacetQuery
     /// <summary>Only the URLs at one end of the links these link filters match (<see cref="UrlQuery.LinkEnds"/>).</summary>
     public UrlLinkEnds? LinkEnds { get; init; }
 
+    /// <summary>Checks the user hid (<see cref="UrlQuery.HiddenChecks"/>): the severity facet, and filters on the issue counts, leave them out.</summary>
+    public IReadOnlyList<string> HiddenChecks { get; init; } = [];
+
     /// <summary>Facet ids from <see cref="UrlGridReader.FACETS"/>; none means all of them.</summary>
     public IReadOnlyList<string> Facets { get; init; } = [];
 }

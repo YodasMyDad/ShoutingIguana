@@ -5,12 +5,7 @@
 // colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-
-const site = () => {
-  const value = process.env.SI_E2E_SITE;
-  if (!value) throw new Error('global-setup sets SI_E2E_SITE');
-  return value;
-};
+import { siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -30,7 +25,7 @@ const inspected = (page: Page) => new URL(page.url()).searchParams.get('inspect'
 /** From Home to one of the crawl's sections, through the sidebar, as a user goes. */
 async function openSection(page: Page, name: RegExp) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name }).first().click();
 }
 

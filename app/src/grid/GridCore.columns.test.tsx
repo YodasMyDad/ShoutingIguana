@@ -2,6 +2,7 @@
 // keys, its menu and the pointer; and the footer's key hints (gap 21).
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { GridCore, type GridColumnLayoutProps } from './GridCore';
 import { GRID_KEY_HINTS } from './gridFoot';
@@ -97,6 +98,60 @@ describe('laying the columns out from the keys', () => {
     expect(columnLayout.onPin).toHaveBeenCalledWith('b', true);
   });
 
+  it('keeps the header’s cursor on a column pinned or unpinned from its menu, where it moves to (R1-5)', async () => {
+    const user = userEvent.setup();
+    const onMove = vi.fn();
+    // The layout as useColumnLayout keeps it: a pinned column goes before the others.
+    function Laid() {
+      const [pinned, setPinned] = useState<string[]>([]);
+      const all = [make('a', 200), make('b', 100), make('c', 100)];
+      const columns = [
+        ...pinned.map((id) => ({ ...all.find((column) => column.id === id)!, pinned: true })),
+        ...all.filter((column) => !pinned.includes(column.id)),
+      ];
+      return (
+        <GridCore<Row>
+          label="Rows"
+          columns={columns}
+          rowCount={rows.length}
+          getRow={(index) => rows[index]}
+          rowHeight={32}
+          headerHeight={32}
+          columnLayout={{
+            onResize: vi.fn(),
+            onMove,
+            onPin: (id, pin) => setPinned((now) => (pin ? [...now, id] : now.filter((other) => other !== id))),
+            onReset: vi.fn(),
+          }}
+        />
+      );
+    }
+    render(<Laid />);
+    const grid = screen.getByRole('grid', { name: 'Rows' });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    fireEvent.keyDown(grid, { key: 'F10', shiftKey: true });
+    await user.click(
+      within(await screen.findByRole('menu', { name: 'Menu for the C column' })).getByRole('menuitem', {
+        name: 'Pin the column to the left',
+      }),
+    );
+    // C is first now, and the cursor is on it: Ctrl+Shift+Right moves C, never what took its old place.
+    expect(cursorCell(grid)).toHaveAttribute('aria-colindex', '1');
+    expect(cursorCell(grid)).toHaveTextContent('C');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'F10', shiftKey: true });
+    await user.click(
+      within(await screen.findByRole('menu', { name: 'Menu for the C column' })).getByRole('menuitem', {
+        name: 'Unpin the column',
+      }),
+    );
+    expect(cursorCell(grid)).toHaveAttribute('aria-colindex', '3');
+    expect(cursorCell(grid)).toHaveTextContent('C');
+  });
+
   it('leaves the header keys alone in a grid whose columns are fixed', () => {
     const onSort = vi.fn();
     const { grid } = setup({ layout: false, columns: [make('a', 200, { sortable: true })], onSort });
@@ -130,13 +185,26 @@ describe('laying the columns out with the pointer', () => {
     });
     const header = grid.querySelectorAll('[role="columnheader"]')[0]!;
     fireEvent.pointerDown(header, { button: 0, clientX: 20, pointerId: 2 });
-    fireEvent.pointerMove(header, { clientX: 270, pointerId: 2 });
+    fireEvent.pointerMove(header, { clientX: 270, pointerId: 2, buttons: 1 });
     expect(grid.querySelector('.si-grid-drop')).not.toBeNull();
     fireEvent.pointerUp(header, { clientX: 270, pointerId: 2 });
     fireEvent.click(within(header as HTMLElement).getByRole('button'));
     expect(columnLayout.onMove).toHaveBeenCalledWith('a', 1);
     expect(onSort).not.toHaveBeenCalled();
     expect(grid.querySelector('.si-grid-drop')).toBeNull();
+  });
+
+  it('forgets a press on a header let go off the header: hovering later draws no drop line (R1-6)', () => {
+    const { grid, columnLayout } = setup();
+    const header = grid.querySelectorAll('[role="columnheader"]')[0]!;
+    fireEvent.pointerDown(header, { button: 0, clientX: 20, pointerId: 1, buttons: 1 });
+    // Let go elsewhere, without moving sideways: the header never hears it.
+    fireEvent.pointerUp(document.body, { clientX: 22, pointerId: 1, buttons: 0 });
+    // Later, the pointer passes over the headers with no button held.
+    fireEvent.pointerMove(header, { clientX: 270, pointerId: 1, buttons: 0 });
+    expect(grid.querySelector('.si-grid-drop')).toBeNull();
+    fireEvent.pointerUp(header, { clientX: 270, pointerId: 1, buttons: 0 });
+    expect(columnLayout.onMove).not.toHaveBeenCalled();
   });
 
   it('opens the column’s menu on a right-click on its header', async () => {

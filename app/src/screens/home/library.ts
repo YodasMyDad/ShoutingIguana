@@ -51,6 +51,31 @@ export function sitesRunning(items: readonly CrawlListItem[], running: readonly 
   );
 }
 
+/**
+ * The crawl running now of each site group that has one, by the group's key: the site's row says what it's doing (in
+ * the card above), as `runningBadge` words it.
+ */
+export function runningBySite(items: readonly CrawlListItem[], running: readonly CrawlListItem[]): Map<string, string> {
+  const ids = new Set(running.map((item) => item.id));
+  const bySite = new Map<string, string>();
+  for (const group of siteGroups(items, []).sites) {
+    const crawl = [group.latest, ...group.earlier].find((item) => ids.has(item.id));
+    if (crawl) bySite.set(group.key, crawl.id);
+  }
+  return bySite;
+}
+
+/**
+ * What a site's row says of its crawl running now, by that crawl's live status: "Crawling now", or paused, stopping or
+ * being analysed as the sidebar's heading says them (round 5 review R1-3). A status not arrived yet is crawling.
+ */
+export function runningBadge(status: CrawlStatus | null | undefined): string {
+  if (status === 'paused') return 'Paused';
+  if (status === 'stopping') return 'Stopping';
+  if (status === 'analyzing') return 'Analysing';
+  return 'Crawling now';
+}
+
 /** What a row's crawl is, for the words under its status and the action beside them: each its own true sentence. */
 export type CrawlNote =
   /** Nothing to add: the status says it. */

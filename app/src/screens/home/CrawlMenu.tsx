@@ -32,6 +32,9 @@ export function CrawlMenu({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
+  // The crawl the confirmation was opened for, and its name then: the row can show another crawl while it's open (its
+  // site's running crawl finishes and becomes the latest), and Delete file deletes what the dialog named.
+  const [target, setTarget] = useState({ item, label: crawlLabel(item, older) });
   const actions = crawlActions(item, status);
   const label = crawlLabel(item, older);
   const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
@@ -74,19 +77,27 @@ export function CrawlMenu({
         <MenuItem icon={X} disabled={!actions.canRemove} onSelect={() => void removeFromLibrary(item, refresh)}>
           Remove from library
         </MenuItem>
-        <MenuItem icon={Trash2} destructive disabled={!actions.canDelete} onSelect={() => setConfirming(true)}>
+        <MenuItem
+          icon={Trash2}
+          destructive
+          disabled={!actions.canDelete}
+          onSelect={() => {
+            setTarget({ item, label });
+            setConfirming(true);
+          }}
+        >
           Delete file…
         </MenuItem>
       </DropdownMenu>
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Delete ${label}’s crawl file?`}
-        description={`The file ${item.fileName} is deleted from the disk, with everything the crawl found and its analysis. This can’t be undone.`}
+        title={`Delete ${target.label}’s crawl file?`}
+        description={`The file ${target.item.fileName} is deleted from the disk, with everything the crawl found and its analysis. This can’t be undone.`}
         confirmLabel="Delete file"
         destructive
         errorTitle="The file couldn’t be deleted."
-        onConfirm={() => deleteCrawlFile(item, refresh)}
+        onConfirm={() => deleteCrawlFile(target.item, refresh)}
       />
     </>
   );

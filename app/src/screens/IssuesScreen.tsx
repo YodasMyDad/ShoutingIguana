@@ -38,6 +38,7 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { siteOriginOf } from '../ui/urlText';
 import { AnalysisNotes, AnalysisProgress, IssuesSkeleton, NotAnalysed } from './issues/AnalysisState';
 import { CheckDetail } from './issues/CheckDetail';
+import { showCheckWords } from './issues/showCheckWords';
 import { ChecksList, type SelectedBy, type SeverityFilter } from './issues/ChecksList';
 import {
   analysisTotals,
@@ -269,7 +270,16 @@ export function IssuesScreen() {
     const { id, title } = selected.check;
     const before = hiddenScopeOf(getSettings(), crawlId, id);
     setCheckHidden(crawlId, id, scope);
-    if (scope === null) return;
+    if (scope === null) {
+      // Shown again where it was hidden, said once with Undo: one hidden in every crawl is shown in every crawl
+      // (round 5 review R1-12).
+      if (before !== null) {
+        notifyUndo(before === 'all' ? `Showed “${title}” in every crawl` : `Showed “${title}” in this crawl`, () =>
+          setCheckHidden(crawlId, id, before),
+        );
+      }
+      return;
+    }
     // The list moves on to the next check it shows, as a list does when a row goes, and focus with it.
     const visible = list?.visible ?? [];
     const at = visible.findIndex((entry) => entry.check.id === id);
@@ -366,7 +376,7 @@ export function IssuesScreen() {
       },
       {
         id: 'issues.hideCheck',
-        title: selected?.hidden ? 'Show this check in the list' : 'Hide this check in this crawl',
+        title: selected?.hidden ? showCheckWords(hiddenScope) : 'Hide this check in this crawl',
         group: 'Issues',
         keys: ['mod+shift+h'],
         enabled: () => selected !== null,

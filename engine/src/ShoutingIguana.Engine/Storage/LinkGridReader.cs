@@ -151,6 +151,7 @@ public static class LinkGridReader
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         ValidateFilters(query.Filters, query.Search, errors);
         RefuseEnds(query.LinkEnds, errors);
+        UrlQueryCompiler.ValidateHidden(query.HiddenChecks, errors);
         for (var index = 0; index < query.Facets.Count; index++)
         {
             if (!FACETS.Contains(query.Facets[index]))
@@ -180,10 +181,11 @@ public static class LinkGridReader
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         ValidateFilters(query.Filters, query.Search, errors);
         UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, after: null, errors);
+        UrlQueryCompiler.ValidateHidden(query.HiddenChecks, errors);
         UrlGridReader.ThrowIfInvalid(errors);
         return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
         {
-            var filters = Compile(context, query.Filters, query.Search, sort: null);
+            var filters = Compile(context, query.Filters, query.Search, sort: null, query.HiddenChecks);
             var tally = EndTally(context, filters, query.End);
             var total = Held(context, $"linkendcount|{query.End}|{filters.Key}", () => tally.Targets().LongCount());
             List<(int Id, int Links)> ends = [.. tally.Targets().Skip(query.Offset).Take(query.Limit)];
@@ -225,9 +227,9 @@ public static class LinkGridReader
     /// the same counts <see cref="Ends"/> lists, so the grid's count is the list's, and kept per set of link filters.
     /// </summary>
     /// <exception cref="NeedsAnalysisException">A link filter needs the URL summary, and there's none.</exception>
-    internal static UrlIdSet EndIds(GridReadContext context, UrlLinkEnds ends)
+    internal static UrlIdSet EndIds(GridReadContext context, UrlLinkEnds ends, IReadOnlyList<string> hidden)
     {
-        var filters = Compile(context, ends.Filters, ends.Search, sort: null);
+        var filters = Compile(context, ends.Filters, ends.Search, sort: null, hidden);
         return HeldLarge(context, $"linkendids|{ends.End}|{filters.Key}", () =>
         {
             var set = UrlIds(context);
@@ -255,14 +257,14 @@ public static class LinkGridReader
         var moment = Live(context);
         var sort = query.Sort.Count == 0 ? null : query.Sort[0];
         var byTarget = sort is not null && LinkColumns.Own(sort.Column) is null;
-        var filters = Compile(context, query.Filters, query.Search, byTarget ? sort : null);
+        var filters = Compile(context, query.Filters, query.Search, byTarget ? sort : null, query.HiddenChecks);
         var total = Total(context);
         var matching = Matching(context, filters, total);
         var descending = sort?.Descending == true;
-        var hash = Hash(context, filters, sort);
+        var hash = Hash(context, filters, sort, query.HiddenChecks);
 
         // The sort value a cursor carries is the target's, read again when it comes back, so a target that has changed is refused.
-        var target = byTarget ? TargetSort(context, sort!) : null;
+        var target = byTarget ? TargetSort(context, sort!, query.HiddenChecks) : null;
         object?[]? Keys(long linkId) => Target(context, linkId) is { } toId
             ? target is null ? [] : target.Text ? [UrlOf(context, toId)] : GridPlanner.KeysOf(context, target.Query, toId)
             : null;
@@ -285,7 +287,7 @@ public static class LinkGridReader
         }
 
         var (columns, unavailable) = Shown(context, query.Columns);
-        var rows = Values(context, columns, ids);
+        var rows = Values(context, columns, ids, query.HiddenChecks);
 
         // The rows are read from this read's snapshot, the places from the moment: a link the moment counted that's gone
         // since (its page was fetched again) leaves the page short of what the count says it holds.
@@ -302,7 +304,7 @@ public static class LinkGridReader
     private static UrlFacets? Facets(GridReadContext context, UrlFacetQuery query)
     {
         var moment = Live(context);
-        var filters = Compile(context, query.Filters, query.Search, sort: null);
+        var filters = Compile(context, query.Filters, query.Search, sort: null, query.HiddenChecks);
         var total = Total(context);
         var tally = Tally(context, filters);
 
@@ -473,6 +475,7 @@ public static class LinkGridReader
         }
 
         UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, query.After, errors);
+        UrlQueryCompiler.ValidateHidden(query.HiddenChecks, errors);
         return errors;
     }
 
@@ -603,7 +606,7 @@ public static class LinkGridReader
     }
 
     /// <param name="sort">A sort by the target, which needs the URL summary as a filter on its column would.</param>
-    private static Filters Compile(GridReadContext context, IReadOnlyList<UrlFilter> filters, string? search, UrlSort? sort)
+    private static Filters Compile(GridReadContext context, IReadOnlyList<UrlFilter> filters, string? search, UrlSort? sort, IReadOnlyList<string> hidden)
     {
         List<Condition> conditions = [];
         Dictionary<string, List<UrlFilter>> ends = new(StringComparer.Ordinal) { [LinkColumns.FROM] = [], [LinkColumns.TO] = [] };
@@ -636,8 +639,8 @@ public static class LinkGridReader
             }
         }
 
-        conditions.AddRange(End(context, LinkColumns.FROM, ends[LinkColumns.FROM], scope));
-        conditions.AddRange(End(context, LinkColumns.TO, ends[LinkColumns.TO], scope));
+        conditions.AddRange(End(context, LinkColumns.FROM, ends[LinkColumns.FROM], scope, hidden));
+        conditions.AddRange(End(context, LinkColumns.TO, ends[LinkColumns.TO], scope, hidden));
         if (!string.IsNullOrEmpty(search))
         {
             conditions.Add(Search(context, search));
@@ -685,7 +688,7 @@ public static class LinkGridReader
     /// (kept, per filter set), which each link's end is tested against: a few ids as a list, so the links' index on that end
     /// finds their links.
     /// </summary>
-    private static IEnumerable<Condition> End(GridReadContext context, string prefix, List<UrlFilter> filters, GridScope scope)
+    private static IEnumerable<Condition> End(GridReadContext context, string prefix, List<UrlFilter> filters, GridScope scope, IReadOnlyList<string> hidden)
     {
         var end = prefix == LinkColumns.TO ? "to_id" : "from_id";
         var inSummary = prefix == LinkColumns.TO;
@@ -711,7 +714,9 @@ public static class LinkGridReader
             yield break;
         }
 
-        var compiled = GridPlanner.Materialize(context, UrlQueryCompiler.Compile(new UrlQuery { Filters = rest }, context.Mode, scope, context.Reason));
+        var unread = UrlQueryCompiler.Compile(new UrlQuery { Filters = rest, HiddenChecks = hidden }, context.Mode, scope, context.Reason);
+        context.Bind(unread.Hidden);
+        var compiled = GridPlanner.Materialize(context, unread);
         var key = prefix + string.Join("&", compiled.All.Select(predicate => predicate.Key));
         var set = HeldLarge(context, "linkend|" + key, () =>
         {
@@ -1644,10 +1649,13 @@ public static class LinkGridReader
     /// <summary>A sort by a column of the target: the URL grid's own sort key, or the target's URL.</summary>
     private sealed record TargetKey(string Column, bool Text, CompiledQuery Query);
 
-    private static TargetKey TargetSort(GridReadContext context, UrlSort sort)
+    /// <param name="hidden">The checks hidden, which a sort by an issue count leaves out (<see cref="UrlQuery.HiddenChecks"/>).</param>
+    private static TargetKey TargetSort(GridReadContext context, UrlSort sort, IReadOnlyList<string> hidden)
     {
         var column = sort.Column[LinkColumns.TO.Length..];
-        var compiled = UrlQueryCompiler.Compile(new UrlQuery { Sort = [new UrlSort(column, sort.Descending)] }, context.Mode, GridScope.AllUrls, context.Reason);
+        var compiled = UrlQueryCompiler.Compile(new UrlQuery { Sort = [new UrlSort(column, sort.Descending)], HiddenChecks = hidden }, context.Mode, GridScope.AllUrls,
+            context.Reason);
+        context.Bind(compiled.Hidden);
         return new TargetKey(column, compiled.Sort[0].Column.Type == UrlColumnType.Text, compiled);
     }
 
@@ -1659,7 +1667,7 @@ public static class LinkGridReader
     private static LinkTargetOrder Order(GridReadContext context, Filters filters, TargetKey key, bool descending)
     {
         var tally = Tally(context, filters);
-        var name = $"linkorder|{key.Column}|{(descending ? "desc" : "asc")}|{filters.Key}";
+        var name = $"linkorder|{key.Column}|{(descending ? "desc" : "asc")}|{filters.Key}{key.Query.HiddenKey}";
         var order = HeldHuge(context, name, () => Ordered(context, tally, key, descending));
 
         // A running crawl's order is kept apart from the tally it was put in order from, and either can be let go and
@@ -1828,9 +1836,20 @@ public static class LinkGridReader
         return command.ExecuteScalar() as string;
     }
 
-    /// <summary>The query's filters, search and sort, hashed, so a cursor from another query is refused.</summary>
-    private static string Hash(GridReadContext context, Filters filters, UrlSort? sort) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"links\n{context.Mode}\n{filters.Key}\n{sort?.Column} {(sort?.Descending == true ? "desc" : "asc")}")))[..16];
+    /// <summary>
+    /// The query's filters, search and sort, hashed, so a cursor from another query is refused: with checks hidden, a sort
+    /// by a target's issue count is another order.
+    /// </summary>
+    private static string Hash(GridReadContext context, Filters filters, UrlSort? sort, IReadOnlyList<string> hidden)
+    {
+        var text = $"links\n{context.Mode}\n{filters.Key}\n{sort?.Column} {(sort?.Descending == true ? "desc" : "asc")}";
+        if (UrlQueryCompiler.HiddenKey(UrlQueryCompiler.Hidden(hidden)) is { Length: > 0 } hiddenKey)
+        {
+            text += "\n" + hiddenKey;
+        }
+
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
+    }
 
     // ---- The rows.
 
@@ -1869,11 +1888,20 @@ public static class LinkGridReader
         return (columns, unavailable);
     }
 
-    private static CompiledQuery EndColumns(GridReadContext context, IReadOnlyList<string> columns) =>
-        UrlQueryCompiler.Compile(new UrlQuery { Columns = columns.Count == 0 ? ["id"] : columns }, context.Mode, GridScope.AllUrls, context.Reason);
+    /// <param name="hidden">The checks hidden, which an end's issue counts leave out (<see cref="UrlQuery.HiddenChecks"/>).</param>
+    private static CompiledQuery EndColumns(GridReadContext context, IReadOnlyList<string> columns, IReadOnlyList<string>? hidden = null)
+    {
+        var compiled = UrlQueryCompiler.Compile(new UrlQuery { Columns = columns.Count == 0 ? ["id"] : columns, HiddenChecks = hidden ?? [] }, context.Mode,
+            GridScope.AllUrls, context.Reason);
+        context.Bind(compiled.Hidden);
+        return compiled;
+    }
 
-    /// <summary>The page's rows, in the order of its ids: each link as stored, with the URL grid's values for each end.</summary>
-    private static List<LinkGridRow> Values(GridReadContext context, List<Column> columns, long[] ids)
+    /// <summary>
+    /// The page's rows, in the order of its ids: each link as stored, with the URL grid's values for each end, the hidden
+    /// checks left out of their issue counts.
+    /// </summary>
+    private static List<LinkGridRow> Values(GridReadContext context, List<Column> columns, long[] ids, IReadOnlyList<string> hidden)
     {
         if (ids.Length == 0)
         {
@@ -1895,7 +1923,7 @@ public static class LinkGridReader
         Dictionary<long, object?[]> Ends(string prefix, Func<(long From, long To, long Kind, string? Text, long Position, long Flags, string? Fragment), long> end)
         {
             List<string> shown = [.. columns.Where(column => column.Prefix == prefix).Select(column => column.Id[prefix.Length..])];
-            return shown.Count == 0 ? [] : UrlGridReader.Values(context, EndColumns(context, shown), [.. links.Values.Select(end).Distinct()]);
+            return shown.Count == 0 ? [] : UrlGridReader.Values(context, EndColumns(context, shown, hidden), [.. links.Values.Select(end).Distinct()]);
         }
 
         var from = Ends(LinkColumns.FROM, link => link.From);

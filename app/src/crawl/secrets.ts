@@ -153,3 +153,14 @@ export function keepCrawlSecrets(crawlId: string, options: Pick<CrawlOptions, 'p
   const secrets = secretsOf(options);
   if (!isEmpty(secrets)) void keepSecrets(`crawl:${crawlId}`, secrets);
 }
+
+/**
+ * Takes a crawl's secrets out of the credential store: its file was deleted, or it left the library (round 5 review
+ * R2-2). Gives back what was kept, for a Remove's Undo to put back; null when nothing was.
+ */
+export async function forgetCrawlSecrets(crawlId: string): Promise<CrawlSecrets | null> {
+  const key: SecretsKey = `crawl:${crawlId}`;
+  const kept = await keptSecrets(key);
+  if (kept) await keepSecrets(key, {});
+  return kept;
+}

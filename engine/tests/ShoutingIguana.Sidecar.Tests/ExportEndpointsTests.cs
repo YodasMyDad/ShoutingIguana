@@ -192,6 +192,34 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
         bad["path"] = Path.Combine(_folder, "bad.csv");
         var problem = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/export", bad), HttpStatusCode.UnprocessableEntity, "invalid-query");
         Assert.Equal(["linkEnds.end"], problem["errors"]!.AsObject().Select(error => error.Key));
+
+        // The checks the user hid are left out of the issue counts in the file, as the grid leaves them out (round 5 review).
+        var hiding = JsonNode.Parse("""{"columns":["errors","url"],"sort":[{"column":"url"}],"hiddenChecks":["broken-internal-links","internal-client-error","a-check-gone"],"limit":1000}""")!;
+        var shown = (await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls", hiding.DeepClone())).Body!;
+        var plainShown = (await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls", new JsonObject { ["columns"] = new JsonArray("errors", "url"), ["sort"] = hiding["sort"]!.DeepClone(), ["limit"] = 1000 })).Body!;
+        var hiddenPath = Path.Combine(_folder, "hidden.csv");
+        var hidingExport = hiding.DeepClone().AsObject();
+        hidingExport.Remove("limit");
+        hidingExport["kind"] = "urls";
+        hidingExport["format"] = "csv";
+        var exported = await ExportAsync(grid.Id, hidingExport.ToJsonString(), hiddenPath);
+        Assert.Equal((long)shown["matching"]!, (long)exported["result"]!["rows"]!);
+        List<string> errors = [.. shown["rows"]!.AsArray().Select(row => ((long)row!["errors"]!).ToString(System.Globalization.CultureInfo.InvariantCulture))];
+        Assert.Equal(errors, Column(hiddenPath).Take(errors.Count));
+        Assert.NotEqual(plainShown["rows"]!.AsArray().Select(row => (long)row!["errors"]!), shown["rows"]!.AsArray().Select(row => (long)row!["errors"]!));
+
+        // Only a stale id hidden (a check another version had): taken, and every count is the grid's own.
+        var stalePath = Path.Combine(_folder, "stale.csv");
+        var stale = await ExportAsync(grid.Id, """{"kind":"urls","format":"csv","columns":["errors","url"],"sort":[{"column":"url"}],"hiddenChecks":["no-such-check"]}""", stalePath);
+        Assert.Equal((long)plainShown["matching"]!, (long)stale["result"]!["rows"]!);
+        List<string> plainErrors = [.. plainShown["rows"]!.AsArray().Select(row => ((long)row!["errors"]!).ToString(System.Globalization.CultureInfo.InvariantCulture))];
+        Assert.Equal(plainErrors, Column(stalePath).Take(plainErrors.Count));
+
+        // An id too long to be one is refused as the grid's call refuses it, past the report's own limits.
+        var tooLong = JsonNode.Parse($$"""{"kind":"urls","format":"csv","hiddenChecks":["{{new string('x', 201)}}"]}""")!;
+        tooLong["path"] = Path.Combine(_folder, "unknown.csv");
+        var refused = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/export", tooLong), HttpStatusCode.UnprocessableEntity, "invalid-query");
+        Assert.Equal(["hiddenChecks"], refused["errors"]!.AsObject().Select(error => error.Key));
     }
 
     [Fact]
@@ -274,7 +302,7 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"sitemaps","format":"html"}""", "format")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","columns":["origin"]}""", "columns")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","origin":"https://a.example"}""", "origin")]
-    [InlineData("""{"kind":"urls","format":"csv","hiddenChecks":["title-missing"]}""", "hiddenChecks")]
+    [InlineData("""{"kind":"robotsOrigins","format":"csv","hiddenChecks":["title-missing"]}""", "hiddenChecks")]
     [InlineData("""{"kind":"report","format":"html","checks":["title-missing"]}""", "checks")]
     [InlineData("""{"kind":"workbook","format":"xlsx","checks":[""]}""", "checks")]
     public async Task ARequestThatCannotBeAnExportIsRefusedByField(string body, string field)

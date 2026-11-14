@@ -4,7 +4,7 @@ import { Check, FolderOpen, Globe, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useRef, useState, type Ref, type SyntheticEvent } from 'react';
 import { crawlOptionDefaultsQuery, libraryQuery } from '../../api/queries';
 import type { CrawlListItem } from '../../api/types';
-import { startCrawl, startUrlFor } from '../../crawl/actions';
+import { quickStartUrl, startCrawl } from '../../crawl/actions';
 import { ErrorState } from '../../feedback/ErrorState';
 import { SkeletonRows } from '../../feedback/Skeleton';
 import { useDelayedLoading } from '../../feedback/useDelayedLoading';
@@ -75,7 +75,7 @@ function CheckForm({ first }: { first: boolean }) {
       return;
     }
     setStarting(true);
-    const startUrl = await startUrlFor(address);
+    const startUrl = await quickStartUrl(address);
     const result = await startCrawl(startUrl);
     setStarting(false);
     if (result.ok) {

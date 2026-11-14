@@ -103,7 +103,8 @@ export function crawlControls(status: CrawlStatus | null, item: CrawlListItem | 
     canPause: status === 'running',
     canResume: status === 'paused',
     canStop: status === 'running' || status === 'paused',
-    canContinue: status === 'stopped' || status === 'interrupted',
+    // Continue reads the file: none for one that isn't there any more (round 5 review R1-11).
+    canContinue: (status === 'stopped' || status === 'interrupted') && item?.missing !== true,
     canAnalyse:
       status !== null &&
       !isCrawling(status) &&

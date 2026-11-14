@@ -3,12 +3,7 @@
 // and axe at zero violations in both themes and under forced colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-
-const site = () => {
-  const value = process.env.SI_E2E_SITE;
-  if (!value) throw new Error('global-setup sets SI_E2E_SITE');
-  return value;
-};
+import { siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -25,7 +20,7 @@ async function expectNoViolations(page: Page) {
 /** From Home to the crawl's Issues, through the sidebar, as a user goes. */
 async function openIssues(page: Page) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: /^Issues/ })

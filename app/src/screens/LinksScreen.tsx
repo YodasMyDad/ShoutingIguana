@@ -766,7 +766,8 @@ export function LinksScreen() {
               error={rows.error}
               description={queryRefusalWords(
                 rows.error.errors,
-                { sort, columns: shown },
+                // The columns as the query sent them (sorted), which the engine's `columns[i]` counts in.
+                { sort, columns: queryColumns },
                 (id) => (!catalogue.data || isLinkColumn(id, catalogue.data) ? linkColumnName(id) : undefined),
                 'links',
               )}

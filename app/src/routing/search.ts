@@ -108,6 +108,7 @@ export function parseFilters(value: unknown, column: ColumnName = urlColumnName)
       case 'isNotEmpty':
         return { column: name, op };
       case 'is':
+      case 'isNot':
         return typeof record.value === 'boolean' ? { column: name, op, value: record.value } : undefined;
       case 'between': {
         const min = finite(record.min);

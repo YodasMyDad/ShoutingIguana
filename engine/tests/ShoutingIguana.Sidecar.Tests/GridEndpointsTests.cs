@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Tests.Support;
 
 namespace ShoutingIguana.Sidecar.Tests;
@@ -88,7 +89,9 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         { """{"columns":["colour"]}""", "columns[0]" },
         { """{"limit":0}""", "limit" },
         { """{"limit":1001}""", "limit" },
-        { """{"after":"not a cursor"}""", "after" }
+        { """{"after":"not a cursor"}""", "after" },
+        { $$"""{"hiddenChecks":["title-too-long","{{new string('x', 201)}}"]}""", "hiddenChecks" },
+        { """{"hiddenChecks":[null]}""", "hiddenChecks" }
     };
 
     [Theory]
@@ -416,6 +419,45 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
 
         TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/issues/{IssueCatalog.ORPHAN_PAGE.Id}/groups", JsonNode.Parse("""{"limit":0}""")),
             HttpStatusCode.UnprocessableEntity, "invalid-query");
+    }
+
+    /// <summary>
+    /// The checks the user hid are left out of the issue counts the URL grid reads, sorts and filters by, of the severity
+    /// facet, and of a links view's target counts, as the engine leaves them out (round 5 review).
+    /// </summary>
+    [Fact]
+    public async Task HiddenChecksAreLeftOutOfTheIssueCounts()
+    {
+        string[] hidden = ["broken-internal-links", "internal-client-error", "a-check-gone"];
+        var query = JsonNode.Parse("""{"columns":["url","issues","errors"],"filters":[{"column":"errors","op":"gte","value":1}],"sort":[{"column":"errors","desc":true}],"limit":1000}""")!;
+        var plain = await PostOkAsync($"api/crawls/{grid.Id}/urls", query.DeepClone());
+        var hiding = query.DeepClone();
+        hiding["hiddenChecks"] = new JsonArray([.. hidden.Select(id => JsonValue.Create(id))]);
+        var page = await PostOkAsync($"api/crawls/{grid.Id}/urls", hiding);
+
+        var expected = UrlGridReader.Query(grid.Path, new UrlQuery
+        {
+            Columns = ["url", "issues", "errors"], Filters = [new UrlFilter("errors", FilterOperator.Gte) { Value = FilterValue.Of(1) }],
+            Sort = [new UrlSort("errors", true)], Limit = 1_000, HiddenChecks = hidden
+        });
+        Assert.Equal(expected.Matching, (long)page["matching"]!);
+        Assert.True((long)page["matching"]! < (long)plain["matching"]!);
+        Assert.Equal(expected.Rows.Select(row => (string)row.Values[1]!), page["rows"]!.AsArray().Select(row => (string)row!["url"]!));
+        Assert.Equal(expected.Rows.Select(row => (long)row.Values[3]!), page["rows"]!.AsArray().Select(row => (long)row!["errors"]!));
+
+        // The severity facet counts as the columns do; its error bucket opens the grid's count.
+        var facets = await PostOkAsync($"api/crawls/{grid.Id}/urls/facets", new JsonObject { ["facets"] = new JsonArray("severity"), ["hiddenChecks"] = hiding["hiddenChecks"]!.DeepClone() });
+        var errors = facets["facets"]!["severity"]!.AsArray().Single(bucket => (string?)bucket!["value"] == "error")!;
+        Assert.Equal(expected.Matching, (long)errors["count"]!);
+
+        // A links view's targets, filtered by their issue count, the same.
+        var links = JsonNode.Parse("""{"columns":["to.url","to.errors"],"filters":[{"column":"to.errors","op":"gte","value":1}],"limit":1}""")!;
+        links["hiddenChecks"] = hiding["hiddenChecks"]!.DeepClone();
+        var expectedLinks = LinkGridReader.Query(grid.Path, new UrlQuery
+        {
+            Columns = ["to.url", "to.errors"], Filters = [new UrlFilter("to.errors", FilterOperator.Gte) { Value = FilterValue.Of(1) }], Limit = 1, HiddenChecks = hidden
+        });
+        Assert.Equal(expectedLinks.Matching, (long)(await PostOkAsync($"api/crawls/{grid.Id}/links", links))["matching"]!);
     }
 
     private async Task<JsonNode> PostOkAsync(string path, JsonNode? body = null)

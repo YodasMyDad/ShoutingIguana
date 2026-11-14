@@ -1085,11 +1085,11 @@ of the file and holds it for that one page only.
   | text | `contains`, `notContains`, `startsWith`, `endsWith` | `value`, matched ignoring the case of ASCII letters |
   | text | `eq`, `ne` | `value`, matched exactly |
   | text | `regex`, `notRegex` | `value`, a .NET regular expression, case-sensitive unless it starts `(?i)` |
-  | boolean | `is` | `value`: true or false |
+  | boolean | `is`, `isNot` | `value`: true or false. `isNot` is the other value or unknown (round 5 review R1-2) |
   | every type | `isEmpty`, `isNotEmpty` | Nothing. Empty is unknown (null), and for text also `""` |
 
-  - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`) matches unknown values too, as "exclude this value"
-    should; add `isNotEmpty` to leave them out.
+  - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`, `isNot`) matches unknown values too, as "exclude
+    this value" should; add `isNotEmpty` to leave them out.
   - A field the operator doesn't take is refused, not ignored: `values` or `min` beside `eq`, `value` beside `in`.
     A null in `filters`, `columns` or `sort` is a field error (`filters[0]`).
   - Regular expressions run in .NET's non-backtracking mode, linear in the text. A pattern that needs backtracking
@@ -1119,6 +1119,22 @@ of the file and holds it for that one page only.
   under it (`linkEnds.end`, `linkEnds.filters[0].column`), a link filter that needs the URL summary without one is
   refused with `needs-analysis` as the links grid refuses it, and a cursor read under other links is refused on
   `after`. What it costs is what the list of ends costs.
+- **`hiddenChecks`** (round 5 review, also noted) is the ids of the checks the user hid, every count in the app
+  leaving them out: `["title-too-long","thin-content"]`. The issue counts (`issues`, `errors`, `warnings`,
+  `notices`) leave their issues out wherever the query uses them: each row's values, the sort, the filters
+  (`errors gte 1`, `issues eq 0`) and so `matching`. Each is the summary's count less the URL's issues of those checks
+  (of its own severity, for `errors`, `warnings` and `notices`), counted as the summary counts them. An id the
+  catalog doesn't have is taken, as the report takes it (a check hidden by another version, kept in the app's
+  settings): it hides the issues stored under it, if any, so a stale id never breaks a grid. At most 1,000 ids, none
+  null or longer than 200 characters: anything else is `invalid-query` on `hiddenChecks`. None, or the field left
+  out, reads exactly as before.
+  - With checks hidden those four columns have no index: a sort by one reads and sorts the matching rows, as a sort by
+    an unindexed column does, and a filter on one is tested per row, never driving the read.
+  - Counts are kept per set of hidden checks (in any order), so a count kept without them is never given with them;
+    a cursor read with other checks hidden is refused on `after`.
+  - `/urls/facets` takes it for `severity` (below), a check's `/rows` and `/sitemaps/urls` take it as `/urls` does,
+    and the links grid's `/links`, `/links/facets` and `/links/ends` for the `from.` and `to.` issue counts. `linkEnds`
+    reads its link filters with the same checks hidden.
 - **`sort`** is up to 3 `{ column, desc }`, with unknown values last whichever the direction, and the URL's `id`
   breaking ties, in the last key's direction (so an index walked backwards needs no sort). The default is crawl order.
 - **The summary.** `summary` says whether the URL summary describes the crawl (see above), and `reason` why not:
@@ -1218,6 +1234,8 @@ count (all of them by default):
 
 - Without the URL summary, the facets that need it are listed in `unavailable` and left out: `inSitemap` and
   `severity`. A filter on a column that needs it is refused with `needs-analysis`, as above.
+- **`hiddenChecks`** (round 5 review, also noted), as the grid takes it: `severity` counts as the issue counts do, the
+  hidden checks left out, so its `error` bucket opens its URLs in a grid given the same `hiddenChecks`.
 
 #### Lookup
 
@@ -1966,10 +1984,10 @@ An export only reads the crawl.
 
   | `kind` | Writes | `format` | Takes |
   | --- | --- | --- | --- |
-  | `urls` | The URL grid | `csv`, `xlsx` | `columns`, `filters`, `search`, `sort`, and `linkEnds` (E7) as the grid takes it |
-  | `links` | The links grid | `csv`, `xlsx` | The same, over the links grid's columns; one sort key |
-  | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's four |
-  | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's four, the check's own columns among them |
+  | `urls` | The URL grid | `csv`, `xlsx` | `columns`, `filters`, `search`, `sort`, `hiddenChecks` (round 5 review), and `linkEnds` (E7) as the grid takes it |
+  | `links` | The links grid | `csv`, `xlsx` | The same but `linkEnds`, over the links grid's columns; one sort key |
+  | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's five |
+  | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's five, the check's own columns among them |
   | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
   | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId` |
   | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
@@ -1985,6 +2003,11 @@ An export only reads the crawl.
   by another version. `GET /report` takes them as `hiddenChecks=a,b`, so the report shown is the report saved. **`checks`**
   (`workbook`): only these checks, the ones an Issues view listed; its summary says "Checks listed". `si export` takes
   them as `--hidden-checks` and `--checks`, comma-separated.
+- **`hiddenChecks` on a grid's export** (round 5 review, also noted: `urls`, `links`, `sitemapUrls`, `issueRows`) is
+  the grid's own ([URLs](#urls-e3a)): the file's issue counts leave those checks out as the grid's do, in its values,
+  sort and filters. Its limits are the grid's, not the report's: an id the catalog doesn't have is taken, and more
+  than 1,000 ids, a null or one over 200 characters is `invalid-query` on `hiddenChecks`, as on the grid's call.
+  `si export --hidden-checks` takes it for these kinds too.
 - **`columns`** are the file's columns, in the order given; without any, the grid's own (`url`; for `issueRows`,
   `url`, `detail` and `relatedUrl`; for `links`, `from.url`, `to.url`, `kind` and `text`). The id is a column only
   when asked for (`id`: "Crawl order"). A column that needs the URL summary, on a crawl that has none, is in the file
@@ -3626,3 +3649,23 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   wrong credentials, the right credentials sent, a closed port, a 502 from the proxy, addresses refused before any
   fetch. `ProxyEndpointTests` (sidecar, 7): a refused proxy as a 200 answer in plain words, and six bodies that are bad
   requests. Not tested: a proxy that never answers (`proxyUnreachable`, a 10 s wait) and a socks5 or https proxy.
+- **Hidden checks in the grids** (round 5 review, also noted). Every count in the app left the hidden checks out but
+  the URL grid's issue counts (`issues`, `errors`, `warnings`, `notices`, precomputed per URL in `url_summary`) and
+  the grids' exports. `UrlQuery.HiddenChecks` (and `UrlFacetQuery`'s, `LinkEndQuery`'s) is now a field of every grid
+  query, `hiddenChecks` in the API ([URLs](#urls-e3a)). `UrlQueryCompiler.Counting` reads each of the four as the
+  summary's count less `(SELECT COUNT(*) FROM issues hi JOIN issue_types ht ON ht.id = hi.issue WHERE hi.url_id =
+  s.url_id AND hi.issue IN ($hide0, …) [AND ht.severity = '…'])`, the join and the severity as `UrlSummaryBuilder`
+  counts them, so the difference is exact; the column then has no index (`Indexed` false), so the planner scans and
+  sorts rather than walking `ix_url_summary_issues`. The ids are parameters (`$hide0`…), sorted and each once, bound by
+  `GridReadContext.Bind` to every statement of the read that names them (a sort key's SQL carries none of a filter's
+  parameters), and to the reads alongside it. A filter on a count carries them among its parameters, so its key, and
+  every count kept by it, is its own; the query's hash, the facets' keys, a links view's order and `linkEnds`' key
+  take them too. The links grid passes them to the URL grid's compiler for each end's values, filters and the
+  target's sort; a grid's export reads them with its query (`ExportFields`: `hiddenChecks` belongs to the four grids
+  too; `si export --hidden-checks` puts them on the grid's query). With none hidden every statement is the same SQL
+  as before. An unknown id is taken (`UrlQueryCompiler.ValidateHidden` refuses only more than 1,000 ids, a null, or
+  one over 200 characters), so a stale id in the app's settings never breaks a grid; a grid export checks them so
+  too, not by the report's limits. Tests: `HiddenChecksGridTests` (engine, 18: the values, sorts both ways by offset
+  and cursor, five filters, counts and cursors never shared, the severity facet alone and in one pass, the links
+  grid's ends and `linkEnds`, stale ids taken and hiding nothing, 1,000 of them, the limits), against `GridReference.WithoutChecks`; `GridExportTests.TheIssueCountsAreExportedWithoutTheHiddenChecks`
+  (CSV and workbook, the URL grid and a check's rows); `GridEndpointsTests` and `ExportEndpointsTests` (sidecar).

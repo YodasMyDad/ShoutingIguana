@@ -149,4 +149,30 @@ describe('the API client with the credential store', () => {
     expect(read.options.proxyUrl).toBe('http://me:pw@proxy:3128');
     expect(read.options.hasRedactedProxyCredentials).toBe(false);
   });
+
+  // Round 5 review R2-2: a crawl's secrets go with it.
+  const SECRETS = JSON.stringify({ proxyUrl: 'http://me:pw@proxy:3128', headers: { Authorization: 'Basic eDp5' } });
+
+  it('forgets a crawl’s secrets once its file is deleted, and keeps them when the delete fails', async () => {
+    store.kept.set(`crawl:${CRAWL}`, SECRETS);
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve(Response.json({ type: 'crawl-busy', title: 'Busy.', status: 409 }, { status: 409 })),
+    );
+    await expect(api.deleteCrawlFile(CRAWL)).rejects.toBeDefined();
+    expect(store.kept.get(`crawl:${CRAWL}`)).toBe(SECRETS);
+    fetchMock.mockImplementationOnce(() => Promise.resolve(new Response(null, { status: 204 })));
+    await api.deleteCrawlFile(CRAWL);
+    expect(store.kept.has(`crawl:${CRAWL}`)).toBe(false);
+  });
+
+  it('takes a removed crawl’s secrets out of the store, and Undo (restore) puts them back', async () => {
+    store.kept.set(`crawl:${CRAWL}`, SECRETS);
+    fetchMock.mockImplementationOnce(() => Promise.resolve(new Response(null, { status: 204 })));
+    await api.removeCrawl(CRAWL);
+    // Out of the store at once: an app closed before the Undo runs out leaves nothing behind.
+    expect(store.kept.has(`crawl:${CRAWL}`)).toBe(false);
+    fetchMock.mockImplementationOnce(() => Promise.resolve(Response.json({ id: CRAWL })));
+    await api.restoreCrawl(CRAWL);
+    expect(JSON.parse(store.kept.get(`crawl:${CRAWL}`) ?? '{}')).toEqual(JSON.parse(SECRETS));
+  });
 });

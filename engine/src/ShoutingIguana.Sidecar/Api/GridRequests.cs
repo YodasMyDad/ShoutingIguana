@@ -61,7 +61,8 @@ internal static class GridRequests
             Sort = sort,
             Offset = request.Offset ?? 0,
             Limit = request.Limit ?? UrlGridReader.DEFAULT_LIMIT,
-            After = request.After
+            After = request.After,
+            HiddenChecks = request.HiddenChecks ?? []
         };
     }
 

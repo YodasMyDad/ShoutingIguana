@@ -141,6 +141,8 @@ export async function saidWhileAnalysing(id: string, action: RefusedWhileAnalysi
   return true;
 }
 
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 /**
  * The start URL for an address as typed: as typed when it has its scheme, else where the site answers, https or, when
  * only http answers, http (the closing audit's gap 1: a site serving only http was checked on https and read nothing).
@@ -148,7 +150,7 @@ export async function saidWhileAnalysing(id: string, action: RefusedWhileAnalysi
  */
 export async function startUrlFor(address: string, options?: CrawlOptions): Promise<string> {
   const trimmed = address.trim();
-  if (trimmed === '' || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed === '' || HAS_SCHEME.test(trimmed)) return trimmed;
   try {
     return (await api.startUrlFor(trimmed, options)).startUrl;
   } catch {
@@ -161,19 +163,34 @@ export async function startUrlFor(address: string, options?: CrawlOptions): Prom
  * request takes the engine's default, not the user's. A saved header has its name only (its value isn't kept), so it
  * isn't sent. Field problems come back for the form to show inline.
  */
+/**
+ * The user's saved defaults as a start sends them: read now, the proxy's password and the headers' values back in from
+ * the credential store, a header kept by name only (no value) left out.
+ */
+async function defaultsToSend(): Promise<CrawlOptions> {
+  const saved = { ...(await api.crawlOptionDefaults()).options };
+  // A response's own fact, not an option to send.
+  delete saved.hasRedactedProxyCredentials;
+  return { ...saved, extraHeaders: sendableHeaders(saved.extraHeaders) };
+}
+
+/**
+ * The start URL for a quick start (Home's field, Simple's Check site): `startUrlFor` asked with the saved defaults,
+ * their secrets in, so a proxy with a password is tried as the crawl will use it (round 5 review R2-1), never the
+ * sidecar's stored copy with "***" for its credentials. Defaults that can't be read leave it to the sidecar's.
+ */
+export async function quickStartUrl(address: string): Promise<string> {
+  const trimmed = address.trim();
+  if (trimmed === '' || HAS_SCHEME.test(trimmed)) return trimmed;
+  const options = await defaultsToSend().catch(() => undefined);
+  return startUrlFor(trimmed, options);
+}
+
 export async function startCrawl(
   startUrl: string,
 ): Promise<{ ok: true; item: CrawlListItem } | { ok: false; fieldErrors: Record<string, string[]> }> {
   try {
-    const saved = { ...(await api.crawlOptionDefaults()).options };
-    // A response's own fact, not an option to send.
-    delete saved.hasRedactedProxyCredentials;
-    return {
-      ok: true,
-      item: await api.startCrawl({
-        options: { ...saved, extraHeaders: sendableHeaders(saved.extraHeaders), startUrl },
-      }),
-    };
+    return { ok: true, item: await api.startCrawl({ options: { ...(await defaultsToSend()), startUrl } }) };
   } catch (error) {
     if (isProblem(error, 'invalid-options')) return { ok: false, fieldErrors: error.errors };
     notifyError(error);

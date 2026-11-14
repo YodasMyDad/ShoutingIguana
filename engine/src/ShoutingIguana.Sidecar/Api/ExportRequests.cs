@@ -61,7 +61,12 @@ internal static class ExportRequests
         Only(body.LookExamples is not null, "lookExamples");
         Only(body.HiddenChecks is not null, "hiddenChecks");
         Only(body.Checks is not null, "checks");
-        CheckIds(body.HiddenChecks, "hiddenChecks", errors);
+        // A grid's are its query's, checked as the grid's call checks them (invalid-query); the report's and the workbook's here.
+        if (!GRIDS.Contains(kind))
+        {
+            CheckIds(body.HiddenChecks, "hiddenChecks", errors);
+        }
+
         CheckIds(body.Checks, "checks", errors);
 
         RobotsBlockReason? reason = body.Reason switch
@@ -89,7 +94,10 @@ internal static class ExportRequests
             Kind = kind,
             Format = format,
             Query = GRIDS.Contains(kind)
-                ? GridRequests.Query(new GridQueryRequest { Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort, LinkEnds = body.LinkEnds })
+                ? GridRequests.Query(new GridQueryRequest
+                {
+                    Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort, LinkEnds = body.LinkEnds, HiddenChecks = body.HiddenChecks
+                })
                 : new UrlQuery { Search = body.Search },
             Blocked = body.Blocked,
             SitemapId = sitemap,

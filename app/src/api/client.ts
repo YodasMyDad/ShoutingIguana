@@ -4,12 +4,15 @@
 import { ProblemError, UnexpectedResponseError, parseProblem } from './errors';
 import {
   continueWithSecrets,
+  forgetCrawlSecrets,
   keepCrawlSecrets,
   keepSecrets,
   keptSecrets,
   secretsOf,
   withSecrets,
+  type CrawlSecrets,
 } from '../crawl/secrets';
+import { currentHiddenChecks } from '../settings/hiddenChecks';
 import type { ExportJob, ExportRequest, ReportOptions } from './exports';
 import type {
   FacetsPage,
@@ -132,6 +135,23 @@ function reportQuery(options: ReportOptions): string {
 const get = <T>(path: string, signal?: Signal) => call<T>({ method: 'GET', path, signal });
 const post = <T>(path: string, body?: unknown, signal?: Signal) => call<T>({ method: 'POST', path, body, signal });
 
+/**
+ * A grid's read (its page, facets, link ends) or export with the checks hidden in its crawl, so its issue counts leave
+ * them out as every other count does (round 5 review, also noted). Nothing is added while none is hidden; a query
+ * that names its own is sent as it is.
+ */
+function withHiddenChecks<T extends object>(crawlId: string, query: T): T {
+  if ('hiddenChecks' in query) return query;
+  const hidden = currentHiddenChecks(crawlId);
+  return hidden.length > 0 ? { ...query, hiddenChecks: hidden } : query;
+}
+
+/** The exports of a grid, which take the grid's query and so its hidden checks. */
+const GRID_EXPORTS: ReadonlySet<ExportRequest['kind']> = new Set(['urls', 'links', 'sitemapUrls', 'issueRows']);
+
+/** The secrets of the crawls removed from the library while the app runs, for Undo (restoreCrawl) to put back. */
+const removedSecrets = new Map<string, CrawlSecrets>();
+
 export const api = {
   // App
   health: (signal?: Signal) => get<Health>('/api/health', signal),
@@ -188,11 +208,28 @@ export const api = {
   favicon: (id: string, signal?: Signal) => callBytes({ method: 'GET', path: `${crawl(id)}/favicon`, signal }),
   /** Adds a crawl file from anywhere: an absolute path ending in `.sicrawl`. */
   openCrawl: (path: string) => post<CrawlListItem>('/api/crawls/open', { path }),
-  /** Removes it from the library, not from disk. Undone by restoreCrawl. */
-  removeCrawl: (id: string) => call<undefined>({ method: 'DELETE', path: crawl(id) }),
-  restoreCrawl: (id: string) => post<CrawlListItem>(`${crawl(id)}/restore`),
-  /** Deletes the file. Only after a confirmation that names the crawl. */
-  deleteCrawlFile: (id: string) => post<undefined>(`${crawl(id)}/delete-file`),
+  /**
+   * Removes it from the library, not from disk. Undone by restoreCrawl. Its secrets leave the credential store at once
+   * (an app closed before the Undo runs out leaves none behind), held here for restoreCrawl to put back.
+   */
+  removeCrawl: async (id: string) => {
+    await call<undefined>({ method: 'DELETE', path: crawl(id) });
+    const kept = await forgetCrawlSecrets(id);
+    if (kept) removedSecrets.set(id, kept);
+  },
+  restoreCrawl: async (id: string) => {
+    const item = await post<CrawlListItem>(`${crawl(id)}/restore`);
+    const kept = removedSecrets.get(id);
+    removedSecrets.delete(id);
+    if (kept) await keepSecrets(`crawl:${id}`, kept);
+    return item;
+  },
+  /** Deletes the file. Only after a confirmation that names the crawl. Its secrets are forgotten with it. */
+  deleteCrawlFile: async (id: string) => {
+    await post<undefined>(`${crawl(id)}/delete-file`);
+    removedSecrets.delete(id);
+    await forgetCrawlSecrets(id);
+  },
 
   // Crawl control
   /** Starts a crawl. In the app, what it was given that the engine doesn't keep is kept for Continue. */
@@ -257,9 +294,9 @@ export const api = {
   // Grids (E3a). One fixed URL per grid, so one preflight per session.
   urlColumns: (signal?: Signal) => get<UrlColumn[]>('/api/url-columns', signal),
   urls: (id: string, query: UrlGridQuery, signal?: Signal) =>
-    post<GridPage<UrlRow>>(`${crawl(id)}/urls`, query, signal),
+    post<GridPage<UrlRow>>(`${crawl(id)}/urls`, withHiddenChecks(id, query), signal),
   urlFacets: (id: string, query: FacetsQuery, signal?: Signal) =>
-    post<FacetsPage>(`${crawl(id)}/urls/facets`, query, signal),
+    post<FacetsPage>(`${crawl(id)}/urls/facets`, withHiddenChecks(id, query), signal),
   /** A URL of the crawl by its text: `url-not-found` when the crawl has none, `invalid-query` when it isn't a URL. */
   lookupUrl: (id: string, url: string, signal?: Signal) => post<UrlLookup>(`${crawl(id)}/urls/lookup`, { url }, signal),
   /**
@@ -279,25 +316,29 @@ export const api = {
   issueGroups: (id: string, checkId: string, page: { offset: number; limit: number }, signal?: Signal) =>
     post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
   issueRows: (id: string, checkId: string, query: UrlGridQuery, signal?: Signal) =>
-    post<GridPage<IssueRow>>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/rows`, query, signal),
+    post<GridPage<IssueRow>>(
+      `${crawl(id)}/issues/${encodeURIComponent(checkId)}/rows`,
+      withHiddenChecks(id, query),
+      signal,
+    ),
 
   // Links, sitemaps and robots.txt (E3b).
   linkColumns: (signal?: Signal) => get<LinkColumn[]>('/api/link-columns', signal),
   /** The links grid: one sort key, `id` or a column of the target. `group` isn't taken. */
   links: (id: string, query: GridQuery, signal?: Signal) =>
-    post<GridPage<LinkRow>>(`${crawl(id)}/links`, query, signal),
+    post<GridPage<LinkRow>>(`${crawl(id)}/links`, withHiddenChecks(id, query), signal),
   linkFacets: (id: string, query: LinkFacetsQuery, signal?: Signal) =>
-    post<LinkFacetsPage>(`${crawl(id)}/links/facets`, query, signal),
+    post<LinkFacetsPage>(`${crawl(id)}/links/facets`, withHiddenChecks(id, query), signal),
   /**
    * E6: the URLs at one end of the links a view matches, each once: its targets, or the pages its links are on. Its
    * `total` is the URL grid's `matching` under the same links as `linkEnds`.
    */
   linkEnds: (id: string, query: LinkEndsQuery, signal?: Signal) =>
-    post<LinkEndsPage>(`${crawl(id)}/links/ends`, query, signal),
+    post<LinkEndsPage>(`${crawl(id)}/links/ends`, withHiddenChecks(id, query), signal),
   sitemaps: (id: string, signal?: Signal) => get<SitemapList>(`${crawl(id)}/sitemaps`, signal),
   /** The URL grid for one sitemap (an index: every sitemap under it). `sitemap-not-found` for an id the crawl lacks. */
   sitemapUrls: (id: string, sitemapId: number, query: UrlGridQuery, signal?: Signal) =>
-    post<GridPage<UrlRow>>(`${crawl(id)}/sitemaps/urls`, { sitemapId, ...query }, signal),
+    post<GridPage<UrlRow>>(`${crawl(id)}/sitemaps/urls`, withHiddenChecks(id, { sitemapId, ...query }), signal),
   /** E6: `search` finds origins by name and `blocked` filters them; the page then has `matching` and `counts`. */
   robotsOrigins: (id: string, query: RobotsOriginsQuery, signal?: Signal) =>
     post<RobotsOriginPage>(`${crawl(id)}/robots`, query, signal),
@@ -313,7 +354,8 @@ export const api = {
    * be an export (`invalid-export`, `invalid-query`), or its file can't be written (`export-not-writable`,
    * `export-file-in-use`); what only the crawl can say (`not-analyzed`, `needs-analysis`...) ends the job as failed.
    */
-  startExport: (id: string, request: ExportRequest) => post<ExportJob>(`${crawl(id)}/export`, request),
+  startExport: (id: string, request: ExportRequest) =>
+    post<ExportJob>(`${crawl(id)}/export`, GRID_EXPORTS.has(request.kind) ? withHiddenChecks(id, request) : request),
   /** An export by its id: one running, or one of the last 64 that ended. `export-not-found` otherwise. */
   exportJob: (exportId: string, signal?: Signal) => get<ExportJob>(exportJob(exportId), signal),
   /** Cancels a running export, which then leaves no file. One that has ended stays as it ended. */

@@ -1,11 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-
-const site = () => {
-  const value = process.env.SI_E2E_SITE;
-  if (!value) throw new Error('global-setup sets SI_E2E_SITE');
-  return value;
-};
+import { siteRow } from './support';
 
 /** axe with the brief's bar: WCAG 2.2 AA, zero violations allowed. */
 async function expectNoViolations(page: Page) {
@@ -23,7 +18,7 @@ async function expectNoViolations(page: Page) {
 test('Home lists the crawl in the data folder, with no accessibility violations', async ({ page }) => {
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
-  await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
+  await expect(library.getByRole('link', { name: siteRow(), exact: true })).toBeVisible();
   await expect(library.getByRole('row')).toHaveCount(2);
   await expectNoViolations(page);
 });
@@ -32,7 +27,7 @@ test('Home passes in the dark theme too', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
   await expect(
-    page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }),
+    page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }),
   ).toBeVisible();
   await expectNoViolations(page);
 });
@@ -40,7 +35,7 @@ test('Home passes in the dark theme too', async ({ page }) => {
 test('the palette opens with Ctrl+K, finds a command and closes with Esc', async ({ page }) => {
   await page.goto('/');
   await expect(
-    page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }),
+    page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }),
   ).toBeVisible();
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog', { name: 'Command palette' });
@@ -54,7 +49,7 @@ test('the palette opens with Ctrl+K, finds a command and closes with Esc', async
 
 test('opening a crawl shows its overview with the sidebar sections', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/overview$/);
   await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Issues/ })).toBeVisible();
@@ -65,7 +60,7 @@ test('at 200% zoom (640x360) the library keeps its Site column and nothing scrol
   await page.setViewportSize({ width: 640, height: 360 });
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
-  const name = library.getByRole('link', { name: site(), exact: true });
+  const name = library.getByRole('link', { name: siteRow(), exact: true });
   await expect(name).toBeVisible();
   const widths = await page.evaluate(() => {
     const main = document.querySelector('main');
@@ -94,7 +89,7 @@ test('at 200% zoom with the sidebar open, the library scrolls inside its card, n
   await page.setViewportSize({ width: 560, height: 360 });
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
-  await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
+  await expect(library.getByRole('link', { name: siteRow(), exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Expand the sidebar' }).click();
   await expect(page.getByRole('button', { name: 'Collapse the sidebar' })).toBeVisible();
   const overflow = () =>
