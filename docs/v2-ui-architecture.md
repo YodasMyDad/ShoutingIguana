@@ -1944,6 +1944,12 @@ the routes' table (`app/simpleScreens.ts`):
   hidden checks the page stored (`settings::preferences`, read as the page reads them: nothing stored is Simple), the
   library item's `score` and `pageCount`, and, with checks hidden, `/api/checks` and the analysis's counts. The
   notification plugin has no buttons on the desktop, so See the summary and Open the report are the toast's only.
+  A crawl the user stops is analysed, and its notification waits for that analysis, then says the stop as the toast
+  does, with the results so far: "Crawl stopped", "example.com: 1,234 URLs, 18 checks found issues. Continue it from
+  the library."; in Simple "The check of example.com was stopped", "Score 71 so far: 2 problems to fix. Continue it
+  from Your sites." (round 5's review, R2-4: it said "Analysis finished" or "The results … are updated", never that
+  the crawl stopped). Continue is the toast's button; the notification says where to find it. Its analysis cancelled,
+  the stop alone, as before.
 
 ### The Summary, What to fix and one problem
 
