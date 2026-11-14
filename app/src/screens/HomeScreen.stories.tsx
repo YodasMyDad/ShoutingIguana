@@ -244,6 +244,19 @@ export const RunningAndPaused: Story = {
   render: () => <ScreenApp path="/" />,
 };
 
+/** A crawl just stopped, analysed now (round 5): its card says so, with Cancel the analysis and nothing to stop. */
+export const AnalysingAfterStop: Story = {
+  loaders: [
+    () => {
+      const stopped = LIBRARY.find((item) => item.status === 'stopped')!;
+      ownSidecar(routes([stopped, ...LIBRARY.filter((item) => item.status === 'completed').slice(0, 3)]));
+      drawAsTheAppForTests(null);
+      liveStore.ingest(message('hello', { live: [], analyzing: [stopped.id] }));
+    },
+  ],
+  render: () => <ScreenApp path="/" />,
+};
+
 /** Nothing crawled yet. */
 export const Empty: Story = {
   loaders: [
