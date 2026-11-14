@@ -470,6 +470,9 @@
   /* The grid's filter editor and column chooser (the Links slice): a list in a popover scrolls past this height. */
   --filter-values-height: 224px;
   --column-list-height: 320px;
+  /* Settings › Updates: a release's notes scroll past this height; About's licences list, past its own. */
+  --update-notes-max: 240px;
+  --licence-list-height: 360px;
   --measure-text: 62ch; /* the longest line of explaining text */
   --measure-explain: 46ch;
   --opacity-disabled: 0.5;

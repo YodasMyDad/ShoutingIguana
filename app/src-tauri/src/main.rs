@@ -6,6 +6,7 @@
 
 mod commands;
 mod context_menu;
+mod data_folder;
 mod drop;
 mod live;
 mod logging;
@@ -13,12 +14,14 @@ mod mode;
 mod open_files;
 mod profile;
 mod quit;
+mod secrets;
 mod settings;
 mod shell;
 mod sidecar;
 mod startup;
 mod sync;
 mod tray;
+mod updates;
 #[cfg(windows)]
 mod webview2;
 mod window;
@@ -51,6 +54,9 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        // Driven by the shell's own commands (updates.rs): the webview isn't granted the plugin's.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::default())
         // For the shell's own settings (shell.json) only: the webview isn't granted the store.
         .plugin(tauri_plugin_store::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -64,6 +70,14 @@ fn main() {
             commands::reveal_crawl_file,
             commands::reveal_export_file,
             commands::open_export_file,
+            commands::open_logs_folder,
+            commands::update_check,
+            commands::update_install,
+            commands::secrets_read,
+            commands::secrets_write,
+            commands::data_folder_choice,
+            commands::data_folder_choose,
+            commands::data_folder_reset,
         ])
         .on_window_event(window::on_event)
         .setup({
