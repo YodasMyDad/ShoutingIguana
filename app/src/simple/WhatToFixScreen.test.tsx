@@ -253,7 +253,9 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     fireEvent.click(where.getByRole('button', { name: 'Show them' }));
     expect(await where.findByText('Page 199')).toBeVisible();
     expect(where.getByRole('button', { name: 'See all 264 in Advanced' })).toBeVisible();
-    expect(where.getByText(/All 2 are shown\. Addresses are on gardenfurnituresets\.co\.uk\./)).toBeVisible();
+    expect(
+      where.getByText('All 2 causes are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
+    ).toBeVisible();
   });
 
   it('lists a check that doesn’t group flat, with what was measured', async () => {

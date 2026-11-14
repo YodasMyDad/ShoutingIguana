@@ -138,6 +138,21 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     expect(main().queryByText(/365 pages were read first/)).toBeNull();
   });
 
+  // The closing audit's gap 25: a Polite check said the site was slow in its first seconds, its https probe failing.
+  it('says no slowdown before the site has answered enough to judge it by', async () => {
+    await open();
+    await heard(
+      progress(2, {
+        fetched: 3,
+        siteVersions: { fetched: 2, statusClasses: {}, statusCodes: {}, noResponse: {} },
+        waits: [{ reason: 'backoff', host: 'example.com', durationMs: 500 }],
+      }),
+    );
+    expect(main().queryByText(/The site is answering slowly/)).toBeNull();
+    await heard(progress(8, { fetched: 14, waits: [{ reason: 'backoff', host: 'example.com', durationMs: 500 }] }));
+    expect(await main().findByText(/The site is answering slowly/)).toBeVisible();
+  });
+
   it('says a slowdown from the progress’s waits', async () => {
     await open();
     await heard(progress(100, { waits: [{ reason: 'backoff', host: 'example.com', durationMs: 4000 }] }));

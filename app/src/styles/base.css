@@ -491,8 +491,11 @@
   colours. The colours are tokens, so a toast follows the OS when the app does.
 */
 [data-sonner-toaster] [data-sonner-toast].si-toast {
+  --toast-lead: 0px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2-5);
   box-sizing: border-box;
   width: var(--toast-width);
@@ -517,12 +520,25 @@
   outline-offset: var(--focus-offset);
 }
 
+/*
+  The text keeps a readable measure: an action that would squeeze it under --toast-text-min wraps under it, at the
+  right. Two actions always go under it together (the closing audit's gap 11: they crushed the text into ~110 px), so
+  they never split across the lines; the text then takes the row, beside the icon when there is one.
+*/
 [data-sonner-toaster] [data-sonner-toast].si-toast [data-content] {
   display: flex;
-  flex: 1;
+  flex: 1 1 var(--toast-text-min);
   flex-direction: column;
   gap: var(--space-0-5);
   min-width: 0;
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast:has([data-icon]) {
+  --toast-lead: calc(var(--icon-md) + var(--space-2-5));
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast:has([data-button].si-toast-cancel) [data-content] {
+  flex-basis: calc(100% - var(--toast-lead));
 }
 
 [data-sonner-toaster] [data-sonner-toast].si-toast [data-title].si-toast-title {

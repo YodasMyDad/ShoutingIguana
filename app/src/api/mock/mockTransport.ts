@@ -518,6 +518,19 @@ export function createMockTransport(): Transport {
       (_match, request) => Promise.resolve(json({ errors: validate(request.body as CrawlOptions) })),
     ],
     [
+      'POST',
+      /^\/api\/crawl-options\/start-url$/,
+      (_match, request) => {
+        // The mock has no network: a bare address is taken as the site's https:// one, as if it answered there.
+        const { address } = request.body as { address: string };
+        const trimmed = address.trim();
+        const typed = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
+        return Promise.resolve(
+          json({ startUrl: typed ? trimmed : `https://${trimmed}`, reason: typed ? 'typed' : 'https' }),
+        );
+      },
+    ],
+    [
       'GET',
       /^\/api\/crawls$/,
       async () => {

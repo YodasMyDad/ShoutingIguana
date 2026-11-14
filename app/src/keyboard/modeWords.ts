@@ -7,6 +7,8 @@ import type { Command } from './registry';
 const SIMPLE_GROUPS: Readonly<Record<string, string>> = {
   Crawl: 'Site check',
   'Recent crawls': 'Your sites',
+  // The closing audit's gap 6: the palette's and the sheet's heading over What to fix's keys.
+  Issues: 'What to fix',
 };
 
 /** A group's name, as the mode says it. */

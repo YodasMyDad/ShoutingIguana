@@ -22,7 +22,7 @@ import type { CrawlListItem } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
-import { crawlControls, crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { crawlControls, crawledUrls, effectiveStatus } from '../../crawl/status';
 import { notifyError, notifyUndo } from '../../feedback/notify';
 import { formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
@@ -41,7 +41,16 @@ import { RelativeTime } from '../../ui/RelativeTime';
 import { ScoreRing } from '../../ui/ScoreRing';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { TextLink } from '../../ui/TextLink';
-import { problemCounts, problemWords, rowKind, rowMeta, rowScore, stoppedEarly, type ProblemCounts } from './sites';
+import {
+  problemCounts,
+  problemWords,
+  rowKind,
+  rowMeta,
+  rowScore,
+  siteName,
+  stoppedEarly,
+  type ProblemCounts,
+} from './sites';
 
 /** A row's grid: the site, its score, what to fix, when, and its action. A narrow card folds the middle under the site. */
 const ROW_GRID =
@@ -87,7 +96,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
   const kind = rowKind(item, status);
   const [open, setOpen] = useState(false);
   const earlierId = useId();
-  const name = crawlName(item);
+  const name = siteName(item);
   const score = rowScore(item, status);
   const problems = useRowProblems(item);
   const controls = crawlControls(status, item);
@@ -175,7 +184,8 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
               <FixCell kind={kind} problems={problems} partial={partial} />
             </div>
             <div className="text-13 text-text-secondary @max-sites/sites:hidden">
-              <RelativeTime iso={item.finishedAt ?? item.startedAt} />
+              {/* When the check started, as the breadcrumb and the sidebar say it: one time for a check everywhere. */}
+              <RelativeTime iso={item.startedAt} />
             </div>
           </>
         )}
@@ -297,7 +307,7 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
   const status = effectiveStatus(item, live) ?? item.status;
   const controls = crawlControls(status, item);
   const [confirming, setConfirming] = useState(false);
-  const name = crawlName(item);
+  const name = siteName(item);
   const busy = kind === 'live';
   const report = kind === 'scored' || kind === 'notScored' || kind === 'noPages';
 

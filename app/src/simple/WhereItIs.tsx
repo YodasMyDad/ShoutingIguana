@@ -12,6 +12,7 @@ import { switchMode } from '../mode/switchMode';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { OneFixTag } from '../ui/PlainCheckRow';
+import { pathOrigin, shownWords } from './whereWords';
 
 /** Causes (or pages, for a check that doesn't group) shown at a time. */
 export const WHERE_STEP = 25;
@@ -40,16 +41,6 @@ const rowsQuery = (crawlId: string, checkId: string, group: CheckGroupRef | null
     ),
   staleTime: Infinity,
 });
-
-/** The site's origin, so its own addresses show as paths: "/blog/". */
-function originOf(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-}
 
 /** An address as Where it is shows it: its path on the site's own origin, else in full; the full one is read. */
 function Address({ url, origin, small = false }: { url: string; origin: string | null; small?: boolean }) {
@@ -118,14 +109,18 @@ export function WhereItIs({
     enabled: !grouped,
     placeholderData: keepPreviousData,
   });
-  const origin = originOf(item.startUrl);
+  // The first address the list holds says which of the site's origins its pages are on (www. or not).
+  const sample = useQuery({ ...rowsQuery(crawlId, check.id, null, 1), enabled: grouped });
+  const firstUrl = grouped
+    ? (sample.data?.rows[0]?.url ?? groups.data?.groups[0]?.relatedUrl)
+    : rows.data?.rows[0]?.url;
+  const origin = pathOrigin(firstUrl, item);
   const [left, right] = headings(check);
   const pages = (check.subject ?? 'page') === 'page';
   const noun = (count: number) => (pages ? (count === 1 ? 'page' : 'pages') : count === 1 ? 'address' : 'addresses');
   const causes = grouped ? (groups.data?.groupCount ?? null) : null;
   const listed = grouped ? (groups.data?.groups.length ?? 0) : (rows.data?.rows.length ?? 0);
   const all = grouped ? (causes ?? 0) : total;
-  const site = item.site ?? origin ?? '';
   const meta =
     causes === null
       ? `${formatCount(total)} ${noun(total)}`
@@ -187,10 +182,14 @@ export function WhereItIs({
       {read ? (
         <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle bg-surface-sunken px-6 py-3 text-14 text-text-secondary">
           <span>
-            {listed >= all
-              ? `${all === 1 ? 'It is' : `All ${formatCount(all)} are`} shown.`
-              : `Showing ${formatCount(listed)} of ${formatCount(all)}.`}
-            {origin ? ` Addresses are on ${site}.` : ''}
+            {shownWords({
+              grouped,
+              listed,
+              all,
+              noun,
+              origin,
+              shortened: origin !== null && (firstUrl ?? '').startsWith(origin),
+            })}
           </span>
           {listed < all && limit < WHERE_MAX ? (
             <Button

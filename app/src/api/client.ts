@@ -46,6 +46,7 @@ import type {
   IssuePage,
   StartCrawlRequest,
   ValidationResult,
+  StartUrlChoice,
 } from './types';
 
 type Signal = AbortSignal | undefined;
@@ -137,6 +138,12 @@ export const api = {
   /** Field-keyed messages; always 200 for options that parse. */
   validateCrawlOptions: (options: CrawlOptions, signal?: Signal) =>
     post<ValidationResult>('/api/crawl-options/validate', options, signal),
+  /**
+   * Where an address typed without a scheme starts: https when the site answers there, else http when only http does.
+   * Asked with `options` (the saved defaults when left out); an address with its scheme comes back as typed.
+   */
+  startUrlFor: (address: string, options?: CrawlOptions, signal?: Signal) =>
+    post<StartUrlChoice>('/api/crawl-options/start-url', options ? { address, options } : { address }, signal),
 
   // Library
   crawls: (signal?: Signal) => get<CrawlListItem[]>('/api/crawls', signal),

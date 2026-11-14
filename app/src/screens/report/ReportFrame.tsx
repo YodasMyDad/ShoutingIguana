@@ -3,6 +3,11 @@ import { useImperativeHandle, useRef, type Ref } from 'react';
 export interface ReportFrameHandle {
   /** Opens the system's print dialog on the report alone: how it's printed, and how it becomes a PDF. */
   print: () => boolean;
+  /**
+   * Round 5: the same, once the report is in the frame: for a print asked for as the screen opens (the Summary's Save
+   * as PDF), which would otherwise print the blank page before it.
+   */
+  printWhenLoaded: () => void;
 }
 
 /**
@@ -32,6 +37,17 @@ export function ReportFrame({
         view.focus();
         view.print();
         return true;
+      },
+      printWhenLoaded: () => {
+        const frame = frameRef.current;
+        if (!frame) return;
+        const go = () => {
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+        };
+        const loaded = frame.contentDocument?.URL === 'about:srcdoc' && frame.contentDocument.readyState === 'complete';
+        if (loaded) go();
+        else frame.addEventListener('load', go, { once: true });
       },
     }),
     [],

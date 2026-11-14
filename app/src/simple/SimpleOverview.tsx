@@ -78,8 +78,8 @@ function useHandOver(crawlId: string, status: CrawlStatus | null, crawling: bool
   if (crawling && watched !== crawlId) setWatched(crawlId);
   if (!crawling && watched === crawlId) {
     setWatched(null);
-    // Only a completed crawl goes on to its analysis by itself; a stopped one waits to be continued.
-    if (!analysing && status === 'completed') setHanding(crawlId);
+    // A completed crawl goes on to its analysis by itself, and so does one the user stopped (round 5, gap 2).
+    if (!analysing && (status === 'completed' || status === 'stopped')) setHanding(crawlId);
   }
   if (analysing && handing === crawlId) setHanding(null);
   const active = handing === crawlId;

@@ -116,6 +116,24 @@ describe('the Report screen', () => {
     contentWindow.mockRestore();
   });
 
+  // The closing audit's gap 14: the Summary's report card has Save as PDF, which opens the report and its print dialog.
+  it('opened to print (the Summary’s Save as PDF), prints once the report is in, and forgets it asked', async () => {
+    sidecar();
+    const print = vi.fn();
+    const contentWindow = vi
+      .spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get')
+      .mockReturnValue({ focus: vi.fn(), print } as unknown as Window);
+    const router = await open(`${REPORT}?print=true`);
+    const shown = await frame();
+    // The report reaches the frame after the screen asks: it prints then, not the blank page before it.
+    fireEvent.load(shown);
+    await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    fireEvent.load(shown);
+    expect(print).toHaveBeenCalledTimes(1);
+    contentWindow.mockRestore();
+  });
+
   it('has no report for a crawl never analysed, and works out the results from there', async () => {
     const onAnalyse = vi.fn();
     const transport = sidecar({ analysis: null, item: { analyzedAt: null, issues: null }, onAnalyse });

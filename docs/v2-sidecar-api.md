@@ -302,6 +302,7 @@ public category titles, so the UI hard-codes none.
 | --- | --- |
 | `GET /api/crawl-options/defaults` | `{ options, speedPresets }`: the user's saved defaults, or the engine's |
 | `PUT /api/crawl-options/defaults` | Saves "my defaults". The start URL, header values and proxy credentials are never saved: the UI keeps secrets in the OS credential store, with the user's consent |
+| `POST /api/crawl-options/start-url` | Round 5: `{ address, options? }` gives `{ startUrl, reason }`, 200: where an address typed without a scheme starts. An address with its scheme comes back as typed (`reason` `typed`, nothing asked). Otherwise the site's home page is asked for on https and http at once, with `options` (the saved defaults when left out: their proxy, user agent and timeout, never their extra headers), each for at most 10 s: https when it gives any HTTP status (`https`), else http when it does (`http`), else https (`noAnswer`, which the crawl then reports as not answering). Why: a site that only serves http, typed without `http://`, was crawled on https, read nothing and was blamed on robots.txt (the closing audit's gap 1). No `address` is a `bad-request` |
 | `POST /api/crawl-options/validate` | `{ errors: { <field>: [messages] } }`, 200. Field names are the JSON names of `CrawlOptions` properties; a value of the wrong type is a message for its field too. A body that isn't JSON, or a property the options don't have, is a `bad-request` (400), as on every other call. The engine gets a field-keyed `Validate`, and the CLI keeps its list of messages |
 
 The options DTO has every public `CrawlOptions` property. `extraHeaders` is an object of name to value, and
@@ -415,8 +416,14 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   engine.
 - It starts the crawl and returns 201 with the item.
 - `CrawlEngine.Start` runs off the request thread: resuming reads every URL into memory.
-- When the crawl completes, it's analysed if `analyzeWhenDone` is set. Stopped crawls aren't analysed
-  automatically.
+- When the crawl completes, it's analysed if `analyzeWhenDone` is set. Since round 5 (the closing audit's gap 2) a
+  crawl the user stops is analysed too, the same way: its status goes `stopping`, `stopped`, `analyzing`, then
+  `stopped` again with its results "so far" (a partial score), so Simple's Summary and Advanced's Overview have them
+  when it ends. Why when it stops, not on first open: an analysis costs what a completed crawl's does (the 100k crawl's
+  takes about 7 s), the user is watching the screen that turns into the results, and Home's score for the site is
+  there without opening it. Not analysed then: a crawl stopped by the sidecar shutting down (the app quitting) and a
+  crawl that failed or was interrupted; those say "No score yet" with Work out the results. While the analysis runs,
+  the crawl is live (`crawl-busy` for remove, delete and continue), as after completing; cancel it to continue at once.
 
 | Method and path | Does |
 | --- | --- |

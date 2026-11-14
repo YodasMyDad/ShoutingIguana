@@ -1,6 +1,6 @@
 // A site check that read no pages, in Simple's words (docs/v2-ui-simple.md, "Every state": Nothing could be read): how
 // the start address answered, and the next action. Advanced says the same in its words (screens/overview/emptyCrawl.ts).
-import type { UrlRow } from '../api/grids';
+import type { RobotsState, UrlRow } from '../api/grids';
 import type { CrawlListItem } from '../api/types';
 
 export type NothingReadAction = 'continue' | 'checkAgain' | 'checkThere' | 'robotsInAdvanced' | 'blockedInAdvanced';
@@ -13,11 +13,23 @@ export interface NothingRead {
   url?: string;
 }
 
+/** How the start address's own robots.txt answered: its state and status, as `/robots/file` gives them. */
+export interface StartRobots {
+  state: RobotsState | null;
+  statusCode: number | null;
+}
+
 /**
  * Why a site check read no pages. `start` is the start address's row as the check stored it: null when it has none,
- * undefined while it isn't known.
+ * undefined while it isn't known. `robots` is how its origin's robots.txt answered, for a start address robots.txt
+ * kept the check from: a file whose rules refuse it, one that answered an error, and one that didn't answer are three
+ * different sentences (slice rules, item 2), never "tells checkers to stay out" for a file that couldn't be read.
  */
-export function nothingRead(item: Pick<CrawlListItem, 'status'>, start: UrlRow | null | undefined): NothingRead {
+export function nothingRead(
+  item: Pick<CrawlListItem, 'status'>,
+  start: UrlRow | null | undefined,
+  robots?: StartRobots,
+): NothingRead {
   const unfinished = item.status === 'stopped' || item.status === 'interrupted';
   const code = start?.statusCode ?? null;
   switch (start?.outcome) {
@@ -47,10 +59,7 @@ export function nothingRead(item: Pick<CrawlListItem, 'status'>, start: UrlRow |
         action: 'blockedInAdvanced',
       };
     case 'robotsDisallowed':
-      return {
-        why: 'The site’s rules file for search engines (its “robots.txt”) tells checkers to stay out, so nothing was read. Ask the site’s owner, or check it in Advanced with the rules file ignored if the site is yours.',
-        action: 'robotsInAdvanced',
-      };
+      return robotsKeptOut(robots, unfinished);
     case 'serverError':
       return {
         why: `The site answered with a server error${code === null ? '' : ` (a ${code})`}: it was failing when it was checked. Try again later.`,
@@ -83,4 +92,36 @@ export function nothingRead(item: Pick<CrawlListItem, 'status'>, start: UrlRow |
         ? { why: 'The check was stopped before it read a page. Continue it to carry on.', action: 'continue' }
         : { why: 'The check ended before the site’s first page answered.', action: 'checkAgain' };
   }
+}
+
+/** The start address robots.txt kept the check from, by how that robots.txt answered. */
+function robotsKeptOut(robots: StartRobots | undefined, unfinished: boolean): NothingRead {
+  const again = unfinished ? 'continue' : 'checkAgain';
+  if (robots?.state === 'unreachable' && robots.statusCode !== null) {
+    const answered =
+      robots.statusCode === 429
+        ? 'answered “too many requests” (a 429)'
+        : `answered with a server error (a ${robots.statusCode})`;
+    return {
+      why: `The site’s rules file for search engines (its “robots.txt”) couldn’t be read: it ${answered}. Until it can be read, search engines and this check stay out, so nothing was read. Try again later.`,
+      action: again,
+    };
+  }
+  if (robots?.state === 'unreachable' || robots?.state === 'unanswered') {
+    return {
+      why: 'The site didn’t answer when the check asked for its rules file for search engines (its “robots.txt”), so nothing was read. Check the address and that the site is up, then try again later.',
+      action: again,
+    };
+  }
+  if (robots?.state === 'read') {
+    return {
+      why: 'The site’s rules file for search engines (its “robots.txt”) tells checkers to stay out, so nothing was read. Ask the site’s owner, or check it in Advanced with the rules file ignored if the site is yours.',
+      action: 'robotsInAdvanced',
+    };
+  }
+  // Not known yet (or no file kept): true whichever way the file answered.
+  return {
+    why: 'The site’s rules file for search engines (its “robots.txt”) kept the check out, so nothing was read.',
+    action: again,
+  };
 }

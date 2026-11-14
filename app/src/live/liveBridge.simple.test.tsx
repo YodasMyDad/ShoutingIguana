@@ -171,6 +171,32 @@ describe('the finished toast in Simple', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     stop();
   });
+
+  // Round 5, gap 2: the sidecar works out a stopped check's results; its toast then says them, so far.
+  it('says a stopped check’s results so far once they are worked out, with See the summary and Continue', async () => {
+    render(<AppToaster />);
+    const { stop, status } = setup();
+    status('running');
+    status('stopping');
+    item = { ...item, status: 'stopped', crawledUrlCount: 1234 };
+    status('stopped');
+    expect(await screen.findByText('1,234 addresses checked. You can continue it later.')).toBeInTheDocument();
+    status('analyzing');
+    item = {
+      ...item,
+      analyzedAt: '2026-10-31T14:40:00Z',
+      issues: { error: 1, warning: 1, notice: 2 },
+      score: { value: 87, band: 'good', partial: true },
+    };
+    status('stopped');
+    expect(
+      await screen.findByText('Score 87 so far: 2 problems to fix. You can continue it later.'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('The check of gardenfurnituresets.co.uk was stopped')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'See the summary' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    stop();
+  });
 });
 
 describe('a check that ends without its results, or fails, in Simple', () => {

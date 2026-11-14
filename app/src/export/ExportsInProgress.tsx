@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { FileDown } from 'lucide-react';
+import { useMode } from '../mode/mode';
 import { Icon } from '../ui/Icon';
 import { exportStore, useExports, type ExportStore } from './exportStore';
 import { showExportToast } from './exportToasts';
@@ -22,9 +23,11 @@ export function ExportsInProgress({
   collapsed: boolean;
   store?: ExportStore | undefined;
 }) {
+  const simple = useMode() === 'simple';
   const exports = useExports(store).filter((tracked) => tracked.job.status === 'running' && !tracked.lost);
   if (exports.length === 0) return null;
-  const heading = exports.length === 1 ? 'Exporting 1 file' : `Exporting ${exports.length} files`;
+  const verb = simple ? 'Saving' : 'Exporting';
+  const heading = exports.length === 1 ? `${verb} 1 file` : `${verb} ${exports.length} files`;
   return (
     <section aria-label={heading} className="flex flex-col gap-0.5">
       {collapsed ? null : <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">{heading}</h2>}
@@ -32,7 +35,7 @@ export function ExportsInProgress({
         {exports.map((tracked) => {
           const name = fileNameOf(tracked.job.path);
           const known = tracked.job.kind !== 'report' && tracked.job.rowsExpected !== null;
-          const progress = progressWords(tracked.job);
+          const progress = progressWords(tracked.job, simple);
           return (
             <li key={tracked.job.exportId}>
               <button

@@ -183,6 +183,57 @@ export const SummaryNothingRead: Story = story(
   ],
 );
 
+/** The start address as robots.txt kept the check from it, and how that robots.txt answered: one sentence each. */
+function robotsKeptOut(state: 'read' | 'unreachable', statusCode: number | null): Story {
+  return story(SUMMARY, NO_PAGES_ANALYSIS, gardenItem({ pageCount: 0, score: null, issues: null }), [
+    [
+      'POST',
+      /\/urls$/,
+      () =>
+        json({
+          columns: ['id', 'url', 'statusCode', 'outcome'],
+          rows: [
+            { id: 1, url: 'https://www.gardenfurnituresets.co.uk/', statusCode: null, outcome: 'robotsDisallowed' },
+          ],
+          offset: 0,
+          matching: 1,
+          total: 1,
+          next: null,
+          summary: { available: true, reason: null },
+          unavailable: [],
+        }),
+    ],
+    [
+      'POST',
+      /\/robots\/file$/,
+      () =>
+        json({
+          origin: 'https://www.gardenfurnituresets.co.uk',
+          isInternal: true,
+          state,
+          statusCode,
+          fetchedAt: '2026-10-31T14:13:00Z',
+          error: statusCode === null && state === 'unreachable' ? 'Connection refused' : null,
+          bytes: state === 'read' ? 24 : null,
+          blocked: 1,
+          respected: true,
+          userAgent: 'ShoutingIguana',
+          lines: [],
+          unmatched: { unreachable: 0, unknown: 0 },
+        }),
+    ],
+  ]);
+}
+
+/** Nothing read: robots.txt's rules tell checkers to stay out. */
+export const SummaryNothingReadRobotsRules: Story = robotsKeptOut('read', 200);
+
+/** Nothing read: robots.txt answered a server error, so the check stayed out until it could be read (gap 1). */
+export const SummaryNothingReadRobotsFailing: Story = robotsKeptOut('unreachable', 503);
+
+/** Nothing read: the site didn't answer when asked for robots.txt: never "stay out" (the closing audit's gap 1). */
+export const SummaryNothingReadRobotsNoAnswer: Story = robotsKeptOut('unreachable', null);
+
 /** A tiny site: 5 pages, and the coverage says it may have more that need JavaScript to reach. */
 export const SummaryTinySite: Story = story(
   SUMMARY,

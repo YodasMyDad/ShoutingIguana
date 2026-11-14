@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ChevronRight, CircleCheck, CircleDashed, FileText } from 'lucide-react';
+import { ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
 import type { Score, Severity } from '../api/types';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
@@ -355,6 +355,12 @@ export function SummaryCards({ crawlId, results }: { crawlId: string; results: P
           <Button size="sm" icon={FileText} asChild>
             <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }}>
               Open the report
+            </Link>
+          </Button>
+          {/* As summary.html: the report, then the system's print dialog on it, which is how it becomes a PDF. */}
+          <Button size="sm" variant="ghost" icon={Download} asChild>
+            <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }} search={{ print: true }}>
+              Save as PDF
             </Link>
           </Button>
         </div>
