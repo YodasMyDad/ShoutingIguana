@@ -17,8 +17,13 @@ const BANDS = { veryGood: 'Very good', good: 'Good', needsWork: 'Needs work', po
 test.use({ storageState: { cookies: [], origins: [] } });
 
 let seeded: string[] = [];
+/** The seeded crawl's row's name: its site, with its port when it has one of its own (round 5, gap 30). */
+let rowName = '';
 test.beforeAll(async () => {
   seeded = await libraryIds();
+  const crawl = await seededCrawl();
+  const port = crawl.startUrl ? new URL(crawl.startUrl).port : '';
+  rowName = port ? `${site()}:${port}` : site();
 });
 test.afterEach(async () => {
   await removeCrawlsNotIn(seeded);
@@ -47,7 +52,7 @@ test('each row of Your sites lands on itself: its score, its problems and its pa
 
   const started = Date.now();
   await page.goto('/');
-  const row = rowOf(page, site());
+  const row = rowOf(page, rowName);
   await expect(row).toBeVisible();
   test
     .info()
@@ -92,7 +97,7 @@ test('each row of Your sites lands on itself: its score, its problems and its pa
   await shoot(page, 'home-1280-light');
 
   // The row opens the check: its Summary, where What to fix counts the same problems and the pages read are the same.
-  await row.getByRole('link', { name: site(), exact: true }).click();
+  await row.getByRole('link', { name: rowName, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/crawls/${item.id}/overview$`));
   const whatToFix = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^What to fix/ });
   if (serious + worthFixing > 0) {
@@ -110,7 +115,7 @@ test('Home passes axe in the dark theme and in forced colours, and nothing scrol
 }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
-  await expect(rowOf(page, site())).toBeVisible();
+  await expect(rowOf(page, rowName)).toBeVisible();
   await expectNoViolations(page);
   await shoot(page, 'home-1280-dark');
   await page.emulateMedia({ colorScheme: 'light', forcedColors: 'active' });
@@ -118,7 +123,7 @@ test('Home passes axe in the dark theme and in forced colours, and nothing scrol
   await page.emulateMedia({ forcedColors: 'none' });
 
   await page.setViewportSize({ width: 640, height: 360 });
-  await expect(rowOf(page, site())).toBeVisible();
+  await expect(rowOf(page, rowName)).toBeVisible();
   const overflow = await page.evaluate(() => {
     const main = document.getElementById('main');
     return {
@@ -128,7 +133,7 @@ test('Home passes axe in the dark theme and in forced colours, and nothing scrol
   });
   expect(overflow).toEqual({ page: 0, main: 0 });
   await expectNoViolations(page);
-  await rowOf(page, site()).scrollIntoViewIfNeeded();
+  await rowOf(page, rowName).scrollIntoViewIfNeeded();
   await shoot(page, 'home-200pct-light');
 });
 
@@ -253,7 +258,7 @@ test('the finished toast in Advanced keeps its words', async ({ page }) => {
 
 test('the switch on Home shows its other view within 100 ms', async ({ page }) => {
   await page.goto('/');
-  await expect(rowOf(page, site())).toBeVisible();
+  await expect(rowOf(page, rowName)).toBeVisible();
   const modeSwitch = page.getByRole('banner').getByRole('radiogroup', { name: 'Mode' });
   const timings: number[] = [];
   for (let round = 0; round < 5; round++) {
