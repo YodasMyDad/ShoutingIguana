@@ -103,9 +103,12 @@ try {
       await page.getByRole('main').getByRole('textbox', { name: 'Web address' }).waitFor({ timeout: 30_000 });
       const mode = await page.getByRole('banner').getByRole('radio', { name: 'Simple' }).getAttribute('aria-checked');
       expectThat(mode === 'true', 'the app didn’t open in Simple');
+      let seen = '';
       const title = await until('the window’s title', () => {
-        const state = shellWindow('state');
-        return state.title === 'Home · Shouting Iguana' ? state.title : null;
+        seen = shellWindow('state').title;
+        return seen === 'Home · Shouting Iguana' ? seen : null;
+      }).catch(async (error) => {
+        throw new Error(`${error.message}: it is "${seen}", the page's "${await page.title()}"`);
       });
       if (options.shots) await page.screenshot({ path: path.join(options.shots, 'simple-01-first-start.png') });
       return `Simple, Home, the window "${title}"`;

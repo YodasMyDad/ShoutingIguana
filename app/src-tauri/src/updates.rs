@@ -95,7 +95,10 @@ pub async fn check(app: &AppHandle) -> Result<UpdateCheck, String> {
 /// Plain words for a check that failed: the network, or a release feed that isn't there yet.
 pub fn check_failed_words(error: &str) -> String {
     let lower = error.to_ascii_lowercase();
-    if lower.contains("404") || lower.contains("not found") {
+    if lower.contains("valid release json") {
+        // The plugin says this whichever way every endpoint failed: no answer, or no latest.json in the release.
+        "No update information could be read from GitHub. Check the internet connection, or try again later.".to_owned()
+    } else if lower.contains("404") || lower.contains("not found") {
         "No update information was found on GitHub. Try again later.".to_owned()
     } else if lower.contains("signature") || lower.contains("pubkey") || lower.contains("public key") {
         "The update information couldn't be trusted, so nothing was installed.".to_owned()
@@ -176,8 +179,14 @@ mod tests {
 
     #[test]
     fn a_failed_check_says_why_in_plain_words() {
+        // The plugin's own words when no endpoint gave a release (seen in the real shell: GitHub's latest release has
+        // no latest.json yet).
         assert_eq!(
-            check_failed_words("Could not fetch a valid release JSON from the remote: 404 Not Found"),
+            check_failed_words("Could not fetch a valid release JSON from the remote"),
+            "No update information could be read from GitHub. Check the internet connection, or try again later."
+        );
+        assert_eq!(
+            check_failed_words("HTTP 404 Not Found"),
             "No update information was found on GitHub. Try again later."
         );
         assert!(check_failed_words("error sending request for url").starts_with("Couldn't reach GitHub"));

@@ -13,6 +13,8 @@
 # one). A key message in the webview's own queue is handled as a real key press is. The window needs the thread's
 # focus for that, which a test run's window may not have: it is given here (AttachThreadInput, SetFocus).
 param([Parameter(Mandatory)][string]$Command, [Parameter(Mandatory)][int]$AppPid, [string]$Argument)
+# A window's title can hold any character ("Home · Shouting Iguana"): written as UTF-8, as the walk reads it.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Add-Type @'
 using System;
