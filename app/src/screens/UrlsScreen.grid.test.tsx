@@ -213,7 +213,7 @@ describe('the URL grid’s facets', () => {
       expect(router.state.location.search.filter).toEqual([{ column: 'statusClass', op: 'in', values: ['2xx'] }]),
     );
     const header = screen.getByRole('heading', { level: 1, name: 'URLs' }).parentElement!;
-    expect(await within(header).findByText(wholeText('2 of 3 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('2 of 3 URLs found'))).toBeVisible();
   });
 });
 
