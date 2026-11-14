@@ -87,8 +87,8 @@ Gaps 1, 2, 6, 7, 11/G5, 12, 14, 25, 29, 30, G3, "last checked", 32 (Simple doc).
   restores the list's scroll (`simple/scrollPlace.ts`); "last checked" = the start everywhere.
 - Verified: typecheck, lint, format, scripts 44, unit 3,495 (one run under the engine tests had 15 timeouts in grid,
   inspector and overview tests; pass alone), storybook 494 x 3 modes clean, sidecar, e2e 188 + 3 `simple-home`
-  failures fixed in `7f910d0` (file 5/5; full e2e NOT re-run after), new spec 30/30 at repeat 10, engine 1,434 + 269
-  + 28, 100k bench green (194 MB). Not verified: a real screen reader, the Tauri shell.
+  failures fixed in `7f910d0` (file 5/5; full e2e NOT re-run after), new spec 30/30 at repeat 10, engine 1,434,
+  269 and 28, 100k bench green (194 MB). Not verified: a real screen reader, the Tauri shell.
 - Integration notes: B's Advanced Home (`HomeScreen.tsx:62`) still adds `https://`: use `startUrlFor`; B's Delete
   and Continue right after a stop must handle the analysing ("busy") state; A also did the paused heading in
   `crawl/runningWords.ts` (B did it with `runningHeading` in `Sidebar.tsx`: keep one); A changed
