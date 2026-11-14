@@ -441,8 +441,10 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   `stopped` again with its results "so far" (a partial score), so Simple's Summary and Advanced's Overview have them
   when it ends. Why when it stops, not on first open: an analysis costs what a completed crawl's does (the 100k crawl's
   takes about 7 s), the user is watching the screen that turns into the results, and Home's score for the site is
-  there without opening it. Not analysed then: a crawl stopped by the sidecar shutting down (the app quitting) and a
-  crawl that failed or was interrupted; those say "No score yet" with Work out the results. While the analysis runs,
+  there without opening it. Not analysed then: a crawl stopped by the sidecar shutting down (the app quitting), a
+  crawl that stopped itself (it gave up on a site that stopped answering: it is there to be continued once the site is
+  back, so Continue isn't held up as busy; round 5's review, R2-6), and a crawl that failed or was interrupted; those
+  say "No score yet" with Work out the results. While the analysis runs,
   the crawl is live (`crawl-busy` for remove, delete and continue), as after completing; cancel it to continue at once.
 
 | Method and path | Does |
@@ -3591,7 +3593,8 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   `Fetching/StartAddress.ChooseAsync`: https and http asked at once, 10 s at most, https if it answers at all. Tests:
   `StartAddressTests`, `CrawlOptionsTests`.
 - **A crawl the user stops is analysed** (part A; gap 2), as a completed one is, when it was started to be analysed
-  (`CrawlManager`): it says `stopped`, `analyzing`, then `stopped` again with its results "so far". One stopped by the
+  (`CrawlManager`; only when the user asked for the stop, `LiveCrawl.StopRequested`, not when the crawl gave up on a
+  dead site: R2-6, `CrawlLifecycleTests.ACrawlThatStoppedItselfIsNotAnalysed`): it says `stopped`, `analyzing`, then `stopped` again with its results "so far". One stopped by the
   app quitting isn't. While that analysis runs, continue, remove and delete answer `crawl-busy` ("This crawl is being
   analysed…"), and `POST /analyze/cancel` frees it; the app shows the state with Cancel the analysis. Tests:
   `CrawlLifecycleTests`.
