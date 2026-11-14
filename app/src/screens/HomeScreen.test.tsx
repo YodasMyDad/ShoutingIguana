@@ -438,3 +438,31 @@ describe('Home’s crawls running now, by what each is doing (round 5 review R1-
     expect(document.getElementById('running-title')).toHaveTextContent(/^1 crawling, 1 paused$/);
   });
 });
+
+describe('Home’s card for a crawl being analysed, and its Crawled figure (round 5 review R1-4, R1-8)', () => {
+  it('shows a crawl only being analysed with the library’s figures: no queue, rate or bar', async () => {
+    const ANALYSING = site('e000000000000002', 'oakmere.example', '2026-11-02T10:00:00Z', {
+      fetchedUrlCount: 110_251,
+      crawledUrlCount: 110_251,
+      pageCount: 101_106,
+    });
+    liveStore.ingest(message('hello', { live: [], analyzing: [ANALYSING.id] }));
+    await open(() => json([ANALYSING]));
+    const card = await screen.findByRole('article', { name: 'oakmere.example' });
+    expect(within(card).getByText('110,251')).toBeVisible();
+    expect(within(card).getByText('101,106')).toBeVisible();
+    for (const word of ['Found', 'Queued', 'URLs a second']) expect(within(card).queryByText(word)).toBeNull();
+    expect(within(card).queryByText('–')).toBeNull();
+    expect(within(card).queryByRole('img', { name: /found/ })).toBeNull();
+  });
+
+  it('says what Crawled counts in Overview’s words, never a figure of the site’s own that leaves its probes out', async () => {
+    const RUNNING = site('e000000000000001', 'garden.example', '2026-11-02T10:00:00Z', { status: 'running' });
+    liveStore.ingest(message('hello', { live: [RUNNING.id] }));
+    liveStore.ingest(message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id })));
+    await open(() => json([RUNNING]));
+    const card = await screen.findByRole('article', { name: 'garden.example' });
+    expect(within(card).getByText('URLs the crawl asked for')).toBeVisible();
+    expect(within(card).queryByText(/on the site/)).toBeNull();
+  });
+});

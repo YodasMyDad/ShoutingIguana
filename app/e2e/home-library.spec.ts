@@ -82,6 +82,40 @@ test('a running crawl is a card above the library, with its live figures and its
   await shoot(page, 'home-stopped');
 });
 
+for (const size of [
+  { width: 640, height: 360 },
+  { width: 1280, height: 720 },
+]) {
+  test(`a running crawl's card keeps its height as its figures arrive, at ${size.width}x${size.height} (R1-10)`, async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await page.setViewportSize(size);
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Library' })).toBeVisible();
+    // Every height the card has from the frame it first shows, read on every frame.
+    await page.evaluate(() => {
+      const heights: number[] = [];
+      (window as unknown as { cardHeights: number[] }).cardHeights = heights;
+      const frame = () => {
+        const card = document.querySelector('main article');
+        if (card) heights.push(Math.round(card.getBoundingClientRect().height));
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    });
+    await read<{ id: string }>('/api/crawls', {
+      options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 2, maxRequestsPerSecond: 20 },
+    });
+    const crawled = page.locator('main article .si-stat__value').first();
+    await expect.poll(async () => countOf(await crawled.innerText()), { timeout: 30_000 }).toBeGreaterThan(5);
+    await page.waitForTimeout(1_000);
+    const heights = await page.evaluate(() => (window as unknown as { cardHeights: number[] }).cardHeights);
+    expect(heights.length).toBeGreaterThan(10);
+    expect([...new Set(heights)]).toEqual([heights[0]]);
+  });
+}
+
 test('a crawl’s actions are in its menu: Remove puts it back with Undo, Delete file asks first', async ({ page }) => {
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
