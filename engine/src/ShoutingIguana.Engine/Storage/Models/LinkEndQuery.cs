@@ -14,4 +14,7 @@ public sealed record LinkEndQuery
     public int Offset { get; init; }
 
     public int Limit { get; init; } = UrlGridReader.DEFAULT_LIMIT;
+
+    /// <summary>Checks the user hid (<see cref="UrlQuery.HiddenChecks"/>): a link filter on an end's issue counts leaves them out.</summary>
+    public IReadOnlyList<string> HiddenChecks { get; init; } = [];
 }

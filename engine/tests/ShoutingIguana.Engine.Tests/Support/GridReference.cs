@@ -190,6 +190,27 @@ internal sealed class GridReference
         return new GridReference(rows, issues, targets, faults);
     }
 
+    /// <summary>
+    /// The reference with some checks hidden: each URL's <c>issues</c>, <c>errors</c>, <c>warnings</c> and <c>notices</c>
+    /// worked out again without those checks' issues, each by its check's severity in the catalog. The rest is shared.
+    /// </summary>
+    public GridReference WithoutChecks(IReadOnlyCollection<string> hidden)
+    {
+        Dictionary<int, Dictionary<string, object?>> rows = [];
+        foreach (var (id, row) in Rows)
+        {
+            var copy = new Dictionary<string, object?>(row, StringComparer.Ordinal);
+            var taken = (Issues.GetValueOrDefault(id) ?? []).Where(issue => hidden.Contains(issue.Issue)).Select(issue => IssueCatalog.Find(issue.Issue)!.Severity).ToList();
+            copy["issues"] = (long)copy["issues"]! - taken.Count;
+            copy["errors"] = (long)copy["errors"]! - taken.Count(severity => severity == IssueSeverity.Error);
+            copy["warnings"] = (long)copy["warnings"]! - taken.Count(severity => severity == IssueSeverity.Warning);
+            copy["notices"] = (long)copy["notices"]! - taken.Count(severity => severity == IssueSeverity.Notice);
+            rows[id] = copy;
+        }
+
+        return new GridReference(rows, Issues.ToDictionary(), Targets.ToDictionary(), Faults.ToDictionary());
+    }
+
     /// <summary>The ids of the rows a filter set matches, in a sort's order: unknown values last, crawl order breaking ties.</summary>
     public List<int> Order(IReadOnlyList<UrlSort> sort, IEnumerable<int> ids)
     {

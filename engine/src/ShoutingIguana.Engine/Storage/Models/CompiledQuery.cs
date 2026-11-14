@@ -16,4 +16,16 @@ internal sealed record CompiledQuery(
 {
     /// <summary>Every condition: the scope's, then the filters' and the search's.</summary>
     public IEnumerable<GridPredicate> All => Scope is null ? Predicates : Predicates.Prepend(Scope);
+
+    /// <summary>
+    /// The checks hidden, as the parameters the issue counts' SQL names (<see cref="UrlQueryCompiler.Hidden"/>): the read
+    /// binds them to every statement that names them (<see cref="GridReadContext.Bind"/>). None when nothing is hidden.
+    /// </summary>
+    public IReadOnlyList<KeyValuePair<string, object>> Hidden { get; init; } = [];
+
+    /// <summary>The hidden checks' ids, each once.</summary>
+    public IReadOnlyList<string> HiddenChecks => [.. Hidden.Select(parameter => (string)parameter.Value)];
+
+    /// <summary>The hidden checks, for the keys that what's counted is kept by; empty when none are.</summary>
+    public string HiddenKey => UrlQueryCompiler.HiddenKey(Hidden);
 }
