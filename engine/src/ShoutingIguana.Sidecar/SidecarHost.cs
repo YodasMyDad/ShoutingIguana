@@ -190,6 +190,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         app.UseMiddleware<RequestGuard>();
         AppEndpoints.Map(app);
         OptionsEndpoints.Map(app);
+        ProxyEndpoints.Map(app);
         AnalysisSettingsEndpoints.Map(app);
         LibraryEndpoints.Map(app);
         CrawlEndpoints.Map(app);

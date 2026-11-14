@@ -4,6 +4,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Export.Models;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage.Models;
@@ -77,7 +78,10 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<ScoreUnit>),
         typeof(CamelCaseEnumConverter<ScoreIncompleteReason>),
         typeof(CamelCaseEnumConverter<NoScoreReason>),
-        typeof(CamelCaseEnumConverter<IssueFixer>)
+        typeof(CamelCaseEnumConverter<IssueFixer>),
+
+        // The proxy test (round 5).
+        typeof(CamelCaseEnumConverter<ProxyTestOutcome>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]
@@ -149,6 +153,9 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(bool))]
 [JsonSerializable(typeof(double))]
 [JsonSerializable(typeof(long))]
+// The proxy test (round 5).
+[JsonSerializable(typeof(ProxyTestRequest))]
+[JsonSerializable(typeof(ProxyTestResult))]
 internal sealed partial class SidecarJsonContext : JsonSerializerContext
 {
 }
