@@ -250,7 +250,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">
           {item.issues ? 'Analysed so far. ' : 'Part way. '}
-          <InlineAction label={`Continue ${crawlName(item)}`} onClick={() => void continueCrawl(item.id)}>
+          <InlineAction crawl={crawlName(item)} onClick={() => void continueCrawl(item.id)}>
             Continue
           </InlineAction>
         </span>
@@ -262,7 +262,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
           {actions.canAnalyse ? (
             <>
               .{' '}
-              <InlineAction label={`Analyse ${crawlName(item)} again`} onClick={() => void analyseCrawl(item.id)}>
+              <InlineAction crawl={crawlName(item)} onClick={() => void analyseCrawl(item.id)}>
                 Analyse again
               </InlineAction>
             </>
@@ -290,7 +290,7 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
     return (
       <span className="text-text-muted">
         Not analysed yet.{' '}
-        <InlineAction label={`Analyse ${crawlName(item)}`} onClick={() => void analyseCrawl(item.id)}>
+        <InlineAction crawl={crawlName(item)} onClick={() => void analyseCrawl(item.id)}>
           {analyseWords(item, status)}
         </InlineAction>
       </span>
@@ -299,11 +299,15 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
   return <span className="text-text-muted">Not analysed yet</span>;
 }
 
-/** A row's one action, as a link-styled button inside its sentence. */
-function InlineAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+/**
+ * A row's one action, as a link-styled button inside its sentence. Its name is its words, then the crawl's
+ * ("Analyse again, garden.example"), so it starts with what it shows, as speech input needs.
+ */
+function InlineAction({ crawl, onClick, children }: { crawl: string; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" className="si-link si-link--inline" aria-label={label} onClick={onClick}>
+    <button type="button" className="si-link si-link--inline" onClick={onClick}>
       {children}
+      <span className="sr-only">, {crawl}</span>
     </button>
   );
 }
@@ -324,7 +328,7 @@ function LocateButton({ item }: { item: CrawlListItem }) {
     });
   };
   return (
-    <InlineAction label={`Locate ${crawlName(item)}’s file`} onClick={() => void locate()}>
+    <InlineAction crawl={crawlName(item)} onClick={() => void locate()}>
       Locate the file…
     </InlineAction>
   );

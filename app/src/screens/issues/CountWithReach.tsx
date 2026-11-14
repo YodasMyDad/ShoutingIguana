@@ -22,11 +22,14 @@ export function CountWithReach({
       title={reach ? `${reach.words.charAt(0).toUpperCase()}${reach.words.slice(1)}` : undefined}
     >
       <Num value={count} />
-      <span className="sr-only"> {noun}</span>
+      <span className="sr-only">
+        {' '}
+        {noun}
+        {reach ? `, ${reach.words}` : ''}
+      </span>
       {reach ? (
-        <span className="figures text-12 text-text-muted">
-          <span aria-hidden="true">· {reach.value}</span>
-          <span className="sr-only">, {reach.words}</span>
+        <span aria-hidden="true" className="figures text-12 text-text-muted">
+          · {reach.value}
         </span>
       ) : null}
     </span>

@@ -73,7 +73,8 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
                 </span>
               ) : null}
               {analysing ? <span>Analysing: its answer is ready soon</span> : null}
-              {!analysing && progress?.phase && status === 'running' ? (
+              {/* The phase, when it says more than Running does: reading robots.txt, the sitemaps, trying again. */}
+              {!analysing && progress?.phase && progress.phase !== 'crawling' && status === 'running' ? (
                 <span>{activityWords(status, progress.phase)}</span>
               ) : null}
             </span>
@@ -109,19 +110,31 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
             size="sm"
             label="Crawled"
             value={<Num value={crawled} />}
+            context={
+              progress?.internalFetched != null ? `${formatCount(progress.internalFetched)} on the site` : 'URLs'
+            }
           />
           <StatLink
             {...linkProps(item.id, { to: 'urls', filters: [] })}
             size="sm"
             label="Found"
             value={<Num value={progress?.discovered} />}
+            context="URLs, crawled or not"
           />
-          <Stat size="sm" label="Queued" value={<Num value={progress?.queued} />} />
+          <Stat
+            size="sm"
+            label="Queued"
+            value={<Num value={progress?.queued} />}
+            context={
+              progress?.inFlight != null ? `${formatCount(progress.inFlight)} on their way` : 'Waiting their turn'
+            }
+          />
           <StatLink
             {...linkProps(item.id, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })}
             size="sm"
             label="Pages"
             value={<Num value={progress ? progress.htmlPages : item.pageCount} />}
+            context="HTML pages read"
           />
           <Stat
             size="sm"

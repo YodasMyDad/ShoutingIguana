@@ -146,12 +146,12 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
     );
     const garden = await rowOf('garden.example');
     expect(within(garden).getByText(/Analysis out of date/)).toBeVisible();
-    await userEvent.click(within(garden).getByRole('button', { name: 'Analyse garden.example again' }));
+    await userEvent.click(within(garden).getByRole('button', { name: 'Analyse again, garden.example' }));
     await userEvent.click(
-      within(await rowOf('oakmere.example')).getByRole('button', { name: 'Continue oakmere.example' }),
+      within(await rowOf('oakmere.example')).getByRole('button', { name: 'Continue, oakmere.example' }),
     );
     await userEvent.click(
-      within(await rowOf('fernleigh.example')).getByRole('button', { name: 'Analyse fernleigh.example' }),
+      within(await rowOf('fernleigh.example')).getByRole('button', { name: 'Analyse it, fernleigh.example' }),
     );
     await waitFor(() =>
       expect(sidecar.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([

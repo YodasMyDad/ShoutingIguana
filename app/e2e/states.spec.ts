@@ -363,7 +363,8 @@ test('toasts take the app’s look and focus ring, and follow the OS theme', asy
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
   await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
-  await library.getByRole('button', { name: `Remove ${site()} from the library` }).click();
+  await library.getByRole('button', { name: `Actions for ${site()}` }).click();
+  await page.getByRole('menuitem', { name: 'Remove from library' }).click();
   const toast = page.locator('[data-sonner-toast]').first();
   await expect(toast).toBeVisible();
   // Sonner fades a toast in: measure it once it's all there.
