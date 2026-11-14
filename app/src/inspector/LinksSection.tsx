@@ -6,6 +6,7 @@ import { LINK_KINDS, type LinkKind, type LinkRow } from '../api/inspector';
 import { linksAsGridPage, queryKeys } from '../api/queries';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { GridCore } from '../grid/GridCore';
+import { useColumnLayout } from '../grid/useColumnLayout';
 import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { useElementWidth } from '../grid/useElementWidth';
@@ -187,6 +188,8 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
     ],
     [words.url, urlWidth, siteOrigin, walk],
   );
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('inspector.links', columns);
 
   const chooseKind = (next: KindChoice) => {
     chooseLinkKind(direction, next);
@@ -244,7 +247,8 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
           <GridCore<LinkRow>
             key={gridKey}
             label={words.grid}
-            columns={columns}
+            columns={laid.columns}
+            columnLayout={laid.columnLayout}
             rowCount={rows.rowCount}
             getRow={rows.getRow}
             rowHeight={rowHeight}

@@ -32,6 +32,8 @@ import { copyRowUrls, rowMenuLabel, useRowMenu } from '../grid/rowMenuState';
 import { nextSort, useHeaderHandoff } from '../grid/sort';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
+import { GRID_KEY_HINTS } from '../grid/gridFoot';
+import { useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
@@ -111,7 +113,8 @@ export function LinksScreen() {
   // be asked for, so the first page never waits on this; columns the route names are checked against it first.
   const catalogue = useQuery(linkColumnsQuery());
   const shown = useMemo(() => shownLinkColumns(search.cols, catalogue.data), [search.cols, catalogue.data]);
-  const queryColumns = useMemo(() => linkQueryColumns(shown), [shown]);
+  // In one order whatever the columns' order: a column moved asks for nothing again.
+  const queryColumns = useMemo(() => [...linkQueryColumns(shown)].sort(), [shown]);
 
   const view = useMemo(
     () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '' })}`,
@@ -201,6 +204,11 @@ export function LinksScreen() {
   );
   /** All links again, in crawl order, with the columns as they are. */
   const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
+  /** The filters and the search gone: the sort and the columns stay, as "Clear the filters" says. */
+  const clearFilters = useCallback(
+    () => void navigate({ search: (previous) => ({ cols: previous.cols, sort: previous.sort }) }),
+    [navigate],
+  );
   const setColumns = (next: readonly string[]) => {
     const isDefault =
       next.length === DEFAULT_LINK_COLUMNS.length && next.every((id, index) => id === DEFAULT_LINK_COLUMNS[index]);
@@ -225,11 +233,23 @@ export function LinksScreen() {
 
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();
-  const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK);
+  const layoutWidths = useStoredColumnLayout('links').widths;
+  const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
   const columns = useMemo(
     () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling }),
     [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling],
   );
+  // The columns as the user laid them out: widths and pins kept with the preferences, the order the route's. Put
+  // back, a set that's the default's in another order takes the default's order again.
+  const laid = useColumnLayout('links', columns, {
+    order: { ids: shown, onChange: setColumns },
+    onReset: () => {
+      const set = new Set(shown);
+      if (set.size === DEFAULT_LINK_COLUMNS.length && DEFAULT_LINK_COLUMNS.every((id) => set.has(id))) {
+        setColumns(DEFAULT_LINK_COLUMNS);
+      }
+    },
+  });
 
   const summary = first?.summary;
   const summaryAvailable = summary?.available ?? true;
@@ -708,7 +728,10 @@ export function LinksScreen() {
             label="Links"
             // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
             minRows={GRID_SCREEN_MIN_ROWS}
-            columns={columns}
+            columns={laid.columns}
+            columnLayout={laid.columnLayout}
+            keyHints={GRID_KEY_HINTS}
+            rowNoun={['link', 'links']}
             rowCount={rowCount}
             getRow={rows.getRow}
             rowHeight={rowHeight}
@@ -756,7 +779,7 @@ export function LinksScreen() {
                       <FilterChips filters={filters} onChange={setFilters} words={words} />
                     ) : undefined
                   }
-                  onClear={clearView}
+                  onClear={clearFilters}
                 />
               )
             }

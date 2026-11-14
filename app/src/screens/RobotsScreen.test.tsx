@@ -962,7 +962,8 @@ describe('robots.txt in a short or narrow window', () => {
     await open(FILE);
     const grid = await screen.findByRole('grid', { name: 'Blocked URLs' });
     await screen.findByText(`${SITE}/old-private`);
-    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // The header, five rows, the frame, and the footer's key hints (--grid-foot-height).
+    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12 + 36}px`);
     const frame = grid.closest('.si-grid-screen')!;
     expect(frame).not.toBeNull();
     // The file and the blocked URLs are the frame's body; the title and what the answer meant are over it.

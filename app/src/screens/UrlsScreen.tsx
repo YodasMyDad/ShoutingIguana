@@ -21,6 +21,8 @@ import { FilterBar, FilterChips } from '../grid/FilterBar';
 import { canEditFilter, refusedFilter, tooManyFiltersWords } from '../grid/filterEditing';
 import { filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
+import { GRID_KEY_HINTS } from '../grid/gridFoot';
+import { storeColumnLayout, useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
@@ -69,6 +71,7 @@ import {
   URL_PRESETS,
   activeUrlPreset,
   colsParam,
+  presetOrderOf,
   shownUrlColumns,
   urlChooserGroups,
   urlColumnName,
@@ -123,7 +126,8 @@ export function UrlsScreen() {
   // of it to be asked for, so the first page never waits on this; columns the route names are checked against it.
   const catalogue = useQuery(urlColumnsQuery());
   const shown = useMemo(() => shownUrlColumns(search.cols, catalogue.data), [search.cols, catalogue.data]);
-  const queryColumns = useMemo(() => urlQueryColumns(shown), [shown]);
+  // In one order whatever the columns' order: a column moved asks for nothing again.
+  const queryColumns = useMemo(() => [...urlQueryColumns(shown)].sort(), [shown]);
 
   const view = useMemo(
     () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '', ends: linkEnds ?? null })}`,
@@ -247,6 +251,11 @@ export function UrlsScreen() {
   const showEveryUrl = () => void navigate({ search: (previous) => ({ ...previous, links: undefined }) });
   /** Every URL again, in crawl order, with the columns as they are. */
   const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
+  /** The filters and the search gone: the sort and the columns stay, as "Clear the filters" says. */
+  const clearFilters = useCallback(
+    () => void navigate({ search: (previous) => ({ cols: previous.cols, sort: previous.sort }) }),
+    [navigate],
+  );
   const setColumns = useCallback(
     (next: readonly string[]) =>
       void navigate({
@@ -271,11 +280,19 @@ export function UrlsScreen() {
 
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();
-  const urlWidth = urlColumnWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK);
+  const layoutWidths = useStoredColumnLayout('urls').widths;
+  const urlWidth = urlColumnWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
   const columns = useMemo(
     () => urlGridColumns(shown, catalogue.data, { siteOrigin, fullUrls, sort, urlWidth, crawling }),
     [shown, catalogue.data, siteOrigin, fullUrls, sort, urlWidth, crawling],
   );
+  // The columns as the user laid them out: their widths and pins kept with the preferences, their order the route's.
+  const columnOrder = useMemo(() => ({ ids: shown, onChange: setColumns }), [shown, setColumns]);
+  const resetOrder = useCallback(() => {
+    const preset = presetOrderOf(shown);
+    if (preset) setColumns(preset);
+  }, [shown, setColumns]);
+  const laid = useColumnLayout('urls', columns, { order: columnOrder, onReset: resetOrder });
   const onSort = (column: string, focused: boolean, extend: boolean) => {
     const next = nextMultiSort(sort, column, extend, MAX_SORTS);
     if (next.full) {
@@ -338,7 +355,9 @@ export function UrlsScreen() {
   const saved = useSavedViews({ filter: search.filter, sort: search.sort, cols: search.cols, q, links: search.links });
   const [naming, setNaming] = useState<{ kind: 'save' } | { kind: 'rename'; view: SavedView } | null>(null);
   const openSaved = useCallback(
-    (saved: SavedView) =>
+    (saved: SavedView) => {
+      // Its columns laid out as they were saved: their widths and pins (none kept: the grid's own).
+      storeColumnLayout('urls', saved.layout);
       void navigate({
         search: {
           filter: saved.search.filter,
@@ -347,7 +366,8 @@ export function UrlsScreen() {
           q: saved.search.q,
           links: saved.search.links,
         },
-      }),
+      });
+    },
     [navigate],
   );
 
@@ -792,7 +812,10 @@ export function UrlsScreen() {
             label="URLs"
             // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
             minRows={GRID_SCREEN_MIN_ROWS}
-            columns={columns}
+            columns={laid.columns}
+            columnLayout={laid.columnLayout}
+            keyHints={GRID_KEY_HINTS}
+            rowNoun={['URL', 'URLs']}
             rowCount={rowCount}
             getRow={rows.getRow}
             rowHeight={rowHeight}
@@ -831,7 +854,7 @@ export function UrlsScreen() {
                       <FilterChips filters={filters} onChange={setFilters} words={words} relatedUrl={relatedUrl} />
                     ) : undefined
                   }
-                  onClear={clearView}
+                  onClear={clearFilters}
                 />
               )
             }

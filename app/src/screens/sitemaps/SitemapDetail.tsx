@@ -14,6 +14,8 @@ import { notifyResult } from '../../feedback/notify';
 import { useAnnounceResults } from '../../feedback/useAnnounceResults';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { GridCore, type GridCopyResult } from '../../grid/GridCore';
+import { useColumnLayout } from '../../grid/useColumnLayout';
+import { GRID_KEY_HINTS } from '../../grid/gridFoot';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import { searchCommand } from '../../grid/searchCommand';
@@ -156,6 +158,8 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
       };
     });
   }, [sort, sortable, crawl.crawling]);
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('sitemaps.urls', columns);
 
   /** This view's place: navigating within it names it, so the sitemap stays in the path. */
   const here = { crawl: crawlId, sitemap: sitemapId === null ? undefined : String(sitemapId) };
@@ -477,7 +481,10 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
             // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
             minRows={GRID_SCREEN_MIN_ROWS}
             label={sitemap ? `URLs listed by ${sitemap.url}` : 'URLs this sitemap lists'}
-            columns={columns}
+            columns={laid.columns}
+            columnLayout={laid.columnLayout}
+            keyHints={GRID_KEY_HINTS}
+            rowNoun={['URL', 'URLs']}
             rowCount={enabled ? rows.rowCount : null}
             getRow={rows.getRow}
             // Under a sort, a running crawl's new URLs come in among these: the cursor stays on its URL.

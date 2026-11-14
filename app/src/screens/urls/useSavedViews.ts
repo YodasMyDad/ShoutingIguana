@@ -8,6 +8,7 @@ import {
   jsonBytes,
   newViewId,
   saveProblem,
+  viewLayoutOf,
   viewNameProblem,
   viewSearchOf,
   type SavedView,
@@ -18,10 +19,19 @@ import { getSettings, updateSettings, useSettings } from '../../settings/setting
 /** The URL grid's saved views, the one the route is on, and what can be done with them. */
 export function useSavedViews(search: SavedViewSearch) {
   const views = useSettings((settings) => settings.savedViews);
+  const layout = useSettings((settings) => settings.gridColumns.urls);
   const current = currentSavedView(views, 'urls', viewSearchOf(search));
-  const problem = saveProblem(views, search);
+  const problem = saveProblem(views, search, layout);
   const save = (name: string) => {
-    const view: SavedView = { id: newViewId(getSettings().savedViews), grid: 'urls', name: name.trim(), search };
+    // The columns' widths and pins go with it: opening it lays them out so again.
+    const kept = viewLayoutOf(getSettings().gridColumns.urls);
+    const view: SavedView = {
+      id: newViewId(getSettings().savedViews),
+      grid: 'urls',
+      name: name.trim(),
+      search,
+      ...(kept ? { layout: kept } : {}),
+    };
     updateSettings((settings) => ({ savedViews: [...settings.savedViews, { ...view, search: viewSearchOf(search) }] }));
     return view;
   };

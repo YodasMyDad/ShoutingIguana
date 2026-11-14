@@ -6,6 +6,7 @@ import type { Check } from '../../api/types';
 import { affectedWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
+import { useColumnLayout } from '../../grid/useColumnLayout';
 import { useRowMenu } from '../../grid/rowMenuState';
 import { useGridMetrics } from '../../grid/metrics';
 import { nextSort, useHeaderHandoff } from '../../grid/sort';
@@ -98,6 +99,8 @@ export function IssueRowsGrid({
       },
     ];
   }, [sort, urlWidth, siteOrigin]);
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('issues.rows', columns);
 
   const shown = rows.rowCount ?? Math.min(Math.max(total, 1), 8);
   const height = Math.max(shown, 1) * rowHeight + headerHeight + 2;
@@ -109,7 +112,8 @@ export function IssueRowsGrid({
       <GridCore<IssueRow>
         key={JSON.stringify(queryKey)}
         label={`${check.title}: ${affectedWords(check).named}`}
-        columns={columns}
+        columns={laid.columns}
+        columnLayout={laid.columnLayout}
         rowCount={rows.rowCount}
         getRow={rows.getRow}
         rowHeight={rowHeight}

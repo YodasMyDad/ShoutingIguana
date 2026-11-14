@@ -318,14 +318,16 @@ export function sharedUrlWidth(
   shown: readonly string[],
   catalogue: readonly LinkColumn[] | undefined,
   available: number | null,
+  /** The widths the user gave columns (the grid's column layout): the room they take is theirs. */
+  widths: Readonly<Record<string, number>> = {},
 ): number | undefined {
   if (available === null) return undefined;
   const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
-  const urls = shown.filter((id) => endColumn(id)?.column === 'url');
+  const urls = shown.filter((id) => endColumn(id)?.column === 'url' && widths[id] === undefined);
   if (urls.length === 0) return undefined;
   const others = shown
     .filter((id) => !urls.includes(id))
-    .reduce((sum, id) => sum + widthOf(id, byId.get(id)?.type ?? 'text'), 0);
+    .reduce((sum, id) => sum + (widths[id] ?? widthOf(id, byId.get(id)?.type ?? 'text')), 0);
   return Math.max(URL_MIN_WIDTH, Math.floor((available - others) / urls.length));
 }
 

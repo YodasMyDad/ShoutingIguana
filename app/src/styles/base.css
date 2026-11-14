@@ -312,6 +312,114 @@
     grid-column: 1 / -1;
   }
 
+  /*
+    A column pinned to the grid's left edge (GridCore's column layout): it sticks while the grid scrolls sideways, on
+    the row's own colour, so what scrolls under it never shows through; the last pinned column draws the edge.
+  */
+  .si-grid-cell--pinned {
+    position: sticky;
+    z-index: 1;
+    background: var(--color-surface);
+  }
+
+  .si-grid-row:not(.si-grid-head):not([data-selected]):hover > .si-grid-cell--pinned {
+    background: var(--color-surface-hover);
+  }
+
+  .si-grid-row[data-selected] > .si-grid-cell--pinned {
+    background: var(--color-surface-selected);
+  }
+
+  .si-grid-cell--pin-edge {
+    box-shadow: inset calc(var(--hairline) * -1) 0 0 var(--color-border);
+  }
+
+  /* A header's cell holds its right edge's handle. */
+  .si-grid-head > .si-grid-cell {
+    position: relative;
+  }
+
+  .si-grid-head > .si-grid-cell--pinned {
+    position: sticky;
+    z-index: 2;
+  }
+
+  /*
+    A column's right edge, for the pointer: a strip over the edge that resizes the column when dragged. It shows as a
+    rule while the pointer is over it, so the edge can be found.
+  */
+  .si-grid-resize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--space-2);
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .si-grid-resize::after {
+    position: absolute;
+    top: var(--space-1-5);
+    right: 0;
+    bottom: var(--space-1-5);
+    width: var(--hairline);
+    background: var(--color-border-control);
+    content: '';
+    opacity: 0;
+  }
+
+  .si-grid-head > .si-grid-cell:hover .si-grid-resize::after,
+  .si-grid-resize:active::after {
+    opacity: 1;
+  }
+
+  /* Where a column dragged by its header would go: a rule in the accent colour between two headers. */
+  .si-grid-drop {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 3;
+    width: var(--rule-width);
+    margin-left: calc(var(--rule-width) / -2);
+    background: var(--color-accent);
+    pointer-events: none;
+  }
+
+  /* A grid's footer: its key hints, then where the cursor is (docs/v2-ui-design.md, from direction A). */
+  .si-grid-foot {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-4);
+    height: var(--grid-foot-height);
+    padding-inline: var(--space-4);
+    overflow: hidden;
+    border-top: var(--hairline) solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    white-space: nowrap;
+    container-type: inline-size;
+  }
+
+  .si-grid-foot__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+  }
+
+  .si-grid-foot__end {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Short of room the hints give way first: the place stays. */
+  @container (max-width: 560px) {
+    .si-grid-foot__hint {
+      display: none;
+    }
+  }
+
   /* In a tree, a group's rows sit under its title, past its chevron. */
   .si-grid-row[data-level='2'] > .si-grid-cell:first-child {
     padding-inline-start: calc(var(--grid-cell-x) + var(--tree-indent));
@@ -476,6 +584,15 @@
     .si-scroll-thumb {
       forced-color-adjust: none;
       background: Highlight;
+    }
+
+    .si-grid-drop {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
+
+    .si-grid-cell--pin-edge {
+      border-right: var(--hairline) solid CanvasText;
     }
 
     .si-scroll-thumb:hover {

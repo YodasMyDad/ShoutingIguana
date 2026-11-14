@@ -95,7 +95,8 @@ describe('the URL grid in a short window', () => {
     const filter = JSON.stringify([{ column: 'statusClass', op: 'in', values: ['2xx'] }]);
     await open(`${URLS}?filter=${encodeURIComponent(filter)}`);
     const table = await screen.findByRole('grid', { name: 'URLs' });
-    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // The header, five rows, the frame, and the footer's key hints (--grid-foot-height).
+    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12 + 36}px`);
     const frame = table.closest('.si-grid-screen')!;
     expect(frame).not.toBeNull();
     expect(table.closest('.si-grid-screen__body')?.parentElement).toBe(frame);
