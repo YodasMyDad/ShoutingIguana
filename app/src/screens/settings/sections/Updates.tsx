@@ -23,7 +23,7 @@ export function Section() {
         <Fact label="This version" className="font-mono text-12">
           {shell ? shell.appVersion : 'Running in a browser'}
         </Fact>
-        <Fact label="Engine" className="font-mono text-12">
+        <Fact label={simple ? 'Site checker' : 'Engine'} className="font-mono text-12">
           {health.data?.engineVersion ?? (health.error ? 'Not connected' : '…')}
         </Fact>
       </Facts>

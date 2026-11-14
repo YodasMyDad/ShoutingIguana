@@ -58,7 +58,7 @@ describe('Settings, in each mode', () => {
     const note = screen.getByText(/are Advanced settings/);
     // Only the sections there are, Analysis among them as the checks' limits.
     expect(note).toHaveTextContent(
-      'Crawl defaults, the checks’ limits, shortcuts and diagnostics are Advanced settings.',
+      'Settings for new site checks, the checks’ limits, shortcuts and diagnostics are Advanced settings.',
     );
     fireEvent.click(within(note).getByRole('button', { name: 'Show them in Advanced' }));
     expect(getSettings().mode).toBe('advanced');
@@ -94,7 +94,7 @@ describe('Settings, General', () => {
     await open('/settings', 'simple');
     const mode = await screen.findByRole('group', { name: 'Mode' });
     const advanced = within(mode).getByRole('radio', { name: 'Advanced' });
-    expect(advanced).toHaveAccessibleDescription('Every URL, link, filter and setting, in technical terms.');
+    expect(advanced).toHaveAccessibleDescription('Every address, link, filter and setting, in technical terms.');
     fireEvent.click(advanced);
     expect(getSettings().mode).toBe('advanced');
     expect(

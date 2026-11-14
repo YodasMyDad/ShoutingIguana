@@ -64,13 +64,13 @@ export function fileNameOf(path: string): string {
   return name && name.length > 0 ? name : path;
 }
 
-/** The rows an export of each kind writes, in words: "URLs", "links", "pages". */
-export function rowNoun(kind: ExportKind): { one: string; many: string } {
+/** The rows an export of each kind writes, in words: "URLs", "links", "pages". Simple says "addresses". */
+export function rowNoun(kind: ExportKind, simple = false): { one: string; many: string } {
   switch (kind) {
     case 'urls':
     case 'sitemapUrls':
     case 'robotsBlocked':
-      return { one: 'URL', many: 'URLs' };
+      return simple ? { one: 'address', many: 'addresses' } : { one: 'URL', many: 'URLs' };
     case 'links':
       return { one: 'link', many: 'links' };
     case 'issueRows':
@@ -87,18 +87,18 @@ export function rowNoun(kind: ExportKind): { one: string; many: string } {
 }
 
 /** What's being exported, when the screen that started it didn't say (an export the engine told of after a reload). */
-export function kindTitle(kind: ExportKind): string {
+export function kindTitle(kind: ExportKind, simple = false): string {
   switch (kind) {
     case 'urls':
-      return 'URLs';
+      return simple ? 'Addresses' : 'URLs';
     case 'links':
       return 'Links';
     case 'sitemapUrls':
-      return 'A sitemap’s URLs';
+      return simple ? 'A sitemap’s addresses' : 'A sitemap’s URLs';
     case 'robotsBlocked':
-      return 'URLs blocked by robots.txt';
+      return simple ? 'Addresses blocked by robots.txt' : 'URLs blocked by robots.txt';
     case 'issueRows':
-      return 'A check’s pages';
+      return simple ? 'A problem’s pages' : 'A check’s pages';
     case 'check':
       return 'A check';
     case 'workbook':
@@ -150,8 +150,8 @@ export function exportPhase(job: ExportJob, lost = false): ExportPhase {
 }
 
 /** "41,000 of 112,590 URLs": how far it has got. Null while nothing can be said in numbers. */
-export function progressWords(job: ExportJob): string | null {
-  const noun = rowNoun(job.kind);
+export function progressWords(job: ExportJob, simple = false): string | null {
+  const noun = rowNoun(job.kind, simple);
   if (job.kind === 'report') return null;
   if (job.rowsExpected === null)
     return job.rowsWritten > 0 ? formatCountOf(job.rowsWritten, noun.one, noun.many) : null;
@@ -167,12 +167,12 @@ export function engineMilliseconds(job: ExportJob): number | null {
 }
 
 /** The line under a running export's name. */
-export function runningLine(job: ExportJob): string {
+export function runningLine(job: ExportJob, simple = false): string {
   switch (exportPhase(job)) {
     case 'starting':
       return job.kind === 'report' ? 'Writing the report…' : 'Starting…';
     case 'counting':
-      return `Counting the ${rowNoun(job.kind).many}…`;
+      return `Counting the ${rowNoun(job.kind, simple).many}…`;
     default:
       return job.kind === 'report' ? 'Writing the report…' : 'Writing…';
   }
@@ -182,20 +182,29 @@ export function runningLine(job: ExportJob): string {
  * What a finished export says beyond "Saved": its rows and the engine's time, then anything the file holds that isn't
  * what the grid shows: cells cut to what a spreadsheet takes, columns that had no values, a crawl that was running.
  */
-export function doneLines(job: ExportJob, columnTitle: (id: string) => string = (id) => id): string[] {
+export function doneLines(
+  job: ExportJob,
+  columnTitle: (id: string) => string = (id) => id,
+  /** Simple's words (the closing audit's gap 7). */
+  simple = false,
+): string[] {
   const result = job.result;
   const lines: string[] = [];
   const took = engineMilliseconds(job);
   const time = took === null ? '' : ` in ${formatMilliseconds(took)}`;
   if (result && job.kind !== 'report') {
-    const noun = rowNoun(job.kind);
+    const noun = rowNoun(job.kind, simple);
     const sheets = result.sheets > 1 ? `, on ${formatCount(result.sheets)} sheets` : '';
     lines.push(`${formatCountOf(result.rows, noun.one, noun.many)}${sheets}${time}.`);
   } else if (time) {
     lines.push(`Written${time}.`);
   }
   if (result?.crawlWasRunning) {
-    lines.push('The crawl was running: the file holds what it had when the export began.');
+    lines.push(
+      simple
+        ? 'The check was still running: the file holds what it had read when the saving began.'
+        : 'The crawl was running: the file holds what it had when the export began.',
+    );
   }
   if (result && result.truncatedCells > 0) {
     const limit = job.format === 'csv' ? '32,758' : '32,767';
@@ -205,7 +214,11 @@ export function doneLines(job: ExportJob, columnTitle: (id: string) => string = 
   if (result && result.unavailableColumns.length > 0) {
     const titles = formatList(result.unavailableColumns.map(columnTitle));
     const are = result.unavailableColumns.length === 1 ? 'is' : 'are';
-    lines.push(`${titles} ${are} empty: they need a current analysis of the crawl.`);
+    lines.push(
+      simple
+        ? `${titles} ${are} empty: they need the check’s results worked out again.`
+        : `${titles} ${are} empty: they need a current analysis of the crawl.`,
+    );
   }
   return lines;
 }
@@ -281,8 +294,9 @@ export function exportProblemWords(
       };
     case 'export-crawl-changed':
       return {
-        sentence:
-          'The crawl changed while it was being exported (it was analysed again, continued or finished), so nothing was saved. Export it again to have it as it is now.',
+        sentence: context.simple
+          ? 'The site check changed while it was being saved (its results were worked out again, or it was continued or finished), so nothing was saved. Save it again to have it as it is now.'
+          : 'The crawl changed while it was being exported (it was analysed again, continued or finished), so nothing was saved. Export it again to have it as it is now.',
         remedies: ['exportAgain'],
       };
     case 'export-too-large':
@@ -293,10 +307,21 @@ export function exportProblemWords(
       };
     case 'not-analyzed':
       return {
-        sentence: `The crawl’s results haven’t been worked out, so there’s nothing to export yet. ${capitalise(results)} first.`,
+        sentence: context.simple
+          ? 'The check’s results haven’t been worked out, so there’s nothing to save yet. Work out the results first.'
+          : `The crawl’s results haven’t been worked out, so there’s nothing to export yet. ${capitalise(results)} first.`,
         remedies: ['analyse'],
       };
     case 'needs-analysis':
+      if (context.simple) {
+        return {
+          sentence:
+            problem.reason === 'crawling'
+              ? 'Some of this comes from the check’s results, which are worked out once the check ends. Save it then.'
+              : 'Some of this comes from the check’s results, which haven’t been worked out. Work out the results, then save it again.',
+          remedies: problem.reason === 'crawling' ? [] : ['analyse'],
+        };
+      }
       return {
         sentence:
           problem.reason === 'crawling'
@@ -306,8 +331,9 @@ export function exportProblemWords(
       };
     case 'check-skipped':
       return {
-        sentence:
-          'The last analysis didn’t run this check, so it has no pages to export. Analyse the crawl again to run it.',
+        sentence: context.simple
+          ? 'This check couldn’t run when the results were last worked out, so it has no pages to save. Work out the results again to run it.'
+          : 'The last analysis didn’t run this check, so it has no pages to export. Analyse the crawl again to run it.',
         remedies: ['analyse'],
       };
     case 'check-not-found':
@@ -320,16 +346,27 @@ export function exportProblemWords(
     case 'origin-not-found':
       return { sentence: 'The crawl has no robots.txt for that origin, so there’s nothing to export.', remedies: [] };
     case 'crawl-not-found':
-      return { sentence: 'The crawl isn’t in the library any more, so it can’t be exported.', remedies: [] };
+      return {
+        sentence: context.simple
+          ? 'The site check isn’t in Your sites any more, so it can’t be saved.'
+          : 'The crawl isn’t in the library any more, so it can’t be exported.',
+        remedies: [],
+      };
     case 'invalid-query':
       if (problem.errors?.sort) {
         return {
-          sentence:
-            'While the crawl runs, an export is in crawl order or by URL: rows sorted by anything the crawl changes would move as it’s written.',
+          sentence: context.simple
+            ? 'While the check runs, the file is saved in the order the check read the addresses: any other order would move as it’s written.'
+            : 'While the crawl runs, an export is in crawl order or by URL: rows sorted by anything the crawl changes would move as it’s written.',
           remedies: ['crawlOrder'],
         };
       }
-      return { sentence: `The engine won’t export this view as it is: ${problem.title}`, remedies: [] };
+      return {
+        sentence: context.simple
+          ? `This can’t be saved as it is: ${problem.title}`
+          : `The engine won’t export this view as it is: ${problem.title}`,
+        remedies: [],
+      };
     case 'invalid-export':
       if (problem.errors?.path) {
         if (context.path && isNetworkPath(context.path)) {
@@ -347,7 +384,12 @@ export function exportProblemWords(
           remedies: ['chooseAnother'],
         };
       }
-      return { sentence: `The engine won’t make this export: ${problem.title}`, remedies: [] };
+      return {
+        sentence: context.simple
+          ? `This can’t be saved as it is: ${problem.title}`
+          : `The engine won’t make this export: ${problem.title}`,
+        remedies: [],
+      };
     default:
       return { sentence: problem.title, remedies: [] };
   }
@@ -369,13 +411,13 @@ export function remedyTitle(remedy: ExportRemedy, simple = false): string {
     case 'tryAgain':
       return 'Try again';
     case 'exportAgain':
-      return 'Export again';
+      return simple ? 'Save again' : 'Export again';
     case 'asCsv':
-      return 'Export as CSV…';
+      return simple ? 'Save as CSV…' : 'Export as CSV…';
     case 'analyse':
       return simple ? 'Work out the results' : 'Analyse the crawl';
     case 'crawlOrder':
-      return 'Export in crawl order';
+      return simple ? 'Save in the order read' : 'Export in crawl order';
   }
 }
 

@@ -292,7 +292,9 @@ export function PaletteBody({
         aria-controls={`${id}-list`}
         aria-autocomplete="list"
         aria-activedescendant={activeId}
-        aria-label="Search commands, checks and crawls"
+        aria-label={
+          appMode === 'simple' ? 'Search commands, checks and your sites' : 'Search commands, checks and crawls'
+        }
         placeholder="Search or run a command…"
         autoComplete="off"
         spellCheck={false}

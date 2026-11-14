@@ -44,6 +44,11 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   const crawledHere = new Set<string>();
   /** Crawls whose crawl completed and whose analysis then began: their toast waits for the analysis. */
   const analysingAfterCrawl = new Set<string>();
+  /**
+   * Crawls stopped here, whose results "so far" the sidecar now works out (round 5, gap 2): their stopped toast, shown at
+   * once, is said again with those results when the analysis ends.
+   */
+  const stoppedHere = new Set<string>();
   /** A completed crawl, waiting a moment to see whether an analysis follows. */
   const finishing = new Map<string, ReturnType<typeof setTimeout>>();
   /** When each running analysis's crawl was last analysed: an analysis that ends with it unchanged was cancelled. */
@@ -265,8 +270,15 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     if (status === 'stopped') {
       const crawled = crawledHere.delete(crawlId);
       analysingAfterCrawl.delete(crawlId);
-      if (crawled && previous === 'stopping') void toastStopped(crawlId);
+      if (crawled && previous === 'stopping') {
+        stoppedHere.add(crawlId);
+        void toastStopped(crawlId, false);
+      } else if (previous === 'analyzing' && stoppedHere.delete(crawlId)) {
+        void toastStopped(crawlId, true);
+      }
+      return;
     }
+    stoppedHere.delete(crawlId);
   }
 
   async function toastFinished(crawlId: string, crawled: boolean) {
@@ -343,23 +355,48 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     }
   }
 
-  async function toastStopped(crawlId: string) {
+  /**
+   * A crawl stopped here: at once, what it read and Continue; then, `analysed`, the same toast again with its results
+   * so far, once the sidecar has worked them out, and the way to them.
+   */
+  async function toastStopped(crawlId: string, analysed: boolean) {
     const item = await itemOf(crawlId);
     const name = crawlName(item);
     const continueAction = { label: 'Continue', onClick: () => void continueCrawl(crawlId) };
+    const results = analysed && item?.analyzedAt ? item : null;
     if (getMode() === 'simple') {
       const words = simpleStoppedWords(name, item ? (crawledUrls(item) ?? 0) : null);
+      const sofar = results
+        ? simpleFinishedWords({
+            site: name,
+            crawled: true,
+            score: results.score,
+            problems: await problemsOf(crawlId, results),
+            pageCount: results.pageCount,
+          }).description
+        : null;
       notifyResult(words.title, {
         id: crawlToast(crawlId, 'stopped'),
-        description: words.description,
+        description: sofar ? `${sofar}. You can continue it later.` : words.description,
         action: continueAction,
+        ...(results ? { secondary: { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') } } : {}),
       });
       return;
     }
+    const checks = results?.issues ? results.issues.error + results.issues.warning + results.issues.notice : null;
+    const found =
+      checks === null
+        ? ''
+        : checks === 0
+          ? ', no checks found issues'
+          : `, ${formatCountOf(checks, 'check')} found issues`;
     notifyResult('Crawl stopped', {
       id: crawlToast(crawlId, 'stopped'),
-      description: item ? `${name}: ${formatCountOf(crawledUrls(item) ?? 0, 'URL')}. You can continue it later.` : name,
+      description: item
+        ? `${name}: ${formatCountOf(crawledUrls(item) ?? 0, 'URL')}${found}. You can continue it later.`
+        : name,
       action: continueAction,
+      ...(results ? { secondary: { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') } } : {}),
     });
   }
 

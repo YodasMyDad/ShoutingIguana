@@ -288,7 +288,9 @@ export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportCh
     {
       id: 'workbook',
       title: 'Spreadsheet of everything',
-      description: 'A summary sheet, then every check that found something on a sheet of its own, with every URL',
+      description: simple
+        ? 'A summary sheet, then every check that found something on a sheet of its own, with every address'
+        : 'A summary sheet, then every check that found something on a sheet of its own, with every URL',
       formats: ['xlsx'],
       // The design names it beside the report: "… report.html" and "… report.xlsx" (docs/v2-ui-simple.md).
       fileView: 'report',

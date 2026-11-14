@@ -8,7 +8,7 @@ import { Tooltip } from '../ui/Tooltip';
 /** What each mode is, read with its segment. */
 const MODE_HINTS: Record<Mode, string> = {
   simple: 'A score, what to fix and a report, in plain words',
-  advanced: 'Every URL, link, filter and setting, in technical terms',
+  advanced: 'Every address, link, filter and setting, in technical terms',
 };
 
 /**

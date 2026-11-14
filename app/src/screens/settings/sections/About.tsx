@@ -17,12 +17,19 @@ export function Section() {
   const shell = useShellInfo();
   const mode = useMode();
   return (
-    <SectionPage title="About" purpose="Shouting Iguana: an SEO crawler and site auditor.">
+    <SectionPage
+      title="About"
+      purpose={
+        mode === 'simple'
+          ? 'Shouting Iguana: it reads your site as search engines do, and says what to fix in plain words.'
+          : 'Shouting Iguana: an SEO crawler and site auditor.'
+      }
+    >
       <Facts auto className="max-w-(--content-max)">
         <Fact label="App" className="font-mono text-12">
           {shell ? `${shell.appVersion}${shell.debug ? ' (debug build)' : ''}` : 'Running in a browser'}
         </Fact>
-        <Fact label="Engine" className="font-mono text-12">
+        <Fact label={mode === 'simple' ? 'Site checker' : 'Engine'} className="font-mono text-12">
           {health.data ? health.data.engineVersion : health.error ? 'Not connected' : '…'}
         </Fact>
         <Fact label="Data folder" className="font-mono text-12 break-all">
