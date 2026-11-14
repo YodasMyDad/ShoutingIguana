@@ -11,6 +11,10 @@ import { fakeSidecar, json, problem, testCrawlItem, type FakeRoute } from '../..
 import { message } from '../../test/overviewSidecar';
 import { ownSidecar, ScreenApp } from '../../test/ScreenStory';
 import { TABLE_STUBBED } from '../tableStubbed';
+import { createMemoryHistory } from '@tanstack/react-router';
+import { App } from '../../app/App';
+import { createQueryClient } from '../../app/queryClient';
+import { createAppRouter } from '../../app/router';
 
 const PRESETS = [
   { id: 'polite', concurrency: 2, maxRequestsPerSecond: 2 },
@@ -299,3 +303,53 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple, on a first start', () => {
     expect(getMode()).toBe('advanced');
   });
 });
+
+describe.skipIf(TABLE_STUBBED)(
+  'Home in Simple, Delete file… while Your sites changes under it (round 5 review R1-1)',
+  () => {
+    it('deletes the check the confirmation was opened for, when a newer check of its site takes its row', async () => {
+      const OLD = testCrawlItem({ ...garden, id: 'a000000000000002', fileName: 'garden-old.sicrawl' });
+      let library: CrawlListItem[] = [OLD];
+      const deleted: string[] = [];
+      ownSidecar([
+        ['GET', /^\/api\/crawls$/, () => json(library)],
+        [
+          'POST',
+          /\/delete-file$/,
+          (request) => {
+            deleted.push(request.path);
+            return new Response(null, { status: 204 });
+          },
+        ],
+        ...routes([]),
+      ]);
+      replaceSettings({ mode: 'simple' });
+      const queryClient = createQueryClient();
+      const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: ['/'] }));
+      render(<App router={router} queryClient={queryClient} />);
+      await act(() => router.load());
+      await userEvent.click(
+        within(await rowOf('gardenfurnituresets.co.uk')).getByRole('button', { name: /^More for/ }),
+      );
+      await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete file…' }));
+      expect(await screen.findByRole('dialog')).toHaveTextContent('garden-old.sicrawl');
+      // A newer check of the site arrives (opened, or one that finished) while the confirmation is open.
+      const NEW = testCrawlItem({
+        ...garden,
+        id: 'e000000000000001',
+        fileName: 'garden-new.sicrawl',
+        startedAt: '2026-11-02T10:00:00Z',
+      });
+      library = [OLD, NEW];
+      await act(() => queryClient.invalidateQueries());
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: /1 earlier check/, hidden: true })).toBeInTheDocument(),
+      );
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveTextContent('garden-old.sicrawl');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
+      await vi.waitFor(() => expect(deleted).toHaveLength(1));
+      expect(deleted).toEqual(['/api/crawls/a000000000000002/delete-file']);
+    });
+  },
+);

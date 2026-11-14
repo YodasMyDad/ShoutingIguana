@@ -316,6 +316,9 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
   const controls = crawlControls(status, item);
   const [confirming, setConfirming] = useState(false);
   const name = siteName(item);
+  // The check the confirmation was opened for: the row can show a newer check of its site while it's open, and Delete
+  // file deletes what the dialog named.
+  const [target, setTarget] = useState({ item, name });
   const busy = kind === 'live';
   const report = kind === 'scored' || kind === 'notScored' || kind === 'noPages';
 
@@ -387,24 +390,32 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
         <MenuItem icon={X} disabled={busy} onSelect={() => void remove()}>
           Remove from Your sites
         </MenuItem>
-        <MenuItem icon={Trash2} destructive disabled={busy || kind === 'missing'} onSelect={() => setConfirming(true)}>
+        <MenuItem
+          icon={Trash2}
+          destructive
+          disabled={busy || kind === 'missing'}
+          onSelect={() => {
+            setTarget({ item, name });
+            setConfirming(true);
+          }}
+        >
           Delete file…
         </MenuItem>
       </DropdownMenu>
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Delete ${name}’s site check file?`}
-        description={`The file ${item.fileName} is deleted from the disk, with everything this check found. This can’t be undone.`}
+        title={`Delete ${target.name}’s site check file?`}
+        description={`The file ${target.item.fileName} is deleted from the disk, with everything this check found. This can’t be undone.`}
         confirmLabel="Delete file"
         destructive
         errorTitle="The file couldn’t be deleted."
         onConfirm={async () => {
           try {
-            await api.deleteCrawlFile(item.id);
+            await api.deleteCrawlFile(target.item.id);
           } catch (error) {
             // Being worked out since it was stopped: said with Stop working them out, and the confirmation closes.
-            if (await saidWhileAnalysing(item.id, 'delete', error)) return;
+            if (await saidWhileAnalysing(target.item.id, 'delete', error)) return;
             throw error;
           }
           void refreshLibrary();

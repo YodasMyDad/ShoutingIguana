@@ -340,3 +340,41 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
     );
   });
 });
+
+describe('Home’s Delete file…, while the library changes under it (round 5 review R1-1)', () => {
+  it('deletes the crawl the confirmation was opened for, when another crawl of its site becomes its latest', async () => {
+    const OLD = site('a000000000000002', 'garden.example', '2026-11-01T10:00:00Z');
+    let running = site('e000000000000001', 'garden.example', '2026-11-02T10:00:00Z', { status: 'running' });
+    liveStore.ingest(message('hello', { live: [running.id] }));
+    const queryClient = createQueryClient();
+    const sidecar = fakeSidecar([
+      ['GET', /^\/api\/crawls$/, () => json([OLD, running])],
+      ['POST', /\/delete-file$/, () => new Response(null, { status: 204 })],
+      ...standardRoutes(),
+    ]);
+    setTransport(sidecar);
+    const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: ['/'] }));
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    const library = await screen.findByRole('region', { name: 'Library' });
+    await userEvent.click(await within(library).findByRole('button', { name: 'Actions for garden.example' }));
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete file…' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(OLD.fileName);
+    // The running crawl of the same site finishes while the confirmation is open: it becomes the site's latest.
+    running = { ...running, status: 'completed', finishedAt: '2026-11-02T11:00:00Z' };
+    act(() => liveStore.ingest(message('hello', { live: [] })));
+    await act(() => queryClient.invalidateQueries());
+    await waitFor(() => expect(screen.queryByRole('article')).toBeNull());
+    // The site's row is its newest crawl now, the old one folded under it.
+    await waitFor(() =>
+      expect(within(library).getByRole('button', { name: /1 older crawl/, hidden: true })).toBeInTheDocument(),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent(OLD.fileName);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sidecar.requests.filter((request) => request.path.endsWith('/delete-file')).map((r) => r.path)).toEqual([
+      '/api/crawls/a000000000000002/delete-file',
+    ]);
+  });
+});
