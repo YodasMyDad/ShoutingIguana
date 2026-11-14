@@ -2,6 +2,7 @@
 // menu and Home's palette commands.
 import { api } from '../../api/client';
 import type { CrawlListItem } from '../../api/types';
+import { saidWhileAnalysing } from '../../crawl/actions';
 import { crawlName } from '../../crawl/status';
 import { notifyError, notifyUndo } from '../../feedback/notify';
 import { formatExactTime } from '../../lib/format';
@@ -24,6 +25,21 @@ export async function removeFromLibrary(item: CrawlListItem, refresh: () => Prom
         .catch((error: unknown) => notifyError(error));
     });
   } catch (error) {
+    if (await saidWhileAnalysing(item.id, 'remove', error)) return;
     notifyError(error);
   }
+}
+
+/**
+ * Deletes a crawl's file, for the confirmation's Delete file: a crawl being analysed since it was stopped says so with
+ * Cancel the analysis, and the confirmation closes; any other failure stays in it.
+ */
+export async function deleteCrawlFile(item: CrawlListItem, refresh: () => Promise<unknown>): Promise<void> {
+  try {
+    await api.deleteCrawlFile(item.id);
+  } catch (error) {
+    if (await saidWhileAnalysing(item.id, 'delete', error)) return;
+    throw error;
+  }
+  void refresh();
 }

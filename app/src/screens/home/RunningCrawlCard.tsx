@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router';
-import { Pause, Play, Square } from 'lucide-react';
+import { Pause, Play, Square, X } from 'lucide-react';
 import { useMemo } from 'react';
 import type { CrawlListItem } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
-import { pauseOrResume, stopCrawl } from '../../crawl/actions';
+import { cancelAnalysis, pauseOrResume, stopCrawl } from '../../crawl/actions';
 import { crawlControls, crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { formatCount, formatCountOf, formatDuration, formatRate } from '../../lib/format';
@@ -94,6 +94,17 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
           {controls.canStop ? (
             <Button size="sm" icon={Square} onClick={() => void stopCrawl(item.id)} aria-label={`Stop ${name}`}>
               Stop
+            </Button>
+          ) : null}
+          {/* Analysed since it was stopped or finished (round 5): wait for it, or cancel it, and the last analysis stands. */}
+          {analysing ? (
+            <Button
+              size="sm"
+              icon={X}
+              onClick={() => void cancelAnalysis(item.id)}
+              aria-label={`Cancel the analysis of ${name}`}
+            >
+              Cancel the analysis
             </Button>
           ) : null}
           <Button size="sm" variant="primary" asChild>

@@ -1,11 +1,14 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CrawlListItem } from '../../api/types';
 import { ENGINE_DEFAULTS } from '../../crawl/options/engineDefaults';
+import { liveStore } from '../../live/liveStore';
 import { getMode } from '../../mode/mode';
 import { replaceSettings } from '../../settings/settingsStore';
-import { json, problem, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
+import { setTransport } from '../../api/transport';
+import { fakeSidecar, json, problem, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
+import { message } from '../../test/overviewSidecar';
 import { ownSidecar, ScreenApp } from '../../test/ScreenStory';
 import { TABLE_STUBBED } from '../tableStubbed';
 
@@ -57,7 +60,10 @@ const refused = (errors: Record<string, string[]>): FakeRoute => [
 
 const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!;
 
-afterEach(() => replaceSettings({ mode: 'advanced', hiddenChecks: [], hiddenChecksByCrawl: {} }));
+afterEach(() => {
+  replaceSettings({ mode: 'advanced', hiddenChecks: [], hiddenChecksByCrawl: {} });
+  liveStore.reset();
+});
 
 describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
   it('asks for one thing, the address, and says what a bare Enter does', async () => {
@@ -190,6 +196,29 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
 
     const cleanRow = await rowOf('clean.example');
     expect(within(cleanRow).getByText('Nothing to fix')).toBeInTheDocument();
+  });
+
+  it('shows a check worked out since it was stopped as such, with Cancel (round 5)', async () => {
+    const stopped = testCrawlItem({ ...garden, id: '72cb879ef60639d5', status: 'stopped', score: null, issues: null });
+    const answers: FakeRoute[] = [
+      ['POST', /\/analyze\/cancel$/, () => new Response(null, { status: 202 })],
+      ...routes([stopped]),
+    ];
+    ownSidecar(answers);
+    // Kept, to see what was asked of it.
+    const sidecar = fakeSidecar(answers);
+    setTransport(sidecar);
+    liveStore.ingest(message('hello', { live: [], analyzing: [stopped.id] }));
+    render(<ScreenApp path="/" mode="simple" />);
+    const sites = await screen.findByRole('list', { name: 'Your sites, the checks running now first' });
+    const row = within(sites).getByRole('link', { name: 'gardenfurnituresets.co.uk' }).closest('li')!;
+    expect(within(row).getByText('Working out the results. They appear here when they’re ready.')).toBeVisible();
+    await userEvent.click(
+      within(row).getByRole('button', { name: 'Stop working out the results for gardenfurnituresets.co.uk' }),
+    );
+    await vi.waitFor(() =>
+      expect(sidecar.requests.map((request) => request.path)).toContain(`/api/crawls/${stopped.id}/analyze/cancel`),
+    );
   });
 
   it('folds a site’s older checks under its newest', async () => {

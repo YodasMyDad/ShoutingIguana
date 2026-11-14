@@ -2,7 +2,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ChevronRight, FolderOpen, MoreHorizontal, Play, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
-import { api } from '../../api/client';
 import { queryKeys } from '../../api/queries';
 import type { CrawlListItem, CrawlStatus } from '../../api/types';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
@@ -13,7 +12,7 @@ import { ConfirmDialog } from '../../ui/Dialog';
 import { IconButton } from '../../ui/IconButton';
 import { DropdownMenu, MenuItem, MenuSeparator } from '../../ui/Menu';
 import { analyseWords, crawlActions } from './library';
-import { crawlLabel, removeFromLibrary } from './libraryActions';
+import { crawlLabel, deleteCrawlFile, removeFromLibrary } from './libraryActions';
 
 /**
  * Every action of a crawl in the library (docs/v2-ui-ia.md, Home): Open, Continue, Crawl again, Analyse again, Show in
@@ -87,10 +86,7 @@ export function CrawlMenu({
         confirmLabel="Delete file"
         destructive
         errorTitle="The file couldn’t be deleted."
-        onConfirm={async () => {
-          await api.deleteCrawlFile(item.id);
-          void refresh();
-        }}
+        onConfirm={() => deleteCrawlFile(item, refresh)}
       />
     </>
   );

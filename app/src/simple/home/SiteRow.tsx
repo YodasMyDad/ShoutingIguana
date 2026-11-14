@@ -20,7 +20,7 @@ import { api } from '../../api/client';
 import { analysisQuery, checksQuery, queryKeys } from '../../api/queries';
 import type { CrawlListItem } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
-import { analyseCrawl, continueCrawl } from '../../crawl/actions';
+import { analyseCrawl, cancelAnalysis, continueCrawl, saidWhileAnalysing } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
 import { crawlControls, crawledUrls, effectiveStatus } from '../../crawl/status';
 import { notifyError, notifyUndo } from '../../feedback/notify';
@@ -113,6 +113,16 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
       <Button size="sm" icon={Play} onClick={() => void continueCrawl(item.id)}>
         Continue
       </Button>
+    ) : kind === 'live' && status === 'analyzing' ? (
+      // Its results being worked out (since it was stopped, or finished): wait, or cancel, as the Checking screen offers.
+      <Button
+        size="sm"
+        icon={X}
+        onClick={() => void cancelAnalysis(item.id)}
+        aria-label={`Stop working out the results for ${name}`}
+      >
+        Cancel
+      </Button>
     ) : kind === 'notScored' && controls.canAnalyse ? (
       <Button size="sm" icon={RefreshCw} onClick={() => void analyseCrawl(item.id)}>
         Update the results
@@ -191,7 +201,14 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
         )}
 
         <div className="relative col-start-5 row-start-1 flex items-center justify-end gap-1 @max-sites/sites:col-start-2">
-          {kind === 'live' ? <LiveDot /> : action}
+          {kind === 'live' ? (
+            <>
+              <LiveDot />
+              {action}
+            </>
+          ) : (
+            action
+          )}
           <RowMenu item={item} kind={kind} />
           {kind !== 'live' && !action ? (
             <ChevronRight aria-hidden className="size-(--icon-md) text-text-muted" />
@@ -323,6 +340,7 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
           .catch((error: unknown) => notifyError(error));
       });
     } catch (error) {
+      if (await saidWhileAnalysing(item.id, 'remove', error)) return;
       notifyError(error);
     }
   };
@@ -391,7 +409,13 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
         destructive
         errorTitle="The file couldn’t be deleted."
         onConfirm={async () => {
-          await api.deleteCrawlFile(item.id);
+          try {
+            await api.deleteCrawlFile(item.id);
+          } catch (error) {
+            // Being worked out since it was stopped: said with Stop working them out, and the confirmation closes.
+            if (await saidWhileAnalysing(item.id, 'delete', error)) return;
+            throw error;
+          }
           void refreshLibrary();
         }}
       />

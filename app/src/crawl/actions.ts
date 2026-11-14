@@ -5,6 +5,9 @@ import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { CrawlListItem, CrawlOptions, CrawlStatus } from '../api/types';
 import { crawlToast, notifyError, notifyResult } from '../feedback/notify';
+import { liveStore } from '../live/liveStore';
+import { getMode } from '../mode/mode';
+import { siteName } from '../simple/home/sites';
 import { sendableHeaders, withScheme } from './options/form';
 
 /**
@@ -68,6 +71,7 @@ export async function continueCrawl(id: string, options: { skipMissingHeaders?: 
       });
       return false;
     }
+    if (await saidWhileAnalysing(id, 'continue', error)) return false;
     // A crawl busy elsewhere (another program has it) can be continued once that's done: Retry stays.
     notifyError(error, { id: crawlToast(id, 'continue'), retry: () => void continueCrawl(id, options) });
     return false;
@@ -90,6 +94,51 @@ export async function cancelAnalysis(id: string): Promise<void> {
   } catch (error) {
     notifyError(error, { id: crawlToast(id, 'cancel-analysis'), retry: () => void cancelAnalysis(id) });
   }
+}
+
+/** What a crawl being analysed refuses, until the analysis ends or is cancelled. */
+export type RefusedWhileAnalysing = 'continue' | 'remove' | 'delete';
+
+const WHILE_ANALYSING: Record<'simple' | 'advanced', Record<RefusedWhileAnalysing, string>> = {
+  simple: {
+    continue: 'You can continue the check once they’re ready. Wait for them, or stop working them out.',
+    remove: 'You can take it off Your sites once they’re ready. Wait for them, or stop working them out.',
+    delete: 'You can delete its file once they’re ready. Wait for them, or stop working them out.',
+  },
+  advanced: {
+    continue: 'It can be continued once the analysis ends. Wait for it, or cancel the analysis.',
+    remove: 'It can be removed from the library once the analysis ends. Wait for it, or cancel the analysis.',
+    delete: 'Its file can be deleted once the analysis ends. Wait for it, or cancel the analysis.',
+  },
+};
+
+/**
+ * A crawl the user stops is analysed at once (round 5's gap 2), and while it is, Continue, Remove and Delete are refused
+ * as busy. When that's why, says so in the mode's words with Cancel the analysis, never the bare refusal, and gives
+ * true; false for any other failure, which the caller reports as it does. Whether it's being analysed is the live
+ * store's, else the sidecar's answer now: the refusal can come before the status's event.
+ */
+export async function saidWhileAnalysing(id: string, action: RefusedWhileAnalysing, error: unknown): Promise<boolean> {
+  if (!isProblem(error, 'crawl-busy')) return false;
+  let item: CrawlListItem;
+  try {
+    item = await api.crawl(id);
+  } catch {
+    return false;
+  }
+  const status = liveStore.getState().crawls[id]?.status ?? item.status;
+  if (status !== 'analyzing' && item.status !== 'analyzing') return false;
+  const mode = getMode();
+  const name = siteName(item);
+  notifyResult(mode === 'simple' ? `The results for ${name} are being worked out.` : `${name} is being analysed.`, {
+    id: crawlToast(id, action),
+    description: WHILE_ANALYSING[mode][action],
+    action: {
+      label: mode === 'simple' ? 'Stop working them out' : 'Cancel the analysis',
+      onClick: () => void cancelAnalysis(id),
+    },
+  });
+  return true;
 }
 
 /**

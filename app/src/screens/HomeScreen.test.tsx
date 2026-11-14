@@ -13,7 +13,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { wholeText } from '../test/text';
-import { fakeSidecar, json, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
+import { fakeSidecar, json, problem, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
 
 async function open(library: () => Response | Promise<Response>, routes: FakeRoute[] = []) {
   const sidecar = fakeSidecar([...routes, ['GET', /^\/api\/crawls$/, library], ...standardRoutes()]);
@@ -218,6 +218,54 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
         true,
       ),
     );
+  });
+
+  it('shows a crawl analysed since it was stopped as analysing, with Cancel the analysis (round 5)', async () => {
+    const ANALYSING = site('e000000000000002', 'oakmere.example', '2026-11-02T10:00:00Z', { status: 'stopped' });
+    liveStore.ingest(message('hello', { live: [], analyzing: [ANALYSING.id] }));
+    const { sidecar } = await open(
+      () => json([LATEST, ANALYSING]),
+      [['POST', /\/analyze\/cancel$/, () => new Response(null, { status: 202 })]],
+    );
+    const card = await screen.findByRole('article', { name: 'oakmere.example' });
+    expect(within(card).getByText('Analysing: its answer is ready soon')).toBeVisible();
+    // Nothing to stop or continue while it's analysed: wait for it, or cancel it.
+    expect(within(card).queryByRole('button', { name: 'Stop oakmere.example' })).toBeNull();
+    await userEvent.click(within(card).getByRole('button', { name: 'Cancel the analysis of oakmere.example' }));
+    await waitFor(() =>
+      expect(sidecar.requests.map((request) => request.path)).toContain('/api/crawls/e000000000000002/analyze/cancel'),
+    );
+  });
+
+  it('says a crawl is being analysed when Delete comes before that status does, and closes the confirmation', async () => {
+    await open(
+      () => json([LATEST]),
+      [
+        [
+          'POST',
+          /\/delete-file$/,
+          () =>
+            problem({
+              type: 'crawl-busy',
+              title: 'This crawl is being analysed. Wait for that to finish, or cancel it.',
+              status: 409,
+            }),
+        ],
+        ['GET', /^\/api\/crawls\/a000000000000002$/, () => json({ ...LATEST, status: 'analyzing' })],
+      ],
+    );
+    await userEvent.click(
+      within(await rowOf('garden.example')).getByRole('button', { name: 'Actions for garden.example' }),
+    );
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete file…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete garden.example’s crawl file?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
+    expect(await screen.findByText('garden.example is being analysed.')).toBeVisible();
+    expect(
+      screen.getByText('Its file can be deleted once the analysis ends. Wait for it, or cancel the analysis.'),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Cancel the analysis' })).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('pins a crawl running now above the library as a card, with its controls and live figures', async () => {
