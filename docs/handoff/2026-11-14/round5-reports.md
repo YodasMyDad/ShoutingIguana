@@ -135,3 +135,6 @@ G1, G2, G6, gaps 5, 18, 26, 31, Simple in `smoke:shell`. All built.
   (`inspector.spec.ts:251`, then 54/54 at repeat 3), shell-frame 120/120 at repeat 10. Engine tests green in the
   fork's run (1,437, 274, 28), not re-run; bench not run. Not verified: Linux CI's new `libdbus-1-dev`; installing a
   real update (needs a release with `latest.json`). Real-shell screenshots: `app/test-results/r5-shell-smoke/`.
+- Linux, checked by the orchestrator in Docker (ubuntu:24.04, the CI job's packages incl. `libdbus-1-dev`, Rust
+  1.99.1, `tools/linux-ci.sh`) on `ui/r5-shell`: clippy `-D warnings` clean (keyring 3.6.3, dbus-secret-service
+  4.1.0), `cargo test --locked` 129 + 3 passed (Windows 134: the rest are Windows-only).
