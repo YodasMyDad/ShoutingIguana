@@ -6,8 +6,10 @@
 
 mod commands;
 mod context_menu;
+mod drop;
 mod live;
 mod logging;
+mod mode;
 mod open_files;
 mod profile;
 mod quit;

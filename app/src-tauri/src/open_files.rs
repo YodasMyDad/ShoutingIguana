@@ -22,7 +22,7 @@ pub const RELAUNCH_AFTER: &str = "--relaunch-after";
 /// How long a relaunched copy waits for the one that started it to be gone. It exits as soon as it has started it.
 const RELAUNCH_WAIT: Duration = Duration::from_secs(10);
 
-const EXTENSION: &str = "sicrawl";
+pub const EXTENSION: &str = "sicrawl";
 
 #[derive(Debug, Default)]
 pub struct OpenFiles {

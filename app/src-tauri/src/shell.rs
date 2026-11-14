@@ -7,6 +7,7 @@ use tauri::AppHandle;
 
 use crate::live::api::Api;
 use crate::live::model::LiveView;
+use crate::mode::{Mode, ShellMode};
 use crate::open_files::OpenFiles;
 use crate::sidecar::Sidecar;
 use crate::sync::lock;
@@ -30,6 +31,8 @@ pub struct Shell {
     pub window_hidden: AtomicBool,
     pub quit: Mutex<QuitPhase>,
     pub open_files: Mutex<OpenFiles>,
+    /// The page's mode, for the shell's own words.
+    pub mode: ShellMode,
 }
 
 impl Shell {
@@ -42,10 +45,18 @@ impl Shell {
             window_hidden: AtomicBool::new(false),
             quit: Mutex::new(QuitPhase::Running),
             open_files: Mutex::new(OpenFiles::new(open_files)),
+            mode: ShellMode::new(stored_mode(app)),
         }
     }
 
     pub fn is_quitting(&self) -> bool {
         *lock(&self.quit) != QuitPhase::Running
     }
+}
+
+/// The mode the page last stored, read as the page reads it (a first start is Simple).
+fn stored_mode(app: &AppHandle) -> Mode {
+    let stored = crate::profile::settings_folder(app)
+        .and_then(|folder| crate::settings::read(&folder.join(crate::settings::FILE_NAME)));
+    Mode::of(crate::settings::preferences(stored.as_ref()).simple)
 }

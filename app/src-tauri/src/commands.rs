@@ -76,7 +76,17 @@ pub async fn settings_write(app: AppHandle, settings: String) -> Result<(), Stri
     settings::write(&folder.join(settings::FILE_NAME), &settings).map_err(|error| {
         log::warn!("Couldn't store the preferences: {error}");
         error.to_string()
-    })
+    })?;
+    // The page tells the shell its mode this way: the tray, the notices and the quit question speak it from now on.
+    let stored = serde_json::from_str::<serde_json::Value>(&settings).ok();
+    let mode = crate::mode::Mode::of(settings::preferences(stored.as_ref()).simple);
+    if let Some(shell) = app.try_state::<Shell>() {
+        if shell.mode.set(mode) {
+            log::info!("The page is in {mode:?} mode: the shell's words follow");
+            shell.tray.changed(true);
+        }
+    }
+    Ok(())
 }
 
 /// Shows a library crawl's file in Explorer or Finder. The page names the crawl and the engine's library says where
