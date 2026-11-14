@@ -163,7 +163,12 @@ failed to load all 328 files: the stale Vite cache below; moved aside, the suite
 PASS. The first run failed at its second step: since round 4 a new profile opens in Simple, and both walks drive
 Advanced's Library. They now start the app in Advanced (`advancedSettings` in `scripts/lib/shell.mjs`, written to the
 run's own profile before the app starts). Not covered: Simple's screens in the real shell (Home, the checking screen,
-the OS notice in Simple's words); the e2e covers them in Chromium only. Next is step 3.
+the OS notice in Simple's words); the e2e covers them in Chromium only.
+
+**2026-11-14: step 3 launched** on `b8684fa`: the closing audit (worktree `closing-audit`, ports 50874-50877) and the
+gallery re-shoot (worktree `gallery-shoot`, ports 49874-49877, building into `_gallery/site/`), from the two briefs
+unchanged, with the head and their folders (this session's scratchpad, `a539aa23-…`) given at launch. If this
+section still says "launched" in a new session, neither reported: check their worktrees and relaunch from the briefs.
 
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
