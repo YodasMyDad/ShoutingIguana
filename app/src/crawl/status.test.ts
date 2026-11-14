@@ -38,6 +38,13 @@ describe('the status a crawl shows', () => {
     expect(crawlControls(status, item)).toMatchObject({ canPause: false, canStop: false, canContinue: true });
   });
 
+  it('offers no Continue for a stopped or interrupted crawl whose file isn’t there any more (round 5 review R1-11)', () => {
+    for (const status of ['stopped', 'interrupted'] as const) {
+      expect(crawlControls(status, testCrawlItem({ status, missing: true })).canContinue).toBe(false);
+      expect(crawlControls(status, testCrawlItem({ status })).canContinue).toBe(true);
+    }
+  });
+
   it('after an analysis is cut off by a restart, offers Analyse again', () => {
     let state = applyEvent(empty, { type: 'crawl', data: { crawlId: ID, status: 'analyzing' } });
     state = applyEvent(state, { type: 'hello', data: { live: [] } });
