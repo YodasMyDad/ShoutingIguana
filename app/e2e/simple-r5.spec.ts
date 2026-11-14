@@ -71,7 +71,8 @@ test('a stopped check has its results so far, and its toast’s two actions sit 
   await expect
     .poll(async () => (await read<CrawlListItem>(`/api/crawls/${id}`)).pageCount, { timeout: 60_000 })
     .toBeGreaterThan(30);
-  await main(page).getByRole('button', { name: /^Stop/ }).click();
+  // F8 stops it, as the top bar's Stop does.
+  await page.keyboard.press('F8');
   // The sidecar works out what it read: the Summary shows it, so far, with the stopped banner and Continue.
   await expect(main(page).getByRole('img', { name: /^Score \d+ out of 100 so far/ })).toBeVisible({
     timeout: 60_000,
@@ -109,11 +110,12 @@ test('a problem opens at its top from a scrolled What to fix, and Back finds the
   page,
 }) => {
   const crawl = await seededCrawl();
-  await page.setViewportSize({ width: 1280, height: 720 });
+  // Short enough that the seeded crawl's list scrolls.
+  await page.setViewportSize({ width: 1280, height: 480 });
   await page.goto(`/crawls/${crawl.id}/issues`);
   const list = main(page).getByRole('heading', { level: 1, name: 'What to fix' });
   await expect(list).toBeVisible();
-  const rows = main(page).locator('a[href*="/issues/"]');
+  const rows = main(page).locator('a[href*="/issues/"]').filter({ visible: true });
   await expect(rows.first()).toBeVisible();
   const last = rows.last();
   await last.scrollIntoViewIfNeeded();

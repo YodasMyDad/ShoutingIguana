@@ -1,7 +1,7 @@
 // The Summary in every state the design lists, over a sidecar of the test's own (the garden crawl's analysis as
 // today's engine answers it, and the states made from it). Each count is a link to exactly its part of What to fix.
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Analysis, CrawlListItem } from '../api/types';
 import { setTransport } from '../api/transport';
@@ -382,6 +382,19 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     expect(main().getByText(/Shouting Iguana’s checks have been updated since these results\./)).toBeVisible();
     expect(main().getByRole('button', { name: 'Update the results' })).toBeVisible();
     expect(main().getByRole('img', { name: 'Score 85 out of 100, Good' })).toBeVisible();
+  });
+
+  // The closing audit's gaps 2 and 14: no report to open without results; Save as PDF beside Open the report.
+  it('offers Open the report only over results, and Save as PDF on the report card', async () => {
+    await open('not-analyzed', gardenItem({ ...NEVER }));
+    await site();
+    expect(await main().findByRole('heading', { name: 'No score yet' })).toBeVisible();
+    expect(main().queryByRole('link', { name: 'Open the report' })).toBeNull();
+    cleanup();
+    await open(GARDEN_ANALYSIS);
+    await site();
+    expect(main().getAllByRole('link', { name: 'Open the report' })).toHaveLength(2);
+    expect(main().getByRole('link', { name: 'Save as PDF' })).toHaveAttribute('href', `${CRAWL}/report?print=true`);
   });
 
   it('nothing could be read: no score, and why', async () => {
