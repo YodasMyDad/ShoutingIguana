@@ -114,3 +114,27 @@ export function crawlControls(status: CrawlStatus | null, item: CrawlListItem | 
       item?.missing !== true,
   };
 }
+
+/**
+ * The heading over the crawls this sidecar is working on, in the sidebar: what each is doing, counted ("1 crawling",
+ * "1 paused", "2 crawling, 1 analysing"), never "crawling" for one that's paused or being analysed. A crawl whose
+ * status hasn't arrived yet counts as crawling: it's live because it was started.
+ */
+export function runningHeading(statuses: readonly (CrawlStatus | null | undefined)[]): string {
+  const counts = new Map<string, number>();
+  for (const status of statuses) {
+    const word =
+      status === 'paused'
+        ? 'paused'
+        : status === 'stopping'
+          ? 'stopping'
+          : status === 'analyzing'
+            ? 'analysing'
+            : 'crawling';
+    counts.set(word, (counts.get(word) ?? 0) + 1);
+  }
+  return ['crawling', 'paused', 'stopping', 'analysing']
+    .filter((word) => counts.has(word))
+    .map((word) => `${counts.get(word) ?? 0} ${word}`)
+    .join(', ');
+}

@@ -178,7 +178,7 @@ describe('the URL grid while the crawl runs', () => {
     });
     const { queryClient } = await open(URLS);
     const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
-    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('3 URLs found'))).toBeVisible();
     expect(within(header).getByText('Live')).toBeVisible();
     state.rows = [...TEST_URL_ROWS, { id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' }];
     let release: () => void = () => undefined;
@@ -195,7 +195,7 @@ describe('the URL grid while the crawl runs', () => {
     expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
     state.hold = null;
     act(() => release());
-    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('4 URLs found'))).toBeVisible();
     expect(await screen.findByText('https://example.com/c')).toBeVisible();
     expect(screen.getByRole('grid', { name: 'URLs' })).toHaveAttribute('aria-busy', 'false');
     expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
@@ -214,7 +214,7 @@ describe('the URL grid’s count', () => {
     const { queryClient } = await open(URLS);
     const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
     const liveRegions = () => header.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]');
-    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('3 URLs found'))).toBeVisible();
     // A screen reader reads what changes in a live region: about once a second here, for as long as the crawl runs.
     expect(liveRegions()).toHaveLength(0);
     /** What the live bridge does on a progress tick, the crawl having found another URL. */
@@ -223,7 +223,7 @@ describe('the URL grid’s count', () => {
       return act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
     };
     await tick({ id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' });
-    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('4 URLs found'))).toBeVisible();
     expect(liveRegions()).toHaveLength(0);
     expect(heard).toEqual([]);
 
@@ -231,12 +231,12 @@ describe('the URL grid’s count', () => {
     const field = screen.getByRole('searchbox', { name: 'Search URLs and titles' });
     fireEvent.change(field, { target: { value: 'example.com/a' } });
     fireEvent.keyDown(field, { key: 'Enter' });
-    expect(await within(header).findByText(wholeText('1 of 4 URLs'))).toBeVisible();
-    await waitFor(() => expect(heard).toEqual(['1 of 4 URLs']));
+    expect(await within(header).findByText(wholeText('1 of 4 URLs found'))).toBeVisible();
+    await waitFor(() => expect(heard).toEqual(['1 of 4 URLs found']));
     // The crawl goes on under the search: the count moves, and nothing more is said.
     await tick({ id: 5, url: 'https://example.com/a/b', statusCode: 200, statusClass: '2xx' });
-    expect(await within(header).findByText(wholeText('2 of 5 URLs'))).toBeVisible();
-    expect(heard).toEqual(['1 of 4 URLs']);
+    expect(await within(header).findByText(wholeText('2 of 5 URLs found'))).toBeVisible();
+    expect(heard).toEqual(['1 of 4 URLs found']);
     stop();
   });
 });

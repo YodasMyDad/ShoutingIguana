@@ -17,15 +17,15 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
-import type { IssueCounts } from '../api/types';
+import { isCrawlStatus, type IssueCounts } from '../api/types';
 import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection, type CrawlSectionEntry } from '../app/sections';
 import { SIMPLE_SECTIONS } from '../app/modeRoutes';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import logoUrl from '../assets/iguana-64.png';
-import { crawlName, crawledUrls } from '../crawl/status';
+import { crawlName, crawledUrls, runningHeading } from '../crawl/status';
 import { ExportsInProgress } from '../export/ExportsInProgress';
 import { formatExactTime } from '../lib/format';
-import { useLiveCrawl, useLiveIds } from '../live/liveStore';
+import { useLive, useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useMode } from '../mode/mode';
 import { useSettings } from '../settings/settingsStore';
 import { CrawlFavicon } from '../crawl/CrawlFavicon';
@@ -287,12 +287,17 @@ function SectionLink({
 function RunningCrawls({ collapsed, simple }: { collapsed: boolean; simple: boolean }) {
   const live = useLiveIds();
   const library = useQuery(libraryQuery()).data;
+  // What each is doing, for the heading: a paused crawl isn't "crawling" (round 5).
+  // One string, so the selector's result is the same from one event to the next while no status changes.
+  const statuses = useLive((state) => state.live.map((id) => state.crawls[id]?.status ?? '').join(' '))
+    .split(' ')
+    .map((status) => (isCrawlStatus(status) ? status : null));
   if (live.length === 0) return null;
   return (
     <section aria-label={simple ? 'Checking now' : 'Running crawls'} className="flex flex-col gap-0.5">
       {collapsed ? null : (
         <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">
-          {simple ? 'Checking now' : live.length === 1 ? '1 crawling' : `${live.length} crawling`}
+          {simple ? 'Checking now' : runningHeading(statuses)}
         </h2>
       )}
       <ul className="flex flex-col gap-0.5">

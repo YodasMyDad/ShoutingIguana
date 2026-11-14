@@ -1,7 +1,7 @@
 import { EyeOff } from 'lucide-react';
 import { useEffect, useId, useRef, type KeyboardEvent, type Ref } from 'react';
 import type { Severity } from '../../api/types';
-import { affectedWords } from '../../crawl/checkSubject';
+import { affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
@@ -9,13 +9,13 @@ import { Button } from '../../ui/Button';
 import { EmptyState, FilteredEmptyState } from '../../ui/EmptyState';
 import { FilterChip } from '../../ui/FilterChip';
 import { ListHeading, ListRow } from '../../ui/ListRow';
-import { Num } from '../../ui/Num';
 import { RefreshLine } from '../../ui/ProgressBar';
 import { SearchField } from '../../ui/SearchField';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { Switch } from '../../ui/Switch';
 import type { CheckEntry, CheckList } from './checkList';
+import { CountWithReach } from './CountWithReach';
 
 export type SeverityFilter = Severity | 'all';
 
@@ -42,6 +42,11 @@ export interface ChecksListProps {
   hiddenTotal: number;
   /** The analysis left notes, shown above the list: a skipped check without a reason of its own points to them. */
   notesShown?: boolean;
+  /**
+   * The analysis's own totals, which each check's count is a share of beside it ("% of Total"): the pages it ran on
+   * for a check that flags only pages, the URLs crawled when it ran for any other (crawl/checkSubject.ts).
+   */
+  totals?: CrawlCounts | null | undefined;
   onClearFilters: () => void;
   /** The analysis is being read again behind what's shown. */
   refreshing?: boolean;
@@ -71,6 +76,7 @@ export function ChecksList({
   onShowHiddenChange,
   hiddenTotal,
   notesShown = false,
+  totals = null,
   onClearFilters,
   refreshing = false,
   filterRef,
@@ -250,6 +256,7 @@ export function ChecksList({
                     onSelect={() => onSelect(entry.check.id, 'click')}
                     onOpen={onOpen}
                     notesShown={notesShown}
+                    totals={totals}
                     ref={(element) => {
                       if (element) options.current.set(entry.check.id, element);
                       else options.current.delete(entry.check.id);
@@ -272,6 +279,7 @@ function CheckOption({
   onSelect,
   onOpen,
   notesShown,
+  totals,
   ref,
 }: {
   entry: CheckEntry;
@@ -280,6 +288,7 @@ function CheckOption({
   onSelect: () => void;
   onOpen: () => void;
   notesShown: boolean;
+  totals: CrawlCounts | null;
   ref: Ref<HTMLDivElement>;
 }) {
   const { check, outcome, count, skipReason } = entry;
@@ -291,10 +300,11 @@ function CheckOption({
   ) : outcome === 'passed' ? (
     <span className="text-12 text-text-muted">Passed</span>
   ) : (
-    <>
-      <Num value={count ?? 0} />
-      <span className="sr-only"> {count === 1 ? words.noun : words.plural}</span>
-    </>
+    <CountWithReach
+      count={count ?? 0}
+      noun={count === 1 ? words.noun : words.plural}
+      reach={checkReach(check, count, totals)}
+    />
   );
   return (
     <ListRow

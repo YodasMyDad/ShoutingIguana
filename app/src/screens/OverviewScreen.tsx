@@ -40,6 +40,7 @@ import {
   type HiddenTotals,
 } from './issues/checkList';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
+import type { CrawlCounts } from '../crawl/checkSubject';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { AlertList } from './overview/AlertList';
 import { alertEntries } from './overview/alerts';
@@ -51,6 +52,7 @@ import { linkProps } from './overview/overviewLinks';
 import { OverviewScore } from './overview/OverviewScore';
 import { ScoreBreakdownFromRoute } from '../simple/ScoreBreakdownDialog';
 import { OverviewSkeleton } from './overview/OverviewSkeleton';
+import { TotalsRow } from './overview/TotalsRow';
 import { crawledCount } from './overview/statusSplit';
 import { useCrawlFacets } from './overview/useCrawlFacets';
 
@@ -191,6 +193,8 @@ export function OverviewScreen() {
   } else {
     body = (
       <>
+        {/* The totals before anything else (round 5, gap 16), whatever the crawl's state: they need no analysis. */}
+        <TotalsRow crawlId={crawlId} />
         {analysing && !neverAnalysed ? (
           <AnalysisProgress
             event={analysisEvent}
@@ -256,6 +260,7 @@ export function OverviewScreen() {
             totals={totals}
             hiddenFound={hiddenChecks?.found ?? 0}
             order={analysis.data?.fixFirst}
+            counts={analysis.data ?? null}
           />
         )}
 
@@ -350,6 +355,7 @@ function Answer({
   totals,
   hiddenFound,
   order,
+  counts,
 }: {
   crawlId: string;
   checks: Checks;
@@ -359,6 +365,8 @@ function Answer({
   hiddenFound: number;
   /** The analysis's `fixFirst`: the engine's order to fix them in. */
   order: readonly string[] | undefined;
+  /** The analysis's own totals, which Fix first's shares are of. */
+  counts: CrawlCounts | null;
 }) {
   const [widthRef, width] = useElementWidth();
   return (
@@ -370,7 +378,7 @@ function Answer({
         columns={width !== null && width > 0 && width < TWO_COLUMNS_BELOW ? 2 : 4}
       />
       <div className="grid grid-cols-(--overview-columns) gap-4 @max-split:grid-cols-1">
-        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} order={order} />
+        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} order={order} totals={counts} />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
           <Categories crawlId={crawlId} checks={checks} entries={entries} />

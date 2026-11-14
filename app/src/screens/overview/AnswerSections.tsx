@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import type { Checks } from '../../api/types';
-import { affectedNoun } from '../../crawl/checkSubject';
+import { affectedNoun, affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Card, CardBody, CardHeader } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
@@ -11,6 +11,7 @@ import { Stat, StatLink, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
 import { outcomeWord } from '../../ui/severity';
 import type { AnalysisTotals, CheckEntry } from '../issues/checkList';
+import { CountWithReach } from '../issues/CountWithReach';
 import { categoryFigures, fixFirst, severityFigures, skippedGroups } from './answer';
 import { linkProps } from './overviewLinks';
 
@@ -69,8 +70,22 @@ export function SeverityFigures({
   );
 }
 
-/** "265 pages" for a check that flags only pages, "9 URLs" for any other (crawl/checkSubject.ts). */
-const affected = (entry: CheckEntry) => <Num value={entry.count} noun={affectedNoun(entry.check)} />;
+/**
+ * "265 pages" for a check that flags only pages, "9 URLs" for any other (crawl/checkSubject.ts), with how much of the
+ * site that is beside it ("% of Total"): of the pages analysed, of the URLs crawled, or the whole site.
+ */
+const affected = (entry: CheckEntry, totals: CrawlCounts | null) => {
+  const words = affectedWords(entry.check);
+  return totals ? (
+    <CountWithReach
+      count={entry.count ?? 0}
+      noun={entry.count === 1 ? words.noun : words.plural}
+      reach={checkReach(entry.check, entry.count, totals)}
+    />
+  ) : (
+    <Num value={entry.count} noun={affectedNoun(entry.check)} />
+  );
+};
 
 /**
  * Fix first (docs/v2-ui-ia.md, flow 3): the checks that found issues, the most severe first, then the most pages or
@@ -81,6 +96,7 @@ export function FixFirst({
   entries,
   hiddenFound = 0,
   order,
+  totals,
 }: {
   crawlId: string;
   entries: readonly CheckEntry[];
@@ -88,6 +104,8 @@ export function FixFirst({
   hiddenFound?: number;
   /** The analysis's `fixFirst`: the engine's order. Absent from an earlier engine's analysis: then the app's. */
   order?: readonly string[] | undefined;
+  /** The analysis's own totals, each count's share is of: the pages it ran on, the URLs crawled when it ran. */
+  totals?: CrawlCounts | null | undefined;
 }) {
   const list = fixFirst(entries, undefined, order);
   return (
@@ -121,7 +139,7 @@ export function FixFirst({
                       {entry.check.title}
                     </>
                   }
-                  meta={affected(entry)}
+                  meta={affected(entry, totals ?? null)}
                   description={<span className="line-clamp-1">{entry.check.description}</span>}
                 >
                   <Link {...linkProps(crawlId, link)} />

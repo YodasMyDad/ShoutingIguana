@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CrawlStatus, ProgressEvent } from '../api/types';
 import { applyEvent, liveProgressOf, type LiveState } from '../live/liveStore';
 import { testCrawlItem } from '../test/fakeSidecar';
-import { crawlControls, crawledUrls, effectiveStatus } from './status';
+import { crawlControls, crawledUrls, effectiveStatus, runningHeading } from './status';
 
 const ID = '0123456789abcdef';
 
@@ -95,5 +95,17 @@ describe('a crawl’s "N URLs"', () => {
     expect(crawledUrls(testCrawlItem({ fetchedUrlCount: 6_914 }))).toBe(6_914);
     expect(crawledUrls(undefined, progress())).toBe(6_909);
     expect(crawledUrls(undefined, undefined)).toBeNull();
+  });
+});
+
+describe('the heading over the crawls running here', () => {
+  /** The closing audit: the sidebar said "1 crawling" for a paused crawl. */
+  it('says what each is doing, never crawling for one that’s paused or being analysed', () => {
+    expect(runningHeading(['running'])).toBe('1 crawling');
+    expect(runningHeading(['paused'])).toBe('1 paused');
+    expect(runningHeading(['analyzing', 'running', 'paused', 'running'])).toBe('2 crawling, 1 paused, 1 analysing');
+    expect(runningHeading(['stopping'])).toBe('1 stopping');
+    // Live before its status has come: it was started, so it's crawling.
+    expect(runningHeading([null])).toBe('1 crawling');
   });
 });

@@ -289,7 +289,7 @@ describe('the URL grid under a running crawl', () => {
     state.rows = [...state.rows, { id: 4, url: 'https://example.com/0', statusCode: 200, statusClass: '2xx' }];
     await act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
     const header = screen.getByRole('heading', { level: 1, name: 'URLs' }).parentElement!;
-    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('4 URLs found'))).toBeVisible();
     await within(grid).findByText('https://example.com/0');
     expect(cursorRowText(grid)).toMatch(/\/b/);
     // With every facet's menu closed, a tick reads no facet: nothing on screen shows one.
