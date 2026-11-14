@@ -88,11 +88,14 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 
 - A large URL field: paste and press Enter to crawl with your defaults. "Settings…" beside it opens `/new`.
 - Under it, **Open…** (Ctrl+O) for a crawl file, and that a file dropped on the window opens too.
-- Crawls running now are pinned above the library as cards, "Crawling now": the site, its status and the time spent
-  crawling, Pause or Resume, Stop and Open, and Crawled, Found, Queued, Pages and URLs a second with its sparkline,
-  each count opening its URLs; what was found as crawled, queued and not followed.
+- Crawls running now are pinned above the library as cards, headed by what they do as the sidebar says it ("1
+  crawling, 1 paused"): the site, its status and the time spent crawling, Pause or Resume, Stop and Open, and Crawled,
+  Found, Queued, Pages and URLs a second with its sparkline, each count opening its URLs; what was found as crawled,
+  queued and not followed. A crawl only being analysed shows its Crawled and Pages, with Cancel the analysis.
+- A site is named by its host and any port of its own ("127.0.0.1:5001"): one host on two ports is two sites.
 - Below them, the library grouped by site: the site whose latest crawl is newest comes first, and each site shows its
-  latest crawl, with older ones folded away ("2 older crawls"). A site with a crawl running now says so.
+  latest crawl, with older ones folded away ("2 older crawls"). A site with a crawl running now says what it's doing
+  (Crawling now, Paused, Stopping, Analysing).
 - Each crawl shows its status, URLs, pages, checks with issues by severity and when it started. Beside its status, the
   one action its state needs: Continue (stopped, interrupted), Analyse again (out of date), Analyse it (never
   analysed), Locate the file… (missing). All its actions are in its menu: Open, Continue, Crawl again…, Analyse again,

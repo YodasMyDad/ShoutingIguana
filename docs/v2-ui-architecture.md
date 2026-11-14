@@ -2119,5 +2119,38 @@ The four parts of round 5 were built at once and merged on `ui/r5-integrate`. Wh
 - **One way a drop arrives**: the shell's `shell://drag-drop` (above).
 - **Overview's "didn't read any pages"** says how the start URL's robots.txt answered (its rules, an error, no answer),
   part A's robots states in Advanced's words (`screens/overview/emptyCrawl.ts`).
-- Not joined: Advanced Home names a site by its host alone (`crawlName`), so two crawls of one host on different ports
-  are two rows of one name there, while Simple, the title and the grouping tell them apart.
+- Advanced Home names a site by its host and port too (`siteName` in its rows, menus, cards, palette and toasts), so
+  two crawls of one host on different ports are two named sites, as in Simple, the title and the grouping (the review
+  fixes, below). The e2e tests look Home's rows up by `siteRow()`.
+
+## Round 5's review fixes
+
+Two reviewers read round 5 joined; every finding was fixed with a test seen failing first.
+
+- **Delete file… keeps its crawl.** The row menus (`CrawlMenu`, Simple's `RowMenu`) keep the crawl a confirmation was
+  opened for: a site's row can show another crawl while it's open (its running crawl finishes and becomes the latest),
+  and Delete file deletes what the dialog named.
+- **A crawl's secrets go with it.** `api.deleteCrawlFile` forgets `crawl:<id>` in the credential store;
+  `api.removeCrawl` takes them out at once and holds them in memory for `restoreCrawl` (Undo) to put back, so an app
+  closed before the Undo runs out leaves nothing behind. A quick start (`quickStartUrl`) asks `start-url` with the saved
+  defaults, their secrets in.
+- **Home's running cards** are headed by `runningTitle` ("1 crawling, 1 paused"), and a site's row badge follows its
+  running crawl's status (Crawling now, Paused, Stopping, Analysing). A crawl only being analysed has a card of its own:
+  Crawled and Pages from what it holds, no queue, rate or bar. Crawled's line is Overview's, "URLs the crawl asked for".
+  The card's status line is one line whatever phase arrives, and `useElementWidth` measures before the first paint, so
+  the card's height holds from its first frame (an e2e test reads it on every frame).
+- **Exclude this value** on a yes-or-no column filters `isNot` (the engine's new operator: the other value or
+  unknown), so the rows where it's unknown stay; the filter editor offers "is not yes" and "is not no". "Not crawled" (a
+  status with no code and no outcome) filters the outcome being empty, never the code alone, which robots.txt-blocked
+  URLs share.
+- **The grid's header** cursor follows a column pinned or unpinned from its menu; a header press let go off the header
+  is forgotten on the next move with no button held.
+- **Reach**: a check reported once for the whole site (`reportedOnce`) is the whole site, "Checked once for the whole
+  site, not URL by URL", as Simple says it, never "1 URL, <0.1%".
+- **Continue** isn't offered for a crawl whose file is missing. **Showing a hidden check** says where ("in every
+  crawl", "in this crawl") and is said once with Undo.
+- **Hidden checks in the grids.** Every grid read, its facets and its grid exports send the crawl's hidden checks
+  (`withHiddenChecks` in `api/client.ts`), so the Issues, Errors, Warnings and Notices columns leave them out;
+  `watchHiddenChecks` (`api/hiddenChecksRefresh.ts`) reads the grids again when they change.
+- A column the engine refuses is named by its place in the columns the query sent (sorted), not the view's order.
+- `GoToUrl.test.tsx` pays for the app's first render once, in a `beforeAll`, and keeps the suite's 5 s limit.
