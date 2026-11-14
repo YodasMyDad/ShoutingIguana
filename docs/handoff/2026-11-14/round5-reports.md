@@ -62,6 +62,38 @@ filters. All built.
   `SummaryScreen.tsx`, `WhatToFixScreen.tsx` (A's), `ReportScreen.tsx`, `reportQuery.ts` (hidden-checks query; D owns
   the frame styling), `.si-grid-header` CSS, `ExportButton` icon-only variant, two fields in `settings/schema.ts`.
 
-## Part A: `ui/r5-simple`: running
+## Part A: `ui/r5-simple` at `7f910d0` (ui/step-3 07ba6ba merged)
+
+Gaps 1, 2, 6, 7, 11/G5, 12, 14, 25, 29, 30, G3, "last checked", 32 (Simple doc). All built.
+
+- Gap 1, scheme: the UI's `withScheme` always added `https://`. Engine `StartAddress.ChooseAsync` asks https and
+  http at once (10 s max, no extra headers), https if it answers at all, else http; new `POST
+  /api/crawl-options/start-url`; Simple Home and New check use it (`startUrlFor` in `crawl/actions.ts`). The
+  2-minute wait was robots.txt's RFC 9309 retry for an https origin that never answered: gone for bare addresses,
+  kept (and shown) for an explicit `https://` that refuses. Robots states each get their own sentence on "No pages
+  could be read"; "stay out" only when the rules refuse.
+- Gap 2: analyse when it stops (not on first open): the sidecar analyses a crawl the user stopped (not one stopped by
+  quitting, interrupted or failed). Simple's Summary: dashed "so far" ring with Continue, the toast said again with
+  results, Open the report only with results; Advanced's Overview "Score so far". Consequence: remove, delete and
+  continue answer "busy" while a just-stopped crawl is analysed; cancelling the analysis frees it.
+- Words (6, 7, 29): palette and `?` sheet, every `exportWords.ts` line, export and refusal toasts, saving list, About
+  and Updates ("Site checker"), the Settings note, the switch's hint, the sidebar heading (Checking now / Paused /
+  Working out the results; Advanced "2 crawling, 1 paused"). `simple/simpleWords.test.tsx` (20 tests) fails on the
+  glossary's Advanced-only words.
+- G5: toast actions go under the text below 200 px (always for two); text 293-326 px both themes, 100% and 200%.
+- Gap 12 "The one cause is shown" / "Showing 25 of 126 causes", the real origin; gap 14 the Summary's duration (start
+  to finish, labelled, for older crawls) and Save as PDF (`/report?print=true`, prints once loaded); gap 25 no slow
+  alert before 10 of the site's own answers; gap 30 sites by host and port; G3 a problem opens at its top and Back
+  restores the list's scroll (`simple/scrollPlace.ts`); "last checked" = the start everywhere.
+- Verified: typecheck, lint, format, scripts 44, unit 3,495 (one run under the engine tests had 15 timeouts in grid,
+  inspector and overview tests; pass alone), storybook 494 x 3 modes clean, sidecar, e2e 188 + 3 `simple-home`
+  failures fixed in `7f910d0` (file 5/5; full e2e NOT re-run after), new spec 30/30 at repeat 10, engine 1,434 + 269
+  + 28, 100k bench green (194 MB). Not verified: a real screen reader, the Tauri shell.
+- Integration notes: B's Advanced Home (`HomeScreen.tsx:62`) still adds `https://`: use `startUrlFor`; B's Delete
+  and Continue right after a stop must handle the analysing ("busy") state; A also did the paused heading in
+  `crawl/runningWords.ts` (B did it with `runningHeading` in `Sidebar.tsx`: keep one); A changed
+  `e2e/overview.spec.ts`'s stopped-crawl assertion; `overview/emptyCrawl.ts`'s robots sentence could take the robots
+  state. In D's files: `layout/ModeSwitch.tsx` (one hint line), `layout/Sidebar.tsx`, `ReportFrame.tsx`
+  (`printWhenLoaded`), About and Updates labels.
 
 ## Part D: `ui/r5-shell`: running
