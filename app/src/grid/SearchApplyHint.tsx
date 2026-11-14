@@ -19,7 +19,7 @@ export function useSearchApplyHint(pending: boolean): SearchApplyHint {
   return {
     describedBy: id,
     end: pending ? (
-      <span className="si-field__hint" title="Press Enter to search">
+      <span className="si-field__hint si-field__enter" title="Press Enter to search">
         <Kbd chord="enter" size="sm" aria-hidden />
       </span>
     ) : null,

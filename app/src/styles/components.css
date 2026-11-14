@@ -498,7 +498,7 @@
     outline-offset: calc(var(--hairline) * -1);
   }
 
-  .si-field:focus-within .si-field__hint {
+  .si-field:focus-within .si-field__hint:not(.si-field__enter) {
     display: none;
   }
 
