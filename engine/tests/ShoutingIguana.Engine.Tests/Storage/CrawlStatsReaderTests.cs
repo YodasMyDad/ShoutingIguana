@@ -16,7 +16,9 @@ namespace ShoutingIguana.Engine.Tests.Storage;
 [Collection(GridCrawlCollection.NAME)]
 public sealed class CrawlStatsReaderTests(GridCrawl crawl) : IDisposable
 {
-    private const string PAGE = "u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL";
+    /// <summary>A page, by plain SQL: Cloudflare's own /cdn-cgi/ endpoints aren't the site's (round 5).</summary>
+    private const string PAGE =
+        "u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL AND instr(lower(u.url), '/cdn-cgi/') = 0";
 
     private static readonly string NOT_CHECKED =
         $"COALESCE(substr(r.error, 1, {RetryingFetcher.NOT_CHECKED_ERROR.Length}) = '{RetryingFetcher.NOT_CHECKED_ERROR}', 0)";
