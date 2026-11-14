@@ -67,13 +67,21 @@ export const SITE_PAGES: readonly GridFilter[] = [
 export const CRAWLED_SITE_PAGES: readonly GridFilter[] = [...SITE_PAGES, { column: 'fetched', op: 'is', value: true }];
 
 /**
+ * Cloudflare's own `/cdn-cgi/` endpoints (the email-protection page every obfuscated address links to): Cloudflare's,
+ * not the site's, so no count of the site's pages has them (the engine's `CrawlSchema.PAGE`, round 5), ignoring the
+ * case of ASCII letters as this filter does.
+ */
+export const NOT_CLOUDFLARE: GridFilter = { column: 'url', op: 'notContains', value: '/cdn-cgi/' };
+
+/**
  * The site's pages: its URLs that answered 2xx with HTML the crawl read. What depth and response times are about, and
- * what "pages" counts everywhere (the library's `pageCount`, a running crawl's `htmlPages`), by the engine's own
- * definition, which goes by the word count: a URL whose status alone was checked (an iframe's target) has none, and
- * isn't a page though it answered 2xx with HTML.
+ * what "pages" counts everywhere (the library's `pageCount`, a running crawl's `htmlPages`, the analysis's
+ * `pagesAnalyzed`), by the engine's own definition, which goes by the word count: a URL whose status alone was checked
+ * (an iframe's target) has none, and isn't a page though it answered 2xx with HTML. Nor is Cloudflare's endpoint.
  */
 export const ANSWERED_SITE_PAGES: readonly GridFilter[] = [
   ...SITE_PAGES,
   { column: 'statusClass', op: 'in', values: ['2xx'] },
   { column: 'wordCount', op: 'isNotEmpty' },
+  NOT_CLOUDFLARE,
 ];

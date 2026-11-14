@@ -141,3 +141,49 @@ export function checkShare(check: CountedCheck, count: number | null, analysis: 
     context: `of the ${formatCountOf(of, noun)} ${what}`,
   };
 }
+
+/** A check, as far as how much of the site its count is goes: whether it finds one fault of the whole site. */
+export type ReachingCheck =
+  | (NonNullable<CountedCheck> & {
+      readonly siteWide?: boolean | undefined;
+      readonly reportedOnce?: boolean | undefined;
+    })
+  | null
+  | undefined;
+
+/** How much of the site a check's count is: a share of what it's a part of, or the whole site. */
+export interface CheckReach {
+  /** The figure's label: "Share of pages", "Reach". */
+  label: string;
+  /** The figure: "3.4%", "Whole site". */
+  value: string;
+  /** What it is of, in a line: "of the 265 pages analysed", "A fault of the whole site, not of its pages". */
+  context: string;
+  /** All of it in words, for a list row's accessible name and tooltip: "3.4% of the 265 pages analysed". */
+  words: string;
+}
+
+/**
+ * How much of the site a check's count is, Screaming Frog's "% of Total" (docs/v2-comparison.md): the share
+ * `checkShare` gives, of the pages analysed for a `page` check and of the URLs crawled for any other; or, for a check
+ * that finds a fault of the whole site (`siteWide`, which Simple says as "The whole site"), the whole site, never "1
+ * page, <0.1%". A check reported once a site (or a sitemap) that finds no fault of the whole site keeps its share, as
+ * Advanced has always said it. Null where no share is known to be true, as `checkShare` says.
+ */
+export function checkReach(
+  check: ReachingCheck,
+  count: number | null,
+  analysis: CrawlCounts | null,
+): CheckReach | null {
+  if (count === null || count <= 0) return null;
+  if (check?.siteWide) {
+    return {
+      label: 'Reach',
+      value: 'Whole site',
+      context: 'A fault of the whole site, whatever its count',
+      words: 'the whole site',
+    };
+  }
+  const share = checkShare(check, count, analysis);
+  return share ? { ...share, words: `${share.value} ${share.context}` } : null;
+}

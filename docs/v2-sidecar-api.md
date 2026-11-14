@@ -238,7 +238,7 @@ Built in stages:
   only where that's true:
   - `page`: every URL it flags is a page, as the analysis counts them (`pagesAnalyzed`): an internal URL that answered
     with HTML the crawler read, and that the analysis audits. Its count is a part of the pages the analysis read. (The
-    library's `pageCount` counts Cloudflare's `/cdn-cgi/` endpoints too, which no check flags: E7.)
+    library's `pageCount` is the same pages since round 5: Cloudflare's `/cdn-cgi/` endpoints are in neither.)
   - `url`: it can flag any URL the crawl has: a file (`internal-client-error` flags a missing image, as its text says),
     a redirect, a URL that didn't answer or wasn't fetched, a URL on another of the site's versions. Its count is of
     URLs, not of pages, and may be more than the pages crawled.
@@ -349,11 +349,11 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   checked has its place in those sums as `noResponse.notChecked`. Taking it out of `fetched` would break every sum a
   client makes with it, the UI's own among them, to save one subtraction; so the count that leaves it out has its own
   name.
-- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed — as in `si stats`, and the same
-  definition a running crawl's `htmlPages` uses, so the count doesn't shift when a crawl ends. **It counts every page
-  the crawl parsed, Cloudflare's own `/cdn-cgi/` endpoints among them, which the analysis doesn't audit**, so it can be
-  more than the analysis's pages: the synthetic site serves one (`/cdn-cgi/l/email-protection`), so its seeded crawl
-  reads 156 against 155, and the 100k crawl 101,107 against 101,106; the garden crawl, which has none, 265 and 265.
+- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed, but for Cloudflare's own
+  `/cdn-cgi/` endpoints — as in `si stats`, and the same definition a running crawl's `htmlPages` uses, so the count
+  doesn't shift when a crawl ends. **Since round 5 it is the analysis's definition too** (`CrawlSchema.PAGE`), so it is
+  `pagesAnalyzed` while the crawl hasn't changed since its analysis: the 100k crawl reads 101,106 in both, where E7 had
+  101,107 against 101,106 ([Engine changes round 5 made](#engine-changes-round-5-made)).
 - **`pagesAnalyzed`** (E7) is the pages the last analysis audited, which its score covers: the analysis's own
   `pagesAnalyzed` and the score's `covers.pages`, as they stood when it ran. **Beside the score, show this one**, not
   `pageCount`. Null before the first analysis; a sidecar from before E7 doesn't send it.
@@ -3555,3 +3555,19 @@ passed and the 2 measurements skipped as they are without `SI_E2E_MEASURE`.
 Not verified: the exports' new words against every state a real site gives (the tests hold each word to a literal and
 the synthetic crawls' rows to the screens' reads; the garden crawl's lists weren't exported); a crawl of a million
 URLs; anything on CI's runners, as nothing was pushed.
+## Engine changes round 5 made
+
+- **One count of pages** (part B; the closing audit's gap 3). Home said 101,107 pages of the 100k crawl where Issues
+  and Simple said 101,106: E7 kept the library's `pageCount` (every page the crawl parsed, Cloudflare's `/cdn-cgi/`
+  endpoint among them) apart from the analysis's `pagesAnalyzed` (which leaves it out), each true by its own
+  definition. The owner's word on the audit ("one number everywhere", `v2-ui-ia.md`) overrules that: a user can't tell
+  two counts of pages apart, and Cloudflare's endpoint is Cloudflare's, not the site's. `CrawlSchema.PAGE` now leaves
+  out a URL with `/cdn-cgi/` in it, ignoring the case of ASCII letters (`CrawlSchema.NOT_CLOUDFLARE`, which the
+  analysis's `SITE_PAGE` uses too), and so do the live counter (`CrawlWriter.IsPage`) and the outcome a refetch takes
+  back (`WriterStatements.ReadOutcome`). So `pageCount`, `si stats`'s pages and indexable pages, a running crawl's
+  `htmlPages`, the history's and the benchmark's expectation (`HtmlPages`, which the synthetic site now counts without
+  its endpoint) are the analysis's pages: the 100k crawl reads 101,106 everywhere, the seeded synthetic crawl 155, the
+  garden crawl 265 as before. Existing crawl files read the new way at once: every count is taken from the file when
+  read. The app's filter for the site's pages adds `url notContains /cdn-cgi/`, so a figure of pages opens exactly
+  them. Tests: `GridServingTests.TheLibrarysPagesAreThePagesItsAnalysisAudited` (it asserted the difference of one
+  before), `UrlSummaryAgreement` (indexable pages without the endpoint), and the app's `e2e/counts-agree.spec.ts`.

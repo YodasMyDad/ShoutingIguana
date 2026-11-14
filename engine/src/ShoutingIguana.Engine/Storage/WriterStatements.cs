@@ -70,10 +70,10 @@ internal sealed class WriterStatements : IDisposable
             "$descriptionCount", "$h1", "$h1Count", "$canonical", "$noindex", "$nofollow", "$indexability",
             "$indexabilityReason", "$words", "$contentHash", "$simhash", "$language", "$outlinks", "$simhash1", "$simhash2", "$simhash3");
         _readOutcome = Prepare(connection, $"""
-            SELECT r.outcome, r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL,
+            SELECT r.outcome, r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL AND {CrawlSchema.NOT_CLOUDFLARE},
                    CASE WHEN r.body_bytes IS NOT NULL THEN COALESCE(r.size_bytes, 0) ELSE 0 END, r.status_code,
                    r.outcome = {(int)FetchOutcome.NetworkError} AND {AnalysisReader.NOT_CHECKED}
-            FROM responses r WHERE r.url_id = $id
+            FROM responses r JOIN urls u ON u.id = r.url_id WHERE r.url_id = $id
             """, "$id");
         _deleteResponse = Prepare(connection, """
             DELETE FROM responses WHERE url_id = $id;

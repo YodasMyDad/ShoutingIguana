@@ -518,6 +518,7 @@ export function IssuesScreen() {
               onShowHiddenChange={setShowHidden}
               hiddenTotal={entries?.filter((entry) => entry.hidden).length ?? 0}
               notesShown={analysis.data.notes.length > 0}
+              totals={analysis.data}
               onClearFilters={clearFilters}
               refreshing={refreshing}
               filterRef={filterRef}

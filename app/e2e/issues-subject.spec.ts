@@ -17,6 +17,7 @@ interface Check {
   title: string;
   grouping: 'detail' | 'relatedUrl' | 'none';
   subject?: 'page' | 'url';
+  siteWide?: boolean;
 }
 interface Analysis {
   pagesAnalyzed: number;
@@ -66,6 +67,8 @@ const PAGES: Filter[] = [
   { column: 'source', op: 'notIn', values: ['siteVersion'] },
   { column: 'statusClass', op: 'in', values: ['2xx'] },
   { column: 'wordCount', op: 'isNotEmpty' },
+  // Cloudflare's endpoint is no page of the site's in any count (round 5).
+  { column: 'url', op: 'notContains', value: '/cdn-cgi/' },
 ];
 
 /** The words for what a check flags: pages only where the catalog says it flags nothing else. */
@@ -243,6 +246,15 @@ test('every check’s count is called what the check flags, as a share of the AP
       await expect(affected).toHaveText(
         new RegExp(`^${words.Many} affected\\s*${count(flaggedCount)}\\s*Open them in URLs$`),
       );
+      // A fault of the whole site is the whole site, as Simple says, never "1 page, <0.1%" (round 5, gap 28).
+      if (check.siteWide) {
+        await expect(figure(page, 'Reach')).toHaveText(
+          /^Reach\s*Whole site\s*A fault of the whole site, whatever its count$/,
+        );
+        await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await expect(option).toHaveAccessibleName(new RegExp(`, the whole site$`));
+        return;
+      }
       // Its share, of the right count of the right thing.
       const share = figure(page, `Share of ${words.many}`);
       const shareText = new RegExp(
@@ -273,7 +285,10 @@ test('every check’s count is called what the check flags, as a share of the AP
       }
       // Its row in the list says the same.
       await expect(option).toHaveAccessibleName(
-        new RegExp(`${literal(check.title)} ${count(flaggedCount)} ?${flaggedCount === 1 ? words.one : words.many}$`),
+        // Then its share of the site, "% of total" (round 5): of the pages analysed, the URLs crawled, or the whole site.
+        new RegExp(
+          `${literal(check.title)} ${count(flaggedCount)} ?${flaggedCount === 1 ? words.one : words.many}(, .+)?$`,
+        ),
       );
     });
   }

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
-import type { CrawlStatus, IssueCounts } from '../api/types';
+import { isCrawlStatus, type IssueCounts } from '../api/types';
 import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection, type CrawlSectionEntry } from '../app/sections';
 import { SIMPLE_SECTIONS } from '../app/modeRoutes';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
@@ -289,16 +289,15 @@ function RunningCrawls({ collapsed, simple }: { collapsed: boolean; simple: bool
   const live = useLiveIds();
   const library = useQuery(libraryQuery()).data;
   // What each does now, read as one string so the store's answer is stable between changes.
-  const doing = useLive((state) => live.map((id) => state.crawls[id]?.status ?? '').join(' '));
+  const doing = useLive((state) => live.map((id) => state.crawls[id]?.status ?? '').join(' '))
+    .split(' ')
+    .map((status) => (isCrawlStatus(status) ? status : null));
   if (live.length === 0) return null;
   return (
     <section aria-label={simple ? 'Checking now' : 'Running crawls'} className="flex flex-col gap-0.5">
       {collapsed ? null : (
         <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">
-          {runningTitle(
-            doing.split(' ').map((status) => (status === '' ? undefined : (status as CrawlStatus))),
-            simple ? 'simple' : 'advanced',
-          )}
+          {runningTitle(doing, simple ? 'simple' : 'advanced')}
         </h2>
       )}
       <ul className="flex flex-col gap-0.5">

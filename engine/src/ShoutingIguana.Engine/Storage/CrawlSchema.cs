@@ -9,11 +9,24 @@ internal static class CrawlSchema
     public const int VERSION = 2;
 
     /// <summary>
-    /// A page, as every count of pages goes by (si stats, the library, a crawl's live progress): an internal URL that
-    /// answered with HTML the crawler read and parsed. A URL that was only status-checked has no word count, so it isn't
-    /// one. SQL over <c>responses r</c> joined to <c>urls u</c>; outcome 0 is a success.
+    /// A page, as every count of pages goes by (si stats, the library, a crawl's live progress, the analysis): an internal
+    /// URL that answered with HTML the crawler read and parsed. A URL that was only status-checked has no word count, so
+    /// it isn't one; nor is one of Cloudflare's own <c>/cdn-cgi/</c> endpoints (the email-protection page every
+    /// obfuscated address links to), which is Cloudflare's, not the site's, and which the analysis doesn't audit. So the
+    /// pages a crawl read and the pages its analysis audited are one number. SQL over <c>responses r</c> joined to
+    /// <c>urls u</c>; outcome 0 is a success.
     /// </summary>
-    public const string PAGE = "u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL";
+    public const string PAGE = $"u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL AND {NOT_CLOUDFLARE}";
+
+    /// <summary>
+    /// Not one of Cloudflare's own <c>/cdn-cgi/</c> endpoints: SQL over <c>urls u</c>, as <see cref="IsCloudflareEndpoint"/>
+    /// has it. Ignoring the case of ASCII letters, as the URL grid's <c>notContains</c> does, so the grid's filter for
+    /// the site's pages lists exactly the pages counted.
+    /// </summary>
+    public const string NOT_CLOUDFLARE = "instr(lower(u.url), '/cdn-cgi/') = 0";
+
+    /// <summary>One of Cloudflare's own <c>/cdn-cgi/</c> endpoints, which no count of the site's pages has in it.</summary>
+    public static bool IsCloudflareEndpoint(string url) => url.Contains("/cdn-cgi/", StringComparison.OrdinalIgnoreCase);
 
     public const string CREATE = """
         CREATE TABLE crawl (

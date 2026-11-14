@@ -11,8 +11,10 @@ list mode, extraction), **step 5** (integrations), **later**, **not doing**.
 ## The answer
 
 - **Behind.** No JavaScript rendering: 113 of their 348 issues need a browser. Fewer checks: we cover 71 of the 348,
-  and 7 more in part. No export in the app, list mode, include and exclude, extraction, comparison, scheduling,
-  visualisations or integrations. A URL grid of 4 columns, with no sort and no column chooser.
+  and 7 more in part. No list mode, include and exclude, extraction, comparison, scheduling, visualisations or
+  integrations. (Written on 2026-11-02. Since then step 3 has built export from every grid, the workbook and the
+  report, and a URL grid with column presets and a chooser, header sort, filters and saved views: see
+  [Since this was written](#since-this-was-written).)
 - **Level.** The plain HTTP crawl: robots.txt, sitemaps, redirects, canonicals, hreflang, duplicates, orphans,
   resume and speed. Storage on disk. A "what" and a "how to fix" for every issue. Light and dark. A command line.
 - **Ahead.** The first minute. The answer screen with "Fix first". Issues grouped by cause. Skipped checks named
@@ -25,6 +27,25 @@ list mode, extraction), **step 5** (integrations), **later**, **not doing**.
   Lighthouse checks stand on it.
 
 For Simple: take Sitebulb's two-sentence hints and its count with a percentage. Don't take its score.
+
+### Since this was written
+
+Step 3 (to round 5, 2026-11-14) has built, of what this page found missing or took:
+
+- **Export** on every grid (CSV and Excel of the view, its filters and columns), the workbook of everything, the
+  report as HTML and PDF, and `si export` on the command line.
+- **The URL grid**: column presets and a chooser, header sort (up to three keys), filters as chips and a filter
+  builder, saved views, 28 px rows in the compact density.
+- **"% of Total"** beside every check's count in Issues and Overview's Fix first, of the pages analysed or the URLs
+  crawled, said whole in the row's name; a fault of the whole site is "Whole site" (round 5).
+- **A row of totals** before anything else on Overview: Crawled, Internal, External, Pages and Found, each opening its
+  URLs (round 5).
+- **The library on Home grouped by site** in Advanced as in Simple, with the running crawls as cards and every action
+  in a row's menu (round 5).
+- **A report for someone else**: Simple's report, in both modes (round 4).
+
+Still later, and in [the IA's room for what comes later](v2-ui-ia.md#room-for-what-comes-later): the SERP snippet,
+the duplicates diff and Insight.
 
 ## 1. Features
 
@@ -82,8 +103,8 @@ For Simple: take Sitebulb's two-sentence hints and its count with a percentage. 
 | Crawl depth | A column, a chart and "Pages With High Crawl Depth" | A column and a chart. No check | **the check audit** |
 | Pagination | rel="next" and rel="prev" stored, and crawled on request. 7 issues | The links are followed, as a crawl setting. No checks | **later** |
 | Storage and scale | Database storage by default. Their rough guide: an SSD and 4 GB allocated for about 2 million URLs. Memory mode: 10k to 100k URLs at 2 GB. Java, with memory to allocate by hand | One SQLite file per crawl. A 100k-page synthetic site at about 2,900 pages a second in 168 to 195 MB, flat. The UI isn't measured at 1M | Level in design. Ours is unproven on large real sites |
-| Saved crawls | Saved as they run in database mode. "File > Crawls", project folders, retention (v23). The free version can't save | Every crawl is a file. The library on Home, grouped by site | Level |
-| Command line | Launch, configure, crawl and export almost anything, headless | `si crawl`, `analyze`, `issues`, `stats`. One export: issues as CSV | Level for crawling. Exports: **step 3** |
+| Saved crawls | Saved as they run in database mode. "File > Crawls", project folders, retention (v23). The free version can't save | Every crawl is a file. The library on Home, grouped by site in both modes (Advanced's since round 5; it was a flat list before) | Level |
+| Command line | Launch, configure, crawl and export almost anything, headless | `si crawl`, `analyze`, `issues`, `stats`, and `si export` (a grid as CSV or Excel, the workbook, the report) | Level for crawling. Exports: built in step 3 |
 | User agent, headers | Presets and a custom string. Any request header | The same | Level |
 | Theme | Light, dark, an accent colour | Light, dark, follows the OS, forced colours | Level |
 | Platforms | Windows, macOS, Ubuntu, Fedora | The shell has run on Windows only. The engine's tests run on three systems | **later** |
@@ -209,18 +230,18 @@ Screaming Frog's three-pane screenshot dates from 2020.
 
 | | Screaming Frog | Sitebulb, where it differs | Us | Verdict |
 | --- | --- | --- | --- | --- |
-| How much one screen holds | Three panes at once: the grid, tabs about the selected URL below it, and Overview or Issues on the right. About 22 rows by 7 columns in the grid of a small window, with both other panes open. The guide lists 57 columns for the Internal tab, and 35 top tabs | Cards, not rows: about three hints fill a screen (their screenshot) | The URL grid: 16 rows by 4 columns. The inspector takes the right third or the bottom half. Rows can be 28, 32 or 40 px | Theirs holds more. **Step 3**: 28 px rows as Advanced's default, column presets and the chooser, more columns on show |
+| How much one screen holds | Three panes at once: the grid, tabs about the selected URL below it, and Overview or Issues on the right. About 22 rows by 7 columns in the grid of a small window, with both other panes open. The guide lists 57 columns for the Internal tab, and 35 top tabs | Cards, not rows: about three hints fill a screen (their screenshot) | The URL grid: 16 rows by 4 columns when this was written; now column presets and a chooser (step 3). The inspector takes the right third or the bottom half. Rows can be 28, 32 or 40 px | Theirs holds more. Built in step 3: column presets and the chooser, more columns on show |
 | From "something is wrong" to "these URLs" | Click an issue on the right and the grid shows its URLs. The Inlinks tab below shows what links to one (inferred from the Issues screenshot) | Each hint has "View URLs" and "Export URLs" | "Fix first" or Issues, then the check's groups by cause, then "Show all N pages in URLs", then the inspector. Every number is a link | Level. Theirs is one click shorter, ours explains the cause. Keep ours |
 | What a first-time user sees | A menu bar of 12 menus, a row of tabs, an empty grid, a URL box and Start. Since v25 the first tab is a Dashboard | Audit setup, then an Audit Overview with scores | "Crawl a site. Paste a URL and press Enter", and the library | Ahead |
 | How an issue is explained | An "Issue Details" pane: "Description" and "How To Fix", a paragraph each. A page per issue on their site | A card: two sentences (what, why), URLs and percentage, and "Learn more…" to a page of 350 to 450 words, some with examples and code | "What's wrong", "Why it matters", "How to fix it", a Learn more link, and the evidence grouped | Level with Sitebulb, ahead of Screaming Frog in the app. Take Sitebulb's "Examples that trigger this Hint": **the check audit** |
 | How issues are prioritised | Type by priority, both sortable. v25 lets a user disable or re-rank an issue | Importance (Critical, High, Medium, Low, Insight) by type (Issue, Potential Issue, Opportunity), and a score | Three severities. "Fix first" sorts by severity, then pages affected | Level. Take "Insight": a class for facts that aren't faults ([For Simple mode](#for-simple-mode)) |
-| Filters and search | A filter per tab. A search box with regex, preset filters and combined rules. v25 adds search to Overview and Issues | A URL Explorer with chosen columns and an advanced filter (from a search summary, not read) | Chips that links apply, and one search over URLs and titles. No filter builder, header sort or saved views yet | Behind. **Step 3** |
+| Filters and search | A filter per tab. A search box with regex, preset filters and combined rules. v25 adds search to Overview and Issues | A URL Explorer with chosen columns and an advanced filter (from a search summary, not read) | Chips that links apply, and one search over URLs and titles. A filter builder, header sort and saved views since step 3 | Level since step 3 |
 | One URL in detail | About 16 lower tabs: URL Details, Inlinks, Outlinks, Image Details, Resources, SERP Snippet, Rendered Page, View Source, HTTP Headers, Cookies, Duplicate Details, Structured Data Details, Lighthouse Details, N-grams and more | A panel that slides in from the right (search summary, not read) | Nine tabs: Summary with indexability as four tests, Issues, Inlinks, Outlinks, Redirects hop by hop, Headers, Structured data, Hreflang, Source. Links walk to the next URL, with back and forward | Ours reads better, theirs holds more. SERP snippet and the duplicate diff: **later**. Rendered page: **step 4** |
 | Live crawl feedback | A progress bar with a percentage, "Completed 729 of 12,245 (5.95%) 11,516 Remaining", average and current URLs a second. Tabs fill as it runs | Not read | Counts, URLs a second, found against crawled, status codes, alerts with what to do, the status in the top bar of every screen, the tray | Ahead |
-| Exports | On every tab and filter, plus Bulk Export, Multi Export and reports | Per hint, bulk, Google Sheets, PDF | Copy URLs. `si issues --csv` | Behind. **Step 3** |
-| A report for someone else | Dashboards export as an image (v25). A Data Studio report. No PDF report in what I read | PDF for one report or the whole audit. The user picks the reports, charts and tables | None yet | Behind Sitebulb. **Step 3**, round 4 |
+| Exports | On every tab and filter, plus Bulk Export, Multi Export and reports | Per hint, bulk, Google Sheets, PDF | Copy URLs, and since step 3 Export (Ctrl+E) on every grid as CSV or Excel, the workbook of everything, the report, and `si export` | Level since step 3, but for Google Sheets and bulk inlinks |
+| A report for someone else | Dashboards export as an image (v25). A Data Studio report. No PDF report in what I read | PDF for one report or the whole audit. The user picks the reports, charts and tables | None when this was written; since round 4, the report (HTML, printed to PDF), in both modes | Level with Screaming Frog; behind Sitebulb's choice of sections |
 | What wasn't checked | "All Issues" lists issues not triggered. Filters that need "crawl analysis" say so. Several checks are off by default | A section not selected at setup scores 100 | Skipped checks are always listed, each with its reason | Ahead. Simple must keep it |
-| Many crawls | "File > Crawls": open, rename, project folders, duplicate, delete, retention | Not read | The library on Home, grouped by site, with status and counts | Level |
+| Many crawls | "File > Crawls": open, rename, project folders, duplicate, delete, retention | Not read | The library on Home, grouped by site (in Advanced since round 5), with status, counts and every action of a crawl in its menu: open, continue, crawl again, analyse again, show in folder, remove, delete | Level |
 | Theming | Light by default, dark, an accent colour | Not found | Light, dark, follows the OS, forced colours | Ahead |
 | Accessibility of the app | Nothing on the pages I read | Nothing on the pages I read | axe on every story, forced colours, reduced motion, 200% zoom with two open defects. No real screen reader yet | Can't compare. Ours is tested |
 | Keyboard | No shortcut list in the guide. Ctrl+Shift+C opens a config diff (v22) | Not found | Ctrl+K palette, a shortcut sheet, grid keys, J and K in Issues | Ahead |
@@ -228,10 +249,12 @@ Screaming Frog's three-pane screenshot dates from 2020.
 **What to take from Screaming Frog.**
 
 - Density, as above. An expert reads 20 rows of 7 columns at a glance, and ours shows 16 of 4.
-- "% of Total" beside every issue count. Our checks list shows a count only.
+- "% of Total" beside every issue count. Our checks list showed a count only. **Done in round 5**: beside each
+  check's count in Issues and Fix first.
 - A row of totals before anything else. Their default Dashboard: Crawled, Internal, External, Issues, Warnings,
-  Opportunities.
-- Export on every grid, in the same place.
+  Opportunities. **Done in round 5**: Overview opens with Crawled, Internal, External, Pages and Found; issues by
+  severity follow it.
+- Export on every grid, in the same place. **Done in step 3** (E5).
 
 **What not to take.** The tab row, the 12 menus, and switches a user must find before a check runs.
 

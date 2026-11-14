@@ -184,7 +184,7 @@ internal static class BenchCommand
                 mismatches.Add($"The analysis is {(analysis.IsPartial ? "partial" : "complete")}, with notes: {Listed(analysis.Notes)}");
             }
 
-            mismatches.AddRange(ExpectationCheck.CompareSummary(UrlSummaryReader.ReadAll(databasePath), stats));
+            mismatches.AddRange(ExpectationCheck.CompareSummary(UrlSummaryReader.ReadAll(databasePath), stats, ExpectationCheck.CloudflareUrlIds(databasePath)));
         }
 
         var total = Math.Max(1, summary.Progress.Fetched);

@@ -2,7 +2,7 @@ import { Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { useId, type ReactNode, type Ref } from 'react';
 import type { CheckGroupRef, GridSort } from '../../api/grids';
 import type { Analysis } from '../../api/types';
-import { affectedCount, affectedWords, checkShare } from '../../crawl/checkSubject';
+import { affectedCount, affectedWords, checkReach } from '../../crawl/checkSubject';
 import { formatCount } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -73,8 +73,9 @@ export function CheckDetail({
   const { check, outcome, count } = entry;
   const found = outcome !== 'passed' && outcome !== 'skipped';
   const words = affectedWords(check);
-  // The share is of the analysis's own totals: the pages it ran on, or the URLs crawled when it ran (`checkShare`).
-  const share = found ? checkShare(check, count, analysis) : null;
+  // The share is of the analysis's own totals: the pages it ran on, or the URLs crawled when it ran (`checkShare`); a
+  // fault of the whole site is the whole site, as Simple says, never "1 page, <0.1%" (`checkReach`).
+  const share = found ? checkReach(check, count, analysis) : null;
   const groups = check.grouping !== 'none';
 
   return (

@@ -38,8 +38,9 @@ internal sealed record CrawlListItem
     public long CrawledUrlCount { get; init; }
 
     /// <summary>
-    /// Internal HTML pages fetched and parsed, as the crawl counts them (live, its progress): every one, Cloudflare's own
-    /// <c>/cdn-cgi/</c> endpoints included, which the analysis doesn't audit. So it can be more than <see cref="PagesAnalyzed"/>.
+    /// Internal HTML pages fetched and parsed, as the crawl counts them (live, its progress), Cloudflare's own
+    /// <c>/cdn-cgi/</c> endpoints left out as the analysis leaves them out: the pages the last analysis audited
+    /// (<see cref="PagesAnalyzed"/>) while the crawl hasn't changed since.
     /// </summary>
     public long PageCount { get; init; }
 

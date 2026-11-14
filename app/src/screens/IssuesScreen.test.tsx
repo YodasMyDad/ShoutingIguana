@@ -869,7 +869,7 @@ describe('a check’s count, worded by what the check flags', () => {
       'Affected pages3 pages',
     );
     expect(await screen.findByRole('grid', { name: 'Title too long: affected pages' })).toBeVisible();
-    expect(row(/^Notice Title too long 3 ?pages$/)).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?pages, 50% of the 6 pages analysed$/)).toBeVisible();
     expect(screen.queryByText(/URLs affected|Share of URLs|Affected URLs/)).toBeNull();
     // The pages analysed come with the analysis: nothing more is read for them.
     expect(facetReads(requests)).toBe(0);
@@ -890,7 +890,7 @@ describe('a check’s count, worded by what the check flags', () => {
     });
     expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
     expect(within(grid).queryByRole('columnheader', { name: 'Pages' })).toBeNull();
-    expect(row(/^Error Internal URL returns 4xx 2 ?URLs$/)).toBeVisible();
+    expect(row(/^Error Internal URL returns 4xx 2 ?URLs, 5% of the 40 URLs crawled$/)).toBeVisible();
     expect(screen.queryByText(/Pages affected|Share of pages|Affected pages/)).toBeNull();
     // Its group's link doesn't call them pages, nor say "URLs in URLs".
     await within(grid).findByText('404 Not Found');
@@ -912,7 +912,7 @@ describe('a check’s count, worded by what the check flags', () => {
       'Affected URLs3 URLs',
     );
     expect(await screen.findByRole('grid', { name: 'Title too long: affected URLs' })).toBeVisible();
-    expect(row(/^Notice Title too long 3 ?URLs$/)).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?URLs, 7\.5% of the 40 URLs crawled$/)).toBeVisible();
     expect(screen.queryByText(/Pages affected|Share of pages|Affected pages|pages analysed/)).toBeNull();
     const all = screen.getByRole('radio', { name: /All/ });
     act(() => all.focus());

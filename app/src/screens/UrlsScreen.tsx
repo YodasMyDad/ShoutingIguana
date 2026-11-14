@@ -307,7 +307,7 @@ export function UrlsScreen() {
   useAnnounceResults(
     crawlId,
     useMemo(() => JSON.stringify({ filters, q: q ?? '' }), [filters, q]),
-    rowCount === null || total === null ? null : formatShownOf(rowCount, total, 'URL'),
+    rowCount === null || total === null ? null : formatShownOf(rowCount, total, 'URL found', 'URLs found'),
   );
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -594,7 +594,13 @@ export function UrlsScreen() {
     <GridScreen ref={frame}>
       <GridHeader
         title="URLs"
-        count={rowCount !== null && total !== null ? <ResultCount shown={rowCount} total={total} noun="URL" /> : null}
+        // Every URL the crawl found, crawled or not: "URLs found", as Overview's Found is, never a bare "URLs", which is
+        // the URLs crawled everywhere (docs/v2-ui-ia.md, "One number everywhere").
+        count={
+          rowCount !== null && total !== null ? (
+            <ResultCount shown={rowCount} total={total} noun="URL found" plural="URLs found" />
+          ) : null
+        }
         badge={crawling ? <LiveBadge /> : null}
         className="px-6 pt-2 pb-1"
         actions={

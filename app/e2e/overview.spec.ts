@@ -182,7 +182,8 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   const pagesRead = count(
     /([\d,]+) pages? read/.exec(
       await main(page)
-        .getByText(/pages? read/)
+        // The line about the crawl ("305 URLs crawled, 155 pages read"), not the totals' "HTML pages read".
+        .getByText(/[\d,]+ pages? read/)
         .innerText(),
     )?.[1] ?? null,
   );

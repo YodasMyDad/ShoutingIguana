@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { focusFallback, useModalOpen, useOverlay } from '../app/overlays';
 import { ExportDialogHost } from '../export/ExportDialog';
 import { setCrawlSettingsOpener } from '../crawl/actions';
+import { CrawlFileDrop } from '../crawl/CrawlFileDrop';
 import { Announcer } from '../feedback/Announcer';
 import { AppToaster } from '../feedback/AppToaster';
 import { RegionBoundary } from '../feedback/RegionBoundary';
@@ -83,6 +84,8 @@ export function AppShell() {
       {palette}
       {shortcuts}
       <StoppingOverlay />
+      {/* A crawl file dropped on the window opens it, from any screen (round 5, gap 17). */}
+      <CrawlFileDrop />
       <ExportDialogHost />
       <AppToaster />
       <Announcer />
