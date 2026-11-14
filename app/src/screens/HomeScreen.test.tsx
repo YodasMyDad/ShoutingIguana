@@ -339,7 +339,8 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
     liveStore.ingest(message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id })));
     await open(() => json([LATEST, RUNNING]));
     const card = await screen.findByRole('article', { name: 'garden.example' });
-    expect(screen.getByRole('heading', { level: 2, name: 'Crawling now' })).toBeVisible();
+    // The cards' heading, as the sidebar's says it.
+    expect(document.getElementById('running-title')).toHaveTextContent(/^1 crawling$/);
     expect(within(card).getByRole('button', { name: 'Pause garden.example' })).toBeVisible();
     expect(within(card).getByRole('button', { name: 'Stop garden.example' })).toBeVisible();
     expect(within(card).getByRole('link', { name: 'Open garden.example' })).toBeVisible();
@@ -403,5 +404,37 @@ describe('Home’s Delete file…, while the library changes under it (round 5 r
     expect(sidecar.requests.filter((request) => request.path.endsWith('/delete-file')).map((r) => r.path)).toEqual([
       '/api/crawls/a000000000000002/delete-file',
     ]);
+  });
+});
+
+describe('Home’s crawls running now, by what each is doing (round 5 review R1-3)', () => {
+  const LATEST = site('a000000000000002', 'garden.example', '2026-11-01T10:00:00Z');
+  const RUNNING = site('e000000000000001', 'garden.example', '2026-11-02T10:00:00Z', { status: 'running' });
+
+  it('heads a paused crawl’s card as the sidebar does, and its site’s row says it’s paused, not crawling', async () => {
+    liveStore.ingest(message('hello', { live: [RUNNING.id] }));
+    liveStore.ingest(
+      message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id, status: 'paused' })),
+    );
+    await open(() => json([LATEST, RUNNING]));
+    await screen.findByRole('article', { name: 'garden.example' });
+    // The cards' heading (the sidebar has one of its own, which says the same).
+    expect(document.getElementById('running-title')).toHaveTextContent(/^1 paused$/);
+    const library = screen.getByRole('region', { name: 'Library' });
+    const row = within(library).getByRole('link', { name: 'garden.example' }).closest('tr')!;
+    expect(within(row).getByText('Paused')).toBeVisible();
+    expect(within(row).queryByText('Crawling now')).toBeNull();
+  });
+
+  it('says what each of two crawls is doing', async () => {
+    const OTHER = site('e000000000000002', 'oakmere.example', '2026-11-02T11:00:00Z', { status: 'running' });
+    liveStore.ingest(message('hello', { live: [RUNNING.id, OTHER.id] }));
+    liveStore.ingest(
+      message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id, status: 'paused' })),
+    );
+    liveStore.ingest(message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: OTHER.id })));
+    await open(() => json([LATEST, RUNNING, OTHER]));
+    await screen.findByRole('article', { name: 'oakmere.example' });
+    expect(document.getElementById('running-title')).toHaveTextContent(/^1 crawling, 1 paused$/);
   });
 });

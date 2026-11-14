@@ -46,7 +46,8 @@ test('a running crawl is a card above the library, with its live figures and its
     options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 2, maxRequestsPerSecond: 20 },
   });
   await page.goto('/');
-  const running = page.getByRole('region', { name: 'Crawling now' });
+  // Named by its heading, which says what the crawls do as the sidebar's does: "1 crawling", "1 paused".
+  const running = page.getByRole('region', { name: /^\d+ (crawling|paused|stopping|analysing)/ });
   const card = running.getByRole('article');
   await expect(card).toHaveCount(1);
   const crawled = () => card.locator('.si-stat__value').first().innerText();
@@ -65,6 +66,7 @@ test('a running crawl is a card above the library, with its live figures and its
   await expect(
     page.getByRole('region', { name: 'Running crawls' }).getByRole('heading', { name: '1 paused' }),
   ).toBeVisible();
+  await expect(running.getByRole('heading', { name: '1 paused' })).toBeVisible();
   await expect(card.getByRole('button', { name: /^Resume/ })).toBeVisible();
   await shoot(page, 'home-paused');
 

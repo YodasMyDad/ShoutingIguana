@@ -12,7 +12,8 @@ import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { commands, useCommands, type Command } from '../keyboard/registry';
 import { liveStore, useLive, useLiveIds } from '../live/liveStore';
-import { isCrawling } from '../api/types';
+import { isCrawlStatus } from '../api/types';
+import { runningTitle } from '../crawl/runningWords';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
 import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
@@ -23,7 +24,7 @@ import { SearchField } from '../ui/SearchField';
 import { TextField } from '../ui/TextField';
 import { removeFromLibrary } from './home/libraryActions';
 import { LibraryTable } from './home/LibraryTable';
-import { crawlActions, libraryView, librarySize, sitesRunning } from './home/library';
+import { crawlActions, libraryView, librarySize, runningBySite } from './home/library';
 import { RunningCrawlCard } from './home/RunningCrawlCard';
 
 /**
@@ -149,18 +150,16 @@ function Library({ titleRef }: { titleRef: Ref<HTMLSpanElement> }) {
   const library = useQuery(libraryQuery());
   const showSkeleton = useDelayedLoading(library.isPending);
   const live = useLiveIds();
-  // Whether every crawl running here is crawling (paused or stopping included), for the cards' heading.
-  const allCrawling = useLive((state) =>
-    state.live.every((id) => {
-      const status = state.crawls[id]?.status;
-      return status == null || isCrawling(status);
-    }),
-  );
   const searchRef = useRef<HTMLInputElement>(null);
 
   const items = library.data;
   const view = useMemo(() => libraryView(items ?? [], live, q), [items, live, q]);
-  const running = useMemo(() => sitesRunning(items ?? [], view.running), [items, view.running]);
+  const running = useMemo(() => runningBySite(items ?? [], view.running), [items, view.running]);
+  // What each card's crawl does now, read as one string so the store's answer is stable between changes: the cards'
+  // heading says it as the sidebar's does, "1 crawling, 1 paused" (round 5 review R1-3).
+  const doing = useLive((state) => view.running.map((item) => state.crawls[item.id]?.status ?? '').join(' '))
+    .split(' ')
+    .map((status) => (isCrawlStatus(status) ? status : null));
   const clearSearch = () => void navigate({ search: {}, replace: true });
 
   // The palette: the library's search, and each site's latest crawl, to open, continue, analyse again or remove.
@@ -254,7 +253,7 @@ function Library({ titleRef }: { titleRef: Ref<HTMLSpanElement> }) {
       {view.running.length > 0 ? (
         <section aria-labelledby="running-title" className="flex flex-col gap-3">
           <h2 id="running-title" className="text-16 font-semibold text-text">
-            {allCrawling ? 'Crawling now' : 'Running now'}
+            {runningTitle(doing, 'advanced')}
           </h2>
           {view.running.map((item) => (
             <RunningCrawlCard key={item.id} item={item} />
