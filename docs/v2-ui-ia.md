@@ -164,8 +164,10 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 - Its rows are grouped by detail or by the other URL involved, as the catalog says for each check, so a template
   fault is one row with its count; open a group for its first pages and all of them in URLs. A check whose detail is a
   measurement lists its URLs flat. One group is open at a time.
-- Actions: copy URLs (the check's, or the open group's), hide the check (remembered, with Undo), and Export (Ctrl+E):
-  this check, the open group's pages, the report and every check (the spreadsheet of everything).
+- Actions: copy URLs (the check's, or the open group's), hide the check in this crawl or in every crawl (remembered,
+  with Undo; its badge says which), and Export (Ctrl+E): this check, the open group's pages, the report and every
+  check (the spreadsheet of everything), and with the list filtered, the spreadsheet of the checks it lists. Hidden
+  checks are left out of every count and list, the report and the workbook; the score stays the analysis's.
 
 **URLs.**
 
@@ -176,11 +178,19 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
   count opening exactly that many URLs, counted when their menu opens; a filter bar over any column the engine filters
   (at most 20).
 - A sort of up to three columns from the headers: a press sorts by one, Shift adds the next key. Hiding a sorted
-  column drops its sort.
+  column drops its sort. "Clear the filters" keeps the sort and the columns.
+- Columns resize (drag a header's edge; a double-click puts it back), move (drag a header) and pin to the left edge
+  (the header's menu), on every grid: remembered per grid, and kept with a saved view. "All columns" is a preset of
+  every column the engine has, for a full export.
 - Quick search and saved views: the view (filters, search, sort, columns) under a name, opened from its menu or the
   palette on any crawl, renamed, or deleted with Undo.
 - Copy: the URLs of the view, the column the cursor is in, the selected rows. Each row has a menu: inspect, open in
-  the browser, copy, and its inlinks in Links.
+  the browser, copy, filter by the value under it or exclude it, and its inlinks in Links.
+- The search applies on Enter (each search is a read of the whole view and a place in the history): the Enter key
+  shows at the field's end while what's typed isn't applied.
+- In a short window (200% zoom of 1280x720) the presets, the facets, the filter bar and the notes fold behind one
+  button, whose name says the filters in force; the footer's key hints give way too. The grid keeps six rows, five
+  beside the inspector.
 - "12,345 of 101,107 URLs", live while crawling.
 - URLs on the crawled host show their path after the site's favicon, with the host named once in the column header.
   Other hosts, and the site's other versions, show in full. "Show full URLs" is a view option.
@@ -335,6 +345,9 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Home, End, Page Up, Page Down | Jump |
 | Shift+F10 or the menu key | Right-click menu: for the row, or the selection it's in. Esc gives the keyboard back to the row |
 | Up from the first row, then Enter | Sort by the header the cursor is on, where the grid sorts by it; Shift+Enter (or Shift+click) adds it to the sort, on the URL grid |
+| On a header: Shift+Left, Shift+Right | The column narrower or wider |
+| On a header: Ctrl+Shift+Left, Ctrl+Shift+Right | Move the column (never across the pinned columns' edge) |
+| On a header: Shift+F10 or the menu key | The column's menu: pin or unpin, move, wider, narrower, its width back, every column back |
 
 ### On URLs
 

@@ -387,8 +387,30 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
 - **Span rows** (`spanRow`): a row drawn as one cell across every column (`aria-colspan`), such as a group's pages and
   its "Show all N pages in URLs"; it is the cursor's cell whatever the cursor's column. Columns' `text` still gives
   every row's words for copying.
-- Columns are fixed widths: a grid in a panel (Issues') shares the panel's measured width (`grid/useElementWidth.ts`)
-  among them. Keep focusable controls out of cells (`Url` with `openable={false}`), so the grid stays one Tab stop.
+- Columns have the widths their grid gives them: a grid in a panel (Issues') shares the panel's measured width
+  (`grid/useElementWidth.ts`) among them. Keep focusable controls out of cells (`Url` with `openable={false}`), so the
+  grid stays one Tab stop.
+- **Columns the user lays out** (`columnLayout`, round 5): a header's right edge drags to resize (a double-click puts
+  the width back), a header drags to move (the line in the accent colour says where; the drag isn't a press, so it
+  doesn't sort), and a right-click on a header, or Shift+F10 on the header row, opens its menu (pin or unpin, move,
+  wider, narrower, its width back, every column back). The header row is reachable (Up from the first row) whenever
+  the columns can be laid out, sorting or not: Shift+Left and Shift+Right move the edge 16 px, Ctrl+Shift+Left and
+  Ctrl+Shift+Right move the column with the cursor, each said once. Pinned columns come first and stick to the left
+  (`position: sticky` on their cells, on the row's own colour, the last drawing the edge); revealing a column scrolls
+  it in beside them. A column narrower than 56 px or its own `minWidth` (the URL's 240) can't be made. The layout is
+  pure (`grid/columnLayout.ts`: widths, pins, an order) and kept per grid in the preferences
+  (`settings.gridColumns`, by the grid's id: `urls`, `links`, `issues.rows`, `issues.groups`, `inspector.links`,
+  `robots.blocked`, `robots.origins`, `sitemaps.urls`, `sitemaps.list`) by `grid/useColumnLayout.ts`, which every
+  grid uses. The URL and link grids' order is their route's `cols` (a move changes the route, replaced), so their
+  queries ask for their columns in one order whatever the order shown; a saved view keeps the widths and pins
+  (`SavedView.layout`) and opening it lays them out so.
+- **The footer** (`keyHints`, `rowNoun`): a screen's own grid (URLs, Links, a sitemap's URLs, an origin's blocked
+  URLs) shows the design's key hints (`grid/gridFoot.ts`: Up Down Move, Enter Inspect, Space Select, Ctrl C Copy for
+  Excel) and where the cursor is ("URL 12 of 264", "3 URLs selected"), at `--grid-foot-height`, outside the rows and
+  never a live region. A footer narrower than 560 px keeps only the place; a short window's grid has none
+  (`useShortScreen`).
+- **The menu opens where it was asked for**, every time: each opening is a menu of its own (`RowMenuState.opening`,
+  the header menu's likewise), placed afresh at its point.
 - **Which column** (`onActivate`'s third argument, `onActiveColumnChange`): Enter says the id of the column the cursor
   was in, and a double-click the cell's, for a grid whose rows hold more than one thing to open (a link's two ends);
   the cursor's column is reported as it changes, for an action on that column (copy it).
@@ -585,9 +607,10 @@ are drawn for the app and are never swapped for Lucide's.
   Simple's own screens are round 4's, each one row of `app/simpleScreens.ts`.
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
-- On every grid: column resize, reorder and pin, "filter by this value" and "exclude it" in the row menu. None is
-  built: a grid's columns are fixed widths in the order chosen. Saved views are the URL grid's only. Export is built:
-  see [Hand over, search, favicons and the analysis's limits](#hand-over-search-favicons-and-the-analysiss-limits).
+- Column resize, reorder and pin are built on every grid (round 5: [the grid primitive](#the-grid-primitive)), and
+  "Filter by this value" and "Exclude this value" in the row menus of the grids with filters (URLs, Links, one
+  sitemap's URLs). Saved views are the URL grid's only. Export is built: see
+  [Hand over, search, favicons and the analysis's limits](#hand-over-search-favicons-and-the-analysiss-limits).
 - Each screen's own pieces, built from the components by its slice: the explanation band, charts. A piece two screens
   need joins `src/ui`.
 - Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
@@ -1130,6 +1153,20 @@ What it settled:
   refuses a write whose file would be over the size it reads (`src-tauri/src/settings.rs`).
 - **Copies**: the URLs of the whole view (Ctrl+Shift+C) and the column the cursor is in, read by cursor as far as
   10,000 rows, named "the first 10,000" on a bigger view.
+- **Round 5.** "Filter by this value" and "Exclude this value" in the row menu, for the cell it was opened on
+  (`grid/valueFilter.ts`: by the column's type, as the filter editor has it: a number `eq`/`ne`, text `eq`/`ne`, an
+  enum `in`/`notIn`, yes or no `is`, an empty cell `isEmpty`/`isNotEmpty`; a status with no code is the outcome's
+  filter), each with the chip it adds as its detail, or why there's none (a column the engine can't filter by, one
+  that needs an analysis, a value over 1,000 characters). "All columns" (`ALL_COLUMNS_PRESET`, `allUrlColumns`):
+  every column of the chooser, URL first. "Clear the filters" keeps the sort and the columns (the palette's "Clear
+  the URLs' filters, search and sort" still clears all three). A view the engine refuses for its sort or columns is
+  said in words with the column's name (`grid/queryRefusal.ts`), never the engine's id. The search applies on Enter
+  (`grid/SearchApplyHint.tsx`: the Enter key at the field's end while what's typed isn't applied, "Press Enter to
+  search." as its description; the placeholder "URL or title" fits the 200 px field: 68 of 100 px). In a screen
+  shorter than 480 px (`grid/useShortScreen.ts`), URLs and Links fold their presets, facets, filter bar and notes
+  behind `ToolsToggle` (its name says the filters and notes behind it, a dot shows there are some; a command that
+  needs a folded part opens it), Export is an icon in the header, and the header's actions wrap: at 640x360 the grid
+  shows 6 rows (0 before), 5 with the inspector open (2 before).
 - **The row menu**: inspect, open in the browser, copy the URL (or the selection's URLs, each once), copy the row (or
   rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). The same piece on
   Links (each end: the end the menu was opened in, and Inspect the source page, Inspect the target), Issues' pages
@@ -1695,6 +1732,20 @@ as the menu opens (`POST /links/ends`, `limit: 1`). The URL grid takes `links: {
 `linkEnds` beside its own filters in its reads, facets and copies, with a line saying which end of which links ("Only
 the URLs that the broken links lead to, each once."), Back to the links (to the links view's filters, search, sort and
 columns) and Show every URL. A saved view keeps the narrowing: it is part of the view's route.
+
+### Round 5: hidden checks, the workbook's filters, the inspector's links
+
+- **Hidden checks** (docs/v2-ui-discovery.md, decision 2) are hidden in this crawl only (`settings.hiddenChecksByCrawl`,
+  by the crawl's id, the 100 crawls last changed kept) or in every crawl (`settings.hiddenChecks`);
+  `settings/hiddenChecks.ts` reads a crawl's (`useHiddenChecks`, `hiddenScopeOf`, `setCheckHidden`), and every count
+  and list that left hidden checks out reads them there. Issues' Hide asks which, its badge says which, and Undo puts
+  the scope back. The report and the workbook leave them out (`hiddenChecks` in the export request, added by
+  `crawlFileChoices` as Export is pressed), the report shown on the Report screen too (its `GET` takes them), each
+  saying how many it left out; the score stays the analysis's.
+- **The workbook takes the Issues view's filters**: with the list filtered (severity, category, text), Export offers
+  "The checks listed: their spreadsheet" (`checks`: the ids the filters keep) beside the spreadsheet of every check.
+- **The inspector's inlinks and outlinks** export (`urlLinksOffer`): the links grid's export filtered as "All N in
+  Links" is, the other end, its status and outcome, the text, the kind, the position and the follow flags.
 
 ### Measured
 
