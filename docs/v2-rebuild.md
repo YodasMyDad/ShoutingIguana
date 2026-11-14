@@ -180,7 +180,16 @@ scrolled What to fix list opens part way down, its back link out of sight; (4) t
 previous right-click was (the first at the window's top-left); (5) Simple's finished toast is squeezed into a narrow
 column; (6) the Report screen's subtitle wraps to 3-4 lines at 1280 px and its frame keeps Windows' classic scroll
 bar; minor: URLs' search placeholder cut ("Search URLs an"), Advanced's sidebar says "1 crawling" for a paused crawl,
-Home's "last checked" 14:51 against 14:13 in the breadcrumb (end against start?). Still running: the closing audit.
+Home's "last checked" 14:51 against 14:13 in the breadcrumb (end against start?).
+
+**2026-11-14: the closing audit is done: step 3 is close, not finished.** Its whole report, with the gallery's
+defects, is [`docs/handoff/2026-11-14/closing-audit-findings.md`](handoff/2026-11-14/closing-audit-findings.md):
+32 gaps, the definition of done item by item, the keyboard tables, the parity list. No screen is missing; Simple in
+the real shell works end to end; axe clean in 32 runs; the 100k budgets met. The serious gaps: Simple tells a user
+robots.txt keeps checkers out when it was only unreachable (gap 1); a stopped check gets no "so far" score (2); URL
+and page counts differ between screens (3); Advanced Home is still the foundation version (4); Advanced words in
+Simple, mostly from the shell (5-7). The brief's audit ports 50874-50877 are in a Windows reserved range: use others.
+**Next (step 4 of the resume list): the owner chooses what blocks "finished"**, then a fix round from that list.
 
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
