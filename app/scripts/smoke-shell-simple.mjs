@@ -237,6 +237,23 @@ try {
     return `the report, the window "${title}"`;
   });
 
+  await walk.step('Settings › Updates checks GitHub’s releases and answers in plain words', async () => {
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('main').getByRole('link', { name: 'Updates', exact: true }).click();
+    await page.getByRole('button', { name: 'Check for updates' }).click();
+    const answer = page.getByText(/You have the newest version|is available|Updates couldn’t be checked/).first();
+    await answer.waitFor({ timeout: 30_000 });
+    const words = (await page.getByRole('main').innerText())
+      .split('\n')
+      .filter((line) => /version|GitHub|update/i.test(line));
+    expectThat(
+      !words.some((line) => /error sending|reqwest|json|404/i.test(line)),
+      `a raw error: ${words.join(' | ')}`,
+    );
+    if (options.shots) await page.screenshot({ path: path.join(options.shots, 'simple-05-updates.png') });
+    return words.slice(-3).join(' | ');
+  });
+
   await walk.step(
     'quitting with a check running asks "Stop checking and quit?"; Cancel keeps both, then it quits',
     async () => {
