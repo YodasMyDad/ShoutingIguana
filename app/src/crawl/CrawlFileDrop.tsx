@@ -25,7 +25,7 @@ const NO_DRAG: DragState = { kind: 'none' };
  * its crawl opens, as Ctrl+O's does. While files are dragged over the window it says what a drop will do, or that what
  * is dragged isn't a crawl file; a drop of anything else says so in a toast, and a crawl file the engine can't open
  * says why, as Ctrl+O's does. The words over the window aren't announced: the toast and the screen that opens are.
- * Mounted once, by the shell's frame. `source` is for tests and stories; the app's is the webview's, and a plain
+ * Mounted once, by the shell's frame. `source` is for tests and stories; the app's is the shell's forwarded drops, and a plain
  * browser has none.
  */
 export function CrawlFileDrop({ source = appDropSource(isTauri) }: { source?: CrawlDropSource | null }) {

@@ -1,8 +1,8 @@
 // A crawl file dropped on the window opens it, from any screen, in both modes (docs/v2-ui-ia.md, Home: "Ctrl+O and
-// drag-and-drop open a .sicrawl from anywhere"). The shell's webview hands the page the dropped files' paths as Tauri's
-// drag-and-drop events (`getCurrentWebview().onDragDropEvent`), which a page may listen to with the `core:event`
-// permission it already has: nothing in the shell forwards them. A plain browser never sees a dropped file's path, so
-// there the window ignores a drop. What a drag over the window shows, and what a drop opens or says, is decided here.
+// drag-and-drop open a .sicrawl from anywhere"). The shell takes every drop on the window (WebView2 hands a drop to the
+// shell, never the page) and forwards it as `shell://drag-drop` (src-tauri/src/drop.rs, `ipc.onDragDrop`): the one way
+// a drop reaches the page, so a file opens once. A plain browser never sees a dropped file's path, so there the window
+// ignores a drop. What a drag over the window shows, and what a drop opens or says, is decided here.
 import type { Mode } from '../settings/schema';
 
 /** A drag over the window, as the shell reports it: the paths come with `enter` and `drop` only. */
@@ -12,7 +12,7 @@ export type CrawlDropEvent =
   | { type: 'drop'; paths: readonly string[] }
   | { type: 'leave' };
 
-/** Where drops come from: the webview's events in the app, a fake in tests and stories. */
+/** Where drops come from: the shell's forwarded events in the app, a fake in tests and stories. */
 export interface CrawlDropSource {
   /** Calls `handler` for each drag event; resolves with the function that stops listening. */
   listen: (handler: (event: CrawlDropEvent) => void) => Promise<() => void>;
@@ -97,28 +97,23 @@ export function notCrawlFilesWords(others: readonly string[], mode: Mode): { tit
 }
 
 /**
- * The webview's own drag-and-drop events, which carry the dropped files' paths: the app's source of drops. Loaded on
- * first use, so a browser never fetches the Tauri module.
+ * The shell's forwarded drops (round 5: part D's `shell://drag-drop`, which part B's drop listens to), carrying the
+ * dropped files' paths: the app's source of drops. Loaded on first use, so a browser never fetches the Tauri module.
  */
-export const webviewDropSource: CrawlDropSource = {
+export const shellDropSource: CrawlDropSource = {
   listen: async (handler) => {
-    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
-    return getCurrentWebview().onDragDropEvent((event) => {
-      const payload = event.payload;
-      handler(
-        payload.type === 'enter' || payload.type === 'drop'
-          ? { type: payload.type, paths: payload.paths }
-          : { type: payload.type },
-      );
-    });
+    const { ipc } = await import('../shell/ipc');
+    return ipc.onDragDrop((event) =>
+      handler(event.type === 'leave' ? { type: 'leave' } : { type: event.type, paths: event.paths }),
+    );
   },
 };
 
 let sourceForTests: CrawlDropSource | null = null;
 
-/** Where the window's drops come from: the webview's in the app, none in a plain browser, a test's or story's own. */
+/** Where the window's drops come from: the shell's in the app, none in a plain browser, a test's or story's own. */
 export function appDropSource(inTheApp: boolean): CrawlDropSource | null {
-  return sourceForTests ?? (inTheApp ? webviewDropSource : null);
+  return sourceForTests ?? (inTheApp ? shellDropSource : null);
 }
 
 /** Tests and stories only: the window's drops come from this source (null goes back to the truth). */
