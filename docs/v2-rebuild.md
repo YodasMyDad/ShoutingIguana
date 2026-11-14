@@ -232,6 +232,15 @@ also passed the Linux CI job in Docker. **Fixes launched** on `008b4b2` from
 Home's host+port names and the `GoToUrl` cause), F2 engine and shell (`ui/r5-fix-engine`). Then: merge both into
 `ui/r5-integrate`, the whole-suite verify, both smoke walks, Linux in Docker, the gallery, merge into `ui/step-3`.
 
+**2026-11-14: both fixers done** (every finding fixed with a test seen failing first; reports condensed in
+[`round5-fixes-reports.md`](handoff/2026-11-14/round5-fixes-reports.md); branches pushed). **Last merge and whole
+verify launched** on `ui/r5-integrate` from [`brief-round5-final.md`](handoff/2026-11-14/brief-round5-final.md)
+(scratch `a539aa23-…/r5-final/`): merge F1 then F2 (an expected conflict in the export path's engine files), F2's
+one-line ask in `offers.ts`, the cause of `CrawlSettingsScreen`'s load timeout, then both verify scripts, cargo,
+`e2e:filled`, round 5's specs x5, the release build and both smoke walks. After it: Linux in Docker
+(`tools/linux-ci.sh`), the gallery re-shoot (the app changed a lot: Advanced Home, Overview's totals, the grid),
+merge `ui/r5-integrate` into `ui/step-3`, push, and tell the owner step 3 is finished.
+
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
    `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
