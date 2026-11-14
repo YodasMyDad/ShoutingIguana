@@ -117,7 +117,6 @@ function LicenceRow({ pkg, text }: { pkg: LicensedPackage; text: string | null }
         {pkg.url ? (
           <a
             href={pkg.url}
-            aria-label={`${pkg.name}’s page, in your browser`}
             onClick={(event) => {
               event.preventDefault();
               if (pkg.url) void openInBrowser(pkg.url);
@@ -125,6 +124,7 @@ function LicenceRow({ pkg, text }: { pkg: LicensedPackage; text: string | null }
             className="si-link ml-auto inline-flex items-center gap-1 text-12"
           >
             Its page
+            <span className="sr-only">: {pkg.name}, in your browser</span>
             <Icon icon={ExternalLink} size="sm" />
           </a>
         ) : null}
