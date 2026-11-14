@@ -1,14 +1,15 @@
 // Each screen names the window (gap 26 of the closing audit): "Issues · garden.co.uk · Shouting Iguana". The shell
 // mirrors document.title onto the window, so the taskbar, Alt+Tab and a screen reader's window list say where you are.
-// The same words as the breadcrumb, in the mode's words: "What to fix" in Simple where Advanced says "Issues".
+// The same words as the breadcrumb, in the mode's words: "What to fix" in Simple where Advanced says "Issues"; the site
+// by its host and port, as Your sites tells sites apart (gap 30): "127.0.0.1:8080".
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useParams } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { crawlQuery } from '../api/queries';
 import { crawlSectionEntry, sectionOf } from '../app/sections';
-import { crawlName } from '../crawl/status';
 import type { Mode } from '../mode/mode';
 import { useMode } from '../mode/mode';
+import { siteName } from '../simple/home/sites';
 
 export const APP_TITLE = 'Shouting Iguana';
 
@@ -45,7 +46,7 @@ export function useDocumentTitle(): void {
   const pathname = useLocation({ select: (location) => location.pathname });
   const { crawl: crawlId } = useParams({ strict: false });
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
-  const site = crawlId && crawl ? crawlName(crawl) : null;
+  const site = crawlId && crawl ? siteName(crawl) : null;
   const title = documentTitle({ pathname, mode, site });
   useEffect(() => {
     document.title = title;
