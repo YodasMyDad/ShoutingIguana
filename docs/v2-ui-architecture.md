@@ -1854,7 +1854,8 @@ columns) and Show every URL. A saved view keeps the narrowing: it is part of the
   and list that left hidden checks out reads them there. Issues' Hide asks which, its badge says which, and Undo puts
   the scope back. The report and the workbook leave them out (`hiddenChecks` in the export request, added by
   `crawlFileChoices` as Export is pressed), the report shown on the Report screen too (its `GET` takes them), each
-  saying how many it left out; the score stays the analysis's.
+  saying how many it left out; the score stays the analysis's. Issues' "This check" sends them too (round 5's review,
+  R2-9), so its file is numbered as its sheet is in the workbook with them hidden.
 - **The workbook takes the Issues view's filters**: with the list filtered (severity, category, text), Export offers
   "The checks listed: their spreadsheet" (`checks`: the ids the filters keep) beside the spreadsheet of every check.
 - **The inspector's inlinks and outlinks** export (`urlLinksOffer`): the links grid's export filtered as "All N in

@@ -41,6 +41,43 @@ describe('the report and the workbook', () => {
   });
 });
 
+describe('“This check” of a check in groups (round 5 review, R2-9)', () => {
+  const offer = () =>
+    issuesOffer({
+      item,
+      crawling: false,
+      simple: false,
+      check: { id: 'h1-missing', title: 'Missing H1', urls: 12 },
+      group: null,
+    });
+  const thisCheck = () => offer().choices.find((choice) => choice.id === 'check');
+
+  it('asks for nothing more while no check is hidden', () => {
+    expect(thisCheck()?.build(as())).toEqual({
+      kind: 'check',
+      format: 'xlsx',
+      path: 'C:/x/a.xlsx',
+      checkId: 'h1-missing',
+    });
+  });
+
+  it('sends the checks hidden in every crawl and in this one, so its file is numbered as the workbook’s sheet', () => {
+    const choice = thisCheck();
+    replaceSettings({
+      hiddenChecks: ['title-missing'],
+      hiddenChecksByCrawl: { [item.id]: ['thin-content'], fedcba9876543210: ['meta-description-missing'] },
+    });
+    // As they are when Export is pressed, not when the offer was made.
+    expect(choice?.build(as({ format: 'csv' }))).toEqual({
+      kind: 'check',
+      format: 'csv',
+      path: 'C:/x/a.xlsx',
+      checkId: 'h1-missing',
+      hiddenChecks: ['title-missing', 'thin-content'],
+    });
+  });
+});
+
 describe('an Issues view’s workbook', () => {
   const base = { item, crawling: false, simple: false, check: null, group: null };
 

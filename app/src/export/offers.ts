@@ -313,17 +313,21 @@ export function isAnalysed(item: CrawlListItem): boolean {
 }
 
 /**
+ * The checks the user hid in this crawl, as they are when Export is pressed: the report, the workbook and one check's
+ * file leave them out, as every screen does (docs/v2-ui-discovery.md, decision 2). Read from the preferences, the one
+ * place outside the screen's own state an offer looks. Nothing while none is hidden.
+ */
+function hiddenChecksOf(item: CrawlListItem): { hiddenChecks?: string[] } {
+  const ids = currentHiddenChecks(item.id);
+  return ids.length > 0 ? { hiddenChecks: [...ids] } : {};
+}
+
+/**
  * "The report…" and "Spreadsheet of everything…" (docs/v2-ui-simple.md, What round 3 builds, 6 and 7). A crawl never
  * analysed has neither: each says so, with "Work out the results" in its place.
  */
 export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportChoice[] {
-  // The checks the user hid in this crawl, as they are when Export is pressed: the files leave them out, as every
-  // screen does (docs/v2-ui-discovery.md, decision 2). Read from the preferences, the one place outside the screen's
-  // own state an offer looks.
-  const hidden = () => {
-    const ids = currentHiddenChecks(item.id);
-    return ids.length > 0 ? { hiddenChecks: [...ids] } : {};
-  };
+  const hidden = () => hiddenChecksOf(item);
   const unavailable = isAnalysed(item)
     ? null
     : simple
@@ -415,11 +419,13 @@ export function issuesOffer(args: {
               ...(crawlOrder || !check.sort?.length ? {} : { sort: [...check.sort] }),
             }
           : {
-              // The check's sheet of the workbook, as a file of its own.
+              // The check's sheet of the workbook, as a file of its own: numbered as the workbook with the same
+              // checks hidden numbers it (R2-9).
               kind: 'check',
               format: format === 'csv' ? 'csv' : 'xlsx',
               path,
               checkId: check.id,
+              ...hiddenChecksOf(args.item),
             },
     });
     if (args.group) {
