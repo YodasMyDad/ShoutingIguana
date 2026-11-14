@@ -2,9 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { GridFilter, UrlRow } from '../api/grids';
 import { updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID } from '../test/fakeSidecar';
-import { GARDEN_CRAWL, ScreenApp, freshStory, ownSidecar } from '../test/ScreenStory';
+import { AT_200_PERCENT, GARDEN_CRAWL, ScreenApp, freshStory, ownSidecar } from '../test/ScreenStory';
 import { testUrlRows, urlsRoutes, type UrlsSidecarOptions, type UrlsSidecarState } from '../test/urlsSidecar';
-import { URL_PRESETS } from './urls/urlColumns';
+import { URL_COLUMNS } from '../api/mock/urlColumns';
+import { URL_PRESETS, allUrlColumns } from './urls/urlColumns';
 
 const meta = { title: 'Screens/URLs' } satisfies Meta;
 export default meta;
@@ -279,4 +280,45 @@ export const ColumnsListUnreadable: Story = {
 export const AHundredThousandUrls: Story = {
   loaders: [() => own({ rows: testUrlRows(100_000) })],
   render: () => <ScreenApp path={URLS} />,
+};
+
+/** "All columns" (gap 20): every column the engine has, for a full export; the grid scrolls sideways. */
+export const AllColumns: Story = {
+  loaders: [clean],
+  render: () => <ScreenApp path={`${GARDEN}?cols=${param(allUrlColumns(URL_COLUMNS))}`} crawlId={GARDEN_CRAWL} />,
+};
+
+/** Columns laid out by the user (gap 10): the URL and Status pinned to the left, Title widened, kept per grid. */
+export const ColumnsLaidOut: Story = {
+  loaders: [
+    () => {
+      clean();
+      updateSettings({ gridColumns: { urls: { pinned: ['url', 'statusCode'], widths: { title: 480, url: 300 } } } });
+    },
+  ],
+  render: () => <ScreenApp path={GARDEN} crawlId={GARDEN_CRAWL} />,
+};
+
+/** 200% zoom of 1280x720 (gap 13): the presets, the filter bar and the notes fold behind one button; the grid has rows. */
+export const At200Folded: Story = {
+  loaders: [clean],
+  render: () => <ScreenApp path={GARDEN} crawlId={GARDEN_CRAWL} size={AT_200_PERCENT} />,
+};
+
+/** The same, filtered: the folded button says so, with its dot. */
+export const At200FoldedFiltered: Story = {
+  loaders: [clean],
+  render: () => (
+    <ScreenApp
+      path={withFilters(GARDEN, [{ column: 'statusClass', op: 'in', values: ['4xx'] }])}
+      crawlId={GARDEN_CRAWL}
+      size={AT_200_PERCENT}
+    />
+  ),
+};
+
+/** 200% zoom with the inspector open beside the grid: the header's actions wrap, and the grid keeps its rows. */
+export const At200WithTheInspector: Story = {
+  loaders: [clean],
+  render: () => <ScreenApp path={`${GARDEN}?inspect=2`} crawlId={GARDEN_CRAWL} size={AT_200_PERCENT} />,
 };

@@ -368,6 +368,43 @@ export const HiddenChecks: Story = {
   render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text`} />,
 };
 
+/**
+ * A check hidden in this crawl only (gap 19), open: its badge says where it's hidden; the list says one is hidden. Hide
+ * on a check that isn't asks which: this crawl, or every crawl.
+ */
+export const HiddenInThisCrawl: Story = {
+  loaders: [
+    () => {
+      own();
+      updateSettings({ hiddenChecksByCrawl: { [TEST_CRAWL_ID]: ['internal-client-error'] } });
+    },
+  ],
+  render: () => <IssuesApp path={`${ISSUES}/internal-client-error`} />,
+};
+
+/** Hide's menu open on a check: hide it in this crawl, or in every crawl. */
+export const HideMenuOpen: Story = {
+  loaders: [() => own()],
+  render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text`} />,
+  play: async ({ canvasElement }) => {
+    const button = await waitForElement(() =>
+      canvasElement.ownerDocument.querySelector<HTMLButtonElement>('button[aria-label="Hide this check"]'),
+    );
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+  },
+};
+
+/** Polls for an element a story's screen draws once its reads land. */
+async function waitForElement<T extends Element>(find: () => T | null, timeout = 5_000): Promise<T> {
+  const started = Date.now();
+  for (;;) {
+    const found = find();
+    if (found) return found;
+    if (Date.now() - started > timeout) throw new Error('The element never came.');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 const ENGINE_FAILED = () =>
   problem({
     type: 'internal',

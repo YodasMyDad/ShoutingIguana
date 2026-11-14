@@ -13,8 +13,8 @@ import { URL_COLUMNS } from '../api/mock/urlColumns';
 import { SavedViewsMenu, ViewNameDialog } from '../screens/urls/SavedViews';
 import { DEFAULT_URL_COLUMNS, urlChooserGroups } from '../screens/urls/urlColumns';
 import { Checkbox } from '../ui/Checkbox';
-import { MenuAt } from '../ui/Menu';
-import { UrlRowItems } from './RowMenu';
+import { MenuAt, MenuSeparator } from '../ui/Menu';
+import { UrlRowItems, ValueFilterItems } from './RowMenu';
 import type { SavedView } from './savedViews';
 import { StateRow, StoryFrame, StorySection } from '../test/StoryFrame';
 import { FilterChip } from '../ui/FilterChip';
@@ -365,6 +365,52 @@ export const SaveViewDialog: Story = {
         onClose={() => undefined}
         onSubmit={() => undefined}
       />
+    </StoryFrame>
+  ),
+};
+
+/** The row menu's value filters (gap 9): the cell's value as a filter, or left out, each with the chip it adds. */
+export const RowMenuValueFilters: Story = {
+  render: () => (
+    <StoryFrame sheet>
+      <div className="min-h-(--dialog-width)">
+        <MenuAt at={{ x: 40, y: 40 }} open onOpenChange={() => undefined} label="Menu for /about/">
+          <UrlRowItems
+            count={1}
+            url="https://example.com/about/"
+            onCopyUrls={() => undefined}
+            onCopyRows={() => undefined}
+          />
+          <MenuSeparator />
+          <ValueFilterItems
+            cell={{
+              filters: {
+                only: { column: 'statusCode', op: 'eq', value: 404 },
+                except: { column: 'statusCode', op: 'ne', value: 404 },
+              },
+            }}
+            sentence={(filter) => `Status code ${filter.op === 'eq' ? 'is' : 'is not'} 404`}
+            onFilter={() => undefined}
+          />
+        </MenuAt>
+      </div>
+    </StoryFrame>
+  ),
+};
+
+/** The same where the cell can't be filtered by: both items there, disabled, and why. */
+export const RowMenuValueFiltersUnavailable: Story = {
+  render: () => (
+    <StoryFrame sheet>
+      <div className="min-h-(--dialog-width)">
+        <MenuAt at={{ x: 40, y: 40 }} open onOpenChange={() => undefined} label="Menu for /about/">
+          <ValueFilterItems
+            cell={{ filters: null, unavailable: 'Filtering by this column needs an analysis' }}
+            sentence={() => ''}
+            onFilter={() => undefined}
+          />
+        </MenuAt>
+      </div>
     </StoryFrame>
   ),
 };
