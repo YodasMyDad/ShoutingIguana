@@ -69,7 +69,13 @@ export type ExportRequest =
       line?: number;
       reason?: RobotsBlockReason;
     } & ExportTarget)
-  | ({ kind: 'check'; format: 'xlsx' | 'csv'; checkId: string } & ExportTarget)
+  | ({
+      kind: 'check';
+      format: 'xlsx' | 'csv';
+      checkId: string;
+      /** Checks the user hid: the file is numbered as the workbook without them numbers its sheet. */
+      hiddenChecks?: string[];
+    } & ExportTarget)
   | ({
       kind: 'workbook';
       format: 'xlsx';

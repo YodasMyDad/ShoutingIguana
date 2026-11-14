@@ -1973,18 +1973,20 @@ An export only reads the crawl.
   | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's four |
   | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's four, the check's own columns among them |
   | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
-  | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId` |
+  | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId`, `hiddenChecks` (round 5's review) |
   | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
   | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |
   | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
   | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
 
-- **`hiddenChecks`** (round 5, `report` and `workbook`): the ids of the checks the user hid, at most 500. They are
+- **`hiddenChecks`** (round 5, `report`, `workbook` and `check`): the ids of the checks the user hid, at most 500. They are
   left out of the lists, the counts and the sheets (discovery decision 2: "the analysis still runs it, and exports
   leave it out"); the score is the analysis's, and the document says how many checks that found something it left
   out ("2 checks that found something are hidden, so they’re left out of this report. The score still counts them.";
   the workbook's summary has a "Hidden checks left out" row). An id the catalog doesn't have is ignored: a check hidden
-  by another version. `GET /report` takes them as `hiddenChecks=a,b`, so the report shown is the report saved. **`checks`**
+  by another version. `GET /report` takes them as `hiddenChecks=a,b`, so the report shown is the report saved. A
+  `check`'s file is named as its sheet is in the workbook with the same checks hidden ("4 …", numbered afresh without
+  them; R2-9: it was numbered against every check), and without a number when the check is hidden itself. **`checks`**
   (`workbook`): only these checks, the ones an Issues view listed; its summary says "Checks listed". `si export` takes
   them as `--hidden-checks` and `--checks`, comma-separated.
 - **`columns`** are the file's columns, in the order given; without any, the grid's own (`url`; for `issueRows`,
@@ -3616,7 +3618,7 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   `ReportOptions.HiddenChecks` and `ReportOptions.Checks`; `ReportReader.Read` takes them (`listing`) and leaves those
   checks out of the problems, the passed and the skipped, numbering the problems afresh; `ReportModel.HiddenProblems`
   and `Narrowed` say what was left out, and the report and the workbook's summary say it.
-  `ExportFields`: `hiddenChecks` belongs to `report` and `workbook`, `checks` to `workbook`; the request's DTO, the
+  `ExportFields`: `hiddenChecks` belongs to `report`, `workbook` and (round 5's review, R2-9) `check`, `checks` to `workbook`; the request's DTO, the
   `GET /report` query and `si export` (`--hidden-checks`, `--checks`) take them. Tested in `WorkbookExportTests`,
   `ReportDocumentTests` and `ExportEndpointsTests`.
 - **The proxy test** (part D). `POST /api/proxy/test` (above), for the proxy test in the app's settings (gap 18 of

@@ -32,7 +32,7 @@ public static class ExportFields
         ["cut"] = REPORT,
         ["examples"] = REPORT,
         ["lookExamples"] = REPORT,
-        ["hiddenChecks"] = [ExportKind.Report, ExportKind.Workbook],
+        ["hiddenChecks"] = [ExportKind.Report, ExportKind.Workbook, ExportKind.Check],
         ["checks"] = [ExportKind.Workbook]
     };
 
