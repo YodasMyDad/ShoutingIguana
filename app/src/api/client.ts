@@ -4,11 +4,13 @@
 import { ProblemError, UnexpectedResponseError, parseProblem } from './errors';
 import {
   continueWithSecrets,
+  forgetCrawlSecrets,
   keepCrawlSecrets,
   keepSecrets,
   keptSecrets,
   secretsOf,
   withSecrets,
+  type CrawlSecrets,
 } from '../crawl/secrets';
 import type { ExportJob, ExportRequest, ReportOptions } from './exports';
 import type {
@@ -132,6 +134,9 @@ function reportQuery(options: ReportOptions): string {
 const get = <T>(path: string, signal?: Signal) => call<T>({ method: 'GET', path, signal });
 const post = <T>(path: string, body?: unknown, signal?: Signal) => call<T>({ method: 'POST', path, body, signal });
 
+/** The secrets of the crawls removed from the library while the app runs, for Undo (restoreCrawl) to put back. */
+const removedSecrets = new Map<string, CrawlSecrets>();
+
 export const api = {
   // App
   health: (signal?: Signal) => get<Health>('/api/health', signal),
@@ -188,11 +193,28 @@ export const api = {
   favicon: (id: string, signal?: Signal) => callBytes({ method: 'GET', path: `${crawl(id)}/favicon`, signal }),
   /** Adds a crawl file from anywhere: an absolute path ending in `.sicrawl`. */
   openCrawl: (path: string) => post<CrawlListItem>('/api/crawls/open', { path }),
-  /** Removes it from the library, not from disk. Undone by restoreCrawl. */
-  removeCrawl: (id: string) => call<undefined>({ method: 'DELETE', path: crawl(id) }),
-  restoreCrawl: (id: string) => post<CrawlListItem>(`${crawl(id)}/restore`),
-  /** Deletes the file. Only after a confirmation that names the crawl. */
-  deleteCrawlFile: (id: string) => post<undefined>(`${crawl(id)}/delete-file`),
+  /**
+   * Removes it from the library, not from disk. Undone by restoreCrawl. Its secrets leave the credential store at once
+   * (an app closed before the Undo runs out leaves none behind), held here for restoreCrawl to put back.
+   */
+  removeCrawl: async (id: string) => {
+    await call<undefined>({ method: 'DELETE', path: crawl(id) });
+    const kept = await forgetCrawlSecrets(id);
+    if (kept) removedSecrets.set(id, kept);
+  },
+  restoreCrawl: async (id: string) => {
+    const item = await post<CrawlListItem>(`${crawl(id)}/restore`);
+    const kept = removedSecrets.get(id);
+    removedSecrets.delete(id);
+    if (kept) await keepSecrets(`crawl:${id}`, kept);
+    return item;
+  },
+  /** Deletes the file. Only after a confirmation that names the crawl. Its secrets are forgotten with it. */
+  deleteCrawlFile: async (id: string) => {
+    await post<undefined>(`${crawl(id)}/delete-file`);
+    removedSecrets.delete(id);
+    await forgetCrawlSecrets(id);
+  },
 
   // Crawl control
   /** Starts a crawl. In the app, what it was given that the engine doesn't keep is kept for Continue. */
