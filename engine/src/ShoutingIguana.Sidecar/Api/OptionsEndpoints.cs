@@ -43,12 +43,21 @@ internal static class OptionsEndpoints
         });
 
         // An address typed without a scheme: https when the site answers there, else http when it answers there. Asked
-        // with the options the crawl would start with, so a proxy the site needs is used.
+        // with the options the crawl would start with, so a proxy the site needs is used. Options a crawl would refuse
+        // are refused here too (their start URL aside: the address is what's asked about), and nothing is asked.
         api.MapPost("/api/crawl-options/start-url", async (HttpRequest request, DefaultsStore defaults) =>
         {
             var body = await RequestBody.ReadAsync(request, SidecarJsonContext.Default.StartUrlRequest).ConfigureAwait(false);
             var address = body.Address ?? throw Problems.BadRequest("Give the address to start from.");
-            var options = (body.Options ?? defaults.Read()).ToCrawlOptions(out _);
+            var options = (body.Options ?? defaults.Read()).ToCrawlOptions(out var mappingErrors);
+            var errors = OptionFields.Merge(mappingErrors, options.ValidateFields())
+                .Where(field => field.Key != OptionFields.START_URL)
+                .ToDictionary(StringComparer.Ordinal);
+            if (errors.Count > 0)
+            {
+                throw Problems.InvalidOptions(errors);
+            }
+
             var choice = await StartAddress.ChooseAsync(address, options, request.HttpContext.RequestAborted).ConfigureAwait(false);
             return TypedResults.Json(new StartUrlDto(choice.StartUrl, ReasonName(choice.Reason)), SidecarJsonContext.Default.StartUrlDto);
         });

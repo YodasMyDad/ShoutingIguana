@@ -11,6 +11,9 @@ namespace ShoutingIguana.Engine.Fetching;
 /// answers there, http when only http answers. Both are asked at once, the site's home page with no body read, so a site
 /// on https costs one round trip and a site that only serves http costs no more than https's refusal. Any HTTP status is
 /// an answer (a 403 or a 503 is a site there); no answer is a refused connection, a TLS failure or no response in time.
+/// Through a proxy, the proxy's own answers are not the site's: a 407 (it wants its password), a refused tunnel, and a
+/// 5xx over plain http (it couldn't reach the site, or the site's own error: either way no proof the site is there, and
+/// https stays the choice).
 /// </summary>
 public static partial class StartAddress
 {
@@ -55,7 +58,7 @@ public static partial class StartAddress
         }
     }
 
-    /// <summary>Whether the address gives any HTTP status. The crawl's proxy, user agent and certificate apply; its extra headers don't.</summary>
+    /// <summary>Whether the site gives any HTTP status of its own. The crawl's proxy, user agent and certificate apply; its extra headers don't.</summary>
     private static async Task<bool> AnswersAsync(Uri uri, CrawlOptions options, CancellationToken cancellationToken)
     {
         // Extra headers can carry a firewall's secret, never sent on a guess (over plain http, anyone could read them).
@@ -71,13 +74,24 @@ public static partial class StartAddress
             using var fetcher = new HttpFetcher(asked, UserAgents.Resolve(asked.UserAgent, asked.CustomUserAgent),
                 new CrawlScope(uri, asked.IncludeSubdomains, asked.StayInStartFolder), TimeProvider.System);
             var response = await fetcher.FetchAsync(uri, FetchBody.None, cancellationToken).ConfigureAwait(false);
-            return response.StatusCode is not null;
+            return response.StatusCode is { } status && !IsTheProxysOwnAnswer(uri, status, asked);
         }
         catch (OperationCanceledException)
         {
             return false;
         }
     }
+
+    /// <summary>
+    /// A 407 only ever comes from a proxy. Over https the site answers through the proxy's tunnel (a refused tunnel is an
+    /// error, not a status), but over plain http an http proxy answers in the site's place: its 5xx is a gateway error.
+    /// </summary>
+    private static bool IsTheProxysOwnAnswer(Uri uri, int status, CrawlOptions options) =>
+        status == 407 || (status >= 500 && uri.Scheme == Uri.UriSchemeHttp && UsesAnHttpProxy(options));
+
+    private static bool UsesAnHttpProxy(CrawlOptions options) =>
+        options.ProxyUrl is { } proxy && Uri.TryCreate(proxy, UriKind.Absolute, out var proxyUri) &&
+        proxyUri.Scheme is "http" or "https";
 
     [GeneratedRegex("^[a-z][a-z0-9+.-]*://", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SchemePattern();
