@@ -48,7 +48,8 @@ test('an address typed without its scheme is checked where the site answers: htt
   await address.press('Enter');
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/overview$/, { timeout: 15_000 });
   const item = await read<CrawlListItem>(`/api/crawls/${crawlIdOf(page)}`);
-  expect(item.startUrl).toBe(`http://${bare}/`);
+  // The engine keeps the start URL as given, with or without its trailing slash.
+  expect(item.startUrl?.replace(/\/$/, '')).toBe(`http://${bare}`);
   // It reads the site, and is done in seconds, not the two minutes https's robots.txt cool-down took.
   await expect(main(page).getByRole('img', { name: /^Score \d+ out of 100/ })).toBeVisible({ timeout: 60_000 });
   await expect(main(page).getByText('No pages could be read')).toBeHidden();

@@ -172,6 +172,22 @@ describe('the live bridge’s toasts', () => {
     stop();
   });
 
+  // Round 5, gap 2: a crawl stopped here is analysed next; its stopped toast stays through that, to be said again.
+  it('keeps the stopped toast while the stopped crawl is analysed', async () => {
+    const { stop, status } = setup();
+    status('running');
+    status('stopping');
+    status('stopped');
+    await settle();
+    vi.mocked(dismissToast).mockClear();
+    status('analyzing');
+    expect(dismissToast).not.toHaveBeenCalledWith(`crawl:${ID}:stopped`);
+    status('stopped');
+    status('running');
+    expect(dismissToast).toHaveBeenCalledWith(`crawl:${ID}:stopped`);
+    stop();
+  });
+
   it('gives each crawl’s news one toast, and takes Continue away once the crawl runs again', async () => {
     const { stop, status } = setup();
     status('running');

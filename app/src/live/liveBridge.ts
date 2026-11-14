@@ -188,7 +188,9 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
    * toast that had just appeared.
    */
   function dismissStaleToasts({ crawlId, status, error }: CrawlEvent) {
-    if (status !== 'stopping' && status !== 'stopped' && status !== 'interrupted') {
+    // The analysis of a crawl stopped here is part of its stop: its toast stays, and is said again with the results.
+    const analysingTheStop = status === 'analyzing' && stoppedHere.has(crawlId);
+    if (status !== 'stopping' && status !== 'stopped' && status !== 'interrupted' && !analysingTheStop) {
       dismissToast(crawlToast(crawlId, 'stopped'));
     }
     if (status !== 'failed' && !error) dismissToast(crawlToast(crawlId, 'failed'));
