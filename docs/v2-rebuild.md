@@ -215,6 +215,15 @@ branch `ui/r5-integrate`, scratch `a539aa23-…/r5-integrate/`). Owner to know: 
 workflow). After integration: a fresh-eyes review, its fixes, the whole-suite verify, both smoke walks, the gallery,
 then merge into `ui/step-3`.
 
+**2026-11-14: integrated** on `ui/r5-integrate` at `008b4b2` (pushed): every check green on the final commit (unit
+3,684 x 4, stories 528 x 3 modes clean, e2e:filled 29, full e2e 224, new specs x5 170/170, cargo 134 + 3, engine
+1,446 + 279 + 28, 100k bench, readbench gate), both `smoke:shell` walks pass, and a hand walk with real mouse input
+in the release build proved G1, G4, Filter by type, column resize/move/pin and drop to open. Left for the fix round:
+Advanced Home names a site by host only (two ports, one name); `GoToUrl` tests got a 20 s limit, not a cause. Linux:
+`ui/r5-shell` passed the CI's Linux job in Docker (`tools/linux-ci.sh`). **Review launched**: two fresh-eyes
+reviewers at once from [`brief-round5-review.md`](handoff/2026-11-14/brief-round5-review.md) (R1 the app, R2 the
+engine, API and shell with security), then their fixes.
+
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
    `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
