@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { FolderOpen, Globe, Inbox, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useRef, useState, type Ref, type SyntheticEvent } from 'react';
 import { libraryQuery, queryKeys } from '../api/queries';
-import { startCrawl, continueCrawl, analyseCrawl } from '../crawl/actions';
+import { startCrawl, startUrlFor, continueCrawl, analyseCrawl } from '../crawl/actions';
 import { canOpenCrawlFiles } from '../crawl/fileOpening';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
@@ -71,7 +71,8 @@ function StartCrawlForm() {
       return;
     }
     setStarting(true);
-    const result = await startCrawl(/^https?:\/\//i.test(startUrl) ? startUrl : `https://${startUrl}`);
+    // A bare address starts where the site answers, https or http, as Simple's Home does (round 5's gap 1).
+    const result = await startCrawl(await startUrlFor(startUrl));
     setStarting(false);
     if (result.ok) {
       setError(null);

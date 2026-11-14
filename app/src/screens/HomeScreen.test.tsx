@@ -47,6 +47,39 @@ describe('Home’s URL field', () => {
   });
 });
 
+describe('Home’s URL field, an address without its scheme (round 5: A’s start address in B’s Home)', () => {
+  it('starts the crawl where the site answers, http when only http does, never https added blindly', async () => {
+    const started: unknown[] = [];
+    const { router } = await open(
+      () => json([]),
+      [
+        ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options: {} })],
+        [
+          'POST',
+          /^\/api\/crawl-options\/start-url$/,
+          (request) => {
+            expect(request.body).toEqual({ address: 'plain-http.example' });
+            return json({ startUrl: 'http://plain-http.example/', reason: 'http' });
+          },
+        ],
+        [
+          'POST',
+          /^\/api\/crawls$/,
+          (request) => {
+            started.push(request.body);
+            return json(testCrawlItem({ startUrl: 'http://plain-http.example/' }));
+          },
+        ],
+      ],
+    );
+    const user = userEvent.setup();
+    await user.type(await screen.findByRole('textbox', { name: 'Start URL' }), 'plain-http.example{Enter}');
+    await waitFor(() => expect(started).toHaveLength(1));
+    expect(started[0]).toMatchObject({ options: { startUrl: 'http://plain-http.example/' } });
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/\/overview$/));
+  });
+});
+
 describe('Home’s library', () => {
   it('shows "–" for what a file that couldn’t be read can’t say, never 0', async () => {
     const unreadable: CrawlListItem = testCrawlItem({
