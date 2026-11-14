@@ -170,6 +170,18 @@ gallery re-shoot (worktree `gallery-shoot`, ports 49874-49877, building into `_g
 unchanged, with the head and their folders (this session's scratchpad, `a539aa23-…`) given at launch. If this
 section still says "launched" in a new session, neither reported: check their worktrees and relaunch from the briefs.
 
+**2026-11-14: the gallery is done and published** (same address, version 2): 32 views x 2 themes in the release
+shell at `b8684fa`, 12.4 MB, every image viewed before publishing. Defects seen while shooting, for the audit's list:
+(1) the Simple | Advanced switch is cut off in the top bar while a crawl runs in Advanced at 1280 px (3 of 3 live
+crawls; the bar overflows 1094 > 1056, search and Home don't give way first); (2) a Simple problem page and New
+crawl let the whole window scroll (absolutely positioned `sr-only` spans with no positioned ancestor in `main`), so
+the wheel over the sidebar scrolls the app off screen and the top bar loses 10 px; (3) a problem opened from a
+scrolled What to fix list opens part way down, its back link out of sight; (4) the URLs row menu opens where the
+previous right-click was (the first at the window's top-left); (5) Simple's finished toast is squeezed into a narrow
+column; (6) the Report screen's subtitle wraps to 3-4 lines at 1280 px and its frame keeps Windows' classic scroll
+bar; minor: URLs' search placeholder cut ("Search URLs an"), Advanced's sidebar says "1 crawling" for a paused crawl,
+Home's "last checked" 14:51 against 14:13 in the breadcrumb (end against start?). Still running: the closing audit.
+
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
    `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
