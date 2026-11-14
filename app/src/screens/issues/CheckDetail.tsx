@@ -8,6 +8,8 @@ import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { EmptyState, SkippedState } from '../../ui/EmptyState';
 import { IconButton } from '../../ui/IconButton';
+import { DropdownMenu, MenuItem } from '../../ui/Menu';
+import type { HiddenScope } from '../../settings/hiddenChecks';
 import { Num } from '../../ui/Num';
 import { SeverityBadge } from '../../ui/SeverityBadge';
 import { SeverityMark } from '../../ui/SeverityMark';
@@ -34,6 +36,12 @@ export interface CheckDetailProps {
   onCopy: () => void;
   copying: boolean;
   onHideChange: (hidden: boolean) => void;
+  /**
+   * Where the check is hidden (this crawl only, or every crawl), and the way to choose: with these, Hide asks which
+   * (docs/v2-ui-discovery.md, decision 2). Left out, Hide hides it in every crawl, as before.
+   */
+  hiddenScope?: HiddenScope | undefined;
+  onHideScopeChange?: ((scope: HiddenScope) => void) | undefined;
   onLearnMore: () => void;
   titleRef?: Ref<HTMLHeadingElement>;
 }
@@ -66,6 +74,8 @@ export function CheckDetail({
   onCopy,
   copying,
   onHideChange,
+  hiddenScope,
+  onHideScopeChange,
   onLearnMore,
   titleRef,
 }: CheckDetailProps) {
@@ -84,7 +94,15 @@ export function CheckDetail({
           <SeverityBadge severity={check.severity} />
           <span>{categoryTitle}</span>
           {outcome === 'skipped' ? <Badge variant="dashed">Skipped</Badge> : null}
-          {entry.hidden ? <Badge variant="outline">Hidden from the list</Badge> : null}
+          {entry.hidden ? (
+            <Badge variant="outline">
+              {hiddenScope === 'crawl'
+                ? 'Hidden in this crawl'
+                : hiddenScope === 'all'
+                  ? 'Hidden in every crawl'
+                  : 'Hidden from the list'}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <h2
@@ -101,13 +119,23 @@ export function CheckDetail({
                 Copy URLs
               </Button>
             ) : null}
-            <IconButton
-              size="sm"
-              icon={entry.hidden ? Eye : EyeOff}
-              label={entry.hidden ? 'Show this check in the list' : 'Hide this check'}
-              command="issues.hideCheck"
-              onClick={() => onHideChange(!entry.hidden)}
-            />
+            {onHideScopeChange && !entry.hidden ? (
+              // Hidden in this crawl only, or in every crawl: the check is the same, the reason to hide it may not be.
+              <DropdownMenu align="end" trigger={<IconButton size="sm" icon={EyeOff} label="Hide this check" />}>
+                <MenuItem shortcut="mod+shift+h" onSelect={() => onHideScopeChange('crawl')}>
+                  Hide in this crawl
+                </MenuItem>
+                <MenuItem onSelect={() => onHideScopeChange('all')}>Hide in every crawl</MenuItem>
+              </DropdownMenu>
+            ) : (
+              <IconButton
+                size="sm"
+                icon={entry.hidden ? Eye : EyeOff}
+                label={entry.hidden ? 'Show this check in the list' : 'Hide this check'}
+                command="issues.hideCheck"
+                onClick={() => onHideChange(!entry.hidden)}
+              />
+            )}
           </div>
         </div>
         {found ? (

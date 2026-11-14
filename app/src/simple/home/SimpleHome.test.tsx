@@ -57,7 +57,7 @@ const refused = (errors: Record<string, string[]>): FakeRoute => [
 
 const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!;
 
-afterEach(() => replaceSettings({ mode: 'advanced', hiddenChecks: [] }));
+afterEach(() => replaceSettings({ mode: 'advanced', hiddenChecks: [], hiddenChecksByCrawl: {} }));
 
 describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
   it('asks for one thing, the address, and says what a bare Enter does', async () => {

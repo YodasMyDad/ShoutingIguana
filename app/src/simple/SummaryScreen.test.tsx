@@ -49,7 +49,7 @@ async function open(
   path = `${CRAWL}/overview`,
   extra: FakeRoute[] = [],
 ) {
-  replaceSettings({ mode: 'simple', hiddenChecks: [] });
+  replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} });
   setTransport(fakeSidecar([...extra, ...simpleRoutes(item, analysis)]));
   const queryClient = createQueryClientWithoutBackoff();
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
@@ -190,7 +190,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
   });
 
   it('closes the breakdown opened here by going back, so Back then leaves the Summary', async () => {
-    replaceSettings({ mode: 'simple', hiddenChecks: [] });
+    replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} });
     setTransport(fakeSidecar(simpleRoutes(gardenItem(), GARDEN_ANALYSIS)));
     const queryClient = createQueryClientWithoutBackoff();
     const router = createAppRouter(

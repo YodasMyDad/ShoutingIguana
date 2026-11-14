@@ -37,7 +37,7 @@ const connect = () => setDirectConnection({ baseUrl: 'mock://sidecar', token: 'm
 
 /** Every story starts clean: nothing hidden, nothing live. */
 function fresh() {
-  updateSettings({ hiddenChecks: [] });
+  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
   liveStore.reset();
 }
 

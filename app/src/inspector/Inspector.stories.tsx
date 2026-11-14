@@ -39,7 +39,13 @@ const connect = () => setDirectConnection({ baseUrl: 'mock://sidecar', token: 'm
 
 /** Every story starts clean: docked on the right at the layout's size, on the section it names, nothing live. */
 function fresh(section: SectionId = 'summary', dock: 'right' | 'bottom' = 'right') {
-  updateSettings({ inspectorDock: dock, inspectorWidth: null, inspectorHeight: null, hiddenChecks: [] });
+  updateSettings({
+    inspectorDock: dock,
+    inspectorWidth: null,
+    inspectorHeight: null,
+    hiddenChecks: [],
+    hiddenChecksByCrawl: {},
+  });
   resetRememberedSection();
   rememberSection(section);
   resetLinkKinds();

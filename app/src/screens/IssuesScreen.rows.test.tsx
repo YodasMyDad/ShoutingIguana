@@ -44,7 +44,7 @@ const cursorRowText = (grid: HTMLElement) =>
 let uninstall: () => void = () => undefined;
 beforeEach(() => {
   uninstall = installKeyboard();
-  updateSettings({ hiddenChecks: [] });
+  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
 });
 afterEach(() => {
   uninstall();

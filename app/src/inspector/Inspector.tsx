@@ -59,6 +59,7 @@ import { preloadSourceViewer } from './sourceViewerLoader';
 import { StructuredDataSection } from './StructuredDataSection';
 import { SummarySection } from './SummarySection';
 import { TYPE_WORDS, depthInBrief } from './words';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 /** Ctrl+F (Cmd+F on macOS): on the Source tab, the source's search. */
 const FIND = parseChord('mod+f');
@@ -123,7 +124,7 @@ function useLinkCount(crawlId: string, urlId: number, direction: 'inlinks' | 'ou
 export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   const inspector = useInspector();
   const dock = useSettings((settings) => settings.inspectorDock);
-  const hiddenChecks = useSettings((settings) => settings.hiddenChecks);
+  const hiddenChecks = useHiddenChecks(crawlId);
   const item = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
   const status = effectiveStatus(item, live);

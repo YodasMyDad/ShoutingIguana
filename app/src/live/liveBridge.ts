@@ -16,7 +16,6 @@ import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback
 import { formatCountOf } from '../lib/format';
 import { getMode } from '../mode/mode';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
-import { getSettings } from '../settings/settingsStore';
 import {
   simpleFailedTitle,
   simpleFinishedWords,
@@ -26,6 +25,7 @@ import {
 import { getConnection, subscribeSidecarStatus } from '../shell/connection';
 import { liveStore, type LiveState, type LiveStore } from './liveStore';
 import { startEventStream } from './sse';
+import { currentHiddenChecks } from '../settings/hiddenChecks';
 
 /** How long a completed crawl waits for its analysis to begin before its toast says it finished without one. */
 const ANALYSIS_GRACE_MS = 1_000;
@@ -329,7 +329,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
    */
   async function problemsOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
     if (!item?.issues) return null;
-    const hidden = getSettings().hiddenChecks;
+    const hidden = currentHiddenChecks(crawlId);
     if (hidden.length === 0) return item.issues.error + item.issues.warning;
     try {
       const [checks, analysis] = await Promise.all([

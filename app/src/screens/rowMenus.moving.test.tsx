@@ -29,7 +29,7 @@ let uninstall: () => void = () => undefined;
 let writeText: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   uninstall = installKeyboard();
-  updateSettings({ hiddenChecks: [], savedViews: [], showFullUrls: true });
+  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {}, savedViews: [], showFullUrls: true });
 });
 afterEach(() => {
   uninstall();

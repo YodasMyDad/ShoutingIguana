@@ -21,7 +21,7 @@ export const SYNTHETIC_CRAWL = '5d66706ffdaef5e0';
 
 /** Every story starts clean: nothing hidden, nothing live. */
 export function freshStory(): void {
-  updateSettings({ hiddenChecks: [] });
+  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
   liveStore.reset();
 }
 

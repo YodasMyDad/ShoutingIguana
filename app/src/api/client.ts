@@ -114,6 +114,7 @@ function reportQuery(options: ReportOptions): string {
   if (options.cut !== undefined) query.set('cut', options.cut);
   if (options.examples !== undefined) query.set('examples', String(options.examples));
   if (options.lookExamples !== undefined) query.set('lookExamples', String(options.lookExamples));
+  if (options.hiddenChecks?.length) query.set('hiddenChecks', options.hiddenChecks.join(','));
   const text = query.toString();
   return text ? `?${text}` : '';
 }

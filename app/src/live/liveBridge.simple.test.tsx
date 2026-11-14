@@ -110,13 +110,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  replaceSettings({ mode: 'advanced', hiddenChecks: [] });
+  replaceSettings({ mode: 'advanced', hiddenChecks: [], hiddenChecksByCrawl: {} });
   dismissToast(`crawl:${ID}:finished`);
   dismissToast(`crawl:${ID}:stopped`);
 });
 
 describe('the finished toast in Simple', () => {
-  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [] }));
+  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} }));
 
   it('says the site is checked, its score and the problems to fix, with See the summary and Open the report', async () => {
     render(<AppToaster />);
@@ -174,7 +174,7 @@ describe('the finished toast in Simple', () => {
 });
 
 describe('a check that ends without its results, or fails, in Simple', () => {
-  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [] }));
+  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} }));
 
   it('a first analysis cancelled: checked, its results not worked out, with Work out the results', async () => {
     render(<AppToaster />);

@@ -28,7 +28,7 @@ import { useCommands } from '../keyboard/registry';
 import { useMode } from '../mode/mode';
 import { formatCountOf } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import { updateSettings, useSettings } from '../settings/settingsStore';
+import { getSettings, useSettings } from '../settings/settingsStore';
 import { useInspector } from '../routing/inspector';
 import { openInBrowser } from '../shell/os';
 import { Card } from '../ui/Card';
@@ -56,6 +56,7 @@ import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
+import { hiddenScopeOf, setCheckHidden, useHiddenChecks, type HiddenScope } from '../settings/hiddenChecks';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -96,7 +97,7 @@ export function IssuesScreen() {
   // for its loading frame until the answer comes.
   const { neverAnalysed, rereading, finishing } = useAnalysisAnswer(crawlId, analysis, { analysing });
 
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
   const [showPassed, setShowPassed] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
@@ -237,12 +238,8 @@ export function IssuesScreen() {
   const inspector = useInspector();
   const onFollow = search.inspect !== undefined ? inspector.open : undefined;
 
-  const setHidden = (id: string, hide: boolean) =>
-    updateSettings((settings) => ({
-      hiddenChecks: hide
-        ? [...settings.hiddenChecks.filter((other) => other !== id), id]
-        : settings.hiddenChecks.filter((other) => other !== id),
-    }));
+  // A check is hidden in this crawl only or in every crawl (docs/v2-ui-discovery.md, decision 2).
+  const hiddenScope = useSettings((settings) => (checkId ? hiddenScopeOf(settings, crawlId, checkId) : null));
 
   // Another check selected by a key (J, K, hiding this one): focus in the list moves to the new check's option, as
   // the arrow keys move it; focus in the check (its grid, its buttons), which goes with it, moves to the new check's
@@ -253,28 +250,34 @@ export function IssuesScreen() {
     focusTitleOf.current = null;
     titleRef.current?.focus();
   }, [checkId]);
-  const selectTakingFocus = (next: CheckEntry) => {
+  const selectTakingFocus = (next: CheckEntry, fromDetail = false) => {
     const focused = document.activeElement;
     const listbox = focused?.closest('[role="listbox"]');
     choose(next.check.id, 'key');
-    if (listbox) {
+    // A menu of the check's own (Hide's) has the keyboard in its portal: the check's title takes it, as from its button.
+    if (fromDetail) focusTitleOf.current = next.check.id;
+    else if (listbox) {
       const options = listbox.querySelectorAll<HTMLElement>('[data-check]');
       [...options].find((option) => option.dataset.check === next.check.id)?.focus();
     } else if (focused?.closest('[data-check-detail]')) focusTitleOf.current = next.check.id;
     else announce(checkWords(next));
   };
 
-  const onHideChange = (hide: boolean) => {
+  const onHideChange = (hide: boolean) => onHideScopeChange(hide ? 'crawl' : null);
+  const onHideScopeChange = (scope: HiddenScope, fromDetail = false) => {
     if (!selected) return;
     const { id, title } = selected.check;
-    setHidden(id, hide);
-    if (!hide) return;
+    const before = hiddenScopeOf(getSettings(), crawlId, id);
+    setCheckHidden(crawlId, id, scope);
+    if (scope === null) return;
     // The list moves on to the next check it shows, as a list does when a row goes, and focus with it.
     const visible = list?.visible ?? [];
     const at = visible.findIndex((entry) => entry.check.id === id);
     const next = visible[at + 1] ?? visible[at - 1];
-    if (next && !showHidden) selectTakingFocus(next);
-    notifyUndo(`Hid “${title}” from the list`, () => setHidden(id, false));
+    if (next && !showHidden) selectTakingFocus(next, fromDetail);
+    notifyUndo(scope === 'all' ? `Hid “${title}” in every crawl` : `Hid “${title}” in this crawl`, () =>
+      setCheckHidden(crawlId, id, before),
+    );
   };
 
   // What Copy URLs copies: the group the groups grid placed and shows open, else the check's URLs. A group the route
@@ -363,11 +366,19 @@ export function IssuesScreen() {
       },
       {
         id: 'issues.hideCheck',
-        title: selected?.hidden ? 'Show this check in the list' : 'Hide this check',
+        title: selected?.hidden ? 'Show this check in the list' : 'Hide this check in this crawl',
         group: 'Issues',
         keys: ['mod+shift+h'],
         enabled: () => selected !== null,
         run: () => onHideChange(!(selected?.hidden ?? false)),
+      },
+      {
+        id: 'issues.hideCheckEverywhere',
+        title: 'Hide this check in every crawl',
+        group: 'Issues',
+        keywords: ['hide', 'all crawls'],
+        enabled: () => selected !== null && hiddenScope !== 'all',
+        run: () => onHideScopeChange('all'),
       },
       {
         id: 'issues.showPassed',
@@ -416,6 +427,17 @@ export function IssuesScreen() {
 
   // Export (Ctrl+E): this check, the open group's pages, the report and every check (the spreadsheet of everything).
   const simple = useMode() === 'simple';
+  // The checks the list's filters keep, when it's filtered: the workbook of those is offered too (the workbook takes
+  // the view's filters, as a grid's file does).
+  const listedChecks = useMemo(() => {
+    if (!list || (severity === 'all' && !q && !category)) return null;
+    const words = [
+      severity === 'all' ? null : `${severity}s`,
+      category ? 'one category' : null,
+      q ? `titles with “${q}”` : null,
+    ].filter((part) => part !== null);
+    return { ids: list.matching.map((entry) => entry.check.id), words: words.join(', ') };
+  }, [list, severity, q, category]);
   useExportCommand(
     () =>
       item
@@ -441,9 +463,10 @@ export function IssuesScreen() {
                   words: placed.detail ? `“${placed.detail}”` : 'the group’s pages',
                 }
               : null,
+            listed: listedChecks,
           })
         : null,
-    [item, crawling, simple, selected, found, placed, sort],
+    [item, crawling, simple, selected, found, placed, sort, listedChecks],
     { group: 'Issues', title: 'Export…', choices: CRAWL_FILE_COMMANDS },
   );
 
@@ -542,6 +565,8 @@ export function IssuesScreen() {
                 onCopy={() => void onCopy()}
                 copying={copying || (found && !copyReady)}
                 onHideChange={onHideChange}
+                hiddenScope={hiddenScope}
+                onHideScopeChange={(scope) => onHideScopeChange(scope, true)}
                 onLearnMore={onLearnMore}
                 titleRef={titleRef}
               />

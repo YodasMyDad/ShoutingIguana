@@ -29,7 +29,6 @@ import { isTauri } from '../../lib/platform';
 import { useLiveCrawl } from '../../live/liveStore';
 import { checkEntries, foundBySeverity } from '../../screens/issues/checkList';
 import { crawledSoFar } from '../../screens/overview/liveFigures';
-import { useSettings } from '../../settings/settingsStore';
 import { pickCrawlFiles, showInFolder } from '../../shell/os';
 import { Button } from '../../ui/Button';
 import { ConfirmDialog } from '../../ui/Dialog';
@@ -42,6 +41,7 @@ import { ScoreRing } from '../../ui/ScoreRing';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { TextLink } from '../../ui/TextLink';
 import { problemCounts, problemWords, rowKind, rowMeta, rowScore, stoppedEarly, type ProblemCounts } from './sites';
+import { useHiddenChecks } from '../../settings/hiddenChecks';
 
 /** A row's grid: the site, its score, what to fix, when, and its action. A narrow card folds the middle under the site. */
 const ROW_GRID =
@@ -55,7 +55,7 @@ const FOLDS = '@max-sites/sites:col-start-1';
  * some, the check's analysis, read for the row. Null while that's read, and for a check never worked out.
  */
 function useRowProblems(item: CrawlListItem): ProblemCounts | null {
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(item.id);
   const needed = hiddenIds.length > 0 && item.issues !== null;
   const checks = useQuery({ ...checksQuery(), enabled: needed }).data;
   const analysis = useQuery({ ...analysisQuery(item.id), enabled: needed }).data;

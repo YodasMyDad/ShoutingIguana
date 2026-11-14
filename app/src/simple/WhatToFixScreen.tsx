@@ -18,7 +18,6 @@ import { useLive } from '../live/liveStore';
 import type { CheckEntry } from '../screens/issues/checkList';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
-import { updateSettings, useSettings } from '../settings/settingsStore';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
@@ -30,6 +29,7 @@ import { ProblemScreen } from './ProblemScreen';
 import { plainResults, type PlainResults } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix } from './useOneFix';
+import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -75,7 +75,7 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   const analysis = useQuery({ ...analysisQuery(crawlId), enabled: readable && !crawling });
   const { neverAnalysed, rereading } = useAnalysisAnswer(crawlId, analysis, { crawling, analysing });
   const { titleRef, analyse } = useAnalysisControl(crawlId, analysing, neverAnalysed);
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   const [showHidden, setShowHidden] = useState(false);
   const hidden = useMemo(() => new Set(showHidden ? [] : hiddenIds), [hiddenIds, showHidden]);
   const results = useMemo(
@@ -176,7 +176,7 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
         hiddenCount={hiddenCount}
         showHidden={showHidden}
         onShowHidden={setShowHidden}
-        onUnhide={() => updateSettings({ hiddenChecks: [] })}
+        onUnhide={() => showAllHidden(crawlId)}
       />
     );
   }

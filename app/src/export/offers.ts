@@ -5,6 +5,7 @@ import type { CheckGroupRef, GridFilter, GridSort, LinkEnds, RobotsBlockReason }
 import type { CrawlListItem } from '../api/types';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatCountOf } from '../lib/format';
+import { currentHiddenChecks } from '../settings/hiddenChecks';
 import type { ExportChoice, ExportOffer } from './exportOffer';
 
 /** A column's id and its title, as the engine's column lists give them. */
@@ -268,6 +269,13 @@ export function isAnalysed(item: CrawlListItem): boolean {
  * analysed has neither: each says so, with "Work out the results" in its place.
  */
 export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportChoice[] {
+  // The checks the user hid in this crawl, as they are when Export is pressed: the files leave them out, as every
+  // screen does (docs/v2-ui-discovery.md, decision 2). Read from the preferences, the one place outside the screen's
+  // own state an offer looks.
+  const hidden = () => {
+    const ids = currentHiddenChecks(item.id);
+    return ids.length > 0 ? { hiddenChecks: [...ids] } : {};
+  };
   const unavailable = isAnalysed(item)
     ? null
     : simple
@@ -283,7 +291,13 @@ export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportCh
       fileView: 'report',
       unavailable,
       remedy: 'analyse',
-      build: ({ path, cut }) => ({ kind: 'report', format: 'html', path, ...(cut === 'summary' ? { cut } : {}) }),
+      build: ({ path, cut }) => ({
+        kind: 'report',
+        format: 'html',
+        path,
+        ...(cut === 'summary' ? { cut } : {}),
+        ...hidden(),
+      }),
     },
     {
       id: 'workbook',
@@ -294,7 +308,7 @@ export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportCh
       fileView: 'report',
       unavailable,
       remedy: 'analyse',
-      build: ({ path }) => ({ kind: 'workbook', format: 'xlsx', path }),
+      build: ({ path }) => ({ kind: 'workbook', format: 'xlsx', path, ...hidden() }),
     },
   ];
 }
@@ -319,6 +333,11 @@ export function issuesOffer(args: {
   check: { id: string; title: string; urls: number | null; flat?: boolean; sort?: readonly GridSort[] } | null;
   /** The open group, with its pages' count and its words. */
   group: { ref: CheckGroupRef; pages: number | null; words: string } | null;
+  /**
+   * The checks the list's filters keep (severity, category, the text filter), by id, when the list is filtered: the
+   * workbook of those alone is offered beside the one of every check. Null or left out when the list isn't filtered.
+   */
+  listed?: { ids: readonly string[]; words: string } | null | undefined;
 }): ExportOffer {
   const choices: ExportChoice[] = [];
   if (args.check) {
@@ -372,9 +391,26 @@ export function issuesOffer(args: {
       });
     }
   }
-  const files = crawlFileChoices(args.item, args.simple).map((choice) =>
-    choice.id === 'workbook' ? { ...choice, title: 'Every check: the spreadsheet of everything' } : choice,
-  );
+  const all = crawlFileChoices(args.item, args.simple);
+  const files = all.flatMap((choice) => {
+    if (choice.id !== 'workbook') return [choice];
+    const every = { ...choice, title: 'Every check: the spreadsheet of everything' };
+    const listed = args.listed;
+    if (!listed) return [every];
+    // The workbook takes the list's filters, as a grid's file takes the grid's (docs/v2-ui-discovery.md, Export).
+    const view: ExportChoice = {
+      ...choice,
+      id: 'workbookListed',
+      title: 'The checks listed: their spreadsheet',
+      description: `${formatCountOf(listed.ids.length, 'check')} (${listed.words}): a summary sheet, then each that found something on a sheet of its own`,
+      fileView: 'checks listed',
+      build: (target) => {
+        const request = choice.build(target);
+        return request.kind === 'workbook' ? { ...request, checks: [...listed.ids] } : request;
+      },
+    };
+    return [view, every];
+  });
   return { ...base(args.item, 'Export issues', args.crawling), choices: [...choices, ...files] };
 }
 

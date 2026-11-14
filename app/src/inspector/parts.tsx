@@ -12,7 +12,6 @@ import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { useLiveCrawl } from '../live/liveStore';
-import { useSettings } from '../settings/settingsStore';
 import { Badge } from '../ui/Badge';
 import { SeverityMark } from '../ui/SeverityMark';
 import { StatusCode } from '../ui/StatusCode';
@@ -22,6 +21,7 @@ import { checkTitle, issuesAreStale, useChecks, useInspectorContext } from './in
 import { issueLink } from './issueLinks';
 import { splitHidden } from './sections';
 import { noStatusWords, reasonPhrase } from './words';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 /** A block of a section, under a hairline, with its title. */
 export function Block({
@@ -187,10 +187,7 @@ export function IssueList({
   detail: UrlDetail;
 }) {
   // The checks hidden from the Issues list come after the others, marked: they're the URL's all the same.
-  const { counted, hidden } = splitHidden(
-    issues,
-    useSettings((settings) => settings.hiddenChecks),
-  );
+  const { counted, hidden } = splitHidden(issues, useHiddenChecks(useInspectorContext().crawlId));
   return (
     <ul aria-label={label} className="flex flex-col">
       {counted.map((issue, index) => (
