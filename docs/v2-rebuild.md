@@ -191,6 +191,18 @@ and page counts differ between screens (3); Advanced Home is still the foundatio
 Simple, mostly from the shell (5-7). The brief's audit ports 50874-50877 are in a Windows reserved range: use others.
 **Next (step 4 of the resume list): the owner chooses what blocks "finished"**, then a fix round from that list.
 
+**2026-11-14: the owner's word: "Fix everything"** (every gap, the "defer" ones included). **Round 5 launched** on
+`001d024`, four builders at once from [`brief-round5.md`](handoff/2026-11-14/brief-round5.md): A Simple's truth
+and words and the stopped check (`ui/r5-simple`), B Advanced Home, one count everywhere, Overview and Issues
+(`ui/r5-home`), C the grid, URLs, inspector and exports (`ui/r5-grid`), D the shell, frame and platform: updater,
+proxy test, credential store, data folder, licences, Simple in `smoke:shell` (`ui/r5-shell`). Worktrees
+`.claude/worktrees/r5-*`, scratch folders in this session's scratchpad (`a539aa23-…/r5-*`, each with a
+`checkpoint.md`). Then: integrate the four (B's drop with D's shell event), a fresh-eyes review, fixes, merge, the
+whole-suite verify and both smoke walks, and a gallery update. Not in this round, and not in the audit's gaps: the
+native macOS menu and installers for other OSes (can't be built or checked on this machine). If this section still
+says "launched" in a new session, the builders didn't report: check each branch's log and checkpoint, and relaunch
+from the brief with "resume from your checkpoint".
+
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
    `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
