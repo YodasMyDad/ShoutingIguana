@@ -2,7 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
-import { alertsQuery, analysisQuery, checksQuery, crawlQuery, startUrlQuery, statsQuery } from '../api/queries';
+import {
+  alertsQuery,
+  analysisQuery,
+  checksQuery,
+  crawlQuery,
+  robotsFileQuery,
+  startUrlQuery,
+  statsQuery,
+} from '../api/queries';
 import { isCrawling, type Checks, type CrawlListItem, type CrawlStatus } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
@@ -492,9 +500,14 @@ function NothingCrawled({
   status: CrawlStatus | null;
 }) {
   const start = useQuery(startUrlQuery(crawlId));
+  const startRow = start.isPending || start.error ? undefined : start.data;
+  // robots.txt kept the crawl from the start URL: how that file answered says why (rules, an error, no answer).
+  const robotsOrigin = startRow?.outcome === 'robotsDisallowed' && startRow.url ? originOf(startRow.url) : null;
+  const robots = useQuery({ ...robotsFileQuery(crawlId, robotsOrigin ?? ''), enabled: robotsOrigin !== null });
   const reason = emptyCrawl(
     { status: status ?? item.status, fetchedUrlCount: item.fetchedUrlCount },
-    start.isPending || start.error ? undefined : start.data,
+    startRow,
+    robots.data ? { state: robots.data.state, statusCode: robots.data.statusCode } : undefined,
   );
   return (
     <Card>
@@ -508,6 +521,15 @@ function NothingCrawled({
       </EmptyState>
     </Card>
   );
+}
+
+/** The origin of a URL, for its robots.txt; null for one that can't be read as a URL. */
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
 }
 
 function EmptyAction({ crawlId, item, reason }: { crawlId: string; item: CrawlListItem; reason: EmptyCrawl }) {

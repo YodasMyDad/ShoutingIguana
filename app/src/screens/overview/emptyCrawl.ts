@@ -2,6 +2,7 @@
 // view has every state": Empty explains why, with the next action). Pure.
 import type { UrlRow } from '../../api/grids';
 import type { CrawlListItem } from '../../api/types';
+import type { StartRobots } from '../../simple/nothingRead';
 
 export type EmptyCrawlAction = 'continue' | 'crawlAgain' | 'crawlFrom' | 'crawlSettings';
 
@@ -36,11 +37,14 @@ export function isEmptyCrawl(item: Pick<CrawlListItem, 'pageCount' | 'status'>):
 
 /**
  * Why the crawl read no pages. `start` is the start URL's row as the crawl stored it: null when it has none, undefined
- * while it isn't known (still loading, or it couldn't be read), which says only what the library knows.
+ * while it isn't known (still loading, or it couldn't be read), which says only what the library knows. `robots` is
+ * how the start URL's robots.txt answered, for a start URL robots.txt kept the crawl from: rules that refuse it, an
+ * error and no answer are three sentences, as Simple's "No pages could be read" says them (round 5's gap 1).
  */
 export function emptyCrawl(
   item: Pick<CrawlListItem, 'status' | 'fetchedUrlCount'>,
   start: UrlRow | null | undefined,
+  robots?: StartRobots,
 ): EmptyCrawl {
   const unfinished = item.status === 'stopped' || item.status === 'interrupted';
   const title = 'This crawl didn’t read any pages';
@@ -83,11 +87,7 @@ export function emptyCrawl(
           }
         : { title, why: 'The start URL redirects, and the crawl didn’t reach a page.', action: 'crawlAgain' };
     case 'robotsDisallowed':
-      return {
-        title,
-        why: 'The site’s robots.txt doesn’t allow the start URL to be crawled (or couldn’t be read). Crawl again with robots.txt ignored if the site is yours to audit.',
-        action: 'crawlSettings',
-      };
+      return robotsKeptOut(title, robots, unfinished);
     case 'timeout':
       return {
         title,
@@ -121,4 +121,36 @@ export function emptyCrawl(
         ? { title, why: 'It stopped before it fetched its start URL. Continue it to carry on.', action: 'continue' }
         : { title, why: 'It ended before it fetched its start URL.', action: 'crawlAgain' };
   }
+}
+
+/** The start URL robots.txt kept the crawl from, by how that robots.txt answered. */
+function robotsKeptOut(title: string, robots: StartRobots | undefined, unfinished: boolean): EmptyCrawl {
+  const again = unfinished ? 'continue' : 'crawlAgain';
+  if (robots?.state === 'unreachable' && robots.statusCode !== null) {
+    return {
+      title,
+      why: `The site’s robots.txt answered ${statusWords(robots.statusCode)}, so the crawl kept out of the whole site, as search engines do, and read nothing. Crawl it again once robots.txt answers.`,
+      action: again,
+    };
+  }
+  if (robots?.state === 'unreachable' || robots?.state === 'unanswered') {
+    return {
+      title,
+      why: 'The site didn’t answer when the crawl asked for its robots.txt, so it read nothing. Check the address and that the site is up, then crawl it again.',
+      action: again,
+    };
+  }
+  if (robots?.state === 'read') {
+    return {
+      title,
+      why: 'The site’s robots.txt doesn’t allow the start URL to be crawled. Crawl again with robots.txt ignored if the site is yours to audit.',
+      action: 'crawlSettings',
+    };
+  }
+  // Not known yet (or no file kept): true whichever way the file answered.
+  return {
+    title,
+    why: 'The site’s robots.txt kept the crawl from the start URL, so it read nothing. Crawl again with robots.txt ignored if the site is yours to audit.',
+    action: 'crawlSettings',
+  };
 }
