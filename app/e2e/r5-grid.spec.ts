@@ -194,6 +194,34 @@ test('searches the source on Ctrl+F from the Source tab and its panel (gap 8)', 
   await expect(main(page).getByRole('searchbox', { name: 'Search URLs and titles' })).toHaveValue('');
 });
 
+test('says the URLs found whole beside the folded toolbars at 200% (B’s count, C’s fold)', async ({ page }) => {
+  await page.setViewportSize({ width: 640, height: 360 });
+  // Filtered, so the count is its longest: "N of M URLs found".
+  const filter = [{ column: 'statusCode', op: 'eq', value: 200 }];
+  await openUrls(page, `?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+  const toggle = main(page).getByRole('button', { name: /^Show the columns and filters/ });
+  await expect(toggle).toBeVisible();
+  const count = main(page).locator('.si-result-count');
+  await expect(count).toHaveText(/^[\d,]+ of [\d,]+ URLs found$/);
+  const fits = await count.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const main = element.closest('main')!.getBoundingClientRect();
+    return {
+      whole: element.scrollWidth <= Math.ceil(box.width) && box.right <= main.right + 0.5 && box.left >= main.left,
+      box: { left: box.left, right: box.right, top: box.top, bottom: box.bottom },
+    };
+  });
+  expect(fits.whole, 'the count is whole and inside the screen').toBe(true);
+  const toggleBox = (await toggle.boundingBox())!;
+  const overlaps =
+    fits.box.left < toggleBox.x + toggleBox.width &&
+    toggleBox.x < fits.box.right &&
+    fits.box.top < toggleBox.y + toggleBox.height &&
+    toggleBox.y < fits.box.bottom;
+  expect(overlaps, 'the count never lies under the fold’s button').toBe(false);
+  await page.screenshot({ path: `${SHOTS}/urls-200-folded-filtered.png` });
+});
+
 test('keeps rows in view at 200% zoom, with and without the inspector (gap 13)', async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 360 });
   await openUrls(page);
