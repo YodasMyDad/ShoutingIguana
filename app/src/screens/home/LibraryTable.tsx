@@ -178,9 +178,9 @@ function CrawlRow({
                 params={{ crawl: item.id }}
                 className={clsx('truncate', nested ? 'text-13 font-medium' : 'text-14 font-semibold')}
                 title={item.startUrl ?? item.path}
-                aria-label={nested ? label : undefined}
               >
-                {nested && item.startedAt ? <RelativeTime iso={item.startedAt} /> : crawlName(item)}
+                {/* An older crawl is named by when it started, in full: its site is the row above's. */}
+                {nested ? label : crawlName(item)}
               </TextLink>
               {running ? (
                 <Badge variant="accent" className="flex-none">
@@ -250,9 +250,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">
           {item.issues ? 'Analysed so far. ' : 'Part way. '}
-          <InlineAction crawl={crawlName(item)} onClick={() => void continueCrawl(item.id)}>
-            Continue
-          </InlineAction>
+          <InlineAction words="Continue" crawl={crawlName(item)} onClick={() => void continueCrawl(item.id)} />
         </span>
       ) : null;
     case 'outOfDate':
@@ -262,9 +260,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
           {actions.canAnalyse ? (
             <>
               .{' '}
-              <InlineAction crawl={crawlName(item)} onClick={() => void analyseCrawl(item.id)}>
-                Analyse again
-              </InlineAction>
+              <InlineAction words="Analyse again" crawl={crawlName(item)} onClick={() => void analyseCrawl(item.id)} />
             </>
           ) : null}
         </span>
@@ -290,9 +286,11 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
     return (
       <span className="text-text-muted">
         Not analysed yet.{' '}
-        <InlineAction crawl={crawlName(item)} onClick={() => void analyseCrawl(item.id)}>
-          {analyseWords(item, status)}
-        </InlineAction>
+        <InlineAction
+          words={analyseWords(item, status)}
+          crawl={crawlName(item)}
+          onClick={() => void analyseCrawl(item.id)}
+        />
       </span>
     );
   }
@@ -303,11 +301,10 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
  * A row's one action, as a link-styled button inside its sentence. Its name is its words, then the crawl's
  * ("Analyse again, garden.example"), so it starts with what it shows, as speech input needs.
  */
-function InlineAction({ crawl, onClick, children }: { crawl: string; onClick: () => void; children: ReactNode }) {
+function InlineAction({ words, crawl, onClick }: { words: string; crawl: string; onClick: () => void }) {
   return (
-    <button type="button" className="si-link si-link--inline" onClick={onClick}>
-      {children}
-      <span className="sr-only">, {crawl}</span>
+    <button type="button" className="si-link si-link--inline" aria-label={`${words}, ${crawl}`} onClick={onClick}>
+      {words}
     </button>
   );
 }
@@ -327,9 +324,5 @@ function LocateButton({ item }: { item: CrawlListItem }) {
       void navigate({ to: '/crawls/$crawl', params: { crawl: opened.id } });
     });
   };
-  return (
-    <InlineAction crawl={crawlName(item)} onClick={() => void locate()}>
-      Locate the file…
-    </InlineAction>
-  );
+  return <InlineAction words="Locate the file…" crawl={crawlName(item)} onClick={() => void locate()} />;
 }

@@ -63,7 +63,7 @@ export function TotalsRow({ crawlId }: { crawlId: string }) {
             value={<Num value={totals?.found} />}
             context={
               totals
-                ? `URLs, crawled or not: ${formatCount(totals.found - totals.crawled)} weren’t`
+                ? `URLs, crawled or not: ${formatCount(totals.found - totals.crawled)} ${totals.found - totals.crawled === 1 ? 'wasn’t' : 'weren’t'}`
                 : 'URLs, crawled or not'
             }
           />
