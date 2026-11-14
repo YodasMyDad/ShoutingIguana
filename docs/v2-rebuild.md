@@ -149,6 +149,15 @@ from its brief.
 
 ### To resume, in this order (from 2026-11-14)
 
+**2026-11-14: step 1 is done.** `151d6dd` verified as one whole, every step green: engine build, tests (1,428 +
+267 + 28), the 100k bench, `readbench --gate`; app `npm ci`, typecheck, lint, format, script tests, unit 3,437 (75
+skipped), build-storybook, stories 488 x 2 themes plain, forced colours and reduced motion (no violations), the
+sidecar build, e2e 188 (2 skipped); `cargo fmt`, `clippy`, `cargo test` (120 + 3). Two things seen on the way, neither
+in the app's code: in the scripted run, `src/main.test.tsx`'s "shows a plain failure…" timed out once at 5 s on its
+cold `import('./main')` under the suite's load (its "index.html has no #root" is that import landing after the
+teardown); it passed 3 of 3 alone and in the full rerun. A full `npm test` run without the script's private TEMP then
+failed to load all 328 files: the stale Vite cache below; moved aside, the suite ran green. Next is step 2.
+
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
    `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
