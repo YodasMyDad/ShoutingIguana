@@ -371,7 +371,7 @@ describe('round 5: the URL grid’s row menu filters by the value under it (gap 
       expect(router.state.location.search.filter).toEqual([{ column: 'statusCode', op: 'eq', value: 404 }]),
     );
     const header = screen.getByRole('heading', { level: 1, name: 'URLs' }).parentElement!;
-    expect(await within(header).findByText(wholeText('1 of 3 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('1 of 3 URLs found'))).toBeVisible();
 
     await act(() => router.navigate({ to: '/crawls/$crawl/urls', params: { crawl: TEST_CRAWL_ID }, search: {} }));
     const fresh = await screen.findByRole('grid', { name: 'URLs' });
