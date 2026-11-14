@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CrawlListItem } from '../../api/types';
 import { ENGINE_DEFAULTS } from '../../crawl/options/engineDefaults';
+import { setSecretsStore } from '../../crawl/secrets';
 import { liveStore } from '../../live/liveStore';
 import { getMode } from '../../mode/mode';
 import { replaceSettings } from '../../settings/settingsStore';
@@ -65,6 +66,7 @@ const refused = (errors: Record<string, string[]>): FakeRoute => [
 const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!;
 
 afterEach(() => {
+  setSecretsStore(null);
   replaceSettings({ mode: 'advanced', hiddenChecks: [], hiddenChecksByCrawl: {} });
   liveStore.reset();
 });
@@ -92,6 +94,47 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     ).toBeInTheDocument();
     expect(field).toHaveAccessibleDescription(/That isn’t a web address/);
     expect(screen.queryByText(/Start URL/)).toBeNull();
+  });
+
+  it('asks where a bare address starts with the saved settings, the proxy’s password in (round 5 review R2-1)', async () => {
+    setSecretsStore({
+      read: (key) =>
+        Promise.resolve(key === 'defaults' ? JSON.stringify({ proxyUrl: 'http://me:pw@proxy.example:3128' }) : null),
+      write: () => Promise.resolve(),
+    });
+    const asked: unknown[] = [];
+    const started: unknown[] = [];
+    await open(
+      [garden],
+      { ...ENGINE_DEFAULTS, proxyUrl: 'http://***@proxy.example:3128/', hasRedactedProxyCredentials: true },
+      [
+        [
+          'POST',
+          /^\/api\/crawl-options\/start-url$/,
+          (request) => {
+            asked.push(request.body);
+            return json({ startUrl: 'http://plain-http.example/', reason: 'http' });
+          },
+        ],
+        [
+          'POST',
+          /^\/api\/crawls$/,
+          (request) => {
+            started.push(request.body);
+            return json(testCrawlItem({ startUrl: 'http://plain-http.example/' }));
+          },
+        ],
+      ],
+    );
+    await userEvent.type(screen.getByRole('textbox', { name: 'Web address' }), 'plain-http.example{Enter}');
+    await vi.waitFor(() => expect(started).toHaveLength(1));
+    expect(asked).toEqual([
+      {
+        address: 'plain-http.example',
+        options: expect.objectContaining({ proxyUrl: 'http://me:pw@proxy.example:3128' }) as unknown,
+      },
+    ]);
+    expect(started[0]).toMatchObject({ options: { startUrl: 'http://plain-http.example/' } });
   });
 
   it('says an address with a user name and password in it can’t be checked, in Simple’s words', async () => {

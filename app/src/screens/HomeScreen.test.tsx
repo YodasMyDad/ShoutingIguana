@@ -3,6 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { drawAsTheAppForTests } from '../crawl/fileOpening';
+import { setSecretsStore } from '../crawl/secrets';
 import { commands } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { message, progressAt } from '../test/overviewSidecar';
@@ -28,6 +29,7 @@ async function open(library: () => Response | Promise<Response>, routes: FakeRou
 const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('tr')!;
 
 afterEach(() => {
+  setSecretsStore(null);
   setTransport(fakeSidecar([]));
   liveStore.reset();
   drawAsTheAppForTests(null);
@@ -51,15 +53,40 @@ describe('Home’s URL field', () => {
 describe('Home’s URL field, an address without its scheme (round 5: A’s start address in B’s Home)', () => {
   it('starts the crawl where the site answers, http when only http does, never https added blindly', async () => {
     const started: unknown[] = [];
+    // The defaults' proxy has a password, kept in the credential store: the sidecar asks through it, password and all
+    // (round 5 review R2-1), never with the stored proxy's "***".
+    setSecretsStore({
+      read: (key) =>
+        Promise.resolve(
+          key === 'defaults'
+            ? JSON.stringify({ proxyUrl: 'http://me:pw@proxy.example:3128', headers: { Authorization: 'Basic eDp5' } })
+            : null,
+        ),
+      write: () => Promise.resolve(),
+    });
     const { router } = await open(
       () => json([]),
       [
-        ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options: {} })],
+        [
+          'GET',
+          /^\/api\/crawl-options\/defaults$/,
+          () =>
+            json({
+              options: {
+                proxyUrl: 'http://***@proxy.example:3128/',
+                hasRedactedProxyCredentials: true,
+                extraHeaders: { Authorization: '', 'X-Unsent': '' },
+              },
+            }),
+        ],
         [
           'POST',
           /^\/api\/crawl-options\/start-url$/,
           (request) => {
-            expect(request.body).toEqual({ address: 'plain-http.example' });
+            expect(request.body).toEqual({
+              address: 'plain-http.example',
+              options: { proxyUrl: 'http://me:pw@proxy.example:3128', extraHeaders: { Authorization: 'Basic eDp5' } },
+            });
             return json({ startUrl: 'http://plain-http.example/', reason: 'http' });
           },
         ],
