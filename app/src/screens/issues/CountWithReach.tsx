@@ -10,25 +10,27 @@ export function CountWithReach({
   count,
   noun,
   reach,
+  nounShown = false,
 }: {
   count: number;
   /** "page", "pages", "URLs": read after the count. */
   noun: string;
   reach: CheckReach | null;
+  /** The noun shown after the count ("3 pages"), as Fix first shows it; else it's read only. */
+  nounShown?: boolean;
 }) {
   return (
     <span
       className="inline-flex items-baseline gap-1.5 whitespace-nowrap"
       title={reach ? `${reach.words.charAt(0).toUpperCase()}${reach.words.slice(1)}` : undefined}
     >
-      <Num value={count} />
+      {nounShown ? <Num value={count} noun={noun} plural={noun} /> : <Num value={count} />}
       <span className="sr-only">
-        {' '}
-        {noun}
+        {nounShown ? '' : ` ${noun}`}
         {reach ? `, ${reach.words}` : ''}
       </span>
       {reach ? (
-        <span aria-hidden="true" className="figures text-12 text-text-muted">
+        <span aria-hidden="true" className="text-12 text-text-muted tabular-nums">
           · {reach.value}
         </span>
       ) : null}

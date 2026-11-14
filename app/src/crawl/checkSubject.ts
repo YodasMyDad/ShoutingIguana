@@ -167,8 +167,8 @@ export interface CheckReach {
  * How much of the site a check's count is, Screaming Frog's "% of Total" (docs/v2-comparison.md): the share
  * `checkShare` gives, of the pages analysed for a `page` check and of the URLs crawled for any other; or, for a check
  * that finds a fault of the whole site (`siteWide`, which Simple says as "The whole site"), the whole site, never "1
- * page, <0.1%"; or, for one reported once for the whole site (`reportedOnce`), that it was checked once. Null where no
- * share is known to be true, as `checkShare` says.
+ * page, <0.1%". A check reported once a site (or a sitemap) that finds no fault of the whole site keeps its share, as
+ * Advanced has always said it. Null where no share is known to be true, as `checkShare` says.
  */
 export function checkReach(
   check: ReachingCheck,
@@ -182,14 +182,6 @@ export function checkReach(
       value: 'Whole site',
       context: 'A fault of the whole site, whatever its count',
       words: 'the whole site',
-    };
-  }
-  if (check?.reportedOnce) {
-    return {
-      label: 'Reach',
-      value: 'Once',
-      context: 'Checked once, for the whole site',
-      words: 'checked once, for the whole site',
     };
   }
   const share = checkShare(check, count, analysis);

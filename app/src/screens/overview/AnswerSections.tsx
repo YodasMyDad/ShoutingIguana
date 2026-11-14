@@ -81,6 +81,7 @@ const affected = (entry: CheckEntry, totals: CrawlCounts | null) => {
       count={entry.count ?? 0}
       noun={entry.count === 1 ? words.noun : words.plural}
       reach={checkReach(entry.check, entry.count, totals)}
+      nounShown
     />
   ) : (
     <Num value={entry.count} noun={affectedNoun(entry.check)} />

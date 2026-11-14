@@ -211,7 +211,8 @@ describe('how much of the site a check’s count is ("% of Total")', () => {
       context: 'A fault of the whole site, whatever its count',
       words: 'the whole site',
     });
-    expect(checkReach({ subject: 'url', reportedOnce: true }, 2, CRAWL)?.value).toBe('Once');
+    // Reported once a sitemap, but no fault of the whole site: its share stands.
+    expect(checkReach({ subject: 'url', reportedOnce: true }, 3, CRAWL)?.value).toBe('1%');
   });
 
   it('is nothing for a check that found nothing, or was skipped', () => {
