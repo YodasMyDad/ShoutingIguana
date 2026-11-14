@@ -35,6 +35,8 @@ import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
 import { GRID_KEY_HINTS } from '../grid/gridFoot';
 import { useSearchApplyHint } from '../grid/SearchApplyHint';
+import { ToolsToggle } from '../grid/ToolsToggle';
+import { useShortScreen } from '../grid/useShortScreen';
 import { queryRefusalWords } from '../grid/queryRefusal';
 import { useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
 import { usePagedRows } from '../grid/usePagedRows';
@@ -314,6 +316,8 @@ export function LinksScreen() {
 
   const [adding, setAdding] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  // The toolbars a short window folds, shown (see `useShortScreen` below).
+  const [toolsOpen, setToolsOpen] = useState(false);
   // The filter whose editor is open, by its place: a chip opens its own, and so does "Change the filter". It's of
   // the view it was opened in: after back, forward or a link, the place may be another filter's, whose editor nobody
   // asked for.
@@ -392,7 +396,10 @@ export function LinksScreen() {
         group: 'Links',
         keywords: ['filter', 'column'],
         enabled: () => editor !== undefined,
-        run: () => setAdding(true),
+        run: () => {
+          setToolsOpen(true);
+          setAdding(true);
+        },
       },
       {
         id: 'links.columns',
@@ -400,7 +407,10 @@ export function LinksScreen() {
         group: 'Links',
         keywords: ['columns', 'show', 'hide'],
         enabled: () => chooserGroups.length > 0,
-        run: () => setChoosing(true),
+        run: () => {
+          setToolsOpen(true);
+          setChoosing(true);
+        },
       },
       {
         id: 'links.clear',
@@ -522,6 +532,10 @@ export function LinksScreen() {
   // keyboard in the grid that comes, never on the page. One that clears the view navigates, and the shell does the
   // same for it.
   const frame = useRef<HTMLDivElement>(null);
+  // A short window (200% zoom) folds the presets and the filter bar behind one button, so the grid keeps its rows. They
+  // show while one of their parts is in use (an editor, the chooser), whatever the toggle says.
+  const short = useShortScreen(frame);
+  const toolsShown = !short || toolsOpen || adding || choosing || editingFilter !== null;
   useFocusRescue(frame, () => frame.current?.querySelector<HTMLElement>('[role="grid"]') ?? searchRef.current);
 
   const onCopy = (result: GridCopyResult) => {
@@ -588,127 +602,146 @@ export function LinksScreen() {
               }}
               className="w-(--search-width)"
             />
+            {short ? (
+              <>
+                <ToolsToggle
+                  open={toolsShown}
+                  onOpenChange={setToolsOpen}
+                  filters={filters.length}
+                  notes={(catalogue.isError ? 1 : 0) + (note ? 1 : 0)}
+                />
+                {toolsShown ? null : (
+                  <span data-slot="export" className="contents">
+                    <ExportButton compact />
+                  </span>
+                )}
+              </>
+            ) : null}
           </>
         }
       />
-      <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
-        <div role="group" aria-label="Views" className="contents">
-          {LINK_PRESETS.map((candidate) => (
-            <Tooltip key={candidate.id} content={candidate.hint} triggerName={candidate.title}>
-              <Button
-                variant="ghost"
-                size="sm"
-                pressed={preset?.id === candidate.id}
-                onClick={() =>
-                  void navigate({
-                    search: (previous) => ({
-                      cols: previous.cols,
-                      filter: candidate.filters.length > 0 ? [...candidate.filters] : undefined,
-                    }),
-                  })
+      {toolsShown ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
+            <div role="group" aria-label="Views" className="contents">
+              {LINK_PRESETS.map((candidate) => (
+                <Tooltip key={candidate.id} content={candidate.hint} triggerName={candidate.title}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    pressed={preset?.id === candidate.id}
+                    onClick={() =>
+                      void navigate({
+                        search: (previous) => ({
+                          cols: previous.cols,
+                          filter: candidate.filters.length > 0 ? [...candidate.filters] : undefined,
+                        }),
+                      })
+                    }
+                  >
+                    {candidate.title}
+                  </Button>
+                </Tooltip>
+              ))}
+            </div>
+            <div className="ml-auto flex items-center gap-1">
+              <ColumnChooser
+                groups={chooserGroups}
+                shown={shown}
+                onChange={setColumns}
+                defaults={DEFAULT_LINK_COLUMNS}
+                open={choosing}
+                onOpenChange={setChoosing}
+                command="links.columns"
+                disabled={chooserGroups.length === 0}
+              />
+              <DropdownMenu
+                align="end"
+                trigger={
+                  <Button variant="ghost" size="sm" icon={Copy}>
+                    Copy
+                  </Button>
                 }
               >
-                {candidate.title}
-              </Button>
-            </Tooltip>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-1">
-          <ColumnChooser
-            groups={chooserGroups}
-            shown={shown}
-            onChange={setColumns}
-            defaults={DEFAULT_LINK_COLUMNS}
-            open={choosing}
-            onOpenChange={setChoosing}
-            command="links.columns"
-            disabled={chooserGroups.length === 0}
-          />
-          <DropdownMenu
-            align="end"
-            trigger={
-              <Button variant="ghost" size="sm" icon={Copy}>
-                Copy
-              </Button>
-            }
+                <MenuItem command="links.copyTargets">{copyTargetsTitle}</MenuItem>
+                <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
+                <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
+              </DropdownMenu>
+              <DropdownMenu
+                align="end"
+                open={endsOpen}
+                onOpenChange={setEndsOpen}
+                trigger={
+                  <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
+                    Show in URLs
+                  </Button>
+                }
+              >
+                <MenuItem
+                  command="links.showTargets"
+                  detail={targetsCount === undefined ? undefined : formatCountOf(targetsCount, 'URL')}
+                >
+                  Their targets
+                </MenuItem>
+                <MenuItem
+                  command="links.showSources"
+                  detail={sourcesCount === undefined ? undefined : formatCountOf(sourcesCount, 'page')}
+                >
+                  The pages they’re on
+                </MenuItem>
+              </DropdownMenu>
+              <ExportButton />
+            </div>
+          </div>
+          <FilterBar
+            filters={filters}
+            onChange={setFilters}
+            words={words}
+            editor={editor}
+            adding={adding}
+            onAddingChange={setAdding}
+            editing={editingFilter}
+            onEditingChange={setEditingFilter}
+            refused={refused}
+            maxFilters={MAX_FILTERS}
+            onClear={() => setFilters([])}
+            className="flex flex-wrap items-center gap-2 px-6 pb-3"
           >
-            <MenuItem command="links.copyTargets">{copyTargetsTitle}</MenuItem>
-            <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
-            <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
-          </DropdownMenu>
-          <DropdownMenu
-            align="end"
-            open={endsOpen}
-            onOpenChange={setEndsOpen}
-            trigger={
-              <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
-                Show in URLs
-              </Button>
-            }
-          >
-            <MenuItem
-              command="links.showTargets"
-              detail={targetsCount === undefined ? undefined : formatCountOf(targetsCount, 'URL')}
+            {LINK_FACET_IDS.map((id) => (
+              <FacetMenu
+                key={id}
+                title={FACET_TITLES[id]}
+                noun="link"
+                values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
+                matching={facetsRead.data?.matching}
+                failed={facetsRead.isError && !facetsRead.data}
+                onRetry={() => void facetsRead.refetch()}
+                onChoose={chooseFacet}
+                onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
+              />
+            ))}
+          </FilterBar>
+          {catalogue.isError ? (
+            <Banner
+              inset
+              tone="warning"
+              className="mx-6 mb-3"
+              actions={
+                <Button size="sm" icon={RefreshCw} onClick={() => void catalogue.refetch()}>
+                  Try again
+                </Button>
+              }
             >
-              Their targets
-            </MenuItem>
-            <MenuItem
-              command="links.showSources"
-              detail={sourcesCount === undefined ? undefined : formatCountOf(sourcesCount, 'page')}
-            >
-              The pages they’re on
-            </MenuItem>
-          </DropdownMenu>
-          <ExportButton />
-        </div>
-      </div>
-      <FilterBar
-        filters={filters}
-        onChange={setFilters}
-        words={words}
-        editor={editor}
-        adding={adding}
-        onAddingChange={setAdding}
-        editing={editingFilter}
-        onEditingChange={setEditingFilter}
-        refused={refused}
-        maxFilters={MAX_FILTERS}
-        onClear={() => setFilters([])}
-        className="flex flex-wrap items-center gap-2 px-6 pb-3"
-      >
-        {LINK_FACET_IDS.map((id) => (
-          <FacetMenu
-            key={id}
-            title={FACET_TITLES[id]}
-            noun="link"
-            values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
-            matching={facetsRead.data?.matching}
-            failed={facetsRead.isError && !facetsRead.data}
-            onRetry={() => void facetsRead.refetch()}
-            onChoose={chooseFacet}
-            onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
-          />
-        ))}
-      </FilterBar>
-      {catalogue.isError ? (
-        <Banner
-          inset
-          tone="warning"
-          className="mx-6 mb-3"
-          actions={
-            <Button size="sm" icon={RefreshCw} onClick={() => void catalogue.refetch()}>
-              Try again
-            </Button>
-          }
-        >
-          The list of the links’ columns couldn’t be read. The links are here, but they can’t be sorted, given another
-          column or filtered by one until it is.
-        </Banner>
-      ) : null}
-      {note ? (
-        <Banner inset className="mx-6 mb-3" actions={note.action ? analyse(note.action) : undefined}>
-          {note.text}
-        </Banner>
+              The list of the links’ columns couldn’t be read. The links are here, but they can’t be sorted, given
+              another column or filtered by one until it is.
+            </Banner>
+          ) : null}
+          {note ? (
+            <Banner inset className="mx-6 mb-3" actions={note.action ? analyse(note.action) : undefined}>
+              {note.text}
+            </Banner>
+          ) : null}
+        </>
       ) : null}
       {failed ? (
         isProblem(rows.error, 'needs-analysis') ? (
@@ -756,7 +789,8 @@ export function LinksScreen() {
             minRows={GRID_SCREEN_MIN_ROWS}
             columns={laid.columns}
             columnLayout={laid.columnLayout}
-            keyHints={GRID_KEY_HINTS}
+            // The footer's hints give way to rows in a short window.
+            keyHints={short ? undefined : GRID_KEY_HINTS}
             rowNoun={['link', 'links']}
             rowCount={rowCount}
             getRow={rows.getRow}

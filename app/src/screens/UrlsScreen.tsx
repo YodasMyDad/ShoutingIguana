@@ -23,6 +23,8 @@ import { filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { GRID_KEY_HINTS } from '../grid/gridFoot';
 import { useSearchApplyHint } from '../grid/SearchApplyHint';
+import { ToolsToggle } from '../grid/ToolsToggle';
+import { useShortScreen } from '../grid/useShortScreen';
 import { queryRefusalWords } from '../grid/queryRefusal';
 import { storeColumnLayout, useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
@@ -347,6 +349,8 @@ export function UrlsScreen() {
   const failed = rows.error !== null && rows.error !== undefined && rowCount === null;
   const [adding, setAdding] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  // The toolbars a short window folds, shown (see `useShortScreen` below).
+  const [toolsOpen, setToolsOpen] = useState(false);
   // The filter whose editor is open, by its place, of the view it was opened in (see Links).
   const [editingIn, setEditingIn] = useState<{ view: string; index: number } | null>(null);
   const editingFilter = editingIn?.view === view ? editingIn.index : null;
@@ -469,7 +473,10 @@ export function UrlsScreen() {
         group: 'URLs',
         keywords: ['filter', 'column'],
         enabled: () => editor !== undefined,
-        run: () => setAdding(true),
+        run: () => {
+          setToolsOpen(true);
+          setAdding(true);
+        },
       },
       {
         id: 'urls.columns',
@@ -477,7 +484,10 @@ export function UrlsScreen() {
         group: 'URLs',
         keywords: ['columns', 'show', 'hide'],
         enabled: () => chooserGroups.length > 0,
-        run: () => setChoosing(true),
+        run: () => {
+          setToolsOpen(true);
+          setChoosing(true);
+        },
       },
       {
         id: 'urls.fullUrls',
@@ -600,6 +610,10 @@ export function UrlsScreen() {
   // A button that goes with the state it was in, without a navigation (Try again, once the read works), leaves the
   // keyboard in the grid that comes, never on the page.
   const frame = useRef<HTMLDivElement>(null);
+  // A short window (200% zoom) folds the presets and the filter bar behind one button, so the grid keeps its rows. They
+  // show while one of their parts is in use (an editor, the chooser), whatever the toggle says.
+  const short = useShortScreen(frame);
+  const toolsShown = !short || toolsOpen || adding || choosing || editingFilter !== null;
   useFocusRescue(frame, () => frame.current?.querySelector<HTMLElement>('[role="grid"]') ?? searchRef.current);
 
   const onCopy = (result: GridCopyResult) => {
@@ -655,144 +669,167 @@ export function UrlsScreen() {
               }}
               className="w-(--search-width)"
             />
+            {short ? (
+              <>
+                <ToolsToggle
+                  open={toolsShown}
+                  onOpenChange={setToolsOpen}
+                  filters={filters.length}
+                  notes={
+                    (search.links ? 1 : 0) +
+                    (catalogue.isError ? 1 : 0) +
+                    (summary && !summary.available && unavailable.length > 0 ? 1 : 0)
+                  }
+                />
+                {toolsShown ? null : (
+                  <span data-slot="export" className="contents">
+                    <ExportButton compact />
+                  </span>
+                )}
+              </>
+            ) : null}
           </>
         }
       />
-      <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
-        <div role="group" aria-label="Column presets" className="contents">
-          {URL_PRESETS.map((candidate) => (
-            <Tooltip key={candidate.id} content={candidate.hint} triggerName={candidate.title}>
-              <Button
-                variant="ghost"
-                size="sm"
-                pressed={preset?.id === candidate.id}
-                onClick={() => setColumns(candidate.columns)}
-              >
-                {candidate.title}
-              </Button>
-            </Tooltip>
-          ))}
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          <SavedViewsMenu
-            views={saved.views}
-            current={saved.current}
-            problem={saved.problem}
-            onOpen={openSaved}
-            onSave={() => setNaming({ kind: 'save' })}
-            onRename={(target) => setNaming({ kind: 'rename', view: target })}
-            onDelete={saved.remove}
-          />
-          <ColumnChooser
-            groups={chooserGroups}
-            shown={shown}
-            onChange={setColumns}
-            defaults={DEFAULT_URL_COLUMNS}
-            open={choosing}
-            onOpenChange={setChoosing}
-            command="urls.columns"
-            disabled={chooserGroups.length === 0}
-            options={
-              <Checkbox
-                label="Show full URLs"
-                description={
-                  siteOrigin
-                    ? `With the host, rather than as paths on ${urlDisplay(siteOrigin).shown}`
-                    : 'With the host, rather than as paths on the crawl’s site'
-                }
-                checked={fullUrls}
-                onCheckedChange={(checked) => updateSettings({ showFullUrls: checked })}
+      {toolsShown ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
+            <div role="group" aria-label="Column presets" className="contents">
+              {URL_PRESETS.map((candidate) => (
+                <Tooltip key={candidate.id} content={candidate.hint} triggerName={candidate.title}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    pressed={preset?.id === candidate.id}
+                    onClick={() => setColumns(candidate.columns)}
+                  >
+                    {candidate.title}
+                  </Button>
+                </Tooltip>
+              ))}
+            </div>
+            <div className="ml-auto flex flex-wrap items-center gap-1">
+              <SavedViewsMenu
+                views={saved.views}
+                current={saved.current}
+                problem={saved.problem}
+                onOpen={openSaved}
+                onSave={() => setNaming({ kind: 'save' })}
+                onRename={(target) => setNaming({ kind: 'rename', view: target })}
+                onDelete={saved.remove}
               />
-            }
-          />
-          <DropdownMenu
-            align="end"
-            trigger={
-              <Button variant="ghost" size="sm" icon={Copy}>
-                Copy
-              </Button>
-            }
-          >
-            <MenuItem command="urls.copyUrls">{copyUrlsTitle}</MenuItem>
-            <MenuItem command="urls.copyColumn">{copyColumnTitle}</MenuItem>
-          </DropdownMenu>
-          <div data-slot="export" className="contents">
-            <ExportButton />
+              <ColumnChooser
+                groups={chooserGroups}
+                shown={shown}
+                onChange={setColumns}
+                defaults={DEFAULT_URL_COLUMNS}
+                open={choosing}
+                onOpenChange={setChoosing}
+                command="urls.columns"
+                disabled={chooserGroups.length === 0}
+                options={
+                  <Checkbox
+                    label="Show full URLs"
+                    description={
+                      siteOrigin
+                        ? `With the host, rather than as paths on ${urlDisplay(siteOrigin).shown}`
+                        : 'With the host, rather than as paths on the crawl’s site'
+                    }
+                    checked={fullUrls}
+                    onCheckedChange={(checked) => updateSettings({ showFullUrls: checked })}
+                  />
+                }
+              />
+              <DropdownMenu
+                align="end"
+                trigger={
+                  <Button variant="ghost" size="sm" icon={Copy}>
+                    Copy
+                  </Button>
+                }
+              >
+                <MenuItem command="urls.copyUrls">{copyUrlsTitle}</MenuItem>
+                <MenuItem command="urls.copyColumn">{copyColumnTitle}</MenuItem>
+              </DropdownMenu>
+              <div data-slot="export" className="contents">
+                <ExportButton />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      <FilterBar
-        filters={filters}
-        onChange={setFilters}
-        words={words}
-        relatedUrl={relatedUrl}
-        editor={editor}
-        adding={adding}
-        onAddingChange={setAdding}
-        editing={editingFilter}
-        onEditingChange={setEditingFilter}
-        refused={refused}
-        maxFilters={MAX_FILTERS}
-        onClear={() => setFilters([])}
-        className="flex flex-wrap items-center gap-2 px-6 pb-3"
-      >
-        {URL_FACET_IDS.map((id) => (
-          <FacetMenu
-            key={id}
-            title={URL_FACET_TITLES[id]}
-            noun="URL"
-            values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
-            matching={facetsRead.data?.matching}
-            failed={facetsRead.isError && !facetsRead.data}
-            unavailable={facetsUnavailable(id)}
-            onRetry={() => void facetsRead.refetch()}
-            onChoose={chooseFacet}
-            onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
-          />
-        ))}
-      </FilterBar>
-      {search.links ? (
-        <Banner
-          inset
-          role="none"
-          className="mx-6 mb-3"
-          actions={
-            <>
-              <Button size="sm" variant="ghost" onClick={backToLinks}>
-                Back to the links
-              </Button>
-              <Button size="sm" onClick={showEveryUrl}>
-                Show every URL
-              </Button>
-            </>
-          }
-        >
-          {linkEndsWords(search.links)}
-        </Banner>
-      ) : null}
-      {catalogue.isError ? (
-        <Banner
-          inset
-          tone="warning"
-          className="mx-6 mb-3"
-          actions={
-            <Button size="sm" icon={RefreshCw} onClick={() => void catalogue.refetch()}>
-              Try again
-            </Button>
-          }
-        >
-          The list of the URLs’ columns couldn’t be read. The URLs are here, but they can’t be sorted, given another
-          column or filtered by one until it is.
-        </Banner>
-      ) : null}
-      {summary && !summary.available && unavailable.length > 0 ? (
-        <Banner
-          inset
-          className="mx-6 mb-3"
-          actions={summary.reason === 'crawling' || analysing ? undefined : analyse(analyseWords(summary.reason))}
-        >
-          {listOfNames(unavailable.map(urlColumnName))} {unavailableBecause}.
-        </Banner>
+          <FilterBar
+            filters={filters}
+            onChange={setFilters}
+            words={words}
+            relatedUrl={relatedUrl}
+            editor={editor}
+            adding={adding}
+            onAddingChange={setAdding}
+            editing={editingFilter}
+            onEditingChange={setEditingFilter}
+            refused={refused}
+            maxFilters={MAX_FILTERS}
+            onClear={() => setFilters([])}
+            className="flex flex-wrap items-center gap-2 px-6 pb-3"
+          >
+            {URL_FACET_IDS.map((id) => (
+              <FacetMenu
+                key={id}
+                title={URL_FACET_TITLES[id]}
+                noun="URL"
+                values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
+                matching={facetsRead.data?.matching}
+                failed={facetsRead.isError && !facetsRead.data}
+                unavailable={facetsUnavailable(id)}
+                onRetry={() => void facetsRead.refetch()}
+                onChoose={chooseFacet}
+                onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
+              />
+            ))}
+          </FilterBar>
+          {search.links ? (
+            <Banner
+              inset
+              role="none"
+              className="mx-6 mb-3"
+              actions={
+                <>
+                  <Button size="sm" variant="ghost" onClick={backToLinks}>
+                    Back to the links
+                  </Button>
+                  <Button size="sm" onClick={showEveryUrl}>
+                    Show every URL
+                  </Button>
+                </>
+              }
+            >
+              {linkEndsWords(search.links)}
+            </Banner>
+          ) : null}
+          {catalogue.isError ? (
+            <Banner
+              inset
+              tone="warning"
+              className="mx-6 mb-3"
+              actions={
+                <Button size="sm" icon={RefreshCw} onClick={() => void catalogue.refetch()}>
+                  Try again
+                </Button>
+              }
+            >
+              The list of the URLs’ columns couldn’t be read. The URLs are here, but they can’t be sorted, given another
+              column or filtered by one until it is.
+            </Banner>
+          ) : null}
+          {summary && !summary.available && unavailable.length > 0 ? (
+            <Banner
+              inset
+              className="mx-6 mb-3"
+              actions={summary.reason === 'crawling' || analysing ? undefined : analyse(analyseWords(summary.reason))}
+            >
+              {listOfNames(unavailable.map(urlColumnName))} {unavailableBecause}.
+            </Banner>
+          ) : null}
+        </>
       ) : null}
       {failed ? (
         isProblem(rows.error, 'needs-analysis') ? (
@@ -841,7 +878,8 @@ export function UrlsScreen() {
             minRows={GRID_SCREEN_MIN_ROWS}
             columns={laid.columns}
             columnLayout={laid.columnLayout}
-            keyHints={GRID_KEY_HINTS}
+            // The footer's hints give way to rows in a short window.
+            keyHints={short ? undefined : GRID_KEY_HINTS}
             rowNoun={['URL', 'URLs']}
             rowCount={rowCount}
             getRow={rows.getRow}

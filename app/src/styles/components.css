@@ -2304,8 +2304,9 @@
   /* Grid screens: one line, so the rows get the room. */
   .si-grid-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-1) var(--space-3);
     min-height: var(--control-height-lg);
   }
 
@@ -2316,8 +2317,18 @@
     letter-spacing: var(--tracking-snug);
   }
 
+  /* In a narrow view (beside the inspector at 200% zoom) the actions go under the title, and the search gives way. */
   .si-grid-header__actions {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
     margin-left: auto;
+  }
+
+  .si-grid-header__actions > .si-field-wrap {
+    flex-shrink: 1;
+    min-width: var(--search-width-min);
   }
 
   .si-result-count {
@@ -2339,6 +2350,25 @@
   .si-result-count__of {
     color: var(--color-text-secondary);
     font-size: var(--text-13);
+  }
+
+  /* A short grid screen's toolbars toggle (grid/ToolsToggle.tsx): a dot while filters are in force behind it. */
+  .si-tools-dot {
+    position: absolute;
+    top: var(--space-1);
+    right: var(--space-1);
+    width: var(--space-1-5);
+    height: var(--space-1-5);
+    border-radius: var(--radius-full);
+    background: var(--color-accent);
+    pointer-events: none;
+  }
+
+  @media (forced-colors: active) {
+    .si-tools-dot {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
   }
 
   /* ---------------------------------------------------------- Grid screens */
