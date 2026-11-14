@@ -221,6 +221,13 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
         Assert.DoesNotContain("<table class=\"examples", bare, StringComparison.Ordinal);
         Assert.Contains("<table class=\"examples", full, StringComparison.Ordinal);
 
+        // The checks the user hid are left out of the report shown, as of the one saved (discovery decision 2).
+        var hidden = await Sidecar.Client.GetStringAsync($"api/crawls/{grid.Id}/report?hiddenChecks=title-missing,{Uri.EscapeDataString("a-check-gone")}");
+        Assert.True(hidden.Length < full.Length);
+        var hiddenPath = Path.Combine(_folder, "hidden.html");
+        await ExportAsync(grid.Id, """{"kind":"report","format":"html","hiddenChecks":["title-missing","a-check-gone"]}""", hiddenPath);
+        Assert.Equal(WithoutMadeOn(hidden), WithoutMadeOn(await File.ReadAllTextAsync(hiddenPath)));
+
         // The file an export saves is this document.
         var path = Path.Combine(_folder, "report.html");
         await ExportAsync(grid.Id, """{"kind":"report","format":"html"}""", path);
@@ -267,6 +274,9 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"sitemaps","format":"html"}""", "format")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","columns":["origin"]}""", "columns")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","origin":"https://a.example"}""", "origin")]
+    [InlineData("""{"kind":"urls","format":"csv","hiddenChecks":["title-missing"]}""", "hiddenChecks")]
+    [InlineData("""{"kind":"report","format":"html","checks":["title-missing"]}""", "checks")]
+    [InlineData("""{"kind":"workbook","format":"xlsx","checks":[""]}""", "checks")]
     public async Task ARequestThatCannotBeAnExportIsRefusedByField(string body, string field)
     {
         var request = JsonNode.Parse(body)!;

@@ -138,6 +138,27 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     /// The score is the one the analysis stored, line for line: the report works none out. A file whose stored score
     /// says another number has a report that says that number.
     /// </summary>
+    /// <summary>Discovery decision 2: the checks the user hid are left out of the report's lists and counts; the score stays.</summary>
+    [Fact]
+    public void TheReportLeavesOutTheChecksTheUserHidAndSaysSo()
+    {
+        var results = IssueReader.ReadResults(crawl.Path)!;
+        var order = results.FixFirst;
+        var clean = IssueCatalog.All.First(check => results.Counts.GetValueOrDefault(check.Id, -1) == 0).Id;
+        string[] hidden = [order[1], order[2], clean];
+        var whole = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
+        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { HiddenChecks = hidden }, SETTINGS));
+
+        var titles = document.QuerySelectorAll("article.problem .problem__tech").Select(tech => tech.TextContent).ToList();
+        Assert.Equal(order.Count - 2, titles.Count);
+        Assert.DoesNotContain(titles, title => title.StartsWith(IssueCatalog.Find(order[1])!.Title + " ·", StringComparison.Ordinal));
+        Assert.Equal(whole.QuerySelectorAll(".passed li").Length - 1, document.QuerySelectorAll(".passed li").Length);
+        Assert.Equal(whole.QuerySelector(".summary__word")?.TextContent, document.QuerySelector(".summary__word")?.TextContent);
+        Assert.Contains(document.QuerySelectorAll(".summary__covers"),
+            note => note.TextContent == "2 checks that found something are hidden, so they’re left out of this report. The score still counts them.");
+        Assert.DoesNotContain(whole.QuerySelectorAll(".summary__covers"), note => note.TextContent.Contains("hidden", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void TheScoreIsTheOneTheAnalysisStored()
     {
