@@ -3548,3 +3548,19 @@ passed and the 2 measurements skipped as they are without `SI_E2E_MEASURE`.
 Not verified: the exports' new words against every state a real site gives (the tests hold each word to a literal and
 the synthetic crawls' rows to the screens' reads; the garden crawl's lists weren't exported); a crawl of a million
 URLs; anything on CI's runners, as nothing was pushed.
+## Engine changes round 5 made
+
+- **One count of pages** (part B; the closing audit's gap 3). Home said 101,107 pages of the 100k crawl where Issues
+  and Simple said 101,106: E7 kept the library's `pageCount` (every page the crawl parsed, Cloudflare's `/cdn-cgi/`
+  endpoint among them) apart from the analysis's `pagesAnalyzed` (which leaves it out), each true by its own
+  definition. The owner's word on the audit ("one number everywhere", `v2-ui-ia.md`) overrules that: a user can't tell
+  two counts of pages apart, and Cloudflare's endpoint is Cloudflare's, not the site's. `CrawlSchema.PAGE` now leaves
+  out a URL with `/cdn-cgi/` in it, ignoring the case of ASCII letters (`CrawlSchema.NOT_CLOUDFLARE`, which the
+  analysis's `SITE_PAGE` uses too), and so do the live counter (`CrawlWriter.IsPage`) and the outcome a refetch takes
+  back (`WriterStatements.ReadOutcome`). So `pageCount`, `si stats`'s pages and indexable pages, a running crawl's
+  `htmlPages`, the history's and the benchmark's expectation (`HtmlPages`, which the synthetic site now counts without
+  its endpoint) are the analysis's pages: the 100k crawl reads 101,106 everywhere, the seeded synthetic crawl 155, the
+  garden crawl 265 as before. Existing crawl files read the new way at once: every count is taken from the file when
+  read. The app's filter for the site's pages adds `url notContains /cdn-cgi/`, so a figure of pages opens exactly
+  them. Tests: `GridServingTests.TheLibrarysPagesAreThePagesItsAnalysisAudited` (it asserted the difference of one
+  before), `UrlSummaryAgreement` (indexable pages without the endpoint), and the app's `e2e/counts-agree.spec.ts`.

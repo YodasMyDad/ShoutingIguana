@@ -590,7 +590,7 @@ are drawn for the app and are never swapped for Lucide's.
   see [Hand over, search, favicons and the analysis's limits](#hand-over-search-favicons-and-the-analysiss-limits).
 - Each screen's own pieces, built from the components by its slice: the explanation band, charts. A piece two screens
   need joins `src/ui`.
-- Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
+- Drag-and-drop of `.sicrawl` files: built in round 5 ([Home, one count, and a dropped file](#home-one-count-and-a-dropped-file-round-5)).
 
 ## Issues (the first slice)
 
@@ -1866,3 +1866,74 @@ sections (Summary, What to fix, Report), Ctrl+8 Advanced's Report.
   row and the Summary to the Report, the Summary's counts to What to fix, Ctrl+1 to Ctrl+3 and Ctrl+8, Overview's
   score to the breakdown and back, the Report's Save into the export dialog. Each runs on the seeded crawl, or on a
   real one with `SI_E2E_CRAWL`.
+
+## Home, one count, and a dropped file (round 5)
+
+Part B of round 5 (the closing audit's gaps 3, 4, 15, 16, 17, 28 and 31).
+
+### Advanced's Home
+
+- `screens/HomeScreen.tsx`: the URL field, then the line that opens a crawl file (**Open…**, the `crawl.open` command,
+  Ctrl+O, in the app; in a plain browser it says where they are), then the crawls running now, then the library.
+- `screens/home/library.ts` (pure): the library as Advanced shows it, grouped by `siteGroups` (Simple's grouping, so the
+  two modes group alike and a change to it, host and port, reaches both); a row's note (missing, unreadable,
+  unfinished, out of date) and its one action; which of a crawl's actions its state allows (`crawlActions`: nothing
+  that pulls the file from under a crawl being worked on, nothing but Remove for a file that isn't there).
+- `screens/home/LibraryTable.tsx`: a row a site, its latest crawl, the older ones folded under it ("2 older crawls",
+  `aria-expanded`), the one action beside the status ("Analyse again, garden.example": the words first, then the
+  crawl's name, so speech input finds it). At 200% the table keeps its Site column, as before.
+- `screens/home/CrawlMenu.tsx`: every action of a crawl, as the IA lists them: Open, Continue, Crawl again…, Analyse
+  again, Show in folder (the app), Remove from library (Undo), Delete file… (`ConfirmDialog`, naming the crawl and its
+  file). An action the state doesn't allow is disabled, so the menu keeps its shape.
+- `screens/home/RunningCrawlCard.tsx`: a crawl running now, as `clarity/home.html` draws it: Pause or Resume, Stop,
+  Open; Crawled, Found, Queued, Pages and URLs a second with its sparkline, each count opening the URLs Overview's
+  does; what was found as crawled, queued and not followed. The live store's figures, its frame drawn from the start.
+- The palette: "Search the library", and for each site's latest crawl Open, Continue, Analyse again and Remove from
+  the library, as its state allows.
+- `crawl/fileOpening.ts`: whether this window can open crawl files (the app), with `drawAsTheAppForTests` for stories.
+
+### One count everywhere
+
+`docs/v2-ui-ia.md` ("One number everywhere") settles the nouns. What makes them agree:
+
+- **Pages.** The engine's page (`CrawlSchema.PAGE`) leaves Cloudflare's `/cdn-cgi/` endpoints out, as the analysis
+  always has, so the library's `pageCount`, `si stats`, the live `htmlPages` and the analysis's `pagesAnalyzed` are one
+  number ([the engine change](v2-sidecar-api.md#engine-changes-round-5-made)). The grid's filter for the site's
+  pages (`ANSWERED_SITE_PAGES`) has `url notContains /cdn-cgi/` beside it (`NOT_CLOUDFLARE`), so Pages lands on its
+  count.
+- **URLs found.** The URL grid's header names its total "URLs found", as Overview's Found is: never a bare "URLs",
+  which is the URLs crawled everywhere else.
+- **Overview's totals** (`screens/overview/totals.ts`, `TotalsRow.tsx`): Crawled, Internal, External, Pages and
+  Found, before anything else, each the grid's own count under the filter it opens, read together as one query under
+  the crawl's key.
+- **% of total** (`checkReach` in `crawl/checkSubject.ts`, `screens/issues/CountWithReach.tsx`): beside each check's
+  count in the checks list and Fix first, the share `checkShare` gives (of the pages analysed for a page check, of the
+  URLs crawled for any other, both the analysis's own), said whole in the row's name and tooltip; a site-wide fault is
+  "Whole site" and one reported once "Once", in the check's figures too, never "1 page, <0.1%".
+- **The sidebar's running crawls** say what each is doing (`runningHeading` in `crawl/status.ts`): "1 paused", never
+  "1 crawling" for a paused crawl.
+
+### A dropped file
+
+- The shell's webview hands the page a drop's paths as Tauri's drag-and-drop events (the window is built with them
+  on, the default), which the page listens to with `getCurrentWebview().onDragDropEvent` under the `core:event`
+  permission it already has: nothing in the shell forwards them. On Windows those events replace HTML5 drag-and-drop
+  of files inside the webview; dragging elements within the page (pointer events) is unaffected.
+- `crawl/crawlDrop.ts` (pure): crawl files from the rest by their names, what a drag over the window says in each
+  mode's words, and the toast for files that aren't crawl files. `crawl/CrawlFileDrop.tsx`, mounted once in
+  `AppShell`: the overlay while files are over the window (shown, not read), and on a drop `openCrawlPaths`, as
+  Ctrl+O's does: each file joins the library, the first that opens is shown, and one the engine can't read says why.
+- A plain browser sees no path, so there the window ignores a drop. `test/fakeDrops.ts` stands in for the webview in
+  tests and stories.
+
+### Tests
+
+- Unit: `screens/home/library.test.ts`, `screens/HomeScreen.test.tsx` (grouping, each state's action, the menu and
+  Delete's confirmation, the running card, Open… and the palette), `crawl/crawlDrop.test.ts`,
+  `crawl/CrawlFileDrop.test.tsx` (a drop opens the crawl from any screen; another file says why, the engine not
+  asked; a damaged one gives the engine's reason; Simple's words), `crawl/checkSubject.test.ts` (`checkReach`),
+  `crawl/status.test.ts` (`runningHeading`).
+- End to end: `e2e/counts-agree.spec.ts` reads every screen's count of a crawl (Home, Overview's totals and its line,
+  each total landing in URLs, Issues' shares, the report, Simple's Summary) against the engine's, on the seeded crawl,
+  on the garden and 100k crawls with `SI_E2E_CRAWL`, and on a crawl of the test site, paused (Overview, the sidebar
+  and Home's card from one moment) and finished.
