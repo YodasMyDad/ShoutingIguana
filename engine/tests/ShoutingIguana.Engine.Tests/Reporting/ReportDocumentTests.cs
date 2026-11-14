@@ -159,6 +159,54 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         Assert.DoesNotContain(whole.QuerySelectorAll(".summary__covers"), note => note.TextContent.Contains("hidden", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Round 5's review (R2-5): with checks hidden, the score table dropped their rows but its sum still took off their
+    /// points ("100 − 126" under rows adding to 66). The score is the analysis's whole, so what the hidden checks (or
+    /// the checks a report of some checks leaves out) took off is one row of its own, and the rows add up to the sum.
+    /// </summary>
+    [Fact]
+    public void TheScoreTableAddsUpWhenChecksAreLeftOut()
+    {
+        var score = IssueReader.ReadResults(crawl.Path)!.Score!;
+        var costly = score.Lines.Where(line => line.Points > 0).ToList();
+        var siteWide = costly.First(line => IssueCatalog.Find(line.CheckId)!.SiteWide);
+        var other = costly.First(line => line != siteWide);
+        string[] leftOut = [siteWide.CheckId, other.CheckId];
+        var points = siteWide.Points + other.Points;
+
+        foreach (var (options, says, howMuch) in new[]
+        {
+            (new ReportOptions { HiddenChecks = leftOut }, "2 hidden checks", "Left out of this report; the score still counts them"),
+            (new ReportOptions { Checks = [.. costly.Select(line => line.CheckId).Except(leftOut)] }, "2 checks not in this report", "The score still counts them")
+        })
+        {
+            var document = Parse(ReportExport.Build(crawl.Path, options, SETTINGS));
+            var rows = document.QuerySelectorAll("table.score-table tbody tr").ToList();
+            var taken = rows.Select(row => row.QuerySelector("td.num")!.TextContent.Replace("−", string.Empty, StringComparison.Ordinal)).Sum(int.Parse);
+            Assert.Equal(score.Lost, taken);
+            Assert.Equal(["Score", $"100 − {score.Lost}", $"{score.Value}"], document.QuerySelectorAll("table.score-table tfoot td").Select(cell => cell.TextContent));
+            var row = Assert.Single(rows, row => row.QuerySelector("td")!.TextContent == says);
+            Assert.Equal([says, howMuch, $"−{points}"], row.QuerySelectorAll("td").Select(cell => cell.TextContent));
+        }
+
+        // Nothing left out: no such row.
+        var whole = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
+        Assert.DoesNotContain(whole.QuerySelectorAll("table.score-table tbody td"),
+            cell => cell.TextContent.Contains("in this report", StringComparison.Ordinal) || cell.TextContent.Contains("hidden", StringComparison.Ordinal));
+
+        // Held at 50 by a serious problem (a copy says so: this crawl's problems take it to 0): with every serious one
+        // hidden, the note says the one holding it is left out, rather than citing a row that isn't there.
+        var held = crawl.Copy();
+        Change(held, "UPDATE analysis SET score_json = replace(replace(score_json, '\"heldBySerious\":false', '\"heldBySerious\":true'), '\"beforeCeiling\":0,', '\"beforeCeiling\":70,')");
+        Assert.True(IssueReader.ReadResults(held)!.Score!.HeldBySerious);
+        Assert.StartsWith($"Held at {ScoreCalculator.SERIOUS_CEILING} while a serious problem stands (70 otherwise). ",
+            Parse(ReportExport.Build(held, settings: SETTINGS)).QuerySelector(".score-note")!.TextContent, StringComparison.Ordinal);
+        var noSerious = Parse(ReportExport.Build(held,
+            new ReportOptions { HiddenChecks = [.. score.Lines.Where(line => line.Severity == IssueSeverity.Error).Select(line => line.CheckId)] }, SETTINGS));
+        Assert.StartsWith($"Held at {ScoreCalculator.SERIOUS_CEILING} while a serious problem stands, among the checks left out of this report (70 otherwise). ",
+            noSerious.QuerySelector(".score-note")!.TextContent, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheScoreIsTheOneTheAnalysisStored()
     {
