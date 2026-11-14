@@ -347,6 +347,9 @@ describe('what counts as a page', () => {
       { column: 'source', op: 'notIn', values: ['siteVersion'] },
       { column: 'statusClass', op: 'in', values: ['2xx'] },
       { column: 'wordCount', op: 'isNotEmpty' },
+      // Cloudflare's endpoint isn't one of the site's pages in any count (round 5): the 100k crawl's 101,107 pages on
+      // Home against 101,106 in Issues was it.
+      { column: 'url', op: 'notContains', value: '/cdn-cgi/' },
     ]);
     // Depth and response times are read under the same filters their columns then add to.
     expect(PAGE_FACETS.filters).toEqual(ANSWERED_SITE_PAGES);

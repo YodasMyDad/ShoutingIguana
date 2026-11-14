@@ -66,6 +66,8 @@ const PAGES: Filter[] = [
   { column: 'source', op: 'notIn', values: ['siteVersion'] },
   { column: 'statusClass', op: 'in', values: ['2xx'] },
   { column: 'wordCount', op: 'isNotEmpty' },
+  // Cloudflare's endpoint is no page of the site's in any count (round 5).
+  { column: 'url', op: 'notContains', value: '/cdn-cgi/' },
 ];
 
 /** The words for what a check flags: pages only where the catalog says it flags nothing else. */

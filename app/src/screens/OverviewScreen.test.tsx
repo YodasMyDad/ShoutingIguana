@@ -103,6 +103,7 @@ const ANSWERED: GridFilter[] = [
   ...SITE_PAGES,
   { column: 'statusClass', op: 'in', values: ['2xx'] },
   { column: 'wordCount', op: 'isNotEmpty' },
+  { column: 'url', op: 'notContains', value: '/cdn-cgi/' },
 ];
 
 let uninstall: () => void = () => undefined;

@@ -238,7 +238,7 @@ Built in stages:
   only where that's true:
   - `page`: every URL it flags is a page, as the analysis counts them (`pagesAnalyzed`): an internal URL that answered
     with HTML the crawler read, and that the analysis audits. Its count is a part of the pages the analysis read. (The
-    library's `pageCount` counts Cloudflare's `/cdn-cgi/` endpoints too, which no check flags: E7.)
+    library's `pageCount` is the same pages since round 5: Cloudflare's `/cdn-cgi/` endpoints are in neither.)
   - `url`: it can flag any URL the crawl has: a file (`internal-client-error` flags a missing image, as its text says),
     a redirect, a URL that didn't answer or wasn't fetched, a URL on another of the site's versions. Its count is of
     URLs, not of pages, and may be more than the pages crawled.
@@ -348,11 +348,11 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   checked has its place in those sums as `noResponse.notChecked`. Taking it out of `fetched` would break every sum a
   client makes with it, the UI's own among them, to save one subtraction; so the count that leaves it out has its own
   name.
-- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed — as in `si stats`, and the same
-  definition a running crawl's `htmlPages` uses, so the count doesn't shift when a crawl ends. **It counts every page
-  the crawl parsed, Cloudflare's own `/cdn-cgi/` endpoints among them, which the analysis doesn't audit**, so it can be
-  more than the analysis's pages: the synthetic site serves one (`/cdn-cgi/l/email-protection`), so its seeded crawl
-  reads 156 against 155, and the 100k crawl 101,107 against 101,106; the garden crawl, which has none, 265 and 265.
+- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed, but for Cloudflare's own
+  `/cdn-cgi/` endpoints — as in `si stats`, and the same definition a running crawl's `htmlPages` uses, so the count
+  doesn't shift when a crawl ends. **Since round 5 it is the analysis's definition too** (`CrawlSchema.PAGE`), so it is
+  `pagesAnalyzed` while the crawl hasn't changed since its analysis: the 100k crawl reads 101,106 in both, where E7 had
+  101,107 against 101,106 ([Engine changes round 5 made](#engine-changes-round-5-made)).
 - **`pagesAnalyzed`** (E7) is the pages the last analysis audited, which its score covers: the analysis's own
   `pagesAnalyzed` and the score's `covers.pages`, as they stood when it ran. **Beside the score, show this one**, not
   `pageCount`. Null before the first analysis; a sidecar from before E7 doesn't send it.
