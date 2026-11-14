@@ -1,4 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from '../../app/queryClient';
+import { ownSidecar } from '../../test/ScreenStory';
+import { json, standardRoutes } from '../../test/fakeSidecar';
 import type { ProxyTestOutcome, ProxyTestResult } from '../../api/types';
 import { StateRow, StoryFrame, StorySection } from '../../test/StoryFrame';
 import { ProxyTest, ProxyTestView, type ProxyTestState } from './ProxyTest';
@@ -134,13 +138,16 @@ export const Narrow: Story = {
   ),
 };
 
-/** Live, against the mock engine: every proxy answers as a working one would. */
+/** Live, against a fake engine that answers as a working proxy would: press Test the proxy. */
 export const Live: Story = {
+  loaders: [() => ownSidecar([['POST', /^\/api\/proxy\/test$/, () => json(RESULTS.ok)], ...standardRoutes()])],
   render: () => (
-    <StoryFrame>
-      <div className="max-w-(--content-max)">
-        <ProxyTest proxyUrl="http://user:secret@proxy.example.com:8080" startUrl={null} />
-      </div>
-    </StoryFrame>
+    <QueryClientProvider client={createQueryClient()}>
+      <StoryFrame>
+        <div className="max-w-(--content-max)">
+          <ProxyTest proxyUrl="http://user:secret@proxy.example.com:8080" startUrl={null} />
+        </div>
+      </StoryFrame>
+    </QueryClientProvider>
   ),
 };
