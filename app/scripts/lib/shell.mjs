@@ -277,7 +277,8 @@ const ADVANCED_WORDS = /crawl|URL|analys/;
 export function simpleTrayProblems({ tooltips, menus }) {
   const problems = [];
   const said = tooltips.map((tooltip) => `"${tooltip}"`).join(' | ');
-  if (!tooltips.some((tooltip) => /: checking /.test(tooltip))) problems.push(`the tray never said it was checking (tooltips: ${said})`);
+  if (!tooltips.some((tooltip) => /: checking /.test(tooltip)))
+    problems.push(`the tray never said it was checking (tooltips: ${said})`);
   if (!tooltips.some((tooltip) => /: working out the results for /.test(tooltip)))
     problems.push(`the tray never said it was working out the results (tooltips: ${said})`);
   if (!menus.some((labels) => labels.some((label) => label.endsWith(' (working out the results)'))))

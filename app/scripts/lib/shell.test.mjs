@@ -246,7 +246,10 @@ test('Simple’s tray says checking, then working out the results, then nothing,
     'the tray’s menu never said it was working out the results',
     'the tray’s last tooltip is "Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked", not "Shouting Iguana" once nothing runs',
   ]);
-  const advanced = TRAY_LOG.replace('working out the results for', 'analysing').replace('(working out the results)', '(analysing)');
+  const advanced = TRAY_LOG.replace('working out the results for', 'analysing').replace(
+    '(working out the results)',
+    '(analysing)',
+  );
   assert.deepEqual(simpleTrayProblems(trayWords(advanced)), [
     'the tray never said it was working out the results (tooltips: "Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked" | "Shouting Iguana: analysing 127.0.0.1:9000" | "Shouting Iguana")',
     'the tray’s menu never said it was working out the results',
