@@ -1,9 +1,15 @@
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { Link2Off } from 'lucide-react';
+import { Download, Link2Off } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { api } from '../api/client';
 import { LINK_KINDS, type LinkKind, type LinkRow } from '../api/inspector';
-import { linksAsGridPage, queryKeys } from '../api/queries';
+import { crawlQuery, linkColumnsQuery, linksAsGridPage, queryKeys, urlDetailQuery } from '../api/queries';
+import { openExportDialog } from '../export/exportFlow';
+import { urlLinksOffer } from '../export/offers';
+import { FOLLOW_PARTS } from '../screens/links/linkColumns';
+import { IconButton } from '../ui/IconButton';
+import { urlDisplay } from '../ui/urlText';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { GridCore } from '../grid/GridCore';
 import { useColumnLayout } from '../grid/useColumnLayout';
@@ -73,6 +79,9 @@ const FRAME_SLACK = 24;
 export function LinksSection({ direction }: { direction: LinkDirection }) {
   const { crawlId, urlId, siteOrigin, walk, crawling } = useInspectorContext();
   const words = WORDS[direction];
+  const item = useQuery(crawlQuery(crawlId)).data;
+  const linkColumns = useQuery(linkColumnsQuery()).data;
+  const ownUrl = useQuery(urlDetailQuery(crawlId, urlId)).data?.url;
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
   const [kind, setKind] = useState<KindChoice>(() => chosenLinkKind(direction));
@@ -223,6 +232,28 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
           >
             {allInLinksWords(rows.rowCount)}
           </TextLink>
+        ) : null}
+        {rows.rowCount !== null && rows.rowCount > 0 && item ? (
+          // The list as a file: the links grid's export, filtered as "All N in Links" is.
+          <IconButton
+            label={`Export these ${words.noun}s…`}
+            icon={Download}
+            size="sm"
+            onClick={() =>
+              openExportDialog(
+                urlLinksOffer({
+                  item,
+                  crawling,
+                  direction,
+                  filters: linksOfUrl(direction, urlId, kind),
+                  rows: rows.rowCount,
+                  url: ownUrl ? urlDisplay(ownUrl, siteOrigin).shown : `URL ${urlId}`,
+                  followParts: FOLLOW_PARTS,
+                  catalogue: linkColumns,
+                }),
+              )
+            }
+          />
         ) : null}
         <Select
           label="Kind of link"

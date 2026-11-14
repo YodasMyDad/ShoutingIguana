@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { CrawlListItem } from '../api/types';
 import { replaceSettings } from '../settings/settingsStore';
 import type { ExportBuildOptions } from './exportOffer';
-import { crawlFileChoices, issuesOffer } from './offers';
+import { crawlFileChoices, issuesOffer, urlLinksOffer } from './offers';
 
 const item = {
   id: '0123456789abcdef',
@@ -60,5 +60,33 @@ describe('an Issues view’s workbook', () => {
 
   it('isn’t offered for a list that isn’t filtered', () => {
     expect(issuesOffer(base).choices.map((choice) => choice.id)).toEqual(['report', 'workbook']);
+  });
+});
+
+describe('the inspector’s links of a URL (gap 22)', () => {
+  it('export as the links grid filtered as “All N in Links” is, the other end first', () => {
+    const filters = [
+      { column: 'to.id', op: 'eq' as const, value: 7 },
+      { column: 'selfLink', op: 'is' as const, value: false },
+    ];
+    const offer = urlLinksOffer({
+      item,
+      crawling: false,
+      direction: 'inlinks',
+      filters,
+      rows: 12,
+      url: '/about/',
+      followParts: ['followed', 'noFollow'],
+    });
+    expect(offer.title).toBe('Export inlinks');
+    expect(offer.choices[0]?.description).toBe('12 inlinks of /about/, in crawl order');
+    expect(offer.choices[0]?.fileView).toBe('inlinks of /about/');
+    expect(offer.choices[0]?.build(as({ format: 'csv' }))).toEqual({
+      kind: 'links',
+      format: 'csv',
+      path: 'C:/x/a.xlsx',
+      columns: ['from.url', 'from.statusCode', 'from.outcome', 'text', 'kind', 'position', 'followed', 'noFollow'],
+      filters,
+    });
   });
 });

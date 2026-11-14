@@ -565,6 +565,22 @@ export function urlChooserGroups(catalogue: readonly UrlColumn[], summaryAvailab
   })).filter((group) => group.columns.length > 0);
 }
 
+/**
+ * "All columns" (docs/v2-ui-discovery.md, Export: "an 'All columns' preset gives the full dump"): the URL, then every
+ * column the engine has for the grid, in the chooser's groups and order, so an export of the view is everything.
+ */
+export const ALL_COLUMNS_PRESET = {
+  id: 'all',
+  title: 'All columns',
+  hint: 'Every column there is, for a full export: the grid scrolls sideways',
+} as const;
+
+/** The columns of "All columns": the URL first, then the chooser's, group by group. */
+export function allUrlColumns(catalogue: readonly UrlColumn[]): string[] {
+  const ids = urlChooserGroups(catalogue, true).flatMap((group) => group.columns.map((column) => column.id));
+  return ['url', ...ids.filter((id) => id !== 'url')];
+}
+
 export const URL_FILTER_GROUPS: readonly FilterGroup[] = GROUPS.map((group) => ({
   id: group,
   title: GROUP_TITLES[group],

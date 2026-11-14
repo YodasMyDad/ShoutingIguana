@@ -160,6 +160,54 @@ function linkEndsOf(ends: LinkEnds): LinkEnds {
   };
 }
 
+/** The inspector's links of one URL as the links grid's export writes them: the other end, then the link's own. */
+export function urlLinksExportColumns(direction: 'inlinks' | 'outlinks', followParts: readonly string[]): string[] {
+  const end = direction === 'inlinks' ? 'from' : 'to';
+  return [`${end}.url`, `${end}.statusCode`, `${end}.outcome`, 'text', 'kind', 'position', ...followParts];
+}
+
+/**
+ * The inspector's inlinks or outlinks of one URL (gap 22 of the closing audit): the links grid's export, filtered to
+ * them as "All N in Links" filters, so the file holds exactly the list's links.
+ */
+export function urlLinksOffer(args: {
+  item: CrawlListItem;
+  crawling: boolean;
+  direction: 'inlinks' | 'outlinks';
+  /** The list's own filters (`linksOfUrl`): the URL, the kind chosen, no link from a page to itself. */
+  filters: readonly GridFilter[];
+  rows: number | null;
+  /** The URL whose links they are, as the inspector shows it, for the file's name and the dialog's words. */
+  url: string;
+  followParts: readonly string[];
+  catalogue?: readonly TitledColumn[] | undefined;
+}): ExportOffer {
+  const columns = urlLinksExportColumns(args.direction, args.followParts);
+  const noun: [string, string] = args.direction === 'inlinks' ? ['inlink', 'inlinks'] : ['outlink', 'outlinks'];
+  const choice: ExportChoice = {
+    id: 'view',
+    title: args.direction === 'inlinks' ? 'These inlinks' : 'These outlinks',
+    description:
+      args.rows === null
+        ? `The ${noun[1]} of ${args.url}`
+        : `${formatCountOf(args.rows, noun[0], noun[1])} of ${args.url}, in crawl order`,
+    formats: ['csv', 'xlsx'],
+    fileView: `${noun[1]} of ${args.url}`,
+    columnTitles: titlesOf(args.catalogue),
+    build: ({ format, path }) => ({
+      kind: 'links',
+      format: format === 'xlsx' ? 'xlsx' : 'csv',
+      path,
+      columns,
+      filters: [...args.filters],
+    }),
+  };
+  return {
+    ...base(args.item, args.direction === 'inlinks' ? 'Export inlinks' : 'Export outlinks', args.crawling),
+    choices: [choice],
+  };
+}
+
 /** Links: the view, as CSV or Excel. */
 export function linksOffer(args: GridViewArgs & { viewName: string | null }): ExportOffer {
   const view: ExportChoice = {

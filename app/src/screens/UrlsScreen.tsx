@@ -71,7 +71,9 @@ import { ANALYSIS_FACETS, URL_FACET_IDS, URL_FACET_TITLES, buildUrlFacets, type 
 import { UrlFilterChips } from './urls/UrlFilterChips';
 import { FIXED_URL_COLUMNS, FIXED_URL_QUERY_COLUMNS, fixedColumnNames } from './urls/urlGridParts';
 import {
+  ALL_COLUMNS_PRESET,
   DEFAULT_URL_COLUMNS,
+  allUrlColumns,
   URL_FILTER_GROUPS,
   URL_PRESETS,
   activeUrlPreset,
@@ -448,6 +450,10 @@ export function UrlsScreen() {
   const hasRows = rowCount !== null && rowCount > 0;
   const noUrls = noUrlsWords(crawling);
   const preset = activeUrlPreset(shown);
+  // "All columns": every column the engine has, known once its list is read.
+  const allColumns = useMemo(() => (catalogue.data ? allUrlColumns(catalogue.data) : null), [catalogue.data]);
+  const showsAll =
+    allColumns !== null && allColumns.length === shown.length && allColumns.every((id, index) => id === shown[index]);
   const rowMenu = useRowMenu<UrlRow>();
   // The row as it was when the menu opened: rows can move under a running crawl while it is open.
   const menuRow = rowMenu.state?.menu.row;
@@ -512,6 +518,16 @@ export function UrlsScreen() {
         run: () => setColumns(candidate.columns),
       })),
       {
+        id: `urls.preset.${ALL_COLUMNS_PRESET.id}`,
+        title: 'Show all the columns',
+        group: 'URLs',
+        keywords: ['columns', 'preset', 'everything', 'full export', ALL_COLUMNS_PRESET.hint],
+        enabled: () => allColumns !== null,
+        run: () => {
+          if (allColumns) setColumns(allColumns);
+        },
+      },
+      {
         id: 'urls.copyUrls',
         title: copyUrlsTitle,
         group: 'URLs',
@@ -572,6 +588,7 @@ export function UrlsScreen() {
       shown,
       editor,
       chooserGroups,
+      allColumns,
       fullUrls,
       hasRows,
       copying,
@@ -707,6 +724,19 @@ export function UrlsScreen() {
                   </Button>
                 </Tooltip>
               ))}
+              <Tooltip content={ALL_COLUMNS_PRESET.hint} triggerName={ALL_COLUMNS_PRESET.title}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  pressed={showsAll}
+                  disabled={allColumns === null}
+                  onClick={() => {
+                    if (allColumns) setColumns(allColumns);
+                  }}
+                >
+                  {ALL_COLUMNS_PRESET.title}
+                </Button>
+              </Tooltip>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-1">
               <SavedViewsMenu
