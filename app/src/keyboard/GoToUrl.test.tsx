@@ -65,7 +65,10 @@ async function goToUrlMode(user: ReturnType<typeof userEvent.setup>) {
   return { palette, field: await within(palette).findByRole('textbox', { name: 'Go to URL' }) };
 }
 
-describe('“Go to URL…” in the palette', () => {
+// Each test renders the whole app (the URLs grid, the inspector, the palette) and types into the palette: 0.3 to 0.7 s
+// alone, but 5.3 s for the first under a machine saturated by a Rust release build, past the 5 s default (round 5's
+// integration; it failed so on part B's branch too). The budget is the work's, not a quiet machine's.
+describe('“Go to URL…” in the palette', { timeout: 20_000 }, () => {
   it('looks a path up in the open crawl and opens the inspector on it, a step back retraces', async () => {
     const { router, history, user } = await open(`${CRAWL}/urls?inspect=2`);
     await screen.findByRole('grid', { name: 'URLs' });
