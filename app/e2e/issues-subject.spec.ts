@@ -18,6 +18,7 @@ interface Check {
   grouping: 'detail' | 'relatedUrl' | 'none';
   subject?: 'page' | 'url';
   siteWide?: boolean;
+  reportedOnce?: boolean;
 }
 interface Analysis {
   pagesAnalyzed: number;
@@ -253,6 +254,15 @@ test('every check’s count is called what the check flags, as a share of the AP
         );
         await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
         await expect(option).toHaveAccessibleName(new RegExp(`, the whole site$`));
+        return;
+      }
+      // A check reported once for the whole site isn't a share of its URLs either (round 5 review R1-9).
+      if (check.reportedOnce) {
+        await expect(figure(page, 'Reach')).toHaveText(
+          /^Reach\s*Whole site\s*Checked once for the whole site, not URL by URL$/,
+        );
+        await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await expect(option).toHaveAccessibleName(new RegExp(`, checked once for the whole site$`));
         return;
       }
       // Its share, of the right count of the right thing.
