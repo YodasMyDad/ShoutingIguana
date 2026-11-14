@@ -172,6 +172,34 @@ describe('the URL grid without the URL summary', () => {
   });
 });
 
+describe('the URL grid refusing a column it was sent (round 5 review, also noted)', () => {
+  it('names the column the engine refused, by its place in the list the query sent, not in the view’s order', async () => {
+    const urls = fakeSidecar([
+      [
+        'POST',
+        /^\/api\/crawls\/[0-9a-f]{16}\/urls$/,
+        (request: TransportRequest) => {
+          const sent = (request.body as GridQuery).columns ?? [];
+          const at = sent.indexOf('title');
+          return problem({
+            type: 'invalid-query',
+            title: 'The query is invalid.',
+            status: 400,
+            errors: { [`columns[${at}]`]: ['The grid can’t show this column here.'] },
+          });
+        },
+      ],
+      ['GET', /^\/api\/url-columns$/, () => json(URL_COLUMNS)],
+      ['GET', /^\/api\/checks$/, () => json(ISSUES_CHECKS)],
+      ...standardRoutes(testCrawlItem()).filter(([, pattern]) => !pattern.source.endsWith('urls$')),
+    ]);
+    setTransport(urls);
+    // Shown as Title then Depth: the query sends its columns sorted, Title well after where the view has it.
+    await open(`${URLS}?cols=title,depth,url`);
+    expect(await screen.findByText('The URLs can’t show Title here.')).toBeVisible();
+  });
+});
+
 describe('the URL grid while the crawl runs', () => {
   it('shows it’s live, and takes new URLs in place: no skeleton, no progress line', async () => {
     const { state } = sidecar({
