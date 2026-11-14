@@ -9,6 +9,7 @@
 //
 // Options: --port (6006 by default; SI_STORYBOOK_PORT too), --filter (a story id contains it), --themes=light,dark,
 // --density=standard, --wait (ms to let a story settle, 700 by default).
+/* global document -- the function handed to page.evaluate runs in the page */
 import { chromium } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
