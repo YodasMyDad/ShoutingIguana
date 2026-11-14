@@ -2,6 +2,14 @@
 // failure becomes one of the typed errors in ./errors: a ProblemError for the contract's problem+json, otherwise
 // SidecarUnavailableError, SidecarUnreachableError or UnexpectedResponseError.
 import { ProblemError, UnexpectedResponseError, parseProblem } from './errors';
+import {
+  continueWithSecrets,
+  keepCrawlSecrets,
+  keepSecrets,
+  keptSecrets,
+  secretsOf,
+  withSecrets,
+} from '../crawl/secrets';
 import type { ExportJob, ExportRequest, ReportOptions } from './exports';
 import type {
   FacetsPage,
@@ -47,6 +55,7 @@ import type {
   StartCrawlRequest,
   ValidationResult,
   StartUrlChoice,
+  ProxyTestResult,
 } from './types';
 
 type Signal = AbortSignal | undefined;
@@ -132,10 +141,26 @@ export const api = {
   checks: (signal?: Signal) => get<Checks>('/api/checks', signal),
 
   // Crawl options
-  crawlOptionDefaults: (signal?: Signal) => get<CrawlOptionDefaults>('/api/crawl-options/defaults', signal),
-  /** Saves "my defaults". The start URL, header values and proxy credentials are never saved. */
-  saveCrawlOptionDefaults: (options: CrawlOptions) =>
-    call<CrawlOptionDefaults>({ method: 'PUT', path: '/api/crawl-options/defaults', body: options }),
+  /** "My defaults", with the proxy's password and the headers' values back in from the credential store (the app). */
+  crawlOptionDefaults: async (signal?: Signal) => {
+    const defaults = await get<CrawlOptionDefaults>('/api/crawl-options/defaults', signal);
+    return { ...defaults, options: withSecrets(defaults.options, await keptSecrets('defaults')) };
+  },
+  /**
+   * Saves "my defaults". The start URL, header values and proxy credentials are never saved by the engine: given
+   * `secrets` (the options as typed), the app keeps those in the credential store instead.
+   */
+  saveCrawlOptionDefaults: async (options: CrawlOptions, secrets?: CrawlOptions) => {
+    const saved = await call<CrawlOptionDefaults>({
+      method: 'PUT',
+      path: '/api/crawl-options/defaults',
+      body: options,
+    });
+    if (!secrets) return saved;
+    const kept = secretsOf(secrets);
+    await keepSecrets('defaults', kept);
+    return { ...saved, options: withSecrets(saved.options, kept) };
+  },
   /** Field-keyed messages; always 200 for options that parse. */
   validateCrawlOptions: (options: CrawlOptions, signal?: Signal) =>
     post<ValidationResult>('/api/crawl-options/validate', options, signal),
@@ -145,6 +170,12 @@ export const api = {
    */
   startUrlFor: (address: string, options?: CrawlOptions, signal?: Signal) =>
     post<StartUrlChoice>('/api/crawl-options/start-url', options ? { address, options } : { address }, signal),
+  /**
+   * Round 5: fetches `url` once through the proxy, its user name and password included (used for this fetch only), and
+   * says what happened. 200 whatever the fetch found; `bad-request` for a proxy or address that can't be tried.
+   */
+  testProxy: (proxyUrl: string, url: string, signal?: Signal) =>
+    post<ProxyTestResult>('/api/proxy/test', { proxyUrl, url }, signal),
 
   // Library
   crawls: (signal?: Signal) => get<CrawlListItem[]>('/api/crawls', signal),
@@ -164,15 +195,32 @@ export const api = {
   deleteCrawlFile: (id: string) => post<undefined>(`${crawl(id)}/delete-file`),
 
   // Crawl control
-  startCrawl: (request: StartCrawlRequest) => post<CrawlListItem>('/api/crawls', request),
+  /** Starts a crawl. In the app, what it was given that the engine doesn't keep is kept for Continue. */
+  startCrawl: async (request: StartCrawlRequest) => {
+    const item = await post<CrawlListItem>('/api/crawls', request);
+    keepCrawlSecrets(item.id, request.options);
+    return item;
+  },
   pauseCrawl: (id: string) => post<undefined>(`${crawl(id)}/pause`),
   resumeCrawl: (id: string) => post<undefined>(`${crawl(id)}/resume`),
   stopCrawl: (id: string) => post<undefined>(`${crawl(id)}/stop`),
   /** The stored options: header names with empty values, and hasRedactedProxyCredentials. */
-  crawlOptions: (id: string, signal?: Signal) => get<CrawlOptions>(`${crawl(id)}/options`, signal),
-  /** Resumes from the file. `needs-secrets` names what must be given again. */
-  continueCrawl: (id: string, request: ContinueCrawlRequest = {}) =>
-    post<CrawlListItem>(`${crawl(id)}/continue`, request),
+  crawlOptions: async (id: string, signal?: Signal) =>
+    withSecrets(await get<CrawlOptions>(`${crawl(id)}/options`, signal), await keptSecrets(`crawl:${id}`)),
+  /**
+   * Resumes from the file. `needs-secrets` names what must be given again: in the app, what the crawl was last
+   * given is sent from the credential store first, so it's asked for only when nothing was kept.
+   */
+  continueCrawl: async (id: string, request: ContinueCrawlRequest = {}) => {
+    const item = await post<CrawlListItem>(
+      `${crawl(id)}/continue`,
+      continueWithSecrets(request, await keptSecrets(`crawl:${id}`)),
+    );
+    if (request.proxyUrl !== undefined || request.extraHeaders !== undefined) {
+      keepCrawlSecrets(id, { proxyUrl: request.proxyUrl ?? null, extraHeaders: request.extraHeaders ?? null });
+    }
+    return item;
+  },
   /** The crawl's alerts from its file, oldest first, up to the last 1,000: every run's. */
   alerts: (id: string, signal?: Signal) => get<AlertEvent[]>(`${crawl(id)}/alerts`, signal),
   /** E4: the crawl's progress since it started, for the "found and crawled" chart. */

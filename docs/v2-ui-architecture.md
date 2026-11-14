@@ -107,7 +107,8 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   shell logs the sidecar's last 50 stderr lines at WARN. The reason it shows prefers a .NET "Unhandled exception." line
   and is never a stack frame, and the sidecar writes unhandled exceptions to its own log too. Try again
   (`restart_sidecar`) starts afresh.
-- **Quitting.** With a crawl running, one native question: "Stop crawling and quit?". Then the window shows
+- **Quitting.** With a crawl running, one native question: "Stop crawling and quit?" ("Stop checking and quit?" in
+  Simple: the shell speaks the page's mode, see "The shell and the platform (round 5)"). Then the window shows
   "Stopping crawls…", the shell writes `shutdown` to the sidecar's stdin and waits up to 35 s (the contract's 30 s bound
   and a margin) before killing it. Closing the window while a crawl runs hides it to the tray instead, and says so once.
   A launch made while the app quits doesn't bring the dying window back: once the engine has stopped, the shell starts
@@ -187,6 +188,14 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   resumed with F7; the window closed to the tray with the crawl going on, and back through the tray icon; "Stop
   crawling and quit?" (Cancel keeps both, Stop and quit ends both); nothing left running and no page error.
   `--shots <folder>` keeps a picture of the page after each step, `--skip keys,live,tray,restart` leaves parts out.
+- **Then Simple** (round 5, `scripts/smoke-shell-simple.mjs`; `--mode advanced` or `--mode simple` runs one walk
+  alone): a second app on a new profile and an empty data folder, as a first-time user meets it. It opens in Simple
+  on Home, its window named "Home · Shouting Iguana"; a check of the test site from Home (the saved defaults set Fast,
+  so it ends while hidden); the window closed with the check going on: hidden, with "Still checking" and the tray's
+  tooltip in Simple's words, read from the shell's log (it records the tooltip the icon is built with), then the
+  finish notice "… is checked"; back through the tray icon onto the Summary's score and the window "Summary · …"; the
+  Report; "Stop checking and quit?" with a check running (Cancel keeps it, Stop and quit ends it); nothing left
+  running and no page error.
 - **What the first walk by hand found** (10 Nov 2026, WebView2 157, Windows 11 at 150%): everything above works as in
   Chromium, with these differences. Back from the tray after a crawl ended there, Overview failed (fixed: see
   Overview's `useAnalysisAnswer`). Scrollbars show (headless Chromium hides them): they were Windows' classic ones,
@@ -1599,8 +1608,9 @@ touch the same lines:
   left out of `POST /api/crawls` takes the engine's default, not the user's.
 - **Data folder**, **Diagnostics** (Copy diagnostics: versions, folders, mode, theme, zoom, page, browser; nothing
   from a crawl, the home folder as `%USERPROFILE%` or `~` and the account name nowhere), **Updates**, **About** (with Copy diagnostics in Simple) and **Shortcuts** (the registry's list) show
-  what is true today. Neither the shell nor the sidecar can move the data folder or look for updates, so there's no
-  control for either (below).
+  what is true today. Since round 5, Data folder changes the folder (a switch, with Go back), Updates checks and
+  installs signed updates, Diagnostics opens the log folders and About lists the third-party licences ("The shell
+  and the platform (round 5)", below).
 
 ### New crawl, and the crawl's settings
 
@@ -1640,17 +1650,112 @@ touch the same lines:
   another user agent" and "Crawl again with robots.txt ignored" (`from` this crawl). Continue's toast, when a proxy
   password is needed again, opens this screen on the proxy (`focus=proxy`).
 
-### What the shell and the engine don't give
+### The shell and the platform (round 5)
 
-- **The OS credential store.** The shell has no command for it (a keychain crate and two commands, read and write by
-  a key the app chooses, asking the user first). Until it has, secrets last as long as the form.
-- **Moving the data folder.** The sidecar takes its data folder at start (`--data-dir`, from the shell) and has no
-  call to change it; Settings shows it, with Copy.
-- **Looking for updates.** The shell has no updater; Updates says how a new version arrives.
-- **A proxy test.** The parity list keeps "Test proxy connection"; the sidecar has no call for it, so the form has no
-  Test button.
-- **The engine's own defaults** once the user has saved theirs: `GET /api/crawl-options/defaults` gives one or the
-  other. The app keeps a copy, checked end to end.
+What round 3 listed as "what the shell and the engine don't give" is built (gap 18 of the closing audit), with the
+shell's words in the page's mode (gap 5), each screen's title on the window (gap 26), the licences and the log
+folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.rs`, `drop.rs`, `mode.rs`.
+
+- **The shell speaks the page's mode.** The page tells the shell its mode by storing its preferences
+  (`settings_write`); the shell reads them once at start and keeps the mode (`mode.rs`). In Simple the tray's tooltip
+  says "Shouting Iguana: checking example.com, 1,204 addresses checked" (paused, stopping, "working out the results
+  for …"), its menu "(working out the results)", the first hide-to-tray notice "Still checking: Shouting Iguana keeps
+  checking in the tray. Quit from its menu." (or "Still working out the results"), and the quit question "Stop
+  checking and quit? You can continue the check later from Your sites." Advanced keeps its words, and an analysis alone
+  now says "Still analysing" rather than "Still crawling". The words are in `tray/text.rs` and `quit.rs`, tested in
+  both modes; `smoke:shell`'s Simple walk reads the notice and the tooltip from the shell's log.
+- **Each screen names the window** (`layout/documentTitle.ts`): "Issues · gardenfurnituresets.co.uk · Shouting
+  Iguana", in the mode's words ("What to fix · …" in Simple), "Home · Shouting Iguana", "New crawl · …"; the site only
+  once the crawl is known. The shell mirrors `document.title` onto the window (`on_document_title_changed`), so the
+  taskbar, Alt+Tab and a screen reader's window list say where you are.
+- **Files dropped on the window** (`drop.rs`). WebView2 and WebKit give a drop to the shell, never paths to the page,
+  so the shell forwards it as **`shell://drag-drop`**, one of:
+  - `{ "type": "enter", "paths": [...], "crawlFiles": [...] }` while files are held over the window,
+  - `{ "type": "drop", "paths": [...], "crawlFiles": [...] }` when they're let go,
+  - `{ "type": "leave" }` when they're taken away.
+
+  `paths` is every path, in order; `crawlFiles` the ones that are `.sicrawl` files (not folders named like one).
+  Moves over the window aren't sent. The page listens with `ipc.onDragDrop` (`shell/ipc.ts`, parsed by
+  `parseShellDragDrop`), opens the crawl files as a launch's are (`openCrawlPaths`) and says why for any other file.
+  Because the shell takes the drop, HTML5 drag and drop events don't reach the page in the app: anything dragged
+  inside the page (a column, say) uses pointer events.
+- **Updates** (`updates.rs`, Settings › Updates' `UpdatePanel`). `tauri-plugin-updater`, driven by the shell's own
+  commands only (`update_check`, `update_install`; the webview isn't granted the plugin's): Check for updates reads
+  `latest.json` from this repository's newest GitHub release
+  (`https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json`, in `tauri.conf.json`'s
+  `plugins.updater.endpoints`), and says the newer version, its date and what's new (the release's notes), or "You
+  have the newest version". Install and restart, on the user's word only, never while a crawl or an analysis runs:
+  the shell downloads the installer (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a
+  second), checks its minisign signature against `plugins.updater.pubkey`, stops the engine as quitting does, and runs
+  the NSIS installer passively; it closes the app and starts the new version. A download whose signature doesn't
+  match is never run. Nothing is checked on its own: the user asks.
+
+  **What the release workflow needs.** The key pair was made with `npx tauri signer generate`; its public key is in
+  `tauri.conf.json`, its private key and that key's password are kept off the repository (on the owner's machine:
+  `%USERPROFILE%\.shouting-iguana\updater.key` and `updater.key.password`). The workflow that builds a release:
+  1. has two repository secrets, **`TAURI_SIGNING_PRIVATE_KEY`** (the private key file's contents) and
+     **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`** (its password), in its environment for the build;
+  2. builds with the updater's artifacts on: `npm run tauri build -- --bundles nsis --config
+     '{"bundle":{"createUpdaterArtifacts":true}}'` (left off in `tauri.conf.json`, so a build without the key, on a
+     developer's machine or in CI's checks, still builds). That writes, beside the installer,
+     `Shouting Iguana_<version>_x64-setup.exe.sig`;
+  3. writes `latest.json` and uploads it with the installer to the GitHub release, which must be the repository's
+     **latest** (not a draft or a pre-release, which `releases/latest` skips; the WPF app's releases must not be
+     marked latest after v2's):
+
+     ```json
+     { "version": "2.1.0", "notes": "What's new, as the Updates screen shows it.", "pub_date": "2026-11-20T10:00:00Z",
+       "platforms": { "windows-x86_64": { "signature": "<the .sig file's contents>",
+         "url": "https://github.com/YodasMyDad/ShoutingIguana/releases/download/v2.1.0/Shouting.Iguana_2.1.0_x64-setup.exe" } } }
+     ```
+
+     (`url` is the uploaded installer's download address; GitHub replaces spaces in asset names with dots.)
+  `version` must be higher than the installed one by semver, or the app says it has the newest. A test run of the
+  built app (`SI_APP_PROFILE_DIR` set) may point the updater elsewhere with `SI_UPDATER_ENDPOINT`; a user's never can.
+- **Secrets in the OS credential store** (`secrets.rs`, `crawl/secrets.ts`). The engine keeps a proxy without its
+  password and headers without their values, and the page used to keep them only while it ran. Now the shell keeps
+  them in Windows' Credential Manager (macOS's Keychain, the Secret Service on Linux), through `keyring`, service
+  "Shouting Iguana", under a key the page names and the shell checks: `defaults` (the crawl defaults' proxy and header
+  values) or `crawl:<id>` (what a crawl was started or last continued with). The value is a small JSON object,
+  `{ "proxyUrl": "http://user:password@host:port", "headers": { "Authorization": "…" } }`, at most 1,200 bytes;
+  empty forgets it. The API client does the rest: `startCrawl` keeps what a crawl starts with; `continueCrawl` sends
+  the kept proxy and headers unless the request gives its own, so Continue asks again only when nothing was kept;
+  `crawlOptions` and `crawlOptionDefaults` put the kept secrets back into the options they read (the proxy only when
+  it's the same proxy), and `saveCrawlOptionDefaults(options, secrets)` keeps the defaults' while the engine gets them
+  without. Nothing secret is ever in `settings.json`, `shell.json`, `defaults.json` or a crawl file. In a browser
+  (development, the tests) there's no store and nothing changes. Site logins are headers here: the engine refuses a
+  user name in a URL. A test run keeps its secrets under its own service name.
+- **A data folder the user can change** (`data_folder.rs`, Settings › Data folder). **Settled: a switch, not a
+  move.** Change folder… asks with the system's own dialog, checks a file can be written there, keeps the choice in
+  the shell's `shell.json` (with the folder before it) and starts the engine again on it (`Sidecar::relaunch`: the
+  old engine finishes what it was writing and stops, the new one gets `--data-dir`; the page sees `starting`, then
+  `ready` with a new generation, and reads everything again). The library is then the new folder's crawls, none if
+  it's new. The old folder's crawls stay exactly where they were: Go back to the folder before (or Use the usual
+  folder, `Documents\Shouting Iguana`) brings them back. Why not move them: a crawl file is a SQLite database, often
+  hundreds of MB; a move of gigabytes can fail half way (a full disk, a file another program holds open, an
+  antivirus scan), leaving crawls in two places, and needs its own progress, cancel and recovery, while a switch
+  can't lose anything, is instant, and is undone by Go back. A user who wants the files moved moves them in Explorer:
+  the library lists the `.sicrawl` files at the top of its folder. Refused while a crawl or an analysis runs. A
+  chosen folder that has gone (a drive unplugged) is passed over for that run, and stays chosen. `SI_APP_DATA_DIR`
+  (tests, development) still wins, and Settings then says it can't be changed.
+- **A proxy test** (`POST /api/proxy/test`, `crawl/options/ProxyTest.tsx`): beside every proxy field, it fetches the
+  crawl's start address (or one the user gives, in the defaults) once through the proxy as typed, password included,
+  and shows the engine's sentence: answered, asks for a password, nothing at that address, couldn't reach the site,
+  timed out, a certificate problem.
+- **The log folders** (Settings › Diagnostics): Open the app's log folder and Open the engine's log folder
+  (`open_logs_folder`, `app` or `engine`: the page names which, the shell finds it, the engine's from
+  `GET /api/health`'s `stateDir`). The log folder shown honours a test profile.
+- **Third-party licences** (About, `scripts/licences.mjs`). Every Vite build writes `licences.json` beside the app
+  (`scripts/licences-plugin.mjs`; Storybook's skips it): the npm packages in `package-lock.json` less the development
+  ones, the crates the shell links (`cargo metadata` for the platform, normal dependencies only, walked from the
+  shell), the NuGet packages the sidecar is published with (its `project.assets.json`, less build-only packages,
+  plus the .NET and ASP.NET Core runtimes the self-contained engine carries), and the fonts. Each with its licence
+  and its licence's text (from the package: LICENSE, COPYING, NOTICE files; a nuspec's licence file), the texts kept
+  once: 434 packages, 192 texts, about 1.5 MB, read only when About opens. A Tauri build (`TAURI_ENV_PLATFORM`) or
+  `SI_LICENCES_STRICT=1` fails when a source can't be read, so a release never ships a partial list; elsewhere it
+  says so and the list says it may be short. A copy run from source (the dev server) has none, and About says why.
+- **Still the engine's**: its own defaults once the user has saved theirs (`GET /api/crawl-options/defaults` gives
+  one or the other). The app keeps a copy, checked end to end.
 
 ## Hand over, search, favicons and the analysis's limits
 

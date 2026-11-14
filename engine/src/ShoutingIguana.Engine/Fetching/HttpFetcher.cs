@@ -53,7 +53,7 @@ internal sealed class HttpFetcher : IDisposable
             MaxConnectionsPerServer = 64,
             EnableMultipleHttp2Connections = true,
             UseProxy = options.ProxyUrl is not null,
-            Proxy = CreateProxy(options.ProxyUrl)
+            Proxy = ProxyFactory.Create(options.ProxyUrl)
         };
 
         if (options.TrustedCertificate is { } trusted)
@@ -357,24 +357,4 @@ internal sealed class HttpFetcher : IDisposable
         HttpRequestError.SecureConnectionError => $"TLS handshake failed: {exception.InnerException?.Message ?? exception.Message}",
         _ => exception.Message
     };
-
-    private static WebProxy? CreateProxy(string? proxyUrl)
-    {
-        if (proxyUrl is null)
-        {
-            return null;
-        }
-
-        var uri = new Uri(proxyUrl);
-        var proxy = new WebProxy(new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty }.Uri);
-        if (uri.UserInfo.Length > 0)
-        {
-            var parts = uri.UserInfo.Split(':', 2);
-            proxy.Credentials = new NetworkCredential(
-                Uri.UnescapeDataString(parts[0]),
-                parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : string.Empty);
-        }
-
-        return proxy;
-    }
 }

@@ -23,6 +23,14 @@
     "allow-settings-write",
     "allow-reveal-crawl-file",
     "allow-reveal-export-file",
-    "allow-open-export-file"
+    "allow-open-export-file",
+    "allow-open-logs-folder",
+    "allow-update-check",
+    "allow-update-install",
+    "allow-secrets-read",
+    "allow-secrets-write",
+    "allow-data-folder-choice",
+    "allow-data-folder-choose",
+    "allow-data-folder-reset"
   ]
 }

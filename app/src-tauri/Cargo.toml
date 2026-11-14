@@ -20,6 +20,10 @@ tauri-plugin-notification = "=2.7.0"
 tauri-plugin-opener = "=2.7.2"
 tauri-plugin-single-instance = "=2.5.4"
 tauri-plugin-store = "=2.5.0"
+# Signed updates from the GitHub releases (updates.rs), driven by the shell's own commands.
+tauri-plugin-updater = "=2.14.0"
+# The OS credential store for the user's secrets (secrets.rs): Credential Manager, Keychain, the Secret Service.
+keyring = { version = "=3.6.3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
 tauri-plugin-window-state = "=2.5.0"
 log = "=0.4.34"
 serde = { version = "=1.0.229", features = ["derive"] }

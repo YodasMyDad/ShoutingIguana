@@ -822,3 +822,15 @@ export type SidecarEvent =
   | { type: 'analysis'; data: AnalysisEvent }
   /** E5: an export as it stands, whole (./exports): as it starts, as it goes on, and as it ends. */
   | { type: 'export'; data: ExportJob };
+
+/** Round 5: what one fetch through a proxy found (`POST /api/proxy/test`). */
+export type ProxyTestOutcome =
+  'ok' | 'proxyAuthRequired' | 'proxyRefused' | 'proxyUnreachable' | 'siteUnreachable' | 'timeout' | 'tls' | 'failed';
+
+/** The proxy test's answer: `message` is one plain sentence, shown as it is. `status` is null with no HTTP answer. */
+export interface ProxyTestResult {
+  outcome: ProxyTestOutcome;
+  status: number | null;
+  elapsedMs: number;
+  message: string;
+}

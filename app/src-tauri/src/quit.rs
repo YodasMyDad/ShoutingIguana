@@ -9,6 +9,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::live::api::QUICK_CALL_TIMEOUT;
 use crate::live::model::LiveKinds;
+use crate::mode::Mode;
 use crate::open_files;
 use crate::shell::{QuitPhase, Shell};
 use crate::sidecar::GRACEFUL_SHUTDOWN_TIMEOUT;
@@ -25,14 +26,25 @@ const STOP_AND_QUIT: &str = "Stop and quit";
 const CANCEL: &str = "Cancel";
 
 /// The question to ask, if quitting would stop something. A pause isn't kept on disk and a stop leaves the crawl
-/// resumable, so one question covers running, paused and stopping crawls alike (docs/v2-ui-ia.md, "The tray").
-pub fn question(kinds: LiveKinds) -> Option<Question> {
-    if kinds.crawling {
-        Some(Question { title: "Stop crawling and quit?", message: "You can continue later from the library." })
-    } else if kinds.analysing {
-        Some(Question { title: "Stop the analysis and quit?", message: "You can analyse again from the library." })
-    } else {
-        None
+/// resumable, so one question covers running, paused and stopping crawls alike (docs/v2-ui-ia.md, "The tray"). In
+/// the page's mode's words.
+pub fn question(kinds: LiveKinds, mode: Mode) -> Option<Question> {
+    match (kinds.crawling, kinds.analysing, mode) {
+        (true, _, Mode::Advanced) => {
+            Some(Question { title: "Stop crawling and quit?", message: "You can continue later from the library." })
+        }
+        (false, true, Mode::Advanced) => {
+            Some(Question { title: "Stop the analysis and quit?", message: "You can analyse again from the library." })
+        }
+        (true, _, Mode::Simple) => Some(Question {
+            title: "Stop checking and quit?",
+            message: "You can continue the check later from Your sites.",
+        }),
+        (false, true, Mode::Simple) => Some(Question {
+            title: "Stop working out the results and quit?",
+            message: "You can work out the results again from Your sites.",
+        }),
+        (false, false, _) => None,
     }
 }
 
@@ -64,7 +76,7 @@ fn run(app: &AppHandle) {
     if !seen.any() {
         window::hide(app);
     }
-    if let Some(question) = question(live_kinds(&shell, seen)) {
+    if let Some(question) = question(live_kinds(&shell, seen), shell.mode.get()) {
         if !ask(app, question) {
             log::info!("Quitting cancelled");
             if !seen.any() {
@@ -138,20 +150,37 @@ mod tests {
 
     #[test]
     fn a_crawl_asks_about_crawling_even_beside_an_analysis() {
-        let crawling = question(LiveKinds { crawling: true, analysing: true }).unwrap();
+        let crawling = question(LiveKinds { crawling: true, analysing: true }, Mode::Advanced).unwrap();
         assert_eq!(crawling.title, "Stop crawling and quit?");
         assert_eq!(crawling.message, "You can continue later from the library.");
     }
 
     #[test]
     fn an_analysis_alone_asks_about_the_analysis() {
-        let analysing = question(LiveKinds { crawling: false, analysing: true }).unwrap();
+        let analysing = question(LiveKinds { crawling: false, analysing: true }, Mode::Advanced).unwrap();
         assert_eq!(analysing.title, "Stop the analysis and quit?");
         assert_eq!(analysing.message, "You can analyse again from the library.");
     }
 
     #[test]
     fn nothing_live_asks_nothing() {
-        assert_eq!(question(LiveKinds::default()), None);
+        assert_eq!(question(LiveKinds::default(), Mode::Advanced), None);
+        assert_eq!(question(LiveKinds::default(), Mode::Simple), None);
+    }
+
+    /// The audit's gap 5: "Stop crawling and quit? … from the library" in Simple.
+    #[test]
+    fn simple_asks_in_its_own_words() {
+        let checking = question(LiveKinds { crawling: true, analysing: true }, Mode::Simple).unwrap();
+        assert_eq!(checking.title, "Stop checking and quit?");
+        assert_eq!(checking.message, "You can continue the check later from Your sites.");
+        let working = question(LiveKinds { crawling: false, analysing: true }, Mode::Simple).unwrap();
+        assert_eq!(working.title, "Stop working out the results and quit?");
+        assert_eq!(working.message, "You can work out the results again from Your sites.");
+        for words in [checking, working] {
+            for word in ["crawl", "analys", "library"] {
+                assert!(!words.title.contains(word) && !words.message.contains(word), "{words:?}");
+            }
+        }
     }
 }

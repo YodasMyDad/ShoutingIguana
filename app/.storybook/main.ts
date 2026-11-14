@@ -9,6 +9,13 @@ const config: StorybookConfig = {
   addons: ['@storybook/addon-a11y', 'storybook-addon-pseudo-states'],
   framework: { name: '@storybook/react-vite', options: {} },
   core: { disableTelemetry: true },
+  // The app's build lists its licences (scripts/licences-plugin.mjs); Storybook has no About to show them.
+  viteFinal: (vite) => ({
+    ...vite,
+    plugins: (vite.plugins ?? [])
+      .flat()
+      .filter((plugin) => !(plugin && 'name' in plugin && plugin.name === 'si-licences')),
+  }),
 };
 
 export default config;

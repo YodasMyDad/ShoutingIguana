@@ -17,6 +17,7 @@ use tauri::{AppHandle, Manager, Wry};
 
 use crate::live::api::CrawlAction;
 use crate::live::model::{LiveStatus, Ring, TrayEntry};
+use crate::mode::Mode;
 use crate::shell::Shell;
 use crate::sync::lock;
 use crate::{quit, window};
@@ -77,8 +78,8 @@ struct Tray {
     tray: Option<TrayIcon<Wry>>,
     shown: bool,
     quitting: bool,
-    /// The crawls the menu was built for: (id, name, status).
-    menu: Option<Vec<(String, String, LiveStatus)>>,
+    /// The crawls the menu was built for, and the mode its words are in: (id, name, status, mode).
+    menu: Option<Vec<(String, String, LiveStatus, Mode)>>,
     look: Option<Look>,
     drawn_at: Option<Instant>,
     /// A redraw held back by the interval, due at this time.
@@ -137,16 +138,17 @@ impl Tray {
             return;
         }
 
-        let look = Look { tooltip: text::tooltip(&entries), ring };
+        let mode = shell.mode.get();
+        let look = Look { tooltip: text::tooltip(&entries, mode), ring };
         let menu_key: Vec<_> =
-            entries.iter().map(|entry| (entry.id.clone(), entry.name.clone(), entry.status)).collect();
+            entries.iter().map(|entry| (entry.id.clone(), entry.name.clone(), entry.status, mode)).collect();
         if self.tray.is_none() {
-            self.build(&entries, &look);
+            self.build(&entries, &look, mode);
             self.menu = Some(menu_key);
             return;
         }
         if rebuild || self.menu.as_ref() != Some(&menu_key) {
-            self.set_menu(&entries);
+            self.set_menu(&entries, mode);
             self.menu = Some(menu_key);
         }
         if self.look.as_ref() != Some(&look) {
@@ -169,8 +171,8 @@ impl Tray {
         }
     }
 
-    fn build(&mut self, entries: &[TrayEntry], look: &Look) {
-        let menu = match build_menu(&self.app, entries) {
+    fn build(&mut self, entries: &[TrayEntry], look: &Look, mode: Mode) {
+        let menu = match build_menu(&self.app, entries, mode) {
             Ok(menu) => menu,
             Err(error) => {
                 log::error!("Couldn't build the tray menu: {error}");
@@ -193,15 +195,15 @@ impl Tray {
                 self.look = Some(look.clone());
                 self.drawn_at = Some(Instant::now());
                 self.due = None;
-                log::info!("Tray icon shown");
+                log::info!("Tray icon shown: \"{}\"", look.tooltip);
             }
             Err(error) => log::error!("Couldn't create the tray icon: {error}"),
         }
     }
 
-    fn set_menu(&self, entries: &[TrayEntry]) {
+    fn set_menu(&self, entries: &[TrayEntry], mode: Mode) {
         let Some(tray) = &self.tray else { return };
-        match build_menu(&self.app, entries) {
+        match build_menu(&self.app, entries, mode) {
             Ok(menu) => {
                 if let Err(error) = tray.set_menu(Some(menu)) {
                     log::warn!("Couldn't update the tray menu: {error}");
@@ -242,12 +244,12 @@ impl Tray {
 
 /// "Open Shouting Iguana"; each live crawl, with Pause and Resume as its status allows (an analysis can't be
 /// controlled, so it shows disabled); "Quit".
-fn build_menu(app: &AppHandle, entries: &[TrayEntry]) -> tauri::Result<Menu<Wry>> {
+fn build_menu(app: &AppHandle, entries: &[TrayEntry], mode: Mode) -> tauri::Result<Menu<Wry>> {
     let open = MenuItem::with_id(app, OPEN, "Open Shouting Iguana", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT, "Quit", true, None::<&str>)?;
     let mut crawls: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::with_capacity(entries.len());
     for entry in entries {
-        let label = text::menu_label(entry);
+        let label = text::menu_label(entry, mode);
         if entry.status == LiveStatus::Analyzing {
             crawls.push(Box::new(MenuItem::with_id(
                 app,

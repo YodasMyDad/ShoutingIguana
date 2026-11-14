@@ -531,6 +531,20 @@ export function createMockTransport(): Transport {
       },
     ],
     [
+      // Round 5's proxy test: there's no network here, so every proxy answers as a working one would.
+      'POST',
+      /^\/api\/proxy\/test$/,
+      () =>
+        Promise.resolve(
+          json({
+            outcome: 'ok',
+            status: 200,
+            elapsedMs: 182,
+            message: 'The proxy answered and the site replied 200 OK in 182 ms.',
+          }),
+        ),
+    ],
+    [
       'GET',
       /^\/api\/crawls$/,
       async () => {

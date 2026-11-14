@@ -316,6 +316,26 @@ The options DTO has every public `CrawlOptions` property. `extraHeaders` is an o
 | `standard` | 5 | no cap, with automatic backoff (the engine's defaults) |
 | `fast` | 16 | no cap |
 
+### Proxy test (round 5)
+
+| Method and path | Does |
+| --- | --- |
+| `POST /api/proxy/test` | `{ proxyUrl, url }`: fetches `url` once through the proxy and answers 200 with `{ outcome, status, elapsedMs, message }`, whatever the fetch found |
+
+- `proxyUrl` is the proxy as the options take it (`http`, `https` or `socks5`, with a host), its user name and password
+  in it when it has them: they're used for this one fetch and kept nowhere, not even in the log. `url` is a whole
+  `http` or `https` address without a user name. Anything else is a `bad-request` (400) whose title says what to type.
+- The fetch is a crawl's (no redirect followed, the body never read, the crawler's user agent) through that proxy only,
+  never the system's, with 10 s to connect to the proxy and 15 s in all.
+- `outcome`: `ok` (the site's answer came back, any status, in `status`), `proxyAuthRequired` (407: the proxy wants a
+  user name and password, or didn't take the ones given), `proxyRefused` (nothing answered at the proxy's address, or
+  it couldn't be found), `proxyUnreachable` (no connection to the proxy in time), `siteUnreachable` (the proxy answered
+  502 or 504, or couldn't open a tunnel to the site; `status` when there was one), `timeout`, `tls` (a secure
+  connection couldn't be set up) and `failed` (anything else).
+- `status` is null when no HTTP answer came back. `message` is one plain sentence the UI shows as it is: "The proxy
+  answered and the site replied 200 OK in 182 ms.", "The proxy asks for a user name and password (407).", "Nothing
+  answered at the proxy's address.".
+
 ### Library (E1)
 
 `GET /api/crawls` returns `[CrawlListItem]`, newest first. It lists the `.sicrawl` files at the top of the data
@@ -3586,3 +3606,13 @@ URLs; anything on CI's runners, as nothing was pushed.
   `ExportFields`: `hiddenChecks` belongs to `report` and `workbook`, `checks` to `workbook`; the request's DTO, the
   `GET /report` query and `si export` (`--hidden-checks`, `--checks`) take them. Tested in `WorkbookExportTests`,
   `ReportDocumentTests` and `ExportEndpointsTests`.
+- **The proxy test** (part D). `POST /api/proxy/test` (above), for the proxy test in the app's settings (gap 18 of step 3's closing audit). The
+  engine gains `Fetching/ProxyTester` (public, with `ProxyTestResult` and `ProxyTestOutcome` in `Fetching/Models`); the
+  sidecar `Api/ProxyEndpoints` and `ProxyTestRequest`. The proxy's address and credentials are made into a `WebProxy`
+  by one `ProxyFactory`, moved out of `HttpFetcher`, so the test sends a password exactly as a crawl does.
+  No crawl file, issue or count changes; the bench is untouched.
+  Tests: `ProxyTesterTests` (engine, 9) against a proxy of the test's own, a loopback server that takes requests in
+  absolute form: a site's answer through it (200, and a 404 that is still the proxy working), a 407 without and with
+  wrong credentials, the right credentials sent, a closed port, a 502 from the proxy, addresses refused before any
+  fetch. `ProxyEndpointTests` (sidecar, 7): a refused proxy as a 200 answer in plain words, and six bodies that are bad
+  requests. Not tested: a proxy that never answers (`proxyUnreachable`, a 10 s wait) and a socks5 or https proxy.

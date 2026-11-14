@@ -12,6 +12,14 @@ fn main() {
         "reveal_crawl_file",
         "reveal_export_file",
         "open_export_file",
+        "open_logs_folder",
+        "update_check",
+        "update_install",
+        "secrets_read",
+        "secrets_write",
+        "data_folder_choice",
+        "data_folder_choose",
+        "data_folder_reset",
     ])))
     .expect("the Tauri build script failed");
 }

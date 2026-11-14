@@ -22,6 +22,7 @@ import {
   type FormSection,
   type HeaderRow,
 } from './form';
+import { ProxyTest } from './ProxyTest';
 import type { FormErrors } from './useValidation';
 import { FIELD_WORDS, SIMPLE_WORDS, USER_AGENT_NAMES, sectionSummary, speedTitle, speedWords } from './words';
 
@@ -364,6 +365,7 @@ function AdvancedSections({
               onTouch={() => onTouch?.('headers')}
             />
             {text('proxyUrl', { mono: true, placeholder: 'http://proxy.example.com:8080' })}
+            <ProxyTest proxyUrl={form.proxyUrl} startUrl={withStartUrl ? form.startUrl : null} />
             {toggle('useCookies')}
           </>,
         )}

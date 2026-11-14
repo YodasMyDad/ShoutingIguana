@@ -1,0 +1,241 @@
+import { CircleCheck, Download, RefreshCw } from 'lucide-react';
+import { useEffect, useReducer, useRef } from 'react';
+import { announce } from '../../../feedback/announce';
+import { formatBytes, formatExactTime } from '../../../lib/format';
+import { useLiveIds } from '../../../live/liveStore';
+import type { Mode } from '../../../mode/mode';
+import type { UpdateCheck, UpdateProgress } from '../../../shell/ipc';
+import { Button } from '../../../ui/Button';
+import { Callout } from '../../../ui/Callout';
+import { Icon } from '../../../ui/Icon';
+import { ProgressBar } from '../../../ui/ProgressBar';
+
+/** What the panel needs of the shell (shell/ipc.ts): stories and tests give their own. */
+export interface Updater {
+  check: () => Promise<UpdateCheck>;
+  install: (version: string) => Promise<void>;
+  onProgress: (handler: (progress: UpdateProgress) => void) => Promise<() => void>;
+}
+
+type Available = NonNullable<UpdateCheck['available']>;
+
+export type UpdateState =
+  | { step: 'idle' }
+  | { step: 'checking' }
+  | { step: 'upToDate'; version: string; checkedAt: string }
+  | { step: 'available'; update: Available }
+  | { step: 'downloading'; update: Available; progress: UpdateProgress | null }
+  | { step: 'installing'; update: Available }
+  | { step: 'failed'; message: string; update: Available | null };
+
+type Action =
+  | { type: 'check' }
+  | { type: 'checked'; result: UpdateCheck; at: string }
+  | { type: 'install' }
+  | { type: 'progress'; progress: UpdateProgress }
+  | { type: 'installing' }
+  | { type: 'failed'; message: string };
+
+function reduce(state: UpdateState, action: Action): UpdateState {
+  const update = 'update' in state ? state.update : null;
+  switch (action.type) {
+    case 'check':
+      return { step: 'checking' };
+    case 'checked':
+      return action.result.available
+        ? { step: 'available', update: action.result.available }
+        : { step: 'upToDate', version: action.result.currentVersion, checkedAt: action.at };
+    case 'install':
+      return update ? { step: 'downloading', update, progress: null } : state;
+    case 'progress':
+      return state.step === 'downloading' ? { ...state, progress: action.progress } : state;
+    case 'installing':
+      return update ? { step: 'installing', update } : state;
+    case 'failed':
+      return { step: 'failed', message: action.message, update };
+  }
+}
+
+const messageOf = (error: unknown) =>
+  typeof error === 'string' ? error : error instanceof Error ? error.message : 'Something went wrong.';
+
+/** "20 November 2026", from the release's date. */
+function publishedOn(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/**
+ * Settings › Updates' updater (docs/v2-ui-architecture.md, "Updates"): Check for updates; what's new in a newer
+ * version; Install and restart, on the user's word only, never while a crawl or an analysis runs (installing closes the
+ * app). The shell downloads the installer, checks its signature and runs it.
+ */
+export function UpdatePanel({
+  updater,
+  mode,
+  initial = { step: 'idle' },
+  busy: busyOverride,
+}: {
+  updater: Updater;
+  mode: Mode;
+  /** For stories: the state to start in. */
+  initial?: UpdateState;
+  /** For stories: whether a crawl or an analysis is running, in place of the live store's word. */
+  busy?: boolean;
+}) {
+  const [state, dispatch] = useReducer(reduce, initial);
+  const liveBusy = useLiveIds().length > 0;
+  const busy = busyOverride ?? liveBusy;
+  const simple = mode === 'simple';
+  const checkRef = useRef<HTMLButtonElement>(null);
+  // Install, pressed, goes as the download starts: when it fails, focus goes to Check for updates, enabled again.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (state.step !== 'failed' || !refocus.current) return;
+    refocus.current = false;
+    checkRef.current?.focus();
+  }, [state.step]);
+
+  useEffect(() => {
+    if (state.step !== 'downloading') return undefined;
+    let unlisten: (() => void) | null = null;
+    let gone = false;
+    void updater
+      .onProgress((progress) => dispatch({ type: 'progress', progress }))
+      .then((stop) => {
+        if (gone) stop();
+        else unlisten = stop;
+      });
+    return () => {
+      gone = true;
+      unlisten?.();
+    };
+  }, [state.step, updater]);
+
+  const check = async () => {
+    dispatch({ type: 'check' });
+    try {
+      const result = await updater.check();
+      dispatch({ type: 'checked', result, at: new Date().toISOString() });
+      announce(
+        result.available
+          ? `Version ${result.available.version} is available.`
+          : `You have the newest version, ${result.currentVersion}.`,
+      );
+    } catch (error) {
+      const message = messageOf(error);
+      dispatch({ type: 'failed', message });
+      announce(message);
+    }
+  };
+
+  const install = async (update: Available) => {
+    dispatch({ type: 'install' });
+    announce(`Downloading version ${update.version}.`);
+    try {
+      await updater.install(update.version);
+      // The shell closes the app as the installer starts: this is seen only for a moment, if at all.
+      dispatch({ type: 'installing' });
+    } catch (error) {
+      const message = messageOf(error);
+      dispatch({ type: 'failed', message });
+      refocus.current = true;
+      announce(message);
+    }
+  };
+
+  const working = state.step === 'checking' || state.step === 'downloading' || state.step === 'installing';
+  const kept = simple ? 'site checks' : 'crawls';
+  return (
+    <div className="flex w-full flex-col items-start gap-3">
+      <Button
+        ref={checkRef}
+        size="sm"
+        icon={RefreshCw}
+        loading={state.step === 'checking'}
+        disabled={working && state.step !== 'checking'}
+        onClick={() => void check()}
+      >
+        {state.step === 'checking' ? 'Checking for updates…' : 'Check for updates'}
+      </Button>
+
+      {state.step === 'upToDate' ? (
+        <p className="flex items-center gap-2 text-13 text-text-secondary">
+          <Icon icon={CircleCheck} size="sm" />
+          <span>
+            You have the newest version, <span className="font-mono text-12">{state.version}</span>. Checked{' '}
+            {formatExactTime(state.checkedAt)}.
+          </span>
+        </p>
+      ) : null}
+
+      {state.step === 'available' || state.step === 'downloading' || state.step === 'installing' ? (
+        <Callout tone="info" icon={Download} title={`Version ${state.update.version} is available`} className="w-full">
+          <div className="flex flex-col gap-3">
+            {publishedOn(state.update.date) ? (
+              <p className="text-13 text-text-secondary">Published {publishedOn(state.update.date)}.</p>
+            ) : null}
+            <section aria-label="What’s new" className="flex flex-col gap-1">
+              <h3 className="text-13 font-semibold">What’s new</h3>
+              <p className="max-h-(--update-notes-max) overflow-auto text-13 whitespace-pre-line text-text-secondary">
+                {state.update.notes ?? 'The release doesn’t say.'}
+              </p>
+            </section>
+            {state.step === 'available' ? (
+              <div className="flex flex-col items-start gap-1.5">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={busy}
+                  aria-describedby="update-install-help"
+                  onClick={() => void install(state.update)}
+                >
+                  Install and restart
+                </Button>
+                <p id="update-install-help" className="text-12 text-text-secondary">
+                  {busy
+                    ? simple
+                      ? 'A site check is running. Install once it has finished.'
+                      : 'A crawl or an analysis is running. Install once it has finished.'
+                    : `Shouting Iguana closes while the installer runs, then opens again. Your ${kept} and settings stay as they are.`}
+                </p>
+              </div>
+            ) : null}
+            {state.step === 'downloading' ? (
+              <ProgressBar
+                label={`Downloading version ${state.update.version}`}
+                value={state.progress?.total ? state.progress.downloaded : null}
+                max={state.progress?.total ?? 100}
+                valueText={
+                  state.progress
+                    ? state.progress.total
+                      ? `${formatBytes(state.progress.downloaded)} of ${formatBytes(state.progress.total)}`
+                      : formatBytes(state.progress.downloaded)
+                    : 'Starting'
+                }
+                className="max-w-(--measure-text)"
+              />
+            ) : null}
+            {state.step === 'installing' ? (
+              <p className="text-13 text-text-secondary">
+                Installing. Shouting Iguana closes and opens again in a moment.
+              </p>
+            ) : null}
+          </div>
+        </Callout>
+      ) : null}
+
+      {state.step === 'failed' ? (
+        <Callout
+          tone="error"
+          title={state.update ? 'The update wasn’t installed' : 'Updates couldn’t be checked'}
+          className="w-full"
+        >
+          {state.message}
+        </Callout>
+      ) : null}
+    </div>
+  );
+}
