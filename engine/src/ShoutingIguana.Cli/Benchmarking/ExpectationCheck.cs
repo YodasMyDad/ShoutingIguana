@@ -2,6 +2,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.TestSite.Models;
 
 namespace ShoutingIguana.Cli.Benchmarking;
@@ -31,8 +32,10 @@ internal static class ExpectationCheck
     /// and the same indexability, judged as the analysis judged it, the crawler's probes of the site's other versions left
     /// out of both. Every page the summary calls indexable counts, read or not: a page that was only status-checked, whose
     /// HTML nobody read, must never pass for one, and URLs that weren't checked are no more unreachable than fine.
+    /// Cloudflare's own endpoints (<paramref name="cloudflareUrlIds"/>) are no page of the site's in the stats' counts
+    /// (CrawlSchema.PAGE), though the summary types them as pages.
     /// </summary>
-    public static List<string> CompareSummary(IEnumerable<UrlSummary> rows, CrawlStats stats)
+    public static List<string> CompareSummary(IEnumerable<UrlSummary> rows, CrawlStats stats, IReadOnlySet<int> cloudflareUrlIds)
     {
         long count = 0, indexablePages = 0;
         Dictionary<IndexabilityReason, long> nonIndexable = [];
@@ -44,7 +47,7 @@ internal static class ExpectationCheck
                 continue;
             }
 
-            if (row is { IsIndexable: true, ResourceType: ResourceType.Page })
+            if (row is { IsIndexable: true, ResourceType: ResourceType.Page } && !cloudflareUrlIds.Contains(row.UrlId))
             {
                 indexablePages++;
             }
@@ -74,5 +77,21 @@ internal static class ExpectationCheck
         {
             mismatches.Add($"{what}: expected {expected:N0}, found {actual:N0}");
         }
+    }
+
+    /// <summary>The ids of the crawl's URLs that are Cloudflare's own endpoints, as CrawlSchema.PAGE leaves them out.</summary>
+    public static HashSet<int> CloudflareUrlIds(string databasePath)
+    {
+        using var connection = CrawlDatabase.OpenReader(databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT u.id FROM urls u WHERE NOT ({CrawlSchema.NOT_CLOUDFLARE})";
+        using var reader = command.ExecuteReader();
+        HashSet<int> ids = [];
+        while (reader.Read())
+        {
+            ids.Add(reader.GetInt32(0));
+        }
+
+        return ids;
     }
 }
