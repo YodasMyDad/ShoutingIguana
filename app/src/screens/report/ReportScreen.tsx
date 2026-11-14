@@ -56,7 +56,7 @@ function longDateOf(iso: string | null | undefined): string | null {
  */
 export function ReportScreen() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
-  const { cut = 'full' } = useSearch({ from: ROUTE });
+  const { cut = 'full', print: printOnOpen } = useSearch({ from: ROUTE });
   const navigate = useNavigate({ from: ROUTE });
   const mode = useMode();
   const words = reportWords(mode);
@@ -100,6 +100,14 @@ export function ReportScreen() {
   const print = () => {
     if (frameRef.current?.print()) printRef.current?.focus();
   };
+  // Asked for as it opened (the Summary's Save as PDF): the print dialog once, when the report is in, then the address
+  // drops it so Back and a reload don't ask again.
+  useEffect(() => {
+    if (!printOnOpen || !shown) return;
+    frameRef.current?.printWhenLoaded();
+    printRef.current?.focus();
+    void navigate({ search: (previous) => ({ ...previous, print: undefined }), replace: true });
+  }, [printOnOpen, shown, navigate]);
   // Save and Spreadsheet of everything are the app's one export flow: the export dialog on that choice (the report in
   // the cut shown), then the native save dialog, then the export's toast, as Overview's and Issues' are.
   const save = (choiceId: 'report' | 'workbook') => {

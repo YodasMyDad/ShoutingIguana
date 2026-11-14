@@ -5,6 +5,8 @@ using System.Text.Json.Nodes;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Tests.Support;
+using ShoutingIguana.TestSite;
+using ShoutingIguana.TestSite.Models;
 
 namespace ShoutingIguana.Sidecar.Tests;
 
@@ -63,6 +65,27 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             JsonNode.Parse("""{"concurrency":0}""")), HttpStatusCode.UnprocessableEntity, "invalid-options");
         Assert.Equal(["concurrency"], refused["errors"]!.AsObject().Select(field => field.Key));
         Assert.Equal(3, (int?)(await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!["concurrency"]);
+    }
+
+    /// <summary>
+    /// An address typed without a scheme starts where the site answers: the test site serves only http, so http, where
+    /// a guess of https read nothing and blamed robots.txt (the closing audit's gap 1). One with its scheme is kept.
+    /// </summary>
+    [Fact]
+    public async Task AnAddressWithoutASchemeStartsWhereTheSiteAnswers()
+    {
+        await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 5 });
+        var address = site.BaseUri.Authority;
+
+        var bare = await _sidecar.PostAsync("api/crawl-options/start-url", new JsonObject { ["address"] = address });
+        Assert.Equal(HttpStatusCode.OK, bare.Status);
+        Assert.Equal($$"""{"startUrl":"http://{{address}}","reason":"http"}""", bare.Body!.ToJsonString());
+
+        var typed = await _sidecar.PostAsync("api/crawl-options/start-url",
+            new JsonObject { ["address"] = "https://example.invalid/", ["options"] = new JsonObject { ["concurrency"] = 2 } });
+        Assert.Equal("""{"startUrl":"https://example.invalid/","reason":"typed"}""", typed.Body!.ToJsonString());
+
+        TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawl-options/start-url", new JsonObject()), HttpStatusCode.BadRequest, "bad-request");
     }
 
     [Fact]

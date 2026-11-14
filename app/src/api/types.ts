@@ -216,6 +216,17 @@ export interface ValidationResult {
   errors: FieldErrors;
 }
 
+/**
+ * `POST /api/crawl-options/start-url`: where an address typed without a scheme starts. `typed`: it had its scheme and
+ * nothing was asked. `https`: the site answered on https. `http`: only http answered. `noAnswer`: neither did, so https.
+ */
+export type StartUrlReason = 'typed' | 'https' | 'http' | 'noAnswer';
+
+export interface StartUrlChoice {
+  startUrl: string;
+  reason: StartUrlReason;
+}
+
 // --------------------------------------------------------------------------------------------------------- Library
 
 /** Checks with at least one issue, by severity: the Issues screen's rows, not issue rows. */

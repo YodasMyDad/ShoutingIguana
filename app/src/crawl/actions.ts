@@ -3,9 +3,9 @@
 // events, which update the screens.
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
-import type { CrawlListItem, CrawlStatus } from '../api/types';
+import type { CrawlListItem, CrawlOptions, CrawlStatus } from '../api/types';
 import { crawlToast, notifyError, notifyResult } from '../feedback/notify';
-import { sendableHeaders } from './options/form';
+import { sendableHeaders, withScheme } from './options/form';
 
 /**
  * Pause, Resume and Stop act on a crawl this sidecar is running: `crawl-busy` says it isn't (it ended, or another
@@ -89,6 +89,21 @@ export async function cancelAnalysis(id: string): Promise<void> {
     await api.cancelAnalysis(id);
   } catch (error) {
     notifyError(error, { id: crawlToast(id, 'cancel-analysis'), retry: () => void cancelAnalysis(id) });
+  }
+}
+
+/**
+ * The start URL for an address as typed: as typed when it has its scheme, else where the site answers, https or, when
+ * only http answers, http (the closing audit's gap 1: a site serving only http was checked on https and read nothing).
+ * The sidecar asks with `options`, or the saved defaults. If it can't be asked, https, and the start says what's wrong.
+ */
+export async function startUrlFor(address: string, options?: CrawlOptions): Promise<string> {
+  const trimmed = address.trim();
+  if (trimmed === '' || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  try {
+    return (await api.startUrlFor(trimmed, options)).startUrl;
+  } catch {
+    return withScheme(trimmed);
   }
 }
 

@@ -6,6 +6,7 @@ import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import { crawlOptionDefaultsQuery, crawlOptionsQuery, queryKeys } from '../api/queries';
 import type { CrawlOptionDefaults, CrawlOptions } from '../api/types';
+import { startUrlFor } from '../crawl/actions';
 import { CrawlOptionsForm } from '../crawl/options/CrawlOptionsForm';
 import {
   FIELD_SECTIONS,
@@ -196,7 +197,9 @@ function NewCrawlForm({
     setSubmitted(true);
     setStarting(true);
     try {
-      const item = await api.startCrawl({ options });
+      const item = await api.startCrawl({
+        options: { ...options, startUrl: await startUrlFor(form.startUrl, options) },
+      });
       // "Use these choices every time": once they've started a crawl, so a start the engine refuses changes nothing.
       if (mode === 'simple' && everyTime) {
         await api

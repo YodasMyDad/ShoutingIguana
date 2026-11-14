@@ -206,10 +206,15 @@ export function validateCrawlSettingsSearch(search: Record<string, unknown>): Cr
 export interface ReportSearch {
   /** The whole report, or its summary. */
   cut?: 'full' | 'summary' | undefined;
+  /** Round 5: open the print dialog (how it becomes a PDF) once the report is in: the Summary's Save as PDF. */
+  print?: true | undefined;
 }
 
 export function validateReportSearch(search: Record<string, unknown>): ReportSearch {
-  return strictSearch(search, { cut: search.cut === 'full' || search.cut === 'summary' ? search.cut : undefined });
+  return strictSearch(search, {
+    cut: search.cut === 'full' || search.cut === 'summary' ? search.cut : undefined,
+    print: search.print === true ? true : undefined,
+  });
 }
 
 export interface IssuesSearch {

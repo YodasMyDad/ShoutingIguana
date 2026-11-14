@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CrawlListItem, CrawlOptionDefaults } from '../../api/types';
 import { ENGINE_DEFAULTS } from '../../crawl/options/engineDefaults';
-import { problemWords, rowKind, rowMeta, rowScore, siteGroups } from './sites';
+import { problemWords, rowKind, rowMeta, rowScore, siteGroups, siteName } from './sites';
 import { ENGINE_LINE, savedSettingsLine } from './savedSettings';
 
 const crawl = (patch: Partial<CrawlListItem>): CrawlListItem => ({
@@ -27,6 +27,31 @@ const crawl = (patch: Partial<CrawlListItem>): CrawlListItem => ({
 });
 
 describe('Your sites', () => {
+  // The closing audit's gap 30: two test sites on 127.0.0.1 were one row, the newer hiding the other.
+  it('tells two sites on one host apart by their port, and names each with it', () => {
+    const items = [
+      crawl({ id: 'p1', site: '127.0.0.1', startUrl: 'http://127.0.0.1:61877/', startedAt: '2026-10-30T10:00:00Z' }),
+      crawl({ id: 'p2', site: '127.0.0.1', startUrl: 'http://127.0.0.1:61878/', startedAt: '2026-10-31T10:00:00Z' }),
+      crawl({
+        id: 'p3',
+        site: '127.0.0.1',
+        startUrl: 'http://127.0.0.1:61877/shop',
+        startedAt: '2026-10-29T10:00:00Z',
+      }),
+      // A scheme's own port is no port of the site's: http and https of one site are one row.
+      crawl({ id: 'd1', site: 'example.com', startUrl: 'http://example.com:80/', startedAt: '2026-10-20T10:00:00Z' }),
+      crawl({ id: 'd2', site: 'example.com', startUrl: 'https://example.com/', startedAt: '2026-10-21T10:00:00Z' }),
+    ];
+    const { sites } = siteGroups(items, []);
+    expect(sites.map((site) => [site.latest.id, site.earlier.map((item) => item.id)])).toEqual([
+      ['p2', []],
+      ['p1', ['p3']],
+      ['d2', ['d1']],
+    ]);
+    expect(sites.map((site) => siteName(site.latest))).toEqual(['127.0.0.1:61878', '127.0.0.1:61877', 'example.com']);
+    expect(siteName(crawl({ site: null, fileName: 'mystery.sicrawl', startUrl: null }))).toBe('mystery.sicrawl');
+  });
+
   it('pins the checks running now, then a row a site, the newest check first, the older ones folded under it', () => {
     const items = [
       crawl({ id: 'a1', site: 'a.example', startedAt: '2026-10-20T10:00:00Z' }),

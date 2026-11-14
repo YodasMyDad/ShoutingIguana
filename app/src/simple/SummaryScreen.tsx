@@ -8,6 +8,7 @@ import {
   checksQuery,
   crawlOptionsQuery,
   crawlQuery,
+  robotsFileQuery,
   startUrlQuery,
   statsQuery,
 } from '../api/queries';
@@ -20,7 +21,7 @@ import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
-import { formatCount, formatDuration } from '../lib/format';
+import { formatCount } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
@@ -32,6 +33,7 @@ import { RefreshLine } from '../ui/ProgressBar';
 import { longDate } from './dates';
 import { nothingRead, type NothingRead } from './nothingRead';
 import { factsWords } from './plainWords';
+import { summarySubtitle } from './summaryWords';
 import { plainResults } from './results';
 import { ScoreBreakdownFromRoute } from './ScoreBreakdownDialog';
 import { ScoreRing } from '../ui/ScoreRing';
@@ -199,7 +201,7 @@ function Summary({
     <div ref={screenRef} className="@container">
       <div aria-busy={refreshing} className="si-simple-page relative flex flex-col gap-5">
         {refreshing ? <RefreshLine label="Refreshing the summary" /> : null}
-        <SummaryHeader crawlId={crawlId} item={item} titleRef={control.titleRef} />
+        <SummaryHeader crawlId={crawlId} item={item} status={status} titleRef={control.titleRef} />
         {body}
         {item && !loading && item.pageCount > 0 ? <FactsLine item={item} analysis={analysis.data} /> : null}
       </div>
@@ -209,21 +211,22 @@ function Summary({
   );
 }
 
-/** The site and when it was checked, with Check again and, the primary action, Open the report. */
+/**
+ * The site and when it was checked, with Check again and, the primary action, Open the report: only over results.
+ * A check with none (never worked out, or no page read) has no report to open, so it isn't offered (gap 2).
+ */
 function SummaryHeader({
   crawlId,
   item,
+  status,
   titleRef,
 }: {
   crawlId: string;
   item: CrawlListItem | undefined;
+  status: CrawlStatus | null;
   titleRef: React.RefObject<HTMLHeadingElement | null>;
 }) {
-  const when = item?.finishedAt ?? item?.startedAt ?? null;
-  // Beside the score: the pages it covers, the analysis's (the crawl's before the first analysis).
-  const count = item ? scoredPages(item) : 0;
-  const pages = count === 1 ? '1 page' : `${formatCount(count)} pages`;
-  const took = item?.crawlingMs ? ` in ${formatDuration(item.crawlingMs)}` : '';
+  const hasResults = item !== undefined && item.analyzedAt !== null && item.pageCount > 0;
   return (
     <header className="flex flex-wrap items-end gap-x-5 gap-y-3">
       <div className="basis-80 min-w-0 flex-1">
@@ -232,8 +235,8 @@ function SummaryHeader({
         </h1>
         {item ? (
           <p className="mt-1.5 text-16 text-text-secondary">
-            {when ? `Checked on ${longDate(when)}. ` : ''}
-            {item.pageCount > 0 ? `${pages} read${took}.` : ''}
+            {/* Beside the score: the pages it covers, the analysis's (the crawl's before the first analysis). */}
+            {summarySubtitle(item, status, scoredPages(item))}
           </p>
         ) : null}
       </div>
@@ -246,7 +249,7 @@ function SummaryHeader({
               </Link>
             </Button>
           ) : null}
-          {item.pageCount > 0 ? (
+          {hasResults ? (
             <Button variant="primary" icon={FileText} asChild>
               <Link to="/crawls/$crawl/report" params={{ crawl: crawlId }}>
                 Open the report
@@ -475,19 +478,31 @@ function NothingReadCard({
   canContinue: boolean;
 }) {
   const start = useQuery(startUrlQuery(crawlId));
+  const startRow = start.isPending || start.error ? undefined : start.data;
+  // robots.txt kept the check from the start address: how that file answered says why (rules, an error, no answer).
+  const robotsOrigin = startRow?.outcome === 'robotsDisallowed' && startRow.url ? originOf(startRow.url) : null;
+  const robots = useQuery({ ...robotsFileQuery(crawlId, robotsOrigin ?? ''), enabled: robotsOrigin !== null });
+  const robotsPending = robotsOrigin !== null && robots.isPending;
   const reason = nothingRead(
     { status: status ?? item.status },
-    start.isPending || start.error ? undefined : start.data,
+    startRow,
+    robots.data ? { state: robots.data.state, statusCode: robots.data.statusCode } : undefined,
   );
   return (
     <Card className="flex flex-wrap items-center gap-7 px-8 py-7">
       <ScoreRing value={null} />
       <div className="basis-64 flex min-w-0 flex-1 flex-col gap-3">
         <h2 className="text-28 font-semibold">No pages could be read</h2>
-        <p className="text-16 text-text-secondary">{reason.why}</p>
-        <div>
-          <NothingReadAction crawlId={crawlId} item={item} reason={reason} canContinue={canContinue} />
-        </div>
+        {robotsPending ? (
+          <Skeleton className="h-(--skeleton-text) w-full" />
+        ) : (
+          <>
+            <p className="text-16 text-text-secondary">{reason.why}</p>
+            <div>
+              <NothingReadAction crawlId={crawlId} item={item} reason={reason} canContinue={canContinue} />
+            </div>
+          </>
+        )}
       </div>
     </Card>
   );
@@ -543,6 +558,14 @@ function NothingReadAction({
           </Link>
         </Button>
       ) : null;
+  }
+}
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
   }
 }
 

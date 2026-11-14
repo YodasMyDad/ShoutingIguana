@@ -663,7 +663,9 @@ internal sealed class CrawlManager(
         bool analyse;
         lock (_sync)
         {
-            analyse = summary.Status is CrawlStatus.Completed && crawl.AnalyzeWhenDone && !_stopping;
+            // A crawl stopped by the user is analysed too, so its results "so far" are there when it ends, as a completed
+            // crawl's are (the closing audit's gap 2). Not one stopped by the app shutting down: it has no time to.
+            analyse = summary.Status is CrawlStatus.Completed or CrawlStatus.Stopped && crawl.AnalyzeWhenDone && !_stopping;
             crawl.Job = null;
             PublishCrawl(new CrawlEventDto(crawl.Id, StatusOf(summary.Status), summary.Error), crawlEnded: true);
             events.PublishLibrary();

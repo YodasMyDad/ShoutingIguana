@@ -1,3 +1,5 @@
+using ShoutingIguana.Engine.Fetching;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors;
 using ShoutingIguana.Sidecar.Options;
@@ -39,5 +41,24 @@ internal static class OptionsEndpoints
 
             return TypedResults.Json(new ValidationDto(errors), SidecarJsonContext.Default.ValidationDto);
         });
+
+        // An address typed without a scheme: https when the site answers there, else http when it answers there. Asked
+        // with the options the crawl would start with, so a proxy the site needs is used.
+        api.MapPost("/api/crawl-options/start-url", async (HttpRequest request, DefaultsStore defaults) =>
+        {
+            var body = await RequestBody.ReadAsync(request, SidecarJsonContext.Default.StartUrlRequest).ConfigureAwait(false);
+            var address = body.Address ?? throw Problems.BadRequest("Give the address to start from.");
+            var options = (body.Options ?? defaults.Read()).ToCrawlOptions(out _);
+            var choice = await StartAddress.ChooseAsync(address, options, request.HttpContext.RequestAborted).ConfigureAwait(false);
+            return TypedResults.Json(new StartUrlDto(choice.StartUrl, ReasonName(choice.Reason)), SidecarJsonContext.Default.StartUrlDto);
+        });
     }
+
+    private static string ReasonName(StartAddressReason reason) => reason switch
+    {
+        StartAddressReason.Https => "https",
+        StartAddressReason.Http => "http",
+        StartAddressReason.NoAnswer => "noAnswer",
+        _ => "typed"
+    };
 }

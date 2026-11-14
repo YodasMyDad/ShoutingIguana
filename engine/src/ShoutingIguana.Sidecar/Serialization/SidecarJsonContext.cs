@@ -86,6 +86,8 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(CrawlOptionsDto))]
 [JsonSerializable(typeof(DefaultsDto))]
 [JsonSerializable(typeof(ValidationDto))]
+[JsonSerializable(typeof(StartUrlRequest))]
+[JsonSerializable(typeof(StartUrlDto))]
 [JsonSerializable(typeof(OpenCrawlRequest))]
 [JsonSerializable(typeof(StartCrawlRequest))]
 [JsonSerializable(typeof(ContinueCrawlRequest))]

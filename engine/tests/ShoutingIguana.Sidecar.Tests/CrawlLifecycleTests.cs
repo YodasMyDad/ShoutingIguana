@@ -150,11 +150,31 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         await events.CrawlStatusAsync(id, "stopping");
         await events.CrawlStatusAsync(id, "stopped");
 
+        // Stopped by the user, it is analysed at once, as a completed crawl is: its results "so far" are there when it
+        // ends (the closing audit's gap 2), and it says stopped again with them.
+        await events.CrawlStatusAsync(id, "analyzing");
+        await events.CrawlStatusAsync(id, "stopped");
         var stopped = await _sidecar.GetJsonAsync($"api/crawls/{id}");
         Assert.Equal("stopped", (string?)stopped["status"]);
-        Assert.Null(stopped["analyzedAt"]);
+        Assert.NotNull(stopped["analyzedAt"]);
         TestSidecar.AssertProblem(await _sidecar.PostAsync($"api/crawls/{id}/pause"), HttpStatusCode.Conflict, "crawl-busy");
         TestSidecar.AssertProblem(await _sidecar.PostAsync($"api/crawls/{id}/stop"), HttpStatusCode.Conflict, "crawl-busy");
+        var analysis = await _sidecar.GetJsonAsync($"api/crawls/{id}/analysis");
+        Assert.True((bool?)analysis["score"]?["partial"] ?? analysis["noScoreReason"] is not null);
+    }
+
+    /// <summary>A crawl started not to be analysed when it ends isn't analysed when it's stopped either.</summary>
+    [Fact]
+    public async Task ACrawlStartedNotToBeAnalysedIsNotAnalysedWhenStopped()
+    {
+        await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+        var started = await _sidecar.PostAsync("api/crawls", new JsonObject { ["options"] = SlowCrawl(), ["analyzeWhenDone"] = false });
+        var id = (string)started.Body!["id"]!;
+        await events.CrawlStatusAsync(id, "running");
+        Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
+        await events.CrawlStatusAsync(id, "stopped");
+
+        Assert.Null((await _sidecar.GetJsonAsync($"api/crawls/{id}"))["analyzedAt"]);
         TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{id}/analysis"), HttpStatusCode.NotFound, "not-analyzed");
     }
 
@@ -171,6 +191,9 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         var path = (string)started["path"]!;
         await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 2);
         Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
+        await events.CrawlStatusAsync(id, "stopped");
+        // Its results so far are worked out before it can be continued.
+        await events.CrawlStatusAsync(id, "analyzing");
         await events.CrawlStatusAsync(id, "stopped");
 
         var stored = await _sidecar.GetJsonAsync($"api/crawls/{id}/options");
