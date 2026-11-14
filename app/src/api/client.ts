@@ -46,6 +46,7 @@ import type {
   IssuePage,
   StartCrawlRequest,
   ValidationResult,
+  ProxyTestResult,
 } from './types';
 
 type Signal = AbortSignal | undefined;
@@ -137,6 +138,12 @@ export const api = {
   /** Field-keyed messages; always 200 for options that parse. */
   validateCrawlOptions: (options: CrawlOptions, signal?: Signal) =>
     post<ValidationResult>('/api/crawl-options/validate', options, signal),
+  /**
+   * Round 5: fetches `url` once through the proxy, its user name and password included (used for this fetch only), and
+   * says what happened. 200 whatever the fetch found; `bad-request` for a proxy or address that can't be tried.
+   */
+  testProxy: (proxyUrl: string, url: string, signal?: Signal) =>
+    post<ProxyTestResult>('/api/proxy/test', { proxyUrl, url }, signal),
 
   // Library
   crawls: (signal?: Signal) => get<CrawlListItem[]>('/api/crawls', signal),
