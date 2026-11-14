@@ -92,7 +92,7 @@ const cursorRowText = (grid: HTMLElement) =>
 let uninstall: () => void = () => undefined;
 beforeEach(() => {
   uninstall = installKeyboard();
-  updateSettings({ savedViews: [], showFullUrls: false });
+  updateSettings({ savedViews: [], showFullUrls: false, gridColumns: {} });
 });
 afterEach(() => {
   uninstall();
@@ -241,7 +241,16 @@ describe('the URL grid’s row menu', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent.replace(/Enter|Ctrl.*$/, '')),
-    ).toEqual(['Inspect', 'Open in the browser', 'Copy the URL', 'Copy the row', 'Show its inlinks in Links']);
+    ).toEqual([
+      'Inspect',
+      'Open in the browser',
+      'Copy the URL',
+      'Copy the row',
+      // The cell the keys opened it on: the URL's (gap 9).
+      'Filter by this valueURL is https://example.com/a',
+      'Exclude this valueURL is not https://example.com/a',
+      'Show its inlinks in Links',
+    ]);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     await waitFor(() => expect(grid).toHaveFocus());
@@ -347,5 +356,108 @@ describe('the words for an enum’s values', () => {
     expect(
       await within(await screen.findByRole('menu')).findByRole('menuitem', { name: /^Audio or video/ }),
     ).toBeVisible();
+  });
+});
+
+describe('round 5: the URL grid’s row menu filters by the value under it (gap 9)', () => {
+  it('filters by the cell right-clicked, or leaves it out, beside the view’s filters', async () => {
+    sidecar();
+    const { router, user, grid } = await open(URLS);
+    const statusOfA = within(grid).getByText('/a').closest('[role="row"]')!.querySelector('[data-col="1"]')!;
+    fireEvent.contextMenu(statusOfA, { clientX: 300, clientY: 200 });
+    const menu = await screen.findByRole('menu');
+    await user.click(within(menu).getByRole('menuitem', { name: /^Filter by this value/ }));
+    await waitFor(() =>
+      expect(router.state.location.search.filter).toEqual([{ column: 'statusCode', op: 'eq', value: 404 }]),
+    );
+    const header = screen.getByRole('heading', { level: 1, name: 'URLs' }).parentElement!;
+    expect(await within(header).findByText(wholeText('1 of 3 URLs'))).toBeVisible();
+
+    await act(() => router.navigate({ to: '/crawls/$crawl/urls', params: { crawl: TEST_CRAWL_ID }, search: {} }));
+    const fresh = await screen.findByRole('grid', { name: 'URLs' });
+    await within(fresh).findByText('/a');
+    fireEvent.contextMenu(within(fresh).getByText('/a').closest('[role="row"]')!.querySelector('[data-col="1"]')!);
+    await user.click(await screen.findByRole('menuitem', { name: /^Exclude this value/ }));
+    await waitFor(() =>
+      expect(router.state.location.search.filter).toEqual([{ column: 'statusCode', op: 'ne', value: 404 }]),
+    );
+  });
+});
+
+describe('round 5: clearing the filters (gap 24)', () => {
+  it('keeps the sort and the columns', async () => {
+    sidecar();
+    const filter = [{ column: 'title', op: 'eq', value: 'Nothing has this title' }];
+    const { router, user } = await open(
+      `${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}&sort=-inlinks&cols=url,inlinks`,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Clear the filters' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({
+        sort: [{ column: 'inlinks', desc: true }],
+        cols: ['url', 'inlinks'],
+      }),
+    );
+  });
+});
+
+describe('round 5: the URL grid’s columns laid out (gap 10)', () => {
+  it('moves a column with the header’s keys, in the route, and keeps a width with the preferences', async () => {
+    sidecar();
+    const { router, user, grid } = await open(`${URLS}?cols=url,statusCode,title`);
+    act(() => grid.focus());
+    // Up to the header, right to Status, then move it right and widen it.
+    await user.keyboard('{ArrowUp}{ArrowRight}{Control>}{Shift>}{ArrowRight}{/Shift}{/Control}');
+    await waitFor(() => expect(router.state.location.search.cols).toEqual(['url', 'title', 'statusCode']));
+    await user.keyboard('{Shift>}{ArrowRight}{/Shift}');
+    expect(getSettings().gridColumns.urls?.widths).toEqual({ statusCode: 120 });
+  });
+
+  it('saves a view with its columns’ widths and pins, and lays them out so when it opens', async () => {
+    sidecar();
+    updateSettings({ gridColumns: { urls: { widths: { title: 300 }, pinned: ['url'] } } });
+    const { router, user } = await open(`${URLS}?sort=-depth`);
+    act(() => void commands.run('urls.saveView'));
+    const dialog = await screen.findByRole('dialog', { name: 'Save this view' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Deep{Enter}');
+    expect(getSettings().savedViews[0]?.layout).toEqual({ widths: { title: 300 }, pinned: ['url'] });
+    updateSettings({ gridColumns: {} });
+    await act(() => router.navigate({ to: '/crawls/$crawl/urls', params: { crawl: TEST_CRAWL_ID }, search: {} }));
+    await user.click(await screen.findByRole('button', { name: 'Saved views' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Deep' }));
+    await waitFor(() => expect(getSettings().gridColumns.urls).toEqual({ widths: { title: 300 }, pinned: ['url'] }));
+    const grid = await screen.findByRole('grid', { name: 'URLs' });
+    expect(within(grid).getAllByRole('columnheader')[0]).toHaveAttribute('data-pinned', 'true');
+  });
+});
+
+describe('round 5: the facets’ buttons', () => {
+  it('open on the first click whatever was open before (the audit’s Minor, never reproduced)', async () => {
+    sidecar();
+    const { user } = await open(URLS);
+    await user.click(screen.getByRole('button', { name: 'Filter by status' }));
+    await screen.findByRole('menu');
+    await user.click(screen.getByRole('button', { name: 'Filter by type' }));
+    expect(await screen.findByRole('menu')).toHaveTextContent(/^Type/);
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('searchbox', { name: 'Search URLs and titles' }));
+    await user.keyboard('abc');
+    await user.click(screen.getByRole('button', { name: 'Filter by type' }));
+    expect(await screen.findByRole('menu')).toHaveTextContent(/^Type/);
+  });
+});
+
+describe('round 5: the URL grid’s search (gap 23)', () => {
+  it('says Enter applies what’s typed, until it does', async () => {
+    sidecar();
+    const { user } = await open(URLS);
+    const field = screen.getByRole('searchbox', { name: 'Search URLs and titles' });
+    expect(field).toHaveAccessibleDescription('Press Enter to search.');
+    const end = () => field.parentElement!.querySelector('.si-field__hint[title="Press Enter to search"]');
+    expect(end()).toBeNull();
+    await user.type(field, 'home');
+    expect(end()).not.toBeNull();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(end()).toBeNull());
   });
 });

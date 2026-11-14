@@ -864,7 +864,9 @@ describe('the Links grid’s states', () => {
     const { router, user } = await open(`${LINKS}?sort=-text`, createQueryClientWithoutBackoff());
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
     // With what the engine said of it, in place: not only behind Details.
-    expect(screen.getByText('The view can’t be sorted by “text”.')).toBeVisible();
+    // In words, never the engine's id for the column (gap 27).
+    expect(screen.getByText(/^The links can’t be sorted by [A-Z][a-z ]+: filter by it instead\.$/)).toBeVisible();
+    expect(screen.queryByText(/“text”/)).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Reset the view' }));
     await counted('13 links');
     expect(router.state.location.search).toEqual({});

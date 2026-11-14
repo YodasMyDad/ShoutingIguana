@@ -163,7 +163,9 @@ describe('the URL grid without the URL summary', () => {
     const { router } = await open(`${URLS}?cols=url,outcome&sort=-outcome`);
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
     // With what the engine said of it, in place: not only behind Details.
-    expect(screen.getByText('The view can’t be sorted by “outcome”.')).toBeVisible();
+    // In words, never the engine's id for the column (gap 27).
+    expect(screen.getByText('The URLs can’t be sorted by Outcome: filter by it instead.')).toBeVisible();
+    expect(screen.queryByText(/“outcome”/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Reset the view' }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));
