@@ -37,6 +37,9 @@ impl LiveStatus {
 pub struct Hello {
     #[serde(default)]
     pub live: Vec<String>,
+    /// The exports running as the stream connects (E5): each one's latest `export` event follows.
+    #[serde(default)]
+    pub exports: Vec<String>,
 }
 
 /// `progress`, twice a second per live crawl. Only what the tray needs is read.
@@ -283,6 +286,8 @@ pub struct LiveView {
     names: HashMap<String, String>,
     /// Crawls seen crawling, until their end has been told.
     crawled: HashSet<String>,
+    /// Exports running: the engine mustn't be stopped under one (a data folder switch, an update's install).
+    exports: HashSet<String>,
 }
 
 impl LiveView {
@@ -439,6 +444,7 @@ impl LiveView {
         let menu = !self.crawls.is_empty();
         self.crawls.clear();
         self.crawled.clear();
+        self.exports.clear();
         Change { menu, progress: menu, ..Change::default() }
     }
 
@@ -456,6 +462,25 @@ impl LiveView {
     /// The crawl's end has been told (or it went on to something else): its next end starts afresh.
     pub fn finish(&mut self, id: &str) {
         self.crawled.remove(id);
+    }
+
+    /// A new stream's `hello`: the exports it lists are the ones running.
+    pub fn exports_running(&mut self, ids: &[String]) {
+        self.exports = ids.iter().cloned().collect();
+    }
+
+    /// An `export` event: running until it says it isn't.
+    pub fn export(&mut self, job: &ExportJob) {
+        if job.status == "running" {
+            self.exports.insert(job.export_id.clone());
+        } else {
+            self.exports.remove(&job.export_id);
+        }
+    }
+
+    /// Whether an export is being written.
+    pub fn exporting(&self) -> bool {
+        !self.exports.is_empty()
     }
 
     pub fn kinds(&self) -> LiveKinds {
@@ -519,7 +544,9 @@ mod tests {
     #[test]
     fn events_parse_with_the_sidecars_names() {
         let hello = Event::parse("hello", r#"{"live":["a","b"]}"#).unwrap();
-        assert!(matches!(hello, Event::Hello(Hello { live }) if live == ["a", "b"]));
+        assert!(matches!(hello, Event::Hello(Hello { live, .. }) if live == ["a", "b"]));
+        let exporting = Event::parse("hello", r#"{"live":[],"analyzing":[],"exports":["e1"]}"#).unwrap();
+        assert!(matches!(exporting, Event::Hello(Hello { exports, .. }) if exports == ["e1"]));
         let data = r#"{"crawlId":"a","status":"running","elapsedMs":5,"discovered":9,"queued":4,"inFlight":2,"fetched":3,
             "htmlPages":1,"redirects":0,"errors":0,"blocked":0,"robotsDisallowed":0,"skipped":0,"bytesDownloaded":9,"urlsPerSecond":1.5}"#;
         let Event::Progress(progress) = Event::parse("progress", data).unwrap() else { panic!("not progress") };
@@ -550,6 +577,28 @@ mod tests {
         assert_eq!(job.file_name(), "a.csv");
         assert_eq!(job.error.map(|error| error.title), Some("The disk is full.".to_owned()));
         assert!(Event::parse("export", "{}").is_err());
+    }
+
+    /// Round 5's review (R2-10): the shell knows when an export runs, from `hello` and the `export` events, so the
+    /// engine isn't stopped under one.
+    #[test]
+    fn the_view_knows_when_an_export_runs() {
+        let job =
+            |id: &str, status: &str| ExportJob { export_id: id.into(), status: status.into(), ..ExportJob::default() };
+        let mut view = LiveView::default();
+        assert!(!view.exporting());
+        view.exports_running(&["e1".into()]);
+        assert!(view.exporting());
+        view.export(&job("e1", "running"));
+        view.export(&job("e2", "running"));
+        view.export(&job("e1", "done"));
+        assert!(view.exporting(), "e2 still runs");
+        view.export(&job("e2", "cancelled"));
+        assert!(!view.exporting());
+        view.export(&job("e3", "running"));
+        view.clear();
+        assert!(!view.exporting(), "the sidecar went, and its exports with it");
+        assert_eq!(view.kinds(), LiveKinds::default(), "an export is no crawl or analysis");
     }
 
     #[test]

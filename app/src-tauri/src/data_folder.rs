@@ -15,6 +15,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
+use crate::live::model::LiveView;
 use crate::profile;
 use crate::shell::Shell;
 use crate::sync::lock;
@@ -81,6 +82,18 @@ pub fn writable(folder: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Why the folder can't be changed now: starting the engine again would cut off what runs in it, an export among it
+/// (round 5's review, R2-10: a big workbook failed half written).
+pub fn refusal(view: &LiveView) -> Option<&'static str> {
+    if view.kinds().any() {
+        Some("Something is running. Change the folder once it has finished, or after stopping it.")
+    } else if view.exporting() {
+        Some("A file is being exported. Change the folder once it has been saved, or after cancelling it.")
+    } else {
+        None
+    }
+}
+
 /// Stores `folder` (None: the default) as the data folder, the one before it as previous, and starts the engine again
 /// on it. Refused while a crawl or an analysis is live, or when the folder can't hold crawls. Blocks: never on the UI
 /// thread.
@@ -89,8 +102,8 @@ pub fn switch(app: &AppHandle, folder: Option<PathBuf>) -> Result<DataFolderChoi
     if crate::sidecar::data_dir_overridden() {
         return Err("This run's data folder is set by its environment, so it can't be changed here.".to_owned());
     }
-    if lock(&shell.live).kinds().any() {
-        return Err("Something is running. Change the folder once it has finished, or after stopping it.".to_owned());
+    if let Some(words) = refusal(&lock(&shell.live)) {
+        return Err(words.to_owned());
     }
     if let Some(folder) = &folder {
         writable(folder)?;
@@ -119,6 +132,19 @@ pub fn switch(app: &AppHandle, folder: Option<PathBuf>) -> Result<DataFolderChoi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Round 5's review (R2-10): an export running was no reason to wait, so a big workbook failed when the engine
+    /// started again on the new folder.
+    #[test]
+    fn the_folder_isnt_changed_under_an_export() {
+        let mut view = LiveView::default();
+        assert_eq!(refusal(&view), None);
+        view.exports_running(&["e1".into()]);
+        assert_eq!(
+            refusal(&view),
+            Some("A file is being exported. Change the folder once it has been saved, or after cancelling it.")
+        );
+    }
 
     #[test]
     fn a_folder_that_takes_a_file_is_writable() {

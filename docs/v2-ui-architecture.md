@@ -1684,9 +1684,13 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   `latest.json` from this repository's newest GitHub release
   (`https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json`, in `tauri.conf.json`'s
   `plugins.updater.endpoints`), and says the newer version, its date and what's new (the release's notes), or "You
-  have the newest version". Install and restart, on the user's word only, never while a crawl or an analysis runs:
-  the shell downloads the installer (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a
-  second), checks its minisign signature against `plugins.updater.pubkey`, stops the engine as quitting does, and runs
+  have the newest version". Install and restart, on the user's word only, never while a crawl, an analysis or an
+  export runs ("A file is being exported. Install the update once it has been saved."; the shell knows the exports
+  running from the event stream's `hello` and `export` events, `LiveView::exporting`): the shell downloads the
+  installer (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a second), checks its
+  minisign signature against `plugins.updater.pubkey`, asks again whether anything runs, under the quit lock (a crawl
+  started during a slow download: "Something started while the update downloaded. Install it once that has
+  finished.", and nothing is stopped; round 5's review, R2-3), stops the engine as quitting does, and runs
   the NSIS installer passively; it closes the app and starts the new version. A download whose signature doesn't
   match is never run. Nothing is checked on its own: the user asks.
 
@@ -1735,7 +1739,8 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   hundreds of MB; a move of gigabytes can fail half way (a full disk, a file another program holds open, an
   antivirus scan), leaving crawls in two places, and needs its own progress, cancel and recovery, while a switch
   can't lose anything, is instant, and is undone by Go back. A user who wants the files moved moves them in Explorer:
-  the library lists the `.sicrawl` files at the top of its folder. Refused while a crawl or an analysis runs. A
+  the library lists the `.sicrawl` files at the top of its folder. Refused while a crawl, an analysis or an export
+  runs ("A file is being exported. Change the folder once it has been saved, or after cancelling it."; R2-10). A
   chosen folder that has gone (a drive unplugged) is passed over for that run, and stays chosen. `SI_APP_DATA_DIR`
   (tests, development) still wins, and Settings then says it can't be changed.
 - **A proxy test** (`POST /api/proxy/test`, `crawl/options/ProxyTest.tsx`): beside every proxy field, it fetches the
