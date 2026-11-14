@@ -180,11 +180,20 @@ test.describe('G6: the Report', () => {
 });
 
 test.describe('Gap 26: each screen names the window', () => {
+  /** The site as the title names it: its host and its port, as Your sites tells sites apart (round 5's gap 30). */
+  const titled = async () => {
+    const { startUrl } = await read<{ startUrl: string }>(`/api/crawls/${idle}`);
+    const host = new URL(startUrl).host;
+    expect(host.startsWith(site()), 'the site is its host, then any port of its own').toBe(true);
+    return host;
+  };
+
   test('Advanced', async ({ page }) => {
+    const named = await titled();
     await openIn(page, 'advanced', `/crawls/${idle}/issues`, { width: 1280, height: 720 });
-    await expect(page).toHaveTitle(`Issues · ${site()} · Shouting Iguana`);
+    await expect(page).toHaveTitle(`Issues · ${named} · Shouting Iguana`);
     await page.goto(`/crawls/${idle}/urls`);
-    await expect(page).toHaveTitle(`URLs · ${site()} · Shouting Iguana`);
+    await expect(page).toHaveTitle(`URLs · ${named} · Shouting Iguana`);
     await page.goto('/new');
     await expect(page).toHaveTitle('New crawl · Shouting Iguana');
     await page.goto('/');
@@ -192,10 +201,11 @@ test.describe('Gap 26: each screen names the window', () => {
   });
 
   test('Simple', async ({ page }) => {
+    const named = await titled();
     await openIn(page, 'simple', `/crawls/${idle}/issues`, { width: 1280, height: 720 });
-    await expect(page).toHaveTitle(`What to fix · ${site()} · Shouting Iguana`);
+    await expect(page).toHaveTitle(`What to fix · ${named} · Shouting Iguana`);
     await page.goto(`/crawls/${idle}/overview`);
-    await expect(page).toHaveTitle(`Summary · ${site()} · Shouting Iguana`);
+    await expect(page).toHaveTitle(`Summary · ${named} · Shouting Iguana`);
     await page.goto('/new');
     await expect(page).toHaveTitle('Check a website · Shouting Iguana');
   });
