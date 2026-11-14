@@ -7,6 +7,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { colourTweensEnd } from './colourTweens';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
+import { siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -126,7 +127,7 @@ const expectShown = (page: Page, expected: number) => expect.poll(() => shown(pa
 /** From Home to the seeded crawl's Links, by the sidebar, as a user goes. */
 async function openLinks(page: Page) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: /^Links/ })

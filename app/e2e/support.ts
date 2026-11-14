@@ -16,6 +16,9 @@ export const env = (name: string) => {
 /** What the library calls the crawl the tests run against. */
 export const site = () => env('SI_E2E_SITE');
 
+/** The same crawl as Home's rows name its site: its host and any port of its own ("127.0.0.1:5001"). */
+export const siteRow = () => env('SI_E2E_SITE_ROW');
+
 /** The sidecar, from the test itself (no page, so no CORS). */
 export async function sidecar(route: string, init: Omit<RequestInit, 'headers'> = {}): Promise<Response> {
   return fetch(`${env('SI_E2E_SIDECAR')}${route}`, {
@@ -107,7 +110,7 @@ export async function expectNoViolations(page: Page) {
 /** From Home to one of the crawl's sections, through the library and the sidebar, as a user goes. */
 export async function openSection(page: Page, section: RegExp) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: section }).first().click();
 }
 

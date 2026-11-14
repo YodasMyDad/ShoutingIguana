@@ -5,7 +5,8 @@ import { useMemo, useRef, useState, type Ref, type SyntheticEvent } from 'react'
 import { libraryQuery, queryKeys } from '../api/queries';
 import { startCrawl, quickStartUrl, continueCrawl, analyseCrawl } from '../crawl/actions';
 import { canOpenCrawlFiles } from '../crawl/fileOpening';
-import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { crawlControls, effectiveStatus } from '../crawl/status';
+import { siteName } from '../simple/home/sites';
 import { ErrorState } from '../feedback/ErrorState';
 import { SkeletonRows } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
@@ -179,7 +180,7 @@ function Library({ titleRef }: { titleRef: Ref<HTMLSpanElement> }) {
         const status = effectiveStatus(item, liveStore.getState().crawls[item.id]) ?? item.status;
         const actions = crawlActions(item, status);
         const controls = crawlControls(status, item);
-        const name = crawlName(item);
+        const name = siteName(item);
         const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
         return [
           {

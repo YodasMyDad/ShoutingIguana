@@ -4,7 +4,7 @@
 // attached. On the 100k crawl:
 //   SI_E2E_CRAWL="%LOCALAPPDATA%\ShoutingIguana\dev-crawls\synthetic-100k.sicrawl" npx playwright test e2e/home-overview-measure.spec.ts
 import { expect, test } from '@playwright/test';
-import { countOf, read, seededCrawl, site } from './support';
+import { countOf, read, seededCrawl, siteRow } from './support';
 
 const TIMES = 5;
 
@@ -34,7 +34,7 @@ test('Overview shows its totals within the budget, opened from URLs', async ({ p
 test('Home’s library answers a click within 100 ms: a row’s menu', async ({ page }) => {
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
-  const actions = library.getByRole('button', { name: `Actions for ${site()}` });
+  const actions = library.getByRole('button', { name: `Actions for ${siteRow()}` });
   await expect(actions).toBeVisible();
   const times: number[] = [];
   for (let run = 0; run < TIMES; run++) {

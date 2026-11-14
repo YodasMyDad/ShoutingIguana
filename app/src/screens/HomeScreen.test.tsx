@@ -466,3 +466,26 @@ describe('Home’s card for a crawl being analysed, and its Crawled figure (roun
     expect(within(card).queryByText(/on the site/)).toBeNull();
   });
 });
+
+describe('Home’s library, a site by its host and port (round 5 integration’s leftover)', () => {
+  it('names two crawls of one host on different ports as two sites, each with its port', async () => {
+    const one = testCrawlItem({
+      id: 'a000000000000001',
+      site: '127.0.0.1',
+      startUrl: 'http://127.0.0.1:5001/',
+      fileName: 'one.sicrawl',
+    });
+    const two = testCrawlItem({
+      id: 'a000000000000002',
+      site: '127.0.0.1',
+      startUrl: 'http://127.0.0.1:5002/',
+      fileName: 'two.sicrawl',
+    });
+    await open(() => json([one, two]));
+    const library = await screen.findByRole('region', { name: 'Library' });
+    expect(await within(library).findByRole('link', { name: '127.0.0.1:5001' })).toBeVisible();
+    expect(within(library).getByRole('link', { name: '127.0.0.1:5002' })).toBeVisible();
+    expect(within(library).getByRole('button', { name: 'Actions for 127.0.0.1:5001' })).toBeVisible();
+    expect(within(library).getByText('2 sites, 2 crawls')).toBeVisible();
+  });
+});

@@ -5,7 +5,7 @@
 // are drawn on the seeded crawl. The screenshots (1280x720 in both themes, and 200%) go to test-results/r5-home/.
 import { expect, test, type Page } from '@playwright/test';
 import path from 'node:path';
-import { countOf, env, expectNoViolations, read, seededCrawl, site } from './support';
+import { countOf, env, expectNoViolations, read, seededCrawl, siteRow } from './support';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
 
 const SHOTS = path.join(import.meta.dirname, '..', 'test-results', 'r5-home');
@@ -119,9 +119,9 @@ for (const size of [
 test('a crawl’s actions are in its menu: Remove puts it back with Undo, Delete file asks first', async ({ page }) => {
   await page.goto('/');
   const library = page.getByRole('region', { name: 'Library' });
-  await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
+  await expect(library.getByRole('link', { name: siteRow(), exact: true })).toBeVisible();
 
-  await library.getByRole('button', { name: `Actions for ${site()}` }).click();
+  await library.getByRole('button', { name: `Actions for ${siteRow()}` }).click();
   const menu = page.getByRole('menu');
   await expect(menu.getByRole('menuitem')).toHaveText([
     'Open',
@@ -132,18 +132,18 @@ test('a crawl’s actions are in its menu: Remove puts it back with Undo, Delete
   ]);
   await shoot(page, 'home-menu');
   await menu.getByRole('menuitem', { name: 'Remove from library' }).click();
-  await expect(library.getByRole('link', { name: site(), exact: true })).toBeHidden();
+  await expect(library.getByRole('link', { name: siteRow(), exact: true })).toBeHidden();
   // Focus never falls to the page when the row goes.
   await expect.poll(() => page.evaluate(() => document.activeElement !== document.body)).toBe(true);
   await page.locator('[data-sonner-toast]').getByRole('button', { name: 'Undo' }).click();
-  await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(library.getByRole('link', { name: siteRow(), exact: true })).toBeVisible({ timeout: 10_000 });
   // The toast gives focus back as it goes: wait for it, as a hand on the mouse would.
   await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 15_000 });
 
   // Delete file… names the crawl and its file, and Cancel leaves it be.
-  await library.getByRole('button', { name: `Actions for ${site()}` }).click();
+  await library.getByRole('button', { name: `Actions for ${siteRow()}` }).click();
   await page.getByRole('menuitem', { name: 'Delete file…' }).click();
-  const dialog = page.getByRole('dialog', { name: `Delete ${site()}’s crawl file?` });
+  const dialog = page.getByRole('dialog', { name: `Delete ${siteRow()}’s crawl file?` });
   await expect(dialog).toContainText('is deleted from the disk');
   await shoot(page, 'home-delete');
   await dialog.getByRole('button', { name: 'Cancel' }).click();

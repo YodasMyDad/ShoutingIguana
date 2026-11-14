@@ -3,13 +3,16 @@
 import { api } from '../../api/client';
 import type { CrawlListItem } from '../../api/types';
 import { saidWhileAnalysing } from '../../crawl/actions';
-import { crawlName } from '../../crawl/status';
+import { siteName } from '../../simple/home/sites';
 import { notifyError, notifyUndo } from '../../feedback/notify';
 import { formatExactTime } from '../../lib/format';
 
-/** "gardenfurnituresets.co.uk", or for an older crawl of a site, "gardenfurnituresets.co.uk, 31 Oct 2026, 14:13". */
+/**
+ * "gardenfurnituresets.co.uk", with its port when it has one of its own ("127.0.0.1:5001": one host on two ports is two
+ * sites), or for an older crawl of a site, "gardenfurnituresets.co.uk, 31 Oct 2026, 14:13".
+ */
 export function crawlLabel(item: CrawlListItem, older: boolean): string {
-  const name = crawlName(item);
+  const name = siteName(item);
   return older && item.startedAt ? `${name}, ${formatExactTime(item.startedAt)}` : name;
 }
 
@@ -18,7 +21,7 @@ export async function removeFromLibrary(item: CrawlListItem, refresh: () => Prom
   try {
     await api.removeCrawl(item.id);
     void refresh();
-    notifyUndo(`${crawlName(item)} was removed from the library. The file is still on disk.`, () => {
+    notifyUndo(`${siteName(item)} was removed from the library. The file is still on disk.`, () => {
       void api
         .restoreCrawl(item.id)
         .then(refresh)

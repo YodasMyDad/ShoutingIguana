@@ -10,7 +10,8 @@ import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
 import { useVisibleIssueCounts } from '../../crawl/visibleIssues';
-import { crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { crawledUrls, effectiveStatus } from '../../crawl/status';
+import { siteName } from '../../simple/home/sites';
 import { formatBytes, formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
 import { useLiveCrawl } from '../../live/liveStore';
@@ -199,7 +200,7 @@ function CrawlRow({
                 title={item.startUrl ?? item.path}
               >
                 {/* An older crawl is named by when it started, in full: its site is the row above's. */}
-                {nested ? label : crawlName(item)}
+                {nested ? label : siteName(item)}
               </TextLink>
               {runningId ? <RunningBadge id={runningId} /> : null}
             </span>
@@ -264,7 +265,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">
           {item.issues ? 'Analysed so far. ' : 'Part way. '}
-          <InlineAction words="Continue" crawl={crawlName(item)} onClick={() => void continueCrawl(item.id)} />
+          <InlineAction words="Continue" crawl={siteName(item)} onClick={() => void continueCrawl(item.id)} />
         </span>
       ) : null;
     case 'outOfDate':
@@ -273,8 +274,7 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
           Analysis out of date
           {actions.canAnalyse ? (
             <>
-              .{' '}
-              <InlineAction words="Analyse again" crawl={crawlName(item)} onClick={() => void analyseCrawl(item.id)} />
+              . <InlineAction words="Analyse again" crawl={siteName(item)} onClick={() => void analyseCrawl(item.id)} />
             </>
           ) : null}
         </span>
@@ -306,7 +306,7 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
         Not analysed yet.{' '}
         <InlineAction
           words={analyseWords(item, status)}
-          crawl={crawlName(item)}
+          crawl={siteName(item)}
           onClick={() => void analyseCrawl(item.id)}
         />
       </span>
@@ -342,5 +342,5 @@ function LocateButton({ item }: { item: CrawlListItem }) {
       void navigate({ to: '/crawls/$crawl', params: { crawl: opened.id } });
     });
   };
-  return <InlineAction words="Locate the file…" crawl={crawlName(item)} onClick={() => void locate()} />;
+  return <InlineAction words="Locate the file…" crawl={siteName(item)} onClick={() => void locate()} />;
 }

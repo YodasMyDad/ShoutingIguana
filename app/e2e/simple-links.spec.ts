@@ -5,7 +5,7 @@
 // hand-over to the Summary are walked with a live check in e2e/simple-home.spec.ts.
 import { expect, test, type Page } from '@playwright/test';
 import type { Analysis } from '../src/api/types';
-import { read, seededCrawl, sidecar, site, type SeededCrawl } from './support';
+import { read, seededCrawl, sidecar, siteRow, type SeededCrawl } from './support';
 
 const main = (page: Page) => page.locator('#main');
 const sheet = (page: Page) => page.frameLocator('iframe[title^="The report for"]');
@@ -34,7 +34,7 @@ test.describe('in Simple', () => {
     const { crawl } = await scoredCrawl();
     await page.goto('/');
     await main(page)
-      .getByRole('button', { name: `More for ${site()}` })
+      .getByRole('button', { name: `More for ${siteRow()}` })
       .first()
       .click();
     await page.getByRole('menuitem', { name: 'Open the report' }).click();

@@ -4,6 +4,7 @@
 // with its counts (`pagesAnalyzed`, `crawledUrlCount`), and no check's count is more than it. Overview's "Fix first"
 // and the inspector word the same counts the same way, and six-digit counts keep their room. Nothing here waits on a clock: every expectation is of what the screen says in the end.
 import { expect, test, type Page } from '@playwright/test';
+import { siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -129,7 +130,7 @@ const figure = (page: Page, label: string) => detailOf(page).getByText(label, { 
 /** From Home to the crawl's Issues, through the sidebar, as a user goes. */
 async function openIssues(page: Page) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: /^Issues/ })
@@ -311,7 +312,7 @@ test('Fix first counts each check in what it flags, and says its order in words 
   const { item, checks, counts } = await crawlFacts();
   const byId = new Map(checks.map((check) => [check.id, check]));
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/crawls/${item.id}/overview$`));
   const fix = page.getByRole('main').getByRole('region', { name: 'Fix first' });
   // The engine's order (the analysis's fixFirst), in its words.

@@ -5,14 +5,13 @@
 // expect it.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
-import { expectNoViolations, read } from './support';
+import { expectNoViolations, read, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
   if (!value) throw new Error(`global-setup sets ${name}`);
   return value;
 };
-const site = () => env('SI_E2E_SITE');
 
 let seeded: string[] = [];
 test.beforeAll(async () => {
@@ -30,7 +29,7 @@ const count = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, '')
 /** From Home to the seeded crawl's Overview, as a user goes. */
 async function openOverview(page: Page) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/overview$/);
   await expect(main(page).getByRole('heading', { name: 'Fix first' })).toBeVisible();
   // The breakdowns have arrived too.

@@ -4,7 +4,8 @@ import { useMemo } from 'react';
 import type { CrawlListItem } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { cancelAnalysis, pauseOrResume, stopCrawl } from '../../crawl/actions';
-import { crawlControls, crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { crawlControls, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { siteName } from '../../simple/home/sites';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { useMinuteClock } from '../../lib/clock';
 import { formatCount, formatCountOf, formatDuration, formatRate, formatRelativeTime } from '../../lib/format';
@@ -40,7 +41,7 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
   const status = effectiveStatus(item, live) ?? item.status;
   const controls = crawlControls(status, item);
   const progress = live?.progress ?? null;
-  const name = crawlName(item);
+  const name = siteName(item);
   const crawled = progress ? crawledSoFar(progress) : crawledUrls(item);
   const found = foundSplit(progress);
   const spark = useMemo(() => sparkOf(live?.history ?? []), [live?.history]);
