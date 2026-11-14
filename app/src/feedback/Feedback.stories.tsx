@@ -154,36 +154,55 @@ function Toasts() {
 
 export const ToastsWithTheirRules: Story = { render: () => <Toasts /> };
 
-/**
- * Toasts with one action and with two, shown at once (the closing audit's gap 11): two actions go under the text,
- * together, at the right; one long one goes under it too. The text never goes
- * narrower than --toast-text-min, in either theme or mode, at 200% zoom too.
- */
-function ToastsWithTheirActions() {
+type ShownToast = Parameters<typeof notifyResult>[1] & { title: string };
+
+/** One toast, shown as the story opens and kept while it's looked at. */
+function ShownToast({ title, ...options }: ShownToast) {
   useEffect(() => {
-    const none = () => undefined;
-    notifyResult('gardenfurnituresets.co.uk is checked', {
-      id: 'two-simple',
-      description: 'Score 85: 6 problems to fix',
-      secondary: { label: 'See the summary', onClick: none },
-      action: { label: 'Open the report', onClick: none },
-    });
-    notifyResult('Crawl stopped', {
-      id: 'two-advanced',
-      description: 'gardenfurnituresets.co.uk: 4,521 URLs, 19 checks found issues. You can continue it later.',
-      secondary: { label: 'View issues', onClick: none },
-      action: { label: 'Continue', onClick: none },
-    });
-    notifyResult('gardenfurnituresets.co.uk is checked', {
-      id: 'one-long',
-      description: 'Its results weren’t worked out. Work out the results to see its score and what to fix.',
-      action: { label: 'Work out the results', onClick: none },
-    });
+    notifyResult(title, { id: title, ...options });
     return () => {
       toast.dismiss();
     };
-  }, []);
+  });
   return <AppToaster />;
 }
 
-export const ToastsWithOneActionAndTwo: Story = { render: () => <ToastsWithTheirActions /> };
+const none = () => undefined;
+
+/**
+ * Toasts with two actions (the closing audit's gap 11): the actions go under the text, together, at the right, and the
+ * text never goes narrower than --toast-text-min, in either theme or mode, at 200% zoom too. Simple's words.
+ */
+export const ToastWithTwoActions: Story = {
+  render: () => (
+    <ShownToast
+      title="gardenfurnituresets.co.uk is checked"
+      description="Score 85: 6 problems to fix"
+      secondary={{ label: 'See the summary', onClick: none }}
+      action={{ label: 'Open the report', onClick: none }}
+    />
+  ),
+};
+
+/** Two actions in Advanced's words, with a longer text. */
+export const ToastWithTwoActionsAdvanced: Story = {
+  render: () => (
+    <ShownToast
+      title="Crawl stopped"
+      description="gardenfurnituresets.co.uk: 4,521 URLs, 19 checks found issues. You can continue it later."
+      secondary={{ label: 'View issues', onClick: none }}
+      action={{ label: 'Continue', onClick: none }}
+    />
+  ),
+};
+
+/** One action too long to sit beside the text at a readable measure: it goes under it. */
+export const ToastWithOneLongAction: Story = {
+  render: () => (
+    <ShownToast
+      title="gardenfurnituresets.co.uk is checked"
+      description="Its results weren’t worked out. Work out the results to see its score and what to fix."
+      action={{ label: 'Work out the results', onClick: none }}
+    />
+  ),
+};
