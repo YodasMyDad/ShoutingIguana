@@ -224,6 +224,14 @@ Advanced Home names a site by host only (two ports, one name); `GoToUrl` tests g
 reviewers at once from [`brief-round5-review.md`](handoff/2026-11-14/brief-round5-review.md) (R1 the app, R2 the
 engine, API and shell with security), then their fixes.
 
+**2026-11-14: reviewed.** R1 (the app) 12 findings, one high (an open Delete confirmation re-targets to another
+crawl and deletes its file); R2 (engine, API, shell) 11, none high, security sound (no key in history; updater
+signature and downgrade checks hold). Both lists in [`reviews/`](handoff/2026-11-14/reviews/). The integrated branch
+also passed the Linux CI job in Docker. **Fixes launched** on `008b4b2` from
+[`brief-round5-fixes.md`](handoff/2026-11-14/brief-round5-fixes.md): F1 the app (`ui/r5-fix-app`, incl. Advanced
+Home's host+port names and the `GoToUrl` cause), F2 engine and shell (`ui/r5-fix-engine`). Then: merge both into
+`ui/r5-integrate`, the whole-suite verify, both smoke walks, Linux in Docker, the gallery, merge into `ui/step-3`.
+
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
    `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
