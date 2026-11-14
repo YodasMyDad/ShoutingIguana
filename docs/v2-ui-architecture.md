@@ -2106,7 +2106,7 @@ The four parts of round 5 were built at once and merged on `ui/r5-integrate`. Wh
   `https://` added blindly.
 - **A crawl analysed since it was stopped** (part A analyses a crawl the user stops) is busy until that ends: Continue,
   Remove and Delete are refused. Home's running card and Simple's live row show it as analysing (working out the
-  results) with **Cancel the analysis** (Simple: Cancel, "Stop working out the results for {site}"); a refusal that
+  results) with **Cancel the analysis** (Simple: Cancel, "Cancel working out the results for {site}"); a refusal that
   comes before the status does says why in the mode's words, with the same action (`saidWhileAnalysing`), never the
   bare refusal, and a Delete confirmation closes on it.
 - **One running heading**, `runningTitle` (`crawl/runningWords.ts`), with both modes' words and "stopping".

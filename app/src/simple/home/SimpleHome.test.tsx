@@ -214,7 +214,7 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     const row = within(sites).getByRole('link', { name: 'gardenfurnituresets.co.uk' }).closest('li')!;
     expect(within(row).getByText('Working out the results. They appear here when they’re ready.')).toBeVisible();
     await userEvent.click(
-      within(row).getByRole('button', { name: 'Stop working out the results for gardenfurnituresets.co.uk' }),
+      within(row).getByRole('button', { name: 'Cancel working out the results for gardenfurnituresets.co.uk' }),
     );
     await vi.waitFor(() =>
       expect(sidecar.requests.map((request) => request.path)).toContain(`/api/crawls/${stopped.id}/analyze/cancel`),

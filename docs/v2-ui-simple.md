@@ -932,7 +932,7 @@ What round 5 settled, where it differs from the above or adds to it:
   stopped toast is said again with the results so far ("Score 87 so far: 5 problems to fix. You can continue it
   later.", See the summary, Continue). A check stopped by the app quitting, interrupted or failed still says No score
   yet with Work out the results. **Open the report** is offered in the head only over results. While it's worked
-  out, Your sites' row says so with **Cancel** ("Stop working out the results for {site}"), and Continue, taking it
+  out, Your sites' row says so with **Cancel** ("Cancel working out the results for {site}"), and Continue, taking it
   off Your sites or deleting its file meanwhile say "The results for {site} are being worked out." with **Stop
   working them out**, never the engine's refusal (joined with part B's Home on integration).
 - **The head's line** says how long the check read for: "Checked on 31 October 2026. 265 pages read in 37 min 25 s."; a

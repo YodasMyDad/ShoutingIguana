@@ -110,7 +110,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
         size="sm"
         icon={X}
         onClick={() => void cancelAnalysis(item.id)}
-        aria-label={`Stop working out the results for ${name}`}
+        aria-label={`Cancel working out the results for ${name}`}
       >
         Cancel
       </Button>
