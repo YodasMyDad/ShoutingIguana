@@ -714,20 +714,22 @@ function GridCoreInner<Row>({
   };
 
   /** A column's menu, open at a point: pin, move, resize. */
-  const [headerMenu, setHeaderMenu] = useState<{ col: number; at: { x: number; y: number }; open: boolean } | null>(
-    null,
-  );
+  // Each opening is a menu of its own, placed afresh at its point (see `RowMenuState.opening`).
+  const [headerMenu, setHeaderMenu] = useState<{
+    col: number;
+    at: { x: number; y: number };
+    open: boolean;
+    opening: number;
+  } | null>(null);
+  const openHeaderMenu = (col: number, at: { x: number; y: number }) =>
+    setHeaderMenu((current) => ({ col, at, open: true, opening: (current?.opening ?? 0) + 1 }));
   const openHeaderMenuFromKeys = (col: number) => {
     const element = scrollRef.current;
     if (!element) return;
     const box = element.getBoundingClientRect();
     const pin = offsets.pins[col];
     const left = box.left + (pin ?? (offsets.lefts[col] ?? 0) - element.scrollLeft);
-    setHeaderMenu({
-      col,
-      at: { x: Math.min(Math.max(left, box.left), box.right), y: box.top + headerHeight },
-      open: true,
-    });
+    openHeaderMenu(col, { x: Math.min(Math.max(left, box.left), box.right), y: box.top + headerHeight });
   };
 
   // A header being dragged to another place: which column, where the pointer started, and where it would go.
@@ -1041,7 +1043,7 @@ function GridCoreInner<Row>({
                         event.preventDefault();
                         setHeaderCursor(col);
                         scrollRef.current?.focus({ preventScroll: true });
-                        setHeaderMenu({ col, at: { x: event.clientX, y: event.clientY }, open: true });
+                        openHeaderMenu(col, { x: event.clientX, y: event.clientY });
                       },
                     }
                   : {})}
@@ -1224,6 +1226,7 @@ function GridCoreInner<Row>({
       ) : null}
       {columnLayout ? (
         <MenuAt
+          key={headerMenu?.opening ?? 0}
           at={headerMenu?.at ?? null}
           open={headerMenu?.open ?? false}
           onOpenChange={(open) => setHeaderMenu((current) => (current ? { ...current, open } : current))}

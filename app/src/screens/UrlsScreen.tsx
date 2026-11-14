@@ -22,13 +22,16 @@ import { canEditFilter, refusedFilter, tooManyFiltersWords } from '../grid/filte
 import { filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { GRID_KEY_HINTS } from '../grid/gridFoot';
+import { useSearchApplyHint } from '../grid/SearchApplyHint';
+import { queryRefusalWords } from '../grid/queryRefusal';
 import { storeColumnLayout, useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { RefusedFilter } from '../grid/RefusedFilter';
 import { searchCommand } from '../grid/searchCommand';
-import { RowMenu, UrlRowItems } from '../grid/RowMenu';
+import { RowMenu, UrlRowItems, ValueFilterItems } from '../grid/RowMenu';
+import { cellValueFilters, withValueFilter } from '../grid/valueFilter';
 import { copyRowUrls, rowMenuLabel, useRowMenu } from '../grid/rowMenuState';
 import type { SavedView } from '../grid/savedViews';
 import { nextMultiSort, sortFullWords, useHeaderHandoff } from '../grid/sort';
@@ -339,6 +342,7 @@ export function UrlsScreen() {
     const value = text.trim();
     void navigate({ search: (previous) => ({ ...previous, q: value || undefined }) });
   };
+  const searchHint = useSearchApplyHint(draft.trim() !== (q ?? ''));
 
   const failed = rows.error !== null && rows.error !== undefined && rowCount === null;
   const [adding, setAdding] = useState(false);
@@ -444,6 +448,17 @@ export function UrlsScreen() {
   // The row as it was when the menu opened: rows can move under a running crawl while it is open.
   const menuRow = rowMenu.state?.menu.row;
   const menuCount = rowMenu.state?.menu.indices.length ?? 1;
+  // The cell the menu was opened on: its value's filters ("Filter by this value", "Exclude this value").
+  const menuCell = cellValueFilters(
+    rowMenu.state ? laid.columns[rowMenu.state.column]?.id : undefined,
+    menuRow as Readonly<Record<string, unknown>> | undefined,
+    catalogue.data,
+    summaryAvailable,
+  );
+  const sentenceOf = (filter: GridFilter) =>
+    filterSentences(filter, words, relatedUrl)
+      .map((sentence) => `${sentence.field} ${sentence.op} ${sentence.value}`)
+      .join(', ');
 
   useCommands(
     (): Command[] => [
@@ -618,23 +633,29 @@ export function UrlsScreen() {
         badge={crawling ? <LiveBadge /> : null}
         className="px-6 pt-2 pb-1"
         actions={
-          <SearchField
-            ref={searchRef}
-            label="Search URLs and titles"
-            placeholder="Search URLs and titles"
-            value={draft}
-            shortcut="mod+f"
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              // The same field whatever is searched for: Enter applies its text and focus stays in it.
-              if (event.key === 'Enter') applySearch(event.currentTarget.value);
-            }}
-            onClear={() => {
-              setDraft('');
-              if (q !== undefined) applySearch('');
-            }}
-            className="w-(--search-width)"
-          />
+          <>
+            {searchHint.note}
+            <SearchField
+              ref={searchRef}
+              label="Search URLs and titles"
+              // What fits beside the keys at the narrowest the field gets: its label says the rest.
+              placeholder="URL or title"
+              aria-describedby={searchHint.describedBy}
+              end={searchHint.end}
+              value={draft}
+              shortcut="mod+f"
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                // The same field whatever is searched for: Enter applies its text and focus stays in it.
+                if (event.key === 'Enter') applySearch(event.currentTarget.value);
+              }}
+              onClear={() => {
+                setDraft('');
+                if (q !== undefined) applySearch('');
+              }}
+              className="w-(--search-width)"
+            />
+          </>
         }
       />
       <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
@@ -791,10 +812,16 @@ export function UrlsScreen() {
               onRemove={() => setFilters(filters.filter((_, index) => index !== refused.index))}
             />
           ) : (
-            // Refused for something else the route holds (a column, a sort): the engine's sentence, and a way out.
+            // Refused for something else the route holds (a column, a sort): what it was, in words, and a way out.
             <ErrorState
               error={rows.error}
-              description={rows.error.detail}
+              description={queryRefusalWords(
+                rows.error.errors,
+                { sort, columns: shown },
+                (id) =>
+                  !catalogue.data || catalogue.data.some((entry) => entry.id === id) ? urlColumnName(id) : undefined,
+                'URLs',
+              )}
               actions={
                 <Button size="sm" onClick={() => void navigate({ search: {} })}>
                   Reset the view
@@ -881,6 +908,12 @@ export function UrlsScreen() {
             if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row.url);
           }}
           onCopyRows={() => void rowMenu.state?.menu.copy()}
+        />
+        <MenuSeparator />
+        <ValueFilterItems
+          cell={menuCell}
+          sentence={sentenceOf}
+          onFilter={(filter) => setFilters(withValueFilter(filters, filter))}
         />
         <MenuSeparator />
         <MenuItem

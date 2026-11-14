@@ -966,6 +966,28 @@ describe('the source', () => {
     expect(within(panel).getByRole('searchbox', { name: 'Search the HTML source' })).toHaveFocus();
   });
 
+  it('searches the source on Ctrl+F from its tab or its panel too, never the grid behind (gap 8)', async () => {
+    const { user, router } = await open(`${URLS}?inspect=2`);
+    const panel = await showTab(user, /^Source/);
+    await within(panel).findByTestId('source-viewer');
+    const field = within(panel).getByRole('searchbox', { name: 'Search the HTML source' });
+    const before = router.state.location.search;
+    // From the tab: the source's field, with what was searched for last selected.
+    const tab = screen.getByRole('tab', { name: /^Source/ });
+    act(() => tab.focus());
+    await user.keyboard('{Control>}f{/Control}');
+    await waitFor(() => expect(field).toHaveFocus());
+    await user.keyboard('patio');
+    // From the panel itself.
+    act(() => panel.focus());
+    await user.keyboard('{Control>}f{/Control}');
+    await waitFor(() => expect(field).toHaveFocus());
+    expect((field as HTMLInputElement).selectionStart).toBe(0);
+    expect((field as HTMLInputElement).selectionEnd).toBe(5);
+    // Nothing reached the URL grid's search: the route's search is as it was.
+    expect(router.state.location.search).toEqual(before);
+  });
+
   it('answers the wrap switch at once, then lays the lines out, saying so until the viewer has', async () => {
     const { user } = await open(`${URLS}?inspect=2`);
     const panel = await showTab(user, /^Source/);

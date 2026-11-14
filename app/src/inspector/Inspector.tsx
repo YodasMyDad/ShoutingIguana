@@ -12,7 +12,7 @@ import {
   PanelRight,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { UrlDetail } from '../api/inspector';
@@ -23,8 +23,10 @@ import { announce } from '../feedback/announce';
 import { RegionBoundary } from '../feedback/RegionBoundary';
 import { Skeleton } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
+import { matchesChord, parseChord } from '../keyboard/keys';
 import { useCommands, type Command } from '../keyboard/registry';
 import { copyText } from '../lib/clipboard';
+import { isMac } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
 import { arrivedByName, useGoneToByName, useInspector } from '../routing/inspector';
 import { updateSettings, useSettings } from '../settings/settingsStore';
@@ -57,6 +59,9 @@ import { preloadSourceViewer } from './sourceViewerLoader';
 import { StructuredDataSection } from './StructuredDataSection';
 import { SummarySection } from './SummarySection';
 import { TYPE_WORDS, depthInBrief } from './words';
+
+/** Ctrl+F (Cmd+F on macOS): on the Source tab, the source's search. */
+const FIND = parseChord('mod+f');
 
 const COPIED_MS = 1_500;
 /** The link counts are read once the inspector has stayed on a URL this long: a grid's cursor passing by reads none. */
@@ -149,7 +154,11 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   // URL, so a section that mounts later (each URL has its own) never takes focus from where the keyboard is.
   const [searchRequest, setSearchRequest] = useState<{ urlId: number } | null>(null);
   if (searchRequest !== null && searchRequest.urlId !== urlId) setSearchRequest(null);
-  const searchFocused = useCallback(() => setSearchRequest(null), []);
+  const searchFocused = useCallback(() => {
+    setSearchRequest(null);
+    // As Ctrl+F does in the pane: what was searched for last is selected, to type over.
+    if (document.activeElement instanceof HTMLInputElement) document.activeElement.select();
+  }, []);
   const sheet = useRef<HTMLDivElement>(null);
   const choose = useCallback((next: SectionId) => {
     rememberSection(next);
@@ -344,9 +353,25 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
 
   const refreshing = query.isFetching && !waiting && !crawling;
   const compact = dock === 'bottom';
+  // Ctrl+F on the Source tab, from its tab, its panel or anywhere in the sheet, searches the source (docs/v2-ui-ia.md,
+  // Keyboard, "In the inspector"), never the grid behind. The pane takes the key itself with focus inside it (and
+  // prevents it): what reaches here is from the rest of the sheet.
+  const onSheetKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || section !== 'source' || notFound) return;
+    if (!matchesChord(FIND, event.nativeEvent, isMac)) return;
+    event.preventDefault();
+    setSearchRequest({ urlId });
+  };
   return (
     <InspectorContext value={context}>
-      <div ref={sheet} className="relative flex min-h-0 flex-1 flex-col" aria-busy={waiting || refreshing}>
+      {/* The sheet takes Ctrl+F for the Source tab's search: see onSheetKeyDown. */}
+      {/* eslint-disable-next-line jsx-a11y-x/no-static-element-interactions */}
+      <div
+        ref={sheet}
+        className="relative flex min-h-0 flex-1 flex-col"
+        aria-busy={waiting || refreshing}
+        onKeyDown={onSheetKeyDown}
+      >
         {refreshing ? <RefreshLine label="Reading this URL again" /> : null}
         {/* Docked at the bottom the sheet is short: what the URL is, the URL and the actions share one line. */}
         <div className={clsx('flex flex-wrap items-center gap-x-3 px-5', compact ? 'pt-2 pb-1' : 'pt-3 pb-2')}>
