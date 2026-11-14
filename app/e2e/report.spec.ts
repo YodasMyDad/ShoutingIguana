@@ -149,8 +149,12 @@ test.describe('in Simple', () => {
     try {
       const file = await saveAs(/^Save…/, /The report/, /^.+ \d{4}-\d{2}-\d{2} report\.html$/);
       expect(existsSync(file)).toBe(true);
-      const shown = await frame(page).getAttribute('srcdoc');
-      expect(readFileSync(file, 'utf8')).toBe(shown);
+      // The saved file is the document shown, without the app's scroll bars, which are the frame's alone (G6).
+      const shown = (await frame(page).getAttribute('srcdoc')) ?? '';
+      expect(shown).toContain('<style id="si-app-scroll-bars">');
+      const saved = readFileSync(file, 'utf8');
+      expect(saved).not.toContain('si-app-scroll-bars');
+      expect(saved).toBe(shown.replace(/<style id="si-app-scroll-bars">[\s\S]*?<\/style>/, ''));
 
       const workbook = await saveAs(/Spreadsheet of everything/, /Spreadsheet of everything/, /^.+ report\.xlsx$/);
       expect(path.basename(workbook)).toBe(path.basename(file).replace(/\.html$/, '.xlsx'));

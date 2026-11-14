@@ -19,6 +19,7 @@ import { Sidebar } from './Sidebar';
 import { StoppingOverlay } from './StoppingOverlay';
 import { TopBar } from './TopBar';
 import { useShellIntegration } from './useShellIntegration';
+import { useDocumentTitle } from './documentTitle';
 
 /**
  * The shell (docs/v2-ui-ia.md): the sidebar, the top bar, the main area and the inspector's slot, plus the
@@ -32,6 +33,7 @@ import { useShellIntegration } from './useShellIntegration';
 export function AppShell() {
   useAppCommands();
   useShellIntegration();
+  useDocumentTitle();
   useFocusAfterNavigation();
   useModeGuard();
   useCrawlSettingsOpener();
@@ -51,7 +53,7 @@ export function AppShell() {
   }, []);
   return (
     <>
-      <div inert={modal} className="flex h-full overflow-hidden bg-canvas text-text">
+      <div inert={modal} className="relative flex h-full overflow-hidden bg-canvas text-text">
         <a
           href="#main"
           className="sr-only z-50 rounded-sm bg-surface-overlay px-3 py-2 text-13 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
@@ -69,7 +71,7 @@ export function AppShell() {
             <SidecarBanner />
           </RegionBoundary>
           <div className={clsx('flex min-h-0 flex-1', dock === 'bottom' && 'flex-col')}>
-            <main id="main" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-auto outline-none">
+            <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-auto outline-none">
               <Outlet />
             </main>
             {inspector ? (

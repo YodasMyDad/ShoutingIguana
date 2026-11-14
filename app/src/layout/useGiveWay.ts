@@ -72,16 +72,32 @@ export function useGiveWay(ref: RefObject<HTMLElement | null>): void {
       measuring = false;
     };
     measure();
+    // The bar's width, and each part's: a part can grow with nothing in the bar changing (a font face that arrives
+    // once a crawl's pill first shows its count, a style sheet loaded late), and the bar must give way then too. The
+    // gallery's G1: in the real shell the switch was cut once a crawl started, the bar 1094 px of parts in 1056.
     const resize = new ResizeObserver(measure);
-    resize.observe(bar);
+    const observeParts = () => {
+      resize.disconnect();
+      resize.observe(bar);
+      for (const part of bar.children) resize.observe(part);
+    };
+    observeParts();
     // A count that grows, a crumb or a control that comes or goes: the parts' own changes, not the marks.
-    const content = new MutationObserver(measure);
+    const content = new MutationObserver((records) => {
+      if (records.some((record) => record.type === 'childList' && record.target === bar)) observeParts();
+      measure();
+    });
     content.observe(bar, { subtree: true, childList: true, characterData: true, attributeFilter: ['class', 'hidden'] });
-    // Fonts arriving change every width. (A test's DOM has no fonts.)
-    if ('fonts' in document) void document.fonts.ready.then(measure);
+    // Fonts arriving change every width, whenever they arrive. (A test's DOM has no fonts.)
+    const fonts = 'fonts' in document ? document.fonts : null;
+    if (fonts) {
+      void fonts.ready.then(measure);
+      fonts.addEventListener('loadingdone', measure);
+    }
     return () => {
       resize.disconnect();
       content.disconnect();
+      fonts?.removeEventListener('loadingdone', measure);
     };
   }, [ref]);
 }
