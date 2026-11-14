@@ -99,6 +99,9 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
   Show in folder, Remove from library (undo), Delete file… (asks first, naming the crawl and its file). An action the
   state doesn't allow is there, disabled. The palette has Open, Continue, Analyse again and Remove for each site's
   latest crawl, and Search the library.
+- A crawl stopped here is analysed at once: its card says so ("Analysing") with **Cancel the analysis**, and Continue,
+  Remove or Delete tried meanwhile say it is being analysed, with the same action, rather than refuse.
+- An address typed without its scheme starts where the site answers, https or http, as in Simple.
 - Every state is drawn: empty, one, many, running, paused, stopped, interrupted, failed, out of date, never analysed,
   in use elsewhere, missing, unreadable, filtered to nothing, loading and failing to load.
 - In a narrow window (200% zoom) the library keeps its Site column: Pages and when it started become second lines of
@@ -196,7 +199,8 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 - Actions: copy URLs (the check's, or the open group's), hide the check in this crawl or in every crawl (remembered,
   with Undo; its badge says which), and Export (Ctrl+E): this check, the open group's pages, the report and every
   check (the spreadsheet of everything), and with the list filtered, the spreadsheet of the checks it lists. Hidden
-  checks are left out of every count and list, the report and the workbook; the score stays the analysis's.
+  checks are left out of every count and list (Home's and Simple's Your sites' among them), the report, the workbook
+  and the crawl's toasts; the score stays the analysis's.
 
 **URLs.**
 

@@ -2066,20 +2066,23 @@ Part B of round 5 (the closing audit's gaps 3, 4, 15, 16, 17, 28 and 31).
   count in the checks list and Fix first, the share `checkShare` gives (of the pages analysed for a page check, of the
   URLs crawled for any other, both the analysis's own), said whole in the row's name and tooltip; a site-wide fault is
   "Whole site" and one reported once "Once", in the check's figures too, never "1 page, <0.1%".
-- **The sidebar's running crawls** say what each is doing (`runningHeading` in `crawl/status.ts`): "1 paused", never
-  "1 crawling" for a paused crawl.
+- **The sidebar's running crawls** say what each is doing (`runningTitle` in `crawl/runningWords.ts`, the one heading
+  for both modes since the integration): "1 paused", "2 crawling, 1 stopping", never "1 crawling" for a paused crawl;
+  in Simple "Checking now", "Paused", "Stopping" or "Working out the results".
 
 ### A dropped file
 
-- The shell's webview hands the page a drop's paths as Tauri's drag-and-drop events (the window is built with them
-  on, the default), which the page listens to with `getCurrentWebview().onDragDropEvent` under the `core:event`
-  permission it already has: nothing in the shell forwards them. On Windows those events replace HTML5 drag-and-drop
-  of files inside the webview; dragging elements within the page (pointer events) is unaffected.
+- The shell takes every drop on the window and forwards it as `shell://drag-drop` ([the shell and the
+  platform](#the-shell-and-the-platform-round-5)); `crawl/crawlDrop.ts`'s `shellDropSource` listens with
+  `ipc.onDragDrop`. That is the one way a drop reaches the page: part B first listened to the webview's own
+  drag-and-drop events (`getCurrentWebview().onDragDropEvent`) while part D built the shell's forward, and two
+  listeners would open a dropped file twice, so the integration kept the shell's. Dragging elements within the page
+  (pointer events) is unaffected.
 - `crawl/crawlDrop.ts` (pure): crawl files from the rest by their names, what a drag over the window says in each
   mode's words, and the toast for files that aren't crawl files. `crawl/CrawlFileDrop.tsx`, mounted once in
   `AppShell`: the overlay while files are over the window (shown, not read), and on a drop `openCrawlPaths`, as
   Ctrl+O's does: each file joins the library, the first that opens is shown, and one the engine can't read says why.
-- A plain browser sees no path, so there the window ignores a drop. `test/fakeDrops.ts` stands in for the webview in
+- A plain browser sees no path, so there the window ignores a drop. `test/fakeDrops.ts` stands in for the shell in
   tests and stories.
 
 ### Tests
@@ -2088,8 +2091,33 @@ Part B of round 5 (the closing audit's gaps 3, 4, 15, 16, 17, 28 and 31).
   Delete's confirmation, the running card, Open… and the palette), `crawl/crawlDrop.test.ts`,
   `crawl/CrawlFileDrop.test.tsx` (a drop opens the crawl from any screen; another file says why, the engine not
   asked; a damaged one gives the engine's reason; Simple's words), `crawl/checkSubject.test.ts` (`checkReach`),
-  `crawl/status.test.ts` (`runningHeading`).
+  `crawl/runningWords.test.ts` (the running heading).
 - End to end: `e2e/counts-agree.spec.ts` reads every screen's count of a crawl (Home, Overview's totals and its line,
   each total landing in URLs, Issues' shares, the report, Simple's Summary) against the engine's, on the seeded crawl,
   on the garden and 100k crawls with `SI_E2E_CRAWL`, and on a crawl of the test site, paused (Overview, the sidebar
   and Home's card from one moment) and finished.
+
+## Round 5 joined
+
+The four parts of round 5 were built at once and merged on `ui/r5-integrate`. Where they met:
+
+- **A bare address, both modes.** Advanced's Home starts a crawl of an address typed without its scheme through
+  `startUrlFor` (`crawl/actions.ts`), as Simple's Home and New crawl do: where the site answers, https or http, never
+  `https://` added blindly.
+- **A crawl analysed since it was stopped** (part A analyses a crawl the user stops) is busy until that ends: Continue,
+  Remove and Delete are refused. Home's running card and Simple's live row show it as analysing (working out the
+  results) with **Cancel the analysis** (Simple: Cancel, "Stop working out the results for {site}"); a refusal that
+  comes before the status does says why in the mode's words, with the same action (`saidWhileAnalysing`), never the
+  bare refusal, and a Delete confirmation closes on it.
+- **One running heading**, `runningTitle` (`crawl/runningWords.ts`), with both modes' words and "stopping".
+- **Hidden checks** (part C) stay out of every figure of checks, the parts' new ones too: Advanced Home's issue counts
+  and Simple's Your sites both read `useVisibleIssueCounts` (`crawl/visibleIssues.ts`: the library's counts with
+  nothing hidden, else the analysis less the hidden checks), and the finished and stopped toasts count the same way.
+  `e2e/counts-agree.spec.ts` runs with a check hidden in this crawl and with one hidden in every crawl.
+- **The window's title** names a site by its host and port (`siteName`, part A's), "URLs · 127.0.0.1:8080 · Shouting
+  Iguana".
+- **One way a drop arrives**: the shell's `shell://drag-drop` (above).
+- **Overview's "didn't read any pages"** says how the start URL's robots.txt answered (its rules, an error, no answer),
+  part A's robots states in Advanced's words (`screens/overview/emptyCrawl.ts`).
+- Not joined: Advanced Home names a site by its host alone (`crawlName`), so two crawls of one host on different ports
+  are two rows of one name there, while Simple, the title and the grouping tell them apart.

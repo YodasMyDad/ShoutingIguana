@@ -931,7 +931,10 @@ What round 5 settled, where it differs from the above or adds to it:
   its second step, then the Summary with the dashed ring "so far", the stopped banner and Continue checking. The
   stopped toast is said again with the results so far ("Score 87 so far: 5 problems to fix. You can continue it
   later.", See the summary, Continue). A check stopped by the app quitting, interrupted or failed still says No score
-  yet with Work out the results. **Open the report** is offered in the head only over results.
+  yet with Work out the results. **Open the report** is offered in the head only over results. While it's worked
+  out, Your sites' row says so with **Cancel** ("Stop working out the results for {site}"), and Continue, taking it
+  off Your sites or deleting its file meanwhile say "The results for {site} are being worked out." with **Stop
+  working them out**, never the engine's refusal (joined with part B's Home on integration).
 - **The head's line** says how long the check read for: "Checked on 31 October 2026. 265 pages read in 37 min 25 s."; a
   check stopped early "Stopped on 15 October 2026 after 6 min 40 s. 312 pages read so far.", as
   `summary-stopped.html`. A check an engine from before `crawlingMs` made says its start-to-finish span, as such
@@ -939,7 +942,8 @@ What round 5 settled, where it differs from the above or adds to it:
 - **One time for a check everywhere:** Home's "Last checked", the breadcrumb and the sidebar say when the check
   **started** (the Summary's date stays the day it finished, as above).
 - **Home tells sites apart by host and port:** two checks of 127.0.0.1 on different ports are two rows, each named
-  with its port ("127.0.0.1:8080"). A scheme's own port isn't the site's: http and https of one site are one row.
+  with its port ("127.0.0.1:8080"), as the window's title names them. Its problems leave out the checks hidden in
+  Advanced, in this check or in every check, as What to fix does. A scheme's own port isn't the site's: http and https of one site are one row.
 - **Where it is** counts what it lists ("The one cause is shown.", "Showing 25 of 126 causes.", "All 3 pages are
   shown.") and says where the addresses shown as paths are ("Addresses starting with “/” are on
   www.example.co.uk."), shortened against the origin the site's pages are on (www. or not), not always the start
@@ -952,7 +956,8 @@ What round 5 settled, where it differs from the above or adds to it:
   text under `--toast-text-min` (200 px) goes under it too.
 - **Simple's words everywhere it shows:** the palette's and the `?` sheet's What to fix heading, every saving message
   and toast (`exportWords`), About and Updates ("Site checker", not "Engine"), the Settings note, and the sidebar over
-  the checks running now (Checking now, Paused, Working out the results). `app/src/simple/simpleWords.test.tsx`
+  the checks running now (Checking now, Paused, Stopping, Working out the results: one heading with Advanced's,
+  `crawl/runningWords.ts`). `app/src/simple/simpleWords.test.tsx`
   draws every Simple screen, the palette, the sheet, the dialogs and the toasts and fails on any of the glossary's
   Advanced-only words (crawl, URL, issue, engine, analysis, Overview, library, indexable, and Error, Warning and
   Notice as severities).

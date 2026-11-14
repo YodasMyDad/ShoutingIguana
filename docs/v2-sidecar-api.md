@@ -3585,6 +3585,16 @@ the synthetic crawls' rows to the screens' reads; the garden crawl's lists weren
 URLs; anything on CI's runners, as nothing was pushed.
 ## Engine changes round 5 made
 
+Four parts built round 5 at once; this is their one account, merged on `ui/r5-integrate`.
+
+- **Where a bare address starts** (part A; gap 1). `POST /api/crawl-options/start-url` (above), with
+  `Fetching/StartAddress.ChooseAsync`: https and http asked at once, 10 s at most, https if it answers at all. Tests:
+  `StartAddressTests`, `CrawlOptionsTests`.
+- **A crawl the user stops is analysed** (part A; gap 2), as a completed one is, when it was started to be analysed
+  (`CrawlManager`): it says `stopped`, `analyzing`, then `stopped` again with its results "so far". One stopped by the
+  app quitting isn't. While that analysis runs, continue, remove and delete answer `crawl-busy` ("This crawl is being
+  analysed…"), and `POST /analyze/cancel` frees it; the app shows the state with Cancel the analysis. Tests:
+  `CrawlLifecycleTests`.
 - **One count of pages** (part B; the closing audit's gap 3). Home said 101,107 pages of the 100k crawl where Issues
   and Simple said 101,106: E7 kept the library's `pageCount` (every page the crawl parsed, Cloudflare's `/cdn-cgi/`
   endpoint among them) apart from the analysis's `pagesAnalyzed` (which leaves it out), each true by its own
@@ -3606,8 +3616,8 @@ URLs; anything on CI's runners, as nothing was pushed.
   `ExportFields`: `hiddenChecks` belongs to `report` and `workbook`, `checks` to `workbook`; the request's DTO, the
   `GET /report` query and `si export` (`--hidden-checks`, `--checks`) take them. Tested in `WorkbookExportTests`,
   `ReportDocumentTests` and `ExportEndpointsTests`.
-- **The proxy test** (part D). `POST /api/proxy/test` (above), for the proxy test in the app's settings (gap 18 of step 3's closing audit). The
-  engine gains `Fetching/ProxyTester` (public, with `ProxyTestResult` and `ProxyTestOutcome` in `Fetching/Models`); the
+- **The proxy test** (part D). `POST /api/proxy/test` (above), for the proxy test in the app's settings (gap 18 of
+  step 3's closing audit). The engine gains `Fetching/ProxyTester` (public, with `ProxyTestResult` and `ProxyTestOutcome` in `Fetching/Models`); the
   sidecar `Api/ProxyEndpoints` and `ProxyTestRequest`. The proxy's address and credentials are made into a `WebProxy`
   by one `ProxyFactory`, moved out of `HttpFetcher`, so the test sends a password exactly as a crawl does.
   No crawl file, issue or count changes; the bench is untouched.

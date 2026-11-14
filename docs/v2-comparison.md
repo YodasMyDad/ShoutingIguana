@@ -43,6 +43,12 @@ Step 3 (to round 5, 2026-11-14) has built, of what this page found missing or to
 - **The library on Home grouped by site** in Advanced as in Simple, with the running crawls as cards and every action
   in a row's menu (round 5).
 - **A report for someone else**: Simple's report, in both modes (round 4).
+- **Columns laid out by hand** on every grid (resize, move, pin, remembered and saved with a view), **Filter by this
+  value** and **Exclude this value** from a row's menu, and an All columns preset (round 5).
+- **Hiding a check** in one crawl or in every crawl, left out of every count, list, the report and the workbook; the
+  workbook takes the view's filters, and the inspector's link lists export (round 5).
+- **The platform**: a signed in-app updater, a proxy test, credentials in the OS's store, a data folder that can be
+  changed, licences in About and a log folder a click away (round 5).
 
 Still later, and in [the IA's room for what comes later](v2-ui-ia.md#room-for-what-comes-later): the SERP snippet,
 the duplicates diff and Insight.
