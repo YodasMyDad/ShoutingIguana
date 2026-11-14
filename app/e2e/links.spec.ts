@@ -539,6 +539,11 @@ test('holds at 1280x720 and at 200% zoom: nothing overprints, and the toolbar wr
     // The sidebar narrows over its transition, and the toolbar wraps: measure once it's done.
     await page.waitForFunction(() => document.getAnimations().length === 0);
     await expect(grid(page).getByRole('row').nth(1)).toBeVisible();
+    // A window this short folds the toolbars behind one button (round 5, gap 13): opened, they must hold as well.
+    if (size.height < 480)
+      await main(page)
+        .getByRole('button', { name: /^Show the columns and filters/ })
+        .click();
     // Nothing of the screen is wider than the window: the page never scrolls sideways, only the grid does.
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     // The toolbar's controls are all in the window, none under another.

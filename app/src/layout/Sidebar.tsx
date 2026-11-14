@@ -28,7 +28,6 @@ import { ExportsInProgress } from '../export/ExportsInProgress';
 import { formatExactTime } from '../lib/format';
 import { useLive, useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useMode } from '../mode/mode';
-import { useSettings } from '../settings/settingsStore';
 import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
@@ -37,6 +36,7 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { toggleSidebar, useSidebarCollapsed } from './sidebarState';
 import { SEVERITIES, type Severity } from '../ui/severity';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 /** Each section's icon, as the design draws the sidebar. */
 const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
@@ -168,7 +168,7 @@ export function Sidebar() {
 function useIssueCounts(crawlId: string | undefined, analysed: boolean): IssueCounts | null {
   const checks = useQuery({ ...checksQuery(), enabled: analysed }).data;
   const analysis = useQuery({ ...analysisQuery(crawlId ?? ''), enabled: crawlId !== undefined && analysed }).data;
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   return useMemo(() => {
     if (!analysed || !checks || !analysis) return null;
     const { error, warning, notice } = foundBySeverity(checkEntries(checks, analysis, new Set(hiddenIds)));

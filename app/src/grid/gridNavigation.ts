@@ -184,6 +184,12 @@ export type HeaderKeyResult =
   | { type: 'sort'; col: number; add?: boolean }
   | { type: 'rows' }
   | { type: 'pass' }
+  /** Shift+Left or Shift+Right: the column's right edge moves, narrower (-1) or wider (1). */
+  | { type: 'resize'; col: number; by: -1 | 1 }
+  /** Ctrl+Shift+Left or Ctrl+Shift+Right: the column moves one place left (-1) or right (1). */
+  | { type: 'reorder'; col: number; by: -1 | 1 }
+  /** Shift+F10 or the menu key: the column's menu (pin, move, width), where the grid has one. */
+  | { type: 'menu'; col: number }
   | null;
 
 export function headerKey(col: number, input: KeyInput, colCount: number): HeaderKeyResult {
@@ -193,9 +199,12 @@ export function headerKey(col: number, input: KeyInput, colCount: number): Heade
   const plain = !input.mod && !input.shift;
   switch (input.key) {
     case 'ArrowLeft':
-      return plain ? { type: 'move', col: clamp(here - 1, last) } : null;
-    case 'ArrowRight':
-      return plain ? { type: 'move', col: clamp(here + 1, last) } : null;
+    case 'ArrowRight': {
+      const by = input.key === 'ArrowLeft' ? -1 : 1;
+      if (plain) return { type: 'move', col: clamp(here + by, last) };
+      if (input.shift) return input.mod ? { type: 'reorder', col: here, by } : { type: 'resize', col: here, by };
+      return null;
+    }
     case 'Home':
       return plain ? { type: 'move', col: 0 } : { type: 'pass' };
     case 'End':
@@ -214,9 +223,9 @@ export function headerKey(col: number, input: KeyInput, colCount: number): Heade
       // Shift+Space selects rows: on the header there's no row to select.
       return input.mod ? null : input.shift ? { type: 'move', col: here } : { type: 'sort', col: here };
     case 'ContextMenu':
-      return { type: 'move', col: here };
+      return { type: 'menu', col: here };
     case 'F10':
-      return input.shift ? { type: 'move', col: here } : null;
+      return input.shift ? { type: 'menu', col: here } : null;
     default:
       return null;
   }

@@ -32,7 +32,7 @@ internal static class WorkbookExport
 
     public static void WriteWorkbook(ExportRun run, XlsxTableWriter table)
     {
-        var model = ReportReader.Read(run.CrawlPath, _ => 0, run.Settings, cancellationToken: run.Token);
+        var model = ReportReader.Read(run.CrawlPath, _ => 0, run.Settings, cancellationToken: run.Token, listing: run.Request.Report);
         run.Expect(model.Problems.Sum(problem => problem.Count));
 
         // The names first: the summary, which is written first, says which sheet each problem is on.
@@ -107,6 +107,16 @@ internal static class WorkbookExport
         Row(Label("Things worth a look"), Count(model.ChecksOf(IssueSeverity.Notice)));
         Row(Label("Checks that found nothing wrong"), Count(model.Passed.Count));
         Row(Label("Checks that couldn’t run"), Count(model.Skipped.Count));
+        if (model.HiddenProblems > 0)
+        {
+            Row(Label("Hidden checks left out"), Count(model.HiddenProblems), XlsxCell.Text("Checks that found something, hidden in the app. The score still counts them."));
+        }
+
+        if (model.Narrowed)
+        {
+            Row(Label("Checks listed"), XlsxCell.Text("Only the checks the view listed when this was saved"));
+        }
+
         Row();
         Row(
         [

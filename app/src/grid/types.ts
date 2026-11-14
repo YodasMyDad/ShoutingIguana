@@ -7,6 +7,10 @@ export interface GridColumn<Row> {
   header: string;
   /** px. */
   width: number;
+  /** The least the user can make it, px, where a column needs more than the grid's least (`MIN_COLUMN_WIDTH`). */
+  minWidth?: number;
+  /** Pinned to the grid's left edge: it stays in view while the grid scrolls sideways. Pinned columns come first. */
+  pinned?: boolean;
   /** Numbers right-align with tabular figures. */
   numeric?: boolean;
   /** URLs and code in the monospace face. */

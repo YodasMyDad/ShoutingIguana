@@ -93,7 +93,8 @@ describe('the Links grid', () => {
     const table = await grid();
     // The grid's own least height: its header, five rows, and its border and scrollbar. A window too short for the
     // toolbars and that scrolls the screen (e2e/grid-zoom.spec.ts measures it at 640x360).
-    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // The header, five rows, the frame, and the footer's key hints (--grid-foot-height).
+    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12 + 36}px`);
     // The toolbars and the grid's place are the shared frame's own children: the frame gives the toolbars their
     // height and the grid the rest.
     const frame = table.closest('.si-grid-screen')!;
@@ -863,7 +864,9 @@ describe('the Links grid’s states', () => {
     const { router, user } = await open(`${LINKS}?sort=-text`, createQueryClientWithoutBackoff());
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
     // With what the engine said of it, in place: not only behind Details.
-    expect(screen.getByText('The view can’t be sorted by “text”.')).toBeVisible();
+    // In words, never the engine's id for the column (gap 27).
+    expect(screen.getByText(/^The links can’t be sorted by [A-Z][a-z ]+: filter by it instead\.$/)).toBeVisible();
+    expect(screen.queryByText(/“text”/)).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Reset the view' }));
     await counted('13 links');
     expect(router.state.location.search).toEqual({});

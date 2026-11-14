@@ -17,7 +17,6 @@ import { useCommands } from '../keyboard/registry';
 import { useMode } from '../mode/mode';
 import { formatCount, formatCountOf, formatDuration, formatExactTime } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import { useSettings } from '../settings/settingsStore';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Card, CardBody, CardHeader } from '../ui/Card';
@@ -55,6 +54,7 @@ import { OverviewSkeleton } from './overview/OverviewSkeleton';
 import { TotalsRow } from './overview/TotalsRow';
 import { crawledCount } from './overview/statusSplit';
 import { useCrawlFacets } from './overview/useCrawlFacets';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 const ROUTE = '/crawls/$crawl/overview';
 
@@ -102,7 +102,7 @@ export function OverviewScreen() {
   const crawled =
     item?.crawledUrlCount ?? (facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0));
 
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
   const entries = useMemo(
     () => (checks.data && analysis.data ? checkEntries(checks.data, analysis.data, hidden) : null),

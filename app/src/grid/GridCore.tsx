@@ -3,10 +3,11 @@
 // ARIA treegrid pattern has them, which the Issues screen uses to group a check's rows by detail. The full grid
 // (column presets, chooser, filter bar, saved views) wraps this in the slices; every grid in the app is this component.
 import clsx from 'clsx';
-import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronsUpDown, Pin, PinOff, RotateCcw } from 'lucide-react';
 import {
   memo,
   useEffect,
+  useMemo,
   useEffectEvent,
   useId,
   useLayoutEffect,
@@ -30,12 +31,24 @@ import { INITIAL_NAV, gridKey, gridPointer, headerKey, type GridNavState, type G
 import { DEFAULT_OVERSCAN, firstFullyVisible, rowsPerPage, scrollLeftToReveal } from './rowRange';
 import { useRowWindow, type RowWindowModel } from './rowWindow';
 import { windowFor } from './scrollWindow';
-import { EMPTY_SELECTION, clampSelection, effectiveRanges, selectOnly, selectedIndices, type Range } from './selection';
+import {
+  EMPTY_SELECTION,
+  clampSelection,
+  effectiveRanges,
+  selectOnly,
+  selectedCount,
+  selectedIndices,
+  type Range,
+} from './selection';
 import { MAX_COPY_ROWS, toTsv } from './tsv';
 import type { GridColumn, GridRange, GridTree, RowFetcher } from './types';
 import { VirtualScrollbar } from './VirtualScrollbar';
 import { RefreshLine } from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
+import { Kbd } from '../ui/Kbd';
+import { MenuAt, MenuItem, MenuSeparator } from '../ui/Menu';
+import { RESIZE_STEP, clampWidth, movedOrder } from './columnLayout';
+import { footWords, type GridKeyHint } from './gridFoot';
 
 export interface GridCopyResult {
   /** Rows copied, or 1 for a single cell. */
@@ -63,6 +76,23 @@ export interface GridMenuContext<Row> {
   copy: () => Promise<void>;
   /** Gives the keyboard back to the grid, with the cursor where it was. */
   focus: () => void;
+}
+
+/**
+ * What changes a grid's columns (`GridCore`'s `columnLayout`): the header's edges drag to resize, its cells drag to
+ * move, and its menu (a right-click, or Shift+F10 on the header) pins, moves and resizes; on the header the keys do
+ * the same (Shift+Left and Shift+Right resize, Ctrl+Shift+Left and Ctrl+Shift+Right move). `useColumnLayout` gives
+ * these, keeping the layout with the preferences.
+ */
+export interface GridColumnLayoutProps {
+  /** A column's width set, px, or put back to the grid's own (`null`). */
+  onResize: (column: string, width: number | null) => void;
+  /** A column moved to another place: `to` is its index among the grid's columns afterwards. */
+  onMove?: ((column: string, to: number) => void) | undefined;
+  /** A column pinned to the grid's left edge, or unpinned. */
+  onPin?: ((column: string, pinned: boolean) => void) | undefined;
+  /** Every column put back as the grid has them. */
+  onReset?: (() => void) | undefined;
 }
 
 export interface GridCoreProps<Row> {
@@ -161,6 +191,15 @@ export interface GridCoreProps<Row> {
   rowKey?: ((row: Row) => string | number) | undefined;
   /** With `startRow` and `rowKey`: the row the grid was left on, so it starts there even if the row has moved. */
   startKey?: string | number | undefined;
+  /** The columns can be resized, moved and pinned: see `GridColumnLayoutProps`. Left out, they're fixed. */
+  columnLayout?: GridColumnLayoutProps | undefined;
+  /**
+   * A footer under the rows with these key hints, and where the cursor is ("Row 12 of 264", "3 rows selected"): a
+   * screen's own grid shows it (`GRID_KEY_HINTS`); a grid in a panel leaves it out.
+   */
+  keyHints?: readonly GridKeyHint[] | undefined;
+  /** What a row is called in the footer's words ("URL", "link"): "row" when left out. */
+  rowNoun?: [string, string] | undefined;
 }
 
 const ORDINALS = ['first', 'second', 'third'];
@@ -196,9 +235,39 @@ function coveredWidth(element: HTMLElement, windowed: boolean): number {
   return Number.isFinite(size) ? size : 0;
 }
 
+/** The footer's height (tokens.css `--grid-foot-height`), for the room a grid with a least height keeps. */
+const FOOT_HEIGHT_FALLBACK = 36;
+function footHeight(): number {
+  if (typeof document === 'undefined') return FOOT_HEIGHT_FALLBACK;
+  const size = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--grid-foot-height'));
+  return Number.isFinite(size) && size > 0 ? size : FOOT_HEIGHT_FALLBACK;
+}
+
+/** How far a pointer goes with the button down on a header before it's moving the column, not pressing it, px. */
+const DRAG_THRESHOLD = 5;
+
+/**
+ * Where each column starts from the grid's left edge, and for the leading run of pinned columns, where each sticks
+ * (the same, as they come first).
+ */
+function columnOffsets<Row>(columns: readonly GridColumn<Row>[]) {
+  const lefts: number[] = [];
+  const pins: (number | undefined)[] = [];
+  let left = 0;
+  let pinning = true;
+  for (const column of columns) {
+    lefts.push(left);
+    pinning = pinning && column.pinned === true;
+    pins.push(pinning ? left : undefined);
+    left += column.width;
+  }
+  const pinnedWidth = columns.reduce((sum, column, index) => sum + (pins[index] === undefined ? 0 : column.width), 0);
+  const lastPinned = pins.reduce<number>((last, pin, index) => (pin === undefined ? last : index), -1);
+  return { lefts, pins, pinnedWidth, lastPinned };
+}
+
 function GridCoreInner<Row>({
   label,
-  columns,
   rowCount,
   getRow,
   rowHeight,
@@ -226,8 +295,22 @@ function GridCoreInner<Row>({
   startRow,
   rowKey,
   startKey,
+  columnLayout,
+  keyHints,
+  rowNoun = ['row', 'rows'],
+  columns: givenColumns,
 }: GridCoreProps<Row>) {
   const id = useId();
+  // A column's edge being dragged: its width as it goes, before the layout keeps it on letting go.
+  const [dragWidth, setDragWidth] = useState<{ id: string; width: number } | null>(null);
+  const columns = useMemo(
+    () =>
+      dragWidth === null
+        ? givenColumns
+        : givenColumns.map((column) => (column.id === dragWidth.id ? { ...column, width: dragWidth.width } : column)),
+    [givenColumns, dragWidth],
+  );
+  const offsets = useMemo(() => columnOffsets(columns), [columns]);
   const scrollRef = useRef<HTMLDivElement>(null);
   /** How tall the empty state's own content is, for a grid that keeps room for it (`minRows`). */
   const [emptyHeight, setEmptyHeight] = useState(0);
@@ -236,11 +319,13 @@ function GridCoreInner<Row>({
   );
   // The header row is a row the cursor reaches when the columns sort: the column it's on there, or null in the rows.
   const sortable = onSort !== undefined && columns.some((column) => column.sortable);
+  // The header is a row the cursor reaches where it does something: sorts, or lays the columns out.
+  const headerReach = sortable || columnLayout !== undefined;
   const [headerCursor, setHeaderCursor] = useState<number | null>(() => {
     const at = focusHeader === undefined ? -1 : columns.findIndex((column) => column.id === focusHeader);
     return at >= 0 ? at : null;
   });
-  const header = sortable && headerCursor !== null ? Math.min(headerCursor, columns.length - 1) : null;
+  const header = headerReach && headerCursor !== null ? Math.min(headerCursor, columns.length - 1) : null;
   const takeFocus = useEffectEvent(() => {
     if (header !== null) scrollRef.current?.focus({ preventScroll: true });
   });
@@ -363,9 +448,11 @@ function GridCoreInner<Row>({
   const revealColumn = (col: number) => {
     const element = scrollRef.current;
     const column = columns[col];
-    if (!element || !column) return;
-    const left = columns.slice(0, col).reduce((sum, other) => sum + other.width, 0);
-    const visible = element.clientWidth - coveredWidth(element, view.windowed);
+    // A pinned column is always in view.
+    if (!element || !column || offsets.pins[col] !== undefined) return;
+    // The pinned columns cover the left of what's in view: a column is revealed beside them.
+    const left = (offsets.lefts[col] ?? 0) - offsets.pinnedWidth;
+    const visible = element.clientWidth - coveredWidth(element, view.windowed) - offsets.pinnedWidth;
     const next = scrollLeftToReveal(left, column.width, element.scrollLeft, visible);
     if (next !== element.scrollLeft) element.scrollLeft = next;
   };
@@ -557,9 +644,17 @@ function GridCoreInner<Row>({
         }
         return;
       }
+      if (move?.type === 'resize' || move?.type === 'reorder' || move?.type === 'menu') {
+        event.preventDefault();
+        if (!columnLayout) return;
+        if (move.type === 'resize') resizeBy(move.col, move.by);
+        else if (move.type === 'reorder') moveBy(move.col, move.by);
+        else openHeaderMenuFromKeys(move.col);
+        return;
+      }
       if (move?.type === 'pass') setHeaderCursor(null);
     } else if (
-      sortable &&
+      headerReach &&
       event.key === 'ArrowUp' &&
       !event.shiftKey &&
       !mod &&
@@ -590,6 +685,149 @@ function GridCoreInner<Row>({
     else if (effect?.type === 'contextMenu') openMenuFromKeys(effect.row, effect.col);
   };
 
+  /** Shift+Left or Shift+Right on a header: its right edge moves a step, and the width is said. */
+  const resizeBy = (col: number, by: -1 | 1) => {
+    const column = columns[col];
+    if (!column || !columnLayout) return;
+    const width = Math.max(column.minWidth ?? 0, clampWidth(column.width + by * RESIZE_STEP));
+    if (width === column.width) {
+      announce(`${column.header} is as ${by < 0 ? 'narrow' : 'wide'} as it goes.`);
+      return;
+    }
+    columnLayout.onResize(column.id, width);
+    announce(`${column.header}: ${width} pixels wide.`);
+  };
+
+  /** Ctrl+Shift+Left or Ctrl+Shift+Right on a header: the column moves a place, and the cursor with it. */
+  const moveBy = (col: number, by: -1 | 1) => {
+    const column = columns[col];
+    if (!column || !columnLayout?.onMove) return;
+    const ids = columns.map((other) => other.id);
+    const pinned = columns.filter((other) => other.pinned).map((other) => other.id);
+    const to = movedOrder(ids, column.id, col + by, pinned).indexOf(column.id);
+    if (to === col) {
+      announce(`${column.header} can’t move further ${by < 0 ? 'left' : 'right'}.`);
+      return;
+    }
+    columnLayout.onMove(column.id, to);
+    setHeaderCursor(to);
+  };
+
+  /** A column's menu, open at a point: pin, move, resize. */
+  // Each opening is a menu of its own, placed afresh at its point (see `RowMenuState.opening`).
+  const [headerMenu, setHeaderMenu] = useState<{
+    col: number;
+    at: { x: number; y: number };
+    open: boolean;
+    opening: number;
+  } | null>(null);
+  const openHeaderMenu = (col: number, at: { x: number; y: number }) =>
+    setHeaderMenu((current) => ({ col, at, open: true, opening: (current?.opening ?? 0) + 1 }));
+  const openHeaderMenuFromKeys = (col: number) => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const box = element.getBoundingClientRect();
+    const pin = offsets.pins[col];
+    const left = box.left + (pin ?? (offsets.lefts[col] ?? 0) - element.scrollLeft);
+    openHeaderMenu(col, { x: Math.min(Math.max(left, box.left), box.right), y: box.top + headerHeight });
+  };
+
+  // A header being dragged to another place: which column, where the pointer started, and where it would go.
+  const headerDrag = useRef<{ col: number; startX: number; pointer: number; moving: boolean } | null>(null);
+  const [dropAt, setDropAt] = useState<{ to: number; x: number } | null>(null);
+  /** A drag just ended on a header: the click that follows it isn't a press of the header (no sort). */
+  const dragEnded = useRef(false);
+  /** The place a column dragged to this x (the grid's content coordinates) would take, and where its line goes. */
+  const dropFor = (col: number, x: number) => {
+    const column = columns[col];
+    if (!column) return null;
+    let to = 0;
+    for (let index = 0; index < columns.length; index++) {
+      const middle = (offsets.lefts[index] ?? 0) + (columns[index]?.width ?? 0) / 2;
+      if (x > middle) to = index + (index < col ? 1 : 0);
+    }
+    const ids = columns.map((other) => other.id);
+    const pinned = columns.filter((other) => other.pinned).map((other) => other.id);
+    const placed = movedOrder(ids, column.id, Math.min(to, columns.length - 1), pinned).indexOf(column.id);
+    // The line is at the edge the column would be put against.
+    const edge = placed > col ? placed + 1 : placed;
+    const end = (offsets.lefts.at(-1) ?? 0) + (columns.at(-1)?.width ?? 0);
+    return { to: placed, x: edge >= columns.length ? end : (offsets.lefts[edge] ?? end) };
+  };
+  /** A pointer's x in the grid's content (its scroll included). */
+  const contentX = (clientX: number) => {
+    const element = scrollRef.current;
+    if (!element) return clientX;
+    return clientX - element.getBoundingClientRect().left + element.scrollLeft;
+  };
+  const onHeaderPointerDown = (event: PointerEvent<HTMLDivElement>, col: number) => {
+    if (event.button !== 0 || !columnLayout?.onMove) return;
+    if (event.target instanceof Element && event.target.closest('.si-grid-resize')) return;
+    headerDrag.current = { col, startX: event.clientX, pointer: event.pointerId, moving: false };
+  };
+  const onHeaderPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = headerDrag.current;
+    if (drag?.pointer !== event.pointerId) return;
+    if (!drag.moving) {
+      if (Math.abs(event.clientX - drag.startX) < DRAG_THRESHOLD) return;
+      drag.moving = true;
+      capturePointer(event.currentTarget, event.pointerId);
+    }
+    setDropAt(dropFor(drag.col, contentX(event.clientX)));
+  };
+  const onHeaderPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = headerDrag.current;
+    headerDrag.current = null;
+    if (!drag?.moving || drag.pointer !== event.pointerId) return;
+    const drop = dropFor(drag.col, contentX(event.clientX));
+    setDropAt(null);
+    dragEnded.current = true;
+    // The click (if any) comes straight after the pointer goes up: after it, a press is a press again.
+    setTimeout(() => (dragEnded.current = false), 0);
+    const column = columns[drag.col];
+    if (drop && column && drop.to !== drag.col) {
+      columnLayout?.onMove?.(column.id, drop.to);
+      setHeaderCursor(drop.to);
+    }
+  };
+  const onHeaderPointerCancel = () => {
+    headerDrag.current = null;
+    setDropAt(null);
+  };
+
+  /** A column's right edge dragged: its width follows the pointer, and is kept on letting go. */
+  const edgeDrag = useRef<{ col: number; startX: number; startWidth: number; pointer: number } | null>(null);
+  const edgeWidth = (clientX: number) => {
+    const drag = edgeDrag.current;
+    const column = drag ? givenColumns[drag.col] : undefined;
+    if (!drag || !column) return null;
+    return { column, width: Math.max(column.minWidth ?? 0, clampWidth(drag.startWidth + clientX - drag.startX)) };
+  };
+  const onEdgePointerDown = (event: PointerEvent<HTMLSpanElement>, col: number) => {
+    const column = columns[col];
+    if (event.button !== 0 || !column) return;
+    event.preventDefault();
+    event.stopPropagation();
+    capturePointer(event.currentTarget, event.pointerId);
+    edgeDrag.current = { col, startX: event.clientX, startWidth: column.width, pointer: event.pointerId };
+  };
+  const onEdgePointerMove = (event: PointerEvent<HTMLSpanElement>) => {
+    if (edgeDrag.current?.pointer !== event.pointerId) return;
+    const next = edgeWidth(event.clientX);
+    if (next) setDragWidth({ id: next.column.id, width: next.width });
+  };
+  const onEdgePointerUp = (event: PointerEvent<HTMLSpanElement>) => {
+    if (edgeDrag.current?.pointer !== event.pointerId) return;
+    const next = edgeWidth(event.clientX);
+    edgeDrag.current = null;
+    setDragWidth(null);
+    if (next && next.width !== next.column.width) columnLayout?.onResize(next.column.id, next.width);
+  };
+  const onEdgePointerCancel = () => {
+    edgeDrag.current = null;
+    setDragWidth(null);
+  };
+
   /**
    * Shift+F10 or the menu key: the menu opens at the bottom-left corner of the cursor's cell (the row's one cell, for a
    * row drawn as one), worked out from where the row is in the grid's scroll space, not measured: the keys have just
@@ -601,7 +839,8 @@ function GridCoreInner<Row>({
     if (!element || !onContextMenu) return;
     const at = spans(row) ? 0 : col;
     const box = element.getBoundingClientRect();
-    const left = box.left + columns.slice(0, at).reduce((sum, column) => sum + column.width, 0) - element.scrollLeft;
+    const pin = offsets.pins[at];
+    const left = box.left + (pin ?? (offsets.lefts[at] ?? 0) - element.scrollLeft);
     const bottom = box.top + headerHeight + (row + 1) * rowHeight - model.offset();
     const anchor = {
       x: Math.min(Math.max(left, box.left), box.right),
@@ -729,10 +968,25 @@ function GridCoreInner<Row>({
 
   const style = { '--grid-template': template } as CSSProperties;
   const showsEmpty = !loading && rowCount === 0 && emptyState !== undefined && emptyState !== null;
+  const foot = keyHints !== undefined && keyHints.length > 0;
   const leastHeight =
     minRows === undefined
       ? undefined
-      : headerHeight + Math.max(minRows * rowHeight, showsEmpty ? emptyHeight : 0) + FRAME_ROOM;
+      : headerHeight +
+        Math.max(minRows * rowHeight, showsEmpty ? emptyHeight : 0) +
+        FRAME_ROOM +
+        (foot ? footHeight() : 0);
+  const pinned = offsets.lastPinned >= 0;
+  /** A pinned cell's own style: where it sticks. */
+  const pinStyle = (col: number): CSSProperties | undefined => {
+    const left = offsets.pins[col];
+    return left === undefined ? undefined : { left };
+  };
+  const pinClass = (col: number) =>
+    offsets.pins[col] === undefined
+      ? undefined
+      : clsx('si-grid-cell--pinned', col === offsets.lastPinned && 'si-grid-cell--pin-edge');
+  const menuColumn = headerMenu ? columns[headerMenu.col] : undefined;
   return (
     <div
       className={clsx('si-grid-frame relative flex min-h-0 flex-col overflow-hidden', className)}
@@ -765,6 +1019,8 @@ function GridCoreInner<Row>({
             style={{ height: headerHeight, width }}
           >
             {columns.map((column, col) => (
+              // The header's pointer handlers move the column (a drag) and open its menu (a right-click): the keys do
+              // the same from the grid, which is the one Tab stop, so the cell itself needs no role of a control.
               <div
                 key={column.id}
                 id={headerCellId(col)}
@@ -773,8 +1029,24 @@ function GridCoreInner<Row>({
                 // A sort of more than one key: the first is the grid's sort, the others say their place in words.
                 aria-sort={column.sortOrder === undefined || column.sortOrder === 1 ? column.sort : undefined}
                 data-active={header === col || undefined}
-                className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric')}
+                data-pinned={column.pinned ? true : undefined}
+                className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric', pinClass(col))}
+                style={pinStyle(col)}
                 title={sortable && !column.sortable ? column.sortHint : undefined}
+                {...(columnLayout
+                  ? {
+                      onPointerDown: (event: PointerEvent<HTMLDivElement>) => onHeaderPointerDown(event, col),
+                      onPointerMove: onHeaderPointerMove,
+                      onPointerUp: onHeaderPointerUp,
+                      onPointerCancel: onHeaderPointerCancel,
+                      onContextMenu: (event: MouseEvent<HTMLDivElement>) => {
+                        event.preventDefault();
+                        setHeaderCursor(col);
+                        scrollRef.current?.focus({ preventScroll: true });
+                        openHeaderMenu(col, { x: event.clientX, y: event.clientY });
+                      },
+                    }
+                  : {})}
               >
                 {column.sortable && onSort ? (
                   // The grid is the one stop for Tab: the cursor reaches the header, and Enter or Space sorts. The
@@ -788,7 +1060,11 @@ function GridCoreInner<Row>({
                       scrollRef.current?.focus({ preventScroll: true });
                       setHeaderCursor(col);
                     }}
-                    onClick={(event) => onSort(column.id, document.activeElement === scrollRef.current, event.shiftKey)}
+                    onClick={(event) => {
+                      // The end of a drag that moved the column isn't a press.
+                      if (dragEnded.current) return;
+                      onSort(column.id, document.activeElement === scrollRef.current, event.shiftKey);
+                    }}
                   >
                     {column.header}
                     {column.headerDetail ? <span className="si-grid-head__detail">{column.headerDetail}</span> : null}
@@ -810,8 +1086,27 @@ function GridCoreInner<Row>({
                     {column.headerDetail ? <span className="si-grid-head__detail">{column.headerDetail}</span> : null}
                   </>
                 )}
+                {columnLayout ? (
+                  // The column's right edge, for the pointer: a drag resizes it, a double-click puts its width back.
+                  // The keys do the same from the header (Shift+Left, Shift+Right), and its menu.
+                  <span
+                    aria-hidden="true"
+                    className="si-grid-resize"
+                    onPointerDown={(event) => onEdgePointerDown(event, col)}
+                    onPointerMove={onEdgePointerMove}
+                    onPointerUp={onEdgePointerUp}
+                    onPointerCancel={onEdgePointerCancel}
+                    onDoubleClick={(event) => {
+                      event.stopPropagation();
+                      columnLayout.onResize(column.id, null);
+                    }}
+                    // The header's own press (a sort) and its drag never start here.
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                ) : null}
               </div>
             ))}
+            {dropAt ? <span aria-hidden="true" className="si-grid-drop" style={{ left: dropAt.x }} /> : null}
           </div>
         </div>
         <div
@@ -866,6 +1161,8 @@ function GridCoreInner<Row>({
                 cellIdPrefix={id}
                 level={tree?.level(index)}
                 expanded={tree?.expanded(index)}
+                pins={pinned ? offsets.pins : undefined}
+                pinEdge={offsets.lastPinned}
               />
             ) : (
               <GridRow
@@ -882,6 +1179,8 @@ function GridCoreInner<Row>({
                 level={tree?.level(index)}
                 expanded={tree?.expanded(index)}
                 span={spanRow?.(row, index) ?? null}
+                pins={pinned ? offsets.pins : undefined}
+                pinEdge={offsets.lastPinned}
               />
             );
           })}
@@ -910,10 +1209,122 @@ function GridCoreInner<Row>({
         </p>
       ) : null}
       {!loading && rowCount === 0 && emptyState ? (
-        <EmptyRegion label={label} top={headerHeight} onHeight={minRows === undefined ? undefined : setEmptyHeight}>
+        <EmptyRegion
+          label={label}
+          top={headerHeight}
+          bottom={foot ? 'var(--grid-foot-height)' : undefined}
+          onHeight={minRows === undefined ? undefined : setEmptyHeight}
+        >
           {emptyState}
         </EmptyRegion>
       ) : null}
+      {foot ? (
+        <GridFoot
+          hints={keyHints}
+          where={footWords(active?.row ?? null, count, selectedCount(selection), loading, rowNoun)}
+        />
+      ) : null}
+      {columnLayout ? (
+        <MenuAt
+          key={headerMenu?.opening ?? 0}
+          at={headerMenu?.at ?? null}
+          open={headerMenu?.open ?? false}
+          onOpenChange={(open) => setHeaderMenu((current) => (current ? { ...current, open } : current))}
+          label={`Menu for the ${menuColumn?.header ?? ''} column`}
+          onCloseFocus={() => scrollRef.current?.focus({ preventScroll: true })}
+        >
+          {menuColumn && headerMenu ? (
+            <ColumnMenuItems
+              column={menuColumn}
+              col={headerMenu.col}
+              count={columns.length}
+              layout={columnLayout}
+              onResize={(by) => resizeBy(headerMenu.col, by)}
+              onMove={(by) => moveBy(headerMenu.col, by)}
+            />
+          ) : null}
+        </MenuAt>
+      ) : null}
+    </div>
+  );
+}
+
+/** A column's menu: pin it, move it, change its width, or put every column back. */
+function ColumnMenuItems<Row>({
+  column,
+  col,
+  count,
+  layout,
+  onResize,
+  onMove,
+}: {
+  column: GridColumn<Row>;
+  col: number;
+  count: number;
+  layout: GridColumnLayoutProps;
+  onResize: (by: -1 | 1) => void;
+  onMove: (by: -1 | 1) => void;
+}) {
+  const pinned = column.pinned === true;
+  return (
+    <>
+      {layout.onPin ? (
+        <MenuItem icon={pinned ? PinOff : Pin} onSelect={() => layout.onPin?.(column.id, !pinned)}>
+          {pinned ? 'Unpin the column' : 'Pin the column to the left'}
+        </MenuItem>
+      ) : null}
+      {layout.onMove ? (
+        <>
+          <MenuItem icon={ArrowLeft} shortcut="mod+shift+arrowleft" disabled={col === 0} onSelect={() => onMove(-1)}>
+            Move left
+          </MenuItem>
+          <MenuItem
+            icon={ArrowRight}
+            shortcut="mod+shift+arrowright"
+            disabled={col >= count - 1}
+            onSelect={() => onMove(1)}
+          >
+            Move right
+          </MenuItem>
+        </>
+      ) : null}
+      <MenuSeparator />
+      <MenuItem shortcut="shift+arrowright" onSelect={() => onResize(1)}>
+        Wider
+      </MenuItem>
+      <MenuItem shortcut="shift+arrowleft" onSelect={() => onResize(-1)}>
+        Narrower
+      </MenuItem>
+      <MenuItem onSelect={() => layout.onResize(column.id, null)}>Put its width back</MenuItem>
+      {layout.onReset ? (
+        <>
+          <MenuSeparator />
+          <MenuItem icon={RotateCcw} onSelect={layout.onReset}>
+            Put every column back
+          </MenuItem>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The grid's footer: its key hints, then where the cursor is. The hints are for the eye (the keys are the grid's and
+ * listed in the `?` sheet); the place is no live region, as it moves with every key.
+ */
+function GridFoot({ hints, where }: { hints: readonly GridKeyHint[]; where: string }) {
+  return (
+    <div className="si-grid-foot">
+      {hints.map((hint) => (
+        <span key={hint.chord} className="si-grid-foot__hint">
+          {hint.chord.split(' ').map((chord) => (
+            <Kbd key={chord} chord={chord} size="sm" aria-hidden />
+          ))}
+          <span className="sr-only">{hint.chord.split(' ').join(' or ')}</span>
+          {hint.words}
+        </span>
+      ))}
+      <span className="si-grid-foot__end">{where}</span>
     </div>
   );
 }
@@ -927,11 +1338,14 @@ function GridCoreInner<Row>({
 function EmptyRegion({
   label,
   top,
+  bottom,
   onHeight,
   children,
 }: {
   label: string;
   top: number;
+  /** What's under it in the frame (the footer), as a length. */
+  bottom?: string | undefined;
   onHeight?: ((height: number) => void) | undefined;
   children: ReactNode;
 }) {
@@ -954,12 +1368,17 @@ function EmptyRegion({
     <div
       ref={ref}
       className="absolute inset-x-0 bottom-0 overflow-auto"
-      style={{ top }}
+      style={bottom === undefined ? { top } : { top, bottom }}
       {...(scrolls ? { tabIndex: 0, role: 'group', 'aria-label': `${label}: no rows` } : {})}
     >
       {children}
     </div>
   );
+}
+
+/** Keeps a pointer's events on an element while it drags (where the browser can: jsdom can't). */
+function capturePointer(element: Element, pointer: number) {
+  (element as Partial<Pick<Element, 'setPointerCapture'>>).setPointerCapture?.(pointer);
 }
 
 /** A control inside the header row: a sort button that took focus keeps its keys to itself. */
@@ -987,6 +1406,18 @@ interface GridRowProps<Row> {
   expanded?: boolean | undefined;
   /** The row's one cell across every column, or null for its own cells. */
   span?: ReactNode;
+  /** Where each pinned column sticks, px from the left (undefined for one that isn't); left out with none pinned. */
+  pins?: readonly (number | undefined)[] | undefined;
+  /** The last pinned column, which draws the pinned columns' edge. */
+  pinEdge?: number | undefined;
+}
+
+/** A pinned cell's class and style in a row, or nothing for a cell that isn't. */
+function pinOf(pins: readonly (number | undefined)[] | undefined, col: number, edge: number | undefined) {
+  const left = pins?.[col];
+  return left === undefined
+    ? { className: undefined, style: undefined }
+    : { className: clsx('si-grid-cell--pinned', col === edge && 'si-grid-cell--pin-edge'), style: { left } };
 }
 
 /** A row's place in a tree, for its `role="row"`. */
@@ -1009,6 +1440,8 @@ const GridRow = memo(function GridRow<Row>({
   level,
   expanded,
   span = null,
+  pins,
+  pinEdge,
 }: GridRowProps<Row>) {
   return (
     <div
@@ -1037,20 +1470,29 @@ const GridRow = memo(function GridRow<Row>({
       ) : null}
       {span !== null
         ? null
-        : columns.map((column, col) => (
-            <div
-              key={column.id}
-              id={`${cellIdPrefix}-r${index}-c${col}`}
-              role="gridcell"
-              aria-colindex={col + 1}
-              data-row={index}
-              data-col={col}
-              data-active={col === activeCol || undefined}
-              className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric', column.mono && 'font-mono')}
-            >
-              {column.cell(row)}
-            </div>
-          ))}
+        : columns.map((column, col) => {
+            const pin = pinOf(pins, col, pinEdge);
+            return (
+              <div
+                key={column.id}
+                id={`${cellIdPrefix}-r${index}-c${col}`}
+                role="gridcell"
+                aria-colindex={col + 1}
+                data-row={index}
+                data-col={col}
+                data-active={col === activeCol || undefined}
+                className={clsx(
+                  'si-grid-cell',
+                  column.numeric && 'si-grid-cell--numeric',
+                  column.mono && 'font-mono',
+                  pin.className,
+                )}
+                style={pin.style}
+              >
+                {column.cell(row)}
+              </div>
+            );
+          })}
     </div>
   );
 }) as <Row>(props: GridRowProps<Row>) => ReactNode;
@@ -1110,12 +1552,16 @@ const PlaceholderRow = memo(function PlaceholderRow({
   cellIdPrefix,
   level,
   expanded,
+  pins,
+  pinEdge,
 }: {
   index: number;
   top: number;
   height: number;
   width: number;
   columns: number;
+  pins?: readonly (number | undefined)[] | undefined;
+  pinEdge?: number | undefined;
   /** The active cell's column in this row, or -1. */
   activeCol: number;
   /** Null for the first load's skeleton, whose rows aren't real yet. */
@@ -1132,20 +1578,24 @@ const PlaceholderRow = memo(function PlaceholderRow({
       className="si-grid-row absolute left-0"
       style={{ transform: `translateY(${top}px)`, height, width }}
     >
-      {Array.from({ length: columns }, (_, col) => (
-        <div
-          key={col}
-          {...(cellIdPrefix === null
-            ? {}
-            : { id: `${cellIdPrefix}-r${index}-c${col}`, 'data-row': index, 'data-col': col })}
-          role="gridcell"
-          aria-colindex={col + 1}
-          data-active={col === activeCol || undefined}
-          className="si-grid-cell"
-        >
-          <span aria-hidden="true" className="skeleton-static block h-(--skeleton-text) w-3/4" />
-        </div>
-      ))}
+      {Array.from({ length: columns }, (_, col) => {
+        const pin = pinOf(pins, col, pinEdge);
+        return (
+          <div
+            key={col}
+            {...(cellIdPrefix === null
+              ? {}
+              : { id: `${cellIdPrefix}-r${index}-c${col}`, 'data-row': index, 'data-col': col })}
+            role="gridcell"
+            aria-colindex={col + 1}
+            data-active={col === activeCol || undefined}
+            className={clsx('si-grid-cell', pin.className)}
+            style={pin.style}
+          >
+            <span aria-hidden="true" className="skeleton-static block h-(--skeleton-text) w-3/4" />
+          </div>
+        );
+      })}
     </div>
   );
 });

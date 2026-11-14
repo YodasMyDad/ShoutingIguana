@@ -112,7 +112,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   uninstall();
-  updateSettings({ hiddenChecks: [] });
+  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
   liveStore.reset();
   setTransport(fakeSidecar([]));
 });

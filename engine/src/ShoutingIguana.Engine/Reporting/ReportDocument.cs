@@ -270,7 +270,18 @@ internal static class ReportDocument
         Tally(html, "notice", notices, notices == 1 ? "Thing worth a look" : "Things worth a look");
         Tally(html, "passed", model.Passed.Count, model.Passed.Count == 1 ? "Check found nothing wrong" : "Checks found nothing wrong");
         Tally(html, "skipped", model.Skipped.Count, model.Skipped.Count == 1 ? "Check couldn’t run" : "Checks couldn’t run");
-        html.Append("    </ul>\n  </section>\n\n");
+        html.Append("    </ul>\n");
+        if (model.HiddenProblems > 0)
+        {
+            // Hidden checks are left out of the lists and the counts, never out of the score, which is the analysis's.
+            html.Append("    <p class=\"summary__covers\">")
+                .Append(model.HiddenProblems == 1
+                    ? "1 check that found something is hidden, so it’s left out of this report. The score still counts it."
+                    : $"{model.HiddenProblems} checks that found something are hidden, so they’re left out of this report. The score still counts them.")
+                .Append("</p>\n");
+        }
+
+        html.Append("  </section>\n\n");
     }
 
     private static void Tally(StringBuilder html, string mark, int count, string words)

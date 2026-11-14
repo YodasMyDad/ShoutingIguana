@@ -25,7 +25,6 @@ import { formatCount } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
-import { useSettings } from '../settings/settingsStore';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -39,6 +38,7 @@ import { ScoreBreakdownFromRoute } from './ScoreBreakdownDialog';
 import { ScoreRing } from '../ui/ScoreRing';
 import { scoredPages } from './home/sites';
 import { FixFirstCard, ScoreHero, SummaryCards } from './SummaryParts';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 const ROUTE = '/crawls/$crawl/overview';
 
@@ -74,7 +74,7 @@ function Summary({
   const { neverAnalysed, rereading } = useAnalysisAnswer(crawlId, analysis, { analysing: false });
   const control = useAnalysisControl(crawlId, false, neverAnalysed);
   const failure = useLive((state) => state.crawls[crawlId]?.error ?? null);
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
   const results = useMemo(
     () => (checks.data && analysis.data ? plainResults(checks.data, analysis.data, hidden) : null),

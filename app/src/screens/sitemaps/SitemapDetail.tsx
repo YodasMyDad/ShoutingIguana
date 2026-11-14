@@ -14,6 +14,13 @@ import { notifyResult } from '../../feedback/notify';
 import { useAnnounceResults } from '../../feedback/useAnnounceResults';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { GridCore, type GridCopyResult } from '../../grid/GridCore';
+import { useColumnLayout } from '../../grid/useColumnLayout';
+import { useSearchApplyHint } from '../../grid/SearchApplyHint';
+import { ValueFilterItems } from '../../grid/RowMenu';
+import { cellValueFilters, withValueFilter } from '../../grid/valueFilter';
+import { filterSentences } from '../../grid/filterSentence';
+import { useUrlFilterWords } from '../urls/useUrlFilterWords';
+import { GRID_KEY_HINTS } from '../../grid/gridFoot';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import { searchCommand } from '../../grid/searchCommand';
@@ -100,6 +107,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   const title = useRef<HTMLHeadingElement>(null);
   const searchField = useRef<HTMLInputElement>(null);
   const [searchText, setSearchText] = useSearchText(q);
+  const searchHint = useSearchApplyHint(searchText.trim() !== (q ?? ''));
   // A chip removed, a banner's button gone once its action worked: focus goes to the view's title.
   useFocusRescue(container, () => title.current);
 
@@ -156,6 +164,10 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
       };
     });
   }, [sort, sortable, crawl.crawling]);
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('sitemaps.urls', columns);
+  // The words of a filter the row menu would add ("Status is 404"), as the chips word them.
+  const filterWords = useUrlFilterWords(crawlId, filters, crawl.siteOrigin);
 
   /** This view's place: navigating within it names it, so the sitemap stays in the path. */
   const here = { crawl: crawlId, sitemap: sitemapId === null ? undefined : String(sitemapId) };
@@ -428,10 +440,13 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
             left of the filters' line, up to its own width, so six filters and the search share one line in a 1280 px
             window; only with less room than that does it go under them. */}
         <span className="flex min-w-(--search-width-min) flex-1 justify-end">
+          {searchHint.note}
           <SearchField
             ref={searchField}
             label="Search this sitemap’s URLs and titles"
             placeholder="Search URLs"
+            aria-describedby={searchHint.describedBy}
+            end={searchHint.end}
             shortcut="mod+f"
             // The same field whatever is searched for: Enter applies its text and focus stays in it.
             value={searchText}
@@ -477,7 +492,10 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
             // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
             minRows={GRID_SCREEN_MIN_ROWS}
             label={sitemap ? `URLs listed by ${sitemap.url}` : 'URLs this sitemap lists'}
-            columns={columns}
+            columns={laid.columns}
+            columnLayout={laid.columnLayout}
+            keyHints={GRID_KEY_HINTS}
+            rowNoun={['URL', 'URLs']}
             rowCount={enabled ? rows.rowCount : null}
             getRow={rows.getRow}
             // Under a sort, a running crawl's new URLs come in among these: the cursor stays on its URL.
@@ -561,6 +579,21 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         >
           Show the URL in URLs
         </MenuItem>
+        <MenuSeparator />
+        <ValueFilterItems
+          cell={cellValueFilters(
+            rowMenu.state ? laid.columns[rowMenu.state.column]?.id : undefined,
+            menuRow as Readonly<Record<string, unknown>> | undefined,
+            sortable,
+            summary?.available ?? true,
+          )}
+          sentence={(filter) =>
+            filterSentences(filter, filterWords.words, filterWords.relatedUrl)
+              .map((sentence) => `${sentence.field} ${sentence.op} ${sentence.value}`)
+              .join(', ')
+          }
+          onFilter={(filter) => setFilters(withValueFilter(filters, filter))}
+        />
       </RowMenu>
     </GridScreen>
   );

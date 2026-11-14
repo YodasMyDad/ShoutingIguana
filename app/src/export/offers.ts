@@ -5,6 +5,7 @@ import type { CheckGroupRef, GridFilter, GridSort, LinkEnds, RobotsBlockReason }
 import type { CrawlListItem } from '../api/types';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatCountOf } from '../lib/format';
+import { currentHiddenChecks } from '../settings/hiddenChecks';
 import type { ExportChoice, ExportOffer } from './exportOffer';
 
 /** A column's id and its title, as the engine's column lists give them. */
@@ -159,6 +160,54 @@ function linkEndsOf(ends: LinkEnds): LinkEnds {
   };
 }
 
+/** The inspector's links of one URL as the links grid's export writes them: the other end, then the link's own. */
+export function urlLinksExportColumns(direction: 'inlinks' | 'outlinks', followParts: readonly string[]): string[] {
+  const end = direction === 'inlinks' ? 'from' : 'to';
+  return [`${end}.url`, `${end}.statusCode`, `${end}.outcome`, 'text', 'kind', 'position', ...followParts];
+}
+
+/**
+ * The inspector's inlinks or outlinks of one URL (gap 22 of the closing audit): the links grid's export, filtered to
+ * them as "All N in Links" filters, so the file holds exactly the list's links.
+ */
+export function urlLinksOffer(args: {
+  item: CrawlListItem;
+  crawling: boolean;
+  direction: 'inlinks' | 'outlinks';
+  /** The list's own filters (`linksOfUrl`): the URL, the kind chosen, no link from a page to itself. */
+  filters: readonly GridFilter[];
+  rows: number | null;
+  /** The URL whose links they are, as the inspector shows it, for the file's name and the dialog's words. */
+  url: string;
+  followParts: readonly string[];
+  catalogue?: readonly TitledColumn[] | undefined;
+}): ExportOffer {
+  const columns = urlLinksExportColumns(args.direction, args.followParts);
+  const noun: [string, string] = args.direction === 'inlinks' ? ['inlink', 'inlinks'] : ['outlink', 'outlinks'];
+  const choice: ExportChoice = {
+    id: 'view',
+    title: args.direction === 'inlinks' ? 'These inlinks' : 'These outlinks',
+    description:
+      args.rows === null
+        ? `The ${noun[1]} of ${args.url}`
+        : `${formatCountOf(args.rows, noun[0], noun[1])} of ${args.url}, in crawl order`,
+    formats: ['csv', 'xlsx'],
+    fileView: `${noun[1]} of ${args.url}`,
+    columnTitles: titlesOf(args.catalogue),
+    build: ({ format, path }) => ({
+      kind: 'links',
+      format: format === 'xlsx' ? 'xlsx' : 'csv',
+      path,
+      columns,
+      filters: [...args.filters],
+    }),
+  };
+  return {
+    ...base(args.item, args.direction === 'inlinks' ? 'Export inlinks' : 'Export outlinks', args.crawling),
+    choices: [choice],
+  };
+}
+
 /** Links: the view, as CSV or Excel. */
 export function linksOffer(args: GridViewArgs & { viewName: string | null }): ExportOffer {
   const view: ExportChoice = {
@@ -268,6 +317,13 @@ export function isAnalysed(item: CrawlListItem): boolean {
  * analysed has neither: each says so, with "Work out the results" in its place.
  */
 export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportChoice[] {
+  // The checks the user hid in this crawl, as they are when Export is pressed: the files leave them out, as every
+  // screen does (docs/v2-ui-discovery.md, decision 2). Read from the preferences, the one place outside the screen's
+  // own state an offer looks.
+  const hidden = () => {
+    const ids = currentHiddenChecks(item.id);
+    return ids.length > 0 ? { hiddenChecks: [...ids] } : {};
+  };
   const unavailable = isAnalysed(item)
     ? null
     : simple
@@ -283,7 +339,13 @@ export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportCh
       fileView: 'report',
       unavailable,
       remedy: 'analyse',
-      build: ({ path, cut }) => ({ kind: 'report', format: 'html', path, ...(cut === 'summary' ? { cut } : {}) }),
+      build: ({ path, cut }) => ({
+        kind: 'report',
+        format: 'html',
+        path,
+        ...(cut === 'summary' ? { cut } : {}),
+        ...hidden(),
+      }),
     },
     {
       id: 'workbook',
@@ -296,7 +358,7 @@ export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportCh
       fileView: 'report',
       unavailable,
       remedy: 'analyse',
-      build: ({ path }) => ({ kind: 'workbook', format: 'xlsx', path }),
+      build: ({ path }) => ({ kind: 'workbook', format: 'xlsx', path, ...hidden() }),
     },
   ];
 }
@@ -321,6 +383,11 @@ export function issuesOffer(args: {
   check: { id: string; title: string; urls: number | null; flat?: boolean; sort?: readonly GridSort[] } | null;
   /** The open group, with its pages' count and its words. */
   group: { ref: CheckGroupRef; pages: number | null; words: string } | null;
+  /**
+   * The checks the list's filters keep (severity, category, the text filter), by id, when the list is filtered: the
+   * workbook of those alone is offered beside the one of every check. Null or left out when the list isn't filtered.
+   */
+  listed?: { ids: readonly string[]; words: string } | null | undefined;
 }): ExportOffer {
   const choices: ExportChoice[] = [];
   if (args.check) {
@@ -374,9 +441,26 @@ export function issuesOffer(args: {
       });
     }
   }
-  const files = crawlFileChoices(args.item, args.simple).map((choice) =>
-    choice.id === 'workbook' ? { ...choice, title: 'Every check: the spreadsheet of everything' } : choice,
-  );
+  const all = crawlFileChoices(args.item, args.simple);
+  const files = all.flatMap((choice) => {
+    if (choice.id !== 'workbook') return [choice];
+    const every = { ...choice, title: 'Every check: the spreadsheet of everything' };
+    const listed = args.listed;
+    if (!listed) return [every];
+    // The workbook takes the list's filters, as a grid's file takes the grid's (docs/v2-ui-discovery.md, Export).
+    const view: ExportChoice = {
+      ...choice,
+      id: 'workbookListed',
+      title: 'The checks listed: their spreadsheet',
+      description: `${formatCountOf(listed.ids.length, 'check')} (${listed.words}): a summary sheet, then each that found something on a sheet of its own`,
+      fileView: 'checks listed',
+      build: (target) => {
+        const request = choice.build(target);
+        return request.kind === 'workbook' ? { ...request, checks: [...listed.ids] } : request;
+      },
+    };
+    return [view, every];
+  });
   return { ...base(args.item, 'Export issues', args.crawling), choices: [...choices, ...files] };
 }
 

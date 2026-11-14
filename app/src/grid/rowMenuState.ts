@@ -15,6 +15,12 @@ export interface RowMenuState<Row> {
   at: { x: number; y: number };
   menu: GridMenuContext<Row>;
   open: boolean;
+  /**
+   * Which opening this is, counted: each opening is a menu of its own (`RowMenu` keys on it), placed afresh at its
+   * point. One menu kept open across two right-clicks (the second closes the first as it opens) kept the first's
+   * place: the point it's anchored to moved, and nothing told the menu to look again.
+   */
+  opening: number;
 }
 
 /**
@@ -25,7 +31,7 @@ export function useRowMenu<Row>() {
   const [state, setState] = useState<RowMenuState<Row> | null>(null);
   const onContextMenu = useCallback(
     (index: number, column: number, at: { x: number; y: number }, menu: GridMenuContext<Row>) =>
-      setState({ index, column, at, menu, open: true }),
+      setState((current) => ({ index, column, at, menu, open: true, opening: (current?.opening ?? 0) + 1 })),
     [],
   );
   const onOpenChange = useCallback(

@@ -2,7 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import type { Density } from '../settings/schema';
 import { Button } from '../ui/Button';
+import { applyColumnLayout, movedOrder, withOrder, withPinned, withWidth, type ColumnLayout } from './columnLayout';
 import { GridCore } from './GridCore';
+import { GRID_KEY_HINTS } from './gridFoot';
 import { DENSITY_METRICS } from './metrics';
 import type { GridColumn } from './types';
 
@@ -361,4 +363,65 @@ function MovingDemo({ density }: { density: Density }) {
 export const RowsThatMove: StoryObj<typeof MovingDemo> = {
   render: (args) => <MovingDemo {...args} />,
   args: { density: 'standard' },
+};
+
+/**
+ * Columns the user lays out (gap 10): drag a header's right edge to resize it (a double-click puts it back), drag a
+ * header to move it, right-click it (or Shift+F10 on it) for its menu; on the header Shift+Left and Shift+Right resize,
+ * Ctrl+Shift+Left and Ctrl+Shift+Right move. The URL and # are pinned: they stay while the grid scrolls sideways. The
+ * footer has the grid's key hints and where the cursor is.
+ */
+function LaidOutDemo({ initial }: { initial: ColumnLayout }) {
+  const [layout, setLayout] = useState<ColumnLayout>(initial);
+  const metrics = DENSITY_METRICS.standard;
+  const laid = applyColumnLayout(columns, layout, true);
+  return (
+    <div className="flex h-screen flex-col bg-canvas p-4">
+      <GridCore<DemoRow>
+        label="Demo URLs"
+        columns={laid}
+        rowCount={50_000}
+        getRow={demoRow}
+        fetchRows={(indices) => Promise.resolve(indices.map(demoRow))}
+        rowHeight={metrics.rowHeight}
+        headerHeight={metrics.headerHeight}
+        keyHints={GRID_KEY_HINTS}
+        rowNoun={['URL', 'URLs']}
+        columnLayout={{
+          onResize: (id, width) => setLayout((current) => withWidth(current, id, width)),
+          onPin: (id, pinned) => setLayout((current) => withPinned(current, id, pinned)),
+          onMove: (id, to) =>
+            setLayout((current) =>
+              withOrder(
+                current,
+                movedOrder(
+                  laid.map((column) => column.id),
+                  id,
+                  to,
+                  current.pinned ?? [],
+                ),
+              ),
+            ),
+          onReset: () => setLayout({}),
+        }}
+        className="flex-1 rounded-lg border border-border"
+      />
+    </div>
+  );
+}
+
+export const ColumnsLaidOut: StoryObj<typeof LaidOutDemo> = {
+  render: (args) => <LaidOutDemo {...args} />,
+  args: { initial: { pinned: ['index', 'url'], widths: { title: 520 } } },
+};
+
+/** A column's menu, opened on its header: pin (or unpin), move, wider, narrower, its width back, every column back. */
+export const ColumnMenuOpen: StoryObj<typeof LaidOutDemo> = {
+  ...ColumnsLaidOut,
+  play: ({ canvasElement }) => {
+    const header = canvasElement.querySelectorAll('[role="columnheader"]')[2];
+    header?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 600, clientY: 40 }),
+    );
+  },
 };

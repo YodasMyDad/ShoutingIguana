@@ -13,6 +13,8 @@ import { useAnnounceResults } from '../../feedback/useAnnounceResults';
 import { useDelayedLoading } from '../../feedback/useDelayedLoading';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { GridCore } from '../../grid/GridCore';
+import { useColumnLayout } from '../../grid/useColumnLayout';
+import { GRID_KEY_HINTS } from '../../grid/gridFoot';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
@@ -542,6 +544,8 @@ function BlockedUrls({
     ],
     [origin, urlWidth],
   );
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('robots.blocked', columns);
 
   // Focus arriving on the grid puts its cursor on a row without a move to hear of: the row is read from the grid
   // itself (the cell it names as active), so the file shows that URL's line as it does once the cursor moves.
@@ -642,7 +646,10 @@ function BlockedUrls({
         <GridCore<RobotsBlockedUrl>
           key={JSON.stringify(queryKey)}
           label="Blocked URLs"
-          columns={columns}
+          columns={laid.columns}
+          columnLayout={laid.columnLayout}
+          keyHints={GRID_KEY_HINTS}
+          rowNoun={['URL', 'URLs']}
           rowCount={rows.rowCount}
           getRow={rows.getRow}
           // The cursor stays on its URL should the list change above it while a crawl runs.

@@ -31,7 +31,9 @@ public static class ExportFields
         ["checkId"] = [ExportKind.IssueRows, ExportKind.Check],
         ["cut"] = REPORT,
         ["examples"] = REPORT,
-        ["lookExamples"] = REPORT
+        ["lookExamples"] = REPORT,
+        ["hiddenChecks"] = [ExportKind.Report, ExportKind.Workbook],
+        ["checks"] = [ExportKind.Workbook]
     };
 
     /// <summary>The kinds whose export is a grid's query: they take <c>columns</c>, <c>filters</c>, <c>search</c> and <c>sort</c>.</summary>

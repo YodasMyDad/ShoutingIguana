@@ -78,6 +78,10 @@ for (const screen of [
     await page.goto(`/crawls/${crawl}/${screen.path}${withFilters(screen.chips)}`);
     const grid = page.getByRole('grid', { name: screen.name });
     await expect(grid.getByRole('row').nth(5)).toBeAttached();
+    // The toolbars fold in a window this short (round 5, gap 13), saying what's behind them; opened, the chips are there.
+    const toggle = main(page).getByRole('button', { name: 'Show the columns and filters: 3 filters in force' });
+    await expect(toggle).toBeVisible();
+    await toggle.click();
     await expect(main(page).getByRole('group', { name: 'Filters' }).locator('.si-chip__main')).toHaveCount(3);
     // The grid has room for five rows under its header, whatever the toolbars took.
     await expect

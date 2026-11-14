@@ -1,5 +1,6 @@
 // The app's preferences: what they are, their defaults, and how a stored value is read. Stored values come from disk,
 // so each is checked at the boundary and anything unusable falls back to its default.
+import { readColumnLayouts, type ColumnLayout } from '../grid/columnLayout';
 import { readSavedViews, type SavedView } from '../grid/savedViews';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
@@ -39,6 +40,13 @@ export interface Settings {
   exportFolder: string | null;
   /** The format a grid was last exported as: the export dialog's choice next time. */
   exportFormat: 'csv' | 'xlsx';
+  /** Each grid's columns as the user laid them out (widths, pins, an order of its own), by the grid's id. */
+  gridColumns: Record<string, ColumnLayout>;
+  /**
+   * Checks hidden in one crawl only (by the crawl's id): with `hiddenChecks`, which hides them in every crawl, what
+   * that crawl's Issues list, counts and exports leave out (docs/v2-ui-discovery.md, decision 2).
+   */
+  hiddenChecksByCrawl: Record<string, string[]>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,6 +65,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showFullUrls: false,
   exportFolder: null,
   exportFormat: 'xlsx',
+  gridColumns: {},
+  hiddenChecksByCrawl: {},
 };
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
@@ -86,6 +96,27 @@ function numberIn<T extends number | null>(
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(range.max, Math.max(range.min, value))
     : fallback;
+}
+
+/** The crawls whose own hidden checks are kept: the most recently changed, as `lastViewByCrawl` keeps them. */
+const MAX_CRAWLS_HIDING = 100;
+/** One crawl hides at most this many checks of its own (the catalog has about 90). */
+const MAX_HIDDEN_PER_CRAWL = 100;
+
+function checkIds(value: unknown, max: number): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((id): id is string => typeof id === 'string' && CHECK_ID.test(id)))].slice(0, max)
+    : [];
+}
+
+function readHiddenByCrawl(value: unknown): Record<string, string[]> {
+  const byCrawl: Record<string, string[]> = {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return byCrawl;
+  for (const [crawl, ids] of Object.entries(value).slice(-MAX_CRAWLS_HIDING)) {
+    const checks = /^[0-9a-f]{16}$/.test(crawl) ? checkIds(ids, MAX_HIDDEN_PER_CRAWL) : [];
+    if (checks.length > 0) byCrawl[crawl] = checks;
+  }
+  return byCrawl;
 }
 
 /** Reads stored settings of any shape (or none) into valid ones. */
@@ -132,5 +163,7 @@ export function readSettings(value: unknown): Settings {
         ? stored.exportFolder
         : DEFAULT_SETTINGS.exportFolder,
     exportFormat: oneOf(stored.exportFormat, ['csv', 'xlsx'], DEFAULT_SETTINGS.exportFormat),
+    gridColumns: readColumnLayouts(stored.gridColumns),
+    hiddenChecksByCrawl: readHiddenByCrawl(stored.hiddenChecksByCrawl),
   };
 }

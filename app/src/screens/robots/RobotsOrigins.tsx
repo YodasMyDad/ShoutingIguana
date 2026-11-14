@@ -8,6 +8,7 @@ import { originsAsGridPage, robotsKeys, type OriginsGridPage } from '../../api/q
 import type { CrawlState } from '../../crawl/useCrawlState';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
+import { useColumnLayout } from '../../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS, GridScreen } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn } from '../../grid/types';
@@ -173,6 +174,8 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
     };
     return narrow ? [origin, blocked, state, read, size] : [origin, state, blocked, read, size];
   }, [crawlId, originWidth, userAgent, respected, narrow]);
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('robots.origins', columns);
 
   let body;
   if (rows.error && rows.rowCount === null) {
@@ -203,7 +206,8 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
       >
         <GridCore<RobotsOrigin>
           label="Origins"
-          columns={columns}
+          columns={laid.columns}
+          columnLayout={laid.columnLayout}
           rowCount={rows.rowCount}
           getRow={rows.getRow}
           rowHeight={rowHeight}

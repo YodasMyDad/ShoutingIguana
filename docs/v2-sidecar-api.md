@@ -1952,11 +1952,19 @@ An export only reads the crawl.
   | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's four, the check's own columns among them |
   | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
   | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId` |
-  | `workbook` | The spreadsheet of everything | `xlsx` | Nothing |
-  | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples` |
+  | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
+  | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |
   | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
   | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
 
+- **`hiddenChecks`** (round 5, `report` and `workbook`): the ids of the checks the user hid, at most 500. They are
+  left out of the lists, the counts and the sheets (discovery decision 2: "the analysis still runs it, and exports
+  leave it out"); the score is the analysis's, and the document says how many checks that found something it left
+  out ("2 checks that found something are hidden, so they’re left out of this report. The score still counts them.";
+  the workbook's summary has a "Hidden checks left out" row). An id the catalog doesn't have is ignored: a check hidden
+  by another version. `GET /report` takes them as `hiddenChecks=a,b`, so the report shown is the report saved. **`checks`**
+  (`workbook`): only these checks, the ones an Issues view listed; its summary says "Checks listed". `si export` takes
+  them as `--hidden-checks` and `--checks`, comma-separated.
 - **`columns`** are the file's columns, in the order given; without any, the grid's own (`url`; for `issueRows`,
   `url`, `detail` and `relatedUrl`; for `links`, `from.url`, `to.url`, `kind` and `text`). The id is a column only
   when asked for (`id`: "Crawl order"). A column that needs the URL summary, on a crawl that has none, is in the file
@@ -3571,3 +3579,10 @@ URLs; anything on CI's runners, as nothing was pushed.
   read. The app's filter for the site's pages adds `url notContains /cdn-cgi/`, so a figure of pages opens exactly
   them. Tests: `GridServingTests.TheLibrarysPagesAreThePagesItsAnalysisAudited` (it asserted the difference of one
   before), `UrlSummaryAgreement` (indexable pages without the endpoint), and the app's `e2e/counts-agree.spec.ts`.
+- **Hidden checks and the workbook's filters** (part C; gap 19 and the workbook parity item).
+  `ReportOptions.HiddenChecks` and `ReportOptions.Checks`; `ReportReader.Read` takes them (`listing`) and leaves those
+  checks out of the problems, the passed and the skipped, numbering the problems afresh; `ReportModel.HiddenProblems`
+  and `Narrowed` say what was left out, and the report and the workbook's summary say it.
+  `ExportFields`: `hiddenChecks` belongs to `report` and `workbook`, `checks` to `workbook`; the request's DTO, the
+  `GET /report` query and `si export` (`--hidden-checks`, `--checks`) take them. Tested in `WorkbookExportTests`,
+  `ReportDocumentTests` and `ExportEndpointsTests`.

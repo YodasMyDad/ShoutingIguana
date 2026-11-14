@@ -104,6 +104,18 @@ export function activeUrlPreset(shown: readonly string[]): UrlPreset | null {
   return URL_PRESETS.find((preset) => sameColumns(preset.columns, shown)) ?? null;
 }
 
+/**
+ * The order of the preset whose columns these are, in any order: what "Put every column back" restores after the
+ * columns were moved. Null for the user's own set, whose order is theirs.
+ */
+export function presetOrderOf(shown: readonly string[]): readonly string[] | null {
+  const set = new Set(shown);
+  return (
+    URL_PRESETS.find((preset) => preset.columns.length === set.size && preset.columns.every((id) => set.has(id)))
+      ?.columns ?? null
+  );
+}
+
 /** The route's `cols` for a set of columns: none for the default set, so the address stays short. */
 export function colsParam(shown: readonly string[]): string[] | undefined {
   return sameColumns(shown, DEFAULT_URL_COLUMNS) ? undefined : [...shown];
@@ -345,12 +357,14 @@ export function urlColumnWidth(
   shown: readonly string[],
   catalogue: readonly UrlColumn[] | undefined,
   available: number | null,
+  /** The widths the user gave columns (the grid's column layout): the room they take is theirs. */
+  widths: Readonly<Record<string, number>> = {},
 ): number | undefined {
   if (available === null || !shown.includes('url')) return undefined;
   const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
   const others = shown
     .filter((id) => id !== 'url')
-    .reduce((sum, id) => sum + widthOf(id, byId.get(id)?.type ?? 'text'), 0);
+    .reduce((sum, id) => sum + (widths[id] ?? widthOf(id, byId.get(id)?.type ?? 'text')), 0);
   return Math.max(URL_MIN_WIDTH, Math.floor(available - others));
 }
 
@@ -432,6 +446,7 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
     return {
       ...base,
       ...(context.urlWidth ? { width: context.urlWidth } : { width: URL_WIDTH }),
+      minWidth: URL_MIN_WIDTH,
       mono: true,
       // The host is named once, here, where the rows show its URLs as paths.
       ...(origin ? { headerDetail: `on ${new URL(origin).host}` } : {}),
@@ -548,6 +563,22 @@ export function urlChooserGroups(catalogue: readonly UrlColumn[], summaryAvailab
         ...(column.needsAnalysis && !summaryAvailable ? { note: `It ${NEEDS_ANALYSIS}.` } : {}),
       })),
   })).filter((group) => group.columns.length > 0);
+}
+
+/**
+ * "All columns" (docs/v2-ui-discovery.md, Export: "an 'All columns' preset gives the full dump"): the URL, then every
+ * column the engine has for the grid, in the chooser's groups and order, so an export of the view is everything.
+ */
+export const ALL_COLUMNS_PRESET = {
+  id: 'all',
+  title: 'All columns',
+  hint: 'Every column there is, for a full export: the grid scrolls sideways',
+} as const;
+
+/** The columns of "All columns": the URL first, then the chooser's, group by group. */
+export function allUrlColumns(catalogue: readonly UrlColumn[]): string[] {
+  const ids = urlChooserGroups(catalogue, true).flatMap((group) => group.columns.map((column) => column.id));
+  return ['url', ...ids.filter((id) => id !== 'url')];
 }
 
 export const URL_FILTER_GROUPS: readonly FilterGroup[] = GROUPS.map((group) => ({
