@@ -1,6 +1,6 @@
 // Checking a site in Simple's words (docs/v2-ui-simple.md, "While it checks the site"): what's in the way, said
 // plainly with what to do about it; how long is left, as a floor; and the analysis's phases. Pure.
-import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait, HistoryPoint } from '../../api/types';
+import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait, HistoryPoint, ProgressEvent } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { formatCount, formatCountOf } from '../../lib/format';
 
@@ -161,9 +161,21 @@ const instant = (iso: string) => {
  * this one), newest first, then what holds the check up at this moment (the progress's waits). One of each kind: a
  * site that stopped answering is one line, whether an alert or a wait said so.
  */
+/** The answers from the site itself a check has before it says the site is slow: a few seconds of a Polite check. */
+export const ANSWERS_TO_JUDGE_BY = 10;
+
+/** The site's own URLs with an outcome so far: the progress's, less its probes of the site's other versions. */
+export function siteAnswers(progress: {
+  fetched: number | null;
+  siteVersions?: Pick<NonNullable<ProgressEvent['siteVersions']>, 'fetched'> | null | undefined;
+}): number {
+  return (progress.fetched ?? 0) - (progress.siteVersions?.fetched ?? 0);
+}
+
 export function inTheWay({
   alerts,
   waits,
+  judged = true,
   runStartedAt,
   site,
   pages,
@@ -171,6 +183,12 @@ export function inTheWay({
 }: {
   alerts: readonly AlertEvent[];
   waits: readonly CrawlWait[];
+  /**
+   * Whether the site has answered enough to judge its pace by (ANSWERS_TO_JUDGE_BY): before then, a slowdown is said
+   * of nothing. Its first requests failing (an http-only site's https version, a twin that isn't there) slow the
+   * check for a moment, and that isn't the site answering slowly.
+   */
+  judged?: boolean;
   /** When this run began; alerts before it are an earlier run's. Null when it isn't known: then every alert counts. */
   runStartedAt: string | null;
   site: string;
@@ -192,7 +210,7 @@ export function inTheWay({
   }
   for (const wait of waits) {
     const words = waitWords(wait);
-    if (!words || seen.has(words.kind)) continue;
+    if (!words || seen.has(words.kind) || (words.kind === 'slow' && !judged)) continue;
     seen.add(words.kind);
     entries.push({ key: `wait:${words.kind}`, level: words.kind === 'down' ? 'warning' : 'info', ...words });
   }

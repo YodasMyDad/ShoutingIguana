@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ProblemError, SidecarUnreachableError } from '../api/errors';
 import { Button } from '../ui/Button';
 import { AppToaster } from './AppToaster';
@@ -7,6 +7,7 @@ import { ErrorState } from './ErrorState';
 import { notifyError, notifyProgress, notifyResult, notifyUndo } from './notify';
 import { SkeletonRows } from './Skeleton';
 import { useDelayedLoading } from './useDelayedLoading';
+import { toast } from 'sonner';
 
 const meta = { title: 'Feedback/States' } satisfies Meta;
 export default meta;
@@ -152,3 +153,37 @@ function Toasts() {
 }
 
 export const ToastsWithTheirRules: Story = { render: () => <Toasts /> };
+
+/**
+ * Toasts with one action and with two, shown at once (the closing audit's gap 11): two actions go under the text,
+ * together, at the right; one long one goes under it too. The text never goes
+ * narrower than --toast-text-min, in either theme or mode, at 200% zoom too.
+ */
+function ToastsWithTheirActions() {
+  useEffect(() => {
+    const none = () => undefined;
+    notifyResult('gardenfurnituresets.co.uk is checked', {
+      id: 'two-simple',
+      description: 'Score 85: 6 problems to fix',
+      secondary: { label: 'See the summary', onClick: none },
+      action: { label: 'Open the report', onClick: none },
+    });
+    notifyResult('Crawl stopped', {
+      id: 'two-advanced',
+      description: 'gardenfurnituresets.co.uk: 4,521 URLs, 19 checks found issues. You can continue it later.',
+      secondary: { label: 'View issues', onClick: none },
+      action: { label: 'Continue', onClick: none },
+    });
+    notifyResult('gardenfurnituresets.co.uk is checked', {
+      id: 'one-long',
+      description: 'Its results weren’t worked out. Work out the results to see its score and what to fix.',
+      action: { label: 'Work out the results', onClick: none },
+    });
+    return () => {
+      toast.dismiss();
+    };
+  }, []);
+  return <AppToaster />;
+}
+
+export const ToastsWithOneActionAndTwo: Story = { render: () => <ToastsWithTheirActions /> };

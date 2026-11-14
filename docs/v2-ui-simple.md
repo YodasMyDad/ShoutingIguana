@@ -876,7 +876,9 @@ Round 4 built the design above; where it differs, this is what holds (settled, a
   ("gardenfurnituresets.co.uk 2026-10-31 Links that lead to broken pages.xlsx") and can be CSV too.
 - **The Report's page count** is the pages the analysis read, the figure the document's head gives. The mockup's
   "12 pages" is the printed length, which isn't known until it's printed and changes with the paper.
-- **The Summary's report card** has Open the report only: Save as PDF is the Report's Print or save as PDF.
+- **The Summary's report card** has Open the report and, since round 5, Save as PDF, as `summary.html` draws it: it
+  opens the Report screen and its print dialog once the report is in (`/crawls/:crawl/report?print=true`), the
+  system's dialog being how the report becomes a PDF.
 - **A row on Home** opens the check where it was last left (the Summary the first time, and whenever the last view
   was one Simple doesn't have), as `/crawls/:crawl` does in both modes; Open the report is in its menu. Its pages, as
   the Summary's head says them, are those the score covers: the library's `pagesAnalyzed`, the crawl's count before
@@ -912,6 +914,49 @@ Round 4 built the design above; where it differs, this is what holds (settled, a
   check's own: the engine has none. **The One fix callout** says the engine's `plainOneFix`; the mockup's middle
   sentence ("That's almost certainly your logo…") is one check's, which the engine doesn't give.
 
+### Round 5, part A (the closing audit's gaps 1, 2, 6, 7, 11, 12, 14, 25, 29, 30, G3)
+
+What round 5 settled, where it differs from the above or adds to it:
+
+- **An address typed without its scheme** ("www.example.co.uk", "127.0.0.1:8080") starts where the site answers:
+  `POST /api/crawl-options/start-url` asks https and http at once, 10 s at most, and gives https when it answers at
+  all, else http when it does, else https (docs/v2-sidecar-api.md). Simple Home and New check use it; a typed scheme
+  is used as typed. Why: a site serving only http was checked on https, read nothing, and the 2 minutes it took were
+  robots.txt's RFC cool-down for an origin that never answered.
+- **"No pages could be read" when robots.txt kept the check out** says how that file answered, from
+  `/robots/file` for the start address's origin: its rules refuse checkers ("tells checkers to stay out", with
+  Advanced); it answered a server error or "too many requests" (it couldn't be read, try again later); it didn't
+  answer ("the site didn't answer…"). Never "stay out" for a file that couldn't be read.
+- **A stopped check is worked out when it stops**, by the sidecar, as a completed one is: the checking screen goes to
+  its second step, then the Summary with the dashed ring "so far", the stopped banner and Continue checking. The
+  stopped toast is said again with the results so far ("Score 87 so far: 5 problems to fix. You can continue it
+  later.", See the summary, Continue). A check stopped by the app quitting, interrupted or failed still says No score
+  yet with Work out the results. **Open the report** is offered in the head only over results.
+- **The head's line** says how long the check read for: "Checked on 31 October 2026. 265 pages read in 37 min 25 s."; a
+  check stopped early "Stopped on 15 October 2026 after 6 min 40 s. 312 pages read so far.", as
+  `summary-stopped.html`. A check an engine from before `crawlingMs` made says its start-to-finish span, as such
+  ("…, start to finish"), when under a day.
+- **One time for a check everywhere:** Home's "Last checked", the breadcrumb and the sidebar say when the check
+  **started** (the Summary's date stays the day it finished, as above).
+- **Home tells sites apart by host and port:** two checks of 127.0.0.1 on different ports are two rows, each named
+  with its port ("127.0.0.1:8080"). A scheme's own port isn't the site's: http and https of one site are one row.
+- **Where it is** counts what it lists ("The one cause is shown.", "Showing 25 of 126 causes.", "All 3 pages are
+  shown.") and says where the addresses shown as paths are ("Addresses starting with “/” are on
+  www.example.co.uk."), shortened against the origin the site's pages are on (www. or not), not always the start
+  address's.
+- **A problem opens at its top**, its back link in sight, whatever What to fix was scrolled to; Back finds the list
+  where it was left (app/src/simple/scrollPlace.ts).
+- **No "answering slowly" before there are enough answers to judge by:** the slowdown is said once the site itself
+  (not the crawler's probes of its other versions) has answered 10 times, a few seconds of a Polite check.
+- **Toasts with two actions** put them under the text, together, at the right; one action that would squeeze the
+  text under `--toast-text-min` (200 px) goes under it too.
+- **Simple's words everywhere it shows:** the palette's and the `?` sheet's What to fix heading, every saving message
+  and toast (`exportWords`), About and Updates ("Site checker", not "Engine"), the Settings note, and the sidebar over
+  the checks running now (Checking now, Paused, Working out the results). `app/src/simple/simpleWords.test.tsx`
+  draws every Simple screen, the palette, the sheet, the dialogs and the toasts and fails on any of the glossary's
+  Advanced-only words (crawl, URL, issue, engine, analysis, Overview, library, indexable, and Error, Warning and
+  Notice as severities).
+
 ## What the engine needs
 
 | Need | For | Shape |
@@ -921,10 +966,10 @@ Round 4 built the design above; where it differs, this is what holds (settled, a
 | Plain skip reasons | Summary, What to fix, the report | `skipped[].reason.plainText` and `plainAction`, by reason code |
 | `siteWide` on a check | The score | `checks[].siteWide`: true for `robots-txt-unreachable`, `no-https`, `site-hidden-from-search`, `duplicate-site-version`, `robots-txt-unreachable-other-origin` |
 | A new check, `site-hidden-from-search` | The score can't say "100" for a site search engines can't list | Error, Indexability, site-wide, reported once on the home page: the home page (the page the start URL ends on) is noindex, and so are more than half of the pages that stand for themselves. Hidden is the noindex pages, as `noindex-page` counts them; the total is the pages the analysis read, less those canonicalised to another URL, which are variants and count neither as hidden nor in the total. A strict majority, and never with no page left to judge. Skipped, with a reason, on a crawl that didn't start at the site's root. Detail: "212 of 240 pages are noindex". With its planted case |
-| The score | Summary, Home, Overview, the breakdown, the report | On `GET /api/crawls/{id}/analysis`: `score: { version, value, band, lost, beforeCeiling, heldBySerious, partial, covers: { pages, urls, checksRun, checksSkipped, complete, reason, blockedByRobots }, lines: [{ checkId, severity, count, of, unit, extent, points }], ifFixed: { checkIds, value } }`, or `score: null` with `noScoreReason` (`not-analysed`, `no-pages`). `ifFixed` is the score with the first five in "Fix first" order fixed. One engine class works it out, tested against `score.mjs`'s cases |
+| The score | Summary, Home, Overview, the breakdown, the report | On `GET /api/crawls/{id}/analysis`: `score: { version, value, band, lost, beforeCeiling, heldBySerious, partial, covers: { pages, urls, checksRun, checksSkipped, complete, reason, blockedByRobots }, lines: [{ checkId, severity, count, of, unit, extent, points }], ifFixed: { checkIds, value } }`, or `score: null` with `noScoreReason` (`noPages`: no page was read; `notScored`: an engine from before the score analysed it; a crawl never analysed has no analysis at all, `not-analyzed`). `ifFixed` is the score with the first five in "Fix first" order fixed. One engine class works it out, tested against `score.mjs`'s cases |
 | The score in the library | Home's rows | `CrawlListItem.score: { value, band, partial }` or null, kept in the summary cache |
 | The score on the command line | The same number everywhere | `si issues` prints it in its head; `si score <db>` prints the breakdown |
-| The report | The Report screen, Save, Print | `GET /api/crawls/{id}/report?cut=full\|summary&examples=5&lookExamples=3` returns the HTML. `si report <db> --out <file> [--cut summary]`. `not-analyzed` when there is no analysis |
+| The report | The Report screen, Save, Print | `GET /api/crawls/{id}/report?cut=full\|summary&examples=5&lookExamples=3` returns the HTML. `si export report <db> --out <file> [--cut summary]`. `not-analyzed` when there is no analysis |
 | The workbook | Spreadsheet of everything, Save as a spreadsheet | E5's export, kinds `workbook` (every check) and `check` (one sheet), with plain and technical titles |
 | A code's name in details | One problem, the report | "HTTP 404" reads "404 Not Found", in both modes. A text change: grouping by detail is unaffected within one analysis |
 | Out-of-date for the score | The Summary's banner | A score by another `scoreVersion` makes the analysis out of date with `engineChanged` |

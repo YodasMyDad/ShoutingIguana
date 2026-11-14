@@ -27,6 +27,7 @@ import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS, fixSectionOf } from './fixSections';
 import { checksWord, looksForWords, passedWords, plainSummary, plainTitle, shareWords } from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
+import { useKeepsPlace } from './scrollPlace';
 import { plainResults, type PlainResults } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix } from './useOneFix';
@@ -98,6 +99,9 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
       !checks.error &&
       !analysis.error);
   const skeleton = useDelayedLoading(loading);
+  // Back from a problem, the list is where it was left; landing on one of its parts (a hash) goes there instead.
+  const landing = useRouterState({ select: (state) => fixSectionOf(state.location.hash) !== null });
+  useKeepsPlace(screenRef, `what-to-fix:${crawlId}`, !loading && !skeleton && !landing);
 
   let body: ReactNode;
   let subtitle: ReactNode = null;

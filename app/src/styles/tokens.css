@@ -455,6 +455,7 @@
   --dialog-max-height: 80vh;
   --dialog-width: 560px;
   --toast-width: 360px;
+  --toast-text-min: 200px; /* a toast's text is never narrower: its actions go under it first */
   --skeleton-text: 10px;
   --skeleton-title: 14px;
   --skeleton-figure: 18px;
