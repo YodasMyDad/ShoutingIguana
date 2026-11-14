@@ -191,9 +191,12 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
 - **Then Simple** (round 5, `scripts/smoke-shell-simple.mjs`; `--mode advanced` or `--mode simple` runs one walk
   alone): a second app on a new profile and an empty data folder, as a first-time user meets it. It opens in Simple
   on Home, its window named "Home · Shouting Iguana"; a check of the test site from Home (the saved defaults set Fast,
-  so it ends while hidden); the window closed with the check going on: hidden, with "Still checking" and the tray's
-  tooltip in Simple's words, read from the shell's log (it records the tooltip the icon is built with), then the
-  finish notice "… is checked"; back through the tray icon onto the Summary's score and the window "Summary · …"; the
+  so it ends while hidden); the window closed with the check going on: hidden, with "Still checking", then the
+  finish notice "… is checked", and the tray's tooltip and menu as they changed, read from the shell's log (it records
+  the tooltip the icon is built with, each new state's tooltip, `Tray tooltip:`, and each menu it builds, `Tray menu:`;
+  `lib/shell.mjs`'s `trayWords` and `simpleTrayProblems`): checking, then working out the results (tooltip and menu),
+  then "Shouting Iguana" with nothing running, never in Advanced's words (round 5's review, R2-11: it read the first
+  tooltip only). A new state's tooltip is drawn at once; only its numbers wait for the tray's one-second redraw; back through the tray icon onto the Summary's score and the window "Summary · …"; the
   Report; "Stop checking and quit?" with a check running (Cancel keeps it, Stop and quit ends it); nothing left
   running and no page error.
 - **What the first walk by hand found** (10 Nov 2026, WebView2 157, Windows 11 at 150%): everything above works as in
@@ -1663,7 +1666,7 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   checking in the tray. Quit from its menu." (or "Still working out the results"), and the quit question "Stop
   checking and quit? You can continue the check later from Your sites." Advanced keeps its words, and an analysis alone
   now says "Still analysing" rather than "Still crawling". The words are in `tray/text.rs` and `quit.rs`, tested in
-  both modes; `smoke:shell`'s Simple walk reads the notice and the tooltip from the shell's log.
+  both modes; `smoke:shell`'s Simple walk reads the notice, each tooltip and each menu from the shell's log.
 - **Each screen names the window** (`layout/documentTitle.ts`): "Issues · gardenfurnituresets.co.uk · Shouting
   Iguana", in the mode's words ("What to fix · …" in Simple), "Home · Shouting Iguana", "New crawl · …"; the site only
   once the crawl is known. The shell mirrors `document.title` onto the window (`on_document_title_changed`), so the

@@ -153,7 +153,11 @@ impl Tray {
         }
         if self.look.as_ref() != Some(&look) {
             let now = Instant::now();
-            match self.drawn_at.map(|at| at + REDRAW_INTERVAL).filter(|next| *next > now) {
+            // Only the numbers wait for the interval: a new state (checking, then working out the results) is shown at
+            // once, so a short one isn't skipped.
+            let new_words =
+                self.look.as_ref().map(|drawn| text::words_of(&drawn.tooltip)) != Some(text::words_of(&look.tooltip));
+            match self.drawn_at.map(|at| at + REDRAW_INTERVAL).filter(|next| *next > now && !new_words) {
                 Some(next) => self.due = Some(next),
                 None => self.redraw(look),
             }
@@ -196,6 +200,7 @@ impl Tray {
                 self.drawn_at = Some(Instant::now());
                 self.due = None;
                 log::info!("Tray icon shown: \"{}\"", look.tooltip);
+                log::info!("Tray menu: {}", text::menu_labels(entries, mode).join(" | "));
             }
             Err(error) => log::error!("Couldn't create the tray icon: {error}"),
         }
@@ -204,11 +209,10 @@ impl Tray {
     fn set_menu(&self, entries: &[TrayEntry], mode: Mode) {
         let Some(tray) = &self.tray else { return };
         match build_menu(&self.app, entries, mode) {
-            Ok(menu) => {
-                if let Err(error) = tray.set_menu(Some(menu)) {
-                    log::warn!("Couldn't update the tray menu: {error}");
-                }
-            }
+            Ok(menu) => match tray.set_menu(Some(menu)) {
+                Ok(()) => log::info!("Tray menu: {}", text::menu_labels(entries, mode).join(" | ")),
+                Err(error) => log::warn!("Couldn't update the tray menu: {error}"),
+            },
             Err(error) => log::warn!("Couldn't build the tray menu: {error}"),
         }
     }
@@ -217,8 +221,16 @@ impl Tray {
         let Some(tray) = &self.tray else { return };
         let previous = self.look.as_ref();
         if previous.map(|previous| &previous.tooltip) != Some(&look.tooltip) {
-            if let Err(error) = tray.set_tooltip(Some(&look.tooltip)) {
-                log::warn!("Couldn't update the tray tooltip: {error}");
+            match tray.set_tooltip(Some(&look.tooltip)) {
+                // Each new state's words, once (not every number): what the smoke test checks the tray said.
+                Ok(())
+                    if previous.map(|previous| text::words_of(&previous.tooltip))
+                        != Some(text::words_of(&look.tooltip)) =>
+                {
+                    log::info!("Tray tooltip: \"{}\"", look.tooltip);
+                }
+                Ok(()) => {}
+                Err(error) => log::warn!("Couldn't update the tray tooltip: {error}"),
             }
         }
         if previous.map(|previous| previous.ring) != Some(look.ring) {

@@ -1,8 +1,9 @@
 // `npm run smoke:shell` walks Simple after Advanced (or `node scripts/smoke-shell.mjs --mode simple`): the built app in
 // its own WebView2, as a first-time user meets it. A new profile (so it opens in Simple) on an empty data folder:
 //   first start (Home, its window named "Home · Shouting Iguana"); a check of the engine's test site from Home;
-//   the window closed with the check going on: hidden to the tray, with Simple's notice ("Still checking") and tray
-//   tooltip ("checking …"), the finish notice in Simple's words; back through the tray icon onto the Summary, its
+//   the window closed with the check going on: hidden to the tray, with Simple's notice ("Still checking"), the tray's
+//   tooltip and menu as they change ("checking …", "working out the results …", then nothing running), the finish
+//   notice in Simple's words; back through the tray icon onto the Summary, its
 //   score; the Report; quitting with a check running asks "Stop checking and quit?" (Cancel, then Stop and quit);
 //   nothing left running.
 // It never crawls a real site. Not run in CI: it needs a desktop session. Options as smoke-shell.mjs's (--exe, --port,
@@ -15,7 +16,16 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { chromium } from '@playwright/test';
 import { appRoot, buildCli } from './lib/engine.mjs';
-import { Walk, appPage, builtApp, parseOptions, shellEnvironment, verdict } from './lib/shell.mjs';
+import {
+  Walk,
+  appPage,
+  builtApp,
+  parseOptions,
+  shellEnvironment,
+  simpleTrayProblems,
+  trayWords,
+  verdict,
+} from './lib/shell.mjs';
 
 if (process.platform !== 'win32') throw new Error('smoke-shell walks the Windows shell (WebView2): run it on Windows');
 const options = parseOptions(
@@ -185,8 +195,6 @@ try {
         `the notice says "${notice[1]}"`,
       );
       expectThat(!/crawl|analys/i.test(notice[0]), `the notice speaks Advanced: "${notice[0]}"`);
-      const tray = /Tray icon shown: "([^"]+)"/.exec(shellLog());
-      expectThat(tray !== null && !/crawl|URL|analys/.test(tray[1]), `the tray's tooltip: "${tray?.[1]}"`);
       // The check ends in the tray: the system notice says so in Simple's words.
       const finished = await until(
         'the finish notice',
@@ -194,7 +202,15 @@ try {
           /Notification: (\S+ is checked): (.+)/.exec(shellLog()) ?? /Notification: (The check of .+)/.exec(shellLog()),
         180_000,
       );
-      return `"${notice[1]}: ${notice[2]}"; tray "${tray[1]}"; then "${finished[1]}${finished[2] ? `: ${finished[2]}` : ''}"`;
+      // The tray's words as they changed (round 5's review, R2-11): checking, then working out the results, then
+      // nothing running; the tooltip and the menu, never in Advanced's words.
+      const tray = await until('the tray saying nothing runs', () => {
+        const said = trayWords(shellLog());
+        return said.tooltips.at(-1) === 'Shouting Iguana' ? said : null;
+      }).catch(() => trayWords(shellLog()));
+      const problems = simpleTrayProblems(tray);
+      expectThat(problems.length === 0, problems.join('; '));
+      return `"${notice[1]}: ${notice[2]}"; tray ${tray.tooltips.map((words) => `"${words}"`).join(' → ')}; then "${finished[1]}${finished[2] ? `: ${finished[2]}` : ''}"`;
     },
   );
 
