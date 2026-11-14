@@ -245,3 +245,50 @@ export function verdict(walk) {
     ? `smoke-shell: PASS (${count('ok')} steps${skipped})`
     : `smoke-shell: FAIL (${walk.failed} of ${walk.steps.length} steps failed${skipped})`;
 }
+
+/**
+ * What the tray said, from the shell's log, in order: each tooltip (the one it was created with, then each new state's,
+ * `Tray tooltip:`) and each menu it built (`Tray menu:`, its labels split on " | ").
+ * @param {string} log
+ */
+export function trayWords(log) {
+  /** @type {string[]} */
+  const tooltips = [];
+  /** @type {string[][]} */
+  const menus = [];
+  for (const line of log.split('\n')) {
+    const tooltip = /Tray (?:icon shown|tooltip): "(.*)"\s*$/.exec(line);
+    if (tooltip) tooltips.push(tooltip[1]);
+    const menu = /Tray menu: (.*?)\s*$/.exec(line);
+    if (menu) menus.push(menu[1].split(' | '));
+  }
+  return { tooltips, menus };
+}
+
+/** Advanced's words, which Simple never says: a site is checked, its results worked out. */
+const ADVANCED_WORDS = /crawl|URL|analys/;
+
+/**
+ * What is wrong with the tray's words through a Simple check that ended in the tray: it said it was checking, then
+ * working out the results (tooltip and menu), and nothing running at the end; never in Advanced's words. Empty when
+ * all is well.
+ * @param {{ tooltips: string[], menus: string[][] }} tray
+ */
+export function simpleTrayProblems({ tooltips, menus }) {
+  const problems = [];
+  const said = tooltips.map((tooltip) => `"${tooltip}"`).join(' | ');
+  if (!tooltips.some((tooltip) => /: checking /.test(tooltip)))
+    problems.push(`the tray never said it was checking (tooltips: ${said})`);
+  if (!tooltips.some((tooltip) => /: working out the results for /.test(tooltip)))
+    problems.push(`the tray never said it was working out the results (tooltips: ${said})`);
+  if (!menus.some((labels) => labels.some((label) => label.endsWith(' (working out the results)'))))
+    problems.push('the tray’s menu never said it was working out the results');
+  const last = tooltips.at(-1);
+  if (last !== undefined && last !== 'Shouting Iguana')
+    problems.push(`the tray’s last tooltip is "${last}", not "Shouting Iguana" once nothing runs`);
+  for (const tooltip of tooltips.filter((words) => ADVANCED_WORDS.test(words)))
+    problems.push(`the tray speaks Advanced: "${tooltip}"`);
+  for (const label of menus.flat().filter((words) => ADVANCED_WORDS.test(words)))
+    problems.push(`the tray’s menu speaks Advanced: "${label}"`);
+  return problems;
+}

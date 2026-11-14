@@ -1,5 +1,6 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Configuration.Models;
@@ -202,6 +203,10 @@ public sealed record CrawlOptions
         if (ProxyUrl is not null && !Uri.TryCreate(ProxyUrl, UriKind.Absolute, out _))
         {
             yield return (Field(nameof(ProxyUrl)), "Proxy must be an absolute URL.");
+        }
+        else if (ProxyUrl is not null && !ProxyFactory.IsValid(ProxyUrl))
+        {
+            yield return (Field(nameof(ProxyUrl)), "Proxy must be an http, https or socks5 address with a host.");
         }
 
         foreach (var (name, value) in ExtraHeaders)

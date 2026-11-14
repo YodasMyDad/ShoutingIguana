@@ -302,7 +302,7 @@ public category titles, so the UI hard-codes none.
 | --- | --- |
 | `GET /api/crawl-options/defaults` | `{ options, speedPresets }`: the user's saved defaults, or the engine's |
 | `PUT /api/crawl-options/defaults` | Saves "my defaults". The start URL, header values and proxy credentials are never saved: the UI keeps secrets in the OS credential store, with the user's consent |
-| `POST /api/crawl-options/start-url` | Round 5: `{ address, options? }` gives `{ startUrl, reason }`, 200: where an address typed without a scheme starts. An address with its scheme comes back as typed (`reason` `typed`, nothing asked). Otherwise the site's home page is asked for on https and http at once, with `options` (the saved defaults when left out: their proxy, user agent and timeout, never their extra headers), each for at most 10 s: https when it gives any HTTP status (`https`), else http when it does (`http`), else https (`noAnswer`, which the crawl then reports as not answering). Why: a site that only serves http, typed without `http://`, was crawled on https, read nothing and was blamed on robots.txt (the closing audit's gap 1). No `address` is a `bad-request` |
+| `POST /api/crawl-options/start-url` | Round 5: `{ address, options? }` gives `{ startUrl, reason }`, 200: where an address typed without a scheme starts. An address with its scheme comes back as typed (`reason` `typed`, nothing asked). Otherwise the site's home page is asked for on https and http at once, with `options` (the saved defaults when left out: their proxy, user agent and timeout, never their extra headers), each for at most 10 s: https when it gives any HTTP status (`https`), else http when it does (`http`), else https (`noAnswer`, which the crawl then reports as not answering). Through a proxy, the proxy's own answers are not the site's: a 407 (the saved defaults mask its password, so the app sends them with its secrets restored), a refused tunnel, and a 5xx over plain http through an http proxy (its gateway error, or the site's own: no proof either way, so https) (round 5's review, R2-1). Why: a site that only serves http, typed without `http://`, was crawled on https, read nothing and was blamed on robots.txt (the closing audit's gap 1). No `address` is a `bad-request`; `options` a crawl would refuse (an unusable proxy, say), their start URL aside, are `invalid-options` (422) with the field messages, and nothing is asked (R2-7: they reached the fetcher, which threw a 500) |
 | `POST /api/crawl-options/validate` | `{ errors: { <field>: [messages] } }`, 200. Field names are the JSON names of `CrawlOptions` properties; a value of the wrong type is a message for its field too. A body that isn't JSON, or a property the options don't have, is a `bad-request` (400), as on every other call. The engine gets a field-keyed `Validate`, and the CLI keeps its list of messages |
 
 The options DTO has every public `CrawlOptions` property. `extraHeaders` is an object of name to value, and
@@ -441,8 +441,10 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   `stopped` again with its results "so far" (a partial score), so Simple's Summary and Advanced's Overview have them
   when it ends. Why when it stops, not on first open: an analysis costs what a completed crawl's does (the 100k crawl's
   takes about 7 s), the user is watching the screen that turns into the results, and Home's score for the site is
-  there without opening it. Not analysed then: a crawl stopped by the sidecar shutting down (the app quitting) and a
-  crawl that failed or was interrupted; those say "No score yet" with Work out the results. While the analysis runs,
+  there without opening it. Not analysed then: a crawl stopped by the sidecar shutting down (the app quitting), a
+  crawl that stopped itself (it gave up on a site that stopped answering: it is there to be continued once the site is
+  back, so Continue isn't held up as busy; round 5's review, R2-6), and a crawl that failed or was interrupted; those
+  say "No score yet" with Work out the results. While the analysis runs,
   the crawl is live (`crawl-busy` for remove, delete and continue), as after completing; cancel it to continue at once.
 
 | Method and path | Does |
@@ -1989,18 +1991,20 @@ An export only reads the crawl.
   | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's five |
   | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's five, the check's own columns among them |
   | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
-  | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId` |
+  | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId`, `hiddenChecks` (round 5's review) |
   | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
   | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |
   | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
   | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
 
-- **`hiddenChecks`** (round 5, `report` and `workbook`): the ids of the checks the user hid, at most 500. They are
+- **`hiddenChecks`** (round 5, `report`, `workbook` and `check`): the ids of the checks the user hid, at most 500. They are
   left out of the lists, the counts and the sheets (discovery decision 2: "the analysis still runs it, and exports
   leave it out"); the score is the analysis's, and the document says how many checks that found something it left
   out ("2 checks that found something are hidden, so they’re left out of this report. The score still counts them.";
   the workbook's summary has a "Hidden checks left out" row). An id the catalog doesn't have is ignored: a check hidden
-  by another version. `GET /report` takes them as `hiddenChecks=a,b`, so the report shown is the report saved. **`checks`**
+  by another version. `GET /report` takes them as `hiddenChecks=a,b`, so the report shown is the report saved. A
+  `check`'s file is named as its sheet is in the workbook with the same checks hidden ("4 …", numbered afresh without
+  them; R2-9: it was numbered against every check), and without a number when the check is hidden itself. **`checks`**
   (`workbook`): only these checks, the ones an Issues view listed; its summary says "Checks listed". `si export` takes
   them as `--hidden-checks` and `--checks`, comma-separated.
 - **`hiddenChecks` on a grid's export** (round 5 review, also noted: `urls`, `links`, `sitemapUrls`, `issueRows`) is
@@ -3614,7 +3618,8 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   `Fetching/StartAddress.ChooseAsync`: https and http asked at once, 10 s at most, https if it answers at all. Tests:
   `StartAddressTests`, `CrawlOptionsTests`.
 - **A crawl the user stops is analysed** (part A; gap 2), as a completed one is, when it was started to be analysed
-  (`CrawlManager`): it says `stopped`, `analyzing`, then `stopped` again with its results "so far". One stopped by the
+  (`CrawlManager`; only when the user asked for the stop, `LiveCrawl.StopRequested`, not when the crawl gave up on a
+  dead site: R2-6, `CrawlLifecycleTests.ACrawlThatStoppedItselfIsNotAnalysed`): it says `stopped`, `analyzing`, then `stopped` again with its results "so far". One stopped by the
   app quitting isn't. While that analysis runs, continue, remove and delete answer `crawl-busy` ("This crawl is being
   analysed…"), and `POST /analyze/cancel` frees it; the app shows the state with Cancel the analysis. Tests:
   `CrawlLifecycleTests`.
@@ -3636,7 +3641,7 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   `ReportOptions.HiddenChecks` and `ReportOptions.Checks`; `ReportReader.Read` takes them (`listing`) and leaves those
   checks out of the problems, the passed and the skipped, numbering the problems afresh; `ReportModel.HiddenProblems`
   and `Narrowed` say what was left out, and the report and the workbook's summary say it.
-  `ExportFields`: `hiddenChecks` belongs to `report` and `workbook`, `checks` to `workbook`; the request's DTO, the
+  `ExportFields`: `hiddenChecks` belongs to `report`, `workbook` and (round 5's review, R2-9) `check`, `checks` to `workbook`; the request's DTO, the
   `GET /report` query and `si export` (`--hidden-checks`, `--checks`) take them. Tested in `WorkbookExportTests`,
   `ReportDocumentTests` and `ExportEndpointsTests`.
 - **The proxy test** (part D). `POST /api/proxy/test` (above), for the proxy test in the app's settings (gap 18 of

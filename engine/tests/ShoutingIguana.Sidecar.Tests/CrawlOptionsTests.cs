@@ -88,6 +88,27 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
         TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawl-options/start-url", new JsonObject()), HttpStatusCode.BadRequest, "bad-request");
     }
 
+    /// <summary>
+    /// Round 5's review (R2-7): options a crawl couldn't start with reached the fetcher, which threw (a 500 logged as an
+    /// engine error). They are refused as the crawl would refuse them, and nothing is asked. The start URL in them is
+    /// no reason to refuse: the address is what's asked about.
+    /// </summary>
+    [Theory]
+    [InlineData("not a proxy")]
+    [InlineData("ftp://proxy.example:21")]
+    public async Task StartUrlRefusesOptionsACrawlCouldntStartWith(string proxyUrl)
+    {
+        var refused = TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawl-options/start-url",
+                new JsonObject { ["address"] = "example.invalid", ["options"] = new JsonObject { ["startUrl"] = "", ["proxyUrl"] = proxyUrl } }),
+            HttpStatusCode.UnprocessableEntity, "invalid-options");
+        Assert.Equal(["proxyUrl"], refused["errors"]!.AsObject().Select(field => field.Key));
+
+        // The crawl itself says the same of that proxy.
+        var validation = await _sidecar.PostAsync("api/crawl-options/validate",
+            new JsonObject { ["startUrl"] = "https://example.com/", ["proxyUrl"] = proxyUrl });
+        Assert.Equal(["proxyUrl"], validation.Body!["errors"]!.AsObject().Select(field => field.Key));
+    }
+
     [Fact]
     public async Task ValidationKeysEveryMessageByItsField()
     {

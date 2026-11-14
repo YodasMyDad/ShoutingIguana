@@ -140,6 +140,37 @@ public sealed class WorkbookExportTests : IDisposable
         AssertHoldsTheChecksRows(check.Id, sheet.Values);
     }
 
+    /// <summary>
+    /// Round 5's review (R2-9): the report and the workbook number their checks afresh once the hidden ones are left out,
+    /// but one check's file was numbered against every check (the workbook's sheet "4 …", its own file "5 …"). It takes
+    /// the hidden checks too, and is named as that check's sheet is in the workbook with them hidden.
+    /// </summary>
+    [Fact]
+    public void OneChecksFileIsNumberedAsTheWorkbookWithTheSameChecksHidden()
+    {
+        var order = IssueReader.ReadResults(_crawl.Path)!.FixFirst;
+        string[] hidden = [order[0], "a-check-from-another-version"];
+        var check = order[4];
+
+        var workbook = Path.Combine(_folder, "hidden-for-one.xlsx");
+        CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx, Report = new() { HiddenChecks = hidden } }, workbook);
+        var inTheWorkbook = XlsxFile.Read(workbook).Sheets[4].Name;
+        Assert.StartsWith("4 ", inTheWorkbook, StringComparison.Ordinal);
+
+        var one = Path.Combine(_folder, "one-with-hidden.xlsx");
+        CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Check, Format = ExportFormat.Xlsx, CheckId = check, Report = new() { HiddenChecks = hidden } }, one);
+        Assert.Equal(inTheWorkbook, Assert.Single(XlsxFile.Read(one).Sheets).Name);
+        AssertHoldsTheChecksRows(check, XlsxFile.Read(one).Sheets[0].Values);
+
+        // The check itself hidden: its file is still what was asked for, named without a number (it has none in the list).
+        var itself = Path.Combine(_folder, "itself-hidden.xlsx");
+        CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Check, Format = ExportFormat.Xlsx, CheckId = order[0], Report = new() { HiddenChecks = hidden } }, itself);
+        Assert.False(char.IsDigit(Assert.Single(XlsxFile.Read(itself).Sheets).Name[0]));
+
+        // And the API and the command line take hiddenChecks for a check's file.
+        Assert.True(ExportFields.Takes(ExportKind.Check, "hiddenChecks"));
+    }
+
     [Fact]
     public void ACheckThatFoundNothingIsAnEmptySheetUnderItsHeader()
     {

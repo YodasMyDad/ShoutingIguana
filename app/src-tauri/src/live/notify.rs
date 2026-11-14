@@ -70,6 +70,19 @@ pub fn notice(
             "Crawl stopped",
             format!("{name}: {}. Continue it from the library.", urls(item.crawled())),
         )),
+        // A crawl the user stopped is analysed, and its notice waited for that: the stop is the news, with the results
+        // so far as the page's toast says them (round 5's review, R2-4). Its analysis cancelled, the stop alone.
+        "stopped" if ended.crawled => {
+            let issues = item
+                .current_issue_checks()
+                .filter(|_| !stored_nothing(item, analysed_before))
+                .map(|checks| format!(", {}", checks_found(checks)))
+                .unwrap_or_default();
+            Some(Notice::new(
+                "Crawl stopped",
+                format!("{name}: {}{issues}. Continue it from the library.", urls(item.crawled())),
+            ))
+        }
         "completed" | "stopped" if ended.was_analysing => {
             if stored_nothing(item, analysed_before) {
                 return None;
@@ -117,6 +130,18 @@ fn simple_notice(
             format!("The check of {name} was stopped"),
             format!("{} checked. Continue it from Your sites.", addresses(item.crawled())),
         )),
+        // Stopped by the user and analysed: "Score 71 so far: 2 problems to fix", as the toast says it (R2-4).
+        "stopped" if ended.crawled => {
+            let so_far = if item.analyzed_at.is_some() && !stored_nothing(item, analysed_before) {
+                result_words(item, problems)
+            } else {
+                format!("{} checked", addresses(item.crawled()))
+            };
+            Some(Notice::new(
+                format!("The check of {name} was stopped"),
+                format!("{}. Continue it from Your sites.", so_far.trim_end_matches('.')),
+            ))
+        }
         "completed" | "stopped" if ended.was_analysing => {
             if stored_nothing(item, analysed_before) {
                 return None;
@@ -467,6 +492,46 @@ mod tests {
         assert_eq!(
             body(notice(&ended("stopped", false, true), &stopped, None, simple(None))).as_deref(),
             Some("1,300 addresses checked. Continue it from Your sites.")
+        );
+    }
+
+    /// Round 5's review (R2-4): a crawl the user stops is analysed, and the notice waits for that analysis; it then said
+    /// "Analysis finished" (Simple: "The results for … are updated"), never that the crawl had stopped. It says the stop
+    /// as the page's toast does, with the results so far, and where to continue it.
+    #[test]
+    fn a_stop_analysed_says_it_stopped_with_its_results_so_far() {
+        let mut stopped = item("stopped");
+        stopped.crawled_url_count = Some(1_234);
+        stopped.score = Some(ScoreSummary { value: 71, partial: true });
+        // The crawl's own end waits for its analysis.
+        assert_eq!(notice(&ended("stopped", false, true), &item("analyzing"), Some(&None), Words::Advanced), None);
+        assert_eq!(
+            notice(&ended("stopped", true, true), &stopped, Some(&None), Words::Advanced),
+            told("Crawl stopped", "example.com: 1,234 URLs, 18 checks found issues. Continue it from the library.")
+        );
+        assert_eq!(
+            notice(&ended("stopped", true, true), &stopped, Some(&None), simple(Some(2))),
+            told(
+                "The check of example.com was stopped",
+                "Score 71 so far: 2 problems to fix. Continue it from Your sites."
+            )
+        );
+
+        // Its analysis cancelled: the stop alone, as before there was an analysis.
+        let before = stopped.analyzed_at.clone();
+        assert_eq!(
+            notice(&ended("stopped", true, true), &stopped, Some(&before), Words::Advanced),
+            told("Crawl stopped", "example.com: 1,234 URLs. Continue it from the library.")
+        );
+        assert_eq!(
+            notice(&ended("stopped", true, true), &stopped, Some(&before), simple(Some(2))),
+            told("The check of example.com was stopped", "1,234 addresses checked. Continue it from Your sites.")
+        );
+
+        // An analysis of a stopped crawl on its own (not after a crawl) is still the analysis's news.
+        assert_eq!(
+            notice(&ended("stopped", true, false), &item("stopped"), None, Words::Advanced),
+            told("Analysis finished", "example.com: 18 checks found issues")
         );
     }
 

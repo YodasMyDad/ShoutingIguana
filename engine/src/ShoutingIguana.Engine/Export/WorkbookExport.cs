@@ -55,12 +55,16 @@ internal static class WorkbookExport
         }
     }
 
-    /// <summary>One check's sheet as a file of its own: named as the workbook names it, when the check found something.</summary>
+    /// <summary>
+    /// One check's sheet as a file of its own: named as the workbook with the same checks hidden names it (numbered
+    /// afresh without them, as the report is), when the check found something and isn't hidden itself.
+    /// </summary>
     public static void WriteCheck(ExportRun run, ITableWriter table)
     {
         var results = IssueReader.ReadResults(run.CrawlPath) ?? throw new ExportException(ExportFailure.NotAnalyzed, GridExport.NOT_ANALYZED);
         var check = IssueCatalog.Find(run.Request.CheckId!)!;
-        var number = ReportSources.FixFirst(results).ToList().IndexOf(check.Id) + 1;
+        var hidden = run.Request.Report.HiddenChecks;
+        var number = ReportSources.FixFirst(results).Where(id => !hidden.Contains(id, StringComparer.Ordinal)).ToList().IndexOf(check.Id) + 1;
         var title = ReportSources.Words(check, ReportSources.Settings(results)).Title;
         WriteSheet(run, table, number > 0 ? SheetTitle(number, title) : title, check.Id);
     }

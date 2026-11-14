@@ -152,6 +152,39 @@ pub fn tray_notice(kinds: LiveKinds, mode: Mode) -> (&'static str, &'static str)
     }
 }
 
+/// A tooltip's words, its numbers aside ("1,204" and "1,300" alike are "#"): a change of words is a change of state,
+/// shown and logged at once, where a change of numbers waits for the next redraw.
+pub fn words_of(text: &str) -> String {
+    let mut words = String::with_capacity(text.len());
+    let mut characters = text.chars().peekable();
+    while let Some(character) = characters.next() {
+        if !character.is_ascii_digit() {
+            words.push(character);
+            continue;
+        }
+        // The number, its thousands' commas with it.
+        while let Some(&next) = characters.peek() {
+            let mut ahead = characters.clone();
+            ahead.next();
+            if next.is_ascii_digit() || (next == ',' && ahead.peek().is_some_and(char::is_ascii_digit)) {
+                characters.next();
+            } else {
+                break;
+            }
+        }
+        words.push('#');
+    }
+    words
+}
+
+/// Every label of the tray's menu, in order, as the shell's log gives them (the smoke test reads them there).
+pub fn menu_labels(entries: &[TrayEntry], mode: Mode) -> Vec<String> {
+    let mut labels = vec![format!("Open {APP_NAME}")];
+    labels.extend(entries.iter().map(|entry| menu_label(entry, mode)));
+    labels.push("Quit".to_owned());
+    labels
+}
+
 /// Menus read `&` as a mnemonic marker; `&&` is a literal ampersand.
 fn menu_text(text: &str) -> String {
     text.replace('&', "&&")
@@ -163,6 +196,22 @@ mod tests {
 
     fn entry(name: &str, status: LiveStatus, fetched: u64) -> TrayEntry {
         TrayEntry { id: name.to_owned(), name: name.to_owned(), status, fetched }
+    }
+
+    /// Round 5's review (R2-11): the tooltip's state is told apart from its numbers, so a change of state is shown and
+    /// logged at once, and the menu's labels are logged in the mode's words.
+    #[test]
+    fn a_tooltips_words_leave_its_numbers_out() {
+        let checking = simple(&[entry("a.com", LiveStatus::Running, 1_204)]);
+        assert_eq!(words_of(&checking), "Shouting Iguana: checking a.com, # addresses checked");
+        assert_eq!(words_of(&checking), words_of(&simple(&[entry("a.com", LiveStatus::Running, 7)])));
+        assert_ne!(words_of(&checking), words_of(&simple(&[entry("a.com", LiveStatus::Analyzing, 7)])));
+        assert_eq!(words_of("site2.com, 1,2 and 3"), "site#.com, # and #");
+        assert_eq!(words_of("a, b"), "a, b");
+
+        let labels = menu_labels(&[entry("a.com", LiveStatus::Analyzing, 0)], Mode::Simple);
+        assert_eq!(labels, ["Open Shouting Iguana", "a.com (working out the results)", "Quit"]);
+        assert_eq!(menu_labels(&[], Mode::Advanced), ["Open Shouting Iguana", "Quit"]);
     }
 
     #[test]

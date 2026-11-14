@@ -58,7 +58,7 @@ internal static class ExportCommand
         };
         var hiddenChecks = new Option<string?>("--hidden-checks")
         {
-            Description = "For report, workbook and the grids: checks hidden in the app, by id, comma-separated, left out of the lists and counts (title-too-long,thin-content)."
+            Description = "For report, workbook, check and the grids: checks hidden in the app, by id, comma-separated, left out of the lists and counts (title-too-long,thin-content)."
         };
         var onlyChecks = new Option<string?>("--checks") { Description = "For workbook: only these checks, by id, comma-separated: the ones an Issues view listed." };
         var command = new Command("export", "Write what a crawl holds to a file: a grid as CSV or Excel, the workbook of everything, or the report.")

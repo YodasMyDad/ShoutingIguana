@@ -191,9 +191,12 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
 - **Then Simple** (round 5, `scripts/smoke-shell-simple.mjs`; `--mode advanced` or `--mode simple` runs one walk
   alone): a second app on a new profile and an empty data folder, as a first-time user meets it. It opens in Simple
   on Home, its window named "Home · Shouting Iguana"; a check of the test site from Home (the saved defaults set Fast,
-  so it ends while hidden); the window closed with the check going on: hidden, with "Still checking" and the tray's
-  tooltip in Simple's words, read from the shell's log (it records the tooltip the icon is built with), then the
-  finish notice "… is checked"; back through the tray icon onto the Summary's score and the window "Summary · …"; the
+  so it ends while hidden); the window closed with the check going on: hidden, with "Still checking", then the
+  finish notice "… is checked", and the tray's tooltip and menu as they changed, read from the shell's log (it records
+  the tooltip the icon is built with, each new state's tooltip, `Tray tooltip:`, and each menu it builds, `Tray menu:`;
+  `lib/shell.mjs`'s `trayWords` and `simpleTrayProblems`): checking, then working out the results (tooltip and menu),
+  then "Shouting Iguana" with nothing running, never in Advanced's words (round 5's review, R2-11: it read the first
+  tooltip only). A new state's tooltip is drawn at once; only its numbers wait for the tray's one-second redraw; back through the tray icon onto the Summary's score and the window "Summary · …"; the
   Report; "Stop checking and quit?" with a check running (Cancel keeps it, Stop and quit ends it); nothing left
   running and no page error.
 - **What the first walk by hand found** (10 Nov 2026, WebView2 157, Windows 11 at 150%): everything above works as in
@@ -1663,7 +1666,7 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   checking in the tray. Quit from its menu." (or "Still working out the results"), and the quit question "Stop
   checking and quit? You can continue the check later from Your sites." Advanced keeps its words, and an analysis alone
   now says "Still analysing" rather than "Still crawling". The words are in `tray/text.rs` and `quit.rs`, tested in
-  both modes; `smoke:shell`'s Simple walk reads the notice and the tooltip from the shell's log.
+  both modes; `smoke:shell`'s Simple walk reads the notice, each tooltip and each menu from the shell's log.
 - **Each screen names the window** (`layout/documentTitle.ts`): "Issues · gardenfurnituresets.co.uk · Shouting
   Iguana", in the mode's words ("What to fix · …" in Simple), "Home · Shouting Iguana", "New crawl · …"; the site only
   once the crawl is known. The shell mirrors `document.title` onto the window (`on_document_title_changed`), so the
@@ -1684,9 +1687,13 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   `latest.json` from this repository's newest GitHub release
   (`https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json`, in `tauri.conf.json`'s
   `plugins.updater.endpoints`), and says the newer version, its date and what's new (the release's notes), or "You
-  have the newest version". Install and restart, on the user's word only, never while a crawl or an analysis runs:
-  the shell downloads the installer (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a
-  second), checks its minisign signature against `plugins.updater.pubkey`, stops the engine as quitting does, and runs
+  have the newest version". Install and restart, on the user's word only, never while a crawl, an analysis or an
+  export runs ("A file is being exported. Install the update once it has been saved."; the shell knows the exports
+  running from the event stream's `hello` and `export` events, `LiveView::exporting`): the shell downloads the
+  installer (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a second), checks its
+  minisign signature against `plugins.updater.pubkey`, asks again whether anything runs, under the quit lock (a crawl
+  started during a slow download: "Something started while the update downloaded. Install it once that has
+  finished.", and nothing is stopped; round 5's review, R2-3), stops the engine as quitting does, and runs
   the NSIS installer passively; it closes the app and starts the new version. A download whose signature doesn't
   match is never run. Nothing is checked on its own: the user asks.
 
@@ -1735,7 +1742,8 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   hundreds of MB; a move of gigabytes can fail half way (a full disk, a file another program holds open, an
   antivirus scan), leaving crawls in two places, and needs its own progress, cancel and recovery, while a switch
   can't lose anything, is instant, and is undone by Go back. A user who wants the files moved moves them in Explorer:
-  the library lists the `.sicrawl` files at the top of its folder. Refused while a crawl or an analysis runs. A
+  the library lists the `.sicrawl` files at the top of its folder. Refused while a crawl, an analysis or an export
+  runs ("A file is being exported. Change the folder once it has been saved, or after cancelling it."; R2-10). A
   chosen folder that has gone (a drive unplugged) is passed over for that run, and stays chosen. `SI_APP_DATA_DIR`
   (tests, development) still wins, and Settings then says it can't be changed.
 - **A proxy test** (`POST /api/proxy/test`, `crawl/options/ProxyTest.tsx`): beside every proxy field, it fetches the
@@ -1939,6 +1947,12 @@ the routes' table (`app/simpleScreens.ts`):
   hidden checks the page stored (`settings::preferences`, read as the page reads them: nothing stored is Simple), the
   library item's `score` and `pageCount`, and, with checks hidden, `/api/checks` and the analysis's counts. The
   notification plugin has no buttons on the desktop, so See the summary and Open the report are the toast's only.
+  A crawl the user stops is analysed, and its notification waits for that analysis, then says the stop as the toast
+  does, with the results so far: "Crawl stopped", "example.com: 1,234 URLs, 18 checks found issues. Continue it from
+  the library."; in Simple "The check of example.com was stopped", "Score 71 so far: 2 problems to fix. Continue it
+  from Your sites." (round 5's review, R2-4: it said "Analysis finished" or "The results … are updated", never that
+  the crawl stopped). Continue is the toast's button; the notification says where to find it. Its analysis cancelled,
+  the stop alone, as before.
 
 ### The Summary, What to fix and one problem
 

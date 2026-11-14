@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Sidecar.Crawls;
@@ -176,6 +178,41 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
 
         Assert.Null((await _sidecar.GetJsonAsync($"api/crawls/{id}"))["analyzedAt"]);
         TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{id}/analysis"), HttpStatusCode.NotFound, "not-analyzed");
+    }
+
+    /// <summary>
+    /// Round 5's review (R2-6): a crawl that stopped itself (it gave up on a site that stopped answering, to be continued
+    /// once the site is back) was analysed as if the user had stopped it, and Continue was refused as busy meanwhile.
+    /// Only a crawl the user stops is analysed on stopping.
+    /// </summary>
+    [Fact]
+    public async Task ACrawlThatStoppedItselfIsNotAnalysed()
+    {
+        var manager = _sidecar.Host.Services.GetRequiredService<CrawlManager>();
+        manager.StartJob = (request, observer) =>
+        {
+            // Stops as the engine's give-up on a dead site does: from inside, with no stop asked for.
+            var job = new CrawlEngine(NullLoggerFactory.Instance).Start(request, observer);
+            _ = job.StopAsync();
+            return job;
+        };
+
+        try
+        {
+            await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+            var id = (string)(await StartAsync(SlowCrawl()))["id"]!;
+            await events.CrawlStatusAsync(id, "stopped");
+
+            // Had it been analysed, it would say so already: the analysis is announced with the stop, under one lock.
+            var stopped = await _sidecar.GetJsonAsync($"api/crawls/{id}");
+            Assert.Equal("stopped", (string?)stopped["status"]);
+            Assert.Null(stopped["analyzedAt"]);
+            TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{id}/analysis"), HttpStatusCode.NotFound, "not-analyzed");
+        }
+        finally
+        {
+            manager.StartJob = null;
+        }
     }
 
     /// <summary>Header values aren't stored, so continuing asks for them again, unless told to go on without them.</summary>

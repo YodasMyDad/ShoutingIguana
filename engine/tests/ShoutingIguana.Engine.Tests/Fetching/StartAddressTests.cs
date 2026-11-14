@@ -68,6 +68,71 @@ public sealed class StartAddressTests
         Assert.Equal(0, requests);
     }
 
+    /// <summary>
+    /// Round 5's review (R2-1): through a proxy, the proxy's own answer was taken for the site's, so an address that
+    /// doesn't exist started on http. A 407 is the proxy asking for its password (the saved defaults mask it), and a
+    /// 5xx over plain http is the proxy saying it couldn't reach the site; a refused tunnel is no answer either.
+    /// </summary>
+    [Theory]
+    [InlineData(407)]
+    [InlineData(500)]
+    [InlineData(502)]
+    [InlineData(503)]
+    [InlineData(504)]
+    public async Task AProxysOwnAnswerIsNotTheSiteAnswering(int proxyStatus)
+    {
+        var asked = new List<string>();
+        await using var proxy = await LoopbackServer.StartAsync(context =>
+        {
+            lock (asked)
+            {
+                asked.Add(context.Request.Method);
+            }
+
+            context.Response.StatusCode = proxyStatus;
+            return Task.CompletedTask;
+        });
+        var options = new CrawlOptions
+        {
+            StartUrl = "https://example.com/",
+            ProxyUrl = new UriBuilder(proxy.BaseUri) { UserName = "user", Password = "secret" }.Uri.AbsoluteUri
+        }.WithoutSecrets();
+
+        var choice = await StartAddress.ChooseAsync("no-such-site.invalid", options, CancellationToken.None);
+
+        Assert.Equal(new StartAddressChoice("https://no-such-site.invalid", StartAddressReason.NoAnswer), choice);
+        Assert.Equal(["CONNECT", "GET"], asked.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ASiteThatOnlyServesHttpThroughAProxyStillStartsOnHttp()
+    {
+        await using var proxy = await LoopbackServer.StartAsync(context =>
+        {
+            // Refuses the https tunnel, and gives the site's page over plain http.
+            context.Response.StatusCode = HttpMethods.IsConnect(context.Request.Method) ? 502 : 200;
+            return Task.CompletedTask;
+        });
+
+        var choice = await StartAddress.ChooseAsync("http-only.invalid", OPTIONS with { ProxyUrl = proxy.BaseUri.AbsoluteUri }, CancellationToken.None);
+
+        Assert.Equal(new StartAddressChoice("http://http-only.invalid", StartAddressReason.Http), choice);
+    }
+
+    [Fact]
+    public async Task ASiteAnsweringAnErrorWithoutAProxyIsStillThere()
+    {
+        await using var server = await LoopbackServer.StartAsync(context =>
+        {
+            context.Response.StatusCode = 503;
+            return Task.CompletedTask;
+        });
+
+        var choice = await StartAddress.ChooseAsync(server.BaseUri.Authority, OPTIONS, CancellationToken.None);
+
+        Assert.Equal(StartAddressReason.Http, choice.Reason);
+    }
+
     [Fact]
     public async Task ExtraHeadersAreNeverSentOnAGuess()
     {

@@ -12,6 +12,8 @@ import {
   parseOptions,
   shellEnvironment,
   shellMemory,
+  simpleTrayProblems,
+  trayWords,
   verdict,
   withDebuggingPort,
 } from './shell.mjs';
@@ -207,4 +209,51 @@ test('a walk with nothing failed passes, and says what it left out', async () =>
   walk.skip('two', 'not on this platform');
   assert.equal(verdict(walk), 'smoke-shell: PASS (1 steps, 1 skipped)');
   assert.equal(formatStep({ name: 'x', outcome: 'ok', detail: '', ms: 12 }), 'ok   x (12 ms)');
+});
+
+// Round 5's review (R2-11): the Simple walk read only the tooltip the tray icon was created with. The shell logs each
+// new state's tooltip and each menu it builds; the walk checks them all.
+const TRAY_LOG = [
+  '[2026-11-14][12:00:01][shouting_iguana::tray][INFO] Tray icon shown: "Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked"',
+  '[2026-11-14][12:00:01][shouting_iguana::tray][INFO] Tray menu: Open Shouting Iguana | 127.0.0.1:9000 | Quit',
+  '[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray menu: Open Shouting Iguana | 127.0.0.1:9000 (working out the results) | Quit',
+  '[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray tooltip: "Shouting Iguana: working out the results for 127.0.0.1:9000"',
+  '[2026-11-14][12:00:05][shouting_iguana::tray][INFO] Tray menu: Open Shouting Iguana | Quit',
+  '[2026-11-14][12:00:05][shouting_iguana::tray][INFO] Tray tooltip: "Shouting Iguana"',
+].join('\n');
+
+test('the tray’s words are read from the shell’s log in order: every tooltip and every menu', () => {
+  assert.deepEqual(trayWords(TRAY_LOG), {
+    tooltips: [
+      'Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked',
+      'Shouting Iguana: working out the results for 127.0.0.1:9000',
+      'Shouting Iguana',
+    ],
+    menus: [
+      ['Open Shouting Iguana', '127.0.0.1:9000', 'Quit'],
+      ['Open Shouting Iguana', '127.0.0.1:9000 (working out the results)', 'Quit'],
+      ['Open Shouting Iguana', 'Quit'],
+    ],
+  });
+  assert.deepEqual(trayWords(''), { tooltips: [], menus: [] });
+});
+
+test('Simple’s tray says checking, then working out the results, then nothing, never in Advanced’s words', () => {
+  assert.deepEqual(simpleTrayProblems(trayWords(TRAY_LOG)), []);
+  // What the walk saw before: the first tooltip alone.
+  assert.deepEqual(simpleTrayProblems(trayWords(TRAY_LOG.split('\n')[0])), [
+    'the tray never said it was working out the results (tooltips: "Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked")',
+    'the tray’s menu never said it was working out the results',
+    'the tray’s last tooltip is "Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked", not "Shouting Iguana" once nothing runs',
+  ]);
+  const advanced = TRAY_LOG.replace('working out the results for', 'analysing').replace(
+    '(working out the results)',
+    '(analysing)',
+  );
+  assert.deepEqual(simpleTrayProblems(trayWords(advanced)), [
+    'the tray never said it was working out the results (tooltips: "Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked" | "Shouting Iguana: analysing 127.0.0.1:9000" | "Shouting Iguana")',
+    'the tray’s menu never said it was working out the results',
+    'the tray speaks Advanced: "Shouting Iguana: analysing 127.0.0.1:9000"',
+    'the tray’s menu speaks Advanced: "127.0.0.1:9000 (analysing)"',
+  ]);
 });

@@ -196,7 +196,11 @@ impl Follower {
         };
         match event {
             Event::Hello(hello) => {
-                let change = lock(&self.view).hello(&hello.live);
+                let change = {
+                    let mut view = lock(&self.view);
+                    view.exports_running(&hello.exports);
+                    view.hello(&hello.live)
+                };
                 // Analyses aren't in hello, and names never are: the library brings the view up to date in one call.
                 let change = match self.api.crawls(connection, None) {
                     Ok(items) => {
@@ -219,7 +223,10 @@ impl Follower {
                 let change = lock(&self.view).crawl(&crawl);
                 self.apply(connection, change);
             }
-            Event::Export(job) => self.export_ended(&job),
+            Event::Export(job) => {
+                lock(&self.view).export(&job);
+                self.export_ended(&job);
+            }
             Event::Other => {}
         }
     }

@@ -12,6 +12,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Url};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
+use crate::live::model::LiveView;
 use crate::profile;
 use crate::shell::{QuitPhase, Shell};
 use crate::sidecar::GRACEFUL_SHUTDOWN_TIMEOUT;
@@ -113,8 +114,8 @@ pub fn check_failed_words(error: &str) -> String {
 pub async fn install(app: &AppHandle, version: &str) -> Result<(), String> {
     let shell = app.try_state::<Shell>().ok_or("The app isn't ready.")?;
     let updates = app.try_state::<Updates>().ok_or("The app isn't ready.")?;
-    if lock(&shell.live).kinds().any() {
-        return Err("Something is running. Install the update once it has finished.".to_owned());
+    if let Some(words) = refusal(&lock(&shell.live)) {
+        return Err(words.to_owned());
     }
     let update = lock(&updates.found)
         .clone()
@@ -126,6 +127,34 @@ pub async fn install(app: &AppHandle, version: &str) -> Result<(), String> {
     let result = download_and_install(app, &shell, &update).await;
     updates.installing.store(false, Ordering::SeqCst);
     result
+}
+
+/// Why an update can't be installed now: installing stops the engine, and what runs in it with it, an export among it
+/// (round 5's review, R2-10).
+fn refusal(view: &LiveView) -> Option<&'static str> {
+    if view.kinds().any() {
+        Some("Something is running. Install the update once it has finished.")
+    } else if view.exporting() {
+        Some("A file is being exported. Install the update once it has been saved.")
+    } else {
+        None
+    }
+}
+
+/// The app starts stopping for the installer. The download may have taken minutes, and whatever started meanwhile
+/// would be stopped with the engine (round 5's review, R2-3): asked again here, under the quit lock, so the app is
+/// either still running with it or stopping without it.
+fn begin_stopping(quit: &Mutex<QuitPhase>, live: &Mutex<LiveView>) -> Result<(), String> {
+    let mut phase = lock(quit);
+    if *phase != QuitPhase::Running {
+        return Err("The app is quitting.".to_owned());
+    }
+    if refusal(&lock(live)).is_some() {
+        log::info!("Not installing: something started while the update downloaded");
+        return Err("Something started while the update downloaded. Install it once that has finished.".to_owned());
+    }
+    *phase = QuitPhase::Stopping;
+    Ok(())
 }
 
 async fn download_and_install(app: &AppHandle, shell: &Shell, update: &Update) -> Result<(), String> {
@@ -154,13 +183,7 @@ async fn download_and_install(app: &AppHandle, shell: &Shell, update: &Update) -
             }
         })?;
     // The engine finishes what it was writing before the installer replaces it.
-    {
-        let mut phase = lock(&shell.quit);
-        if *phase != QuitPhase::Running {
-            return Err("The app is quitting.".to_owned());
-        }
-        *phase = QuitPhase::Stopping;
-    }
+    begin_stopping(&shell.quit, &shell.live)?;
     shell.sidecar.begin_quit(false);
     shell.tray.quit();
     let shell_sidecar = std::sync::Arc::clone(&shell.sidecar);
@@ -176,6 +199,31 @@ async fn download_and_install(app: &AppHandle, shell: &Shell, update: &Update) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Round 5's review (R2-3, R2-10): installing stops the engine, so it waits for what runs: a crawl or an analysis
+    /// before the download, an export too, and anything that started while the update downloaded.
+    #[test]
+    fn nothing_running_is_stopped_by_an_install() {
+        use crate::live::model::{CrawlChange, ExportJob};
+        let mut view = LiveView::default();
+        assert_eq!(refusal(&view), None);
+        view.export(&ExportJob { export_id: "e1".into(), status: "running".into(), ..ExportJob::default() });
+        assert_eq!(refusal(&view), Some("A file is being exported. Install the update once it has been saved."));
+
+        // The download done, a crawl started meanwhile: the engine isn't stopped, and the app isn't quitting.
+        let (quit, live) = (Mutex::new(QuitPhase::Running), Mutex::new(LiveView::default()));
+        lock(&live).crawl(&CrawlChange { crawl_id: "a".into(), status: "running".into(), error: None });
+        assert_eq!(
+            begin_stopping(&quit, &live),
+            Err("Something started while the update downloaded. Install it once that has finished.".to_owned())
+        );
+        assert_eq!(*lock(&quit), QuitPhase::Running);
+
+        lock(&live).crawl(&CrawlChange { crawl_id: "a".into(), status: "stopped".into(), error: None });
+        assert_eq!(begin_stopping(&quit, &live), Ok(()));
+        assert_eq!(*lock(&quit), QuitPhase::Stopping);
+        assert_eq!(begin_stopping(&quit, &live), Err("The app is quitting.".to_owned()));
+    }
 
     #[test]
     fn a_failed_check_says_why_in_plain_words() {
