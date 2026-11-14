@@ -13,7 +13,7 @@
 // the page after each step), --skip keys,live,tray,restart, --keep (leave the run's folder behind).
 /* global document, window -- the functions handed to page.evaluate run in the page */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -22,6 +22,7 @@ import { appRoot, buildCli, copyCrawl, makeSyntheticCrawl } from './lib/engine.m
 import {
   VIRTUAL_KEYS,
   Walk,
+  advancedSettings,
   appPage,
   builtApp,
   parseOptions,
@@ -40,6 +41,10 @@ const temp = mkdtempSync(path.join(os.tmpdir(), 'si-shell-'));
 let crawl = options.crawl ?? path.join(appRoot, '.engine-build', 'crawls', 'e2e-synthetic-full.sicrawl');
 if (!existsSync(crawl)) crawl = await makeSyntheticCrawl({ out: crawl, pages: 40, maxUrls: 5_000, storeHtml: true });
 copyCrawl(crawl, path.join(temp, 'data'));
+// The walk drives Advanced's screens; a new profile would open in Simple.
+const settings = advancedSettings(temp);
+mkdirSync(path.dirname(settings.file), { recursive: true });
+writeFileSync(settings.file, settings.text);
 if (options.shots) mkdirSync(options.shots, { recursive: true });
 
 const port = options.port ?? 9300 + Math.floor(Math.random() * 500);

@@ -5,11 +5,12 @@
 // open, and nothing failed in the console. Then closes the window and checks nothing is left running.
 // Options: --exe <path>, --crawl <file> (else the e2e synthetic crawl, made with the CLI if missing).
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
 import { appRoot, copyCrawl, makeSyntheticCrawl } from './lib/engine.mjs';
+import { advancedSettings } from './lib/shell.mjs';
 
 const argv = process.argv.slice(2);
 const option = (name) => {
@@ -32,6 +33,10 @@ const temp = mkdtempSync(path.join(os.tmpdir(), 'si-smoke-'));
 let crawl = option('--crawl') ?? path.join(appRoot, '.engine-build', 'crawls', 'e2e-synthetic.sicrawl');
 if (!existsSync(crawl)) crawl = await makeSyntheticCrawl({ out: crawl, pages: 40 });
 copyCrawl(crawl, path.join(temp, 'data'));
+// The check reads Advanced's Library; a new profile would open in Simple.
+const settings = advancedSettings(temp);
+mkdirSync(path.dirname(settings.file), { recursive: true });
+writeFileSync(settings.file, settings.text);
 
 const port = 9300 + Math.floor(Math.random() * 500);
 const started = Date.now();

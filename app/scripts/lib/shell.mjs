@@ -36,6 +36,20 @@ export function shellEnvironment({ folder, port, environment = process.env }) {
   };
 }
 
+/**
+ * The preferences a test run starts with, as the shell keeps them (`{"settings": {...}}` in the profile's
+ * settings.json, src-tauri/src/settings.rs): Advanced, since a new profile opens in Simple and the walks drive
+ * Advanced's screens (the Library, the URLs grid, the inspector). The caller writes `text` to `file` before the app
+ * starts.
+ * @param {string} folder the run's folder, as given to shellEnvironment
+ */
+export function advancedSettings(folder) {
+  return {
+    file: path.join(folder, 'profile', 'settings.json'),
+    text: JSON.stringify({ settings: { mode: 'advanced' } }),
+  };
+}
+
 /** The steps of the walk that can be left out with `--skip`. */
 export const SKIPPABLE = ['keys', 'live', 'tray', 'restart'];
 

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   BROWSER_ARGUMENTS,
   Walk,
+  advancedSettings,
   appPage,
   builtApp,
   formatStep,
@@ -36,6 +37,13 @@ test('a test run gets folders of its own and the DevTools port, and the rest of 
   // Its own profile also keeps it out of single instance: it runs beside the user's open app.
   assert.equal(environment.SI_APP_PROFILE_DIR, path.join('C:', 'temp', 'si-smoke', 'profile'));
   assert.equal(environment[BROWSER_ARGUMENTS], '--disable-gpu --remote-debugging-port=9333');
+});
+
+test('a test run starts in Advanced, in the settings file of its own profile, in the shape the shell reads', () => {
+  const folder = path.join('C:', 'temp', 'si-smoke');
+  const { file, text } = advancedSettings(folder);
+  assert.equal(file, path.join(shellEnvironment({ folder, port: 9333 }).SI_APP_PROFILE_DIR, 'settings.json'));
+  assert.deepEqual(JSON.parse(text), { settings: { mode: 'advanced' } });
 });
 
 test('options: paths are made absolute, numbers checked, steps to skip named', () => {

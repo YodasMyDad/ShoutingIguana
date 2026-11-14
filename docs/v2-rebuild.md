@@ -156,7 +156,14 @@ sidecar build, e2e 188 (2 skipped); `cargo fmt`, `clippy`, `cargo test` (120 + 3
 in the app's code: in the scripted run, `src/main.test.tsx`'s "shows a plain failure…" timed out once at 5 s on its
 cold `import('./main')` under the suite's load (its "index.html has no #root" is that import landing after the
 teardown); it passed 3 of 3 alone and in the full rerun. A full `npm test` run without the script's private TEMP then
-failed to load all 328 files: the stale Vite cache below; moved aside, the suite ran green. Next is step 2.
+failed to load all 328 files: the stale Vite cache below; moved aside, the suite ran green.
+
+**2026-11-14: step 2 is done.** The release build of `151d6dd` (`build:sidecar`, `tauri build --no-bundle`), then
+`smoke:shell` PASS, 16 steps, export's Open folder and Open file and the Report's print among them, and `smoke:tauri`
+PASS. The first run failed at its second step: since round 4 a new profile opens in Simple, and both walks drive
+Advanced's Library. They now start the app in Advanced (`advancedSettings` in `scripts/lib/shell.mjs`, written to the
+run's own profile before the app starts). Not covered: Simple's screens in the real shell (Home, the checking screen,
+the OS notice in Simple's words); the e2e covers them in Chromium only. Next is step 3.
 
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
