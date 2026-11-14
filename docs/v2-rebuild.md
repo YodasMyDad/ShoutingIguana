@@ -203,6 +203,18 @@ native macOS menu and installers for other OSes (can't be built or checked on th
 says "launched" in a new session, the builders didn't report: check each branch's log and checkpoint, and relaunch
 from the brief with "resume from your checkpoint".
 
+**2026-11-14: all four parts built and reported** (condensed in
+[`round5-reports.md`](handoff/2026-11-14/round5-reports.md); branches pushed: `ui/r5-simple` `7f910d0`,
+`ui/r5-home` `efed126`, `ui/r5-grid` `8cb83aa`, `ui/r5-shell` `4e513b6`). **Integration launched** on `8ec31e6`
+from [`brief-round5-integrate.md`](handoff/2026-11-14/brief-round5-integrate.md) (worktree `r5-integrate`,
+branch `ui/r5-integrate`, scratch `a539aa23-…/r5-integrate/`). Owner to know: pages now leave out Cloudflare's
+`/cdn-cgi/` endpoints (B, for one count everywhere: reverses E7's call); a crawl the user stops is analysed at once
+(A); the data folder is a switch, not a move (D); the updater's signing key pair is at
+`%USERPROFILE%\.shouting-iguana\updater.key` (+ `.password`), and a release needs the secrets
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` set on GitHub (the architecture doc has the
+workflow). After integration: a fresh-eyes review, its fixes, the whole-suite verify, both smoke walks, the gallery,
+then merge into `ui/step-3`.
+
 1. **Verify `ui/step-3` at `8fd6c66` (or later) as one whole.** Run both scripts from a fresh log folder, one at a
    time (the app's takes ~2.5 h; run it in the background):
    `bash docs/handoff/2026-11-13/tools/verify-engine.sh <repo> <logs>` then
