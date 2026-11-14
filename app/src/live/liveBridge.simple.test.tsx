@@ -286,4 +286,14 @@ describe('the finished toast in Advanced', () => {
     expect(screen.queryAllByRole('button', { name: 'Open the report' })).toHaveLength(1);
     stop();
   });
+
+  it('leaves the checks hidden in this crawl and in every crawl out of its count, as Issues does (round 5)', async () => {
+    replaceSettings({ hiddenChecks: ['slow-response'], hiddenChecksByCrawl: { [ID]: ['image-missing-alt'] } });
+    render(<AppToaster />);
+    const { stop, finish } = setup();
+    await finish();
+    // 19 by the library; one Error and one Warning left once a Warning and a Notice are hidden.
+    expect(await screen.findByText('gardenfurnituresets.co.uk: 4,521 URLs, 2 checks found issues')).toBeInTheDocument();
+    stop();
+  });
 });

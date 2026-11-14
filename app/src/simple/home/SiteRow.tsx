@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import {
@@ -17,17 +17,17 @@ import {
 } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { api } from '../../api/client';
-import { analysisQuery, checksQuery, queryKeys } from '../../api/queries';
+import { queryKeys } from '../../api/queries';
 import type { CrawlListItem } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { analyseCrawl, cancelAnalysis, continueCrawl, saidWhileAnalysing } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
+import { useVisibleIssueCounts } from '../../crawl/visibleIssues';
 import { crawlControls, crawledUrls, effectiveStatus } from '../../crawl/status';
 import { notifyError, notifyUndo } from '../../feedback/notify';
 import { formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
 import { useLiveCrawl } from '../../live/liveStore';
-import { checkEntries, foundBySeverity } from '../../screens/issues/checkList';
 import { crawledSoFar } from '../../screens/overview/liveFigures';
 import { pickCrawlFiles, showInFolder } from '../../shell/os';
 import { Button } from '../../ui/Button';
@@ -50,7 +50,6 @@ import {
   stoppedEarly,
   type ProblemCounts,
 } from './sites';
-import { useHiddenChecks } from '../../settings/hiddenChecks';
 
 /** A row's grid: the site, its score, what to fix, when, and its action. A narrow card folds the middle under the site. */
 const ROW_GRID =
@@ -64,16 +63,8 @@ const FOLDS = '@max-sites/sites:col-start-1';
  * some, the check's analysis, read for the row. Null while that's read, and for a check never worked out.
  */
 function useRowProblems(item: CrawlListItem): ProblemCounts | null {
-  const hiddenIds = useHiddenChecks(item.id);
-  const needed = hiddenIds.length > 0 && item.issues !== null;
-  const checks = useQuery({ ...checksQuery(), enabled: needed }).data;
-  const analysis = useQuery({ ...analysisQuery(item.id), enabled: needed }).data;
-  return useMemo(() => {
-    if (!item.issues) return null;
-    if (!needed) return problemCounts(item.issues);
-    if (!checks || !analysis) return null;
-    return problemCounts(foundBySeverity(checkEntries(checks, analysis, new Set(hiddenIds))));
-  }, [item.issues, needed, checks, analysis, hiddenIds]);
+  const visible = useVisibleIssueCounts(item);
+  return useMemo(() => (visible ? problemCounts(visible) : null), [visible]);
 }
 
 export interface SiteRowProps {

@@ -7,7 +7,7 @@ import { ApiError } from '../api/errors';
 import { api } from '../api/client';
 import { analysisQuery, checksQuery, gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
 import { getTransport } from '../api/transport';
-import type { CrawlEvent, CrawlListItem, CrawlStatus } from '../api/types';
+import type { CrawlEvent, CrawlListItem, CrawlStatus, IssueCounts } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
 import { analyseCrawl, continueCrawl } from '../crawl/actions';
 import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
@@ -320,7 +320,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       });
       return;
     }
-    const checks = item?.issues ? item.issues.error + item.issues.warning + item.issues.notice : null;
+    const checks = await checksFoundOf(crawlId, item);
     const found =
       checks === null
         ? null
@@ -337,24 +337,36 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   }
 
   /**
-   * The problems Simple counts for the check: its checks with issues that are Serious or Worth fixing, less the ones
-   * the user has hidden, as What to fix counts them. With none hidden, the library's counts; else the analysis, read
-   * afresh. Null when there are none to count, or they couldn't be read.
+   * A crawl's checks with issues by severity, less the ones the user has hidden (in this crawl or every crawl), as
+   * Issues and What to fix count them. With none hidden, the library's counts; else the analysis, read afresh. Null
+   * when there are none to count, or they couldn't be read.
    */
-  async function problemsOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+  async function visibleIssuesOf(crawlId: string, item: CrawlListItem | undefined): Promise<IssueCounts | null> {
     if (!item?.issues) return null;
     const hidden = currentHiddenChecks(crawlId);
-    if (hidden.length === 0) return item.issues.error + item.issues.warning;
+    if (hidden.length === 0) return item.issues;
     try {
       const [checks, analysis] = await Promise.all([
         queryClient.query(checksQuery()),
         queryClient.query({ ...analysisQuery(crawlId), staleTime: 0 }),
       ]);
-      const { error, warning } = foundBySeverity(checkEntries(checks, analysis, new Set(hidden)));
-      return error + warning;
+      const { error, warning, notice } = foundBySeverity(checkEntries(checks, analysis, new Set(hidden)));
+      return { error, warning, notice };
     } catch {
       return null;
     }
+  }
+
+  /** The problems Simple counts for the check: its checks with issues that are Serious or Worth fixing. */
+  async function problemsOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+    const issues = await visibleIssuesOf(crawlId, item);
+    return issues ? issues.error + issues.warning : null;
+  }
+
+  /** The checks that found issues, for Advanced's toasts: every severity, the hidden ones left out. */
+  async function checksFoundOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+    const issues = await visibleIssuesOf(crawlId, item);
+    return issues ? issues.error + issues.warning + issues.notice : null;
   }
 
   /**
@@ -385,7 +397,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       });
       return;
     }
-    const checks = results?.issues ? results.issues.error + results.issues.warning + results.issues.notice : null;
+    const checks = results ? await checksFoundOf(crawlId, results) : null;
     const found =
       checks === null
         ? ''

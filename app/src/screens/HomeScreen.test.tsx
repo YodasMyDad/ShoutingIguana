@@ -12,6 +12,7 @@ import type { CrawlListItem } from '../api/types';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { replaceSettings } from '../settings/settingsStore';
 import { wholeText } from '../test/text';
 import { fakeSidecar, json, problem, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
 
@@ -114,6 +115,43 @@ describe('Home’s library', () => {
     expect(within(row).getByText(wholeText('1 error'))).toBeVisible();
     expect(within(row).getByText(wholeText('2 warnings'))).toBeVisible();
     expect(within(row).getByText(wholeText('1 notice'))).toBeVisible();
+  });
+
+  it('leaves the checks hidden in this crawl or in every crawl out of its counts, as Issues does (round 5)', async () => {
+    const item = testCrawlItem({ issues: { error: 1, warning: 2, notice: 1 } });
+    const checks = {
+      categories: [],
+      checks: [
+        { id: 'broken-internal-links', severity: 'error' },
+        { id: 'slow-response', severity: 'warning' },
+        { id: 'missing-alt', severity: 'warning' },
+        { id: 'long-title', severity: 'notice' },
+      ],
+    };
+    const analysis = {
+      analyzedAt: item.analyzedAt,
+      counts: ['broken-internal-links', 'slow-response', 'missing-alt', 'long-title'].map((checkId) => ({
+        checkId,
+        count: 3,
+      })),
+      skipped: [],
+    };
+    replaceSettings({ hiddenChecks: ['slow-response'], hiddenChecksByCrawl: { [item.id]: ['long-title'] } });
+    try {
+      await open(
+        () => json([item]),
+        [
+          ['GET', /^\/api\/checks$/, () => json(checks)],
+          ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/analysis$/, () => json(analysis)],
+        ],
+      );
+      const row = await rowOf('example.com');
+      expect(await within(row).findByText(wholeText('1 warning'))).toBeVisible();
+      expect(within(row).getByText(wholeText('1 error'))).toBeVisible();
+      expect(within(row).queryByText(wholeText('1 notice'))).toBeNull();
+    } finally {
+      replaceSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
+    }
   });
 
   it('keeps its skeleton up for its minimum once shown, even when the library comes a moment later', async () => {

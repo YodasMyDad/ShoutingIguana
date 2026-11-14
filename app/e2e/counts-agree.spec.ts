@@ -27,6 +27,7 @@ interface Analysis {
 }
 interface Check {
   id: string;
+  severity: 'error' | 'warning' | 'notice';
   subject?: 'page' | 'url';
   siteWide?: boolean;
   reportedOnce?: boolean;
@@ -60,8 +61,8 @@ async function shownUrls(page: Page) {
   return count;
 }
 
-/** Every screen's count of a crawl at rest, against the engine's. */
-async function expectOneCount(page: Page, id: string) {
+/** Every screen's count of a crawl at rest, against the engine's. `hidden`: the checks the user has hidden in it. */
+async function expectOneCount(page: Page, id: string, hidden: readonly string[] = []) {
   const item = await read<Item>(`/api/crawls/${id}`);
   const crawled = item.crawledUrlCount;
   const pages = item.pageCount;
@@ -120,7 +121,14 @@ async function expectOneCount(page: Page, id: string) {
   const flagged = (subject: 'page' | 'url') =>
     analysis.counts.find((count) => {
       const check = checks.find((candidate) => candidate.id === count.checkId);
-      return count.count > 0 && check && (check.subject ?? 'url') === subject && !check.siteWide && !check.reportedOnce;
+      return (
+        count.count > 0 &&
+        check &&
+        !hidden.includes(check.id) &&
+        (check.subject ?? 'url') === subject &&
+        !check.siteWide &&
+        !check.reportedOnce
+      );
     });
   for (const [subject, whole] of [
     ['page', `of the ${n(analysis.pagesAnalyzed)} ${analysis.pagesAnalyzed === 1 ? 'page' : 'pages'} analysed`],
@@ -158,12 +166,119 @@ async function expectOneCount(page: Page, id: string) {
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
 }
 
+/**
+ * Hides a check that found something, as the user does on its page in Issues, in this crawl or in every crawl. Of the
+ * Warnings, so Simple's problems count it too.
+ */
+async function hideACheck(page: Page, id: string, scope: 'crawl' | 'all') {
+  const analysis = await read<Analysis>(`/api/crawls/${id}/analysis`);
+  const checks = (await read<{ checks: Check[] }>('/api/checks')).checks;
+  const found = analysis.counts.filter((count) => count.count > 0).map((count) => count.checkId);
+  const hidden = checks.find((check) => check.severity === 'warning' && found.includes(check.id));
+  expect(hidden, 'a Warning that found something, to hide').toBeDefined();
+  await page.goto(`/crawls/${id}/issues/${hidden!.id}`);
+  await page.getByRole('button', { name: 'Hide this check' }).click();
+  await page.getByRole('menuitem', { name: scope === 'crawl' ? /Hide in this crawl/ : /Hide in every crawl/ }).click();
+  await expect(page.getByRole('button', { name: /Show 1 hidden check/ })).toBeVisible();
+  return hidden!.id;
+}
+
+/**
+ * The figures of a crawl's checks with issues, the hidden ones left out everywhere (round 5: part C's hidden checks in
+ * part A's Simple and part B's Home): Advanced's Home and sidebar, Simple's Your sites, Summary and What to fix, and the
+ * report, against the engine's analysis less the hidden checks.
+ */
+async function expectHiddenLeftOut(page: Page, id: string, hidden: string) {
+  const analysis = await read<Analysis>(`/api/crawls/${id}/analysis`);
+  const checks = (await read<{ checks: Check[] }>('/api/checks')).checks;
+  const shown = { error: 0, warning: 0, notice: 0 };
+  for (const count of analysis.counts) {
+    const check = checks.find((candidate) => candidate.id === count.checkId);
+    if (check && count.count > 0 && check.id !== hidden) shown[check.severity]++;
+  }
+  const severityWords = (counts: typeof shown) =>
+    (['error', 'warning', 'notice'] as const).map(
+      (severity) =>
+        // Not the end of a longer number: 30 warnings isn't 130 warnings.
+        new RegExp(`(?<![\\d,])${n(counts[severity])}\\s*${severity}${counts[severity] === 1 ? '' : 's'}`),
+    );
+
+  // Advanced's Home: the crawl's row.
+  await page.goto('/');
+  const row = page
+    .getByRole('region', { name: 'Library' })
+    .getByRole('row')
+    .filter({ has: page.locator(`a[href$="/crawls/${id}"]`) });
+  const issues = row.getByRole('cell').nth(4);
+  for (const words of severityWords(shown)) await expect(issues).toHaveText(words, { timeout: 30_000 });
+
+  // Advanced's sidebar, on the crawl's screens: Errors, Warnings, Notices.
+  await page.goto(`/crawls/${id}/overview`);
+  const bySeverity = page.getByRole('list', { name: 'Issues by severity' });
+  for (const [label, count] of [
+    ['Errors', shown.error],
+    ['Warnings', shown.warning],
+    ['Notices', shown.notice],
+  ] as const) {
+    await expect(bySeverity.getByRole('link', { name: new RegExp(`^${label}`) })).toHaveText(
+      new RegExp(`${n(count)}$`),
+      { timeout: 30_000 },
+    );
+  }
+
+  // The report says it left the check out.
+  await page.goto(`/crawls/${id}/report`);
+  await expect(
+    page.frameLocator('iframe[title^="The report for"]').getByText(/is hidden, so it’s left out/),
+  ).toBeVisible({
+    timeout: 60_000,
+  });
+
+  // Simple: What to fix and Your sites' row count Serious and Worth fixing without it.
+  await page.goto(`/crawls/${id}/overview`);
+  await modeSwitch(page).getByRole('radio', { name: 'Simple' }).click();
+  const problems =
+    shown.error + shown.warning === 0
+      ? 'Nothing to fix'
+      : [
+          shown.error > 0 ? `${n(shown.error)} serious` : '',
+          shown.warning > 0 ? `${n(shown.warning)} worth fixing` : '',
+        ]
+          .filter(Boolean)
+          .join(', ');
+  // What to fix (Simple's Issues) leaves it out and says so; the Summary counts from the same results.
+  await page.goto(`/crawls/${id}/issues`);
+  await expect(page.getByText('1 check is hidden.', { exact: false })).toBeVisible({ timeout: 60_000 });
+  await page.goto('/');
+  const site = page
+    .getByRole('list', { name: 'Your sites, the checks running now first' })
+    .getByRole('listitem')
+    .filter({ has: page.locator(`a[href*="/crawls/${id}"]`) })
+    .first();
+  await expect(site.getByRole('img', { name: new RegExp(`^${problems}`) })).toBeVisible({ timeout: 30_000 });
+  await modeSwitch(page).getByRole('radio', { name: 'Advanced' }).click();
+}
+
 const modeSwitch = (page: Page) => page.getByRole('banner').getByRole('radiogroup', { name: 'Mode' });
 
 test('every screen says the crawl’s one count of URLs crawled, of pages and of URLs found', async ({ page }) => {
   test.setTimeout(240_000);
   const crawl = await seededCrawl();
   await expectOneCount(page, crawl.id);
+});
+
+test.describe('with a check hidden (round 5: hidden checks and one count)', () => {
+  for (const scope of ['crawl', 'all'] as const) {
+    test(`says one count, and leaves a check hidden ${scope === 'crawl' ? 'in this crawl' : 'in every crawl'} out of every figure of checks`, async ({
+      page,
+    }) => {
+      test.setTimeout(300_000);
+      const crawl = await seededCrawl();
+      const hidden = await hideACheck(page, crawl.id, scope);
+      await expectOneCount(page, crawl.id, [hidden]);
+      await expectHiddenLeftOut(page, crawl.id, hidden);
+    });
+  }
 });
 
 test.describe('a crawl of the test site', () => {

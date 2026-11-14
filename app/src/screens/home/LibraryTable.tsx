@@ -9,6 +9,7 @@ import type { CrawlListItem, CrawlStatus } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
+import { useVisibleIssueCounts } from '../../crawl/visibleIssues';
 import { crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
 import { formatBytes, formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
@@ -272,12 +273,16 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
 
 /** Checks with issues by severity; for a crawl never analysed, Analyse it. */
 function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus }) {
+  // The checks hidden in this crawl or every crawl left out, as Issues counts them (round 5).
+  const counts = useVisibleIssueCounts(item);
   if (status === 'unreadable' || item.missing) return <span className="text-text-muted">–</span>;
-  if (item.issues) {
+  // Read with hidden checks: the analysis is on its way, and the library's counts would include them.
+  if (item.issues && !counts) return null;
+  if (counts) {
     return (
       // One severity a line in a narrow library, so the column is as wide as its widest count, not all three.
       <SeverityCounts
-        counts={item.issues}
+        counts={counts}
         className="@max-library/library:flex @max-library/library:flex-col @max-library/library:items-start @max-library/library:gap-1"
       />
     );
