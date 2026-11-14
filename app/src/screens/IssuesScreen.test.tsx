@@ -627,10 +627,28 @@ describe('the Issues screen', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Show 1 hidden check' }));
     await user.click(await screen.findByRole('option', { name: /Internal URL returns 4xx/ }));
     expect(await screen.findByText('Hidden in every crawl')).toBeVisible();
-    // Shown again, it's hidden nowhere.
-    await user.click(screen.getByRole('button', { name: 'Show this check in the list' }));
+    // Shown again: its button says it's shown in every crawl (round 5 review R1-12), and it's hidden nowhere.
+    await user.click(screen.getByRole('button', { name: 'Show this check in every crawl' }));
     expect(getSettings().hiddenChecks).toEqual([]);
     expect(getSettings().hiddenChecksByCrawl).toEqual({});
+    // Said, with Undo, which hides it in every crawl again.
+    const shown = await screen.findByText('Showed “Internal URL returns 4xx” in every crawl');
+    expect(shown).toBeVisible();
+    fireEvent.click(within(shown.closest<HTMLElement>('[data-sonner-toast]')!).getByRole('button', { name: 'Undo' }));
+    expect(getSettings().hiddenChecks).toEqual(['internal-client-error']);
+  });
+
+  it('shows a check hidden in this crawl in this crawl, said with Undo (round 5 review R1-12)', async () => {
+    updateSettings({ hiddenChecksByCrawl: { [TEST_CRAWL_ID]: ['internal-client-error'] } });
+    sidecar();
+    await open(`${ISSUES}/internal-client-error`);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Show this check in this crawl' }));
+    expect(getSettings().hiddenChecksByCrawl[TEST_CRAWL_ID] ?? []).toEqual([]);
+    const shown = await screen.findByText('Showed “Internal URL returns 4xx” in this crawl');
+    expect(shown).toBeVisible();
+    fireEvent.click(within(shown.closest<HTMLElement>('[data-sonner-toast]')!).getByRole('button', { name: 'Undo' }));
+    expect(getSettings().hiddenChecksByCrawl[TEST_CRAWL_ID]).toEqual(['internal-client-error']);
   });
 
   it('leaves out the checks hidden in this crawl only, as those hidden in every crawl', async () => {
