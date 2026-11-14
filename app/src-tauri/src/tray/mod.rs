@@ -195,7 +195,7 @@ impl Tray {
                 self.look = Some(look.clone());
                 self.drawn_at = Some(Instant::now());
                 self.due = None;
-                log::info!("Tray icon shown");
+                log::info!("Tray icon shown: \"{}\"", look.tooltip);
             }
             Err(error) => log::error!("Couldn't create the tray icon: {error}"),
         }

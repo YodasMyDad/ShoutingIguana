@@ -1,7 +1,7 @@
 # The shell's window, from outside, for scripts/smoke-shell.mjs (Windows only). What Playwright can't do over
 # WebView2's DevTools port: keys as the webview itself receives real ones, the tray icon, native dialogs, the window.
 #
-#   shell-window.ps1 state <app pid>              {"window":bool,"dialog":"title"|null,"webviewWindows":n} as JSON
+#   shell-window.ps1 state <app pid>              {"window":bool,"title":"...","dialog":"title"|null,"webviewWindows":n} as JSON
 #   shell-window.ps1 keys <app pid> <vk,vk,...>   presses keys (virtual-key codes, no modifiers) in the webview
 #   shell-window.ps1 tray-click <app pid>         a left click on the tray icon
 #   shell-window.ps1 press <app pid> <button>     presses a button of the app's native dialog
@@ -87,7 +87,7 @@ switch ($Command) {
     $extra = if ($webview) { @([ShellWindow]::TopLevel($webview.ProcessId) | Where-Object { [ShellWindow]::Visible($_) }).Count } else { 0 }
     # The webview's surfaces inside the window: one for the page, and one more while WebView2's print dialog is up.
     $surfaces = @([ShellWindow]::Children($main) | Where-Object { [ShellWindow]::Class($_) -eq 'Chrome_RenderWidgetHostHWND' -and [ShellWindow]::Visible($_) }).Count
-    @{ window = [ShellWindow]::Visible($main); dialog = if ($dialog) { [ShellWindow]::Text($dialog) } else { $null }; webviewWindows = $extra; surfaces = $surfaces } | ConvertTo-Json -Compress
+    @{ window = [ShellWindow]::Visible($main); title = [ShellWindow]::Text($main); dialog = if ($dialog) { [ShellWindow]::Text($dialog) } else { $null }; webviewWindows = $extra; surfaces = $surfaces } | ConvertTo-Json -Compress
   }
   'keys' {
     $target = [ShellWindow]::Children($main) | Where-Object { [ShellWindow]::Class($_) -eq 'Chrome_WidgetWin_1' } | Select-Object -First 1
