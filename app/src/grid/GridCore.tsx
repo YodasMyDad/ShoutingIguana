@@ -713,6 +713,25 @@ function GridCoreInner<Row>({
     setHeaderCursor(to);
   };
 
+  /**
+   * A column pinned or unpinned from its menu takes another place: the header's cursor goes with it once the columns
+   * are laid out again, as `moveBy`'s does (round 5 review R1-5).
+   */
+  const followColumn = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const id = followColumn.current;
+    if (id === null) return;
+    const to = columns.findIndex((column) => column.id === id);
+    if (to < 0) return;
+    followColumn.current = null;
+    setHeaderCursor(to);
+  }, [columns]);
+  const pinColumn = (id: string, pinned: boolean) => {
+    if (!columnLayout?.onPin) return;
+    followColumn.current = id;
+    columnLayout.onPin(id, pinned);
+  };
+
   /** A column's menu, open at a point: pin, move, resize. */
   // Each opening is a menu of its own, placed afresh at its point (see `RowMenuState.opening`).
   const [headerMenu, setHeaderMenu] = useState<{
@@ -768,6 +787,12 @@ function GridCoreInner<Row>({
   const onHeaderPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const drag = headerDrag.current;
     if (drag?.pointer !== event.pointerId) return;
+    // No button held: the press was let go off the header, which never heard it (round 5 review R1-6).
+    if (event.buttons === 0) {
+      headerDrag.current = null;
+      setDropAt(null);
+      return;
+    }
     if (!drag.moving) {
       if (Math.abs(event.clientX - drag.startX) < DRAG_THRESHOLD) return;
       drag.moving = true;
@@ -778,9 +803,9 @@ function GridCoreInner<Row>({
   const onHeaderPointerUp = (event: PointerEvent<HTMLDivElement>) => {
     const drag = headerDrag.current;
     headerDrag.current = null;
+    setDropAt(null);
     if (!drag?.moving || drag.pointer !== event.pointerId) return;
     const drop = dropFor(drag.col, contentX(event.clientX));
-    setDropAt(null);
     dragEnded.current = true;
     // The click (if any) comes straight after the pointer goes up: after it, a press is a press again.
     setTimeout(() => (dragEnded.current = false), 0);
@@ -1241,6 +1266,7 @@ function GridCoreInner<Row>({
               layout={columnLayout}
               onResize={(by) => resizeBy(headerMenu.col, by)}
               onMove={(by) => moveBy(headerMenu.col, by)}
+              onPin={(pinned) => pinColumn(menuColumn.id, pinned)}
             />
           ) : null}
         </MenuAt>
@@ -1257,6 +1283,7 @@ function ColumnMenuItems<Row>({
   layout,
   onResize,
   onMove,
+  onPin,
 }: {
   column: GridColumn<Row>;
   col: number;
@@ -1264,12 +1291,13 @@ function ColumnMenuItems<Row>({
   layout: GridColumnLayoutProps;
   onResize: (by: -1 | 1) => void;
   onMove: (by: -1 | 1) => void;
+  onPin: (pinned: boolean) => void;
 }) {
   const pinned = column.pinned === true;
   return (
     <>
       {layout.onPin ? (
-        <MenuItem icon={pinned ? PinOff : Pin} onSelect={() => layout.onPin?.(column.id, !pinned)}>
+        <MenuItem icon={pinned ? PinOff : Pin} onSelect={() => onPin(!pinned)}>
           {pinned ? 'Unpin the column' : 'Pin the column to the left'}
         </MenuItem>
       ) : null}
