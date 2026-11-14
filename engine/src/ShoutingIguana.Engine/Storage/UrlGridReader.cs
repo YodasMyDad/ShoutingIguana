@@ -118,8 +118,9 @@ public static class UrlGridReader
         var compiled = UrlQueryCompiler.Compile(new UrlQuery { Filters = query.Filters, Search = query.Search, LinkEnds = query.LinkEnds, HiddenChecks = query.HiddenChecks },
             context.Mode, GridScope.AllUrls, context.Reason);
         context.Bind(compiled.Hidden);
+        var linkEnds = HasLinkEnds(compiled);
         compiled = WithLinkEnds(context, GridPlanner.Materialize(context, compiled));
-        var total = GridPlanner.Total(context, compiled);
+        var total = TotalOf(context, compiled, linkEnds);
         var matching = GridPlanner.Matching(context, compiled, total);
         var asked = (query.Facets.Count == 0 ? FACETS : query.Facets).Distinct(StringComparer.Ordinal).ToList();
         var unavailable = context.Mode == GridMode.Summary ? [] : asked.Where(SUMMARY_FACETS.Contains).ToList();
@@ -226,8 +227,9 @@ public static class UrlGridReader
             };
         }
 
+        var linkEnds = HasLinkEnds(compiled);
         compiled = WithLinkEnds(context, GridPlanner.Materialize(context, compiled));
-        var total = GridPlanner.Total(context, compiled);
+        var total = TotalOf(context, compiled, linkEnds);
         var matching = GridPlanner.Matching(context, compiled, total);
         if (scope.SitemapId is { } sitemap)
         {
@@ -270,6 +272,17 @@ public static class UrlGridReader
                         : predicate)
                 ]
             };
+
+    private static bool HasLinkEnds(CompiledQuery query) => query.Predicates.Any(predicate => predicate.LinkEnds is not null);
+
+    /// <summary>
+    /// The URLs a grid counts against. A running crawl's view narrowed to a links view's ends counts against the URLs of
+    /// the links' moment, which the ends are of (<see cref="LinkGridReader.MomentUrls"/>): the crawl's count of URLs is
+    /// kept for a while from whichever read counted it, so it can be older than the moment and fewer than the ends.
+    /// </summary>
+    /// <param name="linkEnds">The query had a condition on the ends of some links (<see cref="HasLinkEnds"/>), before it was read.</param>
+    private static long TotalOf(GridReadContext context, CompiledQuery query, bool linkEnds) =>
+        linkEnds && query.Scope is null && LinkGridReader.MomentUrls(context) is { } urls ? urls : GridPlanner.Total(context, query);
 
     internal static void ThrowIfInvalid(Dictionary<string, List<string>> errors)
     {

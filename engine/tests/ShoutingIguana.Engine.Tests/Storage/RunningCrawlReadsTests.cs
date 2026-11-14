@@ -167,6 +167,56 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
+    /// The URL grid narrowed to a links view's ends counted them at the links' moment, but against the crawl's URLs as an
+    /// earlier read had counted them, kept for a while: a moment taken after the crawl found more URLs had more ends than
+    /// that count of URLs ("526 URLs that are ends, of 516"). The ends are counted against the URLs of their own moment.
+    /// </summary>
+    [Fact]
+    public void TheURLGridOfALinksViewsEndsIsOfTheMomentItsEndsAreOf()
+    {
+        UrlFilter[] hyperlinks = [Names("kind", FilterOperator.In, "hyperlink")];
+        for (var attempt = 0; ; attempt++)
+        {
+            var (running, held) = Running();
+            using (held)
+            {
+                var cache = new ReadCache();
+                var moment = Stopwatch.StartNew();
+
+                // Now: a page of the URL grid counts the crawl's URLs.
+                var before = UrlGridReader.Query(running, new UrlQuery { Limit = LIMIT }, cache);
+                Assert.Equal(SummaryUnavailableReason.Crawling, before.Summary.Reason);
+
+                // The crawl goes on: 200 more URLs, with a hyperlink to each.
+                var largest = TestCrawls.Count(running, "SELECT MAX(id) FROM urls");
+                Change(running, """
+                    INSERT INTO urls (url, is_internal, fetch_mode, depth, state, skip_reason, source)
+                    SELECT 'https://review.example/ends/' || id, 0, 0, 1, 0, 0, 1 FROM urls ORDER BY id LIMIT 200
+                    """);
+                Change(running, $"INSERT INTO links (from_id, to_id, kind, flags, position, text, fragment) SELECT 1, id, {(int)LinkKind.Hyperlink}, 0, 0, 'new', NULL FROM urls WHERE id > $largest",
+                    ("$largest", largest));
+
+                // At once, while the count of URLs is still kept: the hyperlinks' targets, which the links' moment counts now.
+                var ends = UrlGridReader.Query(running, new UrlQuery { LinkEnds = new UrlLinkEnds(LinkEnd.To, hyperlinks), Limit = LIMIT }, cache);
+                var facets = UrlGridReader.Facets(running, new UrlFacetQuery { LinkEnds = new UrlLinkEnds(LinkEnd.To, hyperlinks) }, cache);
+                if (moment.Elapsed > ReadCache.LIVE_FOR - TimeSpan.FromMilliseconds(300))
+                {
+                    // Too slow a machine just now: the count of URLs went before the ends were read. Again, from the start.
+                    Assert.True(attempt < 5, "The reads never fitted in one moment.");
+                    continue;
+                }
+
+                var urls = TestCrawls.Count(running, "SELECT COUNT(*) FROM urls");
+                var targets = TestCrawls.Count(running, $"SELECT COUNT(DISTINCT to_id) FROM links WHERE kind = {(int)LinkKind.Hyperlink}");
+                Assert.Equal(before.Total + 200, urls);
+                Assert.Equal((targets, urls), (ends.Matching, ends.Total));
+                Assert.Equal((targets, urls), (facets.Matching, facets.Total));
+                return;
+            }
+        }
+    }
+
+    /// <summary>
     /// Within the moment a running crawl's reads answer for, the crawl's growth isn't in any answer: a read that counts
     /// something new for the moment (another filter set, the facets, a sort) counts the links the moment had, though its
     /// own snapshot has more, so it agrees with what the reads before it said of the same moment.

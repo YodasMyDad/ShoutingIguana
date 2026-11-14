@@ -1120,7 +1120,9 @@ of the file and holds it for that one page only.
   "these pages in URLs". `/urls/facets`, a check's `/rows` and `/sitemaps/urls` take it too. Its errors are keyed
   under it (`linkEnds.end`, `linkEnds.filters[0].column`), a link filter that needs the URL summary without one is
   refused with `needs-analysis` as the links grid refuses it, and a cursor read under other links is refused on
-  `after`. What it costs is what the list of ends costs.
+  `after`. What it costs is what the list of ends costs. While a crawl runs, `total` under it is the URLs of the
+  links' moment the ends are of, not the count of URLs an earlier read kept (round 5's final verify: that one could be
+  older than the moment, "526 that are ends, of 516"; `RunningCrawlReadsTests.TheURLGridOfALinksViewsEndsIsOfTheMomentItsEndsAreOf`).
 - **`hiddenChecks`** (round 5 review, also noted) is the ids of the checks the user hid, every count in the app
   leaving them out: `["title-too-long","thin-content"]`. The issue counts (`issues`, `errors`, `warnings`,
   `notices`) leave their issues out wherever the query uses them: each row's values, the sort, the filters

@@ -365,6 +365,12 @@ public static class LinkGridReader
         return kept.MaxLinkId <= reader.GetInt64(0) && kept.MaxUrlId <= reader.GetInt64(1) ? kept : Take(context, shared: false);
     });
 
+    /// <summary>
+    /// For a running crawl, the URLs of the moment this read answers for (<see cref="Live"/>), which the ends of its links
+    /// are of (<see cref="EndIds"/>); null for a crawl that stands still.
+    /// </summary>
+    internal static long? MomentUrls(GridReadContext context) => Live(context)?.Urls;
+
     /// <summary>The crawl as this read's snapshot has it, as a moment: its links and URLs counted, with their highest ids, in one statement.</summary>
     private static LinkMoment Take(GridReadContext context, bool shared)
     {
