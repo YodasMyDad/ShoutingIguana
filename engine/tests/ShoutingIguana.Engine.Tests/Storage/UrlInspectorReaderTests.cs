@@ -136,6 +136,53 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
     }
 
     /// <summary>
+    /// Round 5's review (R2-8): Cloudflare's endpoint is told apart ignoring case everywhere (a page, the analysis's site
+    /// pages), but the inspector matched <c>/cdn-cgi/</c> as written, so a <c>/CDN-CGI/</c> page read as one the analysis
+    /// audits, and the hyperlinks on it went uncounted. A copy of the crawl whose endpoint is in capitals (the analysis
+    /// leaves it out the same either way) reads as the crawl does.
+    /// </summary>
+    [Fact]
+    public void CloudflaresEndpointInCapitalsIsLeftOutAsItIsInSmallLetters()
+    {
+        var endpoints = crawl.Reference.Rows.Where(row => ((string)row.Value["url"]!).Contains("/cdn-cgi/", StringComparison.Ordinal)).Select(row => row.Key).ToList();
+        Assert.NotEmpty(endpoints);
+        var capitals = crawl.Copy();
+        Change(capitals, "UPDATE urls SET url = replace(url, '/cdn-cgi/', '/CDN-CGI/') WHERE instr(url, '/cdn-cgi/') > 0");
+
+        var linkedFromThem = Counted("to_id", $"kind = 0 AND from_id IN ({string.Join(',', endpoints)})").Keys;
+        Assert.NotEmpty(linkedFromThem);
+
+        // With the link summary, and as a crawl analysed before it is read (the hyperlinks to a URL from the URL summary,
+        // and those on the pages the analysis left out).
+        foreach (var withoutLinkSummary in new[] { false, true })
+        {
+            GridReadContext.ReadWithoutLinkSummary = withoutLinkSummary;
+            try
+            {
+                AssertReadAlike(endpoints.Concat(linkedFromThem), capitals, withoutLinkSummary ? "without the link summary" : "with the link summary");
+            }
+            finally
+            {
+                GridReadContext.ReadWithoutLinkSummary = false;
+            }
+        }
+    }
+
+    private void AssertReadAlike(IEnumerable<int> ids, string capitals, string how)
+    {
+        foreach (var id in ids)
+        {
+            var (asWritten, inCapitals) = (Read(crawl.Path, id), Read(capitals, id));
+            var what = $"URL {id} ({asWritten.Url}), {how}";
+            Assert.True(asWritten.Indexability.Indexable == inCapitals.Indexability.Indexable && asWritten.Indexability.Reason == inCapitals.Indexability.Reason,
+                $"{what}: {asWritten.Indexability.Reason} as written, {inCapitals.Indexability.Reason} in capitals");
+            Assert.True(Equals(asWritten.Indexability.Tests.Count, inCapitals.Indexability.Tests.Count), what);
+            Assert.True(Equals(asWritten.Links, inCapitals.Links), $"{what}: {asWritten.Links} as written, {inCapitals.Links} in capitals");
+            Assert.True(Equals(asWritten.LinkTotals, inCapitals.LinkTotals), $"{what}: {asWritten.LinkTotals} as written, {inCapitals.LinkTotals} in capitals");
+        }
+    }
+
+    /// <summary>
     /// The URL's length is the check's own measure: the number the check's detail gives for each URL it flags, and the URL
     /// as people read it, with its escapes decoded and its host in its own script. A stored URL that isn't one has none.
     /// </summary>

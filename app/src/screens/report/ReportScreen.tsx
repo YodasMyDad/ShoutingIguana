@@ -30,6 +30,7 @@ import { ReportFrame, type ReportFrameHandle } from './ReportFrame';
 import { reportDocumentQuery } from './reportQuery';
 import { ReportSheetSkeleton } from './ReportSheetSkeleton';
 import { outOfDateText, reportWords, type ReportWords } from './reportWords';
+import { useHiddenChecks } from '../../settings/hiddenChecks';
 
 const ROUTE = '/crawls/$crawl/report';
 
@@ -56,13 +57,15 @@ function longDateOf(iso: string | null | undefined): string | null {
  */
 export function ReportScreen() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
-  const { cut = 'full' } = useSearch({ from: ROUTE });
+  const { cut = 'full', print: printOnOpen } = useSearch({ from: ROUTE });
   const navigate = useNavigate({ from: ROUTE });
   const mode = useMode();
   const words = reportWords(mode);
   const queryClient = useQueryClient();
 
   const item = useQuery(crawlQuery(crawlId)).data;
+  // The checks the user hid: the report shown leaves them out, as the one saved does.
+  const hiddenChecks = useHiddenChecks(crawlId);
   const liveStatus = useLive((state) => state.crawls[crawlId]?.status);
   const analysisEvent = useLive((state) => state.crawls[crawlId]?.analysis ?? null);
   const status = effectiveStatus(item, liveStatus === undefined ? undefined : { status: liveStatus });
@@ -77,7 +80,7 @@ export function ReportScreen() {
   // The document of the cut asked for. While another cut is fetched, the one shown stays, as refreshing: switching
   // never blanks the sheet.
   const report = useQuery({
-    ...reportDocumentQuery(crawlId, cut),
+    ...reportDocumentQuery(crawlId, cut, hiddenChecks),
     enabled: readable && analysis.data !== undefined,
     placeholderData: keepPreviousData,
   });
@@ -85,8 +88,10 @@ export function ReportScreen() {
   const shown = report.data !== undefined && !report.isPlaceholderData;
   useEffect(() => {
     if (!shown) return;
-    void queryClient.query(reportDocumentQuery(crawlId, cut === 'full' ? 'summary' : 'full')).catch(() => undefined);
-  }, [shown, queryClient, crawlId, cut]);
+    void queryClient
+      .query(reportDocumentQuery(crawlId, cut === 'full' ? 'summary' : 'full', hiddenChecks))
+      .catch(() => undefined);
+  }, [shown, queryClient, crawlId, cut, hiddenChecks]);
 
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => control.titleRef.current);
@@ -100,6 +105,14 @@ export function ReportScreen() {
   const print = () => {
     if (frameRef.current?.print()) printRef.current?.focus();
   };
+  // Asked for as it opened (the Summary's Save as PDF): the print dialog once, when the report is in, then the address
+  // drops it so Back and a reload don't ask again.
+  useEffect(() => {
+    if (!printOnOpen || !shown) return;
+    frameRef.current?.printWhenLoaded();
+    printRef.current?.focus();
+    void navigate({ search: (previous) => ({ ...previous, print: undefined }), replace: true });
+  }, [printOnOpen, shown, navigate]);
   // Save and Spreadsheet of everything are the app's one export flow: the export dialog on that choice (the report in
   // the cut shown), then the native save dialog, then the export's toast, as Overview's and Issues' are.
   const save = (choiceId: 'report' | 'workbook') => {

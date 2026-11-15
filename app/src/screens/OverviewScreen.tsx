@@ -2,7 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
-import { alertsQuery, analysisQuery, checksQuery, crawlQuery, startUrlQuery, statsQuery } from '../api/queries';
+import {
+  alertsQuery,
+  analysisQuery,
+  checksQuery,
+  crawlQuery,
+  robotsFileQuery,
+  startUrlQuery,
+  statsQuery,
+} from '../api/queries';
 import { isCrawling, type Checks, type CrawlListItem, type CrawlStatus } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
@@ -17,7 +25,6 @@ import { useCommands } from '../keyboard/registry';
 import { useMode } from '../mode/mode';
 import { formatCount, formatCountOf, formatDuration, formatExactTime } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import { useSettings } from '../settings/settingsStore';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Card, CardBody, CardHeader } from '../ui/Card';
@@ -40,6 +47,7 @@ import {
   type HiddenTotals,
 } from './issues/checkList';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
+import type { CrawlCounts } from '../crawl/checkSubject';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { AlertList } from './overview/AlertList';
 import { alertEntries } from './overview/alerts';
@@ -51,8 +59,10 @@ import { linkProps } from './overview/overviewLinks';
 import { OverviewScore } from './overview/OverviewScore';
 import { ScoreBreakdownFromRoute } from '../simple/ScoreBreakdownDialog';
 import { OverviewSkeleton } from './overview/OverviewSkeleton';
+import { TotalsRow } from './overview/TotalsRow';
 import { crawledCount } from './overview/statusSplit';
 import { useCrawlFacets } from './overview/useCrawlFacets';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 const ROUTE = '/crawls/$crawl/overview';
 
@@ -100,7 +110,7 @@ export function OverviewScreen() {
   const crawled =
     item?.crawledUrlCount ?? (facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0));
 
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
   const entries = useMemo(
     () => (checks.data && analysis.data ? checkEntries(checks.data, analysis.data, hidden) : null),
@@ -191,6 +201,8 @@ export function OverviewScreen() {
   } else {
     body = (
       <>
+        {/* The totals before anything else (round 5, gap 16), whatever the crawl's state: they need no analysis. */}
+        <TotalsRow crawlId={crawlId} />
         {analysing && !neverAnalysed ? (
           <AnalysisProgress
             event={analysisEvent}
@@ -256,6 +268,7 @@ export function OverviewScreen() {
             totals={totals}
             hiddenFound={hiddenChecks?.found ?? 0}
             order={analysis.data?.fixFirst}
+            counts={analysis.data ?? null}
           />
         )}
 
@@ -350,6 +363,7 @@ function Answer({
   totals,
   hiddenFound,
   order,
+  counts,
 }: {
   crawlId: string;
   checks: Checks;
@@ -359,6 +373,8 @@ function Answer({
   hiddenFound: number;
   /** The analysis's `fixFirst`: the engine's order to fix them in. */
   order: readonly string[] | undefined;
+  /** The analysis's own totals, which Fix first's shares are of. */
+  counts: CrawlCounts | null;
 }) {
   const [widthRef, width] = useElementWidth();
   return (
@@ -370,7 +386,7 @@ function Answer({
         columns={width !== null && width > 0 && width < TWO_COLUMNS_BELOW ? 2 : 4}
       />
       <div className="grid grid-cols-(--overview-columns) gap-4 @max-split:grid-cols-1">
-        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} order={order} />
+        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} order={order} totals={counts} />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
           <Categories crawlId={crawlId} checks={checks} entries={entries} />
@@ -484,9 +500,14 @@ function NothingCrawled({
   status: CrawlStatus | null;
 }) {
   const start = useQuery(startUrlQuery(crawlId));
+  const startRow = start.isPending || start.error ? undefined : start.data;
+  // robots.txt kept the crawl from the start URL: how that file answered says why (rules, an error, no answer).
+  const robotsOrigin = startRow?.outcome === 'robotsDisallowed' && startRow.url ? originOf(startRow.url) : null;
+  const robots = useQuery({ ...robotsFileQuery(crawlId, robotsOrigin ?? ''), enabled: robotsOrigin !== null });
   const reason = emptyCrawl(
     { status: status ?? item.status, fetchedUrlCount: item.fetchedUrlCount },
-    start.isPending || start.error ? undefined : start.data,
+    startRow,
+    robots.data ? { state: robots.data.state, statusCode: robots.data.statusCode } : undefined,
   );
   return (
     <Card>
@@ -500,6 +521,15 @@ function NothingCrawled({
       </EmptyState>
     </Card>
   );
+}
+
+/** The origin of a URL, for its robots.txt; null for one that can't be read as a URL. */
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
 }
 
 function EmptyAction({ crawlId, item, reason }: { crawlId: string; item: CrawlListItem; reason: EmptyCrawl }) {

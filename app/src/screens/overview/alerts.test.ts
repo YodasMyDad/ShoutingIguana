@@ -199,6 +199,21 @@ describe('a crawl that read no pages', () => {
       emptyCrawl(done, { id: 1, statusCode: 301, outcome: 'redirect', redirectTarget: 'https://other.example/' }),
     ).toMatchObject({ action: 'crawlFrom', url: 'https://other.example/' });
     expect(emptyCrawl(done, { id: 1, statusCode: null, outcome: 'robotsDisallowed' }).action).toBe('crawlSettings');
+    // How robots.txt answered: its rules, an error, no answer (A's robots states in Advanced's words, round 5).
+    const robotsRow = { id: 1, statusCode: null, outcome: 'robotsDisallowed' } as const;
+    expect(emptyCrawl(done, robotsRow, { state: 'read', statusCode: 200 })).toMatchObject({
+      why: 'The site’s robots.txt doesn’t allow the start URL to be crawled. Crawl again with robots.txt ignored if the site is yours to audit.',
+      action: 'crawlSettings',
+    });
+    expect(emptyCrawl(done, robotsRow, { state: 'unreachable', statusCode: 503 })).toMatchObject({
+      why: 'The site’s robots.txt answered 503 Service Unavailable, so the crawl kept out of the whole site, as search engines do, and read nothing. Crawl it again once robots.txt answers.',
+      action: 'crawlAgain',
+    });
+    expect(emptyCrawl(done, robotsRow, { state: 'unanswered', statusCode: null }).why).toBe(
+      'The site didn’t answer when the crawl asked for its robots.txt, so it read nothing. Check the address and that the site is up, then crawl it again.',
+    );
+    expect(emptyCrawl(done, robotsRow, { state: 'unreachable', statusCode: null }).why).toMatch(/didn’t answer/);
+    expect(emptyCrawl(done, robotsRow, { state: 'unreachable', statusCode: 503 }).why).not.toMatch(/doesn’t allow/);
     expect(emptyCrawl(done, { id: 1, statusCode: 200, outcome: 'success', contentType: 'application/pdf' }).why).toBe(
       'The start URL answered with application/pdf, which isn’t a web page, so there were no links to follow.',
     );

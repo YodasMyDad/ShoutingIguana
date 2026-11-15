@@ -71,6 +71,49 @@ public sealed class WorkbookExportTests : IDisposable
         AssertSummary(file.Sheets[0].Values, results, order, [.. file.Sheets.Select(sheet => sheet.Name)]);
     }
 
+    /// <summary>Discovery decision 2: a check the user hid is left out of the workbook's sheets and its summary, which says so.</summary>
+    [Fact]
+    public void AWorkbookLeavesOutTheChecksTheUserHid()
+    {
+        var results = IssueReader.ReadResults(_crawl.Path)!;
+        var order = results.FixFirst;
+        string[] hidden = [order[0], order[3], "a-check-from-another-version"];
+        var path = Path.Combine(_folder, "hidden.xlsx");
+        var result = CrawlExporter.Export(_crawl.Path,
+            new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx, Report = new() { HiddenChecks = hidden } }, path);
+
+        var kept = order.Where(id => !hidden.Contains(id)).ToList();
+        var file = XlsxFile.Read(path);
+        Assert.Equal(kept.Count + 1, file.Sheets.Count);
+        Assert.Equal(kept.Sum(id => results.Counts[id]), result.Rows);
+        // Numbered afresh: the first sheet after the summary is the first check left in.
+        Assert.StartsWith("1 ", file.Sheets[1].Name, StringComparison.Ordinal);
+        AssertHoldsTheChecksRows(kept[0], file.Sheets[1].Values);
+        var summary = file.Sheets[0].Values;
+        Assert.DoesNotContain(summary, row => row.Contains(order[0]) || row.Contains(order[3]));
+        var note = Assert.Single(summary, row => Equals(row[0], "Hidden checks left out"));
+        Assert.Equal(2d, Convert.ToDouble(note[1], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>The workbook of an Issues view takes the view's checks, as a grid's file takes its filters.</summary>
+    [Fact]
+    public void AWorkbookOfAViewHoldsTheViewsChecksOnly()
+    {
+        var results = IssueReader.ReadResults(_crawl.Path)!;
+        var errors = results.FixFirst.Where(id => IssueCatalog.Find(id)!.Severity == IssueSeverity.Error).ToList();
+        var clean = IssueCatalog.All.First(check => results.Counts.GetValueOrDefault(check.Id, -1) == 0).Id;
+        var path = Path.Combine(_folder, "errors.xlsx");
+        CrawlExporter.Export(_crawl.Path,
+            new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx, Report = new() { Checks = [.. errors, clean] } }, path);
+
+        var file = XlsxFile.Read(path);
+        Assert.Equal(errors.Count + 1, file.Sheets.Count);
+        var summary = file.Sheets[0].Values;
+        Assert.Contains(summary, row => row.Contains(clean));
+        Assert.DoesNotContain(summary, row => row.Length > 7 && row[7] is string id && IssueCatalog.Find(id) is { } check && check.Id != clean && !errors.Contains(id));
+        Assert.Contains(summary, row => Equals(row[0], "Checks listed"));
+    }
+
     [Theory]
     [InlineData(ExportFormat.Xlsx)]
     [InlineData(ExportFormat.Csv)]
@@ -95,6 +138,37 @@ public sealed class WorkbookExportTests : IDisposable
         Assert.StartsWith("3 ", sheet.Name, StringComparison.Ordinal);
         Assert.Equal(SHEET_TITLES, sheet.Values[0]);
         AssertHoldsTheChecksRows(check.Id, sheet.Values);
+    }
+
+    /// <summary>
+    /// Round 5's review (R2-9): the report and the workbook number their checks afresh once the hidden ones are left out,
+    /// but one check's file was numbered against every check (the workbook's sheet "4 …", its own file "5 …"). It takes
+    /// the hidden checks too, and is named as that check's sheet is in the workbook with them hidden.
+    /// </summary>
+    [Fact]
+    public void OneChecksFileIsNumberedAsTheWorkbookWithTheSameChecksHidden()
+    {
+        var order = IssueReader.ReadResults(_crawl.Path)!.FixFirst;
+        string[] hidden = [order[0], "a-check-from-another-version"];
+        var check = order[4];
+
+        var workbook = Path.Combine(_folder, "hidden-for-one.xlsx");
+        CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx, Report = new() { HiddenChecks = hidden } }, workbook);
+        var inTheWorkbook = XlsxFile.Read(workbook).Sheets[4].Name;
+        Assert.StartsWith("4 ", inTheWorkbook, StringComparison.Ordinal);
+
+        var one = Path.Combine(_folder, "one-with-hidden.xlsx");
+        CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Check, Format = ExportFormat.Xlsx, CheckId = check, Report = new() { HiddenChecks = hidden } }, one);
+        Assert.Equal(inTheWorkbook, Assert.Single(XlsxFile.Read(one).Sheets).Name);
+        AssertHoldsTheChecksRows(check, XlsxFile.Read(one).Sheets[0].Values);
+
+        // The check itself hidden: its file is still what was asked for, named without a number (it has none in the list).
+        var itself = Path.Combine(_folder, "itself-hidden.xlsx");
+        CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Check, Format = ExportFormat.Xlsx, CheckId = order[0], Report = new() { HiddenChecks = hidden } }, itself);
+        Assert.False(char.IsDigit(Assert.Single(XlsxFile.Read(itself).Sheets).Name[0]));
+
+        // And the API and the command line take hiddenChecks for a check's file.
+        Assert.True(ExportFields.Takes(ExportKind.Check, "hiddenChecks"));
     }
 
     [Fact]

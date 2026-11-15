@@ -10,7 +10,8 @@
 //   (Cancel, then Stop and quit); nothing left running.
 // It never crawls a real site. Not run in CI: it needs a desktop session (a disconnected one will do).
 // Options: --exe <path>, --crawl <file>, --port <n>, --pages <n> (the test site's), --shots <folder> (a picture of
-// the page after each step), --skip keys,live,tray,restart, --keep (leave the run's folder behind).
+// the page after each step), --skip keys,live,tray,restart, --keep (leave the run's folder behind), --mode both|advanced|simple
+// (both, by default: this walk in Advanced, then scripts/smoke-shell-simple.mjs in Simple, each on an app of its own).
 /* global document, window -- the functions handed to page.evaluate run in the page */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,7 +33,18 @@ import {
 } from './lib/shell.mjs';
 
 if (process.platform !== 'win32') throw new Error('smoke-shell walks the Windows shell (WebView2): run it on Windows');
-const options = parseOptions(process.argv.slice(2));
+const modeAt = process.argv.indexOf('--mode');
+const mode = modeAt === -1 ? 'both' : process.argv[modeAt + 1];
+if (!['both', 'advanced', 'simple'].includes(mode))
+  throw new Error(`--mode takes both, advanced or simple, not '${mode}'`);
+const rest = process.argv
+  .slice(2)
+  .filter((argument, index, all) => argument !== '--mode' && all[index - 1] !== '--mode');
+const simpleWalk = () =>
+  spawnSync(process.execPath, [path.join(import.meta.dirname, 'smoke-shell-simple.mjs'), ...rest], { stdio: 'inherit' })
+    .status ?? 1;
+if (mode === 'simple') process.exit(simpleWalk());
+const options = parseOptions(rest);
 const exe = options.exe ?? builtApp(appRoot, existsSync);
 if (!exe || !existsSync(exe)) throw new Error('No built app: run npm run tauri build first');
 
@@ -488,6 +500,43 @@ try {
         return `crawl ${crawlId} of ${url}`;
       },
     );
+
+    // The gallery's G1: in this shell, at 1280 px with a crawl running in Advanced, the bar ran 38 px past its end and
+    // cut the switch. Read in the real WebView2, at the window's own width and at 1280 px, while the counts move.
+    await walk.step(
+      'at 1280 px with the crawl running, the top bar keeps the Simple | Advanced switch whole',
+      async () => {
+        const measure = () =>
+          page.evaluate(() => {
+            const bar = document.querySelector('header[data-mode]');
+            const box = bar.getBoundingClientRect();
+            const radios = bar.querySelector('[role="radiogroup"]').getBoundingClientRect();
+            return {
+              width: window.innerWidth,
+              step: Number(bar.dataset.give ?? 0),
+              overflow: bar.scrollWidth - bar.clientWidth,
+              inside: radios.left >= box.left - 0.5 && radios.right <= Math.min(box.right, window.innerWidth) + 0.5,
+            };
+          });
+        const read = async () => {
+          const samples = [];
+          for (let index = 0; index < 8; index++) {
+            samples.push(await measure());
+            await sleep(250);
+          }
+          const bad = samples.filter((sample) => sample.overflow > 0 || !sample.inside);
+          expectThat(bad.length === 0, `the bar overflowed: ${JSON.stringify(bad[0])}`);
+          return samples.at(-1);
+        };
+        const natural = await read();
+        let at1280 = natural;
+        if (natural.width !== 1280) {
+          await page.setViewportSize({ width: 1280, height: 720 });
+          at1280 = await read();
+        }
+        return `the window's own ${natural.width} px: step ${natural.step}; at 1280 px: step ${at1280.step}, the switch whole`;
+      },
+    );
   }
 
   const status = async () => (await (await engine(`/api/crawls/${crawlId}`)).json()).status;
@@ -617,4 +666,9 @@ try {
   else console.log(`the run's folder is kept: ${temp}`);
   console.log(verdict(walk));
   process.exitCode = walk.failed === 0 ? 0 : 1;
+}
+if (mode === 'both') {
+  console.log('');
+  console.log('The same app, as a first-time user meets it, in Simple:');
+  if (simpleWalk() !== 0) process.exitCode = 1;
 }

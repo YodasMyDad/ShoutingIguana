@@ -16,4 +16,7 @@ internal sealed record LinkEndsRequest
     public int? Offset { get; init; }
 
     public int? Limit { get; init; }
+
+    /// <summary>The checks the user hid: a link filter on an end's issue counts leaves them out.</summary>
+    public IReadOnlyList<string>? HiddenChecks { get; init; }
 }

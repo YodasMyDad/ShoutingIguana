@@ -1,6 +1,6 @@
 // Query keys and options for every read, so each screen asks for the same data the same way and the live layer knows
 // what to refresh. Freshness comes from events (`library`, `crawl`), not polling: reads stay fresh until told.
-import { queryOptions, type QueryFilters } from '@tanstack/react-query';
+import { mutationOptions, queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
 import type {
   CheckGroupRef,
@@ -443,4 +443,11 @@ export const issuesQuery = (id: string, checkId: string, offset: number, limit: 
     queryKey: queryKeys.issues(id, checkId, offset, limit),
     queryFn: ({ signal }) => api.issues(id, checkId, { offset, limit }, signal),
     staleTime: Infinity,
+  });
+
+/** Round 5: the proxy test, a fetch through the proxy the user typed. Never cached: each press tests again. */
+export const proxyTestMutation = () =>
+  mutationOptions({
+    mutationKey: ['proxy-test'] as const,
+    mutationFn: ({ proxyUrl, url }: { proxyUrl: string; url: string }) => api.testProxy(proxyUrl, url),
   });

@@ -56,10 +56,15 @@ internal static class ExportCommand
         {
             Description = "For report: the first pages listed for each thing worth a look.", DefaultValueFactory = _ => ReportOptions.DEFAULT_LOOK_EXAMPLES
         };
+        var hiddenChecks = new Option<string?>("--hidden-checks")
+        {
+            Description = "For report, workbook, check and the grids: checks hidden in the app, by id, comma-separated, left out of the lists and counts (title-too-long,thin-content)."
+        };
+        var onlyChecks = new Option<string?>("--checks") { Description = "For workbook: only these checks, by id, comma-separated: the ones an Issues view listed." };
         var command = new Command("export", "Write what a crawl holds to a file: a grid as CSV or Excel, the workbook of everything, or the report.")
         {
             database, kind, output, format, columns, filters, search, sort, linkEnds, linkFilters, linkSearch, blocked, sitemap, origin, line, reason, check, cut, examples,
-            lookExamples
+            lookExamples, hiddenChecks, onlyChecks
         };
 
         command.SetAction((parse, cancellationToken) => Task.FromResult(CommandErrors.Run(() =>
@@ -82,7 +87,7 @@ internal static class ExportCommand
             [
                 (columns, "columns"), (filters, "filters"), (search, "search"), (sort, "sort"), (linkEnds, "linkEnds"), (linkFilters, "linkEnds"), (linkSearch, "linkEnds"),
                 (blocked, "blocked"), (sitemap, "sitemapId"), (origin, "origin"), (line, "line"), (reason, "reason"), (check, "checkId"), (cut, "cut"), (examples, "examples"),
-                (lookExamples, "lookExamples")
+                (lookExamples, "lookExamples"), (hiddenChecks, "hiddenChecks"), (onlyChecks, "checks")
             ];
             var misplaced = owned.Where(option => parse.GetResult(option.Option) is { Implicit: false } && !ExportFields.Takes(exportKind, option.Field)).ToList();
             foreach (var (option, field) in misplaced)
@@ -107,14 +112,24 @@ internal static class ExportCommand
             {
                 Kind = exportKind,
                 Format = exportFormat,
-                Query = query with { LinkEnds = ends },
+                Query = query with
+                {
+                    LinkEnds = ends, HiddenChecks = ExportFields.Grids.Contains(exportKind) ? Ids(parse.GetValue(hiddenChecks)) ?? [] : []
+                },
                 Blocked = parse.GetValue(blocked),
                 SitemapId = parse.GetValue(sitemap),
                 Origin = parse.GetValue(origin),
                 Line = parse.GetValue(line),
                 Reason = blockReason,
                 CheckId = parse.GetValue(check),
-                Report = new ReportOptions { Cut = reportCut, Examples = parse.GetValue(examples), LookExamples = parse.GetValue(lookExamples) }
+                Report = new ReportOptions
+                {
+                    Cut = reportCut,
+                    Examples = parse.GetValue(examples),
+                    LookExamples = parse.GetValue(lookExamples),
+                    HiddenChecks = Ids(parse.GetValue(hiddenChecks)) ?? [],
+                    Checks = Ids(parse.GetValue(onlyChecks))
+                }
             };
             return Run(parse.GetValue(database)!, request, target, cancellationToken);
         })));
@@ -372,6 +387,10 @@ internal static class ExportCommand
                 return value is null ? null : new UrlFilter(parts[0], op) { Value = Value(value) };
         }
     }
+
+    /// <summary>A comma-separated list of checks' ids, or null for none given.</summary>
+    private static string[]? Ids(string? list) =>
+        list is null ? null : list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static string Camel(string name) => char.ToLowerInvariant(name[0]) + name[1..];
 }

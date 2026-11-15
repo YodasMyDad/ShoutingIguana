@@ -95,7 +95,8 @@ describe('the URL grid in a short window', () => {
     const filter = JSON.stringify([{ column: 'statusClass', op: 'in', values: ['2xx'] }]);
     await open(`${URLS}?filter=${encodeURIComponent(filter)}`);
     const table = await screen.findByRole('grid', { name: 'URLs' });
-    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // The header, five rows, the frame, and the footer's key hints (--grid-foot-height).
+    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12 + 36}px`);
     const frame = table.closest('.si-grid-screen')!;
     expect(frame).not.toBeNull();
     expect(table.closest('.si-grid-screen__body')?.parentElement).toBe(frame);
@@ -162,10 +163,40 @@ describe('the URL grid without the URL summary', () => {
     const { router } = await open(`${URLS}?cols=url,outcome&sort=-outcome`);
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
     // With what the engine said of it, in place: not only behind Details.
-    expect(screen.getByText('The view can’t be sorted by “outcome”.')).toBeVisible();
+    // In words, never the engine's id for the column (gap 27).
+    expect(screen.getByText('The URLs can’t be sorted by Outcome: filter by it instead.')).toBeVisible();
+    expect(screen.queryByText(/“outcome”/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Reset the view' }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));
+  });
+});
+
+describe('the URL grid refusing a column it was sent (round 5 review, also noted)', () => {
+  it('names the column the engine refused, by its place in the list the query sent, not in the view’s order', async () => {
+    const urls = fakeSidecar([
+      [
+        'POST',
+        /^\/api\/crawls\/[0-9a-f]{16}\/urls$/,
+        (request: TransportRequest) => {
+          const sent = (request.body as GridQuery).columns ?? [];
+          const at = sent.indexOf('title');
+          return problem({
+            type: 'invalid-query',
+            title: 'The query is invalid.',
+            status: 400,
+            errors: { [`columns[${at}]`]: ['The grid can’t show this column here.'] },
+          });
+        },
+      ],
+      ['GET', /^\/api\/url-columns$/, () => json(URL_COLUMNS)],
+      ['GET', /^\/api\/checks$/, () => json(ISSUES_CHECKS)],
+      ...standardRoutes(testCrawlItem()).filter(([, pattern]) => !pattern.source.endsWith('urls$')),
+    ]);
+    setTransport(urls);
+    // Shown as Title then Depth: the query sends its columns sorted, Title well after where the view has it.
+    await open(`${URLS}?cols=title,depth,url`);
+    expect(await screen.findByText('The URLs can’t show Title here.')).toBeVisible();
   });
 });
 
@@ -178,7 +209,7 @@ describe('the URL grid while the crawl runs', () => {
     });
     const { queryClient } = await open(URLS);
     const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
-    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('3 URLs found'))).toBeVisible();
     expect(within(header).getByText('Live')).toBeVisible();
     state.rows = [...TEST_URL_ROWS, { id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' }];
     let release: () => void = () => undefined;
@@ -195,7 +226,7 @@ describe('the URL grid while the crawl runs', () => {
     expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
     state.hold = null;
     act(() => release());
-    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('4 URLs found'))).toBeVisible();
     expect(await screen.findByText('https://example.com/c')).toBeVisible();
     expect(screen.getByRole('grid', { name: 'URLs' })).toHaveAttribute('aria-busy', 'false');
     expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
@@ -214,7 +245,7 @@ describe('the URL grid’s count', () => {
     const { queryClient } = await open(URLS);
     const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
     const liveRegions = () => header.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]');
-    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('3 URLs found'))).toBeVisible();
     // A screen reader reads what changes in a live region: about once a second here, for as long as the crawl runs.
     expect(liveRegions()).toHaveLength(0);
     /** What the live bridge does on a progress tick, the crawl having found another URL. */
@@ -223,7 +254,7 @@ describe('the URL grid’s count', () => {
       return act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
     };
     await tick({ id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' });
-    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
+    expect(await within(header).findByText(wholeText('4 URLs found'))).toBeVisible();
     expect(liveRegions()).toHaveLength(0);
     expect(heard).toEqual([]);
 
@@ -231,12 +262,12 @@ describe('the URL grid’s count', () => {
     const field = screen.getByRole('searchbox', { name: 'Search URLs and titles' });
     fireEvent.change(field, { target: { value: 'example.com/a' } });
     fireEvent.keyDown(field, { key: 'Enter' });
-    expect(await within(header).findByText(wholeText('1 of 4 URLs'))).toBeVisible();
-    await waitFor(() => expect(heard).toEqual(['1 of 4 URLs']));
+    expect(await within(header).findByText(wholeText('1 of 4 URLs found'))).toBeVisible();
+    await waitFor(() => expect(heard).toEqual(['1 of 4 URLs found']));
     // The crawl goes on under the search: the count moves, and nothing more is said.
     await tick({ id: 5, url: 'https://example.com/a/b', statusCode: 200, statusClass: '2xx' });
-    expect(await within(header).findByText(wholeText('2 of 5 URLs'))).toBeVisible();
-    expect(heard).toEqual(['1 of 4 URLs']);
+    expect(await within(header).findByText(wholeText('2 of 5 URLs found'))).toBeVisible();
+    expect(heard).toEqual(['1 of 4 URLs found']);
     stop();
   });
 });

@@ -63,6 +63,13 @@ async function open(path: string) {
 
 const continueCard = () => within(screen.getByRole('region', { name: 'Continue' }));
 
+/**
+ * The last Continue sent. Not the last request: the form's own check (`/validate`) goes out a moment after the card
+ * opens, and on a slow machine that is after the Continue.
+ */
+const lastContinue = (transport: ReturnType<typeof sidecar>) =>
+  transport.requests.filter((request) => request.path.endsWith('/continue')).at(-1)?.body;
+
 afterEach(() => setTransport(fakeSidecar([])));
 
 describe('the crawl’s settings', () => {
@@ -95,9 +102,7 @@ describe('the crawl’s settings', () => {
 
     fireEvent.change(continueCard().getByRole('textbox', { name: 'Header 1 value' }), { target: { value: 's3cret' } });
     fireEvent.click(continueCard().getByRole('button', { name: 'Continue the crawl' }));
-    await waitFor(() =>
-      expect(transport.requests.at(-1)?.body).toMatchObject({ extraHeaders: { 'X-Allow': 's3cret' } }),
-    );
+    await waitFor(() => expect(lastContinue(transport)).toMatchObject({ extraHeaders: { 'X-Allow': 's3cret' } }));
   });
 
   it('continue without the headers, when asked to', async () => {
@@ -106,7 +111,7 @@ describe('the crawl’s settings', () => {
     await screen.findByRole('region', { name: 'Continue' });
     fireEvent.click(await continueCard().findByRole('button', { name: 'Continue the crawl' }));
     fireEvent.click(await continueCard().findByRole('button', { name: 'Continue without that header' }));
-    await waitFor(() => expect(transport.requests.at(-1)?.body).toMatchObject({ skipMissingHeaders: true }));
+    await waitFor(() => expect(lastContinue(transport)).toMatchObject({ skipMissingHeaders: true }));
   });
 
   it('open on the speed when an alert asks to continue more slowly', async () => {

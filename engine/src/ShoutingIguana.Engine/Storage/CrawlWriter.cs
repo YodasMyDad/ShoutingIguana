@@ -506,17 +506,18 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _urls[key] = _urls[key] with { State = UrlState.Done };
 
         // A probe the site has since found was adopted meanwhile, so the response is one of the site's.
-        _counters.OnRecorded(new RecordedResponse(response.Outcome, response.StatusCode, IsPage(item.IsInternal, response),
+        _counters.OnRecorded(new RecordedResponse(response.Outcome, response.StatusCode, IsPage(item.IsInternal, item.Url, response),
             IsSiteUrl: item.IsInternal && !entry.IsProbe, IsNotChecked(response), DownloadedBytes(response.SizeBytes, response.BodyBytes), entry.IsProbe));
         PropagateDepths();
     }
 
     /// <summary>
     /// A page, as <see cref="CrawlSchema.PAGE"/> defines one for every stored count, so the live count ends where the
-    /// stored one is: internal, HTML, fetched and parsed. A URL only status-checked has no word count.
+    /// stored one is: internal, HTML, fetched and parsed, and not one of Cloudflare's endpoints. A URL only status-checked
+    /// has no word count.
     /// </summary>
-    private static bool IsPage(bool isInternal, ResponseRow response) =>
-        isInternal && response is { IsHtml: true, Outcome: FetchOutcome.Success, WordCount: not null };
+    private static bool IsPage(bool isInternal, string url, ResponseRow response) =>
+        isInternal && response is { IsHtml: true, Outcome: FetchOutcome.Success, WordCount: not null } && !CrawlSchema.IsCloudflareEndpoint(url);
 
     /// <summary>Failed without a request, its host having stopped answering, as <see cref="AnalysisReader.NOT_CHECKED"/> reads it back.</summary>
     private static bool IsNotChecked(ResponseRow response) =>

@@ -59,6 +59,15 @@ internal static class ExportRequests
         Only(body.Cut is not null, "cut");
         Only(body.Examples is not null, "examples");
         Only(body.LookExamples is not null, "lookExamples");
+        Only(body.HiddenChecks is not null, "hiddenChecks");
+        Only(body.Checks is not null, "checks");
+        // A grid's are its query's, checked as the grid's call checks them (invalid-query); the report's and the workbook's here.
+        if (!GRIDS.Contains(kind))
+        {
+            CheckIds(body.HiddenChecks, "hiddenChecks", errors);
+        }
+
+        CheckIds(body.Checks, "checks", errors);
 
         RobotsBlockReason? reason = body.Reason switch
         {
@@ -85,7 +94,10 @@ internal static class ExportRequests
             Kind = kind,
             Format = format,
             Query = GRIDS.Contains(kind)
-                ? GridRequests.Query(new GridQueryRequest { Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort, LinkEnds = body.LinkEnds })
+                ? GridRequests.Query(new GridQueryRequest
+                {
+                    Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort, LinkEnds = body.LinkEnds, HiddenChecks = body.HiddenChecks
+                })
                 : new UrlQuery { Search = body.Search },
             Blocked = body.Blocked,
             SitemapId = sitemap,
@@ -94,8 +106,26 @@ internal static class ExportRequests
             Reason = reason,
             CheckId = body.CheckId,
             Group = body.Group is { } group ? new IssueGroupKey(group.Detail, group.RelatedUrlId) : null,
-            Report = Report(cut, body.Examples, body.LookExamples)
+            Report = Report(cut, body.Examples, body.LookExamples) with { HiddenChecks = body.HiddenChecks ?? [], Checks = body.Checks }
         };
+    }
+
+    /// <summary>A list of checks' ids: at most <see cref="ReportOptions.MAX_CHECKS"/>, none empty or longer than an id is.</summary>
+    private static void CheckIds(IReadOnlyList<string>? ids, string field, Dictionary<string, IReadOnlyList<string>> errors)
+    {
+        if (ids is null || errors.ContainsKey(field))
+        {
+            return;
+        }
+
+        if (ids.Count > ReportOptions.MAX_CHECKS)
+        {
+            errors[field] = [$"{field} takes at most {ReportOptions.MAX_CHECKS} checks."];
+        }
+        else if (ids.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 64))
+        {
+            errors[field] = [$"Each of {field} is a check's id, such as title-too-long."];
+        }
     }
 
     /// <summary>The report's options from a query string: <c>cut</c>, <c>examples</c> and <c>lookExamples</c>, each optional.</summary>
@@ -117,12 +147,17 @@ internal static class ExportRequests
 
         var cut = Cut(query["cut"].Count == 0 ? null : query["cut"].ToString(), errors);
         var (examples, lookExamples) = (Number("examples"), Number("lookExamples"));
-        if (query.Keys.FirstOrDefault(key => key is not ("cut" or "examples" or "lookExamples")) is { } unknown)
+        // The checks the user hid, comma-separated, as the export takes them: the report shown is the report saved.
+        IReadOnlyList<string> hidden = query["hiddenChecks"].Count == 0
+            ? []
+            : [.. string.Join(',', query["hiddenChecks"].Select(value => value ?? string.Empty)).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+        CheckIds(hidden, "hiddenChecks", errors);
+        if (query.Keys.FirstOrDefault(key => key is not ("cut" or "examples" or "lookExamples" or "hiddenChecks")) is { } unknown)
         {
-            errors[unknown] = ["The report takes cut, examples and lookExamples."];
+            errors[unknown] = ["The report takes cut, examples, lookExamples and hiddenChecks."];
         }
 
-        return errors.Count > 0 ? throw Problems.InvalidExport(errors) : Report(cut, examples, lookExamples);
+        return errors.Count > 0 ? throw Problems.InvalidExport(errors) : Report(cut, examples, lookExamples) with { HiddenChecks = hidden };
     }
 
     private static ReportOptions Report(ReportCut cut, int? examples, int? lookExamples) => new()

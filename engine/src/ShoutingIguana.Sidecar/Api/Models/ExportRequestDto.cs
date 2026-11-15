@@ -59,4 +59,10 @@ internal sealed record ExportRequestDto
     public int? Examples { get; init; }
 
     public int? LookExamples { get; init; }
+
+    /// <summary>For <c>report</c> and <c>workbook</c>: checks the user hid, left out of the lists and counts.</summary>
+    public IReadOnlyList<string>? HiddenChecks { get; init; }
+
+    /// <summary>For <c>workbook</c>: only these checks, the ones the Issues view listed.</summary>
+    public IReadOnlyList<string>? Checks { get; init; }
 }

@@ -1,9 +1,9 @@
 // The palette's "Go to URL…" in the app: the lookup, what it says when the crawl doesn't have the URL, and the
 // inspector opening on what it finds.
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { resetOverlaysForTests } from '../app/overlays';
@@ -64,6 +64,25 @@ async function goToUrlMode(user: ReturnType<typeof userEvent.setup>) {
   await user.keyboard('{Enter}');
   return { palette, field: await within(palette).findByRole('textbox', { name: 'Go to URL' }) };
 }
+
+// Why these tests were slow (round 5's integration gave them 20 s): the first to render the app paid for everything
+// loaded on demand (the screens, the inspector, the palette: each module's first import is a transform) and for the
+// first render of each, 0.25 s of its 0.6 s alone and over 5 s on a machine saturated by a release build; the others,
+// waiting on the app's own timers, not the processor, never came near. So the file pays it once, before its tests: it
+// imports the screens and renders the app as its first test would, palette open. Each test is then its own work.
+await Promise.all([import('../screens/UrlsScreen'), import('../screens/OverviewScreen'), import('./CommandPalette')]);
+
+beforeAll(async () => {
+  const restore = installKeyboard();
+  const { user } = await open(`${CRAWL}/urls?inspect=2`);
+  await screen.findByRole('grid', { name: 'URLs' });
+  await screen.findByRole('tabpanel', { name: /^Summary/ });
+  await goToUrlMode(user);
+  cleanup();
+  restore();
+  setPaletteMode({ kind: 'commands' });
+  resetOverlaysForTests();
+}, 60_000);
 
 describe('“Go to URL…” in the palette', () => {
   it('looks a path up in the open crawl and opens the inspector on it, a step back retraces', async () => {

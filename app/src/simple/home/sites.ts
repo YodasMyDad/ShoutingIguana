@@ -2,10 +2,11 @@
 // the older checks of a site folded under it, and the checks running now pinned above. What each row says of its
 // check, from the library's item. Pure.
 import type { CrawlListItem, CrawlStatus, IssueCounts, ScoreSummary } from '../../api/types';
+import { crawlName } from '../../crawl/status';
 import { formatCount, formatCountOf } from '../../lib/format';
 
 export interface SiteGroup {
-  /** The site (the start URL's host), or the crawl's id for a file with none. */
+  /** The site (the start URL's host, and its port when it has its own), or the crawl's id for a file with none. */
   key: string;
   /** The newest check of the site: the row. */
   latest: CrawlListItem;
@@ -34,7 +35,7 @@ export function siteGroups(
   const bySite = new Map<string, CrawlListItem[]>();
   for (const item of items) {
     if (live.includes(item.id)) continue;
-    const key = item.site ? `site:${item.site}` : `crawl:${item.id}`;
+    const key = item.site ? `site:${item.site}${portOf(item)}` : `crawl:${item.id}`;
     bySite.set(key, [...(bySite.get(key) ?? []), item]);
   }
   const sites = [...bySite.entries()].flatMap(([key, checks]) => {
@@ -43,6 +44,25 @@ export function siteGroups(
   });
   sites.sort((a, b) => newestFirst(a.latest, b.latest));
   return { running, sites };
+}
+
+/**
+ * ":8080" for a start URL on a port other than its scheme's own, else "": two sites on one host are told apart by it
+ * (the closing audit's gap 30: two test sites on 127.0.0.1 were one row).
+ */
+function portOf(item: Pick<CrawlListItem, 'startUrl'>): string {
+  if (!item.startUrl) return '';
+  try {
+    const { port } = new URL(item.startUrl);
+    return port ? `:${port}` : '';
+  } catch {
+    return '';
+  }
+}
+
+/** The site as its row names it: its name, with its port when it has one of its own ("127.0.0.1:8080"). */
+export function siteName(item: Pick<CrawlListItem, 'site' | 'fileName' | 'startUrl'>): string {
+  return item.site ? `${item.site}${portOf(item)}` : crawlName(item);
 }
 
 /** What a row is, by what can be said of its check: each its own true sentence. */

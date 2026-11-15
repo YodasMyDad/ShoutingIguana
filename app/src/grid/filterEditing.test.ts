@@ -74,9 +74,18 @@ describe('editing a grid filter', () => {
     expect(opsFor('boolean').map((op) => opWords(op, 'boolean'))).toEqual([
       'is yes',
       'is no',
+      'is not yes',
+      'is not no',
       'is empty',
       'is not empty',
     ]);
+  });
+
+  it('edits an excluded yes-or-no value, "is not", and makes it again (round 5 review R1-2)', () => {
+    const noindex = { id: 'noindex', name: 'Noindex', group: 'indexing', type: 'boolean' as const, values: [] };
+    const draft = draftOf({ column: 'noindex', op: 'isNot', value: false }, noindex);
+    expect(draft?.op).toBe('isNotNo');
+    expect(draft && filterOf(draft, noindex)).toEqual({ filter: { column: 'noindex', op: 'isNot', value: false } });
   });
 
   it('asks for what the operator takes: nothing, a value, a range or some values', () => {

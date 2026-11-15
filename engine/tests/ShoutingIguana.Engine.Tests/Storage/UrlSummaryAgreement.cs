@@ -54,7 +54,12 @@ internal static class UrlSummaryAgreement
         Assert.Equal(stats.NonIndexableReasons.Where(pair => pair.Key != IndexabilityReason.None).OrderBy(pair => pair.Key),
             internalRows.Where(row => row.IndexabilityReason is not (null or IndexabilityReason.None)).GroupBy(row => row.IndexabilityReason!.Value)
                 .Select(group => KeyValuePair.Create(group.Key, (long)group.Count())).OrderBy(pair => pair.Key));
-        Assert.Equal(stats.IndexablePageCount, internalRows.Count(row => row is { IsIndexable: true, ResourceType: ResourceType.Page }));
+        // Cloudflare's own endpoints are no page of the site's in any count of pages (CrawlSchema.PAGE), though the summary
+        // types them as pages.
+        var cloudflare = TestCrawls.Rows(path, "SELECT id FROM urls WHERE instr(lower(url), '/cdn-cgi/') > 0")
+            .Select(id => int.Parse(id, CultureInfo.InvariantCulture)).ToHashSet();
+        Assert.Equal(stats.IndexablePageCount,
+            internalRows.Count(row => row is { IsIndexable: true, ResourceType: ResourceType.Page } && !cloudflare.Contains(row.UrlId)));
         Assert.Equal(expected.NotChecked, stats.NotCheckedCount);
 
         AssertLinkCounts(path, rows);

@@ -107,7 +107,8 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   shell logs the sidecar's last 50 stderr lines at WARN. The reason it shows prefers a .NET "Unhandled exception." line
   and is never a stack frame, and the sidecar writes unhandled exceptions to its own log too. Try again
   (`restart_sidecar`) starts afresh.
-- **Quitting.** With a crawl running, one native question: "Stop crawling and quit?". Then the window shows
+- **Quitting.** With a crawl running, one native question: "Stop crawling and quit?" ("Stop checking and quit?" in
+  Simple: the shell speaks the page's mode, see "The shell and the platform (round 5)"). Then the window shows
   "Stopping crawls…", the shell writes `shutdown` to the sidecar's stdin and waits up to 35 s (the contract's 30 s bound
   and a margin) before killing it. Closing the window while a crawl runs hides it to the tray instead, and says so once.
   A launch made while the app quits doesn't bring the dying window back: once the engine has stopped, the shell starts
@@ -187,6 +188,17 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   resumed with F7; the window closed to the tray with the crawl going on, and back through the tray icon; "Stop
   crawling and quit?" (Cancel keeps both, Stop and quit ends both); nothing left running and no page error.
   `--shots <folder>` keeps a picture of the page after each step, `--skip keys,live,tray,restart` leaves parts out.
+- **Then Simple** (round 5, `scripts/smoke-shell-simple.mjs`; `--mode advanced` or `--mode simple` runs one walk
+  alone): a second app on a new profile and an empty data folder, as a first-time user meets it. It opens in Simple
+  on Home, its window named "Home · Shouting Iguana"; a check of the test site from Home (the saved defaults set Fast,
+  so it ends while hidden); the window closed with the check going on: hidden, with "Still checking", then the
+  finish notice "… is checked", and the tray's tooltip and menu as they changed, read from the shell's log (it records
+  the tooltip the icon is built with, each new state's tooltip, `Tray tooltip:`, and each menu it builds, `Tray menu:`;
+  `lib/shell.mjs`'s `trayWords` and `simpleTrayProblems`): checking, then working out the results (tooltip and menu),
+  then "Shouting Iguana" with nothing running, never in Advanced's words (round 5's review, R2-11: it read the first
+  tooltip only). A new state's tooltip is drawn at once; only its numbers wait for the tray's one-second redraw; back through the tray icon onto the Summary's score and the window "Summary · …"; the
+  Report; "Stop checking and quit?" with a check running (Cancel keeps it, Stop and quit ends it); nothing left
+  running and no page error.
 - **What the first walk by hand found** (10 Nov 2026, WebView2 157, Windows 11 at 150%): everything above works as in
   Chromium, with these differences. Back from the tray after a crawl ended there, Overview failed (fixed: see
   Overview's `useAnalysisAnswer`). Scrollbars show (headless Chromium hides them): they were Windows' classic ones,
@@ -387,8 +399,30 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
 - **Span rows** (`spanRow`): a row drawn as one cell across every column (`aria-colspan`), such as a group's pages and
   its "Show all N pages in URLs"; it is the cursor's cell whatever the cursor's column. Columns' `text` still gives
   every row's words for copying.
-- Columns are fixed widths: a grid in a panel (Issues') shares the panel's measured width (`grid/useElementWidth.ts`)
-  among them. Keep focusable controls out of cells (`Url` with `openable={false}`), so the grid stays one Tab stop.
+- Columns have the widths their grid gives them: a grid in a panel (Issues') shares the panel's measured width
+  (`grid/useElementWidth.ts`) among them. Keep focusable controls out of cells (`Url` with `openable={false}`), so the
+  grid stays one Tab stop.
+- **Columns the user lays out** (`columnLayout`, round 5): a header's right edge drags to resize (a double-click puts
+  the width back), a header drags to move (the line in the accent colour says where; the drag isn't a press, so it
+  doesn't sort), and a right-click on a header, or Shift+F10 on the header row, opens its menu (pin or unpin, move,
+  wider, narrower, its width back, every column back). The header row is reachable (Up from the first row) whenever
+  the columns can be laid out, sorting or not: Shift+Left and Shift+Right move the edge 16 px, Ctrl+Shift+Left and
+  Ctrl+Shift+Right move the column with the cursor, each said once. Pinned columns come first and stick to the left
+  (`position: sticky` on their cells, on the row's own colour, the last drawing the edge); revealing a column scrolls
+  it in beside them. A column narrower than 56 px or its own `minWidth` (the URL's 240) can't be made. The layout is
+  pure (`grid/columnLayout.ts`: widths, pins, an order) and kept per grid in the preferences
+  (`settings.gridColumns`, by the grid's id: `urls`, `links`, `issues.rows`, `issues.groups`, `inspector.links`,
+  `robots.blocked`, `robots.origins`, `sitemaps.urls`, `sitemaps.list`) by `grid/useColumnLayout.ts`, which every
+  grid uses. The URL and link grids' order is their route's `cols` (a move changes the route, replaced), so their
+  queries ask for their columns in one order whatever the order shown; a saved view keeps the widths and pins
+  (`SavedView.layout`) and opening it lays them out so.
+- **The footer** (`keyHints`, `rowNoun`): a screen's own grid (URLs, Links, a sitemap's URLs, an origin's blocked
+  URLs) shows the design's key hints (`grid/gridFoot.ts`: Up Down Move, Enter Inspect, Space Select, Ctrl C Copy for
+  Excel) and where the cursor is ("URL 12 of 264", "3 URLs selected"), at `--grid-foot-height`, outside the rows and
+  never a live region. A footer narrower than 560 px keeps only the place; a short window's grid has none
+  (`useShortScreen`).
+- **The menu opens where it was asked for**, every time: each opening is a menu of its own (`RowMenuState.opening`,
+  the header menu's likewise), placed afresh at its point.
 - **Which column** (`onActivate`'s third argument, `onActiveColumnChange`): Enter says the id of the column the cursor
   was in, and a double-click the cell's, for a grid whose rows hold more than one thing to open (a link's two ends);
   the cursor's column is reported as it changes, for an action on that column (copy it).
@@ -585,12 +619,13 @@ are drawn for the app and are never swapped for Lucide's.
   Simple's own screens are round 4's, each one row of `app/simpleScreens.ts`.
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
-- On every grid: column resize, reorder and pin, "filter by this value" and "exclude it" in the row menu. None is
-  built: a grid's columns are fixed widths in the order chosen. Saved views are the URL grid's only. Export is built:
-  see [Hand over, search, favicons and the analysis's limits](#hand-over-search-favicons-and-the-analysiss-limits).
+- Column resize, reorder and pin are built on every grid (round 5: [the grid primitive](#the-grid-primitive)), and
+  "Filter by this value" and "Exclude this value" in the row menus of the grids with filters (URLs, Links, one
+  sitemap's URLs). Saved views are the URL grid's only. Export is built: see
+  [Hand over, search, favicons and the analysis's limits](#hand-over-search-favicons-and-the-analysiss-limits).
 - Each screen's own pieces, built from the components by its slice: the explanation band, charts. A piece two screens
   need joins `src/ui`.
-- Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
+- Drag-and-drop of `.sicrawl` files: built in round 5 ([Home, one count, and a dropped file](#home-one-count-and-a-dropped-file-round-5)).
 
 ## Issues (the first slice)
 
@@ -1130,6 +1165,20 @@ What it settled:
   refuses a write whose file would be over the size it reads (`src-tauri/src/settings.rs`).
 - **Copies**: the URLs of the whole view (Ctrl+Shift+C) and the column the cursor is in, read by cursor as far as
   10,000 rows, named "the first 10,000" on a bigger view.
+- **Round 5.** "Filter by this value" and "Exclude this value" in the row menu, for the cell it was opened on
+  (`grid/valueFilter.ts`: by the column's type, as the filter editor has it: a number `eq`/`ne`, text `eq`/`ne`, an
+  enum `in`/`notIn`, yes or no `is`, an empty cell `isEmpty`/`isNotEmpty`; a status with no code is the outcome's
+  filter), each with the chip it adds as its detail, or why there's none (a column the engine can't filter by, one
+  that needs an analysis, a value over 1,000 characters). "All columns" (`ALL_COLUMNS_PRESET`, `allUrlColumns`):
+  every column of the chooser, URL first. "Clear the filters" keeps the sort and the columns (the palette's "Clear
+  the URLs' filters, search and sort" still clears all three). A view the engine refuses for its sort or columns is
+  said in words with the column's name (`grid/queryRefusal.ts`), never the engine's id. The search applies on Enter
+  (`grid/SearchApplyHint.tsx`: the Enter key at the field's end while what's typed isn't applied, "Press Enter to
+  search." as its description; the placeholder "URL or title" fits the 200 px field: 68 of 100 px). In a screen
+  shorter than 480 px (`grid/useShortScreen.ts`), URLs and Links fold their presets, facets, filter bar and notes
+  behind `ToolsToggle` (its name says the filters and notes behind it, a dot shows there are some; a command that
+  needs a folded part opens it), Export is an icon in the header, and the header's actions wrap: at 640x360 the grid
+  shows 6 rows (0 before), 5 with the inspector open (2 before).
 - **The row menu**: inspect, open in the browser, copy the URL (or the selection's URLs, each once), copy the row (or
   rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). The same piece on
   Links (each end: the end the menu was opened in, and Inspect the source page, Inspect the target), Issues' pages
@@ -1562,8 +1611,9 @@ touch the same lines:
   left out of `POST /api/crawls` takes the engine's default, not the user's.
 - **Data folder**, **Diagnostics** (Copy diagnostics: versions, folders, mode, theme, zoom, page, browser; nothing
   from a crawl, the home folder as `%USERPROFILE%` or `~` and the account name nowhere), **Updates**, **About** (with Copy diagnostics in Simple) and **Shortcuts** (the registry's list) show
-  what is true today. Neither the shell nor the sidecar can move the data folder or look for updates, so there's no
-  control for either (below).
+  what is true today. Since round 5, Data folder changes the folder (a switch, with Go back), Updates checks and
+  installs signed updates, Diagnostics opens the log folders and About lists the third-party licences ("The shell
+  and the platform (round 5)", below).
 
 ### New crawl, and the crawl's settings
 
@@ -1603,17 +1653,117 @@ touch the same lines:
   another user agent" and "Crawl again with robots.txt ignored" (`from` this crawl). Continue's toast, when a proxy
   password is needed again, opens this screen on the proxy (`focus=proxy`).
 
-### What the shell and the engine don't give
+### The shell and the platform (round 5)
 
-- **The OS credential store.** The shell has no command for it (a keychain crate and two commands, read and write by
-  a key the app chooses, asking the user first). Until it has, secrets last as long as the form.
-- **Moving the data folder.** The sidecar takes its data folder at start (`--data-dir`, from the shell) and has no
-  call to change it; Settings shows it, with Copy.
-- **Looking for updates.** The shell has no updater; Updates says how a new version arrives.
-- **A proxy test.** The parity list keeps "Test proxy connection"; the sidecar has no call for it, so the form has no
-  Test button.
-- **The engine's own defaults** once the user has saved theirs: `GET /api/crawl-options/defaults` gives one or the
-  other. The app keeps a copy, checked end to end.
+What round 3 listed as "what the shell and the engine don't give" is built (gap 18 of the closing audit), with the
+shell's words in the page's mode (gap 5), each screen's title on the window (gap 26), the licences and the log
+folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.rs`, `drop.rs`, `mode.rs`.
+
+- **The shell speaks the page's mode.** The page tells the shell its mode by storing its preferences
+  (`settings_write`); the shell reads them once at start and keeps the mode (`mode.rs`). In Simple the tray's tooltip
+  says "Shouting Iguana: checking example.com, 1,204 addresses checked" (paused, stopping, "working out the results
+  for …"), its menu "(working out the results)", the first hide-to-tray notice "Still checking: Shouting Iguana keeps
+  checking in the tray. Quit from its menu." (or "Still working out the results"), and the quit question "Stop
+  checking and quit? You can continue the check later from Your sites." Advanced keeps its words, and an analysis alone
+  now says "Still analysing" rather than "Still crawling". The words are in `tray/text.rs` and `quit.rs`, tested in
+  both modes; `smoke:shell`'s Simple walk reads the notice, each tooltip and each menu from the shell's log.
+- **Each screen names the window** (`layout/documentTitle.ts`): "Issues · gardenfurnituresets.co.uk · Shouting
+  Iguana", in the mode's words ("What to fix · …" in Simple), "Home · Shouting Iguana", "New crawl · …"; the site only
+  once the crawl is known. The shell mirrors `document.title` onto the window (`on_document_title_changed`), so the
+  taskbar, Alt+Tab and a screen reader's window list say where you are.
+- **Files dropped on the window** (`drop.rs`). WebView2 and WebKit give a drop to the shell, never paths to the page,
+  so the shell forwards it as **`shell://drag-drop`**, one of:
+  - `{ "type": "enter", "paths": [...], "crawlFiles": [...] }` while files are held over the window,
+  - `{ "type": "drop", "paths": [...], "crawlFiles": [...] }` when they're let go,
+  - `{ "type": "leave" }` when they're taken away.
+
+  `paths` is every path, in order; `crawlFiles` the ones that are `.sicrawl` files (not folders named like one).
+  Moves over the window aren't sent. The page listens with `ipc.onDragDrop` (`shell/ipc.ts`, parsed by
+  `parseShellDragDrop`), opens the crawl files as a launch's are (`openCrawlPaths`) and says why for any other file.
+  Because the shell takes the drop, HTML5 drag and drop events don't reach the page in the app: anything dragged
+  inside the page (a column, say) uses pointer events.
+- **Updates** (`updates.rs`, Settings › Updates' `UpdatePanel`). `tauri-plugin-updater`, driven by the shell's own
+  commands only (`update_check`, `update_install`; the webview isn't granted the plugin's): Check for updates reads
+  `latest.json` from this repository's newest GitHub release
+  (`https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json`, in `tauri.conf.json`'s
+  `plugins.updater.endpoints`), and says the newer version, its date and what's new (the release's notes), or "You
+  have the newest version". Install and restart, on the user's word only, never while a crawl, an analysis or an
+  export runs ("A file is being exported. Install the update once it has been saved."; the shell knows the exports
+  running from the event stream's `hello` and `export` events, `LiveView::exporting`): the shell downloads the
+  installer (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a second), checks its
+  minisign signature against `plugins.updater.pubkey`, asks again whether anything runs, under the quit lock (a crawl
+  started during a slow download: "Something started while the update downloaded. Install it once that has
+  finished.", and nothing is stopped; round 5's review, R2-3), stops the engine as quitting does, and runs
+  the NSIS installer passively; it closes the app and starts the new version. A download whose signature doesn't
+  match is never run. Nothing is checked on its own: the user asks.
+
+  **What the release workflow needs.** The key pair was made with `npx tauri signer generate`; its public key is in
+  `tauri.conf.json`, its private key and that key's password are kept off the repository (on the owner's machine:
+  `%USERPROFILE%\.shouting-iguana\updater.key` and `updater.key.password`). The workflow that builds a release:
+  1. has two repository secrets, **`TAURI_SIGNING_PRIVATE_KEY`** (the private key file's contents) and
+     **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`** (its password), in its environment for the build;
+  2. builds with the updater's artifacts on: `npm run tauri build -- --bundles nsis --config
+     '{"bundle":{"createUpdaterArtifacts":true}}'` (left off in `tauri.conf.json`, so a build without the key, on a
+     developer's machine or in CI's checks, still builds). That writes, beside the installer,
+     `Shouting Iguana_<version>_x64-setup.exe.sig`;
+  3. writes `latest.json` and uploads it with the installer to the GitHub release, which must be the repository's
+     **latest** (not a draft or a pre-release, which `releases/latest` skips; the WPF app's releases must not be
+     marked latest after v2's):
+
+     ```json
+     { "version": "2.1.0", "notes": "What's new, as the Updates screen shows it.", "pub_date": "2026-11-20T10:00:00Z",
+       "platforms": { "windows-x86_64": { "signature": "<the .sig file's contents>",
+         "url": "https://github.com/YodasMyDad/ShoutingIguana/releases/download/v2.1.0/Shouting.Iguana_2.1.0_x64-setup.exe" } } }
+     ```
+
+     (`url` is the uploaded installer's download address; GitHub replaces spaces in asset names with dots.)
+  `version` must be higher than the installed one by semver, or the app says it has the newest. A test run of the
+  built app (`SI_APP_PROFILE_DIR` set) may point the updater elsewhere with `SI_UPDATER_ENDPOINT`; a user's never can.
+- **Secrets in the OS credential store** (`secrets.rs`, `crawl/secrets.ts`). The engine keeps a proxy without its
+  password and headers without their values, and the page used to keep them only while it ran. Now the shell keeps
+  them in Windows' Credential Manager (macOS's Keychain, the Secret Service on Linux), through `keyring`, service
+  "Shouting Iguana", under a key the page names and the shell checks: `defaults` (the crawl defaults' proxy and header
+  values) or `crawl:<id>` (what a crawl was started or last continued with). The value is a small JSON object,
+  `{ "proxyUrl": "http://user:password@host:port", "headers": { "Authorization": "…" } }`, at most 1,200 bytes;
+  empty forgets it. The API client does the rest: `startCrawl` keeps what a crawl starts with; `continueCrawl` sends
+  the kept proxy and headers unless the request gives its own, so Continue asks again only when nothing was kept;
+  `crawlOptions` and `crawlOptionDefaults` put the kept secrets back into the options they read (the proxy only when
+  it's the same proxy), and `saveCrawlOptionDefaults(options, secrets)` keeps the defaults' while the engine gets them
+  without. Nothing secret is ever in `settings.json`, `shell.json`, `defaults.json` or a crawl file. In a browser
+  (development, the tests) there's no store and nothing changes. Site logins are headers here: the engine refuses a
+  user name in a URL. A test run keeps its secrets under its own service name.
+- **A data folder the user can change** (`data_folder.rs`, Settings › Data folder). **Settled: a switch, not a
+  move.** Change folder… asks with the system's own dialog, checks a file can be written there, keeps the choice in
+  the shell's `shell.json` (with the folder before it) and starts the engine again on it (`Sidecar::relaunch`: the
+  old engine finishes what it was writing and stops, the new one gets `--data-dir`; the page sees `starting`, then
+  `ready` with a new generation, and reads everything again). The library is then the new folder's crawls, none if
+  it's new. The old folder's crawls stay exactly where they were: Go back to the folder before (or Use the usual
+  folder, `Documents\Shouting Iguana`) brings them back. Why not move them: a crawl file is a SQLite database, often
+  hundreds of MB; a move of gigabytes can fail half way (a full disk, a file another program holds open, an
+  antivirus scan), leaving crawls in two places, and needs its own progress, cancel and recovery, while a switch
+  can't lose anything, is instant, and is undone by Go back. A user who wants the files moved moves them in Explorer:
+  the library lists the `.sicrawl` files at the top of its folder. Refused while a crawl, an analysis or an export
+  runs ("A file is being exported. Change the folder once it has been saved, or after cancelling it."; R2-10). A
+  chosen folder that has gone (a drive unplugged) is passed over for that run, and stays chosen. `SI_APP_DATA_DIR`
+  (tests, development) still wins, and Settings then says it can't be changed.
+- **A proxy test** (`POST /api/proxy/test`, `crawl/options/ProxyTest.tsx`): beside every proxy field, it fetches the
+  crawl's start address (or one the user gives, in the defaults) once through the proxy as typed, password included,
+  and shows the engine's sentence: answered, asks for a password, nothing at that address, couldn't reach the site,
+  timed out, a certificate problem.
+- **The log folders** (Settings › Diagnostics): Open the app's log folder and Open the engine's log folder
+  (`open_logs_folder`, `app` or `engine`: the page names which, the shell finds it, the engine's from
+  `GET /api/health`'s `stateDir`). The log folder shown honours a test profile.
+- **Third-party licences** (About, `scripts/licences.mjs`). Every Vite build writes `licences.json` beside the app
+  (`scripts/licences-plugin.mjs`; Storybook's skips it): the npm packages in `package-lock.json` less the development
+  ones, the crates the shell links (`cargo metadata` for the platform, normal dependencies only, walked from the
+  shell), the NuGet packages the sidecar is published with (its `project.assets.json`, less build-only packages,
+  plus the .NET and ASP.NET Core runtimes the self-contained engine carries), and the fonts. Each with its licence
+  and its licence's text (from the package: LICENSE, COPYING, NOTICE files; a nuspec's licence file), the texts kept
+  once: 434 packages, 192 texts, about 1.5 MB, read only when About opens. A Tauri build (`TAURI_ENV_PLATFORM`) or
+  `SI_LICENCES_STRICT=1` fails when a source can't be read, so a release never ships a partial list; elsewhere it
+  says so and the list says it may be short. A copy run from source (the dev server) has none, and About says why.
+- **Still the engine's**: its own defaults once the user has saved theirs (`GET /api/crawl-options/defaults` gives
+  one or the other). The app keeps a copy, checked end to end.
 
 ## Hand over, search, favicons and the analysis's limits
 
@@ -1695,6 +1845,21 @@ as the menu opens (`POST /links/ends`, `limit: 1`). The URL grid takes `links: {
 `linkEnds` beside its own filters in its reads, facets and copies, with a line saying which end of which links ("Only
 the URLs that the broken links lead to, each once."), Back to the links (to the links view's filters, search, sort and
 columns) and Show every URL. A saved view keeps the narrowing: it is part of the view's route.
+
+### Round 5: hidden checks, the workbook's filters, the inspector's links
+
+- **Hidden checks** (docs/v2-ui-discovery.md, decision 2) are hidden in this crawl only (`settings.hiddenChecksByCrawl`,
+  by the crawl's id, the 100 crawls last changed kept) or in every crawl (`settings.hiddenChecks`);
+  `settings/hiddenChecks.ts` reads a crawl's (`useHiddenChecks`, `hiddenScopeOf`, `setCheckHidden`), and every count
+  and list that left hidden checks out reads them there. Issues' Hide asks which, its badge says which, and Undo puts
+  the scope back. The report and the workbook leave them out (`hiddenChecks` in the export request, added by
+  `crawlFileChoices` as Export is pressed), the report shown on the Report screen too (its `GET` takes them), each
+  saying how many it left out; the score stays the analysis's. Issues' "This check" sends them too (round 5's review,
+  R2-9), so its file is numbered as its sheet is in the workbook with them hidden.
+- **The workbook takes the Issues view's filters**: with the list filtered (severity, category, text), Export offers
+  "The checks listed: their spreadsheet" (`checks`: the ids the filters keep) beside the spreadsheet of every check.
+- **The inspector's inlinks and outlinks** export (`urlLinksOffer`): the links grid's export filtered as "All N in
+  Links" is, the other end, its status and outcome, the text, the kind, the position and the follow flags.
 
 ### Measured
 
@@ -1783,6 +1948,12 @@ the routes' table (`app/simpleScreens.ts`):
   hidden checks the page stored (`settings::preferences`, read as the page reads them: nothing stored is Simple), the
   library item's `score` and `pageCount`, and, with checks hidden, `/api/checks` and the analysis's counts. The
   notification plugin has no buttons on the desktop, so See the summary and Open the report are the toast's only.
+  A crawl the user stops is analysed, and its notification waits for that analysis, then says the stop as the toast
+  does, with the results so far: "Crawl stopped", "example.com: 1,234 URLs, 18 checks found issues. Continue it from
+  the library."; in Simple "The check of example.com was stopped", "Score 71 so far: 2 problems to fix. Continue it
+  from Your sites." (round 5's review, R2-4: it said "Analysis finished" or "The results … are updated", never that
+  the crawl stopped). Continue is the toast's button; the notification says where to find it. Its analysis cancelled,
+  the stop alone, as before.
 
 ### The Summary, What to fix and one problem
 
@@ -1866,3 +2037,135 @@ sections (Summary, What to fix, Report), Ctrl+8 Advanced's Report.
   row and the Summary to the Report, the Summary's counts to What to fix, Ctrl+1 to Ctrl+3 and Ctrl+8, Overview's
   score to the breakdown and back, the Report's Save into the export dialog. Each runs on the seeded crawl, or on a
   real one with `SI_E2E_CRAWL`.
+
+## Home, one count, and a dropped file (round 5)
+
+Part B of round 5 (the closing audit's gaps 3, 4, 15, 16, 17, 28 and 31).
+
+### Advanced's Home
+
+- `screens/HomeScreen.tsx`: the URL field, then the line that opens a crawl file (**Open…**, the `crawl.open` command,
+  Ctrl+O, in the app; in a plain browser it says where they are), then the crawls running now, then the library.
+- `screens/home/library.ts` (pure): the library as Advanced shows it, grouped by `siteGroups` (Simple's grouping, so the
+  two modes group alike and a change to it, host and port, reaches both); a row's note (missing, unreadable,
+  unfinished, out of date) and its one action; which of a crawl's actions its state allows (`crawlActions`: nothing
+  that pulls the file from under a crawl being worked on, nothing but Remove for a file that isn't there).
+- `screens/home/LibraryTable.tsx`: a row a site, its latest crawl, the older ones folded under it ("2 older crawls",
+  `aria-expanded`), the one action beside the status ("Analyse again, garden.example": the words first, then the
+  crawl's name, so speech input finds it). At 200% the table keeps its Site column, as before.
+- `screens/home/CrawlMenu.tsx`: every action of a crawl, as the IA lists them: Open, Continue, Crawl again…, Analyse
+  again, Show in folder (the app), Remove from library (Undo), Delete file… (`ConfirmDialog`, naming the crawl and its
+  file). An action the state doesn't allow is disabled, so the menu keeps its shape.
+- `screens/home/RunningCrawlCard.tsx`: a crawl running now, as `clarity/home.html` draws it: Pause or Resume, Stop,
+  Open; Crawled, Found, Queued, Pages and URLs a second with its sparkline, each count opening the URLs Overview's
+  does; what was found as crawled, queued and not followed. The live store's figures, its frame drawn from the start.
+- The palette: "Search the library", and for each site's latest crawl Open, Continue, Analyse again and Remove from
+  the library, as its state allows.
+- `crawl/fileOpening.ts`: whether this window can open crawl files (the app), with `drawAsTheAppForTests` for stories.
+
+### One count everywhere
+
+`docs/v2-ui-ia.md` ("One number everywhere") settles the nouns. What makes them agree:
+
+- **Pages.** The engine's page (`CrawlSchema.PAGE`) leaves Cloudflare's `/cdn-cgi/` endpoints out, as the analysis
+  always has, so the library's `pageCount`, `si stats`, the live `htmlPages` and the analysis's `pagesAnalyzed` are one
+  number ([the engine change](v2-sidecar-api.md#engine-changes-round-5-made)). The grid's filter for the site's
+  pages (`ANSWERED_SITE_PAGES`) has `url notContains /cdn-cgi/` beside it (`NOT_CLOUDFLARE`), so Pages lands on its
+  count.
+- **URLs found.** The URL grid's header names its total "URLs found", as Overview's Found is: never a bare "URLs",
+  which is the URLs crawled everywhere else.
+- **Overview's totals** (`screens/overview/totals.ts`, `TotalsRow.tsx`): Crawled, Internal, External, Pages and
+  Found, before anything else, each the grid's own count under the filter it opens, read together as one query under
+  the crawl's key.
+- **% of total** (`checkReach` in `crawl/checkSubject.ts`, `screens/issues/CountWithReach.tsx`): beside each check's
+  count in the checks list and Fix first, the share `checkShare` gives (of the pages analysed for a page check, of the
+  URLs crawled for any other, both the analysis's own), said whole in the row's name and tooltip; a site-wide fault is
+  "Whole site" and one reported once "Once", in the check's figures too, never "1 page, <0.1%".
+- **The sidebar's running crawls** say what each is doing (`runningTitle` in `crawl/runningWords.ts`, the one heading
+  for both modes since the integration): "1 paused", "2 crawling, 1 stopping", never "1 crawling" for a paused crawl;
+  in Simple "Checking now", "Paused", "Stopping" or "Working out the results".
+
+### A dropped file
+
+- The shell takes every drop on the window and forwards it as `shell://drag-drop` ([the shell and the
+  platform](#the-shell-and-the-platform-round-5)); `crawl/crawlDrop.ts`'s `shellDropSource` listens with
+  `ipc.onDragDrop`. That is the one way a drop reaches the page: part B first listened to the webview's own
+  drag-and-drop events (`getCurrentWebview().onDragDropEvent`) while part D built the shell's forward, and two
+  listeners would open a dropped file twice, so the integration kept the shell's. Dragging elements within the page
+  (pointer events) is unaffected.
+- `crawl/crawlDrop.ts` (pure): crawl files from the rest by their names, what a drag over the window says in each
+  mode's words, and the toast for files that aren't crawl files. `crawl/CrawlFileDrop.tsx`, mounted once in
+  `AppShell`: the overlay while files are over the window (shown, not read), and on a drop `openCrawlPaths`, as
+  Ctrl+O's does: each file joins the library, the first that opens is shown, and one the engine can't read says why.
+- A plain browser sees no path, so there the window ignores a drop. `test/fakeDrops.ts` stands in for the shell in
+  tests and stories.
+
+### Tests
+
+- Unit: `screens/home/library.test.ts`, `screens/HomeScreen.test.tsx` (grouping, each state's action, the menu and
+  Delete's confirmation, the running card, Open… and the palette), `crawl/crawlDrop.test.ts`,
+  `crawl/CrawlFileDrop.test.tsx` (a drop opens the crawl from any screen; another file says why, the engine not
+  asked; a damaged one gives the engine's reason; Simple's words), `crawl/checkSubject.test.ts` (`checkReach`),
+  `crawl/runningWords.test.ts` (the running heading).
+- End to end: `e2e/counts-agree.spec.ts` reads every screen's count of a crawl (Home, Overview's totals and its line,
+  each total landing in URLs, Issues' shares, the report, Simple's Summary) against the engine's, on the seeded crawl,
+  on the garden and 100k crawls with `SI_E2E_CRAWL`, and on a crawl of the test site, paused (Overview, the sidebar
+  and Home's card from one moment) and finished.
+
+## Round 5 joined
+
+The four parts of round 5 were built at once and merged on `ui/r5-integrate`. Where they met:
+
+- **A bare address, both modes.** Advanced's Home starts a crawl of an address typed without its scheme through
+  `startUrlFor` (`crawl/actions.ts`), as Simple's Home and New crawl do: where the site answers, https or http, never
+  `https://` added blindly.
+- **A crawl analysed since it was stopped** (part A analyses a crawl the user stops) is busy until that ends: Continue,
+  Remove and Delete are refused. Home's running card and Simple's live row show it as analysing (working out the
+  results) with **Cancel the analysis** (Simple: Cancel, "Cancel working out the results for {site}"); a refusal that
+  comes before the status does says why in the mode's words, with the same action (`saidWhileAnalysing`), never the
+  bare refusal, and a Delete confirmation closes on it.
+- **One running heading**, `runningTitle` (`crawl/runningWords.ts`), with both modes' words and "stopping".
+- **Hidden checks** (part C) stay out of every figure of checks, the parts' new ones too: Advanced Home's issue counts
+  and Simple's Your sites both read `useVisibleIssueCounts` (`crawl/visibleIssues.ts`: the library's counts with
+  nothing hidden, else the analysis less the hidden checks), and the finished and stopped toasts count the same way.
+  `e2e/counts-agree.spec.ts` runs with a check hidden in this crawl and with one hidden in every crawl.
+- **The window's title** names a site by its host and port (`siteName`, part A's), "URLs · 127.0.0.1:8080 · Shouting
+  Iguana".
+- **One way a drop arrives**: the shell's `shell://drag-drop` (above).
+- **Overview's "didn't read any pages"** says how the start URL's robots.txt answered (its rules, an error, no answer),
+  part A's robots states in Advanced's words (`screens/overview/emptyCrawl.ts`).
+- Advanced Home names a site by its host and port too (`siteName` in its rows, menus, cards, palette and toasts), so
+  two crawls of one host on different ports are two named sites, as in Simple, the title and the grouping (the review
+  fixes, below). The e2e tests look Home's rows up by `siteRow()`.
+
+## Round 5's review fixes
+
+Two reviewers read round 5 joined; every finding was fixed with a test seen failing first.
+
+- **Delete file… keeps its crawl.** The row menus (`CrawlMenu`, Simple's `RowMenu`) keep the crawl a confirmation was
+  opened for: a site's row can show another crawl while it's open (its running crawl finishes and becomes the latest),
+  and Delete file deletes what the dialog named.
+- **A crawl's secrets go with it.** `api.deleteCrawlFile` forgets `crawl:<id>` in the credential store;
+  `api.removeCrawl` takes them out at once and holds them in memory for `restoreCrawl` (Undo) to put back, so an app
+  closed before the Undo runs out leaves nothing behind. A quick start (`quickStartUrl`) asks `start-url` with the saved
+  defaults, their secrets in.
+- **Home's running cards** are headed by `runningTitle` ("1 crawling, 1 paused"), and a site's row badge follows its
+  running crawl's status (Crawling now, Paused, Stopping, Analysing). A crawl only being analysed has a card of its own:
+  Crawled and Pages from what it holds, no queue, rate or bar. Crawled's line is Overview's, "URLs the crawl asked for".
+  The card's status line is one line whatever phase arrives, and `useElementWidth` measures before the first paint, so
+  the card's height holds from its first frame (an e2e test reads it on every frame).
+- **Exclude this value** on a yes-or-no column filters `isNot` (the engine's new operator: the other value or
+  unknown), so the rows where it's unknown stay; the filter editor offers "is not yes" and "is not no". "Not crawled" (a
+  status with no code and no outcome) filters the outcome being empty, never the code alone, which robots.txt-blocked
+  URLs share.
+- **The grid's header** cursor follows a column pinned or unpinned from its menu; a header press let go off the header
+  is forgotten on the next move with no button held.
+- **Reach**: a check reported once for the whole site (`reportedOnce`) is the whole site, "Checked once for the whole
+  site, not URL by URL", as Simple says it, never "1 URL, <0.1%".
+- **Continue** isn't offered for a crawl whose file is missing. **Showing a hidden check** says where ("in every
+  crawl", "in this crawl") and is said once with Undo.
+- **Hidden checks in the grids.** Every grid read, its facets and its grid exports send the crawl's hidden checks
+  (`withHiddenChecks` in `api/client.ts`), so the Issues, Errors, Warnings and Notices columns leave them out;
+  `watchHiddenChecks` (`api/hiddenChecksRefresh.ts`) reads the grids again when they change.
+- A column the engine refuses is named by its place in the columns the query sent (sorted), not the view's order.
+- `GoToUrl.test.tsx` pays for the app's first render once, in a `beforeAll`, and keeps the suite's 5 s limit.

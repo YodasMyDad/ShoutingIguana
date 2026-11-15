@@ -157,6 +157,18 @@ function withRunning() {
   );
 }
 
+/** A check just stopped, its results being worked out (round 5): its row says so, with Cancel. */
+export const WorkingOutAfterStop: Story = {
+  loaders: [
+    () => {
+      const stopped = { ...SITES.find((item) => item.status === 'completed')!, status: 'stopped' as const };
+      ownSidecar(routes([stopped, ...SITES.filter((item) => item.id !== stopped.id && item.id !== RUNNING_ID)]));
+      liveStore.ingest(message('hello', { live: [], analyzing: [stopped.id] }));
+    },
+  ],
+  render: () => <ScreenApp path="/" mode="simple" />,
+};
+
 /** Every state a row can be in, the running check pinned first. */
 export const YourSites: Story = {
   loaders: [

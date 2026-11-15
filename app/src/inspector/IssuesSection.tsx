@@ -3,7 +3,6 @@ import type { UrlDetail } from '../api/inspector';
 import { analyseCrawl } from '../crawl/actions';
 import { affectedCount } from '../crawl/checkSubject';
 import { formatCountOf } from '../lib/format';
-import { useSettings } from '../settings/settingsStore';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
@@ -11,6 +10,7 @@ import { severityCount, SEVERITIES } from '../ui/severity';
 import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
 import { Block, IssueCheckLink, IssueList, SectionBody, StaleIssues } from './parts';
 import { splitHidden } from './sections';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 /**
  * Its issues: each check that flagged the URL in the last analysis, with its severity, title and detail, linking to
@@ -19,7 +19,7 @@ import { splitHidden } from './sections';
 export function IssuesSection({ detail }: { detail: UrlDetail }) {
   const { crawlId, urlId, crawling } = useInspectorContext();
   const { byId, ready } = useChecks();
-  const hiddenChecks = useSettings((settings) => settings.hiddenChecks);
+  const hiddenChecks = useHiddenChecks(crawlId);
   const { issues, namedBy } = detail;
 
   if (issues === null) {

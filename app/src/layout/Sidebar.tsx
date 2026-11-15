@@ -17,17 +17,17 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
-import type { IssueCounts } from '../api/types';
+import { isCrawlStatus, type IssueCounts } from '../api/types';
 import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection, type CrawlSectionEntry } from '../app/sections';
 import { SIMPLE_SECTIONS } from '../app/modeRoutes';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import logoUrl from '../assets/iguana-64.png';
+import { runningTitle } from '../crawl/runningWords';
 import { crawlName, crawledUrls } from '../crawl/status';
 import { ExportsInProgress } from '../export/ExportsInProgress';
 import { formatExactTime } from '../lib/format';
-import { useLiveCrawl, useLiveIds } from '../live/liveStore';
+import { useLive, useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useMode } from '../mode/mode';
-import { useSettings } from '../settings/settingsStore';
 import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
@@ -36,6 +36,7 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { toggleSidebar, useSidebarCollapsed } from './sidebarState';
 import { SEVERITIES, type Severity } from '../ui/severity';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
+import { useHiddenChecks } from '../settings/hiddenChecks';
 
 /** Each section's icon, as the design draws the sidebar. */
 const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
@@ -167,7 +168,7 @@ export function Sidebar() {
 function useIssueCounts(crawlId: string | undefined, analysed: boolean): IssueCounts | null {
   const checks = useQuery({ ...checksQuery(), enabled: analysed }).data;
   const analysis = useQuery({ ...analysisQuery(crawlId ?? ''), enabled: crawlId !== undefined && analysed }).data;
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   return useMemo(() => {
     if (!analysed || !checks || !analysis) return null;
     const { error, warning, notice } = foundBySeverity(checkEntries(checks, analysis, new Set(hiddenIds)));
@@ -287,12 +288,16 @@ function SectionLink({
 function RunningCrawls({ collapsed, simple }: { collapsed: boolean; simple: boolean }) {
   const live = useLiveIds();
   const library = useQuery(libraryQuery()).data;
+  // What each does now, read as one string so the store's answer is stable between changes.
+  const doing = useLive((state) => live.map((id) => state.crawls[id]?.status ?? '').join(' '))
+    .split(' ')
+    .map((status) => (isCrawlStatus(status) ? status : null));
   if (live.length === 0) return null;
   return (
     <section aria-label={simple ? 'Checking now' : 'Running crawls'} className="flex flex-col gap-0.5">
       {collapsed ? null : (
         <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">
-          {simple ? 'Checking now' : live.length === 1 ? '1 crawling' : `${live.length} crawling`}
+          {runningTitle(doing, simple ? 'simple' : 'advanced')}
         </h2>
       )}
       <ul className="flex flex-col gap-0.5">

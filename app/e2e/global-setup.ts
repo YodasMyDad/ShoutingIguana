@@ -80,6 +80,10 @@ export default async function globalSetup() {
 
   // What the library says the crawl is, for the tests to look for.
   process.env.SI_E2E_SITE = item.site ?? item.fileName;
+  // And as Home's rows name it: its host with any port of its own, as one host on two ports is two sites.
+  const { startUrl } = item as { startUrl?: string | null };
+  const port = item.site && startUrl ? new URL(startUrl).port : '';
+  process.env.SI_E2E_SITE_ROW = port ? `${item.site}:${port}` : (item.site ?? item.fileName);
 
   const testSite = await startTestSite().catch(async (error: unknown) => {
     await sidecar.stop();

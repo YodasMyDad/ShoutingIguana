@@ -8,13 +8,16 @@ import { SETTINGS_SECTIONS, sectionsFor } from './settings/registry';
 
 /** How Simple's note names each Advanced-only section, mid-sentence. */
 const IN_A_SENTENCE: Record<string, string> = {
-  'crawl-defaults': 'crawl defaults',
+  'crawl-defaults': 'settings for new site checks',
   analysis: 'the checks’ limits',
   shortcuts: 'shortcuts',
   diagnostics: 'diagnostics',
 };
 
-/** "Crawl defaults, shortcuts and diagnostics are Advanced settings.": the sections there are, and only those. */
+/**
+ * "Settings for new site checks, shortcuts and diagnostics are Advanced settings.": the sections there are, and only
+ * those, in Simple's words, as only Simple says it.
+ */
 function advancedOnlyNote(ids: readonly string[]): string {
   const words = listOf(ids.map((id) => IN_A_SENTENCE[id] ?? id));
   return `${words.charAt(0).toUpperCase()}${words.slice(1)} ${ids.length === 1 ? 'is an Advanced setting' : 'are Advanced settings'}.`;

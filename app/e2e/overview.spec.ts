@@ -5,14 +5,13 @@
 // expect it.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
-import { expectNoViolations } from './support';
+import { expectNoViolations, read, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
   if (!value) throw new Error(`global-setup sets ${name}`);
   return value;
 };
-const site = () => env('SI_E2E_SITE');
 
 let seeded: string[] = [];
 test.beforeAll(async () => {
@@ -30,7 +29,7 @@ const count = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, '')
 /** From Home to the seeded crawl's Overview, as a user goes. */
 async function openOverview(page: Page) {
   await page.goto('/');
-  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: siteRow(), exact: true }).click();
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/overview$/);
   await expect(main(page).getByRole('heading', { name: 'Fix first' })).toBeVisible();
   // The breakdowns have arrived too.
@@ -182,7 +181,8 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   const pagesRead = count(
     /([\d,]+) pages? read/.exec(
       await main(page)
-        .getByText(/pages? read/)
+        // The line about the crawl ("305 URLs crawled, 155 pages read"), not the totals' "HTML pages read".
+        .getByText(/[\d,]+ pages? read/)
         .innerText(),
     )?.[1] ?? null,
   );
@@ -285,8 +285,18 @@ test('a stopped crawl says how far it got, and continues from there', async ({ p
   const stopped = main(page).getByText(/This crawl was stopped after [\d,]+ URLs/);
   await expect(stopped).toBeVisible({ timeout: 30_000 });
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
-  // A stopped crawl isn't analysed on its own, and says so, rather than show an answer.
-  await expect(main(page).getByRole('heading', { name: 'This crawl hasn’t been analysed yet' })).toBeVisible();
+  // A stopped crawl is analysed when it stops (round 5, gap 2): its results so far, never "hasn't been analysed".
+  const id = /\/crawls\/([0-9a-f]{16})\//.exec(page.url())?.[1] ?? '';
+  await expect
+    .poll(
+      async () => {
+        const item = await read<{ status: string; analyzedAt: string | null }>(`/api/crawls/${id}`);
+        return item.status === 'stopped' && item.analyzedAt !== null;
+      },
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+  await expect(main(page).getByRole('heading', { name: 'This crawl hasn’t been analysed yet' })).toBeHidden();
   // The "Crawl stopped" toast has faded in: its colours are its own, not half way there.
   const toast = page.locator('.si-toast').filter({ hasText: 'Crawl stopped' });
   await expect(toast).toBeVisible();

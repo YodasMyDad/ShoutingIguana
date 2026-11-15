@@ -9,6 +9,7 @@
 //
 // Options: --port (6006 by default; SI_STORYBOOK_PORT too), --filter (a story id contains it), --themes=light,dark,
 // --density=standard, --wait (ms to let a story settle, 700 by default).
+/* global document -- the function handed to page.evaluate runs in the page */
 import { chromium } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
@@ -108,6 +109,14 @@ try {
         problems.push(`${theme} ${story.id}: ${violation.id} (${violation.help}): ${where}`);
       }
       for (const error of errors) problems.push(`${theme} ${story.id}: the story threw: ${error}`);
+      // A story that failed to render shows Storybook's error display, which axe passes (it was missed so: a story
+      // whose component needed a QueryClient it wasn't given).
+      const failed = await page.evaluate(() =>
+        document.body.classList.contains('sb-show-errordisplay')
+          ? (document.getElementById('error-message')?.textContent ?? 'it failed to render')
+          : null,
+      );
+      if (failed) problems.push(`${theme} ${story.id}: the story didn't render: ${failed.trim()}`);
       if (shots) {
         const suffix = `${theme}${forced ? '-forced' : ''}${still ? '-still' : ''}${density === 'standard' ? '' : `-${density}`}`;
         await page.screenshot({ path: path.join(shots, `${story.id}-${suffix}.png`), fullPage: true });

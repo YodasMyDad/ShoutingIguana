@@ -70,8 +70,9 @@ function DefaultsForm({ defaults }: { defaults: CrawlOptionDefaults }) {
   const [open, setOpen] = useState<ReadonlySet<FormSection>>(new Set());
   const [saveErrors, setSaveErrors] = useState<FormErrors | null>(null);
   const [saved, setSaved] = useState<'idle' | 'saving' | 'saved'>('idle');
-  // The last values saved (or read): a form that matches them has nothing to save.
-  const savedKey = useRef(JSON.stringify(optionsFromForm(form, { secrets: false })));
+  // The last values saved (or read): a form that matches them has nothing to save. The secrets count: in the app they
+  // are kept in the credential store when the defaults are saved.
+  const savedKey = useRef(JSON.stringify(optionsFromForm(form)));
 
   const options = useMemo(() => optionsFromForm(form, { secrets: false }), [form]);
   const checked = useValidation({ ...options, startUrl: 'https://example.com/' });
@@ -80,7 +81,10 @@ function DefaultsForm({ defaults }: { defaults: CrawlOptionDefaults }) {
   const save = async (values: CrawlForm, key: string) => {
     setSaved('saving');
     try {
-      const result = await api.saveCrawlOptionDefaults(optionsFromForm(values, { secrets: false }));
+      const result = await api.saveCrawlOptionDefaults(
+        optionsFromForm(values, { secrets: false }),
+        optionsFromForm(values),
+      );
       savedKey.current = key;
       queryClient.setQueryData(queryKeys.crawlOptionDefaults, result);
       setSaved('saved');
@@ -95,7 +99,7 @@ function DefaultsForm({ defaults }: { defaults: CrawlOptionDefaults }) {
   };
 
   // Saved a moment after the last change, when the engine finds nothing wrong with the values.
-  const key = JSON.stringify(options);
+  const key = JSON.stringify(optionsFromForm(form));
   const valid = Object.keys(checked).every((field) => field === 'startUrl');
   useEffect(() => {
     if (key === savedKey.current || !valid) return undefined;

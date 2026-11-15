@@ -6,6 +6,7 @@ import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import { crawlOptionDefaultsQuery, crawlOptionsQuery, queryKeys } from '../api/queries';
 import type { CrawlOptionDefaults, CrawlOptions } from '../api/types';
+import { startUrlFor } from '../crawl/actions';
 import { CrawlOptionsForm } from '../crawl/options/CrawlOptionsForm';
 import {
   FIELD_SECTIONS,
@@ -196,11 +197,13 @@ function NewCrawlForm({
     setSubmitted(true);
     setStarting(true);
     try {
-      const item = await api.startCrawl({ options });
+      const item = await api.startCrawl({
+        options: { ...options, startUrl: await startUrlFor(form.startUrl, options) },
+      });
       // "Use these choices every time": once they've started a crawl, so a start the engine refuses changes nothing.
       if (mode === 'simple' && everyTime) {
         await api
-          .saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }))
+          .saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }), optionsFromForm(form))
           .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.crawlOptionDefaults }))
           .catch((error: unknown) => notifyError(error, { title: 'Your choices couldn’t be saved for next time' }));
       }
@@ -222,7 +225,7 @@ function NewCrawlForm({
     if (saving) return;
     setSaving(true);
     try {
-      const saved = await api.saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }));
+      const saved = await api.saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }), optionsFromForm(form));
       queryClient.setQueryData(queryKeys.crawlOptionDefaults, saved);
       notifyResult('Saved as your defaults', {
         description: 'Every new crawl starts with these settings. Header values and proxy passwords aren’t saved.',

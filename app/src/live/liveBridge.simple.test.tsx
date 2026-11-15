@@ -110,13 +110,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  replaceSettings({ mode: 'advanced', hiddenChecks: [] });
+  replaceSettings({ mode: 'advanced', hiddenChecks: [], hiddenChecksByCrawl: {} });
   dismissToast(`crawl:${ID}:finished`);
   dismissToast(`crawl:${ID}:stopped`);
 });
 
 describe('the finished toast in Simple', () => {
-  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [] }));
+  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} }));
 
   it('says the site is checked, its score and the problems to fix, with See the summary and Open the report', async () => {
     render(<AppToaster />);
@@ -171,10 +171,36 @@ describe('the finished toast in Simple', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     stop();
   });
+
+  // Round 5, gap 2: the sidecar works out a stopped check's results; its toast then says them, so far.
+  it('says a stopped check’s results so far once they are worked out, with See the summary and Continue', async () => {
+    render(<AppToaster />);
+    const { stop, status } = setup();
+    status('running');
+    status('stopping');
+    item = { ...item, status: 'stopped', crawledUrlCount: 1234 };
+    status('stopped');
+    expect(await screen.findByText('1,234 addresses checked. You can continue it later.')).toBeInTheDocument();
+    status('analyzing');
+    item = {
+      ...item,
+      analyzedAt: '2026-10-31T14:40:00Z',
+      issues: { error: 1, warning: 1, notice: 2 },
+      score: { value: 87, band: 'good', partial: true },
+    };
+    status('stopped');
+    expect(
+      await screen.findByText('Score 87 so far: 2 problems to fix. You can continue it later.'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('The check of gardenfurnituresets.co.uk was stopped')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'See the summary' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    stop();
+  });
 });
 
 describe('a check that ends without its results, or fails, in Simple', () => {
-  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [] }));
+  beforeEach(() => replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} }));
 
   it('a first analysis cancelled: checked, its results not worked out, with Work out the results', async () => {
     render(<AppToaster />);
@@ -258,6 +284,16 @@ describe('the finished toast in Advanced', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View issues' }));
     expect(openCrawl).toHaveBeenCalledWith(ID, 'issues');
     expect(screen.queryAllByRole('button', { name: 'Open the report' })).toHaveLength(1);
+    stop();
+  });
+
+  it('leaves the checks hidden in this crawl and in every crawl out of its count, as Issues does (round 5)', async () => {
+    replaceSettings({ hiddenChecks: ['slow-response'], hiddenChecksByCrawl: { [ID]: ['image-missing-alt'] } });
+    render(<AppToaster />);
+    const { stop, finish } = setup();
+    await finish();
+    // 19 by the library; one Error and one Warning left once a Warning and a Notice are hidden.
+    expect(await screen.findByText('gardenfurnituresets.co.uk: 4,521 URLs, 2 checks found issues')).toBeInTheDocument();
     stop();
   });
 });

@@ -9,7 +9,8 @@ import { createQueryClient } from '../app/queryClient';
 import { onAnnounce } from '../feedback/announce';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
-import { updateSettings } from '../settings/settingsStore';
+import { getSettings, updateSettings } from '../settings/settingsStore';
+import userEvent from '@testing-library/user-event';
 import { LOCATE_GROUP_LIMIT, LOCATE_GROUP_PAGE, queryKeys } from '../api/queries';
 import type { CrawlListItem, CrawlStatus } from '../api/types';
 import { TEST_CRAWL_ID, fakeSidecar, problem, type FakeRoute } from '../test/fakeSidecar';
@@ -66,7 +67,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   uninstall();
-  updateSettings({ hiddenChecks: [] });
+  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
   setTransport(fakeSidecar([]));
 });
 
@@ -593,9 +594,12 @@ describe('the Issues screen', () => {
   it('hides a check, remembered, moving on to the next, with Undo', async () => {
     sidecar();
     const { router } = await open(`${ISSUES}/internal-client-error`);
-    const hide = await screen.findByRole('button', { name: 'Hide this check' });
-    act(() => hide.focus());
-    fireEvent.click(hide);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Hide this check' }));
+    await user.click(await screen.findByRole('menuitem', { name: /Hide in this crawl/ }));
+    // In this crawl only (docs/v2-ui-discovery.md, decision 2): another crawl still shows it.
+    expect(getSettings().hiddenChecksByCrawl[TEST_CRAWL_ID]).toEqual(['internal-client-error']);
+    expect(getSettings().hiddenChecks).toEqual([]);
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
     // The button went with its check: focus is on the check that took its place.
     await waitFor(() =>
@@ -611,6 +615,48 @@ describe('the Issues screen', () => {
     expect(screen.getByRole('button', { name: 'Show 1 hidden check' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
     expect(await screen.findByRole('option', { name: /Internal URL returns 4xx/ })).toBeVisible();
+  });
+
+  it('hides a check in every crawl when asked, and says where it is hidden', async () => {
+    sidecar();
+    await open(`${ISSUES}/internal-client-error`);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Hide this check' }));
+    await user.click(await screen.findByRole('menuitem', { name: /Hide in every crawl/ }));
+    expect(getSettings().hiddenChecks).toEqual(['internal-client-error']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Show 1 hidden check' }));
+    await user.click(await screen.findByRole('option', { name: /Internal URL returns 4xx/ }));
+    expect(await screen.findByText('Hidden in every crawl')).toBeVisible();
+    // Shown again: its button says it's shown in every crawl (round 5 review R1-12), and it's hidden nowhere.
+    await user.click(screen.getByRole('button', { name: 'Show this check in every crawl' }));
+    expect(getSettings().hiddenChecks).toEqual([]);
+    expect(getSettings().hiddenChecksByCrawl).toEqual({});
+    // Said, with Undo, which hides it in every crawl again.
+    const shown = await screen.findByText('Showed “Internal URL returns 4xx” in every crawl');
+    expect(shown).toBeVisible();
+    fireEvent.click(within(shown.closest<HTMLElement>('[data-sonner-toast]')!).getByRole('button', { name: 'Undo' }));
+    expect(getSettings().hiddenChecks).toEqual(['internal-client-error']);
+  });
+
+  it('shows a check hidden in this crawl in this crawl, said with Undo (round 5 review R1-12)', async () => {
+    updateSettings({ hiddenChecksByCrawl: { [TEST_CRAWL_ID]: ['internal-client-error'] } });
+    sidecar();
+    await open(`${ISSUES}/internal-client-error`);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Show this check in this crawl' }));
+    expect(getSettings().hiddenChecksByCrawl[TEST_CRAWL_ID] ?? []).toEqual([]);
+    const shown = await screen.findByText('Showed “Internal URL returns 4xx” in this crawl');
+    expect(shown).toBeVisible();
+    fireEvent.click(within(shown.closest<HTMLElement>('[data-sonner-toast]')!).getByRole('button', { name: 'Undo' }));
+    expect(getSettings().hiddenChecksByCrawl[TEST_CRAWL_ID]).toEqual(['internal-client-error']);
+  });
+
+  it('leaves out the checks hidden in this crawl only, as those hidden in every crawl', async () => {
+    updateSettings({ hiddenChecksByCrawl: { [TEST_CRAWL_ID]: ['internal-client-error'] } });
+    sidecar();
+    await open(ISSUES);
+    expect(await screen.findByRole('button', { name: 'Show 1 hidden check' })).toBeVisible();
+    expect(screen.queryByRole('option', { name: /Internal URL returns 4xx/ })).toBeNull();
   });
 
   it('answers of the checks that aren’t hidden, as its list and the Overview do, and says what they found', async () => {
@@ -869,7 +915,7 @@ describe('a check’s count, worded by what the check flags', () => {
       'Affected pages3 pages',
     );
     expect(await screen.findByRole('grid', { name: 'Title too long: affected pages' })).toBeVisible();
-    expect(row(/^Notice Title too long 3 ?pages$/)).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?pages, 50% of the 6 pages analysed$/)).toBeVisible();
     expect(screen.queryByText(/URLs affected|Share of URLs|Affected URLs/)).toBeNull();
     // The pages analysed come with the analysis: nothing more is read for them.
     expect(facetReads(requests)).toBe(0);
@@ -890,7 +936,7 @@ describe('a check’s count, worded by what the check flags', () => {
     });
     expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
     expect(within(grid).queryByRole('columnheader', { name: 'Pages' })).toBeNull();
-    expect(row(/^Error Internal URL returns 4xx 2 ?URLs$/)).toBeVisible();
+    expect(row(/^Error Internal URL returns 4xx 2 ?URLs, 5% of the 40 URLs crawled$/)).toBeVisible();
     expect(screen.queryByText(/Pages affected|Share of pages|Affected pages/)).toBeNull();
     // Its group's link doesn't call them pages, nor say "URLs in URLs".
     await within(grid).findByText('404 Not Found');
@@ -912,7 +958,7 @@ describe('a check’s count, worded by what the check flags', () => {
       'Affected URLs3 URLs',
     );
     expect(await screen.findByRole('grid', { name: 'Title too long: affected URLs' })).toBeVisible();
-    expect(row(/^Notice Title too long 3 ?URLs$/)).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?URLs, 7\.5% of the 40 URLs crawled$/)).toBeVisible();
     expect(screen.queryByText(/Pages affected|Share of pages|Affected pages|pages analysed/)).toBeNull();
     const all = screen.getByRole('radio', { name: /All/ });
     act(() => all.focus());

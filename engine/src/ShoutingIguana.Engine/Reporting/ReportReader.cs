@@ -23,9 +23,11 @@ internal static class ReportReader
     /// <see cref="ExportFailure.NotAnalyzed"/> when the crawl has never been analysed: there is no report of it.
     /// <see cref="ExportFailure.CrawlChanged"/> when it was analysed again while this read it.
     /// </exception>
+    /// <param name="listing">Which checks the lists hold: the hidden ones and those outside a view left out. Null lists every check.</param>
     public static ReportModel Read(string crawlPath, Func<IssueSeverity, int> examples, ExportSettings export, AnalysisSettings? outOfDateBy = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, ReportOptions? listing = null)
     {
+        bool Lists(string checkId) => listing?.Lists(checkId) ?? true;
         var results = IssueReader.ReadResults(crawlPath) ?? throw new ExportException(ExportFailure.NotAnalyzed, NOT_ANALYZED);
         var stats = CrawlStatsReader.Read(crawlPath, export.Cache, cancellationToken);
         var summary = CrawlSummaryReader.Read(crawlPath, cancellationToken);
@@ -51,7 +53,7 @@ internal static class ReportReader
         var fixFirst = ReportSources.FixFirst(results);
 
         List<ReportProblem> problems = [];
-        foreach (var id in fixFirst)
+        foreach (var id in fixFirst.Where(Lists))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var check = IssueCatalog.Find(id)!;
@@ -100,14 +102,20 @@ internal static class ReportReader
             Problems = problems,
             Skipped =
             [
-                .. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check =>
+                .. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id) && Lists(check.Id)).Select(check =>
                 {
                     var reason = reasons.GetValueOrDefault(check.Id);
                     var (why, action) = ReportSources.Skipped(reason, settings);
                     return new ReportSkipped(check, ReportSources.Words(check, settings), reason?.Reason, why, action);
                 })
             ],
-            Passed = [.. IssueCatalog.All.Where(check => counts.GetValueOrDefault(check.Id, -1) == 0).Select(check => new ReportPassed(check, ReportSources.Words(check, settings)))],
+            Passed =
+            [
+                .. IssueCatalog.All.Where(check => counts.GetValueOrDefault(check.Id, -1) == 0 && Lists(check.Id))
+                    .Select(check => new ReportPassed(check, ReportSources.Words(check, settings)))
+            ],
+            HiddenProblems = listing is null ? 0 : fixFirst.Count(id => listing.HiddenChecks.Contains(id, StringComparer.Ordinal)),
+            Narrowed = listing?.Checks is not null,
             Score = score,
             NoScore = results.NoScoreReason,
             MadeAt = now,

@@ -31,6 +31,24 @@ internal static class UrlQueryCompiler
     /// <summary>Stands for the column's SQL in a condition, so one condition gives both its forms.</summary>
     private const string COLUMN = "@column";
 
+    /// <summary>The field the hidden checks are refused under.</summary>
+    public const string HIDDEN_CHECKS = "hiddenChecks";
+
+    /// <summary>The start of each hidden check's parameter: <c>$hide0</c>, <c>$hide1</c>, and so on.</summary>
+    private const string HIDDEN_PARAMETER = "$hide";
+
+    /// <summary>
+    /// The issue counts of the URL summary, each with the severity it counts: <c>issues</c> every one. Each is the number of
+    /// the URL's issues whose check the crawl lists in <c>issue_types</c>, as <see cref="UrlSummaryBuilder"/> counts them.
+    /// </summary>
+    private static readonly Dictionary<string, string?> ISSUE_COUNTS = new(StringComparer.Ordinal)
+    {
+        ["issues"] = null,
+        ["errors"] = nameof(IssueSeverity.Error),
+        ["warnings"] = nameof(IssueSeverity.Warning),
+        ["notices"] = nameof(IssueSeverity.Notice)
+    };
+
     /// <summary>The URL summary row's own URL id, which most sets of URL ids are tested against.</summary>
     private const string ROW_ID = "s.url_id";
 
@@ -39,7 +57,7 @@ internal static class UrlQueryCompiler
         [UrlColumnType.Number] = [Eq, Ne, Lt, Lte, Gt, Gte, Between, In, NotIn, IsEmpty, IsNotEmpty],
         [UrlColumnType.Text] = [Contains, NotContains, StartsWith, EndsWith, Eq, Ne, FilterOperator.Regex, NotRegex, IsEmpty, IsNotEmpty],
         [UrlColumnType.Enum] = [In, NotIn, IsEmpty, IsNotEmpty],
-        [UrlColumnType.Boolean] = [Is, IsEmpty, IsNotEmpty]
+        [UrlColumnType.Boolean] = [Is, IsNot, IsEmpty, IsNotEmpty]
     };
 
     /// <summary>The operators an index can serve, when the column has one.</summary>
@@ -48,7 +66,7 @@ internal static class UrlQueryCompiler
     /// <summary>A negative operator's positive one: a negative matches every row the positive doesn't, unknown ones too.</summary>
     private static readonly IReadOnlyDictionary<FilterOperator, FilterOperator> POSITIVE = new Dictionary<FilterOperator, FilterOperator>
     {
-        [Ne] = Eq, [NotIn] = In, [NotContains] = Contains, [NotRegex] = FilterOperator.Regex
+        [Ne] = Eq, [NotIn] = In, [NotContains] = Contains, [NotRegex] = FilterOperator.Regex, [IsNot] = Is
     };
 
     /// <summary>
@@ -103,7 +121,67 @@ internal static class UrlQueryCompiler
         }
 
         ValidatePaging(query.Offset, query.Limit, query.After, errors);
+        ValidateHidden(query.HiddenChecks, errors);
         return errors;
+    }
+
+    /// <summary>The most checks a query hides: more than the catalog has, as the app's settings may keep ids of checks gone since.</summary>
+    public const int MAX_HIDDEN_CHECKS = 1_000;
+
+    /// <summary>The longest id a hidden check may have.</summary>
+    public const int MAX_HIDDEN_CHECK_LENGTH = 200;
+
+    /// <summary>
+    /// The checks a query hides: at most <see cref="MAX_HIDDEN_CHECKS"/> ids, none null or longer than
+    /// <see cref="MAX_HIDDEN_CHECK_LENGTH"/>. An id the catalog doesn't have is taken, as the report takes it (a check hidden
+    /// by another version): it hides the issues stored under it, if any, so a stale id never breaks a grid.
+    /// </summary>
+    public static void ValidateHidden(IReadOnlyList<string> hidden, Dictionary<string, List<string>> errors)
+    {
+        if (hidden.Count > MAX_HIDDEN_CHECKS)
+        {
+            Add(errors, HIDDEN_CHECKS, $"Hide at most {MAX_HIDDEN_CHECKS:N0} checks.");
+        }
+        else if (hidden.Any(id => id is null))
+        {
+            Add(errors, HIDDEN_CHECKS, "Give each hidden check's id.");
+        }
+        else if (hidden.Any(id => id.Length > MAX_HIDDEN_CHECK_LENGTH))
+        {
+            Add(errors, HIDDEN_CHECKS, $"A check's id is at most {MAX_HIDDEN_CHECK_LENGTH} characters.");
+        }
+    }
+
+    /// <summary>
+    /// The hidden checks' ids as the parameters the issue counts' SQL names (<see cref="Counting"/>): each once, in order,
+    /// so the same checks given in another order are the same query. None when nothing is hidden.
+    /// </summary>
+    public static IReadOnlyList<KeyValuePair<string, object>> Hidden(IReadOnlyList<string> hidden) =>
+    [
+        .. hidden.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)
+            .Select((id, index) => new KeyValuePair<string, object>(HIDDEN_PARAMETER + index.ToString(CultureInfo.InvariantCulture), id))
+    ];
+
+    /// <summary>
+    /// A column as it reads with checks hidden: an issue count less the URL's issues of those checks (of its severity, for
+    /// a severity's count), counted as the summary counts them. Such a count has no index, so the plan never walks one for
+    /// it. Any other column, or none hidden, is the column itself, with its SQL unchanged.
+    /// </summary>
+    public static UrlColumnDefinition Counting(UrlColumnDefinition column, IReadOnlyList<KeyValuePair<string, object>> hidden)
+    {
+        if (hidden.Count == 0 || column.Source != ColumnSource.Summary || !ISSUE_COUNTS.TryGetValue(column.Id, out var severity))
+        {
+            return column;
+        }
+
+        var ids = string.Join(", ", hidden.Select(parameter => parameter.Key));
+        var ofSeverity = severity is null ? string.Empty : $" AND ht.severity = '{severity}'";
+        return column with
+        {
+            SummarySql =
+                $"({column.SummarySql} - (SELECT COUNT(*) FROM issues hi JOIN issue_types ht ON ht.id = hi.issue WHERE hi.url_id = s.url_id AND hi.issue IN ({ids}){ofSeverity}))",
+            Indexed = false
+        };
     }
 
     /// <summary>The filters and search of a grid query or a facet query.</summary>
@@ -176,7 +254,8 @@ internal static class UrlQueryCompiler
     /// <param name="reason">The crawl's indexability reason in crawl SQL: the analysis's where it judged differently.</param>
     public static CompiledQuery Compile(UrlQuery query, GridMode mode, GridScope scope, string reason)
     {
-        var predicates = Filters(query.Filters, query.Search, mode, scope, reason);
+        var hidden = Hidden(query.HiddenChecks);
+        var predicates = Filters(query.Filters, query.Search, mode, scope, reason, hidden);
         if (scope.SitemapId is { } sitemap)
         {
             predicates.Insert(0, Sitemap(sitemap, mode));
@@ -184,15 +263,15 @@ internal static class UrlQueryCompiler
 
         if (query.LinkEnds is { } ends)
         {
-            predicates.Add(LinkEnds(ends));
+            predicates.Add(LinkEnds(ends, hidden));
         }
 
-        var sort = query.Sort.Select(key => SortKey(key, mode, scope, reason)).ToList();
+        var sort = query.Sort.Select(key => SortKey(key, mode, scope, reason, hidden)).ToList();
         List<UrlColumnDefinition> columns = [UrlColumns.ID];
         List<string> unavailable = [];
         foreach (var id in query.Columns.Count == 0 ? (scope.IsCheck ? ["url", "detail", "relatedUrl"] : ["url"]) : query.Columns)
         {
-            var column = UrlColumns.Find(id, scope.IsCheck)!;
+            var column = Counting(UrlColumns.Find(id, scope.IsCheck)!, hidden);
             if (columns.Contains(column) || unavailable.Contains(id))
             {
                 continue;
@@ -209,13 +288,15 @@ internal static class UrlQueryCompiler
         }
 
         var scopePredicate = scope.IsCheck ? Scope(scope, mode) : null;
-        return new CompiledQuery(mode, scopePredicate, predicates, sort, columns, unavailable, Hash(mode, scopePredicate, predicates, sort));
+        return new CompiledQuery(mode, scopePredicate, predicates, sort, columns, unavailable, Hash(mode, scopePredicate, predicates, sort, hidden)) { Hidden = hidden };
     }
 
     /// <summary>The filters' and the search's conditions, in order.</summary>
-    public static List<GridPredicate> Filters(IReadOnlyList<UrlFilter> filters, string? search, GridMode mode, GridScope scope, string reason)
+    /// <param name="hidden">The checks hidden (<see cref="Hidden"/>), which a filter on an issue count leaves out.</param>
+    public static List<GridPredicate> Filters(IReadOnlyList<UrlFilter> filters, string? search, GridMode mode, GridScope scope, string reason,
+        IReadOnlyList<KeyValuePair<string, object>> hidden)
     {
-        List<GridPredicate> predicates = [.. filters.Select((filter, index) => Filter(filter, $"$f{index}_", mode, scope, reason))];
+        List<GridPredicate> predicates = [.. filters.Select((filter, index) => Filter(filter, $"$f{index}_", mode, scope, reason, hidden))];
         if (!string.IsNullOrEmpty(search))
         {
             predicates.Add(Search(search, mode));
@@ -324,10 +405,10 @@ internal static class UrlQueryCompiler
         ($"SELECT g.url_id FROM {table} g WHERE {where}", new IdSource([new IdScan($"{table} g", "g.url_id", where, Combinable: false)], ROW_ID, Negated: false));
 
     /// <summary>One key of the sort. A status class sorts as its status code.</summary>
-    public static GridSortKey SortKey(UrlSort sort, GridMode mode, GridScope scope, string reason)
+    public static GridSortKey SortKey(UrlSort sort, GridMode mode, GridScope scope, string reason, IReadOnlyList<KeyValuePair<string, object>> hidden)
     {
         var column = UrlColumns.Find(sort.Column, scope.IsCheck)!;
-        var sorted = column == UrlColumns.STATUS_CLASS ? UrlColumns.STATUS_CODE : column;
+        var sorted = Counting(column == UrlColumns.STATUS_CLASS ? UrlColumns.STATUS_CODE : column, hidden);
         var sql = Resolve(sorted.Sql(mode)!, reason);
         var indexed = mode == GridMode.Summary ? sorted.Indexed : sorted == UrlColumns.ID || sorted == UrlColumns.URL;
         return new GridSortKey(sorted, sql, "+" + sql, sort.Descending, sorted.Nullable, indexed);
@@ -407,7 +488,7 @@ internal static class UrlQueryCompiler
                 Add(errors, $"{field}.value", $"{Name(filter.Operator)} needs a number.");
                 break;
             case UrlColumnType.Boolean when value?.Boolean is null:
-                Add(errors, $"{field}.value", "is needs true or false.");
+                Add(errors, $"{field}.value", $"{Name(filter.Operator)} needs true or false.");
                 break;
             case UrlColumnType.Text when value?.Text is null:
                 Add(errors, $"{field}.value", $"{Name(filter.Operator)} needs text.");
@@ -502,7 +583,7 @@ internal static class UrlQueryCompiler
         }
     }
 
-    private static GridPredicate Filter(UrlFilter filter, string prefix, GridMode mode, GridScope scope, string reason)
+    private static GridPredicate Filter(UrlFilter filter, string prefix, GridMode mode, GridScope scope, string reason, IReadOnlyList<KeyValuePair<string, object>> hidden)
     {
         List<KeyValuePair<string, object>> parameters = [];
         string Parameter(object value)
@@ -539,10 +620,23 @@ internal static class UrlQueryCompiler
             var condition = filter.Operator switch
             {
                 Is => filter.Value!.Value.Boolean!.Value ? $"{COLUMN} = 0" : $"{COLUMN} > 0",
+                // Anything but: the other value, or no reason at all (not judged).
+                IsNot => filter.Value!.Value.Boolean!.Value ? $"({COLUMN} IS NULL OR {COLUMN} > 0)" : $"({COLUMN} IS NULL OR {COLUMN} = 0)",
                 IsEmpty => $"{COLUMN} IS NULL",
                 _ => $"{COLUMN} IS NOT NULL"
             };
-            return Indexed(condition, "s.indexability_reason", parameters);
+            // "Is not" matches most rows, as a negative does: tested per row, never driving the read off the index.
+            return filter.Operator == IsNot
+                ? Plain(condition.Replace(COLUMN, "s.indexability_reason", StringComparison.Ordinal), parameters)
+                : Indexed(condition, "s.indexability_reason", parameters);
+        }
+
+        if (Counting(column, hidden) is var counting && !ReferenceEquals(counting, column))
+        {
+            // An issue count less the hidden checks' issues: tested per row, off every index, with the hidden checks among
+            // its parameters, so its key, and every count kept by it, is its own.
+            parameters.AddRange(hidden);
+            return Inline(filter, counting, counting.SummarySql!, null, indexed: false, Parameter, parameters);
         }
 
         return column.Source switch
@@ -560,7 +654,10 @@ internal static class UrlQueryCompiler
         {
             var matched = Condition(filter, positive, column, urlId, parameter).Replace(COLUMN, sql, StringComparison.Ordinal);
             var subject = urlId ?? sql;
-            var negated = column.Nullable || urlId is not null ? $"({subject} IS NULL OR NOT ({matched}))" : $"NOT ({matched})";
+            // A boolean's "is not" is the other value or unknown, whatever the column says of its nulls.
+            var negated = column.Nullable || urlId is not null || filter.Operator == IsNot
+                ? $"({subject} IS NULL OR NOT ({matched}))"
+                : $"NOT ({matched})";
             return new GridPredicate(negated, negated, parameters, Driving: false, Key(negated, parameters));
         }
 
@@ -723,14 +820,16 @@ internal static class UrlQueryCompiler
     /// <summary>
     /// The URLs at one end of the links some link filters match: a condition to be read from the links grid, which gives
     /// the set of those URLs, once the rest is compiled (<see cref="UrlGridReader.WithLinkEnds"/>). Its key is the filters
-    /// as asked, so the query's hash, and what's kept for it, tell one set of links from another.
+    /// as asked, so the query's hash, and what's kept for it, tell one set of links from another; with checks hidden, which
+    /// a link filter on an end's issue count leaves out, those too.
     /// </summary>
-    public static GridPredicate LinkEnds(UrlLinkEnds ends)
+    public static GridPredicate LinkEnds(UrlLinkEnds ends, IReadOnlyList<KeyValuePair<string, object>> hidden)
     {
         var filters = ends.Filters.Select(filter => string.Join(" ", filter.Column, filter.Operator, Describe(filter.Value),
             $"[{string.Join(",", (filter.Values ?? []).Select(value => Describe(value)))}]", Describe(filter.Min), Describe(filter.Max),
             filter.Group is { } group ? $"{Describe(group.Detail)}/{Describe(group.RelatedUrlId)}" : string.Empty));
-        return new GridPredicate("1", "1", [], Driving: false, $"linkends|{ends.End}|{string.Join("&", filters)}|{Describe(ends.Search)}") { LinkEnds = ends };
+        var key = $"linkends|{ends.End}|{string.Join("&", filters)}|{Describe(ends.Search)}";
+        return new GridPredicate("1", "1", [], Driving: false, hidden.Count == 0 ? key : $"{key}|{HiddenKey(hidden)}") { LinkEnds = ends };
     }
 
     /// <summary>The URL or the title contains the text.</summary>
@@ -781,13 +880,20 @@ internal static class UrlQueryCompiler
     private static string Key(string sql, IReadOnlyList<KeyValuePair<string, object>> parameters) =>
         $"{sql}|{string.Join("|", parameters.Select(parameter => $"{parameter.Key}={Describe(parameter.Value)}"))}";
 
-    private static string Hash(GridMode mode, GridPredicate? scope, IReadOnlyList<GridPredicate> predicates, IReadOnlyList<GridSortKey> sort)
+    /// <param name="hidden">The checks hidden: a sort by an issue count is another order with them, so a cursor of one isn't read on by the other.</param>
+    private static string Hash(GridMode mode, GridPredicate? scope, IReadOnlyList<GridPredicate> predicates, IReadOnlyList<GridSortKey> sort,
+        IReadOnlyList<KeyValuePair<string, object>> hidden)
     {
         var text = string.Join("\n", new[] { mode.ToString(), scope?.Key ?? string.Empty }
             .Concat(predicates.Select(predicate => predicate.Key))
-            .Concat(sort.Select(key => $"{key.Sql} {(key.Descending ? "desc" : "asc")}")));
+            .Concat(sort.Select(key => $"{key.Sql} {(key.Descending ? "desc" : "asc")}"))
+            .Concat(hidden.Count == 0 ? [] : [HiddenKey(hidden)]));
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
     }
+
+    /// <summary>The hidden checks as the keys and hashes hold them; empty when none are.</summary>
+    public static string HiddenKey(IReadOnlyList<KeyValuePair<string, object>> hidden) =>
+        hidden.Count == 0 ? string.Empty : "hidden|" + string.Join(",", hidden.Select(parameter => Describe(parameter.Value)));
 
     /// <summary>A value as the keys and hashes hold it: text quoted, its quotes doubled, so no text can pass for more conditions.</summary>
     internal static string Describe(object? value) => value switch

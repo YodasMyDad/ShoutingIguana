@@ -663,7 +663,12 @@ internal sealed class CrawlManager(
         bool analyse;
         lock (_sync)
         {
-            analyse = summary.Status is CrawlStatus.Completed && crawl.AnalyzeWhenDone && !_stopping;
+            // A crawl stopped by the user is analysed too, so its results "so far" are there when it ends, as a completed
+            // crawl's are (the closing audit's gap 2). Not one stopped by the app shutting down: it has no time to. Nor
+            // one that stopped itself (it gave up on a site that stopped answering): it is there to be continued once the
+            // site is back, and an analysis would hold Continue up as busy for nothing (round 5's review, R2-6).
+            var stoppedByTheUser = summary.Status is CrawlStatus.Stopped && crawl.StopRequested;
+            analyse = (summary.Status is CrawlStatus.Completed || stoppedByTheUser) && crawl.AnalyzeWhenDone && !_stopping;
             crawl.Job = null;
             PublishCrawl(new CrawlEventDto(crawl.Id, StatusOf(summary.Status), summary.Error), crawlEnded: true);
             events.PublishLibrary();

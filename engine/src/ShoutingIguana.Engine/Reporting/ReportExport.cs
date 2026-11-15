@@ -27,7 +27,7 @@ public static class ReportExport
         CrawlExporter.Check(new ExportRequest { Kind = ExportKind.Report, Format = ExportFormat.Html, Report = options });
         var full = options.Cut == ReportCut.Full;
         var model = ReportReader.Read(crawlPath, severity => !full ? 0 : severity == IssueSeverity.Notice ? options.LookExamples : options.Examples, settings ?? new ExportSettings(),
-            outOfDateBy, cancellationToken);
+            outOfDateBy, cancellationToken, options);
         return ReportDocument.Write(model, options);
     }
 

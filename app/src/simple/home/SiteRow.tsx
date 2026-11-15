@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import {
@@ -17,19 +17,18 @@ import {
 } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { api } from '../../api/client';
-import { analysisQuery, checksQuery, queryKeys } from '../../api/queries';
+import { queryKeys } from '../../api/queries';
 import type { CrawlListItem } from '../../api/types';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
-import { analyseCrawl, continueCrawl } from '../../crawl/actions';
+import { analyseCrawl, cancelAnalysis, continueCrawl, saidWhileAnalysing } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
-import { crawlControls, crawlName, crawledUrls, effectiveStatus } from '../../crawl/status';
+import { useVisibleIssueCounts } from '../../crawl/visibleIssues';
+import { crawlControls, crawledUrls, effectiveStatus } from '../../crawl/status';
 import { notifyError, notifyUndo } from '../../feedback/notify';
 import { formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
 import { useLiveCrawl } from '../../live/liveStore';
-import { checkEntries, foundBySeverity } from '../../screens/issues/checkList';
 import { crawledSoFar } from '../../screens/overview/liveFigures';
-import { useSettings } from '../../settings/settingsStore';
 import { pickCrawlFiles, showInFolder } from '../../shell/os';
 import { Button } from '../../ui/Button';
 import { ConfirmDialog } from '../../ui/Dialog';
@@ -41,7 +40,16 @@ import { RelativeTime } from '../../ui/RelativeTime';
 import { ScoreRing } from '../../ui/ScoreRing';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { TextLink } from '../../ui/TextLink';
-import { problemCounts, problemWords, rowKind, rowMeta, rowScore, stoppedEarly, type ProblemCounts } from './sites';
+import {
+  problemCounts,
+  problemWords,
+  rowKind,
+  rowMeta,
+  rowScore,
+  siteName,
+  stoppedEarly,
+  type ProblemCounts,
+} from './sites';
 
 /** A row's grid: the site, its score, what to fix, when, and its action. A narrow card folds the middle under the site. */
 const ROW_GRID =
@@ -55,16 +63,8 @@ const FOLDS = '@max-sites/sites:col-start-1';
  * some, the check's analysis, read for the row. Null while that's read, and for a check never worked out.
  */
 function useRowProblems(item: CrawlListItem): ProblemCounts | null {
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
-  const needed = hiddenIds.length > 0 && item.issues !== null;
-  const checks = useQuery({ ...checksQuery(), enabled: needed }).data;
-  const analysis = useQuery({ ...analysisQuery(item.id), enabled: needed }).data;
-  return useMemo(() => {
-    if (!item.issues) return null;
-    if (!needed) return problemCounts(item.issues);
-    if (!checks || !analysis) return null;
-    return problemCounts(foundBySeverity(checkEntries(checks, analysis, new Set(hiddenIds))));
-  }, [item.issues, needed, checks, analysis, hiddenIds]);
+  const visible = useVisibleIssueCounts(item);
+  return useMemo(() => (visible ? problemCounts(visible) : null), [visible]);
 }
 
 export interface SiteRowProps {
@@ -87,7 +87,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
   const kind = rowKind(item, status);
   const [open, setOpen] = useState(false);
   const earlierId = useId();
-  const name = crawlName(item);
+  const name = siteName(item);
   const score = rowScore(item, status);
   const problems = useRowProblems(item);
   const controls = crawlControls(status, item);
@@ -103,6 +103,16 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
     ) : controls.canContinue ? (
       <Button size="sm" icon={Play} onClick={() => void continueCrawl(item.id)}>
         Continue
+      </Button>
+    ) : kind === 'live' && status === 'analyzing' ? (
+      // Its results being worked out (since it was stopped, or finished): wait, or cancel, as the Checking screen offers.
+      <Button
+        size="sm"
+        icon={X}
+        onClick={() => void cancelAnalysis(item.id)}
+        aria-label={`Cancel working out the results for ${name}`}
+      >
+        Cancel
       </Button>
     ) : kind === 'notScored' && controls.canAnalyse ? (
       <Button size="sm" icon={RefreshCw} onClick={() => void analyseCrawl(item.id)}>
@@ -175,13 +185,21 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
               <FixCell kind={kind} problems={problems} partial={partial} />
             </div>
             <div className="text-13 text-text-secondary @max-sites/sites:hidden">
-              <RelativeTime iso={item.finishedAt ?? item.startedAt} />
+              {/* When the check started, as the breadcrumb and the sidebar say it: one time for a check everywhere. */}
+              <RelativeTime iso={item.startedAt} />
             </div>
           </>
         )}
 
         <div className="relative col-start-5 row-start-1 flex items-center justify-end gap-1 @max-sites/sites:col-start-2">
-          {kind === 'live' ? <LiveDot /> : action}
+          {kind === 'live' ? (
+            <>
+              <LiveDot />
+              {action}
+            </>
+          ) : (
+            action
+          )}
           <RowMenu item={item} kind={kind} />
           {kind !== 'live' && !action ? (
             <ChevronRight aria-hidden className="size-(--icon-md) text-text-muted" />
@@ -297,7 +315,10 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
   const status = effectiveStatus(item, live) ?? item.status;
   const controls = crawlControls(status, item);
   const [confirming, setConfirming] = useState(false);
-  const name = crawlName(item);
+  const name = siteName(item);
+  // The check the confirmation was opened for: the row can show a newer check of its site while it's open, and Delete
+  // file deletes what the dialog named.
+  const [target, setTarget] = useState({ item, name });
   const busy = kind === 'live';
   const report = kind === 'scored' || kind === 'notScored' || kind === 'noPages';
 
@@ -313,6 +334,7 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
           .catch((error: unknown) => notifyError(error));
       });
     } catch (error) {
+      if (await saidWhileAnalysing(item.id, 'remove', error)) return;
       notifyError(error);
     }
   };
@@ -368,20 +390,34 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
         <MenuItem icon={X} disabled={busy} onSelect={() => void remove()}>
           Remove from Your sites
         </MenuItem>
-        <MenuItem icon={Trash2} destructive disabled={busy || kind === 'missing'} onSelect={() => setConfirming(true)}>
+        <MenuItem
+          icon={Trash2}
+          destructive
+          disabled={busy || kind === 'missing'}
+          onSelect={() => {
+            setTarget({ item, name });
+            setConfirming(true);
+          }}
+        >
           Delete file…
         </MenuItem>
       </DropdownMenu>
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Delete ${name}’s site check file?`}
-        description={`The file ${item.fileName} is deleted from the disk, with everything this check found. This can’t be undone.`}
+        title={`Delete ${target.name}’s site check file?`}
+        description={`The file ${target.item.fileName} is deleted from the disk, with everything this check found. This can’t be undone.`}
         confirmLabel="Delete file"
         destructive
         errorTitle="The file couldn’t be deleted."
         onConfirm={async () => {
-          await api.deleteCrawlFile(item.id);
+          try {
+            await api.deleteCrawlFile(target.item.id);
+          } catch (error) {
+            // Being worked out since it was stopped: said with Stop working them out, and the confirmation closes.
+            if (await saidWhileAnalysing(target.item.id, 'delete', error)) return;
+            throw error;
+          }
           void refreshLibrary();
         }}
       />

@@ -42,6 +42,8 @@ export interface ReportOptions {
   examples?: number;
   /** The first pages of each thing worth a look. 3 when left out. */
   lookExamples?: number;
+  /** Checks the user hid, left out of the lists and counts (the score stays the analysis's). */
+  hiddenChecks?: string[];
 }
 
 interface ExportTarget {
@@ -67,8 +69,21 @@ export type ExportRequest =
       line?: number;
       reason?: RobotsBlockReason;
     } & ExportTarget)
-  | ({ kind: 'check'; format: 'xlsx' | 'csv'; checkId: string } & ExportTarget)
-  | ({ kind: 'workbook'; format: 'xlsx' } & ExportTarget)
+  | ({
+      kind: 'check';
+      format: 'xlsx' | 'csv';
+      checkId: string;
+      /** Checks the user hid: the file is numbered as the workbook without them numbers its sheet. */
+      hiddenChecks?: string[];
+    } & ExportTarget)
+  | ({
+      kind: 'workbook';
+      format: 'xlsx';
+      /** Checks the user hid, left out of its sheets and summary. */
+      hiddenChecks?: string[];
+      /** Only these checks: the ones an Issues view listed. */
+      checks?: string[];
+    } & ExportTarget)
   | ({ kind: 'report'; format: 'html' } & ExportTarget & ReportOptions)
   /** E7: every sitemap the crawl looked for, as `GET /sitemaps` lists them, in the list's words. */
   | ({ kind: 'sitemaps'; format: 'csv' | 'xlsx' } & ExportTarget)

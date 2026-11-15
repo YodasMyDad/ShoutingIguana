@@ -58,7 +58,7 @@ export function ExportToastBody({ tracked, onClose }: { tracked: TrackedExport; 
       await api.cancelExport(job.exportId);
     } catch (error) {
       setCancelling(false);
-      notifyError(error, { title: 'The export couldn’t be cancelled' });
+      notifyError(error, { title: simple ? 'The saving couldn’t be cancelled' : 'The export couldn’t be cancelled' });
     }
   };
   const shell = (action: (id: string) => Promise<boolean>, failure: string) => async () => {
@@ -75,7 +75,7 @@ export function ExportToastBody({ tracked, onClose }: { tracked: TrackedExport; 
   switch (phase) {
     case 'done':
       headline = 'Saved';
-      lines = doneLines(job, columnTitle);
+      lines = doneLines(job, columnTitle, simple);
       break;
     case 'cancelled':
       headline = 'Cancelled';
@@ -83,7 +83,11 @@ export function ExportToastBody({ tracked, onClose }: { tracked: TrackedExport; 
       break;
     case 'lost':
       headline = 'Stopped';
-      lines = ['The engine stopped before the file was whole, so nothing was saved.'];
+      lines = [
+        simple
+          ? 'Shouting Iguana stopped before the file was whole, so nothing was saved.'
+          : 'The engine stopped before the file was whole, so nothing was saved.',
+      ];
       remedies = ['exportAgain'];
       break;
     case 'failed': {
@@ -96,7 +100,7 @@ export function ExportToastBody({ tracked, onClose }: { tracked: TrackedExport; 
       break;
     }
     default:
-      headline = cancelling ? 'Cancelling…' : runningLine(job);
+      headline = cancelling ? 'Cancelling…' : runningLine(job, simple);
   }
   const offered = remedies.filter((remedy) => canRun(remedy, tracked.again));
 
@@ -113,14 +117,20 @@ export function ExportToastBody({ tracked, onClose }: { tracked: TrackedExport; 
           </p>
           <p className="text-12 text-text-secondary">{headline}</p>
         </div>
-        <IconButton label="Close" tooltip="Close: the export goes on" icon={X} size="xs" onClick={onClose} />
+        <IconButton
+          label="Close"
+          tooltip={simple ? 'Close: the saving goes on' : 'Close: the export goes on'}
+          icon={X}
+          size="xs"
+          onClick={onClose}
+        />
       </div>
       {running ? (
         <ProgressBar
           label={job.kind === 'report' ? 'Writing the report' : 'Written so far'}
           value={job.kind === 'report' || job.rowsExpected === null ? null : Math.round(tracked.peak * 1000)}
           max={1000}
-          valueText={progressWords(job) ?? undefined}
+          valueText={progressWords(job, simple) ?? undefined}
         />
       ) : null}
       {lines.length > 0 ? (

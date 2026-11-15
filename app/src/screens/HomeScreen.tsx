@@ -1,45 +1,59 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Globe, Inbox, SlidersHorizontal } from 'lucide-react';
-import clsx from 'clsx';
-import { useState, type ReactNode, type SyntheticEvent } from 'react';
-import { api } from '../api/client';
+import { FolderOpen, Globe, Inbox, SlidersHorizontal } from 'lucide-react';
+import { useMemo, useRef, useState, type Ref, type SyntheticEvent } from 'react';
 import { libraryQuery, queryKeys } from '../api/queries';
-import type { CrawlListItem } from '../api/types';
-import { isLive } from '../api/types';
-import { startCrawl } from '../crawl/actions';
-import { crawlName, crawledUrls, effectiveStatus } from '../crawl/status';
+import { startCrawl, quickStartUrl, continueCrawl, analyseCrawl } from '../crawl/actions';
+import { canOpenCrawlFiles } from '../crawl/fileOpening';
+import { crawlControls, effectiveStatus } from '../crawl/status';
+import { siteName } from '../simple/home/sites';
 import { ErrorState } from '../feedback/ErrorState';
-import { notifyError, notifyUndo } from '../feedback/notify';
 import { SkeletonRows } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
-import { formatBytes, formatCount } from '../lib/format';
-import { useLiveCrawl, useLiveIds } from '../live/liveStore';
+import { useFocusRescue } from '../feedback/useFocusRescue';
+import { commands, useCommands, type Command } from '../keyboard/registry';
+import { liveStore, useLive, useLiveIds } from '../live/liveStore';
+import { isCrawlStatus } from '../api/types';
+import { runningTitle } from '../crawl/runningWords';
 import { Button } from '../ui/Button';
 import { Card, CardHeader } from '../ui/Card';
 import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
-import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { Kbd } from '../ui/Kbd';
 import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
-import { RelativeTime } from '../ui/RelativeTime';
 import { SearchField } from '../ui/SearchField';
-import { SeverityCounts } from '../ui/SeverityCount';
-import { StatusPill } from '../ui/StatusPill';
 import { TextField } from '../ui/TextField';
-import { TextLink } from '../ui/TextLink';
+import { removeFromLibrary } from './home/libraryActions';
+import { LibraryTable } from './home/LibraryTable';
+import { crawlActions, libraryView, librarySize, runningBySite } from './home/library';
+import { RunningCrawlCard } from './home/RunningCrawlCard';
 
 /**
- * Home (docs/v2-ui-ia.md): paste a URL and press Enter to crawl with your defaults, and the library below.
- * Foundation version: the URL field and a plain library list with every state. Its slice groups crawls by site,
- * pins the running ones as cards and adds the remaining actions.
+ * Home (docs/v2-ui-ia.md, Home; `clarity/home.html`): paste a URL and press Enter to crawl with your defaults, or open a
+ * crawl file (Open…, Ctrl+O, or dropped on the window). Then the crawls running now, each a card with its live
+ * figures and controls, and the library: a row a site, the site whose latest crawl is newest first, its older crawls
+ * folded under it, every crawl's actions in its menu and the palette.
  */
 export function HomeScreen() {
+  const screenRef = useRef<HTMLDivElement>(null);
+  const libraryTitleRef = useRef<HTMLSpanElement>(null);
+  // A row that goes (removed, its file deleted) or a card that ends leaves focus on the library's title, never on the
+  // page.
+  useFocusRescue(screenRef, () => libraryTitleRef.current);
   return (
-    <div className="mx-auto box-content flex max-w-(--content-max) flex-col gap-8 px-(--page-gutter) pt-7 pb-10">
-      <PageHeader title="Crawl a site" subtitle="Paste a URL and press Enter. It crawls with your default settings." />
-      <StartCrawlForm />
-      <Library />
+    <div
+      ref={screenRef}
+      className="@container mx-auto box-content flex max-w-(--content-max) flex-col gap-8 px-(--page-gutter) pt-7 pb-10"
+    >
+      <section aria-labelledby="home-title" className="flex flex-col gap-3">
+        <PageHeader
+          title={<span id="home-title">Crawl a site</span>}
+          subtitle="Paste a URL and press Enter. It crawls with your default settings."
+        />
+        <StartCrawlForm />
+        <OpenLine />
+      </section>
+      <Library titleRef={libraryTitleRef} />
     </div>
   );
 }
@@ -59,7 +73,8 @@ function StartCrawlForm() {
       return;
     }
     setStarting(true);
-    const result = await startCrawl(/^https?:\/\//i.test(startUrl) ? startUrl : `https://${startUrl}`);
+    // A bare address starts where the site answers, https or http, as Simple's Home does (round 5's gap 1).
+    const result = await startCrawl(await quickStartUrl(startUrl));
     setStarting(false);
     if (result.ok) {
       setError(null);
@@ -106,240 +121,181 @@ function StartCrawlForm() {
   );
 }
 
-function Library() {
+/**
+ * Where a crawl file comes from: Open… (Ctrl+O), or the file dropped on the window, which opens it from any screen.
+ * A plain browser can do neither, and says where they are.
+ */
+function OpenLine() {
+  if (!canOpenCrawlFiles()) {
+    return (
+      <p className="flex items-center gap-2 text-13 text-text-secondary">
+        <FolderOpen aria-hidden className="size-(--icon-sm) flex-none text-text-muted" />
+        In the app, open a crawl file with Ctrl+O, or drop it on the window.
+      </p>
+    );
+  }
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-13 text-text-secondary">
+      <Button size="sm" icon={FolderOpen} command="crawl.open" showShortcut onClick={() => commands.run('crawl.open')}>
+        Open…
+      </Button>
+      <span>a crawl file, or drop one anywhere on the window.</span>
+    </p>
+  );
+}
+
+function Library({ titleRef }: { titleRef: Ref<HTMLSpanElement> }) {
   const navigate = useNavigate({ from: '/' });
+  const queryClient = useQueryClient();
   const { q = '' } = useSearch({ from: '/' });
   const library = useQuery(libraryQuery());
   const showSkeleton = useDelayedLoading(library.isPending);
   const live = useLiveIds();
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  const term = q.trim().toLowerCase();
-  const items = (library.data ?? []).filter(
-    (item) =>
-      term === '' || [item.site, item.startUrl, item.fileName].some((text) => text?.toLowerCase().includes(term)),
-  );
-  // Crawls running now come first, with live progress.
-  const ordered = [
-    ...items.filter((item) => live.includes(item.id)),
-    ...items.filter((item) => !live.includes(item.id)),
-  ];
+  const items = library.data;
+  const view = useMemo(() => libraryView(items ?? [], live, q), [items, live, q]);
+  const running = useMemo(() => runningBySite(items ?? [], view.running), [items, view.running]);
+  // What each card's crawl does now, read as one string so the store's answer is stable between changes: the cards'
+  // heading says it as the sidebar's does, "1 crawling, 1 paused" (round 5 review R1-3).
+  const doing = useLive((state) => view.running.map((item) => state.crawls[item.id]?.status ?? '').join(' '))
+    .split(' ')
+    .map((status) => (isCrawlStatus(status) ? status : null));
   const clearSearch = () => void navigate({ search: {}, replace: true });
 
-  return (
-    // A container: a narrow card (200% zoom) folds two columns into others (--container-library).
-    <Card
-      as="section"
-      aria-labelledby="library-title"
-      aria-busy={library.isFetching}
-      className="@container/library relative min-w-0"
-    >
-      {library.isFetching && !library.isPending ? <RefreshLine label="Refreshing the library" /> : null}
-      <CardHeader
-        title="Library"
-        titleId="library-title"
-        meta={
-          library.data ? `${formatCount(library.data.length)} ${library.data.length === 1 ? 'crawl' : 'crawls'}` : null
-        }
-        // A narrow card (the sidebar open at 200% zoom) puts the search on a line of its own rather than push the card
-        // past the window.
-        className="pb-4 @max-library/library:flex-wrap"
-        actions={
-          <SearchField
-            label="Search the library"
-            placeholder="Search the library"
-            value={q}
-            onChange={(event) =>
-              void navigate({ search: event.target.value ? { q: event.target.value } : {}, replace: true })
-            }
-            onClear={clearSearch}
-            className="w-(--search-width-library) max-w-full"
-          />
-        }
-      />
+  // The palette: the library's search, and each site's latest crawl, to open, continue, analyse again or remove.
+  useCommands(
+    () => [
+      {
+        id: 'home.search',
+        title: 'Search the library',
+        group: 'Go to',
+        keywords: ['find', 'filter', 'crawls'],
+        run: () => {
+          searchRef.current?.focus();
+          searchRef.current?.select();
+        },
+      },
+      ...[...view.running, ...view.sites.map((group) => group.latest)].flatMap((item): Command[] => {
+        const status = effectiveStatus(item, liveStore.getState().crawls[item.id]) ?? item.status;
+        const actions = crawlActions(item, status);
+        const controls = crawlControls(status, item);
+        const name = siteName(item);
+        const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
+        return [
+          {
+            id: `home.open.${item.id}`,
+            title: `Open ${name}`,
+            group: 'Go to',
+            keywords: ['crawl', item.startUrl ?? '', item.fileName],
+            enabled: () => actions.canOpen,
+            run: () => void navigate({ to: '/crawls/$crawl', params: { crawl: item.id } }),
+          },
+          ...(controls.canContinue
+            ? [
+                {
+                  id: `home.continue.${item.id}`,
+                  title: `Continue ${name}`,
+                  group: 'Crawl' as const,
+                  run: () => void continueCrawl(item.id),
+                },
+              ]
+            : []),
+          ...(controls.canAnalyse
+            ? [
+                {
+                  id: `home.analyse.${item.id}`,
+                  title: `Analyse ${name} again`,
+                  group: 'Crawl' as const,
+                  keywords: ['analysis', 'out of date'],
+                  run: () => void analyseCrawl(item.id),
+                },
+              ]
+            : []),
+          ...(actions.canRemove
+            ? [
+                {
+                  id: `home.remove.${item.id}`,
+                  title: `Remove ${name} from the library`,
+                  group: 'Crawl' as const,
+                  run: () => void removeFromLibrary(item, refresh),
+                },
+              ]
+            : []),
+        ];
+      }),
+    ],
+    [view, navigate, queryClient],
+  );
 
-      {showSkeleton ? (
-        // Once shown, the skeleton stays its minimum, even when the library comes a moment later.
-        <div className="px-5 pb-5">
-          <SkeletonRows rows={4} label="Loading the library" />
-        </div>
-      ) : library.isPending ? null : library.error && !library.data ? (
-        <ErrorState
-          error={library.error}
-          title="The library couldn’t be read."
-          onRetry={() => void library.refetch()}
+  const body = showSkeleton ? (
+    // Once shown, the skeleton stays its minimum, even when the library comes a moment later.
+    <div className="px-5 pb-5">
+      <SkeletonRows rows={4} label="Loading the library" />
+    </div>
+  ) : library.isPending ? null : library.error && !items ? (
+    <ErrorState error={library.error} title="The library couldn’t be read." onRetry={() => void library.refetch()} />
+  ) : !items || items.length === 0 ? (
+    <EmptyState panel layout="row" icon={Inbox} title="No crawls yet">
+      Paste a URL above to start{canOpenCrawlFiles() ? ', or open a crawl file' : ''}.
+    </EmptyState>
+  ) : view.sites.length === 0 && view.running.length === 0 ? (
+    <FilteredEmptyState title={`No crawls match “${q}”.`} clearLabel="Clear the search" onClear={clearSearch} />
+  ) : view.sites.length === 0 ? (
+    <p className="px-5 pb-5 text-13 text-text-secondary">
+      {q ? `No other crawls match “${q}”.` : 'Every crawl is running now: they show above.'}
+    </p>
+  ) : (
+    <LibraryTable sites={view.sites} running={running} />
+  );
+
+  return (
+    <>
+      {view.running.length > 0 ? (
+        <section aria-labelledby="running-title" className="flex flex-col gap-3">
+          <h2 id="running-title" className="text-16 font-semibold text-text">
+            {runningTitle(doing, 'advanced')}
+          </h2>
+          {view.running.map((item) => (
+            <RunningCrawlCard key={item.id} item={item} />
+          ))}
+        </section>
+      ) : null}
+      {/* A container: a narrow card (200% zoom) folds two columns into others (--container-library). */}
+      <Card
+        as="section"
+        aria-labelledby="library-title"
+        aria-busy={library.isFetching}
+        className="@container/library relative min-w-0"
+      >
+        {library.isFetching && !library.isPending ? <RefreshLine label="Refreshing the library" /> : null}
+        <CardHeader
+          title={
+            <span ref={titleRef} tabIndex={-1} className="outline-none">
+              Library
+            </span>
+          }
+          titleId="library-title"
+          meta={items ? librarySize(items) : null}
+          // A narrow card (the sidebar open at 200% zoom) puts the search on a line of its own rather than push the
+          // card past the window.
+          className="pb-4 @max-library/library:flex-wrap"
+          actions={
+            <SearchField
+              ref={searchRef}
+              label="Search the library"
+              placeholder="Search the library"
+              value={q}
+              onChange={(event) =>
+                void navigate({ search: event.target.value ? { q: event.target.value } : {}, replace: true })
+              }
+              onClear={clearSearch}
+              className="w-(--search-width-library) max-w-full"
+            />
+          }
         />
-      ) : library.data.length === 0 ? (
-        <EmptyState panel layout="row" icon={Inbox} title="No crawls yet">
-          Paste a URL above to start.
-        </EmptyState>
-      ) : ordered.length === 0 ? (
-        <FilteredEmptyState title={`No crawls match “${q}”.`} clearLabel="Clear the search" onClear={clearSearch} />
-      ) : (
-        // Should the card ever be narrower than its columns (the sidebar open at 200% zoom), the table scrolls in it,
-        // never the page. Positioned, so what's placed absolutely inside it (the Actions header's hidden words) is
-        // held in it too, not by the card, past the window's edge.
-        <div className="relative overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0 text-13">
-            <caption className="sr-only">Crawls in the library, running ones first</caption>
-            <thead>
-              <tr className="text-left text-12 text-text-secondary">
-                <LibraryHeader fill>Site</LibraryHeader>
-                <LibraryHeader>Status</LibraryHeader>
-                <LibraryHeader numeric>URLs</LibraryHeader>
-                <LibraryHeader numeric folds>
-                  Pages
-                </LibraryHeader>
-                <LibraryHeader>Checks with issues</LibraryHeader>
-                <LibraryHeader folds>Started</LibraryHeader>
-                <LibraryHeader>
-                  <span className="sr-only">Actions</span>
-                </LibraryHeader>
-              </tr>
-            </thead>
-            <tbody>
-              {ordered.map((item) => (
-                <LibraryRow key={item.id} item={item} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function LibraryHeader({
-  children,
-  numeric = false,
-  fill = false,
-  folds = false,
-}: {
-  children: ReactNode;
-  numeric?: boolean;
-  /** A narrow library (200% zoom) has no column for it: its value is a second line in another cell. */
-  folds?: boolean;
-  /** Takes the room the other columns leave, its content truncating in it. */
-  fill?: boolean;
-}) {
-  return (
-    <th
-      scope="col"
-      className={clsx(
-        'h-(--grid-header-height) border-y border-border px-3 font-medium whitespace-nowrap first:pl-5 last:pr-5 @max-library/library:px-2 @max-library/library:whitespace-normal',
-        numeric && 'text-right',
-        fill && 'w-full',
-        folds && FOLDS,
-      )}
-    >
-      {children}
-    </th>
-  );
-}
-
-const CELL_BOX =
-  'h-(--row-height-tall) border-b border-border-subtle px-3 first:pl-5 last:pr-5 @max-library/library:px-2';
-/** A column a narrow library (200% zoom) folds into another cell: hidden there, its value a second line. */
-const FOLDS = '@max-library/library:hidden';
-/** That second line: only in a narrow library. */
-const FOLDED = 'hidden text-12 text-text-muted @max-library/library:block';
-const CELL = `${CELL_BOX} whitespace-nowrap`;
-
-function LibraryRow({ item }: { item: CrawlListItem }) {
-  const queryClient = useQueryClient();
-  const live = useLiveCrawl(item.id);
-  const status = effectiveStatus(item, live) ?? item.status;
-  // A file that couldn't be read says nothing about its counts: they show as "–", never 0.
-  const unreadable = status === 'unreadable';
-  // "N URLs" as the URL grid lists them, here as in the top bar and the toasts.
-  const fetched =
-    live?.progress && isLive(status) ? crawledUrls(item, live.progress) : unreadable ? null : crawledUrls(item);
-  const pages = live?.progress && isLive(status) ? live.progress.htmlPages : unreadable ? null : item.pageCount;
-
-  const remove = async () => {
-    try {
-      await api.removeCrawl(item.id);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
-      notifyUndo(`${crawlName(item)} was removed from the library. The file is still on disk.`, () => {
-        void api
-          .restoreCrawl(item.id)
-          .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true }))
-          .catch((error: unknown) => notifyError(error));
-      });
-    } catch (error) {
-      notifyError(error);
-    }
-  };
-
-  return (
-    <tr className="hover:bg-surface-hover">
-      {/* No width of its own (max-w-0), so the site's names truncate instead of pushing the table wider; never less
-          than its least (min-w), so a narrow window's other columns can't squeeze it out. */}
-      <td className={clsx('max-w-0 min-w-(--library-site-min)', CELL)}>
-        <div className="flex min-w-0 items-center gap-3">
-          <CrawlFavicon item={item} size="md" />
-          <div className="flex min-w-0 flex-col">
-            <TextLink
-              variant="subtle"
-              to="/crawls/$crawl"
-              params={{ crawl: item.id }}
-              className="truncate text-14 font-semibold"
-              title={item.startUrl ?? item.path}
-            >
-              {crawlName(item)}
-            </TextLink>
-            <span className="truncate font-mono text-12 text-text-muted" title={item.path}>
-              {item.fileName} · {formatBytes(item.sizeBytes)}
-            </span>
-          </div>
-        </div>
-      </td>
-      {/* The status wraps: a file's error, or "Analysis out of date", never pushes the table wider than the window. */}
-      <td className={CELL_BOX}>
-        <div className="max-w-(--library-status-width)">
-          <StatusPill status={status} fetched={null} variant="plain" />
-          {item.outOfDate ? <span className="block text-12 text-text-muted">Analysis out of date</span> : null}
-          {item.error ? <span className="block text-12 text-text-muted">{item.error}</span> : null}
-          {item.startedAt ? (
-            <span className={FOLDED}>
-              Started <RelativeTime iso={item.startedAt} />
-            </span>
-          ) : null}
-        </div>
-      </td>
-      <td className={clsx('figures text-right', CELL)}>
-        {formatCount(fetched)}
-        <span className={FOLDED}>
-          {pages === null ? '–' : `${formatCount(pages)} ${pages === 1 ? 'page' : 'pages'}`}
-        </span>
-      </td>
-      <td className={clsx('figures text-right', CELL, FOLDS)}>{formatCount(pages)}</td>
-      <td className={CELL_BOX}>
-        {unreadable ? (
-          <span className="text-text-muted">–</span>
-        ) : item.issues ? (
-          // One severity a line in a narrow library, so the column is as wide as its widest count, not all three.
-          <SeverityCounts
-            counts={item.issues}
-            className="@max-library/library:flex @max-library/library:flex-col @max-library/library:items-start @max-library/library:gap-1"
-          />
-        ) : (
-          <span className="text-text-muted">Not analysed yet</span>
-        )}
-      </td>
-      <td className={clsx(CELL, FOLDS)}>
-        <RelativeTime iso={item.startedAt} />
-      </td>
-      <td className={clsx('text-right', CELL)}>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={isLive(status)}
-          onClick={() => void remove()}
-          aria-label={`Remove ${crawlName(item)} from the library`}
-        >
-          Remove
-        </Button>
-      </td>
-    </tr>
+        {body}
+      </Card>
+    </>
   );
 }

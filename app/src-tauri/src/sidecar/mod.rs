@@ -255,6 +255,31 @@ impl Sidecar {
         true
     }
 
+    /// Stops the engine and starts it again, as a new generation: the data folder changed. The webview hears
+    /// `starting`, then `ready` with the new port and token. False if the app is quitting or a restart is already
+    /// due. Blocks while the old engine stops (it finishes what it was writing), so never on the UI thread.
+    pub fn relaunch(self: &Arc<Self>) -> bool {
+        let (old, generation) = {
+            let mut inner = lock(&self.inner);
+            if inner.quitting || inner.restart_pending {
+                return false;
+            }
+            // Its exit is no crash: once it isn't the current launch, its watchers let it go without a word.
+            let old = inner.launch.take();
+            inner.policy.reset();
+            let generation = next_generation(&mut inner);
+            self.publish(&mut inner, generation, SidecarState::Starting);
+            (old, generation)
+        };
+        self.link.publish(None);
+        if let Some(old) = old {
+            log::info!("Stopping the engine (generation {}) to start it again", old.generation);
+            stop_process(&old.process, GRACEFUL_SHUTDOWN_TIMEOUT);
+        }
+        self.spawn(generation);
+        true
+    }
+
     /// From here on the app is quitting: no restarts, and the event stream closes. With `announce`, the webview
     /// hears `stopping` and says it is stopping crawls.
     pub fn begin_quit(&self, announce: bool) {
@@ -328,8 +353,10 @@ impl Sidecar {
         if let Some(folder) = self.extraction_folder() {
             environment.push((EXTRACT_DIR_VARIABLE, folder.into_os_string()));
         }
-        let arguments =
-            launch::arguments(launch::folder_override(DATA_DIR_OVERRIDE), launch::folder_override(STATE_DIR_OVERRIDE));
+        // The environment's folder (tests, development) first, then the one the user chose (data_folder.rs).
+        let data_dir = launch::folder_override(DATA_DIR_OVERRIDE)
+            .or_else(|| crate::data_folder::for_engine(&self.app).map(PathBuf::into_os_string));
+        let arguments = launch::arguments(data_dir, launch::folder_override(STATE_DIR_OVERRIDE));
         let (process, stdout, stderr) = match SidecarProcess::spawn(&binary, &arguments, &environment) {
             Ok(spawned) => spawned,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -570,6 +597,11 @@ fn restart_reason(exit: Exit, report: &ExitReport) -> RestartReason {
     } else {
         RestartReason::StartFailed
     }
+}
+
+/// The data folder is set by the shell's environment (tests, development): the user's choice doesn't apply.
+pub fn data_dir_overridden() -> bool {
+    launch::folder_override(DATA_DIR_OVERRIDE).is_some()
 }
 
 fn next_generation(inner: &mut Inner) -> u32 {

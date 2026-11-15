@@ -101,6 +101,12 @@ internal sealed record ReportModel
     /// <summary>The engine writing the document.</summary>
     public required string EngineVersion { get; init; }
 
+    /// <summary>Checks that found something and are left out because the user hid them (<see cref="ReportOptions.HiddenChecks"/>).</summary>
+    public int HiddenProblems { get; init; }
+
+    /// <summary>The lists are a view's checks only (<see cref="ReportOptions.Checks"/>): what they leave out isn't hidden, only not in the view.</summary>
+    public bool Narrowed { get; init; }
+
     /// <summary>How many of the checks that found something are of a severity.</summary>
     public int ChecksOf(IssueSeverity severity) => Problems.Count(problem => problem.Check.Severity == severity);
 

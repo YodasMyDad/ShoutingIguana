@@ -518,6 +518,33 @@ export function createMockTransport(): Transport {
       (_match, request) => Promise.resolve(json({ errors: validate(request.body as CrawlOptions) })),
     ],
     [
+      'POST',
+      /^\/api\/crawl-options\/start-url$/,
+      (_match, request) => {
+        // The mock has no network: a bare address is taken as the site's https:// one, as if it answered there.
+        const { address } = request.body as { address: string };
+        const trimmed = address.trim();
+        const typed = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
+        return Promise.resolve(
+          json({ startUrl: typed ? trimmed : `https://${trimmed}`, reason: typed ? 'typed' : 'https' }),
+        );
+      },
+    ],
+    [
+      // Round 5's proxy test: there's no network here, so every proxy answers as a working one would.
+      'POST',
+      /^\/api\/proxy\/test$/,
+      () =>
+        Promise.resolve(
+          json({
+            outcome: 'ok',
+            status: 200,
+            elapsedMs: 182,
+            message: 'The proxy answered and the site replied 200 OK in 182 ms.',
+          }),
+        ),
+    ],
+    [
       'GET',
       /^\/api\/crawls$/,
       async () => {

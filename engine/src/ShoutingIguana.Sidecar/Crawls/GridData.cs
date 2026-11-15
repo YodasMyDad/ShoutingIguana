@@ -78,7 +78,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         var asked = GridRequests.Facets(request?.Facets, errors);
         var ends = GridRequests.LinkEnds(request?.LinkEnds, errors);
         GridRequests.ThrowIfAny(errors);
-        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked, LinkEnds = ends };
+        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked, LinkEnds = ends, HiddenChecks = request?.HiddenChecks ?? [] };
         return Facets(await ReadAsync(token => UrlGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
@@ -116,7 +116,8 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         GridRequests.ThrowIfAny(errors);
         var query = new LinkEndQuery
         {
-            End = end!.Value, Filters = filters, Search = request?.Search, Offset = request?.Offset ?? 0, Limit = request?.Limit ?? UrlGridReader.DEFAULT_LIMIT
+            End = end!.Value, Filters = filters, Search = request?.Search, Offset = request?.Offset ?? 0, Limit = request?.Limit ?? UrlGridReader.DEFAULT_LIMIT,
+            HiddenChecks = request?.HiddenChecks ?? []
         };
         return await ReadAsync(token => LinkGridReader.Ends(path, query, cache, token), cancellationToken).ConfigureAwait(false);
     }
@@ -129,7 +130,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         var filters = GridRequests.Filters(request?.Filters, errors);
         var asked = GridRequests.Facets(request?.Facets, errors);
         GridRequests.ThrowIfAny(errors);
-        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked };
+        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked, HiddenChecks = request?.HiddenChecks ?? [] };
         return Facets(await ReadAsync(token => LinkGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 

@@ -1015,7 +1015,8 @@ describe('Sitemaps in a short or narrow window', () => {
     sidecar();
     await open(`${SITEMAPS}/2`);
     const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/sitemaps/pages.xml` });
-    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // The header, five rows, the frame, and the footer's key hints (--grid-foot-height).
+    expect(grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12 + 36}px`);
     const frame = grid.closest('.si-grid-screen')!;
     expect(frame).not.toBeNull();
     expect(grid.closest('.si-grid-screen__body')?.parentElement).toBe(frame);

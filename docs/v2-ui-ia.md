@@ -87,15 +87,45 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 **Home.**
 
 - A large URL field: paste and press Enter to crawl with your defaults. "Settings…" beside it opens `/new`.
-- Below it, the library grouped by site: the site whose latest crawl is newest comes first, and each site shows its
-  latest crawl, with older ones folded away.
-- Crawls running now are pinned at the top, with live progress.
-- Each crawl shows its status, pages, issues by severity and when it ran. Its actions: Open, Continue, Crawl again,
-  Analyse again, Show in folder, Remove from library (undo), Delete file….
-- "N URLs" is the URLs crawled, as the URL grid lists them, here and everywhere else. In a narrow window (200% zoom)
-  the library keeps its Site column: Pages and when it ran become second lines of the URLs and status cells, and
-  nothing scrolls sideways.
-- Ctrl+O and drag-and-drop open a `.sicrawl` from anywhere.
+- Under it, **Open…** (Ctrl+O) for a crawl file, and that a file dropped on the window opens too.
+- Crawls running now are pinned above the library as cards, headed by what they do as the sidebar says it ("1
+  crawling, 1 paused"): the site, its status and the time spent crawling, Pause or Resume, Stop and Open, and Crawled,
+  Found, Queued, Pages and URLs a second with its sparkline, each count opening its URLs; what was found as crawled,
+  queued and not followed. A crawl only being analysed shows its Crawled and Pages, with Cancel the analysis.
+- A site is named by its host and any port of its own ("127.0.0.1:5001"): one host on two ports is two sites.
+- Below them, the library grouped by site: the site whose latest crawl is newest comes first, and each site shows its
+  latest crawl, with older ones folded away ("2 older crawls"). A site with a crawl running now says what it's doing
+  (Crawling now, Paused, Stopping, Analysing).
+- Each crawl shows its status, URLs, pages, checks with issues by severity and when it started. Beside its status, the
+  one action its state needs: Continue (stopped, interrupted), Analyse again (out of date), Analyse it (never
+  analysed), Locate the file… (missing). All its actions are in its menu: Open, Continue, Crawl again…, Analyse again,
+  Show in folder, Remove from library (undo), Delete file… (asks first, naming the crawl and its file). An action the
+  state doesn't allow is there, disabled. The palette has Open, Continue, Analyse again and Remove for each site's
+  latest crawl, and Search the library.
+- A crawl stopped here is analysed at once: its card says so ("Analysing") with **Cancel the analysis**, and Continue,
+  Remove or Delete tried meanwhile say it is being analysed, with the same action, rather than refuse.
+- An address typed without its scheme starts where the site answers, https or http, as in Simple.
+- Every state is drawn: empty, one, many, running, paused, stopped, interrupted, failed, out of date, never analysed,
+  in use elsewhere, missing, unreadable, filtered to nothing, loading and failing to load.
+- In a narrow window (200% zoom) the library keeps its Site column: Pages and when it started become second lines of
+  the URLs and status cells, and nothing scrolls sideways.
+- Ctrl+O and drag-and-drop open a `.sicrawl` from anywhere, in both modes. A dragged file says over the window what a
+  drop will do, or that it isn't a crawl file; a dropped one that isn't says so, and one the engine can't read says
+  why.
+
+**One number everywhere** (round 5, the closing audit's gap 3). Each count has one noun, and the noun one number,
+on every screen:
+
+| Noun | What it counts | Where |
+| --- | --- | --- |
+| **URLs** ("N URLs", "URLs crawled", Simple's "addresses checked") | The URLs the crawl asked for: the URL grid's Crawled (`fetched` is true), the library's `crawledUrlCount`, a running crawl's `crawled`. The crawler's probes of the site's other versions are among them (they were asked for), and are said apart on Overview's status codes. A URL not checked because its host had stopped answering isn't (it wasn't asked) | Home, the top bar, the sidebar's running crawls, the toasts, Overview's Crawled and its line, a check's share of URLs, Simple's Summary, the report |
+| **URLs found** | Every URL the crawl found, crawled or not: the URL grid's total | URLs' header ("264 of 6,286 URLs found"), Overview's Found |
+| **Pages** ("pages read", "pages analysed") | The site's HTML pages the crawl read (an internal URL that answered 2xx with HTML it parsed: a word count), Cloudflare's `/cdn-cgi/` endpoints left out, which is the analysis's pages too: the library's `pageCount` is its `pagesAnalyzed` while the crawl hasn't changed since | Home, Overview's Pages, a page check's share, Simple's Summary, the report |
+| **Internal, External** | Of the URLs crawled, those on the site (its probes included) and those on other sites | Overview's totals |
+
+A check's count is a share of the analysis's own totals, not the crawl's now: of the pages analysed for a check that
+flags only pages, of the URLs crawled when it ran for any other. The garden crawl says 4,521 URLs and 6,286 URLs
+found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywhere.
 
 **New crawl.**
 
@@ -138,6 +168,8 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 
 **Overview (done).**
 
+- It opens with the totals (Screaming Frog's Dashboard row): Crawled, Internal, External, Pages and Found, each
+  opening its URLs. They need no analysis, so a crawl stopped or never analysed has them too.
 - Issues by severity, and "Fix first" in the engine's order: severity, a fault of the whole site before the rest of
   its severity, then URLs affected (a check counts pages only when pages are all it flags). An earlier engine's
   analysis keeps the app's order: severity, then pages or URLs affected.
@@ -155,7 +187,10 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 **Issues.**
 
 - The checks list, grouped by category and filterable by severity and search. Its rows show severity, title and pages
-  affected, or URLs affected for a check that can flag a URL that isn't a page (a missing image, a redirect). Skipped checks are always listed in their category, with their reasons: hiding them would read as
+  affected, or URLs affected for a check that can flag a URL that isn't a page (a missing image, a redirect), with
+  the share of the site beside the count ("% of Total": of the pages analysed, or of the URLs crawled, said in the
+  row's name and tooltip), as Overview's Fix first does. A fault of the whole site is "Whole site" there and in its
+  figures, as in Simple. Skipped checks are always listed in their category, with their reasons: hiding them would read as
   clean. "Show the N checks that passed" adds the ones that passed. The filters, that switch and the hidden checks'
   count sit above the list, so Tab goes from the list to the selected check. A category a link narrowed the list to
   (Overview's "Issues by category") shows there as a chip that removes it: it is never text in the search field, as a
@@ -164,8 +199,11 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 - Its rows are grouped by detail or by the other URL involved, as the catalog says for each check, so a template
   fault is one row with its count; open a group for its first pages and all of them in URLs. A check whose detail is a
   measurement lists its URLs flat. One group is open at a time.
-- Actions: copy URLs (the check's, or the open group's), hide the check (remembered, with Undo), and Export (Ctrl+E):
-  this check, the open group's pages, the report and every check (the spreadsheet of everything).
+- Actions: copy URLs (the check's, or the open group's), hide the check in this crawl or in every crawl (remembered,
+  with Undo; its badge says which), and Export (Ctrl+E): this check, the open group's pages, the report and every
+  check (the spreadsheet of everything), and with the list filtered, the spreadsheet of the checks it lists. Hidden
+  checks are left out of every count and list (Home's and Simple's Your sites' among them), the report, the workbook
+  and the crawl's toasts; the score stays the analysis's.
 
 **URLs.**
 
@@ -176,11 +214,19 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
   count opening exactly that many URLs, counted when their menu opens; a filter bar over any column the engine filters
   (at most 20).
 - A sort of up to three columns from the headers: a press sorts by one, Shift adds the next key. Hiding a sorted
-  column drops its sort.
+  column drops its sort. "Clear the filters" keeps the sort and the columns.
+- Columns resize (drag a header's edge; a double-click puts it back), move (drag a header) and pin to the left edge
+  (the header's menu), on every grid: remembered per grid, and kept with a saved view. "All columns" is a preset of
+  every column the engine has, for a full export.
 - Quick search and saved views: the view (filters, search, sort, columns) under a name, opened from its menu or the
   palette on any crawl, renamed, or deleted with Undo.
 - Copy: the URLs of the view, the column the cursor is in, the selected rows. Each row has a menu: inspect, open in
-  the browser, copy, and its inlinks in Links.
+  the browser, copy, filter by the value under it or exclude it, and its inlinks in Links.
+- The search applies on Enter (each search is a read of the whole view and a place in the history): the Enter key
+  shows at the field's end while what's typed isn't applied.
+- In a short window (200% zoom of 1280x720) the presets, the facets, the filter bar and the notes fold behind one
+  button, whose name says the filters in force; the footer's key hints give way too. The grid keeps six rows, five
+  beside the inspector.
 - "12,345 of 101,107 URLs", live while crawling.
 - URLs on the crawled host show their path after the site's favicon, with the host named once in the column header.
   Other hosts, and the site's other versions, show in full. "Show full URLs" is a view option.
@@ -335,6 +381,9 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Home, End, Page Up, Page Down | Jump |
 | Shift+F10 or the menu key | Right-click menu: for the row, or the selection it's in. Esc gives the keyboard back to the row |
 | Up from the first row, then Enter | Sort by the header the cursor is on, where the grid sorts by it; Shift+Enter (or Shift+click) adds it to the sort, on the URL grid |
+| On a header: Shift+Left, Shift+Right | The column narrower or wider |
+| On a header: Ctrl+Shift+Left, Ctrl+Shift+Right | Move the column (never across the pinned columns' edge) |
+| On a header: Shift+F10 or the menu key | The column's menu: pin or unpin, move, wider, narrower, its width back, every column back |
 
 ### On URLs
 
@@ -415,3 +464,6 @@ macOS uses Cmd where Windows uses Ctrl. One registry feeds the menus, tooltips, 
 | Branded client reports | The report (in step 3 since 2026-11-10) gains a logo, colours and a cover |
 | Step 4 | New crawl gets rendering, include and exclude rules, authentication and list mode. The inspector gets rendered vs raw. URLs gets extraction columns |
 | Step 5 | URLs gets Search Console and analytics columns. Settings gets Connections |
+| A SERP snippet | The inspector's Summary gets the title and description as a search result shows them, cut where it cuts them (docs/v2-comparison.md, "One URL in detail") |
+| The duplicates diff | A duplicate or near-duplicate check's group opens two pages side by side, their texts compared (docs/v2-comparison.md) |
+| Insight | A fourth class beside the severities for facts that aren't faults (Sitebulb's "Insight"): Issues lists them apart, and no score counts them (docs/v2-comparison.md, "How issues are prioritised") |

@@ -35,14 +35,14 @@ public static class UrlGridReader
 
     /// <summary>
     /// The severity facet's values: URLs with at least one issue of each severity (so a URL counts in each it has), and
-    /// those with none; each with the filter that selects them, and the SQL that tells.
+    /// those with none; each with the filter that selects them, and the test of its column that tells (<see cref="Has"/>).
     /// </summary>
-    private static readonly (string Value, string Column, FilterOperator Operator, double Number, string Sql)[] SEVERITIES =
+    private static readonly (string Value, string Column, FilterOperator Operator, double Number, string Test)[] SEVERITIES =
     [
-        ("error", "errors", FilterOperator.Gte, 1, "s.errors > 0"),
-        ("warning", "warnings", FilterOperator.Gte, 1, "s.warnings > 0"),
-        ("notice", "notices", FilterOperator.Gte, 1, "s.notices > 0"),
-        ("none", "issues", FilterOperator.Eq, 0, "s.issues = 0")
+        ("error", "errors", FilterOperator.Gte, 1, " > 0"),
+        ("warning", "warnings", FilterOperator.Gte, 1, " > 0"),
+        ("notice", "notices", FilterOperator.Gte, 1, " > 0"),
+        ("none", "issues", FilterOperator.Eq, 0, " = 0")
     ];
 
     /// <summary>With a filter, this many facets or more are counted in one pass over the matching rows.</summary>
@@ -99,6 +99,7 @@ public static class UrlGridReader
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidateFilters(query.Filters, query.Search, GridScope.AllUrls, errors);
         LinkGridReader.ValidateEnds(query.LinkEnds, errors);
+        UrlQueryCompiler.ValidateHidden(query.HiddenChecks, errors);
         for (var index = 0; index < query.Facets.Count; index++)
         {
             if (!FACETS.Contains(query.Facets[index]))
@@ -114,14 +115,18 @@ public static class UrlGridReader
     private static UrlFacets Facets(GridReadContext context, UrlFacetQuery query)
     {
         RefuseWithoutSummary(context, query.Filters, [], GridScope.AllUrls);
-        var compiled = UrlQueryCompiler.Compile(new UrlQuery { Filters = query.Filters, Search = query.Search, LinkEnds = query.LinkEnds }, context.Mode, GridScope.AllUrls, context.Reason);
+        var compiled = UrlQueryCompiler.Compile(new UrlQuery { Filters = query.Filters, Search = query.Search, LinkEnds = query.LinkEnds, HiddenChecks = query.HiddenChecks },
+            context.Mode, GridScope.AllUrls, context.Reason);
+        context.Bind(compiled.Hidden);
+        var linkEnds = HasLinkEnds(compiled);
         compiled = WithLinkEnds(context, GridPlanner.Materialize(context, compiled));
-        var total = GridPlanner.Total(context, compiled);
+        var total = TotalOf(context, compiled, linkEnds);
         var matching = GridPlanner.Matching(context, compiled, total);
         var asked = (query.Facets.Count == 0 ? FACETS : query.Facets).Distinct(StringComparer.Ordinal).ToList();
         var unavailable = context.Mode == GridMode.Summary ? [] : asked.Where(SUMMARY_FACETS.Contains).ToList();
         var wanted = asked.Except(unavailable).ToList();
-        var conditions = string.Join("&", compiled.All.Select(predicate => predicate.Key));
+        // The severity facet counts without the hidden checks: its counts are kept apart from those with none hidden.
+        var conditions = string.Join("&", compiled.All.Select(predicate => predicate.Key).Append(compiled.HiddenKey).Where(key => key.Length > 0));
         Dictionary<string, IReadOnlyList<FacetBucket>> facets = new(StringComparer.Ordinal);
         if (matching == 0)
         {
@@ -211,6 +216,7 @@ public static class UrlGridReader
         scope = scope with { TargetsStored = context.HasIssueTargets };
         RefuseWithoutSummary(context, query.Filters, query.Sort, scope);
         var compiled = UrlQueryCompiler.Compile(query, context.Mode, scope, context.Reason);
+        context.Bind(compiled.Hidden);
         if (compiled.Scope is { } own)
         {
             // A check's rows (or one group's) counted from the issues alone, which the scope's index serves.
@@ -221,8 +227,9 @@ public static class UrlGridReader
             };
         }
 
+        var linkEnds = HasLinkEnds(compiled);
         compiled = WithLinkEnds(context, GridPlanner.Materialize(context, compiled));
-        var total = GridPlanner.Total(context, compiled);
+        var total = TotalOf(context, compiled, linkEnds);
         var matching = GridPlanner.Matching(context, compiled, total);
         if (scope.SitemapId is { } sitemap)
         {
@@ -261,10 +268,21 @@ public static class UrlGridReader
                 Predicates =
                 [
                     .. query.Predicates.Select(predicate => predicate.LinkEnds is { } ends
-                        ? GridPlanner.InSet(context, query.Mode, predicate, LinkGridReader.EndIds(context, ends))
+                        ? GridPlanner.InSet(context, query.Mode, predicate, LinkGridReader.EndIds(context, ends, query.HiddenChecks))
                         : predicate)
                 ]
             };
+
+    private static bool HasLinkEnds(CompiledQuery query) => query.Predicates.Any(predicate => predicate.LinkEnds is not null);
+
+    /// <summary>
+    /// The URLs a grid counts against. A running crawl's view narrowed to a links view's ends counts against the URLs of
+    /// the links' moment, which the ends are of (<see cref="LinkGridReader.MomentUrls"/>): the crawl's count of URLs is
+    /// kept for a while from whichever read counted it, so it can be older than the moment and fewer than the ends.
+    /// </summary>
+    /// <param name="linkEnds">The query had a condition on the ends of some links (<see cref="HasLinkEnds"/>), before it was read.</param>
+    private static long TotalOf(GridReadContext context, CompiledQuery query, bool linkEnds) =>
+        linkEnds && query.Scope is null && LinkGridReader.MomentUrls(context) is { } urls ? urls : GridPlanner.Total(context, query);
 
     internal static void ThrowIfInvalid(Dictionary<string, List<string>> errors)
     {
@@ -407,14 +425,19 @@ public static class UrlGridReader
     private static string Key(GridReadContext context, CompiledQuery query, string facet) =>
         Column(facet).Sql(query.Mode)!.Replace(UrlColumns.REASON, context.Reason, StringComparison.Ordinal);
 
+    /// <summary>A severity's test of its issue count, the checks the query hides left out of the count: <c>s.errors &gt; 0</c>.</summary>
+    private static string Has(CompiledQuery query, string column, string test) =>
+        UrlQueryCompiler.Counting(UrlColumns.Find(column, issueColumns: false)!, query.Hidden).SummarySql + test;
+
     /// <summary>One facet's values with their counts, in one query; the severities numbered by their place in <see cref="SEVERITIES"/>.</summary>
     private static List<(long? Value, long Count)> Groups(GridReadContext context, CompiledQuery query, string facet)
     {
         var parameters = query.All.SelectMany(predicate => predicate.Parameters).ToList();
         if (facet == "severity")
         {
-            using var sums = context.Command(GridPlanner.Over(context, query, string.Join(", ", SEVERITIES.Select(severity => $"SUM({severity.Sql})")), groupBy: 0), parameters);
-            using var reader = sums.ExecuteReader();
+            var sums = string.Join(", ", SEVERITIES.Select(severity => $"SUM({Has(query, severity.Column, severity.Test)})"));
+            using var counted = context.Command(GridPlanner.Over(context, query, sums, groupBy: 0), parameters);
+            using var reader = counted.ExecuteReader();
             reader.Read();
             return [.. SEVERITIES.Select((_, index) => ((long?)index, reader.IsDBNull(index) ? 0 : reader.GetInt64(index)))];
         }
@@ -496,7 +519,7 @@ public static class UrlGridReader
                     fields.Add((facet, Bind(responseMs, $"CASE WHEN v >= 0 THEN {buckets} ELSE {Largest(3)} END"), 3));
                     break;
                 case "severity":
-                    fields.Add((facet, string.Join(" | ", SEVERITIES.Select((severity, index) => $"(({severity.Sql}) << {index})")), SEVERITIES.Length));
+                    fields.Add((facet, string.Join(" | ", SEVERITIES.Select((severity, index) => $"(({Has(query, severity.Column, severity.Test)}) << {index})")), SEVERITIES.Length));
                     break;
             }
         }

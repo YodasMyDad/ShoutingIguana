@@ -1,13 +1,21 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CrawlListItem } from '../../api/types';
 import { ENGINE_DEFAULTS } from '../../crawl/options/engineDefaults';
+import { setSecretsStore } from '../../crawl/secrets';
+import { liveStore } from '../../live/liveStore';
 import { getMode } from '../../mode/mode';
 import { replaceSettings } from '../../settings/settingsStore';
-import { json, problem, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
+import { setTransport } from '../../api/transport';
+import { fakeSidecar, json, problem, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
+import { message } from '../../test/overviewSidecar';
 import { ownSidecar, ScreenApp } from '../../test/ScreenStory';
 import { TABLE_STUBBED } from '../tableStubbed';
+import { createMemoryHistory } from '@tanstack/react-router';
+import { App } from '../../app/App';
+import { createQueryClient } from '../../app/queryClient';
+import { createAppRouter } from '../../app/router';
 
 const PRESETS = [
   { id: 'polite', concurrency: 2, maxRequestsPerSecond: 2 },
@@ -57,7 +65,11 @@ const refused = (errors: Record<string, string[]>): FakeRoute => [
 
 const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!;
 
-afterEach(() => replaceSettings({ mode: 'advanced', hiddenChecks: [] }));
+afterEach(() => {
+  setSecretsStore(null);
+  replaceSettings({ mode: 'advanced', hiddenChecks: [], hiddenChecksByCrawl: {} });
+  liveStore.reset();
+});
 
 describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
   it('asks for one thing, the address, and says what a bare Enter does', async () => {
@@ -82,6 +94,47 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     ).toBeInTheDocument();
     expect(field).toHaveAccessibleDescription(/That isn’t a web address/);
     expect(screen.queryByText(/Start URL/)).toBeNull();
+  });
+
+  it('asks where a bare address starts with the saved settings, the proxy’s password in (round 5 review R2-1)', async () => {
+    setSecretsStore({
+      read: (key) =>
+        Promise.resolve(key === 'defaults' ? JSON.stringify({ proxyUrl: 'http://me:pw@proxy.example:3128' }) : null),
+      write: () => Promise.resolve(),
+    });
+    const asked: unknown[] = [];
+    const started: unknown[] = [];
+    await open(
+      [garden],
+      { ...ENGINE_DEFAULTS, proxyUrl: 'http://***@proxy.example:3128/', hasRedactedProxyCredentials: true },
+      [
+        [
+          'POST',
+          /^\/api\/crawl-options\/start-url$/,
+          (request) => {
+            asked.push(request.body);
+            return json({ startUrl: 'http://plain-http.example/', reason: 'http' });
+          },
+        ],
+        [
+          'POST',
+          /^\/api\/crawls$/,
+          (request) => {
+            started.push(request.body);
+            return json(testCrawlItem({ startUrl: 'http://plain-http.example/' }));
+          },
+        ],
+      ],
+    );
+    await userEvent.type(screen.getByRole('textbox', { name: 'Web address' }), 'plain-http.example{Enter}');
+    await vi.waitFor(() => expect(started).toHaveLength(1));
+    expect(asked).toEqual([
+      {
+        address: 'plain-http.example',
+        options: expect.objectContaining({ proxyUrl: 'http://me:pw@proxy.example:3128' }) as unknown,
+      },
+    ]);
+    expect(started[0]).toMatchObject({ options: { startUrl: 'http://plain-http.example/' } });
   });
 
   it('says an address with a user name and password in it can’t be checked, in Simple’s words', async () => {
@@ -192,6 +245,29 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     expect(within(cleanRow).getByText('Nothing to fix')).toBeInTheDocument();
   });
 
+  it('shows a check worked out since it was stopped as such, with Cancel (round 5)', async () => {
+    const stopped = testCrawlItem({ ...garden, id: '72cb879ef60639d5', status: 'stopped', score: null, issues: null });
+    const answers: FakeRoute[] = [
+      ['POST', /\/analyze\/cancel$/, () => new Response(null, { status: 202 })],
+      ...routes([stopped]),
+    ];
+    ownSidecar(answers);
+    // Kept, to see what was asked of it.
+    const sidecar = fakeSidecar(answers);
+    setTransport(sidecar);
+    liveStore.ingest(message('hello', { live: [], analyzing: [stopped.id] }));
+    render(<ScreenApp path="/" mode="simple" />);
+    const sites = await screen.findByRole('list', { name: 'Your sites, the checks running now first' });
+    const row = within(sites).getByRole('link', { name: 'gardenfurnituresets.co.uk' }).closest('li')!;
+    expect(within(row).getByText('Working out the results. They appear here when they’re ready.')).toBeVisible();
+    await userEvent.click(
+      within(row).getByRole('button', { name: 'Cancel working out the results for gardenfurnituresets.co.uk' }),
+    );
+    await vi.waitFor(() =>
+      expect(sidecar.requests.map((request) => request.path)).toContain(`/api/crawls/${stopped.id}/analyze/cancel`),
+    );
+  });
+
   it('folds a site’s older checks under its newest', async () => {
     const older = testCrawlItem({
       ...garden,
@@ -270,3 +346,53 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple, on a first start', () => {
     expect(getMode()).toBe('advanced');
   });
 });
+
+describe.skipIf(TABLE_STUBBED)(
+  'Home in Simple, Delete file… while Your sites changes under it (round 5 review R1-1)',
+  () => {
+    it('deletes the check the confirmation was opened for, when a newer check of its site takes its row', async () => {
+      const OLD = testCrawlItem({ ...garden, id: 'a000000000000002', fileName: 'garden-old.sicrawl' });
+      let library: CrawlListItem[] = [OLD];
+      const deleted: string[] = [];
+      ownSidecar([
+        ['GET', /^\/api\/crawls$/, () => json(library)],
+        [
+          'POST',
+          /\/delete-file$/,
+          (request) => {
+            deleted.push(request.path);
+            return new Response(null, { status: 204 });
+          },
+        ],
+        ...routes([]),
+      ]);
+      replaceSettings({ mode: 'simple' });
+      const queryClient = createQueryClient();
+      const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: ['/'] }));
+      render(<App router={router} queryClient={queryClient} />);
+      await act(() => router.load());
+      await userEvent.click(
+        within(await rowOf('gardenfurnituresets.co.uk')).getByRole('button', { name: /^More for/ }),
+      );
+      await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete file…' }));
+      expect(await screen.findByRole('dialog')).toHaveTextContent('garden-old.sicrawl');
+      // A newer check of the site arrives (opened, or one that finished) while the confirmation is open.
+      const NEW = testCrawlItem({
+        ...garden,
+        id: 'e000000000000001',
+        fileName: 'garden-new.sicrawl',
+        startedAt: '2026-11-02T10:00:00Z',
+      });
+      library = [OLD, NEW];
+      await act(() => queryClient.invalidateQueries());
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: /1 earlier check/, hidden: true })).toBeInTheDocument(),
+      );
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveTextContent('garden-old.sicrawl');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
+      await vi.waitFor(() => expect(deleted).toHaveLength(1));
+      expect(deleted).toEqual(['/api/crawls/a000000000000002/delete-file']);
+    });
+  },
+);

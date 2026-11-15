@@ -177,6 +177,8 @@ function matches(value: Value, filter: GridFilter): boolean {
       return !isEmpty(value);
     case 'is':
       return value === filter.value;
+    case 'isNot':
+      return value !== filter.value;
     case 'in':
       return !isEmpty(value) && filter.values.some((candidate) => candidate === value);
     case 'notIn':
@@ -429,7 +431,8 @@ export function queryErrors(
       op === 'endsWith' ||
       op === 'regex' ||
       op === 'notRegex' ||
-      op === 'is';
+      op === 'is' ||
+      op === 'isNot';
     if (takesValue && filter.value !== undefined) {
       if (column.type === 'number' && typeof filter.value !== 'number') add(`${key}.value`, `${op} needs a number.`);
       if (column.type === 'text' && typeof filter.value !== 'string') add(`${key}.value`, `${op} needs text.`);

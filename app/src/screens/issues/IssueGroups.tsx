@@ -18,6 +18,7 @@ import { ErrorState } from '../../feedback/ErrorState';
 import { notifyResult } from '../../feedback/notify';
 import { NO_DETAIL } from '../../grid/filterSentence';
 import { GridCore } from '../../grid/GridCore';
+import { useColumnLayout } from '../../grid/useColumnLayout';
 import { useGridMetrics } from '../../grid/metrics';
 import { useRowMenu } from '../../grid/rowMenuState';
 import type { RowWindowModel } from '../../grid/rowWindow';
@@ -387,6 +388,8 @@ export function IssueGroups({
       },
     ];
   }, [grouping, room, showRelated, siteOrigin, total, words]);
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('issues.groups', columns);
 
   const spanRow = useCallback(
     (row: TreeRow): ReactNode => {
@@ -475,7 +478,8 @@ export function IssueGroups({
         <GridCore<TreeRow>
           key={queryKey.join('|')}
           label={`${check.title}: ${words.named}, grouped by ${grouping === 'relatedUrl' ? 'related URL' : 'detail'}`}
-          columns={columns}
+          columns={laid.columns}
+          columnLayout={laid.columnLayout}
           rowCount={groupCount === null ? null : rows}
           getRow={getRow}
           rowHeight={rowHeight}

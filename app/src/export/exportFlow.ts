@@ -180,16 +180,18 @@ export async function runRemedy(
 
 /** A refusal with no dialog open to say it in: a toast, with the problem's first action. */
 export function notifyRefused(error: unknown, again: ExportAgain): void {
-  const words = exportErrorWords(error, { path: again.path, format: again.format });
+  const simple = getSettings().mode === 'simple';
+  const title = simple ? 'The file couldn’t be saved' : 'The export couldn’t start';
+  const words = exportErrorWords(error, { path: again.path, format: again.format, simple });
   if (!words) {
-    notifyError(error, { title: 'The export couldn’t start', description: errorTitle(error) });
+    notifyError(error, { title, description: errorTitle(error) });
     return;
   }
   const first = words.remedies.find((remedy) => canRun(remedy, again));
-  toast.error('The export couldn’t start', {
+  toast.error(title, {
     id: `export-refused:${again.offer.crawlId}:${again.choiceId}`,
     duration: ERROR_DURATION_MS,
     description: words.sentence,
-    ...(first ? { action: { label: remedyTitle(first), onClick: () => void runRemedy(first, again) } } : {}),
+    ...(first ? { action: { label: remedyTitle(first, simple), onClick: () => void runRemedy(first, again) } } : {}),
   });
 }

@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import type { GridFilter, Sitemap, SitemapDiscovery } from '../../api/grids';
 import { GridCore } from '../../grid/GridCore';
+import { useColumnLayout } from '../../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn, GridTree } from '../../grid/types';
@@ -215,6 +216,8 @@ export function SitemapTree({
     }));
     return narrow ? [address, ...counts, state, found] : [address, found, state, ...counts];
   }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow]);
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
+  const laid = useColumnLayout('sitemaps.list', columns);
 
   const getRow = useCallback((index: number) => rows[index], [rows]);
 
@@ -236,7 +239,8 @@ export function SitemapTree({
     >
       <GridCore<SitemapRow>
         label="Sitemaps"
-        columns={columns}
+        columns={laid.columns}
+        columnLayout={laid.columnLayout}
         rowCount={rows.length}
         getRow={getRow}
         rowHeight={rowHeight}

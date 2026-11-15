@@ -32,7 +32,7 @@ internal static class WorkbookExport
 
     public static void WriteWorkbook(ExportRun run, XlsxTableWriter table)
     {
-        var model = ReportReader.Read(run.CrawlPath, _ => 0, run.Settings, cancellationToken: run.Token);
+        var model = ReportReader.Read(run.CrawlPath, _ => 0, run.Settings, cancellationToken: run.Token, listing: run.Request.Report);
         run.Expect(model.Problems.Sum(problem => problem.Count));
 
         // The names first: the summary, which is written first, says which sheet each problem is on.
@@ -55,12 +55,16 @@ internal static class WorkbookExport
         }
     }
 
-    /// <summary>One check's sheet as a file of its own: named as the workbook names it, when the check found something.</summary>
+    /// <summary>
+    /// One check's sheet as a file of its own: named as the workbook with the same checks hidden names it (numbered
+    /// afresh without them, as the report is), when the check found something and isn't hidden itself.
+    /// </summary>
     public static void WriteCheck(ExportRun run, ITableWriter table)
     {
         var results = IssueReader.ReadResults(run.CrawlPath) ?? throw new ExportException(ExportFailure.NotAnalyzed, GridExport.NOT_ANALYZED);
         var check = IssueCatalog.Find(run.Request.CheckId!)!;
-        var number = ReportSources.FixFirst(results).ToList().IndexOf(check.Id) + 1;
+        var hidden = run.Request.Report.HiddenChecks;
+        var number = ReportSources.FixFirst(results).Where(id => !hidden.Contains(id, StringComparer.Ordinal)).ToList().IndexOf(check.Id) + 1;
         var title = ReportSources.Words(check, ReportSources.Settings(results)).Title;
         WriteSheet(run, table, number > 0 ? SheetTitle(number, title) : title, check.Id);
     }
@@ -107,6 +111,16 @@ internal static class WorkbookExport
         Row(Label("Things worth a look"), Count(model.ChecksOf(IssueSeverity.Notice)));
         Row(Label("Checks that found nothing wrong"), Count(model.Passed.Count));
         Row(Label("Checks that couldn’t run"), Count(model.Skipped.Count));
+        if (model.HiddenProblems > 0)
+        {
+            Row(Label("Hidden checks left out"), Count(model.HiddenProblems), XlsxCell.Text("Checks that found something, hidden in the app. The score still counts them."));
+        }
+
+        if (model.Narrowed)
+        {
+            Row(Label("Checks listed"), XlsxCell.Text("Only the checks the view listed when this was saved"));
+        }
+
         Row();
         Row(
         [

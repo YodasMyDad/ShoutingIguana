@@ -36,7 +36,8 @@ export type GridFilter =
         | 'notRegex';
       value: string | number;
     }
-  | { column: string; op: 'is'; value: boolean }
+  /** `isNot`: the other value, or unknown (round 5 review R1-2: "Exclude this value" keeps the rows it's unknown in). */
+  | { column: string; op: 'is' | 'isNot'; value: boolean }
   | { column: string; op: 'between'; min?: number; max?: number }
   | { column: string; op: 'in' | 'notIn'; values: (string | number)[]; group?: CheckGroupRef }
   | { column: string; op: 'isEmpty' | 'isNotEmpty' };
@@ -57,6 +58,7 @@ export const GRID_FILTER_OPS: readonly GridFilterOp[] = [
   'regex',
   'notRegex',
   'is',
+  'isNot',
   'between',
   'in',
   'notIn',

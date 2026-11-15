@@ -14,7 +14,7 @@ export const order = 10;
 
 const MODE_LINES: Record<Mode, string> = {
   simple: 'A score, what to fix and a report, in plain words.',
-  advanced: 'Every URL, link, filter and setting, in technical terms.',
+  advanced: 'Every address, link, filter and setting, in technical terms.',
 };
 
 const DENSITY_HINTS: Record<Density, string> = {

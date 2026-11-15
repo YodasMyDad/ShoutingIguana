@@ -91,6 +91,46 @@ public sealed class GridExportTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The checks the user hid are left out of the issue counts in the file as in the grid (round 5 review): the URL grid's
+    /// and a check's rows', each as CSV and as a workbook.
+    /// </summary>
+    [Fact]
+    public void TheIssueCountsAreExportedWithoutTheHiddenChecks()
+    {
+        string[] columns = ["id", "url", "issues", "errors", "warnings", "notices"];
+        IReadOnlyList<string> hidden =
+        [
+            .. _crawl.Reference.Issues.Values.SelectMany(issues => issues.Select(issue => issue.Issue)).GroupBy(issue => issue, StringComparer.Ordinal)
+                .GroupBy(group => IssueCatalog.Find(group.Key)!.Severity)
+                .Select(severity => severity.OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).First().Key)
+        ];
+        var reference = _crawl.Reference.WithoutChecks(hidden);
+        var query = new UrlQuery { Columns = columns, Sort = [new UrlSort("errors", true)], HiddenChecks = hidden };
+        var shown = Shown(columns, UrlGridReader.Columns);
+        var expected = Rows(shown, at => Page(UrlGridReader.Query(_crawl.Path, at, _cache)), query);
+        Assert.Equal(reference.Rows.Count, expected.Count);
+        Assert.All(expected, row => Assert.Equal(
+            new[] { "issues", "errors", "warnings", "notices" }.Select(column => reference.Rows[(int)(long)row[0]!][column]),
+            row[2..]));
+        Assert.NotEqual(Rows(shown, at => Page(UrlGridReader.Query(_crawl.Path, at, _cache)), query with { HiddenChecks = [] }), expected);
+
+        foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+        {
+            var (result, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Urls, Format = format, Query = query }, "URLs");
+            AssertSame(shown, expected, rows, format);
+            Assert.Equal(expected.Count, result.Rows);
+        }
+
+        // A check's rows count the URL's other issues the same way: the check shown, the hidden ones left out.
+        var check = _crawl.Reference.Issues.Values.SelectMany(issues => issues.Select(issue => issue.Issue)).First(id => !hidden.Contains(id));
+        var checkRows = new UrlQuery { Columns = columns, Sort = [new UrlSort("url")], HiddenChecks = hidden };
+        var fromGrid = Rows(shown, at => Page(IssueGroupReader.ReadRows(_crawl.Path, check, at, null, _cache)!.Page!), checkRows);
+        Assert.All(fromGrid, row => Assert.Equal(reference.Rows[(int)(long)row[0]!]["issues"], row[2]));
+        var (_, file) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, Query = checkRows, CheckId = check }, check);
+        AssertSame(shown, fromGrid, file, ExportFormat.Csv);
+    }
+
     /// <summary>The header's words and a row's, as literals: a grid's own titles and value words, a number's unit after its title.</summary>
     [Fact]
     public void AFileSaysWhatTheGridSaysInTheGridsWords()

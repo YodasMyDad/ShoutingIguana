@@ -28,4 +28,10 @@ public sealed record UrlQuery
 
     /// <summary>The <see cref="UrlPage.Next"/> of the page before, to read on from it. Not with <see cref="Offset"/>.</summary>
     public string? After { get; init; }
+
+    /// <summary>
+    /// Checks the user hid, by id: the issue counts (<c>issues</c>, <c>errors</c>, <c>warnings</c>, <c>notices</c>) leave
+    /// their issues out, in the values read, the sort and the filters, as every other count leaves them out. None counts every check.
+    /// </summary>
+    public IReadOnlyList<string> HiddenChecks { get; init; } = [];
 }

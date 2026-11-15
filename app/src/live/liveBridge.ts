@@ -7,7 +7,7 @@ import { ApiError } from '../api/errors';
 import { api } from '../api/client';
 import { analysisQuery, checksQuery, gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
 import { getTransport } from '../api/transport';
-import type { CrawlEvent, CrawlListItem, CrawlStatus } from '../api/types';
+import type { CrawlEvent, CrawlListItem, CrawlStatus, IssueCounts } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
 import { analyseCrawl, continueCrawl } from '../crawl/actions';
 import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
@@ -16,7 +16,6 @@ import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback
 import { formatCountOf } from '../lib/format';
 import { getMode } from '../mode/mode';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
-import { getSettings } from '../settings/settingsStore';
 import {
   simpleFailedTitle,
   simpleFinishedWords,
@@ -26,6 +25,7 @@ import {
 import { getConnection, subscribeSidecarStatus } from '../shell/connection';
 import { liveStore, type LiveState, type LiveStore } from './liveStore';
 import { startEventStream } from './sse';
+import { currentHiddenChecks } from '../settings/hiddenChecks';
 
 /** How long a completed crawl waits for its analysis to begin before its toast says it finished without one. */
 const ANALYSIS_GRACE_MS = 1_000;
@@ -44,6 +44,11 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   const crawledHere = new Set<string>();
   /** Crawls whose crawl completed and whose analysis then began: their toast waits for the analysis. */
   const analysingAfterCrawl = new Set<string>();
+  /**
+   * Crawls stopped here, whose results "so far" the sidecar now works out (round 5, gap 2): their stopped toast, shown at
+   * once, is said again with those results when the analysis ends.
+   */
+  const stoppedHere = new Set<string>();
   /** A completed crawl, waiting a moment to see whether an analysis follows. */
   const finishing = new Map<string, ReturnType<typeof setTimeout>>();
   /** When each running analysis's crawl was last analysed: an analysis that ends with it unchanged was cancelled. */
@@ -183,7 +188,9 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
    * toast that had just appeared.
    */
   function dismissStaleToasts({ crawlId, status, error }: CrawlEvent) {
-    if (status !== 'stopping' && status !== 'stopped' && status !== 'interrupted') {
+    // The analysis of a crawl stopped here is part of its stop: its toast stays, and is said again with the results.
+    const analysingTheStop = status === 'analyzing' && stoppedHere.has(crawlId);
+    if (status !== 'stopping' && status !== 'stopped' && status !== 'interrupted' && !analysingTheStop) {
       dismissToast(crawlToast(crawlId, 'stopped'));
     }
     if (status !== 'failed' && !error) dismissToast(crawlToast(crawlId, 'failed'));
@@ -265,8 +272,15 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     if (status === 'stopped') {
       const crawled = crawledHere.delete(crawlId);
       analysingAfterCrawl.delete(crawlId);
-      if (crawled && previous === 'stopping') void toastStopped(crawlId);
+      if (crawled && previous === 'stopping') {
+        stoppedHere.add(crawlId);
+        void toastStopped(crawlId, false);
+      } else if (previous === 'analyzing' && stoppedHere.delete(crawlId)) {
+        void toastStopped(crawlId, true);
+      }
+      return;
     }
+    stoppedHere.delete(crawlId);
   }
 
   async function toastFinished(crawlId: string, crawled: boolean) {
@@ -306,7 +320,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       });
       return;
     }
-    const checks = item?.issues ? item.issues.error + item.issues.warning + item.issues.notice : null;
+    const checks = await checksFoundOf(crawlId, item);
     const found =
       checks === null
         ? null
@@ -323,43 +337,80 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   }
 
   /**
-   * The problems Simple counts for the check: its checks with issues that are Serious or Worth fixing, less the ones
-   * the user has hidden, as What to fix counts them. With none hidden, the library's counts; else the analysis, read
-   * afresh. Null when there are none to count, or they couldn't be read.
+   * A crawl's checks with issues by severity, less the ones the user has hidden (in this crawl or every crawl), as
+   * Issues and What to fix count them. With none hidden, the library's counts; else the analysis, read afresh. Null
+   * when there are none to count, or they couldn't be read.
    */
-  async function problemsOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+  async function visibleIssuesOf(crawlId: string, item: CrawlListItem | undefined): Promise<IssueCounts | null> {
     if (!item?.issues) return null;
-    const hidden = getSettings().hiddenChecks;
-    if (hidden.length === 0) return item.issues.error + item.issues.warning;
+    const hidden = currentHiddenChecks(crawlId);
+    if (hidden.length === 0) return item.issues;
     try {
       const [checks, analysis] = await Promise.all([
         queryClient.query(checksQuery()),
         queryClient.query({ ...analysisQuery(crawlId), staleTime: 0 }),
       ]);
-      const { error, warning } = foundBySeverity(checkEntries(checks, analysis, new Set(hidden)));
-      return error + warning;
+      const { error, warning, notice } = foundBySeverity(checkEntries(checks, analysis, new Set(hidden)));
+      return { error, warning, notice };
     } catch {
       return null;
     }
   }
 
-  async function toastStopped(crawlId: string) {
+  /** The problems Simple counts for the check: its checks with issues that are Serious or Worth fixing. */
+  async function problemsOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+    const issues = await visibleIssuesOf(crawlId, item);
+    return issues ? issues.error + issues.warning : null;
+  }
+
+  /** The checks that found issues, for Advanced's toasts: every severity, the hidden ones left out. */
+  async function checksFoundOf(crawlId: string, item: CrawlListItem | undefined): Promise<number | null> {
+    const issues = await visibleIssuesOf(crawlId, item);
+    return issues ? issues.error + issues.warning + issues.notice : null;
+  }
+
+  /**
+   * A crawl stopped here: at once, what it read and Continue; then, `analysed`, the same toast again with its results
+   * so far, once the sidecar has worked them out, and the way to them.
+   */
+  async function toastStopped(crawlId: string, analysed: boolean) {
     const item = await itemOf(crawlId);
     const name = crawlName(item);
     const continueAction = { label: 'Continue', onClick: () => void continueCrawl(crawlId) };
+    const results = analysed && item?.analyzedAt ? item : null;
     if (getMode() === 'simple') {
       const words = simpleStoppedWords(name, item ? (crawledUrls(item) ?? 0) : null);
+      const sofar = results
+        ? simpleFinishedWords({
+            site: name,
+            crawled: true,
+            score: results.score,
+            problems: await problemsOf(crawlId, results),
+            pageCount: results.pageCount,
+          }).description
+        : null;
       notifyResult(words.title, {
         id: crawlToast(crawlId, 'stopped'),
-        description: words.description,
+        description: sofar ? `${sofar}. You can continue it later.` : words.description,
         action: continueAction,
+        ...(results ? { secondary: { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') } } : {}),
       });
       return;
     }
+    const checks = results ? await checksFoundOf(crawlId, results) : null;
+    const found =
+      checks === null
+        ? ''
+        : checks === 0
+          ? ', no checks found issues'
+          : `, ${formatCountOf(checks, 'check')} found issues`;
     notifyResult('Crawl stopped', {
       id: crawlToast(crawlId, 'stopped'),
-      description: item ? `${name}: ${formatCountOf(crawledUrls(item) ?? 0, 'URL')}. You can continue it later.` : name,
+      description: item
+        ? `${name}: ${formatCountOf(crawledUrls(item) ?? 0, 'URL')}${found}. You can continue it later.`
+        : name,
       action: continueAction,
+      ...(results ? { secondary: { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') } } : {}),
     });
   }
 

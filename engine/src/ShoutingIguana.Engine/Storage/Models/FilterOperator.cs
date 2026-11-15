@@ -31,6 +31,9 @@ public enum FilterOperator
     /// <summary>A boolean column is true, or false.</summary>
     Is,
 
+    /// <summary>A boolean column is anything but the value: the other value, or unknown (null).</summary>
+    IsNot,
+
     /// <summary>Unknown (null), and for text also empty.</summary>
     IsEmpty,
     IsNotEmpty

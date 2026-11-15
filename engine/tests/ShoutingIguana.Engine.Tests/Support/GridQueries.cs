@@ -14,6 +14,8 @@ internal static class GridQueries
 
     public static UrlFilter Boolean(string column, bool value) => new(column, FilterOperator.Is) { Value = FilterValue.Of(value) };
 
+    public static UrlFilter NotBoolean(string column, bool value) => new(column, FilterOperator.IsNot) { Value = FilterValue.Of(value) };
+
     public static UrlFilter Text(string column, FilterOperator op, string value) => new(column, op) { Value = FilterValue.Of(value) };
 
     /// <summary>What a crawl continued after its analysis leaves: the crawl row stamped again.</summary>

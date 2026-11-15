@@ -31,7 +31,11 @@ public static class ExportFields
         ["checkId"] = [ExportKind.IssueRows, ExportKind.Check],
         ["cut"] = REPORT,
         ["examples"] = REPORT,
-        ["lookExamples"] = REPORT
+        ["lookExamples"] = REPORT,
+        // The report and the workbook leave the hidden checks out; a check's file leaves them out and is numbered as the
+        // workbook is; a grid leaves them out of its issue counts.
+        ["hiddenChecks"] = [ExportKind.Report, ExportKind.Workbook, ExportKind.Check, .. GRIDS],
+        ["checks"] = [ExportKind.Workbook]
     };
 
     /// <summary>The kinds whose export is a grid's query: they take <c>columns</c>, <c>filters</c>, <c>search</c> and <c>sort</c>.</summary>

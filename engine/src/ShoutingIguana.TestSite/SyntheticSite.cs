@@ -413,8 +413,11 @@ public sealed partial class SyntheticSite
 
         var products = PageCount - 1;
         var orphans = _options.Sitemaps ? OrphanCount : 0;
-        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true });
-        var analysedPages = htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false });
+        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true } && !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
+        // Cloudflare's /cdn-cgi/ endpoint is no page of the site's in any count (the engine's CrawlSchema.PAGE), so it's
+        // out of both; a page the analysis doesn't audit for another reason would be out of this one alone.
+        var analysedPages = htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false } &&
+                                                               !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
 
         // A site whose home page is noindex, with more than half of its pages, is hidden as a whole, which is reported
         // once, on the home page. A canonicalised page is a variant of another, and no part of the count: no planted

@@ -27,11 +27,18 @@ import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { RefusedFilter } from '../grid/RefusedFilter';
 import { searchCommand } from '../grid/searchCommand';
-import { RowMenu, UrlRowItems } from '../grid/RowMenu';
+import { RowMenu, UrlRowItems, ValueFilterItems } from '../grid/RowMenu';
+import { cellValueFilters, withValueFilter } from '../grid/valueFilter';
 import { copyRowUrls, rowMenuLabel, useRowMenu } from '../grid/rowMenuState';
 import { nextSort, useHeaderHandoff } from '../grid/sort';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
+import { GRID_KEY_HINTS } from '../grid/gridFoot';
+import { useSearchApplyHint } from '../grid/SearchApplyHint';
+import { ToolsToggle } from '../grid/ToolsToggle';
+import { useShortScreen } from '../grid/useShortScreen';
+import { queryRefusalWords } from '../grid/queryRefusal';
+import { useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
@@ -64,6 +71,7 @@ import {
   linkQueryColumns,
   sharedUrlWidth,
   shownLinkColumns,
+  isLinkColumn,
 } from './links/linkColumns';
 import { FOLLOW_COLUMN, endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
 import { LINK_PRESETS, activePreset, sortShown } from './links/presets';
@@ -111,7 +119,8 @@ export function LinksScreen() {
   // be asked for, so the first page never waits on this; columns the route names are checked against it first.
   const catalogue = useQuery(linkColumnsQuery());
   const shown = useMemo(() => shownLinkColumns(search.cols, catalogue.data), [search.cols, catalogue.data]);
-  const queryColumns = useMemo(() => linkQueryColumns(shown), [shown]);
+  // In one order whatever the columns' order: a column moved asks for nothing again.
+  const queryColumns = useMemo(() => [...linkQueryColumns(shown)].sort(), [shown]);
 
   const view = useMemo(
     () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '' })}`,
@@ -201,6 +210,11 @@ export function LinksScreen() {
   );
   /** All links again, in crawl order, with the columns as they are. */
   const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
+  /** The filters and the search gone: the sort and the columns stay, as "Clear the filters" says. */
+  const clearFilters = useCallback(
+    () => void navigate({ search: (previous) => ({ cols: previous.cols, sort: previous.sort }) }),
+    [navigate],
+  );
   const setColumns = (next: readonly string[]) => {
     const isDefault =
       next.length === DEFAULT_LINK_COLUMNS.length && next.every((id, index) => id === DEFAULT_LINK_COLUMNS[index]);
@@ -225,11 +239,23 @@ export function LinksScreen() {
 
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();
-  const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK);
+  const layoutWidths = useStoredColumnLayout('links').widths;
+  const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
   const columns = useMemo(
     () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling }),
     [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling],
   );
+  // The columns as the user laid them out: widths and pins kept with the preferences, the order the route's. Put
+  // back, a set that's the default's in another order takes the default's order again.
+  const laid = useColumnLayout('links', columns, {
+    order: { ids: shown, onChange: setColumns },
+    onReset: () => {
+      const set = new Set(shown);
+      if (set.size === DEFAULT_LINK_COLUMNS.length && DEFAULT_LINK_COLUMNS.every((id) => set.has(id))) {
+        setColumns(DEFAULT_LINK_COLUMNS);
+      }
+    },
+  });
 
   const summary = first?.summary;
   const summaryAvailable = summary?.available ?? true;
@@ -286,9 +312,12 @@ export function LinksScreen() {
     const value = text.trim();
     void navigate({ search: (previous) => ({ ...previous, q: value || undefined }) });
   };
+  const searchHint = useSearchApplyHint(draft.trim() !== (q ?? ''));
 
   const [adding, setAdding] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  // The toolbars a short window folds, shown (see `useShortScreen` below).
+  const [toolsOpen, setToolsOpen] = useState(false);
   // The filter whose editor is open, by its place: a chip opens its own, and so does "Change the filter". It's of
   // the view it was opened in: after back, forward or a link, the place may be another filter's, whose editor nobody
   // asked for.
@@ -367,7 +396,10 @@ export function LinksScreen() {
         group: 'Links',
         keywords: ['filter', 'column'],
         enabled: () => editor !== undefined,
-        run: () => setAdding(true),
+        run: () => {
+          setToolsOpen(true);
+          setAdding(true);
+        },
       },
       {
         id: 'links.columns',
@@ -375,7 +407,10 @@ export function LinksScreen() {
         group: 'Links',
         keywords: ['columns', 'show', 'hide'],
         enabled: () => chooserGroups.length > 0,
-        run: () => setChoosing(true),
+        run: () => {
+          setToolsOpen(true);
+          setChoosing(true);
+        },
       },
       {
         id: 'links.clear',
@@ -497,6 +532,10 @@ export function LinksScreen() {
   // keyboard in the grid that comes, never on the page. One that clears the view navigates, and the shell does the
   // same for it.
   const frame = useRef<HTMLDivElement>(null);
+  // A short window (200% zoom) folds the presets and the filter bar behind one button, so the grid keeps its rows. They
+  // show while one of their parts is in use (an editor, the chooser), whatever the toggle says.
+  const short = useShortScreen(frame);
+  const toolsShown = !short || toolsOpen || adding || choosing || editingFilter !== null;
   useFocusRescue(frame, () => frame.current?.querySelector<HTMLElement>('[role="grid"]') ?? searchRef.current);
 
   const onCopy = (result: GridCopyResult) => {
@@ -519,9 +558,20 @@ export function LinksScreen() {
   // The row as it was when the menu opened: rows can move under a running crawl while it is open.
   const menuRow = rowMenu.state?.menu.row;
   const menuEnd: 'from' | 'to' =
-    rowMenu.state && endColumn(columns[rowMenu.state.column]?.id ?? '')?.end === 'from' ? 'from' : 'to';
+    rowMenu.state && endColumn(laid.columns[rowMenu.state.column]?.id ?? '')?.end === 'from' ? 'from' : 'to';
   const menuUrl = menuRow?.[`${menuEnd}.url`];
   const menuCount = rowMenu.state?.menu.indices.length ?? 1;
+  // The cell the menu was opened on: its value's filters ("Filter by this value", "Exclude this value").
+  const menuCell = cellValueFilters(
+    rowMenu.state ? laid.columns[rowMenu.state.column]?.id : undefined,
+    menuRow as Readonly<Record<string, unknown>> | undefined,
+    catalogue.data,
+    summaryAvailable,
+  );
+  const sentenceOf = (filter: GridFilter) =>
+    filterSentences(filter, words)
+      .map((sentence) => `${sentence.field} ${sentence.op} ${sentence.value}`)
+      .join(', ');
   const noLinks = noLinksWords(crawling);
 
   return (
@@ -532,142 +582,166 @@ export function LinksScreen() {
         badge={crawling ? <LiveBadge /> : null}
         className="px-6 pt-2 pb-1"
         actions={
-          <SearchField
-            ref={searchRef}
-            label="Search anchor text and URLs"
-            placeholder="Search links"
-            value={draft}
-            shortcut="mod+f"
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') applySearch(event.currentTarget.value);
-            }}
-            onClear={() => {
-              setDraft('');
-              if (q !== undefined) applySearch('');
-            }}
-            className="w-(--search-width)"
-          />
+          <>
+            {searchHint.note}
+            <SearchField
+              ref={searchRef}
+              label="Search anchor text and URLs"
+              placeholder="Search links"
+              aria-describedby={searchHint.describedBy}
+              end={searchHint.end}
+              value={draft}
+              shortcut="mod+f"
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') applySearch(event.currentTarget.value);
+              }}
+              onClear={() => {
+                setDraft('');
+                if (q !== undefined) applySearch('');
+              }}
+              className="w-(--search-width)"
+            />
+            {short ? (
+              <>
+                <ToolsToggle
+                  open={toolsShown}
+                  onOpenChange={setToolsOpen}
+                  filters={filters.length}
+                  notes={(catalogue.isError ? 1 : 0) + (note ? 1 : 0)}
+                />
+                {toolsShown ? null : (
+                  <span data-slot="export" className="contents">
+                    <ExportButton compact />
+                  </span>
+                )}
+              </>
+            ) : null}
+          </>
         }
       />
-      <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
-        <div role="group" aria-label="Views" className="contents">
-          {LINK_PRESETS.map((candidate) => (
-            <Tooltip key={candidate.id} content={candidate.hint} triggerName={candidate.title}>
-              <Button
-                variant="ghost"
-                size="sm"
-                pressed={preset?.id === candidate.id}
-                onClick={() =>
-                  void navigate({
-                    search: (previous) => ({
-                      cols: previous.cols,
-                      filter: candidate.filters.length > 0 ? [...candidate.filters] : undefined,
-                    }),
-                  })
+      {toolsShown ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
+            <div role="group" aria-label="Views" className="contents">
+              {LINK_PRESETS.map((candidate) => (
+                <Tooltip key={candidate.id} content={candidate.hint} triggerName={candidate.title}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    pressed={preset?.id === candidate.id}
+                    onClick={() =>
+                      void navigate({
+                        search: (previous) => ({
+                          cols: previous.cols,
+                          filter: candidate.filters.length > 0 ? [...candidate.filters] : undefined,
+                        }),
+                      })
+                    }
+                  >
+                    {candidate.title}
+                  </Button>
+                </Tooltip>
+              ))}
+            </div>
+            <div className="ml-auto flex items-center gap-1">
+              <ColumnChooser
+                groups={chooserGroups}
+                shown={shown}
+                onChange={setColumns}
+                defaults={DEFAULT_LINK_COLUMNS}
+                open={choosing}
+                onOpenChange={setChoosing}
+                command="links.columns"
+                disabled={chooserGroups.length === 0}
+              />
+              <DropdownMenu
+                align="end"
+                trigger={
+                  <Button variant="ghost" size="sm" icon={Copy}>
+                    Copy
+                  </Button>
                 }
               >
-                {candidate.title}
-              </Button>
-            </Tooltip>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-1">
-          <ColumnChooser
-            groups={chooserGroups}
-            shown={shown}
-            onChange={setColumns}
-            defaults={DEFAULT_LINK_COLUMNS}
-            open={choosing}
-            onOpenChange={setChoosing}
-            command="links.columns"
-            disabled={chooserGroups.length === 0}
-          />
-          <DropdownMenu
-            align="end"
-            trigger={
-              <Button variant="ghost" size="sm" icon={Copy}>
-                Copy
-              </Button>
-            }
+                <MenuItem command="links.copyTargets">{copyTargetsTitle}</MenuItem>
+                <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
+                <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
+              </DropdownMenu>
+              <DropdownMenu
+                align="end"
+                open={endsOpen}
+                onOpenChange={setEndsOpen}
+                trigger={
+                  <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
+                    Show in URLs
+                  </Button>
+                }
+              >
+                <MenuItem
+                  command="links.showTargets"
+                  detail={targetsCount === undefined ? undefined : formatCountOf(targetsCount, 'URL')}
+                >
+                  Their targets
+                </MenuItem>
+                <MenuItem
+                  command="links.showSources"
+                  detail={sourcesCount === undefined ? undefined : formatCountOf(sourcesCount, 'page')}
+                >
+                  The pages they’re on
+                </MenuItem>
+              </DropdownMenu>
+              <ExportButton />
+            </div>
+          </div>
+          <FilterBar
+            filters={filters}
+            onChange={setFilters}
+            words={words}
+            editor={editor}
+            adding={adding}
+            onAddingChange={setAdding}
+            editing={editingFilter}
+            onEditingChange={setEditingFilter}
+            refused={refused}
+            maxFilters={MAX_FILTERS}
+            onClear={() => setFilters([])}
+            className="flex flex-wrap items-center gap-2 px-6 pb-3"
           >
-            <MenuItem command="links.copyTargets">{copyTargetsTitle}</MenuItem>
-            <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
-            <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
-          </DropdownMenu>
-          <DropdownMenu
-            align="end"
-            open={endsOpen}
-            onOpenChange={setEndsOpen}
-            trigger={
-              <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
-                Show in URLs
-              </Button>
-            }
-          >
-            <MenuItem
-              command="links.showTargets"
-              detail={targetsCount === undefined ? undefined : formatCountOf(targetsCount, 'URL')}
+            {LINK_FACET_IDS.map((id) => (
+              <FacetMenu
+                key={id}
+                title={FACET_TITLES[id]}
+                noun="link"
+                values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
+                matching={facetsRead.data?.matching}
+                failed={facetsRead.isError && !facetsRead.data}
+                onRetry={() => void facetsRead.refetch()}
+                onChoose={chooseFacet}
+                onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
+              />
+            ))}
+          </FilterBar>
+          {catalogue.isError ? (
+            <Banner
+              inset
+              tone="warning"
+              className="mx-6 mb-3"
+              actions={
+                <Button size="sm" icon={RefreshCw} onClick={() => void catalogue.refetch()}>
+                  Try again
+                </Button>
+              }
             >
-              Their targets
-            </MenuItem>
-            <MenuItem
-              command="links.showSources"
-              detail={sourcesCount === undefined ? undefined : formatCountOf(sourcesCount, 'page')}
-            >
-              The pages they’re on
-            </MenuItem>
-          </DropdownMenu>
-          <ExportButton />
-        </div>
-      </div>
-      <FilterBar
-        filters={filters}
-        onChange={setFilters}
-        words={words}
-        editor={editor}
-        adding={adding}
-        onAddingChange={setAdding}
-        editing={editingFilter}
-        onEditingChange={setEditingFilter}
-        refused={refused}
-        maxFilters={MAX_FILTERS}
-        onClear={() => setFilters([])}
-        className="flex flex-wrap items-center gap-2 px-6 pb-3"
-      >
-        {LINK_FACET_IDS.map((id) => (
-          <FacetMenu
-            key={id}
-            title={FACET_TITLES[id]}
-            noun="link"
-            values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
-            matching={facetsRead.data?.matching}
-            failed={facetsRead.isError && !facetsRead.data}
-            onRetry={() => void facetsRead.refetch()}
-            onChoose={chooseFacet}
-            onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
-          />
-        ))}
-      </FilterBar>
-      {catalogue.isError ? (
-        <Banner
-          inset
-          tone="warning"
-          className="mx-6 mb-3"
-          actions={
-            <Button size="sm" icon={RefreshCw} onClick={() => void catalogue.refetch()}>
-              Try again
-            </Button>
-          }
-        >
-          The list of the links’ columns couldn’t be read. The links are here, but they can’t be sorted, given another
-          column or filtered by one until it is.
-        </Banner>
-      ) : null}
-      {note ? (
-        <Banner inset className="mx-6 mb-3" actions={note.action ? analyse(note.action) : undefined}>
-          {note.text}
-        </Banner>
+              The list of the links’ columns couldn’t be read. The links are here, but they can’t be sorted, given
+              another column or filtered by one until it is.
+            </Banner>
+          ) : null}
+          {note ? (
+            <Banner inset className="mx-6 mb-3" actions={note.action ? analyse(note.action) : undefined}>
+              {note.text}
+            </Banner>
+          ) : null}
+        </>
       ) : null}
       {failed ? (
         isProblem(rows.error, 'needs-analysis') ? (
@@ -687,10 +761,16 @@ export function LinksScreen() {
               onRemove={() => setFilters(filters.filter((_, index) => index !== refused.index))}
             />
           ) : (
-            // Refused for something else the route holds (a column, a sort): the engine's sentence, and a way out.
+            // Refused for something else the route holds (a column, a sort): what it was, in words, and a way out.
             <ErrorState
               error={rows.error}
-              description={rows.error.detail}
+              description={queryRefusalWords(
+                rows.error.errors,
+                // The columns as the query sent them (sorted), which the engine's `columns[i]` counts in.
+                { sort, columns: queryColumns },
+                (id) => (!catalogue.data || isLinkColumn(id, catalogue.data) ? linkColumnName(id) : undefined),
+                'links',
+              )}
               actions={
                 <Button size="sm" onClick={() => void navigate({ search: {} })}>
                   Reset the view
@@ -708,7 +788,11 @@ export function LinksScreen() {
             label="Links"
             // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
             minRows={GRID_SCREEN_MIN_ROWS}
-            columns={columns}
+            columns={laid.columns}
+            columnLayout={laid.columnLayout}
+            // The footer's hints give way to rows in a short window.
+            keyHints={short ? undefined : GRID_KEY_HINTS}
+            rowNoun={['link', 'links']}
             rowCount={rowCount}
             getRow={rows.getRow}
             rowHeight={rowHeight}
@@ -756,7 +840,7 @@ export function LinksScreen() {
                       <FilterChips filters={filters} onChange={setFilters} words={words} />
                     ) : undefined
                   }
-                  onClear={clearView}
+                  onClear={clearFilters}
                 />
               )
             }
@@ -791,6 +875,12 @@ export function LinksScreen() {
         <MenuItem icon={PanelRight} disabled={!menuRow} onSelect={() => openRow(menuRow, 'to')}>
           Inspect the target
         </MenuItem>
+        <MenuSeparator />
+        <ValueFilterItems
+          cell={menuCell}
+          sentence={sentenceOf}
+          onFilter={(filter) => setFilters(withValueFilter(filters, filter))}
+        />
       </RowMenu>
     </GridScreen>
   );

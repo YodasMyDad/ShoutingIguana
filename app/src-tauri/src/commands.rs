@@ -52,8 +52,123 @@ pub fn shell_info(app: AppHandle) -> ShellInfo {
         app_version: app.package_info().version.to_string(),
         platform,
         debug: cfg!(debug_assertions),
-        log_dir: app.path().app_log_dir().map(|folder| folder.to_string_lossy().into_owned()).unwrap_or_default(),
+        log_dir: app_log_folder(&app).map(|folder| folder.to_string_lossy().into_owned()).unwrap_or_default(),
     }
+}
+
+/// The shell's own log folder: the test run's, or the log plugin's.
+fn app_log_folder(app: &AppHandle) -> Option<std::path::PathBuf> {
+    profile::log_folder().or_else(|| app.path().app_log_dir().ok())
+}
+
+/// Settings › Diagnostics' Open logs folder: `app`, the shell's log, or `engine`, the engine's (its state folder's
+/// `logs`, as the engine says). The page names which, never a path.
+#[tauri::command]
+pub async fn open_logs_folder(app: AppHandle, which: String) -> Result<(), String> {
+    let folder = match which.as_str() {
+        "app" => app_log_folder(&app).ok_or("The app has no log folder.")?,
+        "engine" => {
+            const NO_ENGINE: &str = "The engine isn't running.";
+            let shell = app.try_state::<Shell>().ok_or(NO_ENGINE)?;
+            let connection = shell.sidecar.link().current().ok_or(NO_ENGINE)?;
+            let api = Arc::clone(&shell.api);
+            let state = tauri::async_runtime::spawn_blocking(move || api.state_dir(&connection))
+                .await
+                .map_err(|error| error.to_string())?
+                .map_err(|error| format!("The engine didn't say where its log is: {error}"))?;
+            if state.is_empty() {
+                return Err("The engine didn't say where its log is.".to_owned());
+            }
+            std::path::Path::new(&state).join("logs")
+        }
+        _ => return Err("There's no such log.".to_owned()),
+    };
+    // The folder may not exist yet (nothing logged): make it, so Explorer opens it rather than an error.
+    if let Err(error) = std::fs::create_dir_all(&folder) {
+        log::debug!("Couldn't make the log folder {}: {error}", folder.display());
+    }
+    app.opener().open_path(folder.to_string_lossy(), None::<&str>).map_err(|error| {
+        log::info!("Couldn't open the log folder: {error}");
+        format!("The folder couldn't be opened: {error}")
+    })
+}
+
+/// Settings › Updates: is there a newer version, and what's new in it.
+#[tauri::command]
+pub async fn update_check(app: AppHandle) -> Result<crate::updates::UpdateCheck, String> {
+    crate::updates::check(&app).await
+}
+
+/// Installs the update the last check found, if it is still `version`: the app closes and the installer runs.
+#[tauri::command]
+pub async fn update_install(app: AppHandle, version: String) -> Result<(), String> {
+    crate::updates::install(&app, &version).await
+}
+
+/// The secrets kept for the crawl defaults (`defaults`) or a crawl (`crawl:<id>`), or null.
+#[tauri::command]
+pub async fn secrets_read(key: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::secrets::read(&key))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| {
+            log::warn!("Couldn't read secrets from the credential store: {error}");
+            error.to_string()
+        })
+}
+
+/// Keeps secrets (a JSON object, as text) for `key` in the credential store; null forgets them.
+#[tauri::command]
+pub async fn secrets_write(key: String, secrets: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::secrets::write(&key, secrets.as_deref()))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| {
+            log::warn!("Couldn't keep secrets in the credential store: {error}");
+            error.to_string()
+        })
+}
+
+/// The data folder the user chose, and the one before it.
+#[tauri::command]
+pub fn data_folder_choice(app: AppHandle) -> crate::data_folder::DataFolderChoice {
+    crate::data_folder::choice(&app)
+}
+
+/// Asks for a folder with the system's own dialog and, if one is chosen, keeps the crawls there from now on. Null when
+/// the dialog was cancelled.
+#[tauri::command]
+pub async fn data_folder_choose(app: AppHandle) -> Result<Option<crate::data_folder::DataFolderChoice>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picker = app.clone();
+    let chosen = tauri::async_runtime::spawn_blocking(move || {
+        picker.dialog().file().set_title("Where to keep crawls").blocking_pick_folder()
+    })
+    .await
+    .map_err(|error| error.to_string())?;
+    let Some(folder) = chosen.and_then(|folder| folder.into_path().ok()) else { return Ok(None) };
+    tauri::async_runtime::spawn_blocking(move || crate::data_folder::switch(&app, Some(folder)).map(Some))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// Goes back to the folder in use before the last change (`previous`), or to the default (`default`).
+#[tauri::command]
+pub async fn data_folder_reset(app: AppHandle, to: String) -> Result<crate::data_folder::DataFolderChoice, String> {
+    let folder = match to.as_str() {
+        "default" => None,
+        "previous" => {
+            let choice = crate::data_folder::choice(&app);
+            if !choice.has_previous {
+                return Err("There's no folder to go back to.".to_owned());
+            }
+            choice.previous.map(std::path::PathBuf::from)
+        }
+        _ => return Err("There's no such folder.".to_owned()),
+    };
+    tauri::async_runtime::spawn_blocking(move || crate::data_folder::switch(&app, folder))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 /// The `.sicrawl` files waiting to be opened: from the command line, and from every launch since. Each is handed
@@ -76,7 +191,17 @@ pub async fn settings_write(app: AppHandle, settings: String) -> Result<(), Stri
     settings::write(&folder.join(settings::FILE_NAME), &settings).map_err(|error| {
         log::warn!("Couldn't store the preferences: {error}");
         error.to_string()
-    })
+    })?;
+    // The page tells the shell its mode this way: the tray, the notices and the quit question speak it from now on.
+    let stored = serde_json::from_str::<serde_json::Value>(&settings).ok();
+    let mode = crate::mode::Mode::of(settings::preferences(stored.as_ref()).simple);
+    if let Some(shell) = app.try_state::<Shell>() {
+        if shell.mode.set(mode) {
+            log::info!("The page is in {mode:?} mode: the shell's words follow");
+            shell.tray.changed(true);
+        }
+    }
+    Ok(())
 }
 
 /// Shows a library crawl's file in Explorer or Finder. The page names the crawl and the engine's library says where

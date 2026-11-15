@@ -24,9 +24,11 @@ import { StackBar } from '../../ui/StackBar';
 import { Stat, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
 import {
+  ANSWERS_TO_JUDGE_BY,
   alertKey,
   inTheWay,
   pagesWhenRaised,
+  siteAnswers,
   simplePhaseProgress,
   simplePhaseWords,
   timeLeftWords,
@@ -105,11 +107,15 @@ export function CheckingScreen({
     for (const alert of unseen) next.set(alertKey(alert), pagesWhenRaised(history?.points, alert.at) ?? pages);
     setPagesWhenSeen(next);
   }
+  // The site's own answers so far (the crawler's probes of its other versions aren't the site's): until there are
+  // enough to judge by, a slowdown isn't the site's slowness (the closing audit's gap 25).
+  const judged = progress !== null && siteAnswers(progress) >= ANSWERS_TO_JUDGE_BY;
   const obstacles = useMemo(
     () =>
       inTheWay({
         alerts,
         waits: status === 'running' ? (progress?.waits ?? []) : [],
+        judged,
         runStartedAt,
         site,
         pages,
@@ -118,7 +124,7 @@ export function CheckingScreen({
     // `pages` moves with every figure: what's in the way is drawn again when an alert or a wait changes. An alert's
     // own count is held in `pagesWhenSeen`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [alerts, progress?.waits, runStartedAt, site, status, pagesWhenSeen],
+    [alerts, progress?.waits, runStartedAt, site, status, pagesWhenSeen, judged],
   );
   const onStop = useCallback(() => void stopCrawl(crawlId), [crawlId]);
   const onContinue = useCallback(() => void continueCrawl(crawlId), [crawlId]);

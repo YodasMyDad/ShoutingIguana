@@ -70,6 +70,10 @@ internal sealed class GridReadContext : IDisposable
     private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _once = new(StringComparer.Ordinal);
+
+    /// <summary>Parameters given to every statement of this read that names them (<see cref="Bind"/>).</summary>
+    private readonly Dictionary<string, object> _bound = new(StringComparer.Ordinal);
+
     private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     private readonly Dictionary<int, Dictionary<long, long>> _talliesBySlot = [];
     private (long Links, long MaxLinkId, int BlockShift)? _linkSummary;
@@ -224,6 +228,11 @@ internal sealed class GridReadContext : IDisposable
             }
 
             helper._sets.AddRange(_sets);
+            foreach (var (name, value) in _bound)
+            {
+                helper._bound[name] = value;
+            }
+
             return new Alongside(helper, lease);
         }
         catch (Exception exception)
@@ -442,7 +451,28 @@ internal sealed class GridReadContext : IDisposable
             }
         }
 
+        foreach (var (name, value) in _bound)
+        {
+            if (!command.Parameters.Contains(name) && sql.Contains(name, StringComparison.Ordinal))
+            {
+                command.Parameters.AddWithValue(name, value);
+            }
+        }
+
         return command;
+    }
+
+    /// <summary>
+    /// Gives these parameters to every statement this read runs from now on that names them, whatever builds it: the
+    /// checks a query hides, which its issue counts' SQL names in its columns, its sort and its filters alike
+    /// (<see cref="CompiledQuery.Hidden"/>). A parameter bound again takes the later value.
+    /// </summary>
+    public void Bind(IEnumerable<KeyValuePair<string, object>> parameters)
+    {
+        foreach (var (name, value) in parameters)
+        {
+            _bound[name] = value;
+        }
     }
 
     public long Scalar(string sql, IEnumerable<KeyValuePair<string, object>> parameters)

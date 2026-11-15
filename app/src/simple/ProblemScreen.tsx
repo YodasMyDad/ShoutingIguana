@@ -9,6 +9,7 @@ import { ErrorState } from '../feedback/ErrorState';
 import { SkeletonRows } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
+import { useOpensAtTop } from './scrollPlace';
 import { useCommands } from '../keyboard/registry';
 import { useLive } from '../live/liveStore';
 import { switchMode } from '../mode/switchMode';
@@ -61,6 +62,8 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
   const titleRef = useRef<HTMLHeadingElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => titleRef.current);
+  // At its head, its back link in sight, whatever the list it was opened from was scrolled to (the closing audit's G3).
+  useOpensAtTop(screenRef, checkId);
 
   const loading =
     item === undefined ||

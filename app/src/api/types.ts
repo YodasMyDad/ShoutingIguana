@@ -216,6 +216,17 @@ export interface ValidationResult {
   errors: FieldErrors;
 }
 
+/**
+ * `POST /api/crawl-options/start-url`: where an address typed without a scheme starts. `typed`: it had its scheme and
+ * nothing was asked. `https`: the site answered on https. `http`: only http answered. `noAnswer`: neither did, so https.
+ */
+export type StartUrlReason = 'typed' | 'https' | 'http' | 'noAnswer';
+
+export interface StartUrlChoice {
+  startUrl: string;
+  reason: StartUrlReason;
+}
+
 // --------------------------------------------------------------------------------------------------------- Library
 
 /** Checks with at least one issue, by severity: the Issues screen's rows, not issue rows. */
@@ -811,3 +822,15 @@ export type SidecarEvent =
   | { type: 'analysis'; data: AnalysisEvent }
   /** E5: an export as it stands, whole (./exports): as it starts, as it goes on, and as it ends. */
   | { type: 'export'; data: ExportJob };
+
+/** Round 5: what one fetch through a proxy found (`POST /api/proxy/test`). */
+export type ProxyTestOutcome =
+  'ok' | 'proxyAuthRequired' | 'proxyRefused' | 'proxyUnreachable' | 'siteUnreachable' | 'timeout' | 'tls' | 'failed';
+
+/** The proxy test's answer: `message` is one plain sentence, shown as it is. `status` is null with no HTTP answer. */
+export interface ProxyTestResult {
+  outcome: ProxyTestOutcome;
+  status: number | null;
+  elapsedMs: number;
+  message: string;
+}

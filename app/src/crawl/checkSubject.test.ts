@@ -3,6 +3,7 @@ import {
   affectedCount,
   affectedNoun,
   affectedWords,
+  checkReach,
   checkShare,
   partOfAffected,
   shareWhole,
@@ -188,5 +189,42 @@ describe('what a check’s count is a share of', () => {
     expect(checkShare(PAGE, 152, CRAWL)?.value).toBe('100%');
     expect(checkShare(PAGE, 151, CRAWL)?.value).toBe('99.3%');
     expect(checkShare(URL_CHECK, 301, CRAWL)?.value).toBe('100%');
+  });
+});
+
+describe('how much of the site a check’s count is ("% of Total")', () => {
+  it('is its share, of the pages analysed for a page check and of the URLs crawled for any other, said whole', () => {
+    expect(checkReach(PAGE, 15, CRAWL)).toEqual({
+      label: 'Share of pages',
+      value: '9.9%',
+      context: 'of the 152 pages analysed',
+      words: '9.9% of the 152 pages analysed',
+    });
+    expect(checkReach(URL_CHECK, 3, CRAWL)?.words).toBe('1% of the 301 URLs crawled');
+  });
+
+  /** The closing audit's gap 28: a site-wide fault read "1 page, <0.1%" in Advanced, where Simple says the whole site. */
+  it('is the whole site for a fault of the whole site, whatever its count', () => {
+    expect(checkReach({ subject: 'page', siteWide: true, reportedOnce: true }, 1, counts(101_106, 110_251))).toEqual({
+      label: 'Reach',
+      value: 'Whole site',
+      context: 'A fault of the whole site, whatever its count',
+      words: 'the whole site',
+    });
+    // Reported once for the whole site (or once for each of its other versions), but no fault of the whole site: not
+    // a share of its URLs either, as Simple says it (round 5 review R1-9: sitemap-error read "1 URL, <0.1%").
+    for (const count of [1, 3]) {
+      expect(checkReach({ subject: 'url', reportedOnce: true }, count, CRAWL)).toEqual({
+        label: 'Reach',
+        value: 'Whole site',
+        context: 'Checked once for the whole site, not URL by URL',
+        words: 'checked once for the whole site',
+      });
+    }
+  });
+
+  it('is nothing for a check that found nothing, or was skipped', () => {
+    expect(checkReach(PAGE, 0, CRAWL)).toBeNull();
+    expect(checkReach({ siteWide: true }, null, CRAWL)).toBeNull();
   });
 });

@@ -42,6 +42,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .min_inner_size(960.0, 600.0)
         .center()
         .visible(false)
+        // Each screen names itself ("Issues · garden… · Shouting Iguana", docs/v2-ui-ia.md): the window, the taskbar
+        // and Alt+Tab say the page's title.
+        .on_document_title_changed(|window, title| {
+            let title = window_title(&title);
+            if let Err(error) = window.set_title(&title) {
+                log::debug!("Couldn't set the window's title: {error}");
+            }
+        })
         .on_navigation(move |url| match navigation(url, dev_server.as_ref()) {
             Navigation::Stay => true,
             Navigation::OpenInBrowser => {
@@ -74,6 +82,22 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         log::debug!("Couldn't focus the window: {error}");
     }
     Ok(())
+}
+
+/// The page's title as the window's: the app's name when the page has none (as it loads), and never longer than a
+/// title bar can use.
+pub fn window_title(page: &str) -> String {
+    const MAX_CHARS: usize = 200;
+    let page = page.trim();
+    if page.is_empty() || page.starts_with("http") || page.starts_with("tauri") {
+        return crate::tray::text::APP_NAME.to_owned();
+    }
+    if page.chars().count() <= MAX_CHARS {
+        return page.to_owned();
+    }
+    let mut short: String = page.chars().take(MAX_CHARS - 1).collect();
+    short.push('…');
+    short
 }
 
 /// Where the main window may go.
@@ -118,8 +142,15 @@ fn open_in_browser(app: &AppHandle, url: &str) {
     }
 }
 
-/// Closing the window hides it to the tray while a crawl or an analysis is live; otherwise it quits the app.
+/// Closing the window hides it to the tray while a crawl or an analysis is live; otherwise it quits the app. Files
+/// dragged onto it go to the page.
 pub fn on_event(window: &Window, event: &WindowEvent) {
+    if let WindowEvent::DragDrop(drag) = event {
+        if window.label() == MAIN_WINDOW {
+            crate::drop::forward(window.app_handle(), drag);
+        }
+        return;
+    }
     let WindowEvent::CloseRequested { api, .. } = event else { return };
     if window.label() != MAIN_WINDOW {
         return;
@@ -210,7 +241,9 @@ fn first_time_in_tray(app: &AppHandle) {
     if store.get(TRAY_NOTICE_SHOWN).and_then(|shown| shown.as_bool()) == Some(true) {
         return;
     }
-    notify::show(app, "Still crawling", "Shouting Iguana keeps crawling in the tray. Quit from its menu.");
+    let Some(shell) = app.try_state::<Shell>() else { return };
+    let (title, body) = crate::tray::text::tray_notice(lock(&shell.live).kinds(), shell.mode.get());
+    notify::show(app, title, body);
     store.set(TRAY_NOTICE_SHOWN, true);
     if let Err(error) = store.save() {
         log::warn!("Couldn't save the shell's settings: {error}");
@@ -246,6 +279,17 @@ mod tests {
         for elsewhere in [other_port, other_host] {
             assert_ne!(navigation(&url(&elsewhere), None), Navigation::Stay, "{elsewhere}");
         }
+    }
+
+    #[test]
+    fn the_window_takes_the_pages_title() {
+        assert_eq!(window_title("Issues · garden… · Shouting Iguana"), "Issues · garden… · Shouting Iguana");
+        // WebView2 says the address until the page has a title.
+        assert_eq!(window_title("http://tauri.localhost/"), "Shouting Iguana");
+        assert_eq!(window_title("  "), "Shouting Iguana");
+        let long = "a".repeat(500);
+        assert_eq!(window_title(&long).chars().count(), 200);
+        assert!(window_title(&long).ends_with('…'));
     }
 
     #[test]

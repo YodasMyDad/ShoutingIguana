@@ -18,7 +18,6 @@ import { useLive } from '../live/liveStore';
 import type { CheckEntry } from '../screens/issues/checkList';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
-import { updateSettings, useSettings } from '../settings/settingsStore';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
@@ -27,9 +26,11 @@ import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS, fixSectionOf } from './fixSections';
 import { checksWord, looksForWords, passedWords, plainSummary, plainTitle, shareWords } from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
+import { useKeepsPlace } from './scrollPlace';
 import { plainResults, type PlainResults } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix } from './useOneFix';
+import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -75,7 +76,7 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   const analysis = useQuery({ ...analysisQuery(crawlId), enabled: readable && !crawling });
   const { neverAnalysed, rereading } = useAnalysisAnswer(crawlId, analysis, { crawling, analysing });
   const { titleRef, analyse } = useAnalysisControl(crawlId, analysing, neverAnalysed);
-  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  const hiddenIds = useHiddenChecks(crawlId);
   const [showHidden, setShowHidden] = useState(false);
   const hidden = useMemo(() => new Set(showHidden ? [] : hiddenIds), [hiddenIds, showHidden]);
   const results = useMemo(
@@ -98,6 +99,9 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
       !checks.error &&
       !analysis.error);
   const skeleton = useDelayedLoading(loading);
+  // Back from a problem, the list is where it was left; landing on one of its parts (a hash) goes there instead.
+  const landing = useRouterState({ select: (state) => fixSectionOf(state.location.hash) !== null });
+  useKeepsPlace(screenRef, `what-to-fix:${crawlId}`, !loading && !skeleton && !landing);
 
   let body: ReactNode;
   let subtitle: ReactNode = null;
@@ -176,7 +180,7 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
         hiddenCount={hiddenCount}
         showHidden={showHidden}
         onShowHidden={setShowHidden}
-        onUnhide={() => updateSettings({ hiddenChecks: [] })}
+        onUnhide={() => showAllHidden(crawlId)}
       />
     );
   }

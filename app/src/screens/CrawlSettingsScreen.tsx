@@ -19,6 +19,7 @@ import {
   type CrawlFormField,
   type FormSection,
 } from '../crawl/options/form';
+import { ProxyTest } from '../crawl/options/ProxyTest';
 import { formErrors, useValidation, type FormErrors } from '../crawl/options/useValidation';
 import { FIELD_WORDS, settingValue, speedTitle, speedWords } from '../crawl/options/words';
 import { crawlControls, effectiveStatus } from '../crawl/status';
@@ -388,6 +389,7 @@ function ContinuePanel({
             data-setting="proxyUrl"
             onChange={(event) => change({ ...form, proxyUrl: event.target.value })}
           />
+          <ProxyTest proxyUrl={form.proxyUrl} startUrl={stored.startUrl} />
           {missing ? (
             <Callout tone="warning" title="Some settings must be given again" role="alert">
               {missing.headers.length > 0 ? (

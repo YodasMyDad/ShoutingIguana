@@ -394,7 +394,7 @@ public static class UrlInspectorReader
     {
         using var command = context.Command($"""
             SELECT u.id, u.url, u.is_internal, r.url_id IS NOT NULL, {AnalysisReader.NOT_CHECKED}, r.outcome, r.status_code, r.is_html,
-                   r.word_count IS NOT NULL AND instr(u.url, '/cdn-cgi/') = 0, r.redirect_url_id
+                   r.word_count IS NOT NULL AND {CrawlSchema.NOT_CLOUDFLARE}, r.redirect_url_id
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             WHERE u.id = $id
             """, [new("$id", urlId)]);
@@ -889,8 +889,8 @@ public static class UrlInspectorReader
     private static IdSet UnauditedPages(GridReadContext context)
     {
         List<long> pages = [];
-        using var command = context.Command("""
-            SELECT u.id FROM urls u JOIN responses r ON r.url_id = u.id WHERE instr(u.url, '/cdn-cgi/') > 0 AND r.word_count IS NOT NULL
+        using var command = context.Command($"""
+            SELECT u.id FROM urls u JOIN responses r ON r.url_id = u.id WHERE NOT ({CrawlSchema.NOT_CLOUDFLARE}) AND r.word_count IS NOT NULL
             """, []);
         using var reader = command.ExecuteReader();
         while (reader.Read())

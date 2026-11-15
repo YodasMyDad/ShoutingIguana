@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ProblemError, SidecarUnreachableError } from '../api/errors';
 import { Button } from '../ui/Button';
 import { AppToaster } from './AppToaster';
@@ -7,6 +7,7 @@ import { ErrorState } from './ErrorState';
 import { notifyError, notifyProgress, notifyResult, notifyUndo } from './notify';
 import { SkeletonRows } from './Skeleton';
 import { useDelayedLoading } from './useDelayedLoading';
+import { toast } from 'sonner';
 
 const meta = { title: 'Feedback/States' } satisfies Meta;
 export default meta;
@@ -152,3 +153,56 @@ function Toasts() {
 }
 
 export const ToastsWithTheirRules: Story = { render: () => <Toasts /> };
+
+type ShownToast = Parameters<typeof notifyResult>[1] & { title: string };
+
+/** One toast, shown as the story opens and kept while it's looked at. */
+function ShownToast({ title, ...options }: ShownToast) {
+  useEffect(() => {
+    notifyResult(title, { id: title, ...options });
+    return () => {
+      toast.dismiss();
+    };
+  });
+  return <AppToaster />;
+}
+
+const none = () => undefined;
+
+/**
+ * Toasts with two actions (the closing audit's gap 11): the actions go under the text, together, at the right, and the
+ * text never goes narrower than --toast-text-min, in either theme or mode, at 200% zoom too. Simple's words.
+ */
+export const ToastWithTwoActions: Story = {
+  render: () => (
+    <ShownToast
+      title="gardenfurnituresets.co.uk is checked"
+      description="Score 85: 6 problems to fix"
+      secondary={{ label: 'See the summary', onClick: none }}
+      action={{ label: 'Open the report', onClick: none }}
+    />
+  ),
+};
+
+/** Two actions in Advanced's words, with a longer text. */
+export const ToastWithTwoActionsAdvanced: Story = {
+  render: () => (
+    <ShownToast
+      title="Crawl stopped"
+      description="gardenfurnituresets.co.uk: 4,521 URLs, 19 checks found issues. You can continue it later."
+      secondary={{ label: 'View issues', onClick: none }}
+      action={{ label: 'Continue', onClick: none }}
+    />
+  ),
+};
+
+/** One action too long to sit beside the text at a readable measure: it goes under it. */
+export const ToastWithOneLongAction: Story = {
+  render: () => (
+    <ShownToast
+      title="gardenfurnituresets.co.uk is checked"
+      description="Its results weren’t worked out. Work out the results to see its score and what to fix."
+      action={{ label: 'Work out the results', onClick: none }}
+    />
+  ),
+};

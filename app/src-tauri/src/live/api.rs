@@ -123,6 +123,12 @@ impl Api {
         Ok(serde_json::from_str(&body)?)
     }
 
+    /// The engine's state folder, from `GET /api/health`: its log is in `logs` there.
+    pub fn state_dir(&self, connection: &Connection) -> Result<String, ApiError> {
+        let health: serde_json::Value = serde_json::from_str(&self.get(connection, "/api/health")?)?;
+        Ok(health.get("stateDir").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned())
+    }
+
     /// `GET /api/exports/{id}`: one running, or one of the last 64 that ended.
     pub fn export(&self, connection: &Connection, id: &str) -> Result<ExportJob, ApiError> {
         let path = format!("/api/exports/{}", checked_id(id)?);

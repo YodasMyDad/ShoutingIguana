@@ -3,6 +3,7 @@
 // columns), so a saved one is a route: it opens on any crawl, and survives a restart. Pure: what a view is, when two
 // are the same, and what's wrong with a name, all unit-tested. Stored values come from disk: each is checked here.
 import type { GridFilter, GridSort } from '../api/grids';
+import { readColumnLayout, type ColumnLayout } from './columnLayout';
 import { sameFilters } from '../screens/links/presets';
 import { validateGridSearch, type LinkEndsSearch } from '../routing/search';
 
@@ -27,6 +28,16 @@ export interface SavedView {
   /** What the user called it: unique among a grid's views, ignoring case. */
   name: string;
   search: SavedViewSearch;
+  /**
+   * The columns' widths and pins when it was saved (the grid's column layout; their order is the route's `cols`).
+   * Opening the view lays the columns out so; a view without one has the grid's own widths, nothing pinned.
+   */
+  layout?: ColumnLayout | undefined;
+}
+
+/** What a saved view keeps of a grid's column layout: its widths and pins (the order is in the view's columns). */
+export function viewLayoutOf(layout: ColumnLayout | undefined): ColumnLayout | undefined {
+  return readColumnLayout({ widths: layout?.widths, pinned: layout?.pinned });
 }
 
 /** As many as a menu lists at a glance, and few enough that the preferences file stays small. */
@@ -126,7 +137,11 @@ function biggestPart(search: SavedViewSearch): string {
 }
 
 /** Why the view can't be saved as it is, or null: there's room for it, and it isn't too long to keep. */
-export function saveProblem(views: readonly SavedView[], search: SavedViewSearch): string | null {
+export function saveProblem(
+  views: readonly SavedView[],
+  search: SavedViewSearch,
+  layout?: ColumnLayout,
+): string | null {
   if (views.length >= MAX_SAVED_VIEWS) {
     return `${MAX_SAVED_VIEWS} views are saved, as many as the app keeps. Delete one to save another.`;
   }
@@ -135,7 +150,14 @@ export function saveProblem(views: readonly SavedView[], search: SavedViewSearch
     return `This view is too long to keep: ${biggestPart(view)} more room than a saved view has. Shorten it, or remove some.`;
   }
   // The new view with a name of the longest kind, beside the ones there are.
-  const added: SavedView = { id: 'v-00000000', grid: 'urls', name: 'x'.repeat(MAX_VIEW_NAME), search: view };
+  const kept = viewLayoutOf(layout);
+  const added: SavedView = {
+    id: 'v-00000000',
+    grid: 'urls',
+    name: 'x'.repeat(MAX_VIEW_NAME),
+    search: view,
+    ...(kept ? { layout: kept } : {}),
+  };
   if (jsonBytes([...views, added]) > MAX_VIEWS_BYTES) {
     return 'The saved views take all the room the app keeps for them. Delete one, or a long one, to save this view.';
   }
@@ -180,6 +202,8 @@ export function readSavedViews(value: unknown): SavedView[] {
         links: checked.links,
       }),
     };
+    const layout = viewLayoutOf(readColumnLayout(record.layout));
+    if (layout) view.layout = layout;
     // Only what the app could have saved: within a view's room, and the views' room all together.
     if (jsonBytes(view.search) > MAX_VIEW_LENGTH || jsonBytes([...views, view]) > MAX_VIEWS_BYTES) continue;
     views.push(view);

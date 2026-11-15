@@ -238,7 +238,7 @@ Built in stages:
   only where that's true:
   - `page`: every URL it flags is a page, as the analysis counts them (`pagesAnalyzed`): an internal URL that answered
     with HTML the crawler read, and that the analysis audits. Its count is a part of the pages the analysis read. (The
-    library's `pageCount` counts Cloudflare's `/cdn-cgi/` endpoints too, which no check flags: E7.)
+    library's `pageCount` is the same pages since round 5: Cloudflare's `/cdn-cgi/` endpoints are in neither.)
   - `url`: it can flag any URL the crawl has: a file (`internal-client-error` flags a missing image, as its text says),
     a redirect, a URL that didn't answer or wasn't fetched, a URL on another of the site's versions. Its count is of
     URLs, not of pages, and may be more than the pages crawled.
@@ -302,6 +302,7 @@ public category titles, so the UI hard-codes none.
 | --- | --- |
 | `GET /api/crawl-options/defaults` | `{ options, speedPresets }`: the user's saved defaults, or the engine's |
 | `PUT /api/crawl-options/defaults` | Saves "my defaults". The start URL, header values and proxy credentials are never saved: the UI keeps secrets in the OS credential store, with the user's consent |
+| `POST /api/crawl-options/start-url` | Round 5: `{ address, options? }` gives `{ startUrl, reason }`, 200: where an address typed without a scheme starts. An address with its scheme comes back as typed (`reason` `typed`, nothing asked). Otherwise the site's home page is asked for on https and http at once, with `options` (the saved defaults when left out: their proxy, user agent and timeout, never their extra headers), each for at most 10 s: https when it gives any HTTP status (`https`), else http when it does (`http`), else https (`noAnswer`, which the crawl then reports as not answering). Through a proxy, the proxy's own answers are not the site's: a 407 (the saved defaults mask its password, so the app sends them with its secrets restored), a refused tunnel, and a 5xx over plain http through an http proxy (its gateway error, or the site's own: no proof either way, so https) (round 5's review, R2-1). Why: a site that only serves http, typed without `http://`, was crawled on https, read nothing and was blamed on robots.txt (the closing audit's gap 1). No `address` is a `bad-request`; `options` a crawl would refuse (an unusable proxy, say), their start URL aside, are `invalid-options` (422) with the field messages, and nothing is asked (R2-7: they reached the fetcher, which threw a 500) |
 | `POST /api/crawl-options/validate` | `{ errors: { <field>: [messages] } }`, 200. Field names are the JSON names of `CrawlOptions` properties; a value of the wrong type is a message for its field too. A body that isn't JSON, or a property the options don't have, is a `bad-request` (400), as on every other call. The engine gets a field-keyed `Validate`, and the CLI keeps its list of messages |
 
 The options DTO has every public `CrawlOptions` property. `extraHeaders` is an object of name to value, and
@@ -314,6 +315,26 @@ The options DTO has every public `CrawlOptions` property. `extraHeaders` is an o
 | `polite` | 2 | 2/s |
 | `standard` | 5 | no cap, with automatic backoff (the engine's defaults) |
 | `fast` | 16 | no cap |
+
+### Proxy test (round 5)
+
+| Method and path | Does |
+| --- | --- |
+| `POST /api/proxy/test` | `{ proxyUrl, url }`: fetches `url` once through the proxy and answers 200 with `{ outcome, status, elapsedMs, message }`, whatever the fetch found |
+
+- `proxyUrl` is the proxy as the options take it (`http`, `https` or `socks5`, with a host), its user name and password
+  in it when it has them: they're used for this one fetch and kept nowhere, not even in the log. `url` is a whole
+  `http` or `https` address without a user name. Anything else is a `bad-request` (400) whose title says what to type.
+- The fetch is a crawl's (no redirect followed, the body never read, the crawler's user agent) through that proxy only,
+  never the system's, with 10 s to connect to the proxy and 15 s in all.
+- `outcome`: `ok` (the site's answer came back, any status, in `status`), `proxyAuthRequired` (407: the proxy wants a
+  user name and password, or didn't take the ones given), `proxyRefused` (nothing answered at the proxy's address, or
+  it couldn't be found), `proxyUnreachable` (no connection to the proxy in time), `siteUnreachable` (the proxy answered
+  502 or 504, or couldn't open a tunnel to the site; `status` when there was one), `timeout`, `tls` (a secure
+  connection couldn't be set up) and `failed` (anything else).
+- `status` is null when no HTTP answer came back. `message` is one plain sentence the UI shows as it is: "The proxy
+  answered and the site replied 200 OK in 182 ms.", "The proxy asks for a user name and password (407).", "Nothing
+  answered at the proxy's address.".
 
 ### Library (E1)
 
@@ -348,11 +369,11 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   checked has its place in those sums as `noResponse.notChecked`. Taking it out of `fetched` would break every sum a
   client makes with it, the UI's own among them, to save one subtraction; so the count that leaves it out has its own
   name.
-- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed — as in `si stats`, and the same
-  definition a running crawl's `htmlPages` uses, so the count doesn't shift when a crawl ends. **It counts every page
-  the crawl parsed, Cloudflare's own `/cdn-cgi/` endpoints among them, which the analysis doesn't audit**, so it can be
-  more than the analysis's pages: the synthetic site serves one (`/cdn-cgi/l/email-protection`), so its seeded crawl
-  reads 156 against 155, and the 100k crawl 101,107 against 101,106; the garden crawl, which has none, 265 and 265.
+- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed, but for Cloudflare's own
+  `/cdn-cgi/` endpoints — as in `si stats`, and the same definition a running crawl's `htmlPages` uses, so the count
+  doesn't shift when a crawl ends. **Since round 5 it is the analysis's definition too** (`CrawlSchema.PAGE`), so it is
+  `pagesAnalyzed` while the crawl hasn't changed since its analysis: the 100k crawl reads 101,106 in both, where E7 had
+  101,107 against 101,106 ([Engine changes round 5 made](#engine-changes-round-5-made)).
 - **`pagesAnalyzed`** (E7) is the pages the last analysis audited, which its score covers: the analysis's own
   `pagesAnalyzed` and the score's `covers.pages`, as they stood when it ran. **Beside the score, show this one**, not
   `pageCount`. Null before the first analysis; a sidecar from before E7 doesn't send it.
@@ -415,8 +436,16 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   engine.
 - It starts the crawl and returns 201 with the item.
 - `CrawlEngine.Start` runs off the request thread: resuming reads every URL into memory.
-- When the crawl completes, it's analysed if `analyzeWhenDone` is set. Stopped crawls aren't analysed
-  automatically.
+- When the crawl completes, it's analysed if `analyzeWhenDone` is set. Since round 5 (the closing audit's gap 2) a
+  crawl the user stops is analysed too, the same way: its status goes `stopping`, `stopped`, `analyzing`, then
+  `stopped` again with its results "so far" (a partial score), so Simple's Summary and Advanced's Overview have them
+  when it ends. Why when it stops, not on first open: an analysis costs what a completed crawl's does (the 100k crawl's
+  takes about 7 s), the user is watching the screen that turns into the results, and Home's score for the site is
+  there without opening it. Not analysed then: a crawl stopped by the sidecar shutting down (the app quitting), a
+  crawl that stopped itself (it gave up on a site that stopped answering: it is there to be continued once the site is
+  back, so Continue isn't held up as busy; round 5's review, R2-6), and a crawl that failed or was interrupted; those
+  say "No score yet" with Work out the results. While the analysis runs,
+  the crawl is live (`crawl-busy` for remove, delete and continue), as after completing; cancel it to continue at once.
 
 | Method and path | Does |
 | --- | --- |
@@ -1058,11 +1087,11 @@ of the file and holds it for that one page only.
   | text | `contains`, `notContains`, `startsWith`, `endsWith` | `value`, matched ignoring the case of ASCII letters |
   | text | `eq`, `ne` | `value`, matched exactly |
   | text | `regex`, `notRegex` | `value`, a .NET regular expression, case-sensitive unless it starts `(?i)` |
-  | boolean | `is` | `value`: true or false |
+  | boolean | `is`, `isNot` | `value`: true or false. `isNot` is the other value or unknown (round 5 review R1-2) |
   | every type | `isEmpty`, `isNotEmpty` | Nothing. Empty is unknown (null), and for text also `""` |
 
-  - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`) matches unknown values too, as "exclude this value"
-    should; add `isNotEmpty` to leave them out.
+  - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`, `isNot`) matches unknown values too, as "exclude
+    this value" should; add `isNotEmpty` to leave them out.
   - A field the operator doesn't take is refused, not ignored: `values` or `min` beside `eq`, `value` beside `in`.
     A null in `filters`, `columns` or `sort` is a field error (`filters[0]`).
   - Regular expressions run in .NET's non-backtracking mode, linear in the text. A pattern that needs backtracking
@@ -1091,7 +1120,25 @@ of the file and holds it for that one page only.
   "these pages in URLs". `/urls/facets`, a check's `/rows` and `/sitemaps/urls` take it too. Its errors are keyed
   under it (`linkEnds.end`, `linkEnds.filters[0].column`), a link filter that needs the URL summary without one is
   refused with `needs-analysis` as the links grid refuses it, and a cursor read under other links is refused on
-  `after`. What it costs is what the list of ends costs.
+  `after`. What it costs is what the list of ends costs. While a crawl runs, `total` under it is the URLs of the
+  links' moment the ends are of, not the count of URLs an earlier read kept (round 5's final verify: that one could be
+  older than the moment, "526 that are ends, of 516"; `RunningCrawlReadsTests.TheURLGridOfALinksViewsEndsIsOfTheMomentItsEndsAreOf`).
+- **`hiddenChecks`** (round 5 review, also noted) is the ids of the checks the user hid, every count in the app
+  leaving them out: `["title-too-long","thin-content"]`. The issue counts (`issues`, `errors`, `warnings`,
+  `notices`) leave their issues out wherever the query uses them: each row's values, the sort, the filters
+  (`errors gte 1`, `issues eq 0`) and so `matching`. Each is the summary's count less the URL's issues of those checks
+  (of its own severity, for `errors`, `warnings` and `notices`), counted as the summary counts them. An id the
+  catalog doesn't have is taken, as the report takes it (a check hidden by another version, kept in the app's
+  settings): it hides the issues stored under it, if any, so a stale id never breaks a grid. At most 1,000 ids, none
+  null or longer than 200 characters: anything else is `invalid-query` on `hiddenChecks`. None, or the field left
+  out, reads exactly as before.
+  - With checks hidden those four columns have no index: a sort by one reads and sorts the matching rows, as a sort by
+    an unindexed column does, and a filter on one is tested per row, never driving the read.
+  - Counts are kept per set of hidden checks (in any order), so a count kept without them is never given with them;
+    a cursor read with other checks hidden is refused on `after`.
+  - `/urls/facets` takes it for `severity` (below), a check's `/rows` and `/sitemaps/urls` take it as `/urls` does,
+    and the links grid's `/links`, `/links/facets` and `/links/ends` for the `from.` and `to.` issue counts. `linkEnds`
+    reads its link filters with the same checks hidden.
 - **`sort`** is up to 3 `{ column, desc }`, with unknown values last whichever the direction, and the URL's `id`
   breaking ties, in the last key's direction (so an index walked backwards needs no sort). The default is crawl order.
 - **The summary.** `summary` says whether the URL summary describes the crawl (see above), and `reason` why not:
@@ -1191,6 +1238,8 @@ count (all of them by default):
 
 - Without the URL summary, the facets that need it are listed in `unavailable` and left out: `inSitemap` and
   `severity`. A filter on a column that needs it is refused with `needs-analysis`, as above.
+- **`hiddenChecks`** (round 5 review, also noted), as the grid takes it: `severity` counts as the issue counts do, the
+  hidden checks left out, so its `error` bucket opens its URLs in a grid given the same `hiddenChecks`.
 
 #### Lookup
 
@@ -1939,17 +1988,32 @@ An export only reads the crawl.
 
   | `kind` | Writes | `format` | Takes |
   | --- | --- | --- | --- |
-  | `urls` | The URL grid | `csv`, `xlsx` | `columns`, `filters`, `search`, `sort`, and `linkEnds` (E7) as the grid takes it |
-  | `links` | The links grid | `csv`, `xlsx` | The same, over the links grid's columns; one sort key |
-  | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's four |
-  | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's four, the check's own columns among them |
+  | `urls` | The URL grid | `csv`, `xlsx` | `columns`, `filters`, `search`, `sort`, `hiddenChecks` (round 5 review), and `linkEnds` (E7) as the grid takes it |
+  | `links` | The links grid | `csv`, `xlsx` | The same but `linkEnds`, over the links grid's columns; one sort key |
+  | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's five |
+  | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's five, the check's own columns among them |
   | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
-  | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId` |
-  | `workbook` | The spreadsheet of everything | `xlsx` | Nothing |
-  | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples` |
+  | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId`, `hiddenChecks` (round 5's review) |
+  | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
+  | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |
   | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
   | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
 
+- **`hiddenChecks`** (round 5, `report`, `workbook` and `check`): the ids of the checks the user hid, at most 500. They are
+  left out of the lists, the counts and the sheets (discovery decision 2: "the analysis still runs it, and exports
+  leave it out"); the score is the analysis's, and the document says how many checks that found something it left
+  out ("2 checks that found something are hidden, so they’re left out of this report. The score still counts them.";
+  the workbook's summary has a "Hidden checks left out" row). An id the catalog doesn't have is ignored: a check hidden
+  by another version. `GET /report` takes them as `hiddenChecks=a,b`, so the report shown is the report saved. A
+  `check`'s file is named as its sheet is in the workbook with the same checks hidden ("4 …", numbered afresh without
+  them; R2-9: it was numbered against every check), and without a number when the check is hidden itself. **`checks`**
+  (`workbook`): only these checks, the ones an Issues view listed; its summary says "Checks listed". `si export` takes
+  them as `--hidden-checks` and `--checks`, comma-separated.
+- **`hiddenChecks` on a grid's export** (round 5 review, also noted: `urls`, `links`, `sitemapUrls`, `issueRows`) is
+  the grid's own ([URLs](#urls-e3a)): the file's issue counts leave those checks out as the grid's do, in its values,
+  sort and filters. Its limits are the grid's, not the report's: an id the catalog doesn't have is taken, and more
+  than 1,000 ids, a null or one over 200 characters is `invalid-query` on `hiddenChecks`, as on the grid's call.
+  `si export --hidden-checks` takes it for these kinds too.
 - **`columns`** are the file's columns, in the order given; without any, the grid's own (`url`; for `issueRows`,
   `url`, `detail` and `relatedUrl`; for `links`, `from.url`, `to.url`, `kind` and `text`). The id is a column only
   when asked for (`id`: "Crawl order"). A column that needs the URL summary, on a crawl that has none, is in the file
@@ -3548,3 +3612,67 @@ passed and the 2 measurements skipped as they are without `SI_E2E_MEASURE`.
 Not verified: the exports' new words against every state a real site gives (the tests hold each word to a literal and
 the synthetic crawls' rows to the screens' reads; the garden crawl's lists weren't exported); a crawl of a million
 URLs; anything on CI's runners, as nothing was pushed.
+## Engine changes round 5 made
+
+Four parts built round 5 at once; this is their one account, merged on `ui/r5-integrate`.
+
+- **Where a bare address starts** (part A; gap 1). `POST /api/crawl-options/start-url` (above), with
+  `Fetching/StartAddress.ChooseAsync`: https and http asked at once, 10 s at most, https if it answers at all. Tests:
+  `StartAddressTests`, `CrawlOptionsTests`.
+- **A crawl the user stops is analysed** (part A; gap 2), as a completed one is, when it was started to be analysed
+  (`CrawlManager`; only when the user asked for the stop, `LiveCrawl.StopRequested`, not when the crawl gave up on a
+  dead site: R2-6, `CrawlLifecycleTests.ACrawlThatStoppedItselfIsNotAnalysed`): it says `stopped`, `analyzing`, then `stopped` again with its results "so far". One stopped by the
+  app quitting isn't. While that analysis runs, continue, remove and delete answer `crawl-busy` ("This crawl is being
+  analysed…"), and `POST /analyze/cancel` frees it; the app shows the state with Cancel the analysis. Tests:
+  `CrawlLifecycleTests`.
+- **One count of pages** (part B; the closing audit's gap 3). Home said 101,107 pages of the 100k crawl where Issues
+  and Simple said 101,106: E7 kept the library's `pageCount` (every page the crawl parsed, Cloudflare's `/cdn-cgi/`
+  endpoint among them) apart from the analysis's `pagesAnalyzed` (which leaves it out), each true by its own
+  definition. The owner's word on the audit ("one number everywhere", `v2-ui-ia.md`) overrules that: a user can't tell
+  two counts of pages apart, and Cloudflare's endpoint is Cloudflare's, not the site's. `CrawlSchema.PAGE` now leaves
+  out a URL with `/cdn-cgi/` in it, ignoring the case of ASCII letters (`CrawlSchema.NOT_CLOUDFLARE`, which the
+  analysis's `SITE_PAGE` uses too), and so do the live counter (`CrawlWriter.IsPage`) and the outcome a refetch takes
+  back (`WriterStatements.ReadOutcome`). So `pageCount`, `si stats`'s pages and indexable pages, a running crawl's
+  `htmlPages`, the history's and the benchmark's expectation (`HtmlPages`, which the synthetic site now counts without
+  its endpoint) are the analysis's pages: the 100k crawl reads 101,106 everywhere, the seeded synthetic crawl 155, the
+  garden crawl 265 as before. Existing crawl files read the new way at once: every count is taken from the file when
+  read. The app's filter for the site's pages adds `url notContains /cdn-cgi/`, so a figure of pages opens exactly
+  them. Tests: `GridServingTests.TheLibrarysPagesAreThePagesItsAnalysisAudited` (it asserted the difference of one
+  before), `UrlSummaryAgreement` (indexable pages without the endpoint), and the app's `e2e/counts-agree.spec.ts`.
+- **Hidden checks and the workbook's filters** (part C; gap 19 and the workbook parity item).
+  `ReportOptions.HiddenChecks` and `ReportOptions.Checks`; `ReportReader.Read` takes them (`listing`) and leaves those
+  checks out of the problems, the passed and the skipped, numbering the problems afresh; `ReportModel.HiddenProblems`
+  and `Narrowed` say what was left out, and the report and the workbook's summary say it.
+  `ExportFields`: `hiddenChecks` belongs to `report`, `workbook` and (round 5's review, R2-9) `check`, `checks` to `workbook`; the request's DTO, the
+  `GET /report` query and `si export` (`--hidden-checks`, `--checks`) take them. Tested in `WorkbookExportTests`,
+  `ReportDocumentTests` and `ExportEndpointsTests`.
+- **The proxy test** (part D). `POST /api/proxy/test` (above), for the proxy test in the app's settings (gap 18 of
+  step 3's closing audit). The engine gains `Fetching/ProxyTester` (public, with `ProxyTestResult` and `ProxyTestOutcome` in `Fetching/Models`); the
+  sidecar `Api/ProxyEndpoints` and `ProxyTestRequest`. The proxy's address and credentials are made into a `WebProxy`
+  by one `ProxyFactory`, moved out of `HttpFetcher`, so the test sends a password exactly as a crawl does.
+  No crawl file, issue or count changes; the bench is untouched.
+  Tests: `ProxyTesterTests` (engine, 9) against a proxy of the test's own, a loopback server that takes requests in
+  absolute form: a site's answer through it (200, and a 404 that is still the proxy working), a 407 without and with
+  wrong credentials, the right credentials sent, a closed port, a 502 from the proxy, addresses refused before any
+  fetch. `ProxyEndpointTests` (sidecar, 7): a refused proxy as a 200 answer in plain words, and six bodies that are bad
+  requests. Not tested: a proxy that never answers (`proxyUnreachable`, a 10 s wait) and a socks5 or https proxy.
+- **Hidden checks in the grids** (round 5 review, also noted). Every count in the app left the hidden checks out but
+  the URL grid's issue counts (`issues`, `errors`, `warnings`, `notices`, precomputed per URL in `url_summary`) and
+  the grids' exports. `UrlQuery.HiddenChecks` (and `UrlFacetQuery`'s, `LinkEndQuery`'s) is now a field of every grid
+  query, `hiddenChecks` in the API ([URLs](#urls-e3a)). `UrlQueryCompiler.Counting` reads each of the four as the
+  summary's count less `(SELECT COUNT(*) FROM issues hi JOIN issue_types ht ON ht.id = hi.issue WHERE hi.url_id =
+  s.url_id AND hi.issue IN ($hide0, …) [AND ht.severity = '…'])`, the join and the severity as `UrlSummaryBuilder`
+  counts them, so the difference is exact; the column then has no index (`Indexed` false), so the planner scans and
+  sorts rather than walking `ix_url_summary_issues`. The ids are parameters (`$hide0`…), sorted and each once, bound by
+  `GridReadContext.Bind` to every statement of the read that names them (a sort key's SQL carries none of a filter's
+  parameters), and to the reads alongside it. A filter on a count carries them among its parameters, so its key, and
+  every count kept by it, is its own; the query's hash, the facets' keys, a links view's order and `linkEnds`' key
+  take them too. The links grid passes them to the URL grid's compiler for each end's values, filters and the
+  target's sort; a grid's export reads them with its query (`ExportFields`: `hiddenChecks` belongs to the four grids
+  too; `si export --hidden-checks` puts them on the grid's query). With none hidden every statement is the same SQL
+  as before. An unknown id is taken (`UrlQueryCompiler.ValidateHidden` refuses only more than 1,000 ids, a null, or
+  one over 200 characters), so a stale id in the app's settings never breaks a grid; a grid export checks them so
+  too, not by the report's limits. Tests: `HiddenChecksGridTests` (engine, 18: the values, sorts both ways by offset
+  and cursor, five filters, counts and cursors never shared, the severity facet alone and in one pass, the links
+  grid's ends and `linkEnds`, stale ids taken and hiding nothing, 1,000 of them, the limits), against `GridReference.WithoutChecks`; `GridExportTests.TheIssueCountsAreExportedWithoutTheHiddenChecks`
+  (CSV and workbook, the URL grid and a check's rows); `GridEndpointsTests` and `ExportEndpointsTests` (sidecar).

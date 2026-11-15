@@ -412,7 +412,7 @@
   --robots-note-height: calc(2 * var(--leading-12) + var(--space-3));
   /* The Report screen (round 4). */
   --paper-width: 860px; /* the report's sheet on the canvas: a page's width, with room either side of its text */
-  --report-bar-text: 200px; /* the toolbar's title and line, before its controls go under them */
+  --report-bar-text: 360px; /* the toolbar's title and line, before its controls go under them (G6: one line at 1280 px) */
   --report-sheet-min: 320px; /* the sheet keeps this much, however short the window: the screen scrolls instead */
   --color-paper: #ffffff; /* the sheet, light in both themes as paper is: the report is light only */
   --divider-height: 20px;
@@ -455,6 +455,7 @@
   --dialog-max-height: 80vh;
   --dialog-width: 560px;
   --toast-width: 360px;
+  --toast-text-min: 200px; /* a toast's text is never narrower: its actions go under it first */
   --skeleton-text: 10px;
   --skeleton-title: 14px;
   --skeleton-figure: 18px;
@@ -470,6 +471,9 @@
   /* The grid's filter editor and column chooser (the Links slice): a list in a popover scrolls past this height. */
   --filter-values-height: 224px;
   --column-list-height: 320px;
+  /* Settings › Updates: a release's notes scroll past this height; About's licences list, past its own. */
+  --update-notes-max: 240px;
+  --licence-list-height: 360px;
   --measure-text: 62ch; /* the longest line of explaining text */
   --measure-explain: 46ch;
   --opacity-disabled: 0.5;
