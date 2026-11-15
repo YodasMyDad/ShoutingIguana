@@ -181,17 +181,51 @@ needed.
 The branches' own checks, and the review shots both agents made (in the session scratchpad's `framed/` and
 `found-on/`), are in their commits (`42b6938`, `88f4c4b`).
 
+**PAUSED 2026-11-15 (late) for the owner's usage.** Done since the merge:
+
+- **The owner's installed copy is upgraded** to this build (setup `/S`, in place in `%LOCALAPPDATA%\Shouting Iguana`).
+- **Gallery version 6 is published** at <https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>, 2026-11-15:
+  - 45 views x 2 themes in the framed look, 12.2 MB, including three new views: 23 the switcher, 25 a found-on list
+    opened, and 29 the open button;
+  - the site is in `.claude/worktrees/_gallery/site/`, and the v5 backup is in the session scratchpad's
+    `gallery6/site-backup/`.
+
+The shots found four defects:
+
+1. Sitemaps (view 32): sitemap names are cut to `/si….xml` despite the spare width.
+2. Simple Home (view 02): "gardenfurnituresets.co…" is cut despite the spare width.
+3. The switcher (view 23):
+   - it labels test-site crawls "127.0.0.1" without the port, where Home shows the port;
+   - two crawls of a site can look identical;
+   - it shows no Paused or Running state.
+4. Issues with a found-on list opened (view 25): the focus ring is clipped to stubs, and two scroll bars sit side by
+   side.
+
+The fix branch is `ui/gallery6-fixes` (worktree `.claude/worktrees/gallery6-fixes`, from `9ce9529`), worked by one agent.
+Each fix needs a test seen failing first, then `verify-app.sh` (ports 62900, Storybook 7690), `e2e:filled`, the release
+build with `smoke:shell`, and the four views re-shot. Scratch and checkpoint: the session scratchpad's `gallery6-fixes/`.
+Its state at the pause is in the entry below, or in that branch's own copy of this section.
+
 **Left, in order:**
 
-1. Re-shoot the whole gallery on this build: the 42 views, plus the switcher, a found-on list opened and the open
-   button. Publish it as version 6 to <https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>.
-2. Update the owner's installed copy:
+1. Finish `ui/gallery6-fixes`:
+   1. Read its checkpoint, `git log ui/step-3..ui/gallery6-fixes`, and its status entry.
+   2. Finish whatever of the four fixes and their checks is not done.
+   3. Look at the re-shot views 02, 23, 25 and 32.
+2. Merge `ui/gallery6-fixes` into `ui/step-3` (`--no-ff`, local) and rerun `verify-app.sh`.
+3. Rebuild the installer (`npm run build:sidecar -- --target x86_64-pc-windows-msvc`, then
+   `npm run tauri build -- --bundles nsis`), and rerun `smoke:tauri`, `check:orphans` and `smoke:shell`.
+4. Update the owner's install:
    1. The owner closes the app.
-   2. Run the new setup with `/S`. NSIS upgrades it in place in `%LOCALAPPDATA%\Shouting Iguana`.
+   2. Run the new setup with `/S`. NSIS upgrades it in place.
 
    `smoke-installer.ps1` refuses to run beside a real install by design.
-3. Step 3b: the check audit on the three real sites above.
-4. The release step (signing, licences, updater secrets, CI on all three OSes), at the owner's word. Merging to
+5. Put the four re-shot views into `_gallery/site/`:
+   1. Optimise them losslessly with `zop2.py`, as the gallery agent did.
+   2. Rebuild with `build.cjs`, taking the notes on the four defects out of the page's "Seen in these shots".
+   3. Publish to the same artifact, with the HTML and the changed shots.
+6. Step 3b: the check audit on the three real sites above.
+7. The release step (signing, licences, updater secrets, CI on all three OSes), at the owner's word. Merging to
    `master` or releasing still needs an explicit yes.
 
 Still for the owner's eye: at 1280x720 with an export running, the sidebar scrolls and the export's row sits half below
