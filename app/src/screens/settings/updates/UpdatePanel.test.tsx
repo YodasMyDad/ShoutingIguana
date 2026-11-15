@@ -71,6 +71,42 @@ describe('UpdatePanel (gap 18)', () => {
     expect(screen.getByRole('button', { name: 'Check for updates' })).toHaveFocus();
   });
 
+  // Round 5's polish: GitHub answering 404 (no release with latest.json yet) said "Check the internet connection".
+  it.each(['simple', 'advanced'] as const)(
+    'tells a failed check’s cases apart, in plain words, in %s',
+    async (mode) => {
+      const cases = [
+        ['noUpdateInformation', 'No update information yet', /GitHub answered, but no new version has been published/],
+        ['noConnection', 'Couldn’t reach GitHub', /Check the internet connection/],
+        ['untrusted', 'The update information can’t be trusted', /signature doesn’t match/],
+        ['unreadable', 'The update information couldn’t be read', /can’t read/],
+      ] as const;
+      for (const [problem, title, text] of cases) {
+        const user = userEvent.setup();
+        const shell = updater({
+          check: () => Promise.reject({ problem, message: 'The shell’s sentence.', currentVersion: '2.0.0' }),
+        });
+        const { container, unmount } = render(<UpdatePanel updater={shell} mode={mode} busy={false} />);
+        await user.click(screen.getByRole('button', { name: 'Check for updates' }));
+        expect(await screen.findByText(title)).toBeInTheDocument();
+        expect(container.textContent).toMatch(text);
+        if (problem !== 'noConnection') expect(container.textContent).not.toMatch(/internet connection/);
+        if (problem === 'noUpdateInformation') expect(container.textContent).toContain('you have 2.0.0');
+        expect(container.textContent).not.toMatch(/crawl|engine|analys|json|404/i);
+        unmount();
+      }
+    },
+  );
+
+  it('shows a failed check’s own sentence when the shell gives no case', async () => {
+    const user = userEvent.setup();
+    const shell = updater({ check: () => Promise.reject('Couldn’t reach GitHub to check for updates.') });
+    render(<UpdatePanel updater={shell} mode="advanced" busy={false} />);
+    await user.click(screen.getByRole('button', { name: 'Check for updates' }));
+    expect(await screen.findByText('Updates couldn’t be checked')).toBeInTheDocument();
+    expect(screen.getByText('Couldn’t reach GitHub to check for updates.')).toBeInTheDocument();
+  });
+
   it('has no Advanced word in Simple', async () => {
     const user = userEvent.setup();
     const shell = updater({

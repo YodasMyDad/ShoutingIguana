@@ -4,7 +4,13 @@ import { announce } from '../../../feedback/announce';
 import { formatBytes, formatExactTime } from '../../../lib/format';
 import { useLiveIds } from '../../../live/liveStore';
 import type { Mode } from '../../../mode/mode';
-import type { UpdateCheck, UpdateProgress } from '../../../shell/ipc';
+import {
+  parseUpdateCheckFailure,
+  type UpdateCheck,
+  type UpdateCheckFailure,
+  type UpdateCheckProblem,
+  type UpdateProgress,
+} from '../../../shell/ipc';
 import { Button } from '../../../ui/Button';
 import { Callout } from '../../../ui/Callout';
 import { Icon } from '../../../ui/Icon';
@@ -26,7 +32,7 @@ export type UpdateState =
   | { step: 'available'; update: Available }
   | { step: 'downloading'; update: Available; progress: UpdateProgress | null }
   | { step: 'installing'; update: Available }
-  | { step: 'failed'; message: string; update: Available | null };
+  | { step: 'failed'; message: string; update: Available | null; failure?: UpdateCheckFailure | undefined };
 
 type Action =
   | { type: 'check' }
@@ -34,7 +40,7 @@ type Action =
   | { type: 'install' }
   | { type: 'progress'; progress: UpdateProgress }
   | { type: 'installing' }
-  | { type: 'failed'; message: string };
+  | { type: 'failed'; message: string; failure?: UpdateCheckFailure | undefined };
 
 function reduce(state: UpdateState, action: Action): UpdateState {
   const update = 'update' in state ? state.update : null;
@@ -52,12 +58,53 @@ function reduce(state: UpdateState, action: Action): UpdateState {
     case 'installing':
       return update ? { step: 'installing', update } : state;
     case 'failed':
-      return { step: 'failed', message: action.message, update };
+      return { step: 'failed', message: action.message, update, failure: action.failure };
   }
 }
 
 const messageOf = (error: unknown) =>
-  typeof error === 'string' ? error : error instanceof Error ? error.message : 'Something went wrong.';
+  typeof error === 'string'
+    ? error
+    : error instanceof Error
+      ? error.message
+      : (parseUpdateCheckFailure(error)?.message ?? 'Something went wrong.');
+
+/**
+ * A check that showed no update, case by case, in both modes' words (round 5's polish: GitHub answering that there's
+ * no update information yet read as "check the internet connection"). No update information yet isn't a fault: it's
+ * said as information, with the version running.
+ */
+const CHECK_WORDS: Record<
+  UpdateCheckProblem,
+  { tone: 'info' | 'error'; title: string; text: (version: string | null) => string }
+> = {
+  noConnection: {
+    tone: 'error',
+    title: 'Couldn’t reach GitHub',
+    text: () => 'New versions come from GitHub, and it didn’t answer. Check the internet connection, then try again.',
+  },
+  noUpdateInformation: {
+    tone: 'info',
+    title: 'No update information yet',
+    text: (version) =>
+      `GitHub answered, but no new version has been published there yet${version ? `: you have ${version}` : ''}. Try again later.`,
+  },
+  unreadable: {
+    tone: 'error',
+    title: 'The update information couldn’t be read',
+    text: () => 'GitHub answered with update information this version can’t read. Try again later.',
+  },
+  untrusted: {
+    tone: 'error',
+    title: 'The update information can’t be trusted',
+    text: () => 'Its signature doesn’t match this app’s, so nothing will be installed from it. Try again later.',
+  },
+  unavailable: {
+    tone: 'error',
+    title: 'Updates can’t be checked here',
+    text: () => 'This copy of the app can’t check for new versions.',
+  },
+};
 
 /** "20 November 2026", from the release's date. */
 function publishedOn(iso: string | null): string | null {
@@ -125,9 +172,11 @@ export function UpdatePanel({
           : `You have the newest version, ${result.currentVersion}.`,
       );
     } catch (error) {
-      const message = messageOf(error);
-      dispatch({ type: 'failed', message });
-      announce(message);
+      const failure = parseUpdateCheckFailure(error) ?? undefined;
+      const words = failure ? CHECK_WORDS[failure.problem] : null;
+      const message = words && failure ? words.text(failure.currentVersion) : messageOf(error);
+      dispatch({ type: 'failed', message, failure });
+      announce(words ? `${words.title}. ${message}` : message);
     }
   };
 
@@ -229,11 +278,19 @@ export function UpdatePanel({
 
       {state.step === 'failed' ? (
         <Callout
-          tone="error"
-          title={state.update ? 'The update wasn’t installed' : 'Updates couldn’t be checked'}
+          tone={state.failure ? CHECK_WORDS[state.failure.problem].tone : 'error'}
+          title={
+            state.update
+              ? 'The update wasn’t installed'
+              : state.failure
+                ? CHECK_WORDS[state.failure.problem].title
+                : 'Updates couldn’t be checked'
+          }
           className="w-full"
         >
-          {state.message}
+          {state.failure && !state.update
+            ? CHECK_WORDS[state.failure.problem].text(state.failure.currentVersion)
+            : state.message}
         </Callout>
       ) : null}
     </div>

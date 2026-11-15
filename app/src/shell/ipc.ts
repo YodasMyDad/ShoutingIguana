@@ -211,6 +211,34 @@ export function parseUpdateCheck(value: unknown): UpdateCheck {
   };
 }
 
+/** Why a check showed no update (src-tauri/src/updates.rs, `CheckProblem`): each case its own words in the panel. */
+export type UpdateCheckProblem = 'noConnection' | 'noUpdateInformation' | 'unreadable' | 'untrusted' | 'unavailable';
+
+/** A check that showed no update, as the shell rejects `update_check` with it. */
+export interface UpdateCheckFailure {
+  problem: UpdateCheckProblem;
+  /** The shell's own sentence for it. */
+  message: string;
+  currentVersion: string | null;
+}
+
+const CHECK_PROBLEMS: readonly UpdateCheckProblem[] = [
+  'noConnection',
+  'noUpdateInformation',
+  'unreadable',
+  'untrusted',
+  'unavailable',
+];
+
+/** The case of a failed check, from what `update_check` rejected with; null for anything else (a plain sentence). */
+export function parseUpdateCheckFailure(value: unknown): UpdateCheckFailure | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { problem, message, currentVersion } = value as Record<string, unknown>;
+  const known = CHECK_PROBLEMS.find((candidate) => candidate === problem);
+  if (!known || typeof message !== 'string') return null;
+  return { problem: known, message, currentVersion: textOrNull(currentVersion) };
+}
+
 export function parseUpdateProgress(value: unknown): UpdateProgress | null {
   if (typeof value !== 'object' || value === null) return null;
   const { downloaded, total } = value as Record<string, unknown>;
