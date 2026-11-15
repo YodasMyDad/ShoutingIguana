@@ -766,14 +766,18 @@
   }
 }
 
-/* Reduced motion: no shimmer, no tweening. Orientation still happens; it just doesn't move. */
+/* Reduced motion: no shimmer, no tweening. Orientation still happens; it just doesn't move.
+   Transitions take no time at all (0s), never a short one: every element's transition-property is `all` unless it says
+   otherwise, so 0.01ms made every change of every property a transition, and whatever was measured just after a change
+   (the top bar giving way) read the old size. In the release shell the bar flipped between two steps every frame. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
   ::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
 }
