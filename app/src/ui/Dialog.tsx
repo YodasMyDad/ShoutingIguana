@@ -94,7 +94,7 @@ export function Dialog({
 export interface ConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The question, naming the thing: "Delete gardenfurnituresets.co.uk's crawl file?" */
+  /** The question, naming the thing: "Delete the crawl file of gardenfurnituresets.co.uk?" */
   title: ReactNode;
   /** What will be lost, plainly: "The file and its 4,521 URLs are deleted from the disk. This can't be undone." */
   description: ReactNode;

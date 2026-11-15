@@ -540,6 +540,35 @@ const SECTIONS = [
   /^Source/,
 ];
 
+// Round 5's polish: at 1280 px the inspector showed 3½ of its tabs, the rest out of sight with no sign of them.
+test('at 1280 px the tabs out of view are counted and listed, and the keyboard reaches them', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const inspector = await inspectPlant(page, 'hreflang-en');
+  const strip = inspector.getByRole('tablist', { name: 'About this URL' });
+  const tabs = await strip.getByRole('tab').count();
+  const more = inspector.getByRole('button', { name: /^\d+ more: / });
+  await expect(more).toBeVisible();
+  const counted = Number(/^(\d+)/.exec((await more.innerText()).trim())?.[1]);
+  expect(counted).toBeGreaterThan(0);
+  expect(counted).toBeLessThan(tabs);
+  // From the chosen tab, Tab reaches the button; its menu lists the tabs out of view, and the last is chosen there.
+  await strip.getByRole('tab', { selected: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(more).toBeFocused();
+  await page.keyboard.press('Enter');
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem')).toHaveCount(counted);
+  const last = (await menu.getByRole('menuitem').last().innerText()).split('\n')[0]?.trim() ?? '';
+  await menu.getByRole('menuitem').last().click();
+  const chosen = strip.getByRole('tab', { name: new RegExp(`^${last}`) });
+  await expect(chosen).toHaveAttribute('aria-selected', 'true');
+  await expect(chosen).toBeFocused();
+  // Wholly in view in its strip.
+  const [box, room] = await Promise.all([chosen.boundingBox(), strip.boundingBox()]);
+  expect(box && room && box.x >= room.x - 0.5 && box.x + box.width <= room.x + room.width + 0.5).toBe(true);
+  await expectNoViolations(page);
+});
+
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`the inspector passes axe in every section (${colorScheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme });

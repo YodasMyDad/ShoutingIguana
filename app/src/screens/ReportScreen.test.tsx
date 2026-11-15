@@ -67,6 +67,10 @@ beforeEach((context) => {
   if (context.task.file.projectName === 'filled') context.skip();
 });
 
+/** The line under the Report's title: its parts each kept whole, so read as one text. */
+const reportLine = () =>
+  screen.getByRole('heading', { level: 1, name: 'Report' }).nextElementSibling?.textContent ?? null;
+
 describe('the Report screen', () => {
   it('shows the engine’s document in a frame that runs nothing, under a toolbar that says what it’s of', async () => {
     sidecar();
@@ -77,7 +81,7 @@ describe('the Report screen', () => {
     expect(sheet.getAttribute('sandbox')).toBe('allow-same-origin allow-modals');
     expect(sheet.getAttribute('srcdoc')).toContain('The full cut.');
     expect(screen.getByRole('heading', { level: 1, name: 'Report' })).toBeVisible();
-    expect(screen.getByText('gardenfurnituresets.co.uk · checked 31 October 2026 · 265 pages read')).toBeVisible();
+    expect(reportLine()).toBe('gardenfurnituresets.co.uk · checked 31 October 2026 · 265 pages read');
     expect(screen.getByRole('button', { name: /Print or save as PDF/ })).toBeEnabled();
   });
 
@@ -85,7 +89,7 @@ describe('the Report screen', () => {
     sidecar();
     await open(REPORT, 'advanced');
     await frame();
-    expect(screen.getByText('gardenfurnituresets.co.uk · crawled 31 October 2026 · 265 pages read')).toBeVisible();
+    expect(reportLine()).toBe('gardenfurnituresets.co.uk · crawled 31 October 2026 · 265 pages read');
   });
 
   it('switches to the summary page, in its address, keeping the sheet up while it comes', async () => {

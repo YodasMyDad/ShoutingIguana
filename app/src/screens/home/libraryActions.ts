@@ -16,6 +16,17 @@ export function crawlLabel(item: CrawlListItem, older: boolean): string {
   return older && item.startedAt ? `${name}, ${formatExactTime(item.startedAt)}` : name;
 }
 
+/**
+ * The question before a crawl's file is deleted, naming it: "Delete the crawl file of gardenfurnituresets.co.uk?", and
+ * for an older crawl of a site, "… of gardenfurnituresets.co.uk from 31 Oct 2026, 14:13?" (round 5's polish: it read
+ * "Delete 127.0.0.1:49877, 15 Nov 2026, 01:42's crawl file?", a possessive on a date). `file` is the mode's word for
+ * the file: Simple's "site check file".
+ */
+export function deleteQuestion(item: CrawlListItem, older: boolean, file = 'crawl file'): string {
+  const when = older && item.startedAt ? ` from ${formatExactTime(item.startedAt)}` : '';
+  return `Delete the ${file} of ${siteName(item)}${when}?`;
+}
+
 /** Takes a crawl off the library, with Undo: its file stays on disk. Shared by the menu and the palette. */
 export async function removeFromLibrary(item: CrawlListItem, refresh: () => Promise<unknown>): Promise<void> {
   try {

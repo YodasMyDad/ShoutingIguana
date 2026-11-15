@@ -40,6 +40,7 @@ import { RelativeTime } from '../../ui/RelativeTime';
 import { ScoreRing } from '../../ui/ScoreRing';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { TextLink } from '../../ui/TextLink';
+import { deleteQuestion } from '../../screens/home/libraryActions';
 import {
   problemCounts,
   problemWords,
@@ -144,10 +145,23 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
               {name}
             </TextLink>
             <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-12 text-text-muted">
-              <span className="truncate">
-                {nested ? <RelativeTime iso={item.startedAt} /> : rowMeta(item, status, 0)}
-                {item.outOfDate && kind !== 'live' ? ' · results out of date' : ''}
-              </span>
+              {/* Each part whole, the line wrapping between them, never cut ("5,710 pages re…": round 5's polish). */}
+              {nested ? (
+                <span className="truncate">
+                  <RelativeTime iso={item.startedAt} />
+                  {item.outOfDate && kind !== 'live' ? ' · results out of date' : ''}
+                </span>
+              ) : (
+                [
+                  ...rowMeta(item, status, 0).split(' · '),
+                  ...(item.outOfDate && kind !== 'live' ? ['results out of date'] : []),
+                ].map((part, index) => (
+                  <span key={part} className="whitespace-nowrap">
+                    {index > 0 ? '· ' : ''}
+                    {part}
+                  </span>
+                ))
+              )}
               {earlier.length > 0 ? (
                 <button
                   type="button"
@@ -405,7 +419,7 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Delete ${target.name}’s site check file?`}
+        title={deleteQuestion(target.item, false, 'site check file')}
         description={`The file ${target.item.fileName} is deleted from the disk, with everything this check found. This can’t be undone.`}
         confirmLabel="Delete file"
         destructive

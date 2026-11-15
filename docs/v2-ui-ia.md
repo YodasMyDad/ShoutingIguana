@@ -95,7 +95,8 @@ robots.txt and the crawl's settings are Advanced only. The table is in [Simple m
 - A site is named by its host and any port of its own ("127.0.0.1:5001"): one host on two ports is two sites.
 - Below them, the library grouped by site: the site whose latest crawl is newest comes first, and each site shows its
   latest crawl, with older ones folded away ("2 older crawls"). A site with a crawl running now says what it's doing
-  (Crawling now, Paused, Stopping, Analysing).
+  and whose state it is, beside the row's own: Crawling now, or Newer crawl paused, stopping or being analysed
+  (Another crawl, when it began before the row's). A row whose site has another crawl going offers no Continue.
 - Each crawl shows its status, URLs, pages, checks with issues by severity and when it started. Beside its status, the
   one action its state needs: Continue (stopped, interrupted), Analyse again (out of date), Analyse it (never
   analysed), Locate the file… (missing). All its actions are in its menu: Open, Continue, Crawl again…, Analyse again,

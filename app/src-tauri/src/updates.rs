@@ -62,21 +62,57 @@ fn test_endpoint() -> Option<Url> {
     Url::parse(&value).inspect_err(|error| log::warn!("{ENDPOINT_OVERRIDE} isn't a URL: {error}")).ok()
 }
 
+/// Why a check showed no update: each case is its own sentence in Settings › Updates (UpdatePanel's words), in both
+/// modes. The updater collapses most of them into one error, so they're told apart by the error's kind, not its words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CheckProblem {
+    /// No answer from GitHub: no connection, a name that didn't resolve, a time-out.
+    NoConnection,
+    /// GitHub answered, but with no update information: no release has a `latest.json` yet (a 404), or an error status.
+    NoUpdateInformation,
+    /// The update information was there, but this version can't read it.
+    Unreadable,
+    /// The update information's signature doesn't match the app's key: nothing from it is installed.
+    Untrusted,
+    /// This copy of the app can't check (its updater couldn't be set up).
+    Unavailable,
+}
+
+/// A check that showed no update, as the page gets it: the case, its plain sentence, and the version running.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckFailed {
+    pub problem: CheckProblem,
+    pub message: String,
+    pub current_version: String,
+}
+
+impl CheckFailed {
+    fn new(problem: CheckProblem, current_version: &str) -> Self {
+        Self { problem, message: problem_words(problem).to_owned(), current_version: current_version.to_owned() }
+    }
+}
+
 /// Asks the release feed whether there's a newer version than this one.
-pub async fn check(app: &AppHandle) -> Result<UpdateCheck, String> {
+pub async fn check(app: &AppHandle) -> Result<UpdateCheck, CheckFailed> {
     let current_version = app.package_info().version.to_string();
     let mut builder = app.updater_builder();
     if let Some(endpoint) = test_endpoint() {
         log::info!("Checking for updates at the test's endpoint {endpoint}");
-        builder = builder.endpoints(vec![endpoint]).map_err(|error| error.to_string())?;
+        builder = builder.endpoints(vec![endpoint]).map_err(|error| {
+            log::warn!("The test's update endpoint was refused: {error}");
+            CheckFailed::new(CheckProblem::Unavailable, &current_version)
+        })?;
     }
     let updater = builder.build().map_err(|error| {
         log::warn!("The updater couldn't be set up: {error}");
-        "Updates can't be checked in this copy of the app.".to_owned()
+        CheckFailed::new(CheckProblem::Unavailable, &current_version)
     })?;
     let found = updater.check().await.map_err(|error| {
-        log::info!("Couldn't check for updates: {error}");
-        check_failed_words(&error.to_string())
+        let problem = check_problem(&error);
+        log::info!("Couldn't check for updates ({problem:?}): {error}");
+        CheckFailed::new(problem, &current_version)
     })?;
     let available = found.as_ref().map(|update| AvailableUpdate {
         version: update.version.clone(),
@@ -93,18 +129,55 @@ pub async fn check(app: &AppHandle) -> Result<UpdateCheck, String> {
     Ok(UpdateCheck { current_version, available })
 }
 
-/// Plain words for a check that failed: the network, or a release feed that isn't there yet.
-pub fn check_failed_words(error: &str) -> String {
+/// The case of a failed check, by the updater's error. Every endpoint answering with an error status (GitHub's 404 for
+/// a release with no `latest.json`) is `ReleaseNotFound`: GitHub answered. No answer at all is a request error.
+pub fn check_problem(error: &tauri_plugin_updater::Error) -> CheckProblem {
+    use tauri_plugin_updater::Error;
+    match error {
+        Error::ReleaseNotFound => CheckProblem::NoUpdateInformation,
+        Error::Reqwest(error) if error.is_decode() => CheckProblem::Unreadable,
+        Error::Reqwest(error) if error.is_status() => CheckProblem::NoUpdateInformation,
+        Error::Reqwest(_) | Error::Network(_) | Error::Io(_) => CheckProblem::NoConnection,
+        Error::Minisign(_)
+        | Error::Base64(_)
+        | Error::SignatureUtf8(_)
+        | Error::SignedVersionMismatch { .. }
+        | Error::MissingSignedVersion => CheckProblem::Untrusted,
+        Error::Serialization(_)
+        | Error::Semver(_)
+        | Error::UrlParse(_)
+        | Error::TargetNotFound(_)
+        | Error::TargetsNotFound(_) => CheckProblem::Unreadable,
+        other => problem_of_words(&other.to_string()),
+    }
+}
+
+/// The case, from an error's words alone: for an error of a kind `check_problem` doesn't name.
+fn problem_of_words(error: &str) -> CheckProblem {
     let lower = error.to_ascii_lowercase();
-    if lower.contains("valid release json") {
-        // The plugin says this whichever way every endpoint failed: no answer, or no latest.json in the release.
-        "No update information could be read from GitHub. Check the internet connection, or try again later.".to_owned()
-    } else if lower.contains("404") || lower.contains("not found") {
-        "No update information was found on GitHub. Try again later.".to_owned()
+    if lower.contains("valid release json") || lower.contains("404") || lower.contains("not found") {
+        CheckProblem::NoUpdateInformation
     } else if lower.contains("signature") || lower.contains("pubkey") || lower.contains("public key") {
-        "The update information couldn't be trusted, so nothing was installed.".to_owned()
+        CheckProblem::Untrusted
     } else {
-        "Couldn't reach GitHub to check for updates. Check the internet connection, then try again.".to_owned()
+        CheckProblem::NoConnection
+    }
+}
+
+/// Each case's plain sentence, which the page shows if it has no words of its own for it.
+pub fn problem_words(problem: CheckProblem) -> &'static str {
+    match problem {
+        CheckProblem::NoConnection => {
+            "Couldn't reach GitHub to check for updates. Check the internet connection, then try again."
+        }
+        CheckProblem::NoUpdateInformation => {
+            "GitHub answered, but has no update information for Shouting Iguana yet. Try again later."
+        }
+        CheckProblem::Unreadable => "GitHub's update information couldn't be read. Try again later.",
+        CheckProblem::Untrusted => {
+            "The update information's signature didn't match this app's, so it can't be trusted. Nothing was installed."
+        }
+        CheckProblem::Unavailable => "Updates can't be checked in this copy of the app.",
     }
 }
 
@@ -176,7 +249,7 @@ async fn download_and_install(app: &AppHandle, shell: &Shell, update: &Update) -
         .await
         .map_err(|error| {
             log::warn!("The update couldn't be downloaded: {error}");
-            if error.to_string().to_ascii_lowercase().contains("signature") {
+            if check_problem(&error) == CheckProblem::Untrusted {
                 "The download's signature didn't match, so it wasn't installed.".to_owned()
             } else {
                 "The update couldn't be downloaded. Check the internet connection, then try again.".to_owned()
@@ -219,7 +292,11 @@ mod tests {
         );
         assert_eq!(*lock(&quit), QuitPhase::Running);
 
+        // Stopped, it's held as being analysed (its results so far come next): still something running.
         lock(&live).crawl(&CrawlChange { crawl_id: "a".into(), status: "stopped".into(), error: None });
+        assert!(begin_stopping(&quit, &live).is_err());
+        // The library says no analysis followed: nothing runs.
+        assert!(lock(&live).settle("a"));
         assert_eq!(begin_stopping(&quit, &live), Ok(()));
         assert_eq!(*lock(&quit), QuitPhase::Stopping);
         assert_eq!(begin_stopping(&quit, &live), Err("The app is quitting.".to_owned()));
@@ -227,18 +304,42 @@ mod tests {
 
     #[test]
     fn a_failed_check_says_why_in_plain_words() {
-        // The plugin's own words when no endpoint gave a release (seen in the real shell: GitHub's latest release has
-        // no latest.json yet).
+        use tauri_plugin_updater::Error;
+        // GitHub answered 404 (its latest release has no latest.json yet): the plugin's ReleaseNotFound. Seen in the
+        // release shell, where it said to check the internet connection.
+        assert_eq!(check_problem(&Error::ReleaseNotFound), CheckProblem::NoUpdateInformation);
+        assert!(!problem_words(CheckProblem::NoUpdateInformation).contains("internet connection"));
+        assert!(problem_words(CheckProblem::NoUpdateInformation).starts_with("GitHub answered"));
+        assert_eq!(check_problem(&Error::Network("connection refused".into())), CheckProblem::NoConnection);
+        assert!(problem_words(CheckProblem::NoConnection).contains("Check the internet connection"));
+        assert_eq!(check_problem(&Error::MissingSignedVersion), CheckProblem::Untrusted);
         assert_eq!(
-            check_failed_words("Could not fetch a valid release JSON from the remote"),
-            "No update information could be read from GitHub. Check the internet connection, or try again later."
+            check_problem(&Error::SignedVersionMismatch { signed: "2.1.0".into(), announced: "2.2.0".into() }),
+            CheckProblem::Untrusted
         );
+        assert!(problem_words(CheckProblem::Untrusted).contains("can't be trusted"));
+        let unreadable = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        assert_eq!(check_problem(&Error::Serialization(unreadable)), CheckProblem::Unreadable);
+        assert_eq!(check_problem(&Error::TargetNotFound("windows-x86_64".into())), CheckProblem::Unreadable);
+
+        // From the words alone, for a kind not named.
+        let no_information = CheckProblem::NoUpdateInformation;
+        assert_eq!(problem_of_words("Could not fetch a valid release JSON from the remote"), no_information);
+        assert_eq!(problem_of_words("HTTP 404 Not Found"), no_information);
+        assert_eq!(problem_of_words("error sending request for url"), CheckProblem::NoConnection);
+        assert_eq!(problem_of_words("signature verification failed"), CheckProblem::Untrusted);
+    }
+
+    #[test]
+    fn a_failed_check_reaches_the_page_as_its_case_its_words_and_the_version() {
         assert_eq!(
-            check_failed_words("HTTP 404 Not Found"),
-            "No update information was found on GitHub. Try again later."
+            serde_json::to_value(CheckFailed::new(CheckProblem::NoUpdateInformation, "2.0.0")).unwrap(),
+            serde_json::json!({
+                "problem": "noUpdateInformation",
+                "message": "GitHub answered, but has no update information for Shouting Iguana yet. Try again later.",
+                "currentVersion": "2.0.0"
+            })
         );
-        assert!(check_failed_words("error sending request for url").starts_with("Couldn't reach GitHub"));
-        assert!(check_failed_words("signature verification failed").contains("couldn't be trusted"));
     }
 
     #[test]

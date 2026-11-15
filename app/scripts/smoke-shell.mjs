@@ -12,7 +12,7 @@
 // Options: --exe <path>, --crawl <file>, --port <n>, --pages <n> (the test site's), --shots <folder> (a picture of
 // the page after each step), --skip keys,live,tray,restart, --keep (leave the run's folder behind), --mode both|advanced|simple
 // (both, by default: this walk in Advanced, then scripts/smoke-shell-simple.mjs in Simple, each on an app of its own).
-/* global document, window -- the functions handed to page.evaluate run in the page */
+/* global document, window, getComputedStyle, requestAnimationFrame, PopStateEvent -- the functions handed to page.evaluate run in the page */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -21,6 +21,7 @@ import { createInterface } from 'node:readline';
 import { chromium } from '@playwright/test';
 import { appRoot, buildCli, copyCrawl, makeSyntheticCrawl } from './lib/engine.mjs';
 import {
+  UPDATE_ANSWERS,
   VIRTUAL_KEYS,
   Walk,
   advancedSettings,
@@ -29,6 +30,7 @@ import {
   parseOptions,
   shellEnvironment,
   shellMemory,
+  updateTruth,
   verdict,
 } from './lib/shell.mjs';
 
@@ -162,6 +164,24 @@ try {
   const picture = async (name) => {
     if (options.shots) await page.screenshot({ path: path.join(options.shots, `${name}.png`) });
   };
+  /** The page at the window's own size again, after a step that set its own (setViewportSize). */
+  const windowSize = async () => {
+    const session = await page.context().newCDPSession(page);
+    await session.send('Emulation.clearDeviceMetricsOverride');
+    await session.detach();
+  };
+  /** A route of the app, as its own links go there: no load. */
+  const visit = (route) =>
+    page.evaluate((to) => {
+      window.history.pushState(null, '', to);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, route);
+  /** "1 min 5 s" in ms. */
+  const durationOf = (words) =>
+    [...(words ?? '').matchAll(/(\d+)\s*(h|min|s)\b/g)].reduce(
+      (sum, [, value, unit]) => sum + Number(value) * { h: 3_600_000, min: 60_000, s: 1_000 }[unit],
+      0,
+    );
   /** Home. The app reopens where it was left, so it's reached by its link, never by loading `/`. */
   const home = async () => {
     await nav.getByRole('link', { name: 'Home' }).click();
@@ -266,6 +286,82 @@ try {
     return `"html": ${matches}`;
   });
 
+  // Round 5's polish: at 1280 px the inspector showed 3½ of its 9 tabs, the rest out of sight with no sign of them.
+  await walk.step(
+    'at 1280 px the inspector counts the tabs out of view, lists them, and the keyboard reaches them',
+    async () => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await nav.getByRole('link', { name: /^URLs/ }).click();
+      await grid.getByRole('row').nth(1).getByRole('gridcell').nth(1).click();
+      await page.keyboard.press('Enter');
+      const strip = inspector.getByRole('tablist', { name: 'About this URL' });
+      await strip.waitFor();
+      const more = inspector.getByRole('button', { name: /^\d+ more: / });
+      await more.waitFor({ timeout: 5_000 });
+      const name = await more.getAttribute('aria-label');
+      await strip.getByRole('tab', { selected: true }).focus();
+      await page.keyboard.press('Tab');
+      expectThat(
+        await more.evaluate((element) => element === document.activeElement),
+        'Tab from the tabs didn’t reach the button',
+      );
+      await page.keyboard.press('Enter');
+      const items = page.getByRole('menu').getByRole('menuitem');
+      await items.first().waitFor();
+      const last = (await items.last().innerText()).split('\n')[0].trim();
+      // Down the menu to its last item, once the menu has the keyboard.
+      await until('the menu taking the keyboard', () =>
+        page.evaluate(() => document.activeElement?.getAttribute('role') === 'menuitem'),
+      );
+      // A key at a time, as a hand presses them: pressed together, WebView2 dropped some.
+      const focusedItem = () => page.evaluate(() => document.activeElement?.textContent ?? '');
+      for (let step = 1; step < (await items.count()) && !(await focusedItem()).startsWith(last); step++) {
+        const before = await focusedItem();
+        await page.keyboard.press('ArrowDown');
+        await until('the next item', async () => (await focusedItem()) !== before, 2_000).catch(() => undefined);
+      }
+      await until(
+        'the last item focused',
+        async () => (await page.evaluate(() => document.activeElement?.textContent ?? '')).startsWith(last),
+        5_000,
+      ).catch(async (error) => {
+        const now = await page.evaluate(() => ({
+          menus: document.querySelectorAll('[role="menu"]').length,
+          items: [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent).join('|'),
+          focused: `${document.activeElement?.getAttribute('role')} ${document.activeElement?.textContent?.slice(0, 30)}`,
+        }));
+        throw new Error(`${error.message}: "${last}" wanted; ${JSON.stringify(now)}`);
+      });
+      await page.keyboard.press('Enter');
+      const chosen = strip.getByRole('tab', { name: new RegExp(`^${last}`) });
+      await until(
+        'the tab chosen from the list, focused',
+        async () =>
+          (await chosen.getAttribute('aria-selected')) === 'true' &&
+          (await chosen.evaluate((tab) => tab === document.activeElement)),
+        5_000,
+      ).catch(async (error) => {
+        const now = await page.evaluate(() => ({
+          selected: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent,
+          focused: `${document.activeElement?.tagName} ${document.activeElement?.getAttribute('role')} ${document.activeElement?.textContent?.slice(0, 30)}`,
+        }));
+        throw new Error(`${error.message}: "${last}" asked for; ${now.selected} chosen; focus on ${now.focused}`);
+      });
+      const inView = await chosen.evaluate((tab) => {
+        const box = tab.getBoundingClientRect();
+        const room = tab.parentElement.getBoundingClientRect();
+        return box.left >= room.left - 0.5 && box.right <= room.right + 0.5;
+      });
+      expectThat(inView, `${last} was chosen out of view`);
+      await picture('04b-inspector-more');
+      await inspector.getByRole('tab', { name: /^Summary/ }).click();
+      await page.keyboard.press('Escape');
+      await inspector.waitFor({ state: 'hidden' });
+      await windowSize();
+      return `"${name}"; ${last} chosen from it, focused and in view`;
+    },
+  );
+
   await walk.step('Issues shows a check: what is wrong, why it matters, how to fix it', async () => {
     await page.keyboard.press('Control+2');
     await page.waitForURL(/\/issues/);
@@ -359,7 +455,40 @@ try {
       `the report is unstyled (font "${styled.font}", style-src ${styleSrc})`,
     );
     expectThat(!/nonce-|sha256-/.test(styleSrc), `style-src holds a nonce or a hash: ${styleSrc}`);
+    // Round 5's polish: the frame kept Windows' classic bar (the report's own policy refused the app's style), and at
+    // 1280 px the line left "read" alone and Print or save as PDF took a row of its own.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.waitForTimeout(300);
+    const bars = await frame.locator('html').evaluate((html) => {
+      const own = html.ownerDocument;
+      return {
+        applied: own.getElementById('si-app-scroll-bars')?.sheet != null,
+        width: own.defaultView.innerWidth - own.documentElement.clientWidth,
+      };
+    });
+    const size = await page.evaluate(() =>
+      Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--scrollbar-size')),
+    );
+    expectThat(bars.applied, 'the report frame refused the app’s scroll bars');
+    expectThat(
+      Math.abs(bars.width - size) < 1,
+      `the report frame's scroll bar is ${bars.width} px wide, not the app's ${size} px`,
+    );
+    const bar = await page.getByRole('heading', { level: 1, name: 'Report' }).evaluate((title) => {
+      const header = title.closest('header');
+      const line = title.nextElementSibling;
+      const button = (words) =>
+        [...header.querySelectorAll('button')].find((each) => each.textContent.trim().startsWith(words));
+      return {
+        lines: Math.round(line.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(line).lineHeight)),
+        print: Math.round(button('Print or save as PDF').getBoundingClientRect().top),
+        save: Math.round(button('Save…').getBoundingClientRect().top),
+      };
+    });
+    expectThat(bar.lines === 1, `the report's line takes ${bar.lines} lines at 1280 px`);
+    expectThat(bar.print === bar.save, 'Print or save as PDF is on a row of its own at 1280 px');
     await picture('06b-report');
+    await windowSize();
     // Print: the frame's print() blocks the page until its dialog closes, so the button is pressed without waiting on
     // it, the dialog is looked for from outside, and Esc, pressed in the webview, closes it. WebView2's print dialog
     // isn't a window of its own: it is drawn in the app's window, as one more of the webview's surfaces in it.
@@ -390,7 +519,7 @@ try {
     await page.evaluate(() => 1);
     await page.keyboard.press('Control+2');
     await page.waitForURL(/\/issues/);
-    return `styled (${styled.font.split(',')[0]}; style-src ${styleSrc}); WebView2's print dialog opened over the window (${opened.surfaces - before.surfaces} more surface) and closed on Esc`;
+    return `styled (${styled.font.split(',')[0]}; style-src ${styleSrc}), the app's ${size} px scroll bar, one line and one row at 1280 px; WebView2's print dialog opened over the window (${opened.surfaces - before.surfaces} more surface) and closed on Esc`;
   });
 
   await walk.step('the palette (Ctrl+K), "Go to URL…" and the shortcut sheet (?)', async () => {
@@ -415,6 +544,20 @@ try {
     await page.keyboard.press('Escape');
     await sheet.waitFor({ state: 'hidden' });
     return `Go to URL "/" opened ${found}`;
+  });
+
+  // Round 5's polish: GitHub answering 404 (no release with update information yet) said to check the connection.
+  await walk.step('Settings › Updates says which case GitHub’s answer is, in plain words', async () => {
+    const truth = await updateTruth();
+    await visit('/settings/updates');
+    await page.getByRole('button', { name: 'Check for updates' }).click();
+    await page.getByText(UPDATE_ANSWERS).first().waitFor({ timeout: 30_000 });
+    const words = (await main.innerText()).split('\n').filter((line) => /version|GitHub|update|connection/i.test(line));
+    const said = words.join('\n');
+    expectThat(truth.words.test(said), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
+    if (truth.not) expectThat(!truth.not.test(said), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
+    await picture('07b-updates');
+    return `GitHub ${truth.said}: "${words.slice(-2).join(' ')}"`;
   });
 
   if (options.skip.has('keys')) walk.skip('the browser’s own keys are off', 'left out with --skip');
@@ -495,9 +638,44 @@ try {
         await page.keyboard.press('F7');
         await main.getByText('The crawl is paused.', { exact: false }).waitFor();
         await picture('08-paused');
+        // Round 5's polish: a page loaded again while the crawl was paused put the pause on the chart's clock, which
+        // said "over 2 min 21 s" beside Elapsed 30 s.
+        await page.waitForTimeout(6_000);
+        await page.reload();
+        await main.getByText('The crawl is paused.', { exact: false }).waitFor({ timeout: 20_000 });
+        await main.click({ position: { x: 300, y: 10 } });
         await page.keyboard.press('F7');
         await main.getByText('The crawl is paused.', { exact: false }).waitFor({ state: 'hidden' });
-        return `crawl ${crawlId} of ${url}`;
+        await page.waitForTimeout(2_500);
+        const clocks = await page.evaluate(() => {
+          const text = document.querySelector('main')?.innerText ?? '';
+          const elapsed = [...document.querySelectorAll('.si-stat')].find((stat) =>
+            stat.textContent.startsWith('Elapsed'),
+          );
+          return {
+            chart: /The site’s URLs over (.*?)(?: of crawling)?(?:\n|$)/.exec(text)?.[1] ?? null,
+            elapsed: elapsed?.querySelector('.si-stat__value')?.textContent ?? null,
+          };
+        });
+        const gap = Math.abs(durationOf(clocks.chart) - durationOf(clocks.elapsed));
+        expectThat(
+          clocks.chart !== null && gap <= 3_000,
+          `the chart is over ${clocks.chart} beside Elapsed ${clocks.elapsed}`,
+        );
+        // Round 5's polish: the card said Queued 92,111 and the bar under the chart Queued 92,116. One read: both.
+        const queued = await page.evaluate(() => {
+          const stat = [...document.querySelectorAll('.si-stat')].find((each) => each.textContent.startsWith('Queued'));
+          const bar = document.querySelector('[aria-label^="Of "][aria-label*=" found: "]')?.getAttribute('aria-label');
+          return {
+            card: stat?.querySelector('.si-stat__value')?.textContent?.replace(/[^\d]/g, '') ?? null,
+            bar: / ([\d,]+) queued/.exec(bar ?? '')?.[1]?.replace(/,/g, '') ?? null,
+          };
+        });
+        expectThat(
+          queued.card !== null && queued.card === queued.bar,
+          `Queued is ${queued.card} on the card and ${queued.bar} on the bar`,
+        );
+        return `crawl ${crawlId} of ${url}; after a load while paused the chart is over ${clocks.chart} beside Elapsed ${clocks.elapsed}; Queued ${queued.card} on the card and the bar`;
       },
     );
 
@@ -534,7 +712,65 @@ try {
           await page.setViewportSize({ width: 1280, height: 720 });
           at1280 = await read();
         }
-        return `the window's own ${natural.width} px: step ${natural.step}; at 1280 px: step ${at1280.step}, the switch whole`;
+        // Round 5's polish: under reduced motion every change was a 0.01 ms transition, the measure read old widths,
+        // and the bar flipped between two steps every frame, the search field's Ctrl K poking out under the switch.
+        // Watched frame by frame: one step, and the field's keys never outside it.
+        const frames = () =>
+          page.evaluate(
+            () =>
+              new Promise((resolve) => {
+                const bar = document.querySelector('header[data-mode]');
+                const search = [...bar.querySelectorAll('button')].find((button) =>
+                  button.textContent.includes('Search or run a command'),
+                );
+                const steps = new Set();
+                const bad = [];
+                let left = 40;
+                const frame = () => {
+                  steps.add(Number(bar.dataset.give ?? 0));
+                  const keys = search?.querySelector('kbd')?.getBoundingClientRect();
+                  const field = search?.getBoundingClientRect();
+                  if (bar.scrollWidth > bar.clientWidth) bad.push(`overflow ${bar.scrollWidth - bar.clientWidth}`);
+                  if (field && keys && keys.width > 0 && keys.right > field.right + 0.5)
+                    bad.push('the keys out of the field');
+                  if (--left > 0) requestAnimationFrame(frame);
+                  else resolve({ steps: [...steps], bad });
+                };
+                requestAnimationFrame(frame);
+              }),
+          );
+        const seen = [];
+        const watch = async (label) => {
+          const result = await frames();
+          expectThat(
+            result.steps.length === 1 && result.bad.length === 0,
+            `${label}: steps ${result.steps.join(',')}, ${result.bad[0] ?? 'nothing out of place'}`,
+          );
+          seen.push(`${label} ${result.steps[0]}`);
+        };
+        for (const reducedMotion of ['no-preference', 'reduce']) {
+          await page.emulateMedia({ reducedMotion });
+          for (const [width, height] of [
+            [1280, 720],
+            [1024, 720],
+            [640, 360],
+          ]) {
+            await page.setViewportSize({ width, height });
+            await page.waitForTimeout(300);
+            await watch(`${reducedMotion === 'reduce' ? 'reduced motion, ' : ''}${width} px`);
+          }
+        }
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await page.keyboard.press('F7');
+        await main.getByText('The crawl is paused.', { exact: false }).waitFor();
+        await page.waitForTimeout(300);
+        await watch('reduced motion, paused, 1280 px');
+        await picture('08b-topbar-paused-reduced-motion');
+        await page.keyboard.press('F7');
+        await main.getByText('The crawl is paused.', { exact: false }).waitFor({ state: 'hidden' });
+        await page.emulateMedia({ reducedMotion: null });
+        await windowSize();
+        return `the window's own ${natural.width} px: step ${natural.step}; at 1280 px: step ${at1280.step}, the switch whole; one step a frame: ${seen.join('; ')}`;
       },
     );
   }

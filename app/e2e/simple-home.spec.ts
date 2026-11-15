@@ -229,7 +229,9 @@ test('a check started from Home with Enter goes through its three steps to the S
   const toast = page.locator('.si-toast').filter({ hasText: `${item.site} is checked` });
   await expect(toast).toBeVisible();
   await expect(toast).toContainText(`Score ${item.score!.value}${item.score!.partial ? ' so far' : ''}: ${toFix}`);
-  await expect(toast.getByRole('button', { name: 'See the summary' })).toBeVisible();
+  // On the Summary already, it doesn't offer it (round 5's polish): what to fix instead, when there is any.
+  await expect(toast.getByRole('button', { name: 'See the summary' })).toHaveCount(0);
+  if (problems > 0) await expect(toast.getByRole('button', { name: 'See what to fix' })).toBeVisible();
   // The toast's Open the report lands on the Report screen, part C's.
   await toast.getByRole('button', { name: 'Open the report' }).click();
   await expect(page).toHaveURL(new RegExp(`/crawls/${id}/report$`));

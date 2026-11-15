@@ -68,12 +68,25 @@ export function runningBySite(items: readonly CrawlListItem[], running: readonly
 /**
  * What a site's row says of its crawl running now, by that crawl's live status: "Crawling now", or paused, stopping or
  * being analysed as the sidebar's heading says them (round 5 review R1-3). A status not arrived yet is crawling.
+ *
+ * The row is the site's latest crawl at rest, and the one running is another (in the card above): told `newer` (whether
+ * it started after the row's), the words say whose state it is, as the row's own status says the row's crawl's
+ * ("Newer crawl paused" beside "Stopped", never "Paused" beside "Stopped": round 5's polish). Crawling now is the
+ * site's, whichever crawl it is.
  */
-export function runningBadge(status: CrawlStatus | null | undefined): string {
-  if (status === 'paused') return 'Paused';
-  if (status === 'stopping') return 'Stopping';
-  if (status === 'analyzing') return 'Analysing';
+export function runningBadge(status: CrawlStatus | null | undefined, newer?: boolean): string {
+  const whose = newer === undefined ? null : newer ? 'Newer crawl' : 'Another crawl';
+  if (status === 'paused') return whose ? `${whose} paused` : 'Paused';
+  if (status === 'stopping') return whose ? `${whose} stopping` : 'Stopping';
+  if (status === 'analyzing') return whose ? `${whose} being analysed` : 'Analysing';
   return 'Crawling now';
+}
+
+/** Whether a site's crawl running now started after the row's crawl: unknown (undefined) when either time is. */
+export function startedLater(running: string | null | undefined, row: string | null | undefined): boolean | undefined {
+  const later = Date.parse(running ?? '');
+  const earlier = Date.parse(row ?? '');
+  return Number.isNaN(later) || Number.isNaN(earlier) ? undefined : later > earlier;
 }
 
 /** What a row's crawl is, for the words under its status and the action beside them: each its own true sentence. */

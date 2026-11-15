@@ -212,7 +212,7 @@ function YourSites({
   );
 }
 
-/** A first start: three steps, then where Advanced is and how to open a crawl file. */
+/** A first start: three steps, then where Advanced is and how to open a site check file. */
 function FirstStart() {
   const router = useRouter();
   const steps = [
@@ -249,7 +249,7 @@ function FirstStart() {
         <p className="flex items-center gap-2">
           <SlidersHorizontal aria-hidden className="size-(--icon-sm) flex-none text-text-muted" />
           <span>
-            Want every URL, filter and setting?{' '}
+            Want every address, filter and setting?{' '}
             <button type="button" className="si-link si-link--inline" onClick={() => switchMode(router, 'advanced')}>
               Switch to Advanced
             </button>
@@ -259,7 +259,7 @@ function FirstStart() {
         <p className="flex items-center gap-2">
           <FolderOpen aria-hidden className="size-(--icon-sm) flex-none text-text-muted" />
           <span>
-            Have a crawl file already?{' '}
+            Have a site check file already?{' '}
             {isTauri ? (
               <>
                 <button type="button" className="si-link si-link--inline" onClick={() => commands.run('crawl.open')}>

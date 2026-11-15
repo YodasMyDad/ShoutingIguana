@@ -36,10 +36,26 @@ export interface LiveBridgeOptions {
   queryClient: QueryClient;
   /** Opens a crawl's view from a toast's action: its Summary or Overview, Issues, or the Report. */
   openCrawl: (id: string, view: 'overview' | 'issues' | 'report') => void;
+  /**
+   * Where the user is now (the app's path): a toast offers what's useful from there, never the screen already on it
+   * (round 5's polish: Simple's toast offered See the summary over the Summary). Left out, a toast offers everything.
+   */
+  viewing?: () => string;
   store?: LiveStore;
 }
 
-export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: LiveBridgeOptions): () => void {
+/** Which of a crawl's views the path is, if it's one of that crawl's: its Summary or Overview, Issues or the Report. */
+export function crawlViewAt(path: string, crawlId: string): 'overview' | 'issues' | 'report' | null {
+  const view = new RegExp(`^/crawls/${crawlId}/(overview|issues|report)(?:/|$)`).exec(path)?.[1];
+  return view === 'overview' || view === 'issues' || view === 'report' ? view : null;
+}
+
+export function startLiveBridge({
+  queryClient,
+  openCrawl,
+  viewing = () => '',
+  store = liveStore,
+}: LiveBridgeOptions): () => void {
   /** Crawls seen crawling in this session, so their end reads "Crawl finished" rather than "Analysis finished". */
   const crawledHere = new Set<string>();
   /** Crawls whose crawl completed and whose analysis then began: their toast waits for the analysis. */
@@ -293,30 +309,38 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     // The Report: the report a check ends in, in both modes.
     const report = { label: 'Open the report', onClick: () => openCrawl(crawlId, 'report') };
     if (getMode() === 'simple') {
+      // What's useful from where the user is: never the screen already in front of them.
+      const here = crawlViewAt(viewing(), crawlId);
       const summary = { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') };
+      const whatToFix = { label: 'See what to fix', onClick: () => openCrawl(crawlId, 'issues') };
       // Read, but its results not worked out: the first analysis was cancelled (or stored nothing new), or never began.
       if (crawled && item && (!item.analyzedAt || item.analyzedAt === before)) {
         const words = simpleUnworkedWords(name);
         notifyResult(words.title, {
           id: crawlToast(crawlId, 'finished'),
           description: words.description,
-          secondary: summary,
+          ...(here === 'overview' ? {} : { secondary: summary }),
           action: { label: 'Work out the results', onClick: () => void analyseCrawl(crawlId) },
         });
         return;
       }
+      const problems = await problemsOf(crawlId, item);
       const words = simpleFinishedWords({
         site: name,
         crawled,
         score: item?.score,
-        problems: await problemsOf(crawlId, item),
+        problems,
         pageCount: item?.pageCount ?? null,
       });
+      // On the Summary: the report, and what to fix when there is any; on the Report: back to the summary.
+      const toFix = problems !== null && problems > 0 && here !== 'issues' ? whatToFix : null;
+      const [action, secondary] =
+        here === 'report' ? [summary, toFix] : here === 'overview' ? [report, toFix] : [report, summary];
       notifyResult(words.title, {
         id: crawlToast(crawlId, 'finished'),
         description: words.description,
-        secondary: summary,
-        action: report,
+        ...(secondary ? { secondary } : {}),
+        action,
       });
       return;
     }
@@ -328,11 +352,14 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
           ? 'no checks found issues'
           : `${formatCountOf(checks, 'check')} found issues`;
     const urls = crawled && item ? formatCountOf(crawledUrls(item) ?? 0, 'URL') : null;
+    // Never the screen already in front of the user: from Issues, the report alone; from the Report, Issues alone.
+    const here = crawlViewAt(viewing(), crawlId);
+    const issues = { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') };
     notifyResult(crawled ? 'Crawl finished' : 'Analysis finished', {
       id: crawlToast(crawlId, 'finished'),
       description: [name, [urls, found].filter(Boolean).join(', ')].filter(Boolean).join(': '),
-      action: { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') },
-      secondary: report,
+      action: here === 'issues' ? report : issues,
+      ...(here === 'issues' || here === 'report' ? {} : { secondary: report }),
     });
   }
 
@@ -393,7 +420,9 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         id: crawlToast(crawlId, 'stopped'),
         description: sofar ? `${sofar}. You can continue it later.` : words.description,
         action: continueAction,
-        ...(results ? { secondary: { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') } } : {}),
+        ...(results && crawlViewAt(viewing(), crawlId) !== 'overview'
+          ? { secondary: { label: 'See the summary', onClick: () => openCrawl(crawlId, 'overview') } }
+          : {}),
       });
       return;
     }

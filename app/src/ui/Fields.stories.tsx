@@ -352,7 +352,8 @@ export const SelectAndTabs: Story = {
             { value: 'source', label: 'Source', disabled: true, content: null },
           ]}
         />
-        {/* In a narrow panel: the tabs past the edge scroll without a bar, the end with more tabs past it faded. */}
+        {/* In a narrow panel: the tabs past the edge scroll without a bar, the end with more tabs past it faded, and a
+            button at the end counts the tabs out of view and lists them. */}
         <div className="w-(--checks-width)">
           <Tabs
             label="Inspector sections, narrow"

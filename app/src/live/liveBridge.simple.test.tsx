@@ -60,10 +60,15 @@ const clock: LiveStoreClock = {
   isHidden: () => false,
 };
 
-function setup() {
+function setup(viewing?: string) {
   const store = new LiveStore(clock);
   const openCrawl = vi.fn();
-  const stop = startLiveBridge({ queryClient: new QueryClient(), openCrawl, store });
+  const stop = startLiveBridge({
+    queryClient: new QueryClient(),
+    openCrawl,
+    store,
+    ...(viewing === undefined ? {} : { viewing: () => viewing }),
+  });
   const status = (value: string) =>
     store.ingest({ event: 'crawl', id: '', data: JSON.stringify({ crawlId: ID, status: value }) });
   /** A crawl that runs, completes and goes on to its analysis, which ends with the item analysed and scored. */
@@ -127,6 +132,30 @@ describe('the finished toast in Simple', () => {
     fireEvent.click(screen.getByRole('button', { name: 'See the summary' }));
     expect(openCrawl).toHaveBeenCalledWith(ID, 'overview');
     expect(screen.queryAllByRole('button', { name: 'Open the report' })).toHaveLength(1);
+    stop();
+  });
+
+  // Round 5's polish: the toast offered See the summary while the Summary was already on screen.
+  it('offers what’s useful from the Summary, where it is: the report, and what to fix', async () => {
+    render(<AppToaster />);
+    const { stop, finish, openCrawl } = setup(`/crawls/${ID}/overview`);
+    await finish();
+    expect(await screen.findByText('gardenfurnituresets.co.uk is checked')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'See the summary' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Open the report' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'See what to fix' }));
+    expect(openCrawl).toHaveBeenCalledWith(ID, 'issues');
+    stop();
+  });
+
+  it('offers the summary from the Report, and never the Report itself', async () => {
+    render(<AppToaster />);
+    const { stop, finish, openCrawl } = setup(`/crawls/${ID}/report`);
+    await finish();
+    expect(await screen.findByText('gardenfurnituresets.co.uk is checked')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open the report' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'See the summary' }));
+    expect(openCrawl).toHaveBeenCalledWith(ID, 'overview');
     stop();
   });
 

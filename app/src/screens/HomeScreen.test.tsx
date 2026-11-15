@@ -275,7 +275,7 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
         .map((item) => item.textContent),
     ).toEqual(['Open', 'Crawl again…', 'Analyse again', 'Remove from library', 'Delete file…']);
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete file…' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Delete garden.example’s crawl file?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Delete the crawl file of garden.example?' });
     expect(dialog).toHaveTextContent('garden.example-a000000000000002.sicrawl is deleted from the disk');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
     await waitFor(() =>
@@ -323,7 +323,7 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
       within(await rowOf('garden.example')).getByRole('button', { name: 'Actions for garden.example' }),
     );
     await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete file…' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Delete garden.example’s crawl file?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Delete the crawl file of garden.example?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
     expect(await screen.findByText('garden.example is being analysed.')).toBeVisible();
     expect(
@@ -422,8 +422,30 @@ describe('Home’s crawls running now, by what each is doing (round 5 review R1-
     expect(document.getElementById('running-title')).toHaveTextContent(/^1 paused$/);
     const library = screen.getByRole('region', { name: 'Library' });
     const row = within(library).getByRole('link', { name: 'garden.example' }).closest('tr')!;
-    expect(within(row).getByText('Paused')).toBeVisible();
+    // Whose state it is: the newer crawl's, beside the row's own (round 5's polish: 'Paused' beside 'Stopped').
+    expect(within(row).getByText('Newer crawl paused')).toBeVisible();
+    expect(within(row).queryByText('Paused', { exact: true })).toBeNull();
     expect(within(row).queryByText('Crawling now')).toBeNull();
+  });
+
+  // Round 5's polish: "Paused" beside the name, "Stopped. Analysed so far. Continue" in four lines under its status.
+  it('says a stopped row’s state once, beside the newer crawl’s, and offers no Continue while that one goes', async () => {
+    const STOPPED = site('a000000000000003', 'garden.example', '2026-11-01T10:00:00Z', {
+      status: 'stopped',
+      issues: { error: 4, warning: 8, notice: 3 },
+    });
+    liveStore.ingest(message('hello', { live: [RUNNING.id] }));
+    liveStore.ingest(
+      message('progress', progressAt(60, { rate: 20, size: 4_000, crawlId: RUNNING.id, status: 'paused' })),
+    );
+    await open(() => json([STOPPED, RUNNING]));
+    await screen.findByRole('article', { name: 'garden.example' });
+    const library = screen.getByRole('region', { name: 'Library' });
+    const row = within(library).getByRole('link', { name: 'garden.example' }).closest('tr')!;
+    expect(within(row).getByText('Newer crawl paused')).toBeVisible();
+    expect(within(row).getByText('Stopped')).toBeVisible();
+    expect(within(row).getByText('Analysed so far')).toHaveClass('whitespace-nowrap');
+    expect(within(row).queryByRole('button', { name: /Continue/ })).toBeNull();
   });
 
   it('says what each of two crawls is doing', async () => {

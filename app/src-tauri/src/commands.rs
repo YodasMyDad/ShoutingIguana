@@ -95,7 +95,7 @@ pub async fn open_logs_folder(app: AppHandle, which: String) -> Result<(), Strin
 
 /// Settings › Updates: is there a newer version, and what's new in it.
 #[tauri::command]
-pub async fn update_check(app: AppHandle) -> Result<crate::updates::UpdateCheck, String> {
+pub async fn update_check(app: AppHandle) -> Result<crate::updates::UpdateCheck, crate::updates::CheckFailed> {
     crate::updates::check(&app).await
 }
 

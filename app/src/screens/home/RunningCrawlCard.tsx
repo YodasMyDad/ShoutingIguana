@@ -21,7 +21,7 @@ import { Stat, StatLink, Stats } from '../../ui/Stat';
 import { StatusPill } from '../../ui/StatusPill';
 import { TextLink } from '../../ui/TextLink';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
-import { activityWords, crawledSoFar, foundSplit, sparkOf } from '../overview/liveFigures';
+import { activityWords, crawledSoFar, foundSplit, queuedLine, queuedSoFar, sparkOf } from '../overview/liveFigures';
 import { linkProps } from '../overview/overviewLinks';
 
 /** The sparkline's scale ends this far above the highest rate, as Overview's does. */
@@ -170,10 +170,8 @@ export function RunningCrawlCard({ item }: { item: CrawlListItem }) {
             <Stat
               size="sm"
               label="Queued"
-              value={<Num value={progress?.queued} />}
-              context={
-                progress?.inFlight != null ? `${formatCount(progress.inFlight)} on their way` : 'Waiting their turn'
-              }
+              value={<Num value={queuedSoFar(progress)} />}
+              context={queuedLine(progress)}
             />
             <StatLink
               {...linkProps(item.id, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })}

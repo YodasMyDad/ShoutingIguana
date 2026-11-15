@@ -1,5 +1,6 @@
 // The built app from outside, for `npm run smoke:shell`: the environment of a test run, the script's options, the
 // steps of a walk and what they come to. Nothing here starts anything, so all of it is tested (shell.test.mjs).
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** WebView2 reads extra browser arguments from here: how a run of the app gets its DevTools port. */
@@ -256,14 +257,24 @@ export function trayWords(log) {
   const tooltips = [];
   /** @type {string[][]} */
   const menus = [];
+  /** Each tooltip, and each time the icon went (`NOTHING_SHOWN`), in order: what a gap in the tray would show. */
+  /** @type {string[]} */
+  const shown = [];
   for (const line of log.split('\n')) {
     const tooltip = /Tray (?:icon shown|tooltip): "(.*)"\s*$/.exec(line);
-    if (tooltip) tooltips.push(tooltip[1]);
+    if (tooltip) {
+      tooltips.push(tooltip[1]);
+      shown.push(tooltip[1]);
+    }
+    if (/Tray icon removed\s*$/.test(line)) shown.push(NOTHING_SHOWN);
     const menu = /Tray menu: (.*?)\s*$/.exec(line);
     if (menu) menus.push(menu[1].split(' | '));
   }
-  return { tooltips, menus };
+  return { tooltips, menus, shown };
 }
+
+/** In `trayWords`'s `shown`: the tray icon was taken away (nothing runs, and the window is in front). */
+export const NOTHING_SHOWN = '(no tray icon)';
 
 /** Advanced's words, which Simple never says: a site is checked, its results worked out. */
 const ADVANCED_WORDS = /crawl|URL|analys/;
@@ -272,10 +283,21 @@ const ADVANCED_WORDS = /crawl|URL|analys/;
  * What is wrong with the tray's words through a Simple check that ended in the tray: it said it was checking, then
  * working out the results (tooltip and menu), and nothing running at the end; never in Advanced's words. Empty when
  * all is well.
- * @param {{ tooltips: string[], menus: string[][] }} tray
+ * @param {{ tooltips: string[], menus: string[][], shown?: string[] }} tray
  */
-export function simpleTrayProblems({ tooltips, menus }) {
+export function simpleTrayProblems({ tooltips, menus, shown = tooltips }) {
   const problems = [];
+  // Round 5's polish: between a check's end and its results being worked out, the tray said nothing ran for a moment
+  // (its icon went, or its tooltip was plain "Shouting Iguana"). From the first time it says it's checking to the first
+  // time after that it says it's working out the results, it never says nothing runs.
+  const checking = shown.findIndex((words) => /: checking /.test(words));
+  const working = shown.findIndex((words, index) => index > checking && /: working out the results for /.test(words));
+  if (checking >= 0 && working > checking) {
+    const gap = shown
+      .slice(checking + 1, working)
+      .find((words) => words === NOTHING_SHOWN || words === 'Shouting Iguana');
+    if (gap) problems.push(`the tray said nothing ran (${gap}) between checking and working out the results`);
+  }
   const said = tooltips.map((tooltip) => `"${tooltip}"`).join(' | ');
   if (!tooltips.some((tooltip) => /: checking /.test(tooltip)))
     problems.push(`the tray never said it was checking (tooltips: ${said})`);
@@ -291,4 +313,39 @@ export function simpleTrayProblems({ tooltips, menus }) {
   for (const label of menus.flat().filter((words) => ADVANCED_WORDS.test(words)))
     problems.push(`the tray’s menu speaks Advanced: "${label}"`);
   return problems;
+}
+
+/** What Settings › Updates says once a check has an answer, whichever it is. */
+export const UPDATE_ANSWERS =
+  /You have the newest version|is available|No update information yet|Couldn’t reach GitHub|couldn’t be read|can’t be trusted|Updates can’t be checked|Updates couldn’t be checked/;
+
+/**
+ * What Settings › Updates must say, by what GitHub answered when asked the same: the update information, so a newer
+ * version or the newest; an error status (a 404: no release has update information yet), so no update information
+ * yet, never the internet connection (round 5's polish); no answer, so the connection.
+ * @param {number | null} status GitHub's HTTP status, or null for no answer
+ */
+export function updateWordsFor(status) {
+  if (status === null) return { said: 'didn’t answer', words: /Couldn’t reach GitHub/, not: null };
+  if (status >= 200 && status < 300)
+    return {
+      said: `answered ${status}`,
+      words: /is available|You have the newest version/,
+      not: /internet connection/,
+    };
+  return { said: `answered ${status}`, words: /No update information yet/, not: /internet connection/ };
+}
+
+/**
+ * Asks GitHub for the app's update information, as the shell's updater does (its endpoint in tauri.conf.json), and
+ * says what Settings › Updates must say of it (`updateWordsFor`).
+ * @param {typeof fetch} fetcher
+ */
+export async function updateTruth(fetcher = fetch) {
+  const config = path.join(import.meta.dirname, '..', '..', 'src-tauri', 'tauri.conf.json');
+  const endpoint = JSON.parse(readFileSync(config, 'utf8')).plugins.updater.endpoints[0];
+  const status = await fetcher(endpoint, { redirect: 'follow', signal: AbortSignal.timeout(20_000) })
+    .then((response) => response.status)
+    .catch(() => null);
+  return updateWordsFor(status);
 }

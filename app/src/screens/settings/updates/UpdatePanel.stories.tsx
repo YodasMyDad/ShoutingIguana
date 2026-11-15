@@ -48,8 +48,25 @@ const STATES: { label: string; state: UpdateState; busy?: boolean }[] = [
     state: { step: 'downloading', update: UPDATE, progress: { downloaded: 4_400_000, total: null } },
   },
   { label: 'Installing', state: { step: 'installing', update: UPDATE } },
+  ...(
+    [
+      ['No answer from GitHub', 'noConnection'],
+      ['GitHub has no update information yet', 'noUpdateInformation'],
+      ['The update information can’t be read', 'unreadable'],
+      ['The update information’s signature doesn’t match', 'untrusted'],
+      ['This copy can’t check', 'unavailable'],
+    ] as const
+  ).map(([label, problem]) => ({
+    label: `The check failed: ${label.toLowerCase()}`,
+    state: {
+      step: 'failed' as const,
+      update: null,
+      message: 'The shell’s own sentence.',
+      failure: { problem, message: 'The shell’s own sentence.', currentVersion: '2.0.0-alpha.1' },
+    },
+  })),
   {
-    label: 'The check failed',
+    label: 'The check failed, in a sentence of its own',
     state: {
       step: 'failed',
       update: null,

@@ -12,7 +12,7 @@ import { ConfirmDialog } from '../../ui/Dialog';
 import { IconButton } from '../../ui/IconButton';
 import { DropdownMenu, MenuItem, MenuSeparator } from '../../ui/Menu';
 import { analyseWords, crawlActions } from './library';
-import { crawlLabel, deleteCrawlFile, removeFromLibrary } from './libraryActions';
+import { crawlLabel, deleteCrawlFile, deleteQuestion, removeFromLibrary } from './libraryActions';
 
 /**
  * Every action of a crawl in the library (docs/v2-ui-ia.md, Home): Open, Continue, Crawl again, Analyse again, Show in
@@ -92,7 +92,7 @@ export function CrawlMenu({
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Delete ${target.label}’s crawl file?`}
+        title={deleteQuestion(target.item, older)}
         description={`The file ${target.item.fileName} is deleted from the disk, with everything the crawl found and its analysis. This can’t be undone.`}
         confirmLabel="Delete file"
         destructive

@@ -14,6 +14,9 @@ import {
   shellMemory,
   simpleTrayProblems,
   trayWords,
+  UPDATE_ANSWERS,
+  updateTruth,
+  updateWordsFor,
   verdict,
   withDebuggingPort,
 } from './shell.mjs';
@@ -234,8 +237,43 @@ test('the tray’s words are read from the shell’s log in order: every tooltip
       ['Open Shouting Iguana', '127.0.0.1:9000 (working out the results)', 'Quit'],
       ['Open Shouting Iguana', 'Quit'],
     ],
+    shown: [
+      'Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked',
+      'Shouting Iguana: working out the results for 127.0.0.1:9000',
+      'Shouting Iguana',
+    ],
   });
-  assert.deepEqual(trayWords(''), { tooltips: [], menus: [] });
+  assert.deepEqual(trayWords(''), { tooltips: [], menus: [], shown: [] });
+});
+
+// Round 5's polish, as the release shell's log had it: the icon went between the check and its results.
+const TRAY_GAP_LOG = [
+  '[2026-11-15][02:41:17][INFO][shouting_iguana::tray] Tray icon shown: "Shouting Iguana: checking 127.0.0.1, 0 addresses checked"',
+  '[2026-11-15][02:41:17][INFO][shouting_iguana::tray] Tray menu: Open Shouting Iguana | 127.0.0.1 | Quit',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray icon removed',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray menu: Open Shouting Iguana | 127.0.0.1 (working out the results) | Quit',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray tooltip: "Shouting Iguana: working out the results for 127.0.0.1"',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray icon shown',
+  '[2026-11-15][02:41:23][INFO][shouting_iguana::tray] Tray tooltip: "Shouting Iguana"',
+].join('\n');
+
+test('Simple’s tray never says nothing runs between a check and the working out of its results', () => {
+  assert.deepEqual(simpleTrayProblems(trayWords(TRAY_GAP_LOG)), [
+    'the tray said nothing ran ((no tray icon)) between checking and working out the results',
+  ]);
+  // Hidden in the tray, the gap was the plain tooltip.
+  const hidden = TRAY_LOG.replace(
+    '[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray menu',
+    '[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray tooltip: "Shouting Iguana"\n[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray menu',
+  );
+  assert.deepEqual(simpleTrayProblems(trayWords(hidden)), [
+    'the tray said nothing ran (Shouting Iguana) between checking and working out the results',
+  ]);
+  // The icon going once nothing runs, after the results, is no gap.
+  assert.deepEqual(
+    simpleTrayProblems(trayWords(`${TRAY_LOG}\n[2026-11-14][12:00:06][shouting_iguana::tray][INFO] Tray icon removed`)),
+    [],
+  );
 });
 
 test('Simple’s tray says checking, then working out the results, then nothing, never in Advanced’s words', () => {
@@ -256,4 +294,23 @@ test('Simple’s tray says checking, then working out the results, then nothing,
     'the tray speaks Advanced: "Shouting Iguana: analysing 127.0.0.1:9000"',
     'the tray’s menu speaks Advanced: "127.0.0.1:9000 (analysing)"',
   ]);
+});
+
+// Round 5's polish: GitHub answering 404 (no release with update information yet) read as "check the internet connection".
+test('what Settings › Updates must say follows what GitHub answered', async () => {
+  const words = (status) => updateWordsFor(status);
+  assert.match('No update information yet', words(404).words);
+  assert.match('Check the internet connection, then try again.', words(404).not);
+  assert.match('Couldn’t reach GitHub', words(null).words);
+  assert.match('Version 2.1.0 is available', words(200).words);
+  assert.match('You have the newest version, 2.0.0.', words(200).words);
+  assert.match('No update information yet', UPDATE_ANSWERS);
+  const asked = [];
+  const answered = await updateTruth((url) => {
+    asked.push(url);
+    return Promise.resolve({ status: 404 });
+  });
+  assert.equal(answered.said, 'answered 404');
+  assert.match(asked[0], /^https:\/\/github\.com\/.*\/latest\.json$/);
+  assert.equal((await updateTruth(() => Promise.reject(new Error('offline')))).said, 'didn’t answer');
 });
