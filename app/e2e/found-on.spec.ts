@@ -98,8 +98,9 @@ test('a page holding broken links says which URL it links to', async ({ page }) 
   const groups = page.getByRole('treegrid', { name: /Links to broken internal URLs/ });
   await groups.focus();
   await page.keyboard.press('ArrowRight');
+  // The URL's own status: a 4xx, or a 3xx whose redirects end broken (the crawl's planted /plants/redirect-broken).
   await expect(groups.locator('.si-where-line').first()).toHaveText(
-    /^Links to .+ \((4\d\d|blocked by robots\.txt|no answer)\)( \+[\d,]+)?$/,
+    /^Links to .+ \(([345]\d\d|blocked by robots\.txt|no answer)\)( \+[\d,]+)?$/,
   );
 });
 
