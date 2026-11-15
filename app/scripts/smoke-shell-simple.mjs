@@ -17,6 +17,7 @@ import { createInterface } from 'node:readline';
 import { chromium } from '@playwright/test';
 import { appRoot, buildCli } from './lib/engine.mjs';
 import {
+  UPDATE_ANSWERS,
   Walk,
   appPage,
   builtApp,
@@ -24,6 +25,7 @@ import {
   shellEnvironment,
   simpleTrayProblems,
   trayWords,
+  updateTruth,
   verdict,
 } from './lib/shell.mjs';
 
@@ -125,6 +127,15 @@ try {
     },
     { needed: true },
   );
+
+  await walk.step('a first start speaks Simple’s words: a site check file, an address', async () => {
+    // Round 5's polish: a first start asked "Have a crawl file already?" and offered "every URL".
+    const advancedWords = (await page.getByRole('main').innerText())
+      .split('\n')
+      .filter((line) => /\b(crawls?|URLs?)\b/i.test(line.replace(/\bhttps?:\/\/\S+/g, '')));
+    expectThat(advancedWords.length === 0, `a first start speaks Advanced: ${advancedWords.join(' | ')}`);
+    return 'none of Advanced’s words on Home';
+  });
 
   /** The engine as the shell handed it to the page. */
   const engine = async (route, init = {}) => {
@@ -256,11 +267,14 @@ try {
     return `the report, the window "${title}"`;
   });
 
-  await walk.step('Settings › Updates checks GitHub’s releases and answers in plain words', async () => {
+  await walk.step('Settings › Updates checks GitHub’s releases and says which case it is, in plain words', async () => {
+    // What GitHub answers, asked from here: the words must say that case (round 5's polish: a 404, no release with
+    // update information yet, said to check the internet connection).
+    const truth = await updateTruth();
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
     await page.getByRole('main').getByRole('link', { name: 'Updates', exact: true }).click();
     await page.getByRole('button', { name: 'Check for updates' }).click();
-    const answer = page.getByText(/You have the newest version|is available|Updates couldn’t be checked/).first();
+    const answer = page.getByText(UPDATE_ANSWERS).first();
     await answer.waitFor({ timeout: 30_000 });
     const words = (await page.getByRole('main').innerText())
       .split('\n')
@@ -269,6 +283,9 @@ try {
       !words.some((line) => /error sending|reqwest|json|404/i.test(line)),
       `a raw error: ${words.join(' | ')}`,
     );
+    expectThat(truth.words.test(words.join('\n')), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
+    if (truth.not)
+      expectThat(!truth.not.test(words.join('\n')), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
     if (options.shots) await page.screenshot({ path: path.join(options.shots, 'simple-05-updates.png') });
     return words.slice(-3).join(' | ');
   });
