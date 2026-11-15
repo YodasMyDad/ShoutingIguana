@@ -106,7 +106,7 @@ export function progressSeries(history: CrawlHistory | undefined, trail: readonl
       continue;
     }
     if (takeover && at >= takeover.at) break;
-    const elapsedMs = watchedStored && runs ? crawlingAt(at, runs) : offset + (point.elapsedMs ?? at - liveFrom);
+    const elapsedMs = watchedStored ? crawlingAt(at, runs) : offset + (point.elapsedMs ?? at - liveFrom);
     // Never past where the trail takes over, which may know of a pause the history can't tell.
     if (takeoverAt !== null && elapsedMs >= takeoverAt) continue;
     points.push({ elapsedMs, found: point.internalFound, crawled: point.internalFetched });

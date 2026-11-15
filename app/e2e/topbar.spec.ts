@@ -208,7 +208,10 @@ test('under reduced motion the bar settles on one step, and the search field’s
           const bad: string[] = [];
           let left = 40;
           const frame = () => {
-            if (!bar) return resolve({ steps, bad: ['no bar'] });
+            if (!bar) {
+              resolve({ steps, bad: ['no bar'] });
+              return;
+            }
             steps.push(Number(bar.dataset.give ?? 0));
             const keys = search?.querySelector('kbd')?.getBoundingClientRect();
             const field = search?.getBoundingClientRect();

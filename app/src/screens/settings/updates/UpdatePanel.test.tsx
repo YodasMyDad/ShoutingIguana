@@ -4,6 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { UpdateProgress } from '../../../shell/ipc';
 import { UpdatePanel, type Updater } from './UpdatePanel';
 
+/** What Tauri's invoke rejects with: the command's error as the shell serialised it, not an Error. */
+const rejected = (reason: unknown): Promise<never> =>
+  // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the shell's own value, as invoke gives it
+  Promise.reject(reason);
+
 const NEWER = { version: '2.1.0', date: '2026-11-20T10:00:00Z', notes: 'Faster crawls.' };
 
 function updater(overrides: Partial<Updater> = {}): Updater & { emit: (progress: UpdateProgress) => void } {
@@ -84,7 +89,7 @@ describe('UpdatePanel (gap 18)', () => {
       for (const [problem, title, text] of cases) {
         const user = userEvent.setup();
         const shell = updater({
-          check: () => Promise.reject({ problem, message: 'The shell’s sentence.', currentVersion: '2.0.0' }),
+          check: () => rejected({ problem, message: 'The shell’s sentence.', currentVersion: '2.0.0' }),
         });
         const { container, unmount } = render(<UpdatePanel updater={shell} mode={mode} busy={false} />);
         await user.click(screen.getByRole('button', { name: 'Check for updates' }));
@@ -100,7 +105,7 @@ describe('UpdatePanel (gap 18)', () => {
 
   it('shows a failed check’s own sentence when the shell gives no case', async () => {
     const user = userEvent.setup();
-    const shell = updater({ check: () => Promise.reject('Couldn’t reach GitHub to check for updates.') });
+    const shell = updater({ check: () => rejected('Couldn’t reach GitHub to check for updates.') });
     render(<UpdatePanel updater={shell} mode="advanced" busy={false} />);
     await user.click(screen.getByRole('button', { name: 'Check for updates' }));
     expect(await screen.findByText('Updates couldn’t be checked')).toBeInTheDocument();
