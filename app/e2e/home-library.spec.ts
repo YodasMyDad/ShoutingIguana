@@ -5,7 +5,7 @@
 // are drawn on the seeded crawl. The screenshots (1280x720 in both themes, and 200%) go to test-results/r5-home/.
 import { expect, test, type Page } from '@playwright/test';
 import path from 'node:path';
-import { countOf, env, expectNoViolations, read, seededCrawl, siteRow } from './support';
+import { countOf, env, expectNoViolations, read, seededCrawl, sidecar, siteRow } from './support';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
 
 const SHOTS = path.join(import.meta.dirname, '..', 'test-results', 'r5-home');
@@ -183,6 +183,57 @@ test('the library at 1280x720 and at 200% zoom, older crawls folded under their 
   await library.scrollIntoViewIfNeeded();
   await expectNoSidewaysScroll(page);
   await shoot(page, 'home-library-200');
+});
+
+// Polish 2 (gallery 18): beside "Newer crawl paused" the site's address had room for "http:…" alone at 1280 px.
+test('a site whose newer crawl is paused keeps its address readable beside the badge, at 1280 px', async ({ page }) => {
+  test.setTimeout(120_000);
+  const startUrl = env('SI_E2E_TESTSITE');
+  // The site's crawl at rest, then a newer one of it, paused: the row is the first, with the second's badge.
+  const done = await read<{ id: string }>('/api/crawls', {
+    options: { startUrl, concurrency: 4, maxRequestsPerSecond: 0, maxUrls: 20 },
+  });
+  await expect
+    .poll(async () => (await read<{ status: string }>(`/api/crawls/${done.id}`)).status, { timeout: 60_000 })
+    .not.toMatch(/^(running|paused|stopping|analyzing)$/);
+  const newer = await read<{ id: string }>('/api/crawls', {
+    options: { startUrl, concurrency: 2, maxRequestsPerSecond: 20 },
+  });
+  expect((await sidecar(`/api/crawls/${newer.id}/pause`, { method: 'POST' })).ok).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  const row = page
+    .getByRole('region', { name: 'Library' })
+    .getByRole('row')
+    .filter({ has: page.locator(`a[href$="/crawls/${done.id}"]`) });
+  const badge = row.getByText('Newer crawl paused');
+  await expect(badge).toBeVisible({ timeout: 30_000 });
+  // The other columns' words decide how much room the Site column keeps (the gallery's crawls had longer ones): at
+  // 1024 px it has least. The address holds the whole start URL beside the badge, or has a line of its own.
+  for (const width of [1280, 1024]) {
+    await page.setViewportSize({ width, height: 720 });
+    const fit = await row.locator('.font-mono').first().evaluate(
+      (address, [url, badgeBottom]) => {
+        const context = document.createElement('canvas').getContext('2d')!;
+        const style = getComputedStyle(address);
+        context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        return {
+          room: address.clientWidth,
+          needs: Math.ceil(context.measureText(url).width),
+          ownLine: address.getBoundingClientRect().top >= badgeBottom - 0.5,
+        };
+      },
+      [startUrl, (await badge.boundingBox())!.y + (await badge.boundingBox())!.height] as const,
+    );
+    expect(
+      fit.ownLine || fit.room >= fit.needs,
+      `${width} px: ${fit.room} px beside the badge for an address ${fit.needs} px wide`,
+    ).toBe(true);
+    await expectNoSidewaysScroll(page);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await row.scrollIntoViewIfNeeded();
+  await shoot(page, 'home-library-newer-paused');
 });
 
 test('Overview opens with its totals, and Issues says each check’s share beside its count', async ({ page }) => {
