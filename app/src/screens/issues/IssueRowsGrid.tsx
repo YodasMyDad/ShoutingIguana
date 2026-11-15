@@ -92,7 +92,7 @@ export function IssueRowsGrid({
         width: urlWidth,
         sortable: true,
         ...sorted('url'),
-        cell: (row) => <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} openable={false} />,
+        cell: (row) => <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} tabbable={false} />,
         text: (row) => row.url ?? '',
       },
       {

@@ -17,6 +17,7 @@ import { usePagedRows } from '../../grid/usePagedRows';
 import { withRecorded } from '../../lib/failure';
 import { formatBytes, formatCount, formatCountOf, formatExactTime } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
+import { OpenUrlButton } from '../../ui/OpenUrlButton';
 import { Banner } from '../../ui/Banner';
 import { EmptyState } from '../../ui/EmptyState';
 import { LiveBadge } from '../../ui/LiveBadge';
@@ -114,6 +115,7 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
           <span className="min-w-0 truncate" title={row.origin}>
             {row.origin}
           </span>
+          <OpenUrlButton url={row.origin} inGrid />
           {row.isInternal ? (
             <Badge variant="outline" className="shrink-0 font-sans">
               This site

@@ -11,6 +11,7 @@ import { formatCount } from '../lib/format';
 import { switchMode } from '../mode/switchMode';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { OneFixTag } from '../ui/PlainCheckRow';
 import { FoundOnWords } from './FoundOnWords';
 import { pathOrigin, shownWords } from './whereWords';
@@ -50,6 +51,7 @@ function Address({ url, origin, small = false }: { url: string; origin: string |
     <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'} title={url}>
       <span aria-hidden="true">{shown}</span>
       <span className="sr-only">{url}</span>
+      <OpenUrlButton url={url} className="ml-1" />
     </span>
   );
 }

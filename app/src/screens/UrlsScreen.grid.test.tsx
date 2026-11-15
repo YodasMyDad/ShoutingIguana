@@ -240,7 +240,7 @@ describe('the URL grid’s row menu', () => {
     expect(
       within(menu)
         .getAllByRole('menuitem')
-        .map((item) => item.textContent.replace(/Enter|Ctrl.*$/, '')),
+        .map((item) => item.textContent.replace(/(Shift\+?)?Enter|Ctrl.*$/, '')),
     ).toEqual([
       'Inspect',
       'Open in the browser',

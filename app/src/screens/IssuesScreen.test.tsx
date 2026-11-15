@@ -307,8 +307,13 @@ describe('the Issues screen', () => {
     expect(decodeURIComponent(link.getAttribute('href') ?? '')).toContain('"group":{"detail":null,"relatedUrlId":1}');
     expect(rows()[0]).toHaveAttribute('aria-expanded', 'true');
     expect(rows().filter((row) => row.getAttribute('aria-level') === '2')).toHaveLength(6);
-    // One stop for Tab: nothing in its rows takes focus of its own (the cursor reaches them).
-    expect(within(grid).queryAllByRole('button')).toEqual([]);
+    // One stop for Tab: nothing in its rows takes focus of its own (the cursor reaches them; a URL's open-in-browser
+    // button is pressed, never tabbed to).
+    expect(
+      within(grid)
+        .queryAllByRole('button')
+        .filter((button) => button.tabIndex >= 0),
+    ).toEqual([]);
     // Enter on a page opens the inspector; Left on its group closes it.
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'ArrowDown' });

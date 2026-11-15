@@ -67,6 +67,7 @@ export function UrlRowItems({ count, url, onInspect, onCopyUrls, onCopyRows, row
       ) : null}
       <MenuItem
         icon={ExternalLink}
+        shortcut="shift+enter"
         disabled={!opens}
         onSelect={() => {
           if (url !== undefined) void openInBrowser(url);

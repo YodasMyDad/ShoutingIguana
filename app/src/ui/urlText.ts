@@ -130,3 +130,8 @@ export function siteOriginOf(startUrl: string | null | undefined): string | null
     return null;
   }
 }
+
+/** The accessible name of a button that opens a URL in the browser: "Open https://example.com/a/ in your browser". */
+export function openLabel(url: string): string {
+  return `Open ${url} in your browser`;
+}

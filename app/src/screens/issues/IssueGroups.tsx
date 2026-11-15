@@ -452,7 +452,7 @@ export function IssueGroups({
     );
     const relatedCell = (group: IssueGroup) =>
       group.relatedUrl ? (
-        <Url url={group.relatedUrl} siteOrigin={siteOrigin} copyable={false} openable={false} />
+        <Url url={group.relatedUrl} siteOrigin={siteOrigin} copyable={false} tabbable={false} />
       ) : (
         <span className="text-text-muted">No other URL</span>
       );
@@ -553,7 +553,7 @@ export function IssueGroups({
               url={row.row.url ?? ''}
               siteOrigin={siteOrigin}
               copyable={false}
-              openable={false}
+              tabbable={false}
               className="min-w-0 flex-1"
             />
             {references === 'none' ? null : (
@@ -665,6 +665,7 @@ export function IssueGroups({
             if (followed !== null) onFollow?.(followed);
           }}
           rowKey={treeRowKey}
+          openUrlOf={(row) => pageOf(row)?.url ?? null}
           onContextMenu={rowMenu.onContextMenu}
           busy={groups.isRefreshing}
           className="si-issue-tree flex-1 rounded-md border border-border"
@@ -740,7 +741,7 @@ function WhereCell({
             url={where.link.url}
             siteOrigin={siteOrigin}
             copyable={false}
-            openable={false}
+            tabbable={false}
             className="min-w-0 flex-1"
           />
           {place ? (
@@ -761,7 +762,7 @@ function WhereCell({
             url={where.target.url}
             siteOrigin={siteOrigin}
             copyable={false}
-            openable={false}
+            tabbable={false}
             className="min-w-0 flex-1"
           />
           <StatusCode code={where.target.statusCode} className="shrink-0" />
@@ -781,7 +782,7 @@ function WhereCell({
             url={where.sitemap.url}
             siteOrigin={siteOrigin}
             copyable={false}
-            openable={false}
+            tabbable={false}
             className="min-w-0 flex-1"
           />
         </span>

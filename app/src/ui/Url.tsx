@@ -6,7 +6,7 @@ import { copyText } from '../lib/clipboard';
 import { openInBrowser } from '../shell/os';
 import { IconButton } from './IconButton';
 import { Tooltip } from './Tooltip';
-import { middleTruncate, originLength, urlDisplay } from './urlText';
+import { middleTruncate, openLabel, originLength, urlDisplay } from './urlText';
 
 /** How long "Copied" stays in the tooltip after a click. */
 const COPIED_MS = 1_500;
@@ -222,10 +222,17 @@ export function Url({
       )}
       {openable && web ? (
         <IconButton
-          label="Open in the browser"
+          label={openLabel(url)}
+          tooltip="Open in your browser"
           icon={ExternalLink}
           size="xs"
           className="si-url__open"
+          data-open-url={url}
+          // In a grid's cell it's no Tab stop (the grid is one, and Shift+Enter opens the row's URL), a press leaves
+          // focus on the grid, and a quick second press is no double-click on the row (which would inspect it).
+          tabIndex={tabbable ? undefined : -1}
+          onMouseDown={tabbable ? undefined : (event) => event.preventDefault()}
+          onDoubleClick={(event) => event.stopPropagation()}
           onClick={() => void openInBrowser(url)}
         />
       ) : null}

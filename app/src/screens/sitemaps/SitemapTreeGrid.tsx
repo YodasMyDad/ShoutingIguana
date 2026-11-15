@@ -170,7 +170,7 @@ export function SitemapTree({
             <span aria-hidden="true" className="si-tree-spacer" />
           ) : null}
           <span className="min-w-0 flex-1">
-            <Url url={row.sitemap.url} siteOrigin={siteOrigin} copyable={false} openable={false} />
+            <Url url={row.sitemap.url} siteOrigin={siteOrigin} copyable={false} tabbable={false} />
           </span>
           {row.sitemap.isIndex ? (
             <Badge variant="outline" className="ml-2 shrink-0">

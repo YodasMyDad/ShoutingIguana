@@ -528,7 +528,7 @@ function BlockedUrls({
         header: 'Blocked URL',
         width: urlWidth,
         // Every one is on this origin, which the page names once: its path is what tells them apart.
-        cell: (row) => <Url url={row.url} siteOrigin={origin} copyable={false} openable={false} />,
+        cell: (row) => <Url url={row.url} siteOrigin={origin} copyable={false} tabbable={false} />,
         text: (row) => row.url,
       },
       {

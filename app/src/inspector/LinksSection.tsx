@@ -151,9 +151,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
         id: 'url',
         header: words.url,
         width: urlWidth,
-        cell: (row) => (
-          <Url url={row.url} siteOrigin={siteOrigin} openable={false} tabbable={false} onGo={() => walk(row.id)} />
-        ),
+        cell: (row) => <Url url={row.url} siteOrigin={siteOrigin} tabbable={false} onGo={() => walk(row.id)} />,
         text: (row) => row.url,
       },
       {
