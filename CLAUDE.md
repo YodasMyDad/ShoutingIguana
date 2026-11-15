@@ -14,9 +14,14 @@ status and open owner decisions. Update it at the end of each step.
 
 ### Current work
 
-Step 3, the UI, is on branch `ui/step-3` and is pushed. The folder you were opened in is often `v2`, which does not
+Step 3, the UI, is on branch `ui/step-3`. The folder you were opened in is often `v2`, which does not
 contain that work. Before any UI or engine work, read `docs/v2-rebuild.md` on `ui/step-3`, section **Where step 3
-stands**. That section is the only status. Update it before you stop, including what is left, and push `ui/step-3`.
+stands**. That section is the only status. Update it before you stop, including what is left, and commit it.
+
+**Never push to GitHub** (no branch, tag or backup) until the owner says it is time to deploy: pushes ran CI and used
+up their GitHub minutes. Commit locally; run every check locally (the verify scripts in
+`docs/handoff/2026-11-13/tools/`, `smoke:shell`, the Linux Docker check in `docs/handoff/2026-11-14/tools/`). The app
+and engine workflows are manual-only (`workflow_dispatch`).
 Do not treat the October status in `v2`'s copy of the doc as the current task, and do not redo work the section
 lists as done.
 

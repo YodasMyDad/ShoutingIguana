@@ -3,7 +3,9 @@
 The single place to pick up the rebuild. Technical detail lives in [engine/README.md](../engine/README.md) and the
 rules for working in the code in [CLAUDE.md](../CLAUDE.md). Update the status and open items here at the end of every
 step. For step 3, **Where step 3 stands** below is the only status. `v2`'s copy of this doc only points here. Update
-this section before you stop, then push `ui/step-3`.
+this section before you stop, then commit it. **Never push** until the owner says it is time to deploy (2026-11-15:
+pushes ran CI and used up their GitHub minutes); every check runs locally, and the app and engine workflows are
+manual-only.
 
 ## Why
 
@@ -146,7 +148,7 @@ were not moved. This section is the place to resume. Merging to `master` or rele
    `C:\Users\LEEMES~1\AppData\Local\Temp\claude\e2e5beaddde4c070\a539aa23-e856-44c1-bd21-ca484e8740e2\scratchpad\r5-polish2\`.
    One thing the owner may judge: at 1280x720 with an export running, the sidebar now scrolls and the export's row
    sits half below the fold.
-2. Merge `ui/r5-polish2` into `ui/step-3` (`--no-ff`), push, and run the Linux check
+2. Merge `ui/r5-polish2` into `ui/step-3` (`--no-ff`, committed locally, not pushed), and run the Linux check
    (`docs/handoff/2026-11-14/tools/linux-ci.sh`, Docker) if `app/src-tauri/` changed.
 3. Look at the five re-shot views (02, 18, 27, 32, 42; already rebuilt into `_gallery/site/`) and the page's diff against version 4 (backup in the scratchpad's `gallerysite-backup`), then
    publish `_gallery/site/shouting-iguana-screens.html` with those ten images to

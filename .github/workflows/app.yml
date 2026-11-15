@@ -7,13 +7,10 @@
 # Rust is pinned in app/src-tauri/rust-toolchain.toml.
 name: App (v2)
 
-# The app builds the engine's sidecar and CLI, so an engine change can break it too.
+# Manual only, at the owner's word (2026-11-15): pushes ran this on every branch and used up GitHub minutes. Every
+# check runs locally during development (docs/handoff/2026-11-13/tools/verify-*.sh, smoke:shell, the Linux Docker
+# check); run this from the Actions tab when preparing a release.
 on:
-  push:
-    branches: [v2, 'ui/**']
-    paths: ['app/**', '!app/spike/**', '!app/design/**', 'engine/**', '.github/workflows/app.yml']
-  pull_request:
-    paths: ['app/**', '!app/spike/**', '!app/design/**', 'engine/**', '.github/workflows/app.yml']
   workflow_dispatch:
 
 permissions:

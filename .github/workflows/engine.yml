@@ -4,13 +4,9 @@
 # reads of that crawl is slower than the UI's budget.
 name: Engine (v2)
 
-# The engine's Directory.Build.props imports the root one, so a change there can break the engine too.
+# Manual only, at the owner's word (2026-11-15): pushes used up GitHub minutes. Every check runs locally during
+# development (docs/handoff/2026-11-13/tools/verify-engine.sh); run this from the Actions tab when preparing a release.
 on:
-  push:
-    branches: [v2]
-    paths: ['engine/**', 'Directory.Build.props', '.github/workflows/engine.yml']
-  pull_request:
-    paths: ['engine/**', 'Directory.Build.props', '.github/workflows/engine.yml']
   workflow_dispatch:
 
 jobs:
