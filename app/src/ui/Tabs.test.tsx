@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -95,6 +96,47 @@ describe('a strip of tabs wider than its room', () => {
     expect(css).toMatch(
       /\.si-tabs\[data-more-end\] \{\s*mask-image: linear-gradient\(to left, transparent, black var\(--tabs-fade\)\);/,
     );
+  });
+
+  // Round 5's polish: the inspector showed 3½ of its 9 tabs at 1280 px, the rest out of sight with no sign of them.
+  it('says how many tabs are out of view and lists them; one chosen there is chosen, in view and focused', async () => {
+    const user = userEvent.setup();
+    const chosen = vi.fn();
+    const { rerender } = render(<Tabs label="Sections" tabs={TABS} value="summary" onValueChange={chosen} />);
+    expect(screen.queryByRole('button', { name: /more:/ })).toBeNull();
+    const list = screen.getByRole('tablist', { name: 'Sections' });
+    layOut(list);
+    Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 400 });
+    list.dispatchEvent(new Event('scroll'));
+    // 150 px of a 400 px strip: summary whole, inlinks half in view, outlinks and hreflang out of it.
+    const more = await screen.findByRole('button', { name: '3 more: inlinks, outlinks, hreflang' });
+    expect(more).toHaveTextContent('3 more');
+    await user.click(more);
+    const menu = await screen.findByRole('menu');
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['inlinks', 'outlinks', 'hreflang']);
+    await user.click(within(menu).getByRole('menuitem', { name: 'hreflang' }));
+    expect(chosen).toHaveBeenCalledWith('hreflang');
+    rerender(<Tabs label="Sections" tabs={TABS} value="hreflang" onValueChange={chosen} />);
+    expect(list.scrollLeft).toBe(250);
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'hreflang' })).toHaveFocus());
+    // Now the ones before it are out of view, at the start.
+    expect(await screen.findByRole('button', { name: '3 more: summary, inlinks, outlinks' })).toBeInTheDocument();
+  });
+
+  it('chooses from the list on its own when nothing controls it', async () => {
+    const user = userEvent.setup();
+    render(<Tabs label="Sections" tabs={TABS} defaultValue="summary" />);
+    const list = screen.getByRole('tablist', { name: 'Sections' });
+    layOut(list);
+    Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 400 });
+    list.dispatchEvent(new Event('scroll'));
+    await user.click(await screen.findByRole('button', { name: /^3 more:/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'outlinks' }));
+    expect(screen.getByRole('tab', { name: 'outlinks' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('scrolls without a bar: the tab strip asks for none, where every other part has a thin one without arrows', () => {

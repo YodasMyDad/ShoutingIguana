@@ -28,6 +28,11 @@ export interface DropdownMenuProps {
   side?: 'top' | 'right' | 'bottom' | 'left' | undefined;
   open?: boolean | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;
+  /**
+   * Where focus goes once it has closed, when not back to its button: what a choice put in its place (a tab chosen
+   * from a strip's overflow menu). Null, or left out, gives it back to the button.
+   */
+  closeFocus?: (() => HTMLElement | null) | undefined;
   className?: string | undefined;
 }
 
@@ -42,6 +47,7 @@ export function DropdownMenu({
   side = 'bottom',
   open,
   onOpenChange,
+  closeFocus,
   className,
 }: DropdownMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -64,7 +70,13 @@ export function DropdownMenu({
           collisionPadding={COLLISION_PADDING}
           loop
           // Focus goes back to the button without its tooltip popping up, which would take the next Esc.
-          onCloseAutoFocus={() => quietNextFocus(triggerRef.current)}
+          onCloseAutoFocus={(event) => {
+            const elsewhere = closeFocus?.() ?? null;
+            if (elsewhere) {
+              event.preventDefault();
+              elsewhere.focus();
+            } else quietNextFocus(triggerRef.current);
+          }}
           className={clsx('si-menu', className)}
         >
           <KindContext.Provider value="dropdown">{children}</KindContext.Provider>
