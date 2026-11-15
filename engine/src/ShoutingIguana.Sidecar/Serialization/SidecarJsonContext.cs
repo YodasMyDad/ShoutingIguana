@@ -54,6 +54,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
 
         // Links, sitemaps and robots.txt (E3b).
         typeof(CamelCaseEnumConverter<IssueSubject>),
+        typeof(CamelCaseEnumConverter<IssueReferences>),
         typeof(CamelCaseEnumConverter<SitemapDiscovery>),
         typeof(CamelCaseEnumConverter<SitemapSource>),
         typeof(CamelCaseEnumConverter<SitemapState>),
@@ -123,6 +124,9 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(UrlDetailDto))]
 [JsonSerializable(typeof(LinksRequest))]
 [JsonSerializable(typeof(LinkPageDto))]
+[JsonSerializable(typeof(FoundOnRequest))]
+[JsonSerializable(typeof(FoundOnDto))]
+[JsonSerializable(typeof(IssueTargetsDto))]
 [JsonSerializable(typeof(HtmlSourceDto))]
 [JsonSerializable(typeof(GroupsRequest))]
 [JsonSerializable(typeof(IssueGroupPageDto))]

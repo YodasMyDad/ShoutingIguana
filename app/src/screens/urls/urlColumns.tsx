@@ -451,11 +451,7 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
       // The host is named once, here, where the rows show its URLs as paths.
       ...(origin ? { headerDetail: `on ${new URL(origin).host}` } : {}),
       cell: (row) =>
-        row.url ? (
-          <Url url={row.url} siteOrigin={origin} copyable={false} openable={false} tabbable={false} />
-        ) : (
-          muted('–')
-        ),
+        row.url ? <Url url={row.url} siteOrigin={origin} copyable={false} tabbable={false} /> : muted('–'),
       text: (row) => row.url ?? '',
     };
   }
@@ -515,11 +511,7 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
           ...base,
           mono: true,
           cell: (row) =>
-            words(row) ? (
-              <Url url={words(row)} siteOrigin={origin} copyable={false} openable={false} tabbable={false} />
-            ) : (
-              muted('–')
-            ),
+            words(row) ? <Url url={words(row)} siteOrigin={origin} copyable={false} tabbable={false} /> : muted('–'),
           text: words,
         };
       }

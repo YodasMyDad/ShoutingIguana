@@ -207,6 +207,66 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         return new LinkPageDto([.. page.Rows.Select(LinkRowDto.From)], page.Offset, page.Total, page.Next);
     }
 
+    /// <summary>Where each of a page of URLs is found: the links to it, the pages they're on, the sitemaps listing it.</summary>
+    public async Task<FoundOnDto> FoundOnAsync(string id, FoundOnRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var (urlIds, limit) = FoundOnPage(request);
+        if (urlIds.Count == 0)
+        {
+            return new FoundOnDto([]);
+        }
+
+        var urls = await ReadAsync(token => FoundOnReader.ReadFoundOn(path, urlIds, limit, cache, token), cancellationToken).ConfigureAwait(false);
+        return new FoundOnDto([.. urls.Select(UrlFoundOnDto.From)]);
+    }
+
+    /// <summary>The URLs each of a page of a check's flagged pages names: its broken targets, its canonical.</summary>
+    public async Task<IssueTargetsDto> TargetsAsync(string id, string checkId, FoundOnRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var (urlIds, limit) = FoundOnPage(request);
+        var urls = urlIds.Count == 0
+            ? []
+            : await ReadAsync(token => FoundOnReader.ReadTargets(path, checkId, urlIds, limit, cache, token), cancellationToken).ConfigureAwait(false)
+              ?? throw Problems.NotAnalyzed();
+        if (urls.Count == 0 && IssueCatalog.Find(checkId) is null)
+        {
+            throw Problems.CheckNotFound(checkId);
+        }
+
+        return new IssueTargetsDto(checkId, urls);
+    }
+
+    /// <summary>The URL ids a request names (an id no URL can have is left out) and how many of each to list.</summary>
+    private static (IReadOnlyList<int> UrlIds, int Limit) FoundOnPage(FoundOnRequest request)
+    {
+        if (request.UrlIds is not { Count: > 0 } ids)
+        {
+            throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>> { ["urlIds"] = ["Give the URLs' ids."] });
+        }
+
+        if (ids.Count > FoundOnReader.MAX_URLS)
+        {
+            throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["urlIds"] = [$"Give from 1 to {FoundOnReader.MAX_URLS} URL ids."]
+            });
+        }
+
+        var limit = request.Limit ?? FoundOnReader.DEFAULT_LISTED;
+        if (limit is < 0 or > FoundOnReader.MAX_LISTED)
+        {
+            throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["limit"] = [$"List from 0 to {FoundOnReader.MAX_LISTED} of each URL's."]
+            });
+        }
+
+        // An id no URL can have names none, as a URL id does elsewhere.
+        return ([.. ids.Where(urlId => urlId is >= 1 and <= int.MaxValue).Select(urlId => (int)urlId)], limit);
+    }
+
     /// <summary>
     /// The site's icon as the crawl kept it, or null when it has none. The engine gives out nothing but an image it told
     /// by its bytes as it read the file, with the media type those bytes are.

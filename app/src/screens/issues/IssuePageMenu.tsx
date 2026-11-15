@@ -2,7 +2,7 @@
 // and the Issues screen's own, "Show the page in URLs", the URL grid narrowed to that one URL with the inspector on
 // it. A group's row has its own: its pages in URLs, as its "Show all" link has them.
 import { useNavigate } from '@tanstack/react-router';
-import { ClipboardList, Copy, ListFilter } from 'lucide-react';
+import { ClipboardList, Copy, Link2, ListFilter } from 'lucide-react';
 import type { GridFilter } from '../../api/grids';
 import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
 import { copyRowUrls, rowMenuLabel, type RowMenuState } from '../../grid/rowMenuState';
@@ -26,6 +26,11 @@ export interface IssuePageMenuProps<Row> {
   /** The URL of each row the menu acts on, for a copy; null for a row that has none (a group). */
   urlOf: (row: Row) => string | null | undefined;
   onInspect: (urlId: number) => void;
+  /**
+   * For a URL other pages refer to (a check whose `references` is `sources`): the links to it in the Links grid, which
+   * "Show where it's found in Links" opens. Null or left out for any other row.
+   */
+  foundIn?: GridFilter[] | null | undefined;
 }
 
 export function IssuePageMenu<Row>({
@@ -37,6 +42,7 @@ export function IssuePageMenu<Row>({
   group,
   urlOf,
   onInspect,
+  foundIn,
 }: IssuePageMenuProps<Row>) {
   const navigate = useNavigate();
   const count = state?.menu.indices.length ?? 1;
@@ -69,6 +75,16 @@ export function IssuePageMenu<Row>({
           >
             Show the page in URLs
           </MenuItem>
+          {foundIn ? (
+            <MenuItem
+              icon={Link2}
+              onSelect={() =>
+                void navigate({ to: '/crawls/$crawl/links', params: { crawl: crawlId }, search: { filter: foundIn } })
+              }
+            >
+              Show where it’s found in Links
+            </MenuItem>
+          ) : null}
         </>
       ) : group ? (
         <>

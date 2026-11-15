@@ -27,6 +27,7 @@ import { commands } from '../keyboard/registry';
 import { copyText } from '../lib/clipboard';
 import { formatCountOf } from '../lib/format';
 import { isMac } from '../lib/platform';
+import { openInBrowser } from '../shell/os';
 import { INITIAL_NAV, gridKey, gridPointer, headerKey, type GridNavState, type GridPosition } from './gridNavigation';
 import { DEFAULT_OVERSCAN, firstFullyVisible, rowsPerPage, scrollLeftToReveal } from './rowRange';
 import { useRowWindow, type RowWindowModel } from './rowWindow';
@@ -132,6 +133,11 @@ export interface GridCoreProps<Row> {
    * it, else the row), reads them, copies them as Ctrl+C does, and gives the keyboard back to the grid.
    */
   onContextMenu?: (index: number, column: number, anchor: { x: number; y: number }, menu: GridMenuContext<Row>) => void;
+  /**
+   * The URL Shift+Enter opens in the browser for a row, with the column the cursor is in (a link has two ends): the
+   * row's `url` when left out. Nothing for a row without one.
+   */
+  openUrlOf?: ((row: Row, column: string | undefined) => string | null | undefined) | undefined;
   /** Fetches rows that aren't loaded, for copying a selection that spans pages. */
   fetchRows?: RowFetcher<Row>;
   onCopy?: (result: GridCopyResult) => void;
@@ -280,6 +286,7 @@ function GridCoreInner<Row>({
   onActiveRowChange,
   onActiveColumnChange,
   onContextMenu,
+  openUrlOf,
   fetchRows,
   onCopy,
   emptyState,
@@ -492,7 +499,7 @@ function GridCoreInner<Row>({
     if (!tree || !active || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
     const firstCell = active.col === 0 || spans(active.row);
     const expanded = tree.expanded(active.row);
-    if (event.key === 'Enter' && expanded !== undefined && !tree.activates) {
+    if (event.key === 'Enter' && expanded !== undefined && !activatesAt(tree, active.row)) {
       toggle(active.row, !expanded);
       return true;
     }
@@ -670,6 +677,16 @@ function GridCoreInner<Row>({
     if (treeKey(event)) {
       event.preventDefault();
       return;
+    }
+    // Shift+Enter opens the URL of the row under the cursor in the browser, as its cell's button does.
+    if (event.key === 'Enter' && event.shiftKey && !mod && !event.altKey && active) {
+      const row = getRow(active.row);
+      const url = row === undefined ? null : (openUrlOf ?? urlOfRow)(row, columns[active.col]?.id);
+      if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+        event.preventDefault();
+        void openInBrowser(url);
+        return;
+      }
     }
     const result = gridKey({ active, selection, follow: nav.follow }, input, {
       rowCount: count,
@@ -939,7 +956,7 @@ function GridCoreInner<Row>({
     // The chevron's own press has opened or closed the group already.
     if (event.target instanceof Element && event.target.closest('[data-tree-toggle]')) return;
     const expanded = tree?.expanded(position.row);
-    if (expanded !== undefined && !tree?.activates) toggle(position.row, !expanded);
+    if (expanded !== undefined && !(tree && activatesAt(tree, position.row))) toggle(position.row, !expanded);
     else activate(position.row, position.col);
   };
 
@@ -1432,6 +1449,17 @@ function pinOf(pins: readonly (number | undefined)[] | undefined, col: number, e
   return left === undefined
     ? { className: undefined, style: undefined }
     : { className: clsx('si-grid-cell--pinned', col === edge && 'si-grid-cell--pin-edge'), style: { left } };
+}
+
+/** A row's own URL, where it has one (the URL grid's rows, a check's rows): what Shift+Enter opens by default. */
+function urlOfRow(row: unknown): string | null {
+  const url = typeof row === 'object' && row !== null ? (row as { url?: unknown }).url : undefined;
+  return typeof url === 'string' ? url : null;
+}
+
+/** Whether Enter and a double-click on a tree's row activate it (rather than open or close it). */
+function activatesAt(tree: GridTree, row: number): boolean {
+  return typeof tree.activates === 'function' ? tree.activates(row) : tree.activates === true;
 }
 
 /** A row's place in a tree, for its `role="row"`. */

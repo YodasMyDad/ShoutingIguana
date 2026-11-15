@@ -14,7 +14,10 @@ import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { Url } from '../../ui/Url';
+import { linksOfUrl } from '../links/linkPlaces';
 import { IssuePageMenu } from './IssuePageMenu';
+import { WhereFoundLine } from './WhereFoundLine';
+import { referencesOf } from './whereFound';
 
 /** An issue's identity among a check's rows: a URL can be flagged more than once, by detail or by related URL. */
 function issueRowKey(row: IssueRow): string {
@@ -22,6 +25,8 @@ function issueRowKey(row: IssueRow): string {
 }
 
 const DETAIL_WIDTH = 260;
+/** "Found on 3 pages · /garden-furniture/ +2", for a check whose URLs other pages refer to. */
+const WHERE_WIDTH = 300;
 const MIN_URL_WIDTH = 240;
 const FRAME_SLACK = 24;
 
@@ -72,7 +77,9 @@ export function IssueRowsGrid({
   // The row as it was when the menu opened: rows can move under a running crawl while it is open.
   const menuRow = rowMenu.state?.menu.row;
 
-  const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 720) - DETAIL_WIDTH - FRAME_SLACK);
+  const references = referencesOf(check);
+  const whereWidth = references === 'none' ? 0 : WHERE_WIDTH;
+  const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 720) - DETAIL_WIDTH - whereWidth - FRAME_SLACK);
   const columns = useMemo<GridColumn<IssueRow>[]>(() => {
     const sorted = (id: string) => {
       const entry = sort.find((candidate) => candidate.column === id);
@@ -85,7 +92,7 @@ export function IssueRowsGrid({
         width: urlWidth,
         sortable: true,
         ...sorted('url'),
-        cell: (row) => <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} openable={false} />,
+        cell: (row) => <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} tabbable={false} />,
         text: (row) => row.url ?? '',
       },
       {
@@ -97,8 +104,28 @@ export function IssueRowsGrid({
         cell: (row) => <span title={row.detail ?? undefined}>{row.detail ?? '–'}</span>,
         text: (row) => row.detail ?? '',
       },
+      // Where each is found (or what each page names): read for the rows drawn, a page of them in one request.
+      ...(references === 'none'
+        ? []
+        : [
+            {
+              id: 'where',
+              header: references === 'sources' ? 'Found on' : 'Names',
+              width: WHERE_WIDTH,
+              cell: (row: IssueRow) => (
+                <WhereFoundLine
+                  crawlId={crawlId}
+                  check={check}
+                  urlId={row.id}
+                  siteOrigin={siteOrigin}
+                  className="block"
+                />
+              ),
+              text: () => '',
+            },
+          ]),
     ];
-  }, [sort, urlWidth, siteOrigin]);
+  }, [sort, urlWidth, siteOrigin, references, crawlId, check]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.rows', columns);
 
@@ -146,6 +173,7 @@ export function IssueRowsGrid({
         onOpenChange={rowMenu.onOpenChange}
         siteOrigin={siteOrigin}
         page={menuRow?.url ? { id: menuRow.id, url: menuRow.url } : null}
+        foundIn={menuRow && references === 'sources' ? linksOfUrl('inlinks', menuRow.id, 'all') : null}
         urlOf={(row) => row.url}
         onInspect={onInspect}
       />

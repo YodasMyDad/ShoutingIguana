@@ -17,6 +17,7 @@ import { Badge } from './Badge';
 import { SeverityMark } from './SeverityMark';
 import { StatusCode } from './StatusCode';
 import { TextLink } from './TextLink';
+import { OpenUrlButton } from './OpenUrlButton';
 import { Url } from './Url';
 
 /** The synthetic site's icon, as the engine serves it: a 32 px PNG. */
@@ -77,6 +78,20 @@ export const Urls: Story = {
         </StateRow>
         <StateRow label="Not copyable">
           <Url url={`${SITE}/login/`} copyable={false} openable={false} />
+        </StateRow>
+        <StateRow label="In a grid's selected row: open in the browser, shown">
+          {/* A grid's cell: no Tab stop, the button always shown on the row the grid has selected. */}
+          <div className="si-grid-row w-(--inspector-width-min)" data-selected="">
+            <Url url={`${SITE}/blog/best-rattan-patio-sets/`} siteOrigin={SITE} copyable={false} tabbable={false} />
+          </div>
+        </StateRow>
+        <StateRow label="Beside an address in Simple's lists, focused">
+          <span className="si-where-table">
+            <span className="font-mono text-13">
+              /blog/best-rattan-patio-sets/
+              <OpenUrlButton url={`${SITE}/blog/best-rattan-patio-sets/`} className="ml-1 opacity-100" />
+            </span>
+          </span>
         </StateRow>
         <StateRow label="A link in the app">
           <div className="w-(--inspector-width-min)">

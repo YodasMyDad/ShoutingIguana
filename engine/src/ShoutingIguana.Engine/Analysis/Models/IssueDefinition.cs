@@ -36,6 +36,13 @@ public sealed record IssueDefinition(
     public required IssueSubject Subject { get; init; }
 
     /// <summary>
+    /// How the URLs the check flags stand to the references between URLs: each one is found somewhere (a 404 the site
+    /// links to: show where), it holds the bad references (a page linking to broken URLs: show them), or neither. Only how
+    /// the check is shown: it isn't stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public IssueReferences References { get; init; }
+
+    /// <summary>
     /// The check finds one fault of the whole site, not a fault of pages: robots.txt that search engines can't read, a
     /// site not on HTTPS. However many URLs it is reported on (one, or each other version of the site that answers), the
     /// score counts it as the whole site (<see cref="ScoreCalculator"/>). It isn't part of

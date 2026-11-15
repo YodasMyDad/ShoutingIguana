@@ -228,7 +228,6 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
           <Url
             url={url}
             siteOrigin={context.siteOrigin}
-            openable={false}
             tabbable={false}
             {...(typeof urlId === 'number' ? { onGo: () => context.onOpen(urlId, end.end) } : {})}
           />

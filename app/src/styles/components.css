@@ -2200,6 +2200,52 @@
     opacity: 1;
   }
 
+  /*
+   * In a grid's row the button shows on the row's hover, on the row under the cursor while the grid has focus, and
+   * always on a selected row: the grid's own Shift+Enter opens the same URL from the keyboard.
+   */
+  .si-grid-row:hover .si-url__open,
+  .si-grid-row[data-selected] .si-url__open,
+  .si-grid:focus .si-grid-row:has(> [data-active]) .si-url__open,
+  .si-where-table tr:hover .si-open-url,
+  .si-where-table tr:focus-within .si-open-url {
+    opacity: 1;
+  }
+
+  /* A URL shown as plain text in a cell (robots.txt's origins): the button sits after it rather than over its end. */
+  .si-url__open--inline {
+    position: static;
+    flex-shrink: 0;
+    transform: none;
+  }
+
+  /* Simple's lists: the button beside an address, shown on the row's hover or focus. */
+  .si-open-url {
+    opacity: 0;
+    vertical-align: middle;
+  }
+
+  .si-open-url:focus-visible {
+    opacity: 1;
+  }
+
+  @media (forced-colors: active) {
+    .si-url__open,
+    .si-open-url {
+      color: LinkText;
+    }
+  }
+
+  /* ------------------------------------------------- Where an issue's URL is found */
+  /* A page that opens to show where it's found reads as a page, not as a group: the tree's heavier group title is for groups. */
+  .si-issue-tree .si-grid-row[data-level='2'][aria-expanded] {
+    font-weight: inherit;
+  }
+
+  .si-where-line {
+    font-size: var(--text-12);
+  }
+
   /* -------------------------------------------------------------- Favicons */
   .si-favicon {
     display: inline-grid;

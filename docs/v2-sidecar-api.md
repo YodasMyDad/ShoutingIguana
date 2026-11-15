@@ -234,6 +234,12 @@ Built in stages:
   `description` is what is wrong, `why` is why it matters and `fix` is what to do. `learnMore` is an absolute URL, or
   null when no authoritative page exists. `grouping` (E3a) is how
   the check's issues group: see [Issue groups](#issue-groups-e3a).
+- **`references`** (found-on) is how the check's flagged URLs stand to the references between URLs, so the UI shows
+  where to fix each: `sources` (each URL is something other URLs refer to: a 404, a redirect, a sitemap entry; read
+  where it's found with [`/urls/found-on`](#where-a-url-is-found-found-on)), `targets` (each page holds the bad
+  references: read what its issue names with [`/issues/{checkId}/targets`](#where-a-url-is-found-found-on)) or
+  `none`. 13 checks are `sources`, 17 `targets` ([the list](v2-ui-ia.md#where-its-found-uifound-on)). Only how a
+  check is shown: not stored with an analysis, nor in the checks' fingerprint.
 - **`subject`** (E3b) is what the check's flagged URLs are, so the UI can say "pages affected, of the N pages crawled"
   only where that's true:
   - `page`: every URL it flags is a page, as the analysis counts them (`pagesAnalyzed`): an internal URL that answered
@@ -1522,6 +1528,55 @@ with `matching` the rows the filters match and `total` the check's flagged URLs,
 
 A skipped check has `total` and `matching` null and no rows. Without a URL summary, the URL columns are the crawl's as
 in `/urls`: the issues are the last analysis's, as on the Issues screen.
+
+### Where a URL is found (found-on)
+
+Two reads for a page of a check's URLs at once, so a grid's rows cost one request, never one a row. Both take
+`{ urlIds, limit }`: 1 to 100 URL ids (an id past what a URL can have names none), and how many references of each to
+list, 0 to 50 (5 when left out); none, too many or too many listed is `invalid-query` on `urlIds` or `limit`. Each
+answers in the order asked, each URL once, leaving out a URL it has nothing for. They read in one snapshot, a URL at a
+time on the links' indexes, so they cost what the URLs' own links do.
+
+`POST /api/crawls/{id}/urls/found-on`: where each URL is found. It needs no analysis (it's the crawl's own links).
+
+```json
+{"urlIds":[812,977],"limit":2}
+```
+
+```json
+{"urls":[{"urlId":812,"links":3,"pages":3,"pagesExact":true,
+          "sources":[{"id":40,"url":"https://www.example.com/garden-furniture/","kind":"hyperlink","text":"Old range","position":"footer",
+                      "flags":[],"followed":true,"fragment":null,"statusCode":200,"indexable":true,"fetched":true,"outcome":"success"}],
+          "sitemaps":{"total":0,"sitemaps":[]},"start":false}]}
+```
+
+- **`links`** is every link to the URL, of every kind (hyperlinks, images, scripts, canonicals, hreflang, pagination,
+  meta refreshes, redirects), a page's links to itself left out: the inspector's inlinks total, and what Links
+  filtered to `to.id` and `selfLink` false counts.
+- **`pages`** is the pages those links are on. It's counted over the URL's first 5,000 links
+  (`FoundOnReader.PAGES_COUNTED_LINKS`); past them `pagesExact` is false and `pages` is a floor: the more of the pages
+  those links are on and the pages linking to it by hyperlink (the URL summary's `linkingPages`). A footer link on
+  every page of a million has a million links, and the links' index by target holds no page.
+- **`sources`** are its first `limit` links in crawl order, each as `/urls/inlinks` gives it (`id` and `url` the page
+  linking, its status, the link's kind, text, position, flags and whether it's followed): the same rows.
+- **`sitemaps`** are the sitemaps listing it (`total` and the first 20, as the inspector's `listedIn`), none read
+  where the URL summary says no sitemap lists it. **`start`**: it's the crawl's start URL.
+
+`POST /api/crawls/{id}/issues/{checkId}/targets`: what each of a check's flagged pages names (its broken targets, its
+canonical, the alternate that doesn't link back), from `issue_targets` (an earlier engine's analysis: the issue's one
+related URL). `check-not-found` and `not-analyzed` as `/rows`; a check the analysis skipped names nothing; a page
+the check didn't flag is left out.
+
+```json
+{"checkId":"broken-internal-links","urls":[{"urlId":31,"total":3,
+  "targets":[{"id":812,"url":"https://www.example.com/old/","statusCode":404,"fetched":true,"outcome":"clientError",
+              "kind":"hyperlink","text":"Old range","position":"footer"}]}]}
+```
+
+- **`total`** is every URL the page's issue names; **`targets`** the first `limit` by id (the crawl's order of finding
+  them), each with its status and outcome, and the page's first link to it (its kind, text and position; a canonical
+  check's canonical, a hreflang check's hreflang, an image check's image first), null where the page has no stored
+  link to it.
 
 ### Links (E3b)
 
@@ -3676,3 +3731,23 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   and cursor, five filters, counts and cursors never shared, the severity facet alone and in one pass, the links
   grid's ends and `linkEnds`, stale ids taken and hiding nothing, 1,000 of them, the limits), against `GridReference.WithoutChecks`; `GridExportTests.TheIssueCountsAreExportedWithoutTheHiddenChecks`
   (CSV and workbook, the URL grid and a check's rows); `GridEndpointsTests` and `ExportEndpointsTests` (sidecar).
+
+## Engine changes found-on made
+
+- `IssueDefinition.References` (`IssueReferences`: `None`, `Sources`, `Targets`) on the 30 checks that refer to other
+  URLs; `GET /api/checks` gives it as `references`. Not stored, not in the fingerprint, so no analysis goes out of
+  date. `FoundOnReaderTests.EveryCheckSaysWhereItsUrlsAreFound` holds the list, and
+  `EveryFlaggedUrlIsFoundAndEveryFlaggedPageNamesItsTargets` shows each one's URLs on the synthetic site found
+  somewhere (two are planted only on its HTTPS version: `redirect-downgrade`, `mixed-content`).
+- `Storage/FoundOnReader`: `ReadFoundOn` and `ReadTargets`, reads only, in one snapshot; the two endpoints above
+  (`GridData.FoundOnAsync`, `TargetsAsync`). `UrlInspectorReader`'s `ReadLinks`, `ListedIn`, `TotalLinks` and `OtherEnd`
+  are `internal` now so the reader reuses them: a source is exactly an inlink.
+- The report (`ReportReader`, `ReportDocument`): a `sources` check's examples get "Where to fix it" (the first three
+  pages, then how many more; the sitemap; the start address); a `targets` page naming several, "and N others".
+  `IssueRow` carries the URL's id (`UrlId`).
+- A check's file (the workbook's sheets, `kind: 'check'`, `kind: 'issueRows'`): columns after its own from
+  `Export/WhereFoundColumns`, read a page of rows at a time (`GridExport.WriteGrid`'s `extra`): "Linked from (pages)",
+  "Linked from", "Listed in sitemaps", or "Links to (addresses)", "Links to". Tests: `WorkbookExportTests` (every
+  check's sheet's header and its cells against the reader), `GridExportTests`,
+  `ReportDocumentTests.AnAddressOtherPagesReferToSaysWhereItIsFound`,
+  `GridEndpointsTests.FlaggedUrlsSayWhereTheyAreFoundAndPagesWhatTheyName`.

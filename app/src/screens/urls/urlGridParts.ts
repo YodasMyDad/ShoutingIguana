@@ -1,10 +1,12 @@
 // The URL grid's pieces for a view that is the URL grid narrowed to something with a fixed set of columns (one
 // sitemap's URLs): the nine columns the URL grid showed before it had presets, what the query asks for to draw them,
 // and their names in a list. `UrlsScreen` exports them, and the filters' chips, under the names they had there.
+import { createElement } from 'react';
 import type { UrlRow } from '../../api/grids';
 import { listOfNames } from '../../grid/summaryWords';
 import type { GridColumn } from '../../grid/types';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
+import { Url } from '../../ui/Url';
 import { urlCellValue } from './urlColumns';
 
 const plain = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value));
@@ -18,7 +20,15 @@ const status = (row: UrlRow) =>
 
 /** Columns use E3a's ids (docs/v2-sidecar-api.md, URLs), so the query asks for exactly these. */
 export const FIXED_URL_COLUMNS: readonly GridColumn<UrlRow>[] = [
-  { id: 'url', header: 'URL', width: 420, mono: true, cell: (row) => row.url ?? '', text: (row) => row.url ?? '' },
+  {
+    id: 'url',
+    header: 'URL',
+    width: 420,
+    mono: true,
+    // With its open-in-browser button, as every grid's URLs have it.
+    cell: (row) => (row.url ? createElement(Url, { url: row.url, copyable: false, tabbable: false }) : ''),
+    text: (row) => row.url ?? '',
+  },
   { id: 'statusCode', header: 'Status', width: 104, numeric: true, cell: (row) => status(row) || '–', text: status },
   {
     id: 'indexability',

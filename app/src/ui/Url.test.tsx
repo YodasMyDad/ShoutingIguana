@@ -93,9 +93,9 @@ describe('Url', () => {
   it('offers to open a web URL in the browser, and nothing else', () => {
     layOut(400);
     const { rerender } = render(<Url url={`${SITE}/`} />);
-    expect(screen.getByRole('button', { name: 'Open in the browser' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Open ${SITE}/ in your browser` })).toBeInTheDocument();
     rerender(<Url url="mailto:hello@example.com" />);
-    expect(screen.queryByRole('button', { name: 'Open in the browser' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /in your browser/ })).toBeNull();
     rerender(<Url url={`${SITE}/`} openable={false} copyable={false} />);
     expect(screen.queryByRole('button')).toBeNull();
   });

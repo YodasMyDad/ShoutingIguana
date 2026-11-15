@@ -2274,3 +2274,45 @@ Four things the re-shot gallery found, each proved in the release shell.
   its whole width on a line of its own when it can't sit whole beside "Newer crawl paused" (it had room for "http:…").
 - **Simple Home's dots end a line**: each part of a site's line carries the dot after it, so a wrapped line never starts
   with one ("Stopped early ·" / "14,414 pages read"); the earlier-checks toggle no longer starts with its own.
+
+## Where it's found, and opening a URL in the browser (ui/found-on)
+
+What each view shows is in [the IA](v2-ui-ia.md#where-its-found-uifound-on); the classification is the engine's
+(`references` on each check). The pieces:
+
+- **One read for a page of rows** (`api/whereFoundBatch.ts`): every row, cell or line asks for its own URL
+  (`foundOnQuery`, `issueTargetsQuery` in `api/queries.ts`, keyed under the crawl so a continue or an analysis reads
+  them afresh), and the asks made in one moment (a timer of 0 ms, as the queries start in effects) go to the sidecar as
+  one `POST /urls/found-on` or `POST /issues/{checkId}/targets` of up to 100 URLs, split past that. A row drawn later
+  asks again; one already read is the cache's. So a grid's page of rows costs one request, never one a row, and the
+  same answer serves Advanced's row, its expansion, Simple's line and the One fix.
+- **The words and rows** are pure, in `screens/issues/whereFound.ts` (summaries, the rows under an expanded URL, plain
+  words for Simple, the one page linking to most, a template link's place), unit-tested; the hooks are
+  `useWhereFound.ts` (`useWhereFoundOf`, `useTemplateLink`, which shares the open group's first-rows read), the line
+  `WhereFoundLine.tsx`.
+- **A third level in the Issues tree** (`IssueGroups.tsx`, `groupTree.ts`'s `childPlace`/`pageChildren`): under the
+  open group one page at a time is expanded, its rows after it; while they're read one placeholder row stands in. A
+  page row is a tree row that opens (`aria-expanded`), but Enter must still inspect it, so `GridTree.activates` can be
+  a function of the row: groups open on Enter, everything under them activates. Left from a row under a page goes to
+  the page (`parent`). The heavier weight of a row that opens is a group's only (`.si-issue-tree`).
+- **Simple** reuses the same reads: `simple/FoundOnWords.tsx` under each address, `simple/useSharedSource.ts` over the
+  first 25 for the One fix callout.
+- **Open in the browser.** `ui/Url.tsx`'s button (now in every grid cell: grids pass `tabbable={false}` and no longer
+  `openable={false}`) is named `openLabel(url)` (`ui/urlText.ts`): "Open <url> in your browser", the full URL whatever
+  the cell shows. With `tabbable={false}` it has `tabIndex -1`, keeps focus on the grid on a press (mouse-down
+  prevented) and stops a double-click reaching the row (which would inspect). CSS (`components.css`) shows it on the
+  row's hover, on the cursor's row while the grid has focus (`.si-grid:focus .si-grid-row:has(> [data-active])`) and
+  on a selected row (`[data-selected]`), in `LinkText` under forced colours. `ui/OpenUrlButton.tsx` is the same button
+  beside text (Simple's addresses, robots.txt's origins; `inGrid` for a grid's cell). Both open through
+  `shell/os.ts`'s `openInBrowser` (Tauri's opener plugin, http(s) only, the inspector's path; `window.open` in a
+  browser), so no new permission. `GridCore` takes `openUrlOf(row, column)` for Shift+Enter (default: the row's `url`;
+  Links: the end the cursor's column is on; Issues: the page or the source under the cursor), listed in the shortcut
+  sheet as `grid.openInBrowser`, and shown on the row menus' "Open in the browser". Links' menu has "Open the source
+  page in your browser" and "Open the target in your browser".
+- **Tests:** `api/whereFoundBatch.test.ts` (one request a moment, chunks of 100, a failure to each ask),
+  `screens/issues/whereFound.test.ts`, `screens/IssuesScreen.whereFound.test.tsx` (the row's line, Right to open,
+  Enter to inspect, Show all to Links, the menu, the targets line and the template's place),
+  `simple/ProblemScreen.whereFound.test.tsx`, `ui/OpenUrlButton.test.tsx`, `grid/GridCore.openUrl.test.tsx`
+  (Shift+Enter, seen failing first), `export/offers.hidden.test.ts`, and `e2e/found-on.spec.ts` on the synthetic crawl
+  (the opener stubbed, axe, forced colours). The fixtures say each check's `references` as the engine does
+  (`test/issuesSidecar.ts`, `test/simple/engine-checks.json`).

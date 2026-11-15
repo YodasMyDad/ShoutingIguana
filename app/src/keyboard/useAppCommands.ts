@@ -32,6 +32,13 @@ export const GRID_KEY_COMMANDS: readonly Command[] = [
     keys: ['arrowdown', 'arrowup', 'arrowleft', 'arrowright'],
   },
   { id: 'grid.inspect', title: 'Inspect the URL', group: 'In grids', scope: 'grid', keys: ['enter'] },
+  {
+    id: 'grid.openInBrowser',
+    title: 'Open the URL in your browser',
+    group: 'In grids',
+    scope: 'grid',
+    keys: ['shift+enter'],
+  },
   { id: 'grid.select', title: 'Select the row', group: 'In grids', scope: 'grid', keys: ['space'] },
   {
     id: 'grid.extend',

@@ -109,6 +109,8 @@ internal static class ReportDocument
           .examples td, .examples th { padding: 3.5px 8px; }
           .examples caption { caption-side: top; padding: 0 0 2px; text-align: left; font-size: 9pt; font-weight: 600; }
           .examples td:first-child { width: 56%; }
+          .examples--where td:first-child { width: 34%; }
+          .examples--where td:last-child { width: 40%; }
           .problem__split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; }
           .problem__split .examples { margin-top: 8px; }
           .examples--one td:first-child { width: auto; }
@@ -623,10 +625,13 @@ internal static class ReportDocument
 
         var caption = more > 0 ? $"The first {rows.Count} of {Number(problem.Count)}" : problem.Count == 1 ? "Where it is" : $"All {problem.Count}";
         var isUrl = problem.Check.Subject == IssueSubject.Url;
-        html.Append(compact ? "<table class=\"examples examples--one\">" : "<table class=\"examples\">").Append("\n          <caption>").Append(caption).Append("</caption>\n");
+        var whereFound = problem.Check.References == IssueReferences.Sources;
+        html.Append(compact ? "<table class=\"examples examples--one\">" : whereFound ? "<table class=\"examples examples--where\">" : "<table class=\"examples\">")
+            .Append("\n          <caption>").Append(caption).Append("</caption>\n");
         if (!compact)
         {
-            html.Append("          <thead><tr><th scope=\"col\">").Append(isUrl ? "Address" : "Page").Append("</th><th scope=\"col\">What was found</th></tr></thead>\n");
+            html.Append("          <thead><tr><th scope=\"col\">").Append(isUrl ? "Address" : "Page").Append("</th><th scope=\"col\">What was found</th>")
+                .Append(whereFound ? "<th scope=\"col\">Where to fix it</th>" : string.Empty).Append("</tr></thead>\n");
         }
 
         html.Append("          <tbody>");
@@ -643,12 +648,28 @@ internal static class ReportDocument
                     html.Append("</span>");
                 }
 
+                if (row.FoundOn is { } foundOn)
+                {
+                    html.Append("<span class=\"found\">");
+                    WhereFound(html, model, foundOn);
+                    html.Append("</span>");
+                }
+
                 html.Append("</td></tr>");
             }
             else
             {
                 html.Append("</td><td>");
                 Found(html, model, row);
+                if (whereFound)
+                {
+                    html.Append("</td><td>");
+                    if (row.FoundOn is { } foundOn)
+                    {
+                        WhereFound(html, model, foundOn);
+                    }
+                }
+
                 html.Append("</td></tr>");
             }
         }
@@ -672,6 +693,63 @@ internal static class ReportDocument
         {
             html.Append(row.Detail is null ? "→ " : " → ");
             Url(html, model, related);
+            if (row.Targets is > 1 and var targets)
+            {
+                html.Append(" and ").Append(Number(targets - 1)).Append(targets == 2 ? " other" : " others");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where a URL other pages refer to is found, so a reader knows what to change: the pages linking to it (the first few,
+    /// then how many more), the sitemaps listing it, or that it's the address the check started from.
+    /// </summary>
+    private static void WhereFound(StringBuilder html, ReportModel model, UrlFoundOn foundOn)
+    {
+        List<string> pages = [.. foundOn.Sources.Select(source => source.Url).Distinct(StringComparer.Ordinal)];
+        List<Action> parts = [];
+        if (foundOn.Pages > 0)
+        {
+            parts.Add(() =>
+            {
+                html.Append("Linked from ").Append(foundOn.Pages == 1 ? "1 page" : $"{Number(foundOn.Pages)}{(foundOn.PagesExact ? string.Empty : "+")} pages").Append(": ");
+                for (var index = 0; index < pages.Count; index++)
+                {
+                    html.Append(index == 0 ? string.Empty : ", ");
+                    Url(html, model, pages[index]);
+                }
+
+                if (foundOn.Pages > pages.Count)
+                {
+                    html.Append(" and ").Append(Number(foundOn.Pages - pages.Count)).Append(" more");
+                }
+            });
+        }
+
+        if (foundOn.Sitemaps.Total > 0)
+        {
+            parts.Add(() =>
+            {
+                html.Append(foundOn.Sitemaps.Total == 1 ? "Listed in the sitemap " : $"Listed in {Number(foundOn.Sitemaps.Total)} sitemaps, first ");
+                Url(html, model, foundOn.Sitemaps.Sitemaps[0].Url);
+            });
+        }
+
+        if (foundOn.Start)
+        {
+            parts.Add(() => html.Append("The address the check started from"));
+        }
+
+        if (parts.Count == 0)
+        {
+            html.Append("No page read links to it");
+            return;
+        }
+
+        for (var index = 0; index < parts.Count; index++)
+        {
+            html.Append(index == 0 ? string.Empty : ". ");
+            parts[index]();
         }
     }
 

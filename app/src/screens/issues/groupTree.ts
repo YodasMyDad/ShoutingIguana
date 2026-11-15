@@ -57,3 +57,28 @@ export function sameGroup(a: CheckGroupRef | null | undefined, b: CheckGroupRef 
 export function groupFilter(checkId: string, group: CheckGroupRef): GridFilter[] {
   return [{ column: 'check', op: 'in', values: [checkId], group }];
 }
+
+/** One page under the open group expanded to show where it's found: its place among the group's pages, and its rows. */
+export interface OpenPage {
+  page: number;
+  rows: number;
+}
+
+/** A row under the open group: one of its pages, a row under the expanded page, or the link to all its pages. */
+export type ChildPlace =
+  { kind: 'page'; page: number } | { kind: 'where'; page: number; row: number } | { kind: 'more' };
+
+/** The rows under an open group whose pages have come: each page, the expanded one's rows after it, then the link. */
+export function pageChildren(pages: number, open: OpenPage | null): number {
+  return pages + (open && open.page < pages ? open.rows : 0) + 1;
+}
+
+/** Which of an open group's rows a child is, its pages having come, with `open` expanded. */
+export function childPlace(child: number, pages: number, open: OpenPage | null): ChildPlace {
+  const expanded = open && open.page < pages ? open : null;
+  const extra = expanded?.rows ?? 0;
+  if (child >= pages + extra) return { kind: 'more' };
+  if (!expanded || child <= expanded.page) return { kind: 'page', page: child };
+  if (child <= expanded.page + extra) return { kind: 'where', page: expanded.page, row: child - expanded.page - 1 };
+  return { kind: 'page', page: child - extra };
+}

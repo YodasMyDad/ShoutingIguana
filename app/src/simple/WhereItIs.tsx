@@ -11,7 +11,9 @@ import { formatCount } from '../lib/format';
 import { switchMode } from '../mode/switchMode';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { OneFixTag } from '../ui/PlainCheckRow';
+import { FoundOnWords } from './FoundOnWords';
 import { pathOrigin, shownWords } from './whereWords';
 
 /** Causes (or pages, for a check that doesn't group) shown at a time. */
@@ -49,6 +51,7 @@ function Address({ url, origin, small = false }: { url: string; origin: string |
     <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'} title={url}>
       <span aria-hidden="true">{shown}</span>
       <span className="sr-only">{url}</span>
+      <OpenUrlButton url={url} className="ml-1" />
     </span>
   );
 }
@@ -172,6 +175,7 @@ export function WhereItIs({
                   <tr key={row.id}>
                     <td>
                       <PageLine row={row} origin={origin} />
+                      <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                     </td>
                     <td className="text-text-secondary">{row.detail ?? ''}</td>
                   </tr>
@@ -234,6 +238,8 @@ function GroupRow({
   const rows = first.data?.rows ?? [];
   const status = rows[0]?.relatedStatusCode ?? null;
   const many = count > FIRST_PAGES;
+  // Broken or redirected addresses say where each is linked from: the first few are listed, not run together.
+  const whereFound = (check.references ?? 'none') === 'sources';
   return (
     <tr>
       <td>
@@ -260,7 +266,24 @@ function GroupRow({
             {group.likelyTemplate ? <OneFixTag /> : null}
           </span>
         ) : null}
-        {many && !open ? (
+        {many && !open && whereFound ? (
+          <>
+            <ul className="flex flex-col gap-2">
+              {rows.slice(0, FIRST_PAGES).map((row) => (
+                <li key={row.id}>
+                  <PageLine row={row} origin={origin} />
+                  <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
+                </li>
+              ))}
+            </ul>
+            <span className="mt-2 block text-text-secondary">
+              And {formatCount(count - Math.min(rows.length, FIRST_PAGES))} more.{' '}
+              <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+                Show them
+              </Button>
+            </span>
+          </>
+        ) : many && !open ? (
           <span className="text-text-secondary">
             {rows
               .slice(0, FIRST_PAGES)
@@ -276,6 +299,7 @@ function GroupRow({
             {rows.map((row) => (
               <li key={row.id}>
                 <PageLine row={row} origin={origin} />
+                <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
               </li>
             ))}
           </ul>

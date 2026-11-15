@@ -39,7 +39,7 @@ import type {
   UrlLookup,
   UrlRow,
 } from './grids';
-import type { HtmlSource, LinkPage, LinksQuery, UrlDetail } from './inspector';
+import type { FoundOnPage, HtmlSource, IssueTargetsPage, LinkPage, LinksQuery, UrlDetail } from './inspector';
 import { getTransport, type TransportRequest } from './transport';
 import type {
   AlertEvent,
@@ -310,11 +310,27 @@ export const api = {
     post<UrlDetail>(`${crawl(id)}/urls/inspect`, { urlId }, signal),
   urlLinks: (id: string, urlId: number, direction: 'inlinks' | 'outlinks', query: LinksQuery, signal?: Signal) =>
     post<LinkPage>(`${crawl(id)}/urls/${direction}`, { urlId, ...query }, signal),
+  /**
+   * Where each of up to 100 URLs is found, in one read: its links, the pages they're on, the first `limit` of them (0 to
+   * 50, 5 when left out) and the sitemaps listing it. `invalid-query` for none, too many or too many listed.
+   */
+  foundOn: (id: string, urlIds: readonly number[], limit?: number, signal?: Signal) =>
+    post<FoundOnPage>(`${crawl(id)}/urls/found-on`, limit === undefined ? { urlIds } : { urlIds, limit }, signal),
   /** The stored HTML, streamed as one JSON object. `bytes` is null for a page over 512 MB. */
   urlSource: (id: string, urlId: number, signal?: Signal) =>
     post<HtmlSource>(`${crawl(id)}/urls/source`, { urlId }, signal),
   issueGroups: (id: string, checkId: string, page: { offset: number; limit: number }, signal?: Signal) =>
     post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
+  /**
+   * What each of up to 100 of a check's flagged pages names (its broken targets, its canonical), the first `limit` of
+   * each (0 to 50, 5 when left out). `check-not-found`, `not-analyzed` and `invalid-query` as `/rows`.
+   */
+  issueTargets: (id: string, checkId: string, urlIds: readonly number[], limit?: number, signal?: Signal) =>
+    post<IssueTargetsPage>(
+      `${crawl(id)}/issues/${encodeURIComponent(checkId)}/targets`,
+      limit === undefined ? { urlIds } : { urlIds, limit },
+      signal,
+    ),
   issueRows: (id: string, checkId: string, query: UrlGridQuery, signal?: Signal) =>
     post<GridPage<IssueRow>>(
       `${crawl(id)}/issues/${encodeURIComponent(checkId)}/rows`,

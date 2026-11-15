@@ -123,7 +123,7 @@ public static class UrlInspectorReader
     /// URL, so each sitemap is asked whether it lists this one: a lookup a sitemap (a crawl reads at most a thousand), where
     /// finding the URL's rows without their sitemap would read every row of every sitemap.
     /// </summary>
-    private static UrlSitemaps ListedIn(GridReadContext context, int urlId)
+    internal static UrlSitemaps ListedIn(GridReadContext context, int urlId)
     {
         List<SitemapRef> sitemaps = [];
         long total = 0;
@@ -161,7 +161,7 @@ public static class UrlInspectorReader
         return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadLinks(context, urlId, direction, query));
     }
 
-    private static LinkPage? ReadLinks(GridReadContext context, int urlId, LinkDirection direction, LinkQuery query)
+    internal static LinkPage? ReadLinks(GridReadContext context, int urlId, LinkDirection direction, LinkQuery query)
     {
         if (Inspected(context, urlId) is not { } self)
         {
@@ -322,7 +322,7 @@ public static class UrlInspectorReader
     /// the request for it, which only its response says, with or without the summary, as the URL grid's outcome column
     /// reads it.
     /// </summary>
-    private static (string Status, string Indexable, string Fetched, string Outcome, string Join) OtherEnd(GridReadContext context)
+    internal static (string Status, string Indexable, string Fetched, string Outcome, string Join) OtherEnd(GridReadContext context)
     {
         var notChecked = AnalysisReader.NOT_CHECKED.Replace("r.", "orr.", StringComparison.Ordinal);
         var outcome = $"CASE WHEN orr.url_id IS NULL THEN NULL WHEN {notChecked} THEN {(int)UrlOutcome.NotChecked} ELSE orr.outcome END";
@@ -419,7 +419,7 @@ public static class UrlInspectorReader
     }
 
     /// <summary>A stored enum's value, or null for one this engine doesn't know: a newer engine's, or a crafted file's.</summary>
-    private static TEnum? Known<TEnum>(SqliteDataReader reader, int ordinal) where TEnum : struct, Enum
+    internal static TEnum? Known<TEnum>(SqliteDataReader reader, int ordinal) where TEnum : struct, Enum
     {
         if (reader.IsDBNull(ordinal))
         {
@@ -431,7 +431,7 @@ public static class UrlInspectorReader
     }
 
     /// <summary>A stored number as an int, or null when there's none or it doesn't fit one (a crafted file's infinity).</summary>
-    private static int? Int32OrNull(SqliteDataReader reader, int ordinal) =>
+    internal static int? Int32OrNull(SqliteDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) || reader.GetInt64(ordinal) is < int.MinValue or > int.MaxValue ? null : (int)reader.GetInt64(ordinal);
 
     /// <summary>
@@ -845,7 +845,7 @@ public static class UrlInspectorReader
     private static long TotalLinks(GridReadContext context, LinkDirection direction, int urlId) => TotalLinks(context, direction, urlId, []);
 
     /// <summary>The same of some kinds only (in order, each once): one count, kept, for the inspector's own figure and its list of those kinds.</summary>
-    private static long TotalLinks(GridReadContext context, LinkDirection direction, int urlId, IReadOnlyList<LinkKind> kinds) =>
+    internal static long TotalLinks(GridReadContext context, LinkDirection direction, int urlId, IReadOnlyList<LinkKind> kinds) =>
         context.Count($"links|{direction}|{urlId}|{OfKinds(kinds)}", () => Count(context, direction, urlId, kinds, OfKinds(kinds)));
 
     /// <summary>The condition that a link <c>l</c> is of one of these kinds; none for every kind.</summary>

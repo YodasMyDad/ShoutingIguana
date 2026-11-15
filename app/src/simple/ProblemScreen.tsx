@@ -3,6 +3,7 @@ import { Link, useRouter } from '@tanstack/react-router';
 import { ArrowLeft, ArrowUpRight, FileText, Gauge, RefreshCw, UserRound } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
+import type { LinkPosition } from '../api/inspector';
 import { isCrawling, type Analysis, type Check, type CrawlListItem, type SkipReason } from '../api/types';
 import { crawlName, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
@@ -32,6 +33,10 @@ import {
   type ShareWords,
 } from './plainWords';
 import { WhereItIs } from './WhereItIs';
+import { useSharedSource } from './useSharedSource';
+import { pathOrigin } from './whereWords';
+import { useTemplateLink } from '../screens/issues/useWhereFound';
+import { templateLinkWords } from '../screens/issues/whereFound';
 import { firstGroupQuery } from './useOneFix';
 
 const FIX = '/crawls/$crawl/issues/{-$check}';
@@ -247,6 +252,10 @@ function FoundProblem({
   const fixer = fixerWords(check.fixer);
   const first = useQuery({ ...firstGroupQuery(crawlId, check.id), enabled: check.grouping !== 'none' });
   const template = first.data?.groups[0]?.likelyTemplate ? first.data.groups[0] : null;
+  // Where the one fix is: the link every page shares (a check of pages holding it), or the one page linking to most
+  // of the broken addresses (a check of the addresses).
+  const templateLink = templateLinkWords(useTemplateLink(crawlId, check, template));
+  const shared = useSharedSource(crawlId, check);
   const context = {
     crawlId,
     check,
@@ -334,6 +343,19 @@ function FoundProblem({
         >
           {check.plainOneFix ??
             'They share one cause, in the part of the site every page shares, so one change there clears them.'}
+          {templateLink && template.relatedUrl ? (
+            <>
+              {' '}
+              {templateLink}, to <span className="font-mono text-14">{pathOf(template.relatedUrl, item)}</span>.
+            </>
+          ) : null}
+        </Callout>
+      ) : shared ? (
+        <Callout
+          className="mt-4"
+          title={`One page links to ${shared.urls.toLocaleString('en-GB')} of ${shared.of >= count ? 'these' : 'the first'} ${shared.of.toLocaleString('en-GB')} ${noun}`}
+        >
+          {sharedSourceWords(pathOf(shared.url, item), shared.position)}
         </Callout>
       ) : null}
       <WhereItIs crawlId={crawlId} item={item} check={check} total={count} onCopy={copyList} onSave={saveSheet} />
@@ -355,6 +377,23 @@ function FoundProblem({
       </Card>
     </>
   );
+}
+
+/** "/garden-furniture/ links to most of them, from its footer. Fix or remove the links there first." */
+function sharedSourceWords(path: string, position: LinkPosition | null): ReactNode {
+  const where = position && position !== 'content' ? `, from its ${position === 'navigation' ? 'menu' : position}` : '';
+  return (
+    <>
+      <span className="font-mono text-14">{path}</span> links to most of them{where}. Fix or remove the links there
+      first.
+    </>
+  );
+}
+
+/** An address as the problem page names it: its path on the site's own origin, else in full. */
+function pathOf(url: string, item: Pick<CrawlListItem, 'site' | 'startUrl'>): string {
+  const origin = pathOrigin(url, item);
+  return origin && url.startsWith(origin) ? url.slice(origin.length) || '/' : url;
 }
 
 /** A check that couldn't run: what it looks for, why it couldn't, and what would let it. */

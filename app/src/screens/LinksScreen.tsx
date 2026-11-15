@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
+import { Copy, ExternalLink, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
+import { openInBrowser } from '../shell/os';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
@@ -793,6 +794,8 @@ export function LinksScreen() {
             // The footer's hints give way to rows in a short window.
             keyHints={short ? undefined : GRID_KEY_HINTS}
             rowNoun={['link', 'links']}
+            // Shift+Enter opens the end the cursor is on: the source page in its columns, else the target.
+            openUrlOf={(row, column) => endUrl(row, column?.startsWith('from.') ? 'from' : 'to')}
             rowCount={rowCount}
             getRow={rows.getRow}
             rowHeight={rowHeight}
@@ -875,6 +878,21 @@ export function LinksScreen() {
         <MenuItem icon={PanelRight} disabled={!menuRow} onSelect={() => openRow(menuRow, 'to')}>
           Inspect the target
         </MenuItem>
+        {(['from', 'to'] as const).map((end) => {
+          const url = menuRow ? endUrl(menuRow, end) : null;
+          return (
+            <MenuItem
+              key={end}
+              icon={ExternalLink}
+              disabled={url === null}
+              onSelect={() => {
+                if (url !== null) void openInBrowser(url);
+              }}
+            >
+              {end === 'from' ? 'Open the source page in your browser' : 'Open the target in your browser'}
+            </MenuItem>
+          );
+        })}
         <MenuSeparator />
         <ValueFilterItems
           cell={menuCell}
@@ -884,4 +902,10 @@ export function LinksScreen() {
       </RowMenu>
     </GridScreen>
   );
+}
+
+/** One end's URL of a link, where it's one a browser can open. */
+function endUrl(row: LinkRow, end: 'from' | 'to'): string | null {
+  const url = row[`${end}.url`];
+  return typeof url === 'string' && /^https?:/i.test(url) ? url : null;
 }

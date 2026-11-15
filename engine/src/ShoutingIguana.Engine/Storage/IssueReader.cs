@@ -18,7 +18,7 @@ public static class IssueReader
     internal static Action<string>? SnapshotTaken { get; set; }
 
     private const string SELECT_ROWS = """
-        SELECT i.issue, u.url, i.detail, r.url
+        SELECT i.issue, u.url, i.detail, r.url, i.url_id
         FROM issues i
         JOIN urls u ON u.id = i.url_id
         LEFT JOIN urls r ON r.id = i.related_url_id
@@ -187,7 +187,8 @@ public static class IssueReader
                 reader.GetString(0),
                 reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2),
-                reader.IsDBNull(3) ? null : reader.GetString(3));
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.GetInt32(4));
         }
     }
 

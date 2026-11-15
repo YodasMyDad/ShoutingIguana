@@ -127,3 +127,22 @@ describe('the inspector’s links of a URL (gap 22)', () => {
     });
   });
 });
+
+describe('“This check” of a check whose URLs are referred to', () => {
+  const described = (references: 'sources' | 'targets' | 'none') =>
+    issuesOffer({
+      item,
+      crawling: false,
+      simple: false,
+      check: { id: 'internal-client-error', title: 'Internal URL returns 4xx', urls: 8, references },
+      group: null,
+    }).choices.find((choice) => choice.id === 'check')?.description;
+
+  it('says its file has where each is found, or what each page links to', () => {
+    expect(described('sources')).toBe(
+      'Internal URL returns 4xx: 8 pages, with what was found on each and the pages that link to it',
+    );
+    expect(described('targets')).toMatch(/with what was found on each and the URLs it links to$/);
+    expect(described('none')).toMatch(/with what was found on each$/);
+  });
+});

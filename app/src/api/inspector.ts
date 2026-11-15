@@ -344,3 +344,51 @@ export interface LinkPage {
 export type HtmlSource =
   | { stored: true; html: string; bytes: number | null; truncated: boolean }
   | { stored: false; reason: 'notStored' | 'notPage' };
+
+/**
+ * Where a URL other URLs refer to is found (`POST /urls/found-on`): every link to it, of every kind, a page's links to
+ * itself left out; the pages they're on; the first of them as the inspector's inlinks name them (`id` and `url` are the
+ * page linking); the sitemaps listing it; and whether it's the start URL.
+ */
+export interface UrlFoundOn {
+  urlId: number;
+  links: number;
+  /** The pages those links are on: exact, or a floor when `pagesExact` is false (past 5,000 links). */
+  pages: number;
+  pagesExact: boolean;
+  sources: LinkRow[];
+  sitemaps: UrlSitemaps;
+  start: boolean;
+}
+
+export interface FoundOnPage {
+  /** In the order asked, each once; a URL the crawl doesn't have is left out. */
+  urls: UrlFoundOn[];
+}
+
+/** A URL a flagged page's issue names (a broken target, the canonical), with its status and the page's link to it. */
+export interface IssueTarget {
+  id: number;
+  url: string;
+  statusCode: number | null;
+  fetched: boolean;
+  outcome: UrlOutcome | null;
+  /** The page's first link to it; null with `text` and `position` where it has none stored. */
+  kind: LinkKind | null;
+  text: string | null;
+  position: LinkPosition | null;
+}
+
+export interface IssueTargetsOfUrl {
+  urlId: number;
+  /** Every URL the page's issue names. */
+  total: number;
+  /** The first of them, by id. */
+  targets: IssueTarget[];
+}
+
+/** `POST /issues/{checkId}/targets`: a page the check didn't flag is left out; a check that didn't run has none. */
+export interface IssueTargetsPage {
+  checkId: string;
+  urls: IssueTargetsOfUrl[];
+}

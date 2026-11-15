@@ -300,6 +300,16 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   "404 Not Found", a robots.txt's "503 Service Unavailable" (as the reason of its alert and of the URLs it refused),
   a firewall's "Rate limited (429 Too Many Requests)". A crawl an earlier engine stored keeps its words ("HTTP 404"),
   which a detail still names when it quotes them; the crawl file is never rewritten.
+- **Where to fix it.** Each check says how its URLs stand to the references between URLs
+  (`IssueDefinition.References`, not stored): `Sources` when each is something other URLs refer to (a 404, a redirect,
+  a URL robots.txt blocks, a sitemap entry), so what's fixed is where it's found; `Targets` when each is the page holding
+  the bad references (it links to broken URLs, its canonical redirects), so what's fixed is on it; `None` otherwise.
+  13 checks are `Sources`, 17 `Targets` (the list: [the IA](../docs/v2-ui-ia.md#where-its-found-uifound-on)).
+  `Storage/FoundOnReader` reads, for up to 100 URLs in one snapshot, where each is found (its links of every kind, the
+  pages they're on, the first of them as the inspector's inlinks, the sitemaps listing it, whether it's the start URL)
+  and what each flagged page names (every URL in `issue_targets`, with its status and the page's link to it). The
+  pages are counted over a URL's first 5,000 links, a floor past them. The report and a check's file say it too
+  ([below](#export-and-the-report)).
 - **What an issue names.** An issue is one check on one URL, with a short detail and the other URL involved. Where a
   page has several (it links to three broken URLs, shows two large images), `issues` keeps the first and
   `issue_targets` every one, so the Issues screen puts the page in the group of each and the inspector counts each as
@@ -668,6 +678,9 @@ method takes a `CancellationToken`, which stops the read within milliseconds.
 - `IssueGroupReader`: a check's issues grouped by their cause (`ReadGroups`), and its rows as a URL grid
   (`ReadRows`).
 
+`FoundOnReader` (`ReadFoundOn`, `ReadTargets`) reads where a page of a check's URLs is found, and what its pages name,
+for the Issues screen's rows, Simple's problem page, the report and a check's file ([above](#seo-analysis)).
+
 Three more read what the Links, Sitemaps and robots.txt screens show (see [below](#links-sitemaps-and-robotstxt)):
 `LinkGridReader`, `SitemapListReader` (with `UrlGridReader.QuerySitemap`) and `RobotsReader`. `CrawlStatsReader.Read`,
 the crawl's headline numbers (`si stats`, the API's `/stats`), reads the same way: one snapshot, stopped by its token,
@@ -990,6 +1003,14 @@ a URL 112,000 issues name (it was 35 ms, reading every issue; 100 ms with 3.5M i
 
 ## Export and the report
 
+**Where to fix each URL.** A check whose URLs other pages refer to (`References.Sources`) has, after its sheet's own
+columns (in the workbook, its own file and a group's or its rows' export), "Linked from (pages)", "Linked from" (the
+first ten pages, each with where on it the link is and its text, then "and N more") and "Listed in sitemaps"; a check
+whose pages hold the bad references (`Targets`) has "Links to (addresses)" and "Links to" (the first ten with their
+status). They're read a page of rows at a time (`Export/WhereFoundColumns`). The report's list of a `Sources` check's
+first addresses has "Where to fix it" (the first three pages linking, then how many more, the sitemap, the start
+address), and a `Targets` page naming several says how many others.
+
 `si export` and `si report` write what the app's Export writes, by the same code (`Export/CrawlExporter`); the
 sidecar runs the same as a job ([the API doc](../docs/v2-sidecar-api.md#export-e5)).
 
@@ -1015,7 +1036,7 @@ si export example.sicrawl --kind urls --out broken-targets.csv --link-ends to --
 | `sitemapUrls` (`--sitemap <id>`) | One sitemap's URLs | `.csv`, `.xlsx` |
 | `robotsBlocked` (`--origin`, with `--line` or `--reason` to narrow) | The URLs robots.txt kept the crawl from on an origin | `.csv`, `.xlsx` |
 | `issueRows` (`--check <id>`) | A check's rows, with any of the grid's columns | `.csv`, `.xlsx` |
-| `check` (`--check <id>`) | One check's sheet of the workbook, as a file of its own | `.xlsx`, `.csv` |
+| `check` (`--check <id>`) | One check's sheet of the workbook, as a file of its own (with where to fix each URL, below) | `.xlsx`, `.csv` |
 | `workbook` | The spreadsheet of everything | `.xlsx` |
 | `report` | The report (also `si report`) | `.html` |
 
