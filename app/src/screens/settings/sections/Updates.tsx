@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { healthQuery } from '../../../api/queries';
-import { useMode } from '../../../mode/mode';
 import { Fact, Facts } from '../../../ui/Facts';
 import { SectionPage } from '../SectionPage';
 import { useShellInfo } from '../../../shell/useShellInfo';
@@ -26,23 +25,22 @@ export const order = 70;
 export function Section() {
   const shell = useShellInfo();
   const health = useQuery(healthQuery());
-  const simple = useMode() === 'simple';
   return (
     <SectionPage title="Updates" purpose="The version you have, and how a new one arrives.">
       <Facts auto>
         <Fact label="This version" className="font-mono text-12">
           {shell ? shell.appVersion : 'Running in a browser'}
         </Fact>
-        <Fact label={simple ? 'Site checker' : 'Engine'} className="font-mono text-12">
+        <Fact label="Engine" className="font-mono text-12">
           {health.data?.engineVersion ?? (health.error ? 'Not connected' : '…')}
         </Fact>
       </Facts>
       {isTauri ? (
-        <UpdatePanel updater={SHELL_UPDATER} mode={simple ? 'simple' : 'advanced'} />
+        <UpdatePanel updater={SHELL_UPDATER} />
       ) : (
         <p className="text-13 text-text-secondary">
-          The installed app checks for new versions here. A new version comes as a new installer: run it, and your{' '}
-          {simple ? 'site checks' : 'crawls'} and settings stay as they are.
+          The installed app checks for new versions here. A new version comes as a new installer: run it, and your
+          crawls and settings stay as they are.
         </p>
       )}
     </SectionPage>

@@ -25,14 +25,13 @@ import logoUrl from '../assets/iguana-64.png';
 import { runningTitle } from '../crawl/runningWords';
 import { crawlName, crawledUrls } from '../crawl/status';
 import { ExportsInProgress } from '../export/ExportsInProgress';
-import { formatExactTime } from '../lib/format';
 import { useLive, useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useMode } from '../mode/mode';
-import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
 import { NavItem } from '../ui/NavItem';
 import { SeverityMark } from '../ui/SeverityMark';
+import { CrawlSwitcher } from './CrawlSwitcher';
 import { toggleSidebar, useSidebarCollapsed } from './sidebarState';
 import { SEVERITIES, type Severity } from '../ui/severity';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
@@ -76,14 +75,15 @@ export function Sidebar() {
       : CRAWL_SECTIONS;
 
   return (
+    // On the frame, with no edge of its own: the panel beside it has the edge (the framed workspace).
     <nav
       aria-label="Main"
       className={clsx(
-        'flex min-h-0 shrink-0 flex-col border-r border-border-subtle bg-canvas p-3 transition-width duration-(--duration-panel) ease-out',
+        'si-sidebar flex min-h-0 shrink-0 flex-col bg-frame p-3 transition-width duration-(--duration-panel) ease-out',
         collapsed ? 'w-(--sidebar-width-collapsed) px-2' : 'w-(--sidebar-width)',
       )}
     >
-      <div className={clsx('mb-5 flex h-(--control-height) items-center gap-2.5', collapsed ? 'flex-col' : 'pl-1')}>
+      <div className={clsx('mb-3 flex h-(--control-height) items-center gap-2.5', collapsed ? 'flex-col' : 'pl-1')}>
         {collapsed ? null : (
           <>
             <img src={logoUrl} alt="" className="size-(--favicon-lg) shrink-0" />
@@ -104,7 +104,7 @@ export function Sidebar() {
           live ones, as many crawls and exports as are running (polish 2: a paused crawl and an export ran 7 px past a
           720 px window, Settings on its edge). Settings stays whole below it. The padding, taken back by the margin,
           keeps the focus rings inside what clips. */}
-      <div className="-m-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-1">
+      <div className="-m-1 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-1">
         <ul className="flex flex-col gap-0.5">
           <li>
             <NavItem
@@ -119,20 +119,11 @@ export function Sidebar() {
         </ul>
 
         {crawlId ? (
-          <section aria-label={crawlName(crawl)} className="flex flex-col gap-1.5">
-            <div className={clsx('flex items-center gap-2.5 py-1', collapsed ? 'justify-center' : 'px-2')}>
-              <CrawlFavicon item={crawl} size="lg" />
-              {collapsed ? null : (
-                <div className="flex min-w-0 flex-col">
-                  <h2 className="truncate text-13 font-semibold" title={crawl?.startUrl ?? undefined}>
-                    {crawlName(crawl)}
-                  </h2>
-                  {crawl?.startedAt ? (
-                    <span className="truncate text-12 text-text-muted">{formatExactTime(crawl.startedAt)}</span>
-                  ) : null}
-                </div>
-              )}
-            </div>
+          <section aria-label={crawlName(crawl)} className="flex flex-col gap-2">
+            {/* The open crawl, as a switcher to the library's recent ones (the framed workspace). Its name is the
+                section's heading for a screen reader's list of headings, as it was before it became a button. */}
+            <h2 className="sr-only">{crawlName(crawl)}</h2>
+            <CrawlSwitcher crawlId={crawlId} crawl={crawl} collapsed={collapsed} mode={mode} />
             <ul className="flex flex-col gap-0.5">
               {sections.map((section) => (
                 <SectionLink
@@ -147,8 +138,9 @@ export function Sidebar() {
                 />
               ))}
             </ul>
+            {/* The Report after a small gap: no rule (the framed workspace keeps the sidebar's lines to the panel). */}
             {mode === 'advanced' && report ? (
-              <ul className="flex flex-col gap-0.5 border-t border-border-subtle pt-1.5">
+              <ul className="flex flex-col gap-0.5 pt-1.5">
                 <SectionLink
                   crawlId={crawlId}
                   section={REPORT_SECTION}
@@ -166,7 +158,7 @@ export function Sidebar() {
           <ExportsInProgress collapsed={collapsed} />
         </div>
       </div>
-      <div className="mt-2 border-t border-border-subtle pt-2">
+      <div className="mt-2">
         <NavItem to="/settings/{-$section}" params={{}} label="Settings" icon={Settings} collapsed={collapsed} />
       </div>
     </nav>
@@ -308,11 +300,7 @@ function RunningCrawls({ collapsed, simple }: { collapsed: boolean; simple: bool
   if (live.length === 0) return null;
   return (
     <section aria-label={simple ? 'Checking now' : 'Running crawls'} className="flex flex-col gap-0.5">
-      {collapsed ? null : (
-        <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">
-          {runningTitle(doing, simple ? 'simple' : 'advanced')}
-        </h2>
-      )}
+      {collapsed ? null : <h2 className="si-nav-label">{runningTitle(doing, simple ? 'simple' : 'advanced')}</h2>}
       <ul className="flex flex-col gap-0.5">
         {live.map((id) => (
           <RunningCrawl

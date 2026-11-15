@@ -64,10 +64,10 @@
     outline-offset: calc(var(--focus-width) * -1);
   }
 
-  /* The row the keys are on (J and K on What to fix): the tint and the accent rule, never the tint alone. */
+  /* The row the keys are on (J and K on What to fix): the current place's look, the inset neutral fill. */
   .si-plain-row[aria-current='true'] {
-    background: var(--color-surface-selected);
-    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+    background: var(--color-current-inset);
+    color: var(--color-current-text);
   }
 
   .si-plain-row__number {

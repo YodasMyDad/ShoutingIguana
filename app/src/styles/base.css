@@ -1,9 +1,12 @@
 /* Base rules, in tokens only: the page, the one focus ring, figures, skeletons, the current place, the grid primitive,
    the palette's rows and toasts. The component library's look is in components.css.
 
-   State indicators meet WCAG 2.2 AA (1.4.11) in both themes: what's selected, highlighted or current carries the
-   accent rule (at least 3:1 against what's beside it), never a tint alone, and focus is an outline. Under forced
-   colours each is a Highlight outline on the page's own colours, so no text sits on Highlight unreadable. */
+   State indicators (the framed workspace, docs/v2-ui-design.md): what's current or highlighted is a solid neutral fill
+   with near-black (or white) text at 600, never the accent: the owner found the accent rule along the edge "what all
+   AI does". It is told by more than the fill: the weight and the darker text (and aria-current or aria-selected for a
+   screen reader), the text at 4.5:1 on the fill. A grid's selected rows keep the selection tint alone. Focus is an
+   outline, as ever. Under forced colours each is a Highlight ring on the page's own colours, so no text sits on
+   Highlight unreadable. */
 
 @layer base {
   html,
@@ -14,7 +17,7 @@
 
   body {
     margin: 0;
-    background: var(--color-canvas);
+    background: var(--color-frame);
     color: var(--color-text);
     font-family: var(--font-sans);
     font-size: var(--text-14);
@@ -139,17 +142,18 @@
   }
 
   /*
-    What's current in a list of places (the sidebar, Settings' sections) and what's highlighted in the palette: the
-    selected tint, its text in the accent, and the accent rule along its leading edge.
+    What's current in a list of places (the sidebar, Settings' sections): a solid neutral fill, its text and icon
+    near-black (white in dark) at 600. No accent rule, no accent text. On the frame (the sidebar) it takes the frame's
+    fill; on the panel, the inset one (components.css).
   */
   .si-current {
-    background: var(--color-surface-selected);
-    color: var(--color-accent-text);
-    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+    background: var(--color-current-inset);
+    color: var(--color-current-text);
+    font-weight: var(--font-weight-semibold);
   }
 
   /* The grid primitive (src/grid/GridCore.tsx), in clarity's look: a sheet, a 12 px header in the secondary text, row
-     rules, and selection as the tint with the accent rule. */
+     rules, and selection as the tint (no accent rule along the edge since the framed workspace). */
   .si-grid {
     background: var(--color-surface);
     font-size: var(--grid-font-size);
@@ -201,14 +205,11 @@
     background: var(--color-surface-hover);
   }
 
+  /* Selected: the tint, which hover never covers, and the focused grid's cursor outline on top (below). */
   .si-grid-row[data-selected] {
     background: var(--color-surface-selected);
   }
 
-  /*
-    The selection's accent rule, along the rows' leading edge. It sits in a gutter that sticks to the grid's left edge,
-    so a grid scrolled sideways still shows which rows are selected.
-  */
   /* What a first load is doing, over its skeleton: a line of words that takes no room from the rows. */
   .si-grid-note {
     position: absolute;
@@ -223,24 +224,6 @@
     color: var(--color-text-secondary);
     font-size: var(--text-13);
     line-height: var(--leading-13);
-  }
-
-  .si-grid-gutter {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    /* No height of its own: in the rows' flow, a full-height gutter would add to what the grid can scroll. */
-    height: 0;
-    width: var(--rule-width);
-    pointer-events: none;
-  }
-
-  .si-grid-mark {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background: var(--color-accent);
   }
 
   /* The keyboard cursor: drawn on the active cell while the grid has focus. An outline survives forced colours. */
@@ -537,9 +520,15 @@
     font-weight: var(--font-weight-semibold);
   }
 
+  /* Highlighted: the current place's look (.si-current), the inset fill and the darker text. */
   .si-palette-item[aria-selected='true'] {
-    background: var(--color-surface-selected);
-    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+    background: var(--color-current-overlay);
+    color: var(--color-current-text);
+  }
+
+  /* What's muted on a highlighted option (a crawl's age, "No title") reads in the secondary text: 4.5:1 still. */
+  .si-palette-item[aria-selected='true'] .text-text-muted {
+    color: var(--color-text-secondary);
   }
 
   .si-palette-item[aria-disabled='true'] {
@@ -580,7 +569,6 @@
       outline-color: CanvasText;
     }
 
-    .si-grid-mark,
     .si-scroll-thumb {
       forced-color-adjust: none;
       background: Highlight;

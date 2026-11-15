@@ -44,7 +44,7 @@ export function SimpleHome() {
       ref={screenRef}
       className="@container mx-auto box-content flex max-w-(--content-max) flex-col gap-8 px-(--page-gutter) pt-10 pb-10"
     >
-      <section aria-labelledby="home-title" className="flex flex-col gap-4">
+      <section aria-labelledby="home-title" className="flex max-w-(--start-form-max) flex-col gap-4">
         <PageHeader
           title={<span id="home-title">Check a website</span>}
           subtitle="Paste a web address. Shouting Iguana reads the site the way a search engine does, and tells you what to fix in plain words."

@@ -71,7 +71,8 @@ function NavAnchor({
 }
 
 /**
- * A place in a list of places (the sidebar, Settings' sections): an icon, a label and a count. The current one has
- * the tint, its text in the accent and the accent rule along its edge (`.si-current`), never the tint alone.
+ * A place in a list of places (the sidebar, Settings' sections): an icon, a label and a count. The current one is a
+ * solid neutral fill, its label, icon and count near-black (white in dark) at 600 (`.si-current`): no accent rule and
+ * no accent text since the framed workspace (docs/v2-ui-design.md).
  */
 export const NavItem = createLink(NavAnchor);

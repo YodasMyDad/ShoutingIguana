@@ -1156,20 +1156,6 @@ function GridCoreInner<Row>({
                 />
               ))
             : null}
-          {/* The selection's accent rule: a gutter that stays at the left edge when the grid scrolls sideways. */}
-          <div aria-hidden="true" className="si-grid-gutter">
-            {loading
-              ? null
-              : indices
-                  .filter((index) => inRanges(ranges, index))
-                  .map((index) => (
-                    <span
-                      key={index}
-                      className="si-grid-mark"
-                      style={{ transform: `translateY(${index * rowHeight - view.base}px)`, height: rowHeight }}
-                    />
-                  ))}
-          </div>
           {indices.map((index) => {
             const row = getRow(index);
             const top = index * rowHeight - view.base;

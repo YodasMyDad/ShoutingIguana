@@ -175,8 +175,8 @@ export const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'settings/{-$section}',
   validateSearch: validateNoSearch,
-  // A section there's no file for (Analysis until its slice) is General, in the address too: nothing turns Advanced
-  // on, or lands, on a section that isn't there. Its list comes with the screen's chunk.
+  // A section there's no file for is General, in the address too: nothing lands on a section that isn't there. Every
+  // section is in both modes. Its list comes with the screen's chunk.
   beforeLoad: async ({ params }) => {
     if (params.section === undefined) return;
     const { SETTINGS_SECTIONS } = await import('../screens/settings/registry');

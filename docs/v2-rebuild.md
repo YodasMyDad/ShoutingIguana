@@ -135,6 +135,24 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`. Since 2026-1
 the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not moved. This section is the place to
 resume. Merging to `master` or releasing still needs an explicit yes.
 
+**AFTER STEP 3, 2026-11-15: the framed workspace, on branch `ui/framed`** (worktree `.claude/worktrees/framed`, local
+only, NOT merged into `ui/step-3`; awaiting the owner's look at the review shots). The owner, on the installed app: the
+left side and the segmentation were "wishy washy and difficult to see", and the accent rule along the current item
+"looks AI made". Of three mocked directions they chose B, framed workspace; plus two decisions on the same branch:
+**Settings is the full Settings in both modes** ("the Simple and Advanced modes are just for the UI … not for
+settings"), and **capped screens grow with a wide window** (`--content-max` 1,136 → 1,800 px). What's built: the frame
+and one inset panel (top bar, screen, inspector), the sidebar on the frame with the crawl switcher (a Radix menu of the
+recent crawls, then Home), `.si-current` as a neutral fill everywhere (no accent rule, no accent text), the grid's
+selection without its rule, stronger card edges and divided card headers, the Overview's figures as cards. Design and
+why: [v2-ui-design.md](v2-ui-design.md#the-framed-workspace-2026-11-15); build: v2-ui-architecture.md, "The framed
+workspace". Checks: `verify-app.sh` on `dad6f78` every step exit 0 (unit 3,817, stories x3 plain, forced, reduced)
+except e2e, 247 of 248: Overview's sideways-scroll check at 640 px failed in the frame before the totals' row took
+fewer columns (the cards' gaps made five columns wider); fixed by clipping a figure card, then the full e2e 248 passed,
+and `framed` + `home-library` 3 times in a row; `e2e:filled` 31; release build and `smoke:shell` 19 + 9. The stories
+weren't run again after that one CSS line. Review shots (release shell, 1280 x 720 at 150%, both themes; the wide one
+2560 x 1362): scratch `a539aa23-…/framed/shots/`. **Left:** the owner's verdict on the shots; then merge into
+`ui/step-3`, re-shoot the gallery, rebuild the installer.
+
 **STEP 3 FINISHED 2026-11-15.** Polish 2 is merged (`9be9c71`, local). Its last checks, on `84ebeeb` (the merge differs
 only in docs and CI): `verify-app.sh` every step exit 0 (unit 3,769; stories x3, plain, forced and reduced; sidecar),
 full e2e 233 (the first run failed one test, `states.spec` "tabs past the edge", which still held the scrolling strip

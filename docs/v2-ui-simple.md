@@ -52,9 +52,10 @@ session decide the mode again, and the two views would drift into two apps.
 - **Switching keeps the screen.** The same route renders its other view: a problem in Simple is that check in
   Advanced, the Summary is Overview, the report is the report. Search params the other view doesn't use (Issues'
   `group`, `severity`, `inspect`) are kept in the address and ignored, so switching back restores them.
-- **From an Advanced-only screen** (URLs, Links, Sitemaps, robots.txt, the crawl's settings, an Advanced-only
-  Settings section), switching to Simple goes to the nearest screen Simple has: the crawl's Summary, or Settings >
-  General. It is a navigation, so Back returns.
+- **From an Advanced-only screen** (URLs, Links, Sitemaps, robots.txt, the crawl's settings), switching to Simple
+  goes to the nearest screen Simple has: the crawl's Summary. It is a navigation, so Back returns. Settings is no
+  such screen: every section of it is in both modes, so switching there stays put ([Settings in each
+  mode](#settings-in-each-mode)).
 - **Simple never leads to an Advanced-only screen by surprise.** Simple's own links to one always say so ("See it
   in Advanced", "Open in Advanced", "Show them in Advanced"). Arriving at an Advanced-only screen, by such a link,
   by Back or Forward, or by a reopened session, **turns Advanced on**: the switch shows it, and a toast says
@@ -75,7 +76,7 @@ session decide the mode again, and the two views would drift into two apps.
 | `/crawls/:crawl/issues/:check` | One problem | Issues, with that check selected |
 | `/crawls/:crawl/report` | Report. Param: `cut` (`full`, `summary`) | Report, the same screen |
 | `/crawls/:crawl/urls`, `/links`, `/sitemaps/:sitemap?`, `/robots/:origin?`, `/settings` | None: Advanced only | As built |
-| `/settings/:section?` | General, Data folder, Updates, About | All eight sections |
+| `/settings/:section?` | All eight sections, the same as Advanced's | All eight sections |
 
 `/crawls/:crawl` goes to the crawl's last view in the current mode: the Summary the first time in Simple.
 
@@ -83,11 +84,13 @@ session decide the mode again, and the two views would drift into two apps.
 
 The same shell: sidebar, top bar, main area. No inspector in Simple: a page's detail is Advanced.
 
-- **Sidebar.** Home; the open site, with when it was checked; its three sections, **Summary**, **What to fix** and
+- **Sidebar.** Home; the open site, with when it was checked, as a switcher to your recent sites ("Switch site",
+  "Recent checks", "All your sites, on Home"); its three sections, **Summary**, **What to fix** and
   **Report**; at the bottom, "Checking now" (crawls running) and Settings. What to fix carries a count: the
   problems that are Serious or Worth fixing (6 on the garden crawl). Why not all 19: a site with nothing but things
   worth a look would show a to-do count it can't clear.
-- **Advanced's sidebar gains Report** as an eighth section, after a rule, below the crawl's Settings. Why last and
+- **Advanced's sidebar gains Report** as an eighth section, after a small gap (a rule until the framed workspace),
+  below the crawl's Settings. Why last and
   not beside Issues: Ctrl+1 to Ctrl+7 are built and stay as they are.
 - **Pause, Stop and Continue stay in the top bar only**, with their words, as Advanced decided. Why: one place, on
   every screen. The checking screen says where they are.
@@ -735,24 +738,39 @@ A crawl ends in the report without a hunt:
 
 ## Settings in each mode
 
-`settings-simple.html`, `settings-advanced.html`.
+**Settings is the same screen in both modes** (decided 2026-11-15, the owner, on first use): "the setting should
+always be the settings when I click in settings it should be the full settings relevant of whether I'm in Simple or
+Advanced mode … the Simple and Advanced modes are just for the UI for the user of using the app, not for settings. I
+still need the settings whatever version they're using."
 
-| Section | Simple | Advanced |
-| --- | --- | --- |
-| General | **Mode** (Simple, Advanced, with a line on each); Theme | Mode; Theme; Density |
-| Crawl defaults | No | Yes: the New crawl form, saved as defaults |
-| Analysis | No | Yes: every threshold |
-| Data folder | Yes | Yes |
-| Shortcuts | No (`?` still lists them) | Yes |
-| Diagnostics | No. About carries "Copy diagnostics" | Yes |
-| Updates | Yes | Yes |
-| About | Yes | Yes |
+So every section, every setting and every word is the same in Simple as in Advanced, in Advanced's words:
 
-- Under Simple's four sections, a note: "Crawl defaults, the checks' limits, shortcuts and diagnostics are Advanced
-  settings", with **Show them in Advanced**.
-- **Mode** is the same setting as the switch. Its help line says so: "The same site check either way, with the
-  same checks and the same numbers. This is the switch at the top right of every screen."
-- Settings made in Advanced apply in Simple. There is one set of crawl defaults and one set of thresholds.
+| Section | Both modes |
+| --- | --- |
+| General | **Mode** (Simple, Advanced, with a line on each, and the switch's keys); Theme; Density |
+| Crawl defaults | The New crawl form, saved as defaults |
+| Analysis | Every threshold |
+| Data folder | Where crawls are saved, and Change folder… |
+| Shortcuts | The keys that work in the mode shown (the `?` sheet's list) |
+| Diagnostics | Copy diagnostics, the log folders |
+| Updates | The version, the engine's, Check for updates |
+| About | The versions, the folders, the licences |
+
+- **No mode filtering and no note**: Simple's list of four sections and its "… are Advanced settings. Show them in
+  Advanced" are gone. Arriving at any section in Simple (the sidebar's Settings, the palette's Open settings or
+  Ctrl+,, an address, Back, a reopened session) leaves Simple on; switching mode on a section stays on it.
+- **Mode** stays a setting: the same value as the switch. Its help line says so: "The same site check either way, with
+  the same checks and the same numbers. This is the switch at the top right of every screen (Ctrl+Shift+A)."
+- **Shortcuts** is the one section whose list differs: it lists the keys that work in the mode shown, as the `?` sheet
+  does, since Simple's keys are Simple's (Ctrl+1 is Summary there). Its title and line are the same.
+- The palette's Density commands are in both modes too: they change a setting.
+- Settings are one set, whichever mode they were made in: one set of crawl defaults and one set of thresholds.
+- Settings is outside Simple's words (Simple's words, below): the shell around it, the palette and the sheet are
+  Simple's. The crawl's own settings (`/crawls/:crawl/settings`) are still Advanced only, and New crawl still shows
+  Simple's four questions.
+
+Before 2026-11-15, Simple listed General, Data folder, Updates and About (`settings-simple.html` is that design), with
+Density, the switch's keys and the Diagnostics section left out and About carrying Copy diagnostics.
 
 ## New crawl in each mode
 
@@ -828,7 +846,8 @@ Settings, New crawl and export, each to this design.
 2. **The switch in the top bar**, as [The switch](#the-switch) says, with the palette commands and Ctrl+Shift+A in
    the shortcut registry.
 3. **The top bar's order of giving way**, by its own width. Fixes the shell pass's search-field finding.
-4. **Settings.** Every section the IA lists, with General > Mode; the Simple list of four sections and its note.
+4. **Settings.** Every section the IA lists, with General > Mode; the Simple list of four sections and its note (since
+   2026-11-15, every section in both modes: [Settings in each mode](#settings-in-each-mode)).
 5. **New crawl in both modes:** one form, one route, Simple's four questions and Advanced's sections, "Use these
    choices every time" and "Save as my defaults", the changed-settings line. Home's Options… and Settings… open it.
 6. **Export (E5),** with the report in it:
@@ -955,12 +974,13 @@ What round 5 settled, where it differs from the above or adds to it:
 - **Toasts with two actions** put them under the text, together, at the right; one action that would squeeze the
   text under `--toast-text-min` (200 px) goes under it too.
 - **Simple's words everywhere it shows:** the palette's and the `?` sheet's What to fix heading, every saving message
-  and toast (`exportWords`), About and Updates ("Site checker", not "Engine"), the Settings note, and the sidebar over
+  and toast (`exportWords`), and the sidebar over
   the checks running now (Checking now, Paused, Stopping, Working out the results: one heading with Advanced's,
   `crawl/runningWords.ts`). `app/src/simple/simpleWords.test.tsx`
   draws every Simple screen, the palette, the sheet, the dialogs and the toasts and fails on any of the glossary's
   Advanced-only words (crawl, URL, issue, engine, analysis, Overview, library, indexable, and Error, Warning and
-  Notice as severities).
+  Notice as severities). Settings itself is left out since 2026-11-15: it says Advanced's words in both modes
+  ([Settings in each mode](#settings-in-each-mode)); the shell around it is checked.
 
 ## What the engine needs
 

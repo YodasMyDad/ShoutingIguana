@@ -34,13 +34,13 @@ const STATES: { label: string; choice: DataFolderChoice; busy?: boolean }[] = [
   { label: 'Set by the run (a test)', choice: { chosen: null, previous: null, hasPrevious: false, fixed: true } },
 ];
 
-function Every({ simple }: { simple: boolean }) {
+function Every() {
   return (
     <StoryFrame sheet>
-      <StorySection title={simple ? 'Simple' : 'Advanced'}>
+      <StorySection title="Every state">
         {STATES.map(({ label, choice, busy }) => (
           <StateRow key={label} label={label}>
-            <FolderChoice shell={shellWith(choice)} simple={simple} busy={busy ?? false} />
+            <FolderChoice shell={shellWith(choice)} busy={busy ?? false} />
           </StateRow>
         ))}
       </StorySection>
@@ -48,6 +48,5 @@ function Every({ simple }: { simple: boolean }) {
   );
 }
 
-/** Change folder…, Go back and Use the usual folder, in each state. */
-export const EveryState: Story = { render: () => <Every simple={false} /> };
-export const EveryStateSimple: Story = { render: () => <Every simple /> };
+/** Change folder…, Go back and Use the usual folder, in each state: the same in both modes, as Settings is. */
+export const EveryState: Story = { render: () => <Every /> };

@@ -30,7 +30,7 @@ export function ExportsInProgress({
   const heading = exports.length === 1 ? `${verb} 1 file` : `${verb} ${exports.length} files`;
   return (
     <section aria-label={heading} className="flex flex-col gap-0.5">
-      {collapsed ? null : <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">{heading}</h2>}
+      {collapsed ? null : <h2 className="si-nav-label">{heading}</h2>}
       <ul className="flex flex-col gap-0.5">
         {exports.map((tracked) => {
           const name = fileNameOf(tracked.job.path);

@@ -237,8 +237,8 @@ export const NavItems: Story = {
 /**
  * List rows, as the checks list uses them: one listbox, a group per category named by its `ListHeading`
  * (`level="none"`, as only options belong in a listbox), the severity mark, the title, the count; selected with the
- * accent rule, and focused as well, so forced colours show its ring beside the focus ring; skipped with its reason and
- * the dashed badge.
+ * neutral fill and a heavier title (no accent rule since the framed workspace), and focused as well, so forced colours
+ * show its ring beside the focus ring; skipped with its reason and the dashed badge.
  */
 export const ListRows: Story = {
   parameters: { pseudo: { hover: ['.is-hover'], focusVisible: ['.is-focus'] } },

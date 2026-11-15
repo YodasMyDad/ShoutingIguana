@@ -25,7 +25,7 @@ export interface ListRowProps extends Omit<HTMLAttributes<HTMLElement>, 'title'>
 
 /**
  * A row in a list (the checks list, the inspector's issues, the sitemaps): icon, title, a count at the end, and a
- * line of description. Selected is the tint with the accent rule along its edge (3:1), and a heavier title.
+ * line of description. Selected is the current place's look: the neutral fill, darker text and a heavier title.
  */
 export function ListRow({
   ref,

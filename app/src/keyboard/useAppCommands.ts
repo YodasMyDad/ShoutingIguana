@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { crawlQuery } from '../api/queries';
 import { SIMPLE_SECTIONS } from '../app/modeRoutes';
-import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection } from '../app/sections';
+import { goToSection } from '../app/goToSection';
+import { CRAWL_SECTIONS, REPORT_SECTION } from '../app/sections';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { getOverlay, setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
@@ -100,28 +101,6 @@ export function useAppCommands(): void {
   const live = useLiveCrawl(crawlId);
   const status = crawlId ? effectiveStatus(item, live) : null;
   const controls = crawlControls(status, item);
-
-  const goToSection = (section: CrawlSection, crawl: string) => {
-    switch (section) {
-      case 'issues':
-        return navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl } });
-      case 'urls':
-        return navigate({ to: '/crawls/$crawl/urls', params: { crawl } });
-      case 'links':
-        return navigate({ to: '/crawls/$crawl/links', params: { crawl } });
-      case 'sitemaps':
-        // The list, from one sitemap's page too: left out, the router keeps the sitemap the page is on.
-        return navigate({ to: '/crawls/$crawl/sitemaps/{-$sitemap}', params: { crawl, sitemap: undefined } });
-      case 'robots':
-        return navigate({ to: '/crawls/$crawl/robots/{-$origin}', params: { crawl, origin: undefined } });
-      case 'settings':
-        return navigate({ to: '/crawls/$crawl/settings', params: { crawl } });
-      case 'report':
-        return navigate({ to: '/crawls/$crawl/report', params: { crawl } });
-      default:
-        return navigate({ to: '/crawls/$crawl/overview', params: { crawl } });
-    }
-  };
 
   // The crawl's sections in this mode: Simple's three (the Report once it exists), or Advanced's seven and the Report.
   const reportExists = SIMPLE_SCREENS.report !== null;
@@ -233,7 +212,7 @@ export function useAppCommands(): void {
         keys: [(simple ? section.simpleKey : undefined) ?? section.key],
         inInputs: true,
         enabled: () => crawlId !== undefined,
-        run: () => (crawlId ? goToSection(section.id, crawlId) : undefined),
+        run: () => (crawlId ? goToSection(navigate, section.id, crawlId) : undefined),
       })),
       {
         id: 'crawl.pauseResume',
@@ -278,8 +257,9 @@ export function useAppCommands(): void {
         enabled: () => getSettings().theme !== theme.value,
         run: () => updateSettings({ theme: theme.value }),
       })),
-      // Density is the grids', which are Advanced's.
-      ...(simple ? [] : DENSITIES).map<Command>((density) => ({
+      // Density is a setting, so in both modes, as in Settings > General: "the Simple and Advanced modes are just for
+      // the UI for the user of using the app, not for settings" (the owner).
+      ...DENSITIES.map<Command>((density) => ({
         id: `view.density.${density.value}`,
         title: density.title,
         group: 'View',

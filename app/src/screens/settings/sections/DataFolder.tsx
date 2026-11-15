@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { healthQuery } from '../../../api/queries';
 import { ErrorState } from '../../../feedback/ErrorState';
-import { useMode } from '../../../mode/mode';
 import { PathRow, SectionPage, Setting } from '../SectionPage';
 import { FolderChoice } from '../dataFolder/FolderChoice';
 import { dataFolderShell } from '../dataFolder/dataFolderShell';
@@ -18,14 +17,11 @@ export const order = 40;
  */
 export function Section() {
   const health = useQuery(healthQuery());
-  const simple = useMode() === 'simple';
   const shell = dataFolderShell();
-  const items = simple ? 'site checks' : 'crawls';
-  const Items = simple ? 'Site checks' : 'Crawls';
   return (
     <SectionPage
       title="Data folder"
-      purpose={`Where your ${items} are saved: one file each, named after the site and the date.`}
+      purpose="Where your crawls are saved: one file each, named after the site and the date."
     >
       {health.error ? (
         <ErrorState
@@ -35,15 +31,15 @@ export function Section() {
         />
       ) : (
         <Setting
-          label={`${Items} are saved in`}
+          label="Crawls are saved in"
           help={
             shell
-              ? `Change the folder to save ${items} somewhere else. The ${items} already saved stay where they are, and you can go back to them.`
-              : `A ${simple ? 'check' : 'crawl'} opened from somewhere else stays where it is. The installed app can change this folder.`
+              ? 'Change the folder to save crawls somewhere else. The crawls already saved stay where they are, and you can go back to them.'
+              : 'A crawl opened from somewhere else stays where it is. The installed app can change this folder.'
           }
         >
           <PathRow label="folder" path={health.data?.dataDir ?? null} />
-          {shell ? <FolderChoice shell={shell} simple={simple} /> : null}
+          {shell ? <FolderChoice shell={shell} /> : null}
         </Setting>
       )}
     </SectionPage>

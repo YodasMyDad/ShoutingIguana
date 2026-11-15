@@ -80,7 +80,7 @@ function RowMenuItems() {
  * checkable and radio items, a destructive one. The first item is highlighted, as the keyboard leaves it.
  */
 export const DropdownOpen: Story = {
-  // The keyboard's highlight on the third item: the tint and the accent rule, as the palette's.
+  // The keyboard's highlight on the third item: the neutral fill and the darker text, as the palette's.
   play: async () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     document.querySelectorAll<HTMLElement>('[role="menuitem"]')[2]?.focus();

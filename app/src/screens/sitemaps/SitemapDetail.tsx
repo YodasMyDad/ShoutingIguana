@@ -540,7 +540,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
                 <NothingListed sitemap={sitemap} subtree={subtree} crawling={crawl.crawling} />
               )
             }
-            className="flex-1 rounded-lg border border-border shadow-1"
+            className="flex-1 rounded-lg border border-border-card"
           />
         </GridScreenBody>
       )}

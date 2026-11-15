@@ -60,22 +60,28 @@ function StatAnchor({ label, value, context, size, words, compact, className, re
  */
 export const StatLink = createLink(StatAnchor);
 
-/** Figures side by side, divided by hairlines: put it in a `Card`. */
+/**
+ * Figures side by side, divided by hairlines: put it in a `Card`. Or, `cards`, each figure a card of its own in a row
+ * with a 12 px gap, not in a card (the framed workspace's Overview).
+ */
 export function Stats({
   columns,
   wrap = false,
+  cards = false,
   className,
   children,
 }: {
   columns: number;
   /** More figures than columns: they run on to further rows, with a hairline between every two. */
   wrap?: boolean | undefined;
+  /** Each figure its own card, on as many rows as the columns make: `wrap` then has nothing to do. */
+  cards?: boolean | undefined;
   className?: string | undefined;
   children: ReactNode;
 }) {
   return (
     <div
-      className={clsx('si-stats', wrap && 'si-stats--wrap', className)}
+      className={clsx('si-stats', cards ? 'si-stats--cards' : wrap && 'si-stats--wrap', className)}
       style={{ '--stat-columns': columns } as CSSProperties}
     >
       {children}

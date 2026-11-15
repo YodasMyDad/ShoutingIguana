@@ -110,7 +110,7 @@ export function TopBar() {
     <header
       ref={barRef}
       data-mode={mode}
-      className="group/topbar flex h-(--topbar-height) shrink-0 items-center gap-2 overflow-hidden border-b border-border-subtle bg-canvas pr-4 pl-3 *:shrink-0"
+      className="group/topbar flex h-(--topbar-height) shrink-0 items-center gap-2 overflow-hidden border-b border-border pr-4 pl-3 *:shrink-0"
     >
       <div className="flex gap-0.5">
         <IconButton

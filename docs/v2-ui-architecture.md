@@ -157,6 +157,37 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   the WebView2 profile, the engine's unpacked files and the log, and keeps it out of single instance. The smoke test
   and the orphan check use it, so they never touch the user's own copy, and run beside it.
 
+## The framed workspace (the shell's frame)
+
+The owner chose design B, framed workspace ([the design](v2-ui-design.md#the-framed-workspace-2026-11-15)): the
+left side and the segmentation had been "wishy washy and difficult to see". How it's built:
+
+- `AppShell` draws the frame (`bg-frame`), the `Sidebar` on it, then one `.si-panel` (`data-panel`) holding the
+  `TopBar`, the engine's banner, `main#main` (the one scroller) and the `InspectorSlot`. The panel clips what scrolls
+  to its corners (`overflow: hidden`), so nothing in a screen may be positioned to escape it; the app's overlays
+  (palette, dialogs, menus, toasts, the drop overlay, "Stopping crawls…") are portals or fixed, outside it. Its inset
+  is `--frame-inset` (8, then 4 px at 800 px wide, none at 640 px, where the panel keeps only its left edge).
+- `CrawlSwitcher` (`layout/`) is the sidebar's open crawl: a `DropdownMenu` (Radix, as the app's other menus: Enter,
+  Space or the down arrow opens it on its first item, arrows and typing move, Esc gives focus back) of a
+  `MenuRadioGroup`, so the open crawl is announced as checked. `recentCrawls` picks the library's eight newest (by
+  start, else last change), the open one always among them. Choosing one goes to the same section of it
+  (`app/goToSection.ts`, shared with Ctrl+1 to Ctrl+8); the last item goes Home. Its button's name is its visible
+  words plus "Switch crawl:" and a comma read but not shown (WCAG 2.5.3); collapsed, it's the favicon with an
+  `aria-label` and a tooltip.
+- The sidebar's colours are its own tokens (`--color-nav-*`, `--color-current`) under `.si-sidebar`; `.si-current`
+  elsewhere takes `--color-current-inset`, menus and the palette `--color-current-overlay`.
+- **Capped screens grow with the window.** Overview, Home (both modes) and Simple's checking screen centre a column
+  of `--content-max`, now 1,800 px (was 1,136): on a maximised 4K window at 150% the main area is about 2,300 px, and
+  the old cap left a wide empty band each side (the owner took it for a layout bug). The column fills the panel up to
+  that and only centres past it; what's inside spreads (the figures, the charts, the library and Your sites) while
+  prose keeps `--measure-text`, forms `--form-max`, and Home's address field `--start-form-max` (1,136 px).
+  `e2e/framed.spec.ts` measures it at 1920 and 2560 px.
+- Tests: `e2e/framed.spec.ts` (the panel and its inset at 1280 and 640 px, the screen scrolling inside it, forced
+  colours, the current place's exact fill and text in both themes and modes, the switcher by keyboard and in a
+  collapsed sidebar and Simple, the wide column), `e2e/states.spec.ts` (no accent rule, 4.5:1, neutral, hover apart
+  from selection), `layout/CrawlSwitcher.test.tsx`, `layout/recentCrawls.test.ts`, and the `Shell/App` stories
+  `CrawlSwitcherOpen` and `SidebarCollapsed`.
+
 ## The shell smoke walk
 
 Every other test of the UI runs in headless Chromium against a Vite build. `npm run smoke:shell`
@@ -357,9 +388,10 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   or End), Page Up and Down, Enter inspects, Space selects, Shift extends, Ctrl+A, Ctrl+C, Shift+F10 and the menu key.
   A row picked by a plain click follows the cursor; a selection built with Space or Shift stays put. Every move scrolls
   the cursor's cell into view, sideways too. Focus arriving lands on the first row wholly in view.
-- **Selection** shows as the selected tint and the accent rule (3:1 or more) in a gutter that sticks to the grid's left
-  edge; hover never covers it. Under forced colours a selected row is a Highlight outline, and the cursor on it
-  CanvasText.
+- **Selection** shows as the selected tint; hover never covers it, and the keyboard's cursor is the focus outline over
+  it. The accent rule it had in a gutter at the grid's left edge went with the framed workspace (the owner: it "looks
+  AI made"; [the design](v2-ui-design.md#the-framed-workspace-2026-11-15)). Under forced colours a selected row is a
+  Highlight outline, and the cursor on it CanvasText.
 - **Copy**: the selection as tab-separated text with a header row, quoted as Excel does, up to 10,000 rows (fetching
   rows that aren't loaded). Crawled text is the site's, so a copied row's value starting with =, +, -, @, a tab or a
   carriage return gets a `'` in front (OWASP's advice against CSV injection): a spreadsheet shows it as text, without
@@ -525,9 +557,12 @@ see [The full grid's pieces](#the-full-grids-pieces). Column presets and saved v
   motion tokens, not Tailwind's. `narrow:` is below 1360 px, as the layout tokens' own query. ESLint refuses arbitrary
   values (`w-[37px]`, `[mask:x]`) and `dangerouslySetInnerHTML`.
 - Themes use `light-dark()`: the page follows the OS unless `data-theme` says otherwise. Density is `data-density`.
-- State indicators meet WCAG 2.2 AA (1.4.11): what's selected, current or highlighted carries the accent rule against
-  its tint (`.si-current`, the grid's gutter, the palette's option), never the tint alone; text on it is 4.5:1 or
-  more; placeholders are `text-muted`. High contrast maps the roles to system colours under `forced-colors: active`,
+- State indicators (the framed workspace, [the design](v2-ui-design.md#the-framed-workspace-2026-11-15)): what's
+  current or highlighted (`.si-current`, the palette's and a menu's option, a list's chosen row) is a solid neutral
+  fill with near-black (white) text at 600, never the accent: no rule along its edge, no blue text. The owner found
+  the accent rule "what all AI does". It reads by the fill, the weight and the darker text together; its text is 4.5:1
+  or more on the fill, and what's muted on an overlay's highlight turns secondary to keep that. A grid's selected rows
+  keep the selection's tint alone. Placeholders are `text-muted`. High contrast maps the roles to system colours under `forced-colors: active`,
   with `surface-selected` as `Canvas`: selected and current things get a `Highlight` mark on the page's own colours,
   so no text sits on Highlight unreadable, and selected text is HighlightText on Highlight. Focus rings, the grid's
   included, are outlines, so they survive it. What can be selected and focused at once (a chosen segment, a pressed
@@ -1507,20 +1542,21 @@ giving way, Settings, New crawl in both modes and the crawl's own settings.
   existed (or with a mode this app doesn't know) read as Advanced: that's someone who has used the app as it was.
 - **Read** through `useMode()` (or `getMode()` outside React), in `mode/mode.ts`. **Changed** through
   `switchMode(router, mode)` (`mode/switchMode.ts`), which the switch, Ctrl+Shift+A (`app.mode`), the palette's
-  "Switch to …", Settings > General > Mode, "Show them in Advanced" and "Back to Simple" all call. A change the user
-  made is announced once ("Advanced is on").
+  "Switch to …", Settings > General > Mode, New crawl's "Show them in Advanced" and "Back to Simple" all call. A
+  change the user made is announced once ("Advanced is on").
 - **Switching keeps the route.** The same route renders its other view, its search params kept (Simple ignores
   Issues' `group`, `severity`, `inspect`), so switching back restores them. From an Advanced-only screen, switching to
   Simple navigates (a push, so Back returns) to the nearest screen Simple has: the crawl's Summary
-  (`/crawls/:crawl/overview`), or Settings > General. `app/modeRoutes.ts` says which screens are Advanced only
-  (`advancedOnlyScreen`) and where a switch lands (`simpleLanding`).
+  (`/crawls/:crawl/overview`). `app/modeRoutes.ts` says which screens are Advanced only (`advancedOnlyScreen`: a
+  crawl's URLs, Links, Sitemaps, robots.txt and settings) and where a switch lands (`simpleLanding`). Settings is in
+  both modes, every section, so a switch on it stays put and the guard below never turns Advanced on for it.
 - **Arriving at an Advanced-only screen in Simple** (a link, Back or Forward, a reopened session) turns Advanced on,
   with the toast "Advanced is on" and **Back to Simple** (`mode/useModeGuard.ts`). The guard looks at where each
   navigation lands (`onResolved`) and at the place the app opens on, never at a change of mode, so switching to Simple
   on such a screen (which then leaves it) isn't undone. It turns Advanced on only for a screen that's there: a crawl
-  the library has, and a section of Settings with a file (the route sends any other to General). New crawl does the
-  same, with the same toast, for a setting Simple doesn't show (`focus=userAgent` in Simple). A link in Simple to an
-  Advanced-only screen says so in its words ("See it in Advanced").
+  the library has. New crawl does the same, with the same toast, for a setting Simple doesn't show
+  (`focus=userAgent` in Simple). A link in Simple to an Advanced-only screen says so in its words ("See it in
+  Advanced").
 - **`/crawls/:crawl`** opens the crawl's last view in the current mode: in Simple, a last view Simple doesn't have
   opens the Summary.
 - **No inspector in Simple**: the shell leaves the inspector's slot out while a Simple screen is shown
@@ -1528,9 +1564,10 @@ giving way, Settings, New crawl in both modes and the crawl's own settings.
 - **The palette and the `?` sheet** list what's registered, and `useAppCommands` registers each mode's own: in Simple
   its sections (Summary, What to fix, the Report once it exists) on Ctrl+1 to Ctrl+3, its words ("Check a website",
   "Pause the check", "Work out the results again", "Open a site check file…"), and no Advanced-only command (Go to
-  URLs, Go to URL…, Density) but "Switch to Advanced". Both list their groups in the mode's words ("Site check", "Your
-  sites") and, in Simple, none of the grids' or the inspector's keys (`keyboard/modeWords.ts`). A check is found by
-  either of its titles, and shows the mode's own.
+  URLs, Go to URL…) but "Switch to Advanced". Density's commands are in both: they change a setting, and settings are
+  the same in both modes. Both list their groups in the mode's words ("Site check", "Your sites") and, in Simple,
+  none of the grids' or the inspector's keys (`keyboard/modeWords.ts`). A check is found by either of its titles, and
+  shows the mode's own.
 - **Tests, stories and the e2e start in Advanced**, which every screen built before Simple was written for:
   `test/setup.ts` puts `mode: 'advanced'` in place before each test (`replaceSettings`, which doesn't save),
   `.storybook/preview.tsx` before each story, and the e2e's browsers start with it stored (`e2e/storage.ts`,
@@ -1599,19 +1636,22 @@ touch the same lines:
 - **One file a section**, in `screens/settings/sections/`, found by `screens/settings/registry.ts`
   (`import.meta.glob`). A section file exports `id` (its place in `/settings/:section`), `title`, `order` (General
   10, Crawl defaults 20, Analysis 30, Data folder 40, Shortcuts 50, Diagnostics 60, Updates 70, About 80) and
-  `function Section()`. **The Analysis section is one new file, `sections/Analysis.tsx`, and nothing else**: it is
-  Advanced only already (`ADVANCED_ONLY_SETTINGS`), Simple's note names "the checks' limits" once it exists, and
-  until then Analysis isn't listed. An address naming a section with no file opens General.
-- **Each mode's list**: Simple lists General, Data folder, Updates and About, with a note naming the Advanced-only
-  sections that exist and **Show them in Advanced** (focus goes to the first section it brings into the list).
-- **General**: Mode (the switch's value, as two choice cards, each with its line), Theme, and Density in Advanced.
+  `function Section()`. An address naming a section with no file opens General.
+- **Both modes list every section, the same, in Advanced's words** (the owner, 2026-11-15: "the Simple and Advanced
+  modes are just for the UI for the user of using the app, not for settings. I still need the settings whatever
+  version they're using"). No section reads the mode but General's Mode choice (the mode itself) and Shortcuts' list
+  (the keys that work in the mode shown). `SettingsScreen.test.tsx` draws every section in both modes and compares the
+  list, every heading and control by name and description, and the words. Until then Simple listed four sections with
+  a note and **Show them in Advanced**, and arriving at another section in Simple turned Advanced on.
+- **General**: Mode (the switch's value, as two choice cards, each with its line, and the switch's keys), Theme and
+  Density.
 - **Crawl defaults**: New crawl's form in Advanced, without a start URL, saved a moment after each change once the
   engine finds nothing wrong (`PUT /api/crawl-options/defaults`), with "Put back the engine's defaults" (with Undo).
   Every new crawl starts from them, and so does Home's Enter: `startCrawl` sends the saved defaults, since a setting
   left out of `POST /api/crawls` takes the engine's default, not the user's.
 - **Data folder**, **Diagnostics** (Copy diagnostics: versions, folders, mode, theme, zoom, page, browser; nothing
-  from a crawl, the home folder as `%USERPROFILE%` or `~` and the account name nowhere), **Updates**, **About** (with Copy diagnostics in Simple) and **Shortcuts** (the registry's list) show
-  what is true today. Since round 5, Data folder changes the folder (a switch, with Go back), Updates checks and
+  from a crawl, the home folder as `%USERPROFILE%` or `~` and the account name nowhere), **Updates**, **About** and
+  **Shortcuts** (the registry's list, as the mode shown has it) show what is true today. Since round 5, Data folder changes the folder (a switch, with Go back), Updates checks and
   installs signed updates, Diagnostics opens the log folders and About lists the third-party licences ("The shell
   and the platform (round 5)", below).
 

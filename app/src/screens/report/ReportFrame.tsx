@@ -61,7 +61,8 @@ export function ReportFrame({
       srcDoc={shown}
       title={title}
       sandbox="allow-same-origin allow-modals"
-      className="block h-full w-full max-w-(--paper-width) rounded-t-xs border-0 bg-(--color-paper) scheme-light shadow-2"
+      // The paper on the panel: white on white in light, so the card edge draws it (the framed workspace).
+      className="block h-full w-full max-w-(--paper-width) rounded-t-xs border border-b-0 border-border-card bg-(--color-paper) scheme-light shadow-2"
     />
   );
 }

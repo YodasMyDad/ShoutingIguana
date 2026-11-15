@@ -26,24 +26,22 @@ export function showAdvancedFor(router: AnyRouter, what: string): void {
 
 /**
  * Turns Advanced on for an Advanced-only screen reached in Simple, once it's sure the screen is there: a crawl's
- * section only for a crawl the library has (one it hasn't says so in Simple too). Settings' sections are sure by the
- * time a navigation lands, as the route sends one there's no file for to General. True when it did.
+ * section only for a crawl the library has (one it hasn't says so in Simple too). Settings is never one: it's the same
+ * in both modes, every section. True when it did.
  */
 export async function turnAdvancedOnFor(router: AnyRouter, pathname: string): Promise<boolean> {
   if (getMode() !== 'simple') return false;
   const screen = advancedOnlyScreen(pathname);
-  if (screen === null) return false;
   const crawl = crawlIdOf(pathname);
-  if (crawl) {
-    const { queryClient } = router.options.context as RouterContext;
-    try {
-      await queryClient.query(crawlQuery(crawl));
-    } catch {
-      return false;
-    }
-    // Still there, and still Simple, once the library has answered.
-    if (getMode() !== 'simple' || router.state.location.pathname !== pathname) return false;
+  if (screen === null || crawl === null) return false;
+  const { queryClient } = router.options.context as RouterContext;
+  try {
+    await queryClient.query(crawlQuery(crawl));
+  } catch {
+    return false;
   }
+  // Still there, and still Simple, once the library has answered.
+  if (getMode() !== 'simple' || router.state.location.pathname !== pathname) return false;
   showAdvancedFor(router, screen);
   return true;
 }

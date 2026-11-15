@@ -3,8 +3,9 @@
   (app/design/directions/clarity/app.css), under `si-` names.
 
   - Every component has every state here: hover, focus (the one ring in base.css, an outline), pressed or active,
-    disabled, loading, invalid, selected or current. A state is never a tint alone: it carries a 3:1 mark too (the
-    accent rule, the control edge, the underline).
+    disabled, loading, invalid, selected or current. A chosen control carries a 3:1 mark (the control edge, the
+    underline); what's current or highlighted in a list is the neutral fill with darker, heavier text (base.css), never
+    an accent rule along its edge.
   - Under forced colours (the end of this file) every edge, mark and selected state is redrawn in system colours.
   - Reduced motion: base.css stops every animation and transition; nothing here relies on moving to be understood.
 */
@@ -937,10 +938,15 @@
     user-select: none;
   }
 
-  /* Highlighted, from the pointer or the keys: the palette's look, the accent rule against the tint. */
+  /* Highlighted, from the pointer or the keys: the palette's look, the inset neutral fill and the darker text. */
   .si-menu-item[data-highlighted] {
-    background: var(--color-surface-selected);
-    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+    background: var(--color-current-overlay);
+    color: var(--color-current-text);
+  }
+
+  /* On the overlay's fill, what's muted beside the item's words reads in the secondary text: 4.5:1 still. */
+  .si-menu-item[data-highlighted] .si-menu-item__end {
+    color: var(--color-text-secondary);
   }
 
   .si-menu-item[data-disabled] {
@@ -1434,23 +1440,25 @@
   }
 
   /* ------------------------------------------------------------------ Cards */
+  /* A card: the surface with the card border, flat on the panel (the framed workspace: the edge does the work). */
   .si-card {
     min-width: 0;
-    border: var(--hairline) solid var(--color-border);
+    border: var(--hairline) solid var(--color-border-card);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
-    box-shadow: var(--elevation-1), var(--highlight-top);
   }
 
   .si-card--flush {
     overflow: hidden;
   }
 
+  /* A card's header: divided from its body by the card's border, never a tinted band. */
   .si-card__header {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-4) var(--space-5) 0;
+    padding: var(--space-3) var(--space-5);
+    border-bottom: var(--hairline) solid var(--color-border-card);
   }
 
   .si-card__title {
@@ -1486,7 +1494,7 @@
     align-items: flex-start;
     gap: var(--space-2-5);
     padding: var(--space-3) var(--space-5);
-    border-top: var(--hairline) solid var(--color-border-subtle);
+    border-top: var(--hairline) solid var(--color-border-card);
     color: var(--color-text-secondary);
     font-size: var(--text-13);
     line-height: var(--leading-13);
@@ -1539,6 +1547,26 @@
   .si-stats--wrap > .si-stat:last-child {
     border-left: 0;
     border-radius: 0;
+    background: var(--color-surface);
+  }
+
+  /*
+    Figures as cards of their own (the framed workspace: the Overview's figures): each a card, in a row with a 12 px gap,
+    on as many rows as the columns make. Not inside a card.
+  */
+  .si-stats--cards {
+    gap: var(--space-3);
+  }
+
+  .si-stats--cards > .si-stat,
+  .si-stats--cards > .si-stat:first-child,
+  .si-stats--cards > .si-stat:last-child {
+    /* Its figure stays inside it: for the frame before a narrowed row takes fewer columns (the gaps make five
+       columns wider than the hairlines did), a long figure is clipped, never a sideways scroll of the screen. */
+    overflow: hidden;
+    padding: var(--space-4) var(--space-5);
+    border: var(--hairline) solid var(--color-border-card);
+    border-radius: var(--radius-lg);
     background: var(--color-surface);
   }
 
@@ -2444,8 +2472,14 @@
     color: var(--color-text-muted);
   }
 
+  /* The current place: the neutral fill (base.css), its label, icon and count in the current text, at 600. */
+  .si-nav-item.si-current {
+    color: var(--color-current-text);
+    font-weight: var(--font-weight-semibold);
+  }
+
   .si-nav-item.si-current .si-nav-item__icon {
-    color: var(--color-accent-text);
+    color: var(--color-current-text);
   }
 
   .si-nav-item__label {
@@ -2464,7 +2498,151 @@
   }
 
   .si-nav-item.si-current .si-nav-item__count {
+    color: var(--color-current-text);
+  }
+
+  /*
+    The sidebar's items, on the frame (the framed workspace): its own text, icon and hover colours, and the frame's
+    current fill. Severity marks keep their colours: they're data.
+  */
+  .si-sidebar .si-nav-item,
+  .si-sidebar .si-export-item {
+    color: var(--color-nav-text);
+  }
+
+  .si-sidebar .si-nav-item:hover:not(.si-current),
+  .si-sidebar .si-export-item:hover {
+    background: var(--color-nav-hover);
+    color: var(--color-text);
+  }
+
+  .si-sidebar .si-nav-item__icon {
+    color: var(--color-nav-icon);
+  }
+
+  .si-sidebar .si-nav-item__count {
+    color: var(--color-nav-label);
+  }
+
+  .si-sidebar .si-nav-item.si-current {
+    background: var(--color-current);
+    color: var(--color-current-text);
+  }
+
+  .si-sidebar .si-nav-item.si-current .si-nav-item__icon,
+  .si-sidebar .si-nav-item.si-current .si-nav-item__count {
+    color: var(--color-current-text);
+  }
+
+  /* A group's label in the sidebar: "Crawling now". Sentence case, 12 px, semibold, muted. */
+  .si-nav-label {
+    padding: 0 var(--space-2-5) var(--space-1-5);
+    color: var(--color-nav-label);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* The crawl switcher: the open crawl as a bordered button on the frame, that opens the library's recent crawls. */
+  .si-switcher {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    width: 100%;
+    min-height: var(--control-height-lg);
+    padding: var(--space-1-5) var(--space-2);
+    border: var(--hairline) solid var(--color-border-switcher);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-panel);
+    color: var(--color-text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .si-switcher:hover,
+  .si-switcher[data-state='open'] {
+    border-color: var(--color-border-strong);
+  }
+
+  .si-switcher--collapsed {
+    justify-content: center;
+    min-height: var(--control-height);
+    padding: 0;
+  }
+
+  .si-switcher__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .si-switcher__name {
+    overflow: hidden;
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    font-weight: var(--font-weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-switcher__date {
+    overflow: hidden;
+    color: var(--color-nav-label);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-switcher__chevron {
+    flex: none;
+    color: var(--color-nav-icon);
+  }
+
+  .si-switcher-menu {
+    width: var(--switcher-menu-width);
+    max-width: calc(100vw - 2 * var(--space-2));
+  }
+
+  /* A crawl in the switcher's menu: its site over its date. */
+  .si-switcher-menu .si-menu-item[role='menuitemradio'] {
+    height: auto;
+    min-height: var(--list-row-height);
+    padding-block: var(--space-1-5);
+  }
+
+  .si-switcher-menu__date {
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-menu-item[data-highlighted] .si-switcher-menu__date {
     color: var(--color-text-secondary);
+  }
+
+  /*
+    The workspace panel: right of the sidebar, inset from the window's edges (--frame-inset), its own edge and corners.
+    The top bar sits at its top; the screen scrolls inside it below; the inspector docks inside it. With no inset left
+    (a small window or a big zoom) it keeps only its edge against the sidebar, and square corners.
+  */
+  .si-panel {
+    margin: var(--frame-inset) var(--frame-inset) var(--frame-inset) 0;
+    overflow: hidden;
+    border: var(--hairline) solid var(--color-border-panel);
+    border-radius: var(--radius-panel);
+    background: var(--color-canvas);
+    box-shadow: var(--shadow-panel);
+  }
+
+  @media (max-width: 640px) {
+    .si-panel {
+      border-width: 0 0 0 var(--hairline);
+      border-radius: 0;
+    }
   }
 
   .si-nav-item--collapsed {
@@ -2552,12 +2730,12 @@
     outline-offset: calc(var(--focus-width) * -1);
   }
 
-  /* Selected: the tint and the accent rule (3:1), never the tint alone. */
+  /* Selected: the current place's look, the inset neutral fill and the darker text, its title at 600 (below). */
   .si-list-row[aria-selected='true'],
   .si-list-row[aria-current='page'],
   .si-list-row[aria-current='true'] {
-    background: var(--color-surface-selected);
-    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+    background: var(--color-current-inset);
+    color: var(--color-current-text);
   }
 
   .si-list-row[aria-selected='true'] .si-list-row__title,
@@ -3155,7 +3333,10 @@
   .si-dialog,
   .si-card,
   .si-callout,
-  .si-mini-stats {
+  .si-mini-stats,
+  .si-switcher,
+  .si-panel,
+  .si-stats--cards > .si-stat {
     border: var(--hairline) solid CanvasText;
   }
 

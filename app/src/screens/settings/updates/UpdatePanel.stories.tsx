@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { Mode } from '../../../mode/mode';
 import { StateRow, StoryFrame, StorySection } from '../../../test/StoryFrame';
 import { UpdatePanel, type UpdateState, type Updater } from './UpdatePanel';
 
@@ -21,10 +20,10 @@ const STILL: Updater = {
   onProgress: () => Promise.resolve(() => undefined),
 };
 
-function Panel({ state, mode = 'advanced', busy = false }: { state: UpdateState; mode?: Mode; busy?: boolean }) {
+function Panel({ state, busy = false }: { state: UpdateState; busy?: boolean }) {
   return (
     <div className="max-w-(--form-max)">
-      <UpdatePanel updater={STILL} mode={mode} initial={state} busy={busy} />
+      <UpdatePanel updater={STILL} initial={state} busy={busy} />
     </div>
   );
 }
@@ -83,25 +82,20 @@ const STATES: { label: string; state: UpdateState; busy?: boolean }[] = [
   },
 ];
 
-function EveryStateIn({ mode }: { mode: Mode }) {
-  return (
+/** Every state of the updater: the same in both modes, as Settings is. */
+export const EveryState: Story = {
+  render: () => (
     <StoryFrame sheet>
-      <StorySection title={mode === 'simple' ? 'Simple' : 'Advanced'}>
+      <StorySection title="Every state">
         {STATES.map(({ label, state, busy }) => (
           <StateRow key={label} label={label}>
-            <Panel state={state} mode={mode} busy={busy ?? false} />
+            <Panel state={state} busy={busy ?? false} />
           </StateRow>
         ))}
       </StorySection>
     </StoryFrame>
-  );
-}
-
-/** Every state of the updater, in Advanced's words. */
-export const EveryState: Story = { render: () => <EveryStateIn mode="advanced" /> };
-
-/** The same in Simple's: "site checks", never crawls or the engine. */
-export const EveryStateSimple: Story = { render: () => <EveryStateIn mode="simple" /> };
+  ),
+};
 
 /** A narrow panel, as at 200% zoom: the notes and the progress wrap, nothing overprints. */
 export const Narrow: Story = {

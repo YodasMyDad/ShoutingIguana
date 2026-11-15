@@ -17,6 +17,7 @@ import {
 import { setOverlay } from '../app/overlays';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { updateSettings } from '../settings/settingsStore';
 import { applyShellState, setDirectConnection } from '../shell/connection';
 import { SidecarBanner } from './SidecarBanner';
 import { StoppingOverlay } from './StoppingOverlay';
@@ -29,8 +30,10 @@ let seq = 1_000;
 const connected = () =>
   setDirectConnection({ baseUrl: 'mock://sidecar', token: 'mock', generation: 1, version: 'mock' });
 
-function Prototype({ path }: { path: string }) {
+function Prototype({ path, collapsed = false }: { path: string; collapsed?: boolean }) {
   const [app] = useState(() => {
+    // The sidebar as each story asks, whatever the story before it left in the page's storage.
+    updateSettings({ sidebarCollapsed: collapsed });
     const queryClient = createQueryClient();
     return { queryClient, router: createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] })) };
   });
@@ -133,4 +136,43 @@ export const EngineFailed: Story = {
 export const StoppingCrawls: Story = {
   loaders: [() => applyShellState({ state: 'stopping', seq: seq++, generation: 2 })],
   render: () => <StoppingOverlay />,
+};
+
+/** Two crawls in the library, for the sidebar's crawl switcher: the open one, and a newer one. */
+function twoCrawls() {
+  const open = testCrawlItem();
+  const newer = testCrawlItem({
+    id: 'fedcba9876543210',
+    site: 'oakmere.example',
+    fileName: 'oakmere.example.sicrawl',
+    startUrl: 'https://oakmere.example/',
+    startedAt: '2026-11-10T09:00:00Z',
+  });
+  setTransport(fakeSidecar([['GET', /^\/api\/crawls$/, () => json([open, newer])], ...standardRoutes(open)]));
+  connected();
+}
+
+const openSwitcher = async () => {
+  for (let tries = 0; tries < 50; tries++) {
+    const button = document.querySelector<HTMLButtonElement>('.si-switcher');
+    if (button) {
+      button.focus();
+      button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+};
+
+/** The framed workspace's crawl switcher, open: the recent crawls, the open one ticked, then Home. */
+export const CrawlSwitcherOpen: Story = {
+  loaders: [() => twoCrawls()],
+  render: () => <Prototype path={URLS} />,
+  play: openSwitcher,
+};
+
+/** The sidebar collapsed to its icons: the switcher is the site's icon, the current place the same neutral fill. */
+export const SidebarCollapsed: Story = {
+  loaders: [() => twoCrawls()],
+  render: () => <Prototype path={`/crawls/${TEST_CRAWL_ID}/overview`} collapsed />,
 };

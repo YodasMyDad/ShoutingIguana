@@ -225,7 +225,7 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
           }}
           // Live refreshes update in place: the progress line is for a refresh the user asked for.
           busy={rows.isRefreshing && !crawl.crawling}
-          className="flex-1 rounded-lg border border-border shadow-1"
+          className="flex-1 rounded-lg border border-border-card"
         />
       </div>
     );
