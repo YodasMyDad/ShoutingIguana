@@ -554,7 +554,7 @@ export function IssueGroups({
               siteOrigin={siteOrigin}
               copyable={false}
               tabbable={false}
-              className="min-w-0 flex-1"
+              className="min-w-1/3 flex-1"
             />
             {references === 'none' ? null : (
               <WhereFoundLine
@@ -562,11 +562,12 @@ export function IssueGroups({
                 check={check}
                 urlId={row.row.id}
                 siteOrigin={siteOrigin}
+                first={row.group.relatedUrlId}
                 className="max-w-1/2 shrink"
               />
             )}
             {row.row.detail && row.row.detail !== row.group.detail ? (
-              <span className="max-w-1/3 shrink-0 truncate text-text-muted" title={row.row.detail}>
+              <span className="max-w-1/4 min-w-0 shrink truncate text-text-muted" title={row.row.detail}>
                 {row.row.detail}
               </span>
             ) : null}

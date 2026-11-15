@@ -222,3 +222,21 @@ describe('an open group with a page expanded', () => {
     expect(pageChildren(2, { page: 5, rows: 3 })).toBe(3);
   });
 });
+
+describe('a page under a group of one URL it names', () => {
+  it('names the group’s URL first', () => {
+    const target = (id: number, path: string, statusCode: number) => ({
+      id,
+      url: `${ORIGIN}${path}`,
+      statusCode,
+      fetched: true,
+      outcome: null,
+      kind: 'hyperlink' as const,
+      text: null,
+      position: null,
+    });
+    const named: IssueTargetsOfUrl = { urlId: 1, total: 2, targets: [target(3, '/a/', 404), target(9, '/b/', 301)] };
+    expect(targetsSummary(named, ORIGIN, { id: 'broken-internal-links' }, 9)).toBe('Links to /b/ (301) +1');
+    expect(targetsSummary(named, ORIGIN, { id: 'broken-internal-links' }, 77)).toBe('Links to /a/ (404) +1');
+  });
+});

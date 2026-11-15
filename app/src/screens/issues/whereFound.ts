@@ -55,8 +55,14 @@ export function foundOnSummary(found: UrlFoundOn, siteOrigin: string | null): st
 }
 
 /** What a page's issue names, for one line: "Links to /old/ (404) +2". */
-export function targetsSummary(named: IssueTargetsOfUrl, siteOrigin: string | null, check: Pick<Check, 'id'>): string {
-  const first = named.targets[0];
+export function targetsSummary(
+  named: IssueTargetsOfUrl,
+  siteOrigin: string | null,
+  check: Pick<Check, 'id'>,
+  /** The URL to name first where the page names it: the group's own, under a group of that URL. */
+  first_: number | null = null,
+): string {
+  const first = named.targets.find((target) => target.id === first_) ?? named.targets[0];
   if (!first) return named.total === 0 ? '' : `Names ${formatCount(named.total)} URLs`;
   const rest = named.total - 1;
   return `${targetVerb(check, first)} ${shown(first.url, siteOrigin)}${statusSuffix(first)}${rest > 0 ? ` +${formatCount(rest)}` : ''}`;

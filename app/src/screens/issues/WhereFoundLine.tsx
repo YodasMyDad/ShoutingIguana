@@ -13,12 +13,15 @@ export function WhereFoundLine({
   check,
   urlId,
   siteOrigin,
+  first = null,
   className,
 }: {
   crawlId: string;
   check: Pick<Check, 'id' | 'references'>;
   urlId: number;
   siteOrigin: string | null;
+  /** For a page under a group of one URL it names: that URL, named first. */
+  first?: number | null | undefined;
   className?: string | undefined;
 }) {
   const where = useWhereFoundOf(crawlId, check, urlId);
@@ -26,7 +29,7 @@ export function WhereFoundLine({
   const words = where.foundOn
     ? foundOnSummary(where.foundOn, siteOrigin)
     : where.targets
-      ? targetsSummary(where.targets, siteOrigin, check)
+      ? targetsSummary(where.targets, siteOrigin, check, first)
       : where.error
         ? 'Where it’s found couldn’t be read'
         : null;
