@@ -49,10 +49,17 @@ export function scrollBarStyle(look: ScrollBarLook): string {
   ].join('\n');
 }
 
-/** The report's document with the app's scroll bars in its head (or first, if it has none). */
+/**
+ * The report's document with the app's scroll bars first in its head (or first of all, if it has none). First, ahead
+ * of the document's own Content-Security-Policy: the engine's report allows its one style sheet alone (`style-src` with
+ * that sheet's hash), and a policy given in a meta element governs only what comes after it. Put after it, as round 5
+ * put them, the bars were refused, and the frame drew Windows' classic bar in the release shell.
+ */
 export function withAppScrollBars(text: string, look: ScrollBarLook | null): string {
   if (!look) return text;
   const style = `<style id="${SCROLL_BARS_STYLE_ID}">\n${scrollBarStyle(look)}\n</style>`;
-  const head = /<\/head\s*>/i.exec(text);
-  return head ? `${text.slice(0, head.index)}${style}${text.slice(head.index)}` : `${style}${text}`;
+  const head = /<head\b[^>]*>/i.exec(text);
+  if (!head) return `${style}${text}`;
+  const at = head.index + head[0].length;
+  return `${text.slice(0, at)}${style}${text.slice(at)}`;
 }

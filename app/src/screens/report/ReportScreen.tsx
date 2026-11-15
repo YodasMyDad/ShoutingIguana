@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Download, Play, Printer, RefreshCw, Sheet } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import type { ReportCut } from '../../api/exports';
 import { analysisQuery, crawlQuery } from '../../api/queries';
 import { isCrawling, type Analysis, type AnalysisEvent, type CrawlListItem } from '../../api/types';
@@ -298,40 +298,56 @@ function ReportBar({
   const date = longDateOf(item?.startedAt ?? item?.analyzedAt);
   // The pages the report covers: what its analysis read, which the document's own head says too.
   const pages = analysis ? formatCountOf(analysis.pagesAnalyzed, 'page') : null;
-  const line = item
-    ? [crawlName(item), date ? `${words.checked} ${date}` : null, pages ? `${pages} read` : null]
-        .filter((part) => part !== null)
-        .join(' · ')
-    : null;
+  const parts = item
+    ? [crawlName(item), date ? `${words.checked} ${date}` : null, pages ? `${pages} read` : null].filter(
+        (part) => part !== null,
+      )
+    : [];
+  // The title and its line on a row of their own, the controls on the next: side by side they wrapped at 1280 px, the
+  // line leaving "read" alone and Print or save as PDF on a row of its own (the gallery in the release shell). The line
+  // wraps only between its parts, never inside one; the controls wrap as two groups, the cut and the three ways out.
   return (
-    <header className="flex flex-wrap items-center gap-3">
-      <div className="min-w-0 grow basis-(--report-bar-text)">
+    <header className="flex flex-col gap-3">
+      <div className="min-w-0">
         {/* Focusable from script only: where focus goes when what had it went away. */}
         <h1 ref={titleRef} tabIndex={-1} className="text-21 font-semibold tracking-snug text-text">
           Report
         </h1>
         <p className="min-h-(--leading-14) text-14 break-words text-text-secondary">
-          {line ? <span title={item?.startedAt ? formatExactTime(item.startedAt) : undefined}>{line}</span> : null}
+          {parts.length > 0 ? (
+            <span title={item?.startedAt ? formatExactTime(item.startedAt) : undefined}>
+              {parts.map((part, index) => (
+                <Fragment key={part}>
+                  {index > 0 ? ' · ' : null}
+                  <span className="whitespace-nowrap">{part}</span>
+                </Fragment>
+              ))}
+            </span>
+          ) : null}
         </p>
       </div>
-      <SegmentedControl label="How much of the report" options={CUTS} value={cut} onValueChange={onCut} wrap />
-      <Button icon={Sheet} command="report.workbook" disabled={!ready} onClick={() => onSave('workbook')}>
-        Spreadsheet of everything…
-      </Button>
-      <Button icon={Download} command="report.save" disabled={!ready} onClick={() => onSave('report')}>
-        Save…
-      </Button>
-      <Button
-        ref={printRef}
-        variant="primary"
-        icon={Printer}
-        command="report.print"
-        showShortcut
-        disabled={!ready}
-        onClick={onPrint}
-      >
-        Print or save as PDF
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <SegmentedControl label="How much of the report" options={CUTS} value={cut} onValueChange={onCut} wrap />
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <Button icon={Sheet} command="report.workbook" disabled={!ready} onClick={() => onSave('workbook')}>
+            Spreadsheet of everything…
+          </Button>
+          <Button icon={Download} command="report.save" disabled={!ready} onClick={() => onSave('report')}>
+            Save…
+          </Button>
+          <Button
+            ref={printRef}
+            variant="primary"
+            icon={Printer}
+            command="report.print"
+            showShortcut
+            disabled={!ready}
+            onClick={onPrint}
+          >
+            Print or save as PDF
+          </Button>
+        </div>
+      </div>
     </header>
   );
 }
