@@ -256,14 +256,24 @@ export function trayWords(log) {
   const tooltips = [];
   /** @type {string[][]} */
   const menus = [];
+  /** Each tooltip, and each time the icon went (`NOTHING_SHOWN`), in order: what a gap in the tray would show. */
+  /** @type {string[]} */
+  const shown = [];
   for (const line of log.split('\n')) {
     const tooltip = /Tray (?:icon shown|tooltip): "(.*)"\s*$/.exec(line);
-    if (tooltip) tooltips.push(tooltip[1]);
+    if (tooltip) {
+      tooltips.push(tooltip[1]);
+      shown.push(tooltip[1]);
+    }
+    if (/Tray icon removed\s*$/.test(line)) shown.push(NOTHING_SHOWN);
     const menu = /Tray menu: (.*?)\s*$/.exec(line);
     if (menu) menus.push(menu[1].split(' | '));
   }
-  return { tooltips, menus };
+  return { tooltips, menus, shown };
 }
+
+/** In `trayWords`'s `shown`: the tray icon was taken away (nothing runs, and the window is in front). */
+export const NOTHING_SHOWN = '(no tray icon)';
 
 /** Advanced's words, which Simple never says: a site is checked, its results worked out. */
 const ADVANCED_WORDS = /crawl|URL|analys/;
@@ -272,10 +282,21 @@ const ADVANCED_WORDS = /crawl|URL|analys/;
  * What is wrong with the tray's words through a Simple check that ended in the tray: it said it was checking, then
  * working out the results (tooltip and menu), and nothing running at the end; never in Advanced's words. Empty when
  * all is well.
- * @param {{ tooltips: string[], menus: string[][] }} tray
+ * @param {{ tooltips: string[], menus: string[][], shown?: string[] }} tray
  */
-export function simpleTrayProblems({ tooltips, menus }) {
+export function simpleTrayProblems({ tooltips, menus, shown = tooltips }) {
   const problems = [];
+  // Round 5's polish: between a check's end and its results being worked out, the tray said nothing ran for a moment
+  // (its icon went, or its tooltip was plain "Shouting Iguana"). From the first time it says it's checking to the first
+  // time after that it says it's working out the results, it never says nothing runs.
+  const checking = shown.findIndex((words) => /: checking /.test(words));
+  const working = shown.findIndex((words, index) => index > checking && /: working out the results for /.test(words));
+  if (checking >= 0 && working > checking) {
+    const gap = shown
+      .slice(checking + 1, working)
+      .find((words) => words === NOTHING_SHOWN || words === 'Shouting Iguana');
+    if (gap) problems.push(`the tray said nothing ran (${gap}) between checking and working out the results`);
+  }
   const said = tooltips.map((tooltip) => `"${tooltip}"`).join(' | ');
   if (!tooltips.some((tooltip) => /: checking /.test(tooltip)))
     problems.push(`the tray never said it was checking (tooltips: ${said})`);

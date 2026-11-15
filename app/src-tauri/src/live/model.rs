@@ -288,6 +288,9 @@ pub struct LiveView {
     crawled: HashSet<String>,
     /// Exports running: the engine mustn't be stopped under one (a data folder switch, an update's install).
     exports: HashSet<String>,
+    /// Crawls that have just ended crawling here, kept as being analysed until the engine says so or the library says
+    /// no analysis followed (`settle`): the hand-over from crawl to analysis, a few ms the tray mustn't show as nothing.
+    handing_over: HashSet<String>,
 }
 
 impl LiveView {
@@ -361,6 +364,7 @@ impl LiveView {
             return Change::default();
         };
         let mut change = Change { progress: true, ..Change::default() };
+        self.handing_over.remove(&progress.crawl_id);
         if status.is_crawling() {
             self.crawled.insert(progress.crawl_id.clone());
         }
@@ -392,6 +396,7 @@ impl LiveView {
     pub fn crawl(&mut self, event: &CrawlChange) -> Change {
         let mut change = Change::default();
         let index = self.crawls.iter().position(|crawl| crawl.id == event.crawl_id);
+        let handed_over = self.handing_over.remove(&event.crawl_id);
         match (LiveStatus::parse(&event.status), index) {
             (Some(status), Some(index)) => {
                 let crawl = &mut self.crawls[index];
@@ -418,15 +423,26 @@ impl LiveView {
                 self.crawls.push(LiveCrawl { id: event.crawl_id.clone(), status, fetched: 0, queued: 0, in_flight: 0 });
             }
             (None, Some(index)) => {
-                let crawl = self.crawls.remove(index);
+                let crawled = self.crawled.contains(&event.crawl_id);
+                let was = self.crawls[index].status;
                 change.menu = true;
                 change.ended = Some(Ended {
-                    id: crawl.id,
+                    id: event.crawl_id.clone(),
                     status: event.status.clone(),
                     error: event.error.clone(),
-                    was_analysing: crawl.status == LiveStatus::Analyzing,
-                    crawled: self.crawled.contains(&event.crawl_id),
+                    // Not the analysis a hand-over stood in for: that never began.
+                    was_analysing: was == LiveStatus::Analyzing && !handed_over,
+                    crawled,
                 });
+                // A crawl that ended crawling here goes straight on to its analysis (a completed crawl, and a stopped
+                // one's results so far): it stays, as being analysed, across the hand-over, where the tray showed
+                // nothing running for a moment (round 5's polish). `settle` lets it go if no analysis follows.
+                if was.is_crawling() && crawled && matches!(event.status.as_str(), "completed" | "stopped") {
+                    self.crawls[index].status = LiveStatus::Analyzing;
+                    self.handing_over.insert(event.crawl_id.clone());
+                } else {
+                    self.crawls.remove(index);
+                }
             }
             // The end of a crawl this shell never saw live: nothing to tell.
             (None, None) => {}
@@ -445,6 +461,7 @@ impl LiveView {
         self.crawls.clear();
         self.crawled.clear();
         self.exports.clear();
+        self.handing_over.clear();
         Change { menu, progress: menu, ..Change::default() }
     }
 
@@ -462,6 +479,17 @@ impl LiveView {
     /// The crawl's end has been told (or it went on to something else): its next end starts afresh.
     pub fn finish(&mut self, id: &str) {
         self.crawled.remove(id);
+    }
+
+    /// The library's word on a crawl that ended crawling: no analysis followed (or it couldn't be asked), so the crawl
+    /// held across the hand-over goes. True if it went: the tray's menu changes.
+    pub fn settle(&mut self, id: &str) -> bool {
+        if !self.handing_over.remove(id) {
+            return false;
+        }
+        let before = self.crawls.len();
+        self.crawls.retain(|crawl| crawl.id != id);
+        self.crawls.len() != before
     }
 
     /// A new stream's `hello`: the exports it lists are the ones running.
@@ -668,7 +696,9 @@ mod tests {
         let finished = view.crawl(&change("a", "completed"));
         let ended = finished.ended.expect("ended");
         assert!(ended.crawled && !ended.was_analysing);
-        assert_eq!(view.kinds(), LiveKinds::default());
+        // Round 5's polish: held across the hand-over, as being analysed, so the tray never shows nothing running.
+        assert_eq!(view.kinds(), LiveKinds { crawling: false, analysing: true });
+        assert_eq!(view.entries()[0].status, LiveStatus::Analyzing);
 
         // The analysis follows at once: the name is remembered, so no lookup.
         let analysing = view.crawl(&change("a", "analyzing"));
@@ -681,6 +711,37 @@ mod tests {
         assert!(analysed.crawled && analysed.was_analysing);
         view.finish("a");
         assert!(!view.was_crawled("a"));
+    }
+
+    #[test]
+    fn a_crawl_stays_across_the_hand_over_to_its_analysis_and_goes_if_none_follows() {
+        let mut view = LiveView::default();
+        view.crawl(&change("a", "running"));
+        view.set_name("a", "example.com".into());
+        view.crawl(&change("a", "stopping"));
+        // Stopped: its results so far are worked out next. Never a moment with nothing in the view.
+        let stopped = view.crawl(&change("a", "stopped")).ended.expect("ended");
+        assert!(stopped.crawled && !stopped.was_analysing);
+        assert_eq!(view.entries().len(), 1);
+        assert!(!view.settle("b"));
+        // The library says no analysis followed: it goes, and the menu changes.
+        assert!(view.settle("a"));
+        assert!(view.entries().is_empty());
+        assert!(!view.settle("a"));
+
+        // A crawl that failed has no analysis to wait for: it goes at once.
+        view.crawl(&change("b", "running"));
+        assert!(view.crawl(&change("b", "failed")).ended.is_some());
+        assert!(view.entries().is_empty());
+
+        // Once its analysis begins, settling is nothing more to do, and the analysis's end is told as one.
+        view.crawl(&change("c", "running"));
+        view.crawl(&change("c", "completed"));
+        view.crawl(&change("c", "analyzing"));
+        assert!(!view.settle("c"));
+        let analysed = view.crawl(&change("c", "completed")).ended.expect("ended");
+        assert!(analysed.was_analysing && analysed.crawled);
+        assert!(view.entries().is_empty());
     }
 
     #[test]

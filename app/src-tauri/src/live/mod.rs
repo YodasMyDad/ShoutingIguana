@@ -275,6 +275,13 @@ impl Follower {
         notify::show(&self.app, &notice.title, &notice.body);
     }
 
+    /// Lets a crawl held across the hand-over to its analysis go, when none follows: the tray redraws without it.
+    fn settle(&self, id: &str) {
+        if lock(&self.view).settle(id) {
+            self.tray.changed(true);
+        }
+    }
+
     /// A crawl left the live ones: tell the user if the window can't, once its outcome is settled.
     fn ended(&mut self, connection: &Connection, ended: &Ended) {
         if self.app.try_state::<Shell>().is_none_or(|shell| shell.is_quitting()) {
@@ -284,6 +291,7 @@ impl Follower {
             Ok(item) => item,
             Err(error) => {
                 log::debug!("Couldn't read how crawl {} ended: {error}", ended.id);
+                self.settle(&ended.id);
                 return;
             }
         };
@@ -291,6 +299,8 @@ impl Follower {
         if LiveStatus::parse(&item.status).is_some() {
             return;
         }
+        // No analysis followed: the crawl held across the hand-over goes.
+        self.settle(&ended.id);
         lock(&self.view).finish(&ended.id);
         let baseline = self.baselines.remove(&ended.id);
         let key = notify::ending_key(&item);

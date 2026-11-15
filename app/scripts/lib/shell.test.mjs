@@ -234,8 +234,43 @@ test('the tray’s words are read from the shell’s log in order: every tooltip
       ['Open Shouting Iguana', '127.0.0.1:9000 (working out the results)', 'Quit'],
       ['Open Shouting Iguana', 'Quit'],
     ],
+    shown: [
+      'Shouting Iguana: checking 127.0.0.1:9000, 12 addresses checked',
+      'Shouting Iguana: working out the results for 127.0.0.1:9000',
+      'Shouting Iguana',
+    ],
   });
-  assert.deepEqual(trayWords(''), { tooltips: [], menus: [] });
+  assert.deepEqual(trayWords(''), { tooltips: [], menus: [], shown: [] });
+});
+
+// Round 5's polish, as the release shell's log had it: the icon went between the check and its results.
+const TRAY_GAP_LOG = [
+  '[2026-11-15][02:41:17][INFO][shouting_iguana::tray] Tray icon shown: "Shouting Iguana: checking 127.0.0.1, 0 addresses checked"',
+  '[2026-11-15][02:41:17][INFO][shouting_iguana::tray] Tray menu: Open Shouting Iguana | 127.0.0.1 | Quit',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray icon removed',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray menu: Open Shouting Iguana | 127.0.0.1 (working out the results) | Quit',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray tooltip: "Shouting Iguana: working out the results for 127.0.0.1"',
+  '[2026-11-15][02:41:22][INFO][shouting_iguana::tray] Tray icon shown',
+  '[2026-11-15][02:41:23][INFO][shouting_iguana::tray] Tray tooltip: "Shouting Iguana"',
+].join('\n');
+
+test('Simple’s tray never says nothing runs between a check and the working out of its results', () => {
+  assert.deepEqual(simpleTrayProblems(trayWords(TRAY_GAP_LOG)), [
+    'the tray said nothing ran ((no tray icon)) between checking and working out the results',
+  ]);
+  // Hidden in the tray, the gap was the plain tooltip.
+  const hidden = TRAY_LOG.replace(
+    '[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray menu',
+    '[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray tooltip: "Shouting Iguana"\n[2026-11-14][12:00:04][shouting_iguana::tray][INFO] Tray menu',
+  );
+  assert.deepEqual(simpleTrayProblems(trayWords(hidden)), [
+    'the tray said nothing ran (Shouting Iguana) between checking and working out the results',
+  ]);
+  // The icon going once nothing runs, after the results, is no gap.
+  assert.deepEqual(
+    simpleTrayProblems(trayWords(`${TRAY_LOG}\n[2026-11-14][12:00:06][shouting_iguana::tray][INFO] Tray icon removed`)),
+    [],
+  );
 });
 
 test('Simple’s tray says checking, then working out the results, then nothing, never in Advanced’s words', () => {
