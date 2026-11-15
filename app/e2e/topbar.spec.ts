@@ -187,7 +187,9 @@ for (const zoom of [1, 2] as const) {
 // 0.01 ms transition, so the measure read each part at its old width and the bar flipped between two steps every frame,
 // the search field's "Ctrl K" left poking out under the switch. Watched frame by frame, at widths either side of the
 // search field's step, with the crawl's count moving: one step, held, and the field's keys go with the field.
-test('under reduced motion the bar settles on one step, and the search field’s keys go with it', async ({ browser }) => {
+test('under reduced motion the bar settles on one step, and the search field’s keys go with it', async ({
+  browser,
+}) => {
   test.setTimeout(120_000);
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
