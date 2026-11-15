@@ -120,6 +120,12 @@ export interface TrailPoint {
   at: number;
   /** Ms the run had spent crawling by then (`RunClock`): where the point sits on the chart's time axis. */
   runMs: number;
+  /**
+   * The engine's time spent crawling by then, over every run (E3c's `crawlingMs`), when the event said it: what Elapsed
+   * shows, and where the chart places the point. The run's clock can't know of a pause from before the page first
+   * heard of the run (a page loaded again part-way, round 5's polish); this does.
+   */
+  crawlingMs?: number | undefined;
   fetched: number | null;
   internalFound: number;
   internalFetched: number;
@@ -620,6 +626,7 @@ export function applyEvent(state: LiveState, event: LiveEvent): LiveState {
             ? addTrailPoint(before.trail, {
                 at,
                 runMs: clock.runMs,
+                ...(typeof progress.crawlingMs === 'number' ? { crawlingMs: progress.crawlingMs } : {}),
                 fetched: progress.fetched,
                 internalFound,
                 internalFetched,

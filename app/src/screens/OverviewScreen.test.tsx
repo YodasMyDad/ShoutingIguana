@@ -676,7 +676,9 @@ describe('the Overview while the crawl runs', () => {
     expect(cell('Elapsed')).toHaveTextContent('At this pace, done within 1 h 22 min');
     expect(region('Progress').getByRole('img', { name: /^URLs a second over the last 1 min: / })).toBeVisible();
     expect(
-      region('Found and crawled').getByRole('img', { name: /^Found and crawled URLs of the site over 1 min: / }),
+      region('Found and crawled').getByRole('img', {
+        name: /^Found and crawled URLs of the site over 1 min of crawling: /,
+      }),
     ).toBeVisible();
     expect(region('Status codes').getByText('120 URLs so far')).toBeVisible();
     expect(region('Alerts').getByText('None so far')).toBeVisible();
@@ -774,7 +776,7 @@ describe('the Overview while the crawl runs', () => {
     expect(after[0]).toHaveTextContent('2xx');
     expect(after[0]).not.toHaveTextContent('–');
     expect(chart.isConnected).toBe(true);
-    expect(chart).toHaveAccessibleName(/^Found and crawled URLs of the site over 1 s: /);
+    expect(chart).toHaveAccessibleName(/^Found and crawled URLs of the site over 1 s of crawling: /);
     expect(found.isConnected).toBe(true);
     expect(found).toHaveAccessibleName('Of 9 URLs found: 2 crawled, 8 queued, 0 not followed');
     expect(key?.isConnected).toBe(true);
@@ -921,7 +923,9 @@ describe('the Overview while the crawl runs', () => {
     expect(cell('Elapsed')).toHaveTextContent('At this pace, done within 1 h 22 min');
     // And the chart's time is the same clock.
     expect(
-      region('Found and crawled').getByRole('img', { name: /^Found and crawled URLs of the site over 1 min [23] s: / }),
+      region('Found and crawled').getByRole('img', {
+        name: /^Found and crawled URLs of the site over 1 min [23] s of crawling: /,
+      }),
     ).toBeVisible();
   });
 

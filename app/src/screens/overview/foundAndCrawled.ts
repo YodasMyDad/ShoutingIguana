@@ -78,10 +78,19 @@ function earlierRuns(runs: readonly CrawlRun[], liveFrom: number): { earlier: re
 export function progressSeries(history: CrawlHistory | undefined, trail: readonly TrailPoint[]): ProgressSeries | null {
   const points: ProgressPoint[] = [];
   const liveFrom = history?.liveFrom ? Date.parse(history.liveFrom) : Number.NaN;
-  const takeover = trail[0];
   // E3c: the runs' times, so the earlier runs go on the same axis as this one.
   const runs = history?.runs ?? null;
   const { earlier, offset } = runs ? earlierRuns(runs, liveFrom) : { earlier: [], offset: 0 };
+  // One clock, Elapsed's: the time spent crawling over every run. A trail point the engine timed (`crawlingMs`) sits
+  // there; one it didn't, at the run's own clock after the earlier runs. The run's clock counts a pause from before the
+  // page first heard of the run (a page loaded again part-way), where the engine's doesn't (round 5's polish: the chart
+  // said "over 2 min 21 s" beside Elapsed 30 s).
+  const placeOf = (point: TrailPoint) => point.crawlingMs ?? offset + point.runMs;
+  const takeover = trail[0];
+  const takeoverAt = takeover ? placeOf(takeover) : null;
+  // The run being watched, once the file has it: its points go by its stretches of crawling, as the earlier runs' do,
+  // not by the wall time since it began, which runs on through a pause.
+  const watchedStored = runs !== null && runs.length > earlier.length;
   let continued = false;
   for (const point of history?.points ?? []) {
     const at = Date.parse(point.at);
@@ -97,13 +106,13 @@ export function progressSeries(history: CrawlHistory | undefined, trail: readonl
       continue;
     }
     if (takeover && at >= takeover.at) break;
-    const elapsedMs = point.elapsedMs ?? at - liveFrom;
+    const elapsedMs = watchedStored && runs ? crawlingAt(at, runs) : offset + (point.elapsedMs ?? at - liveFrom);
     // Never past where the trail takes over, which may know of a pause the history can't tell.
-    if (takeover && elapsedMs >= takeover.runMs) continue;
-    points.push({ elapsedMs: offset + elapsedMs, found: point.internalFound, crawled: point.internalFetched });
+    if (takeoverAt !== null && elapsedMs >= takeoverAt) continue;
+    points.push({ elapsedMs, found: point.internalFound, crawled: point.internalFetched });
   }
   for (const point of trail) {
-    points.push({ elapsedMs: offset + point.runMs, found: point.internalFound, crawled: point.internalFetched });
+    points.push({ elapsedMs: placeOf(point), found: point.internalFound, crawled: point.internalFetched });
   }
   const last = points.at(-1);
   if (!last) return null;

@@ -275,7 +275,7 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
         .map((item) => item.textContent),
     ).toEqual(['Open', 'Crawl again…', 'Analyse again', 'Remove from library', 'Delete file…']);
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete file…' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Delete garden.example’s crawl file?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Delete the crawl file of garden.example?' });
     expect(dialog).toHaveTextContent('garden.example-a000000000000002.sicrawl is deleted from the disk');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
     await waitFor(() =>
@@ -323,7 +323,7 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
       within(await rowOf('garden.example')).getByRole('button', { name: 'Actions for garden.example' }),
     );
     await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete file…' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Delete garden.example’s crawl file?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Delete the crawl file of garden.example?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
     expect(await screen.findByText('garden.example is being analysed.')).toBeVisible();
     expect(

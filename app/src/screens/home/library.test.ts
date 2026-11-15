@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testCrawlItem } from '../../test/fakeSidecar';
+import { deleteQuestion } from './libraryActions';
 import {
   analyseWords,
   crawlActions,
@@ -91,5 +92,18 @@ describe('Advanced’s library', () => {
       canAnalyse: false,
       canDelete: true,
     });
+  });
+});
+
+// Round 5's polish: "Delete 127.0.0.1:49877, 15 Nov 2026, 01:42's crawl file?" put a possessive on a date.
+describe('the question before a crawl file is deleted', () => {
+  const item = testCrawlItem({ site: '127.0.0.1:49877', startedAt: '2026-11-15T01:42:00Z' });
+
+  it('names the site, and an older crawl by when it started, without a possessive', () => {
+    expect(deleteQuestion(item, false)).toBe('Delete the crawl file of 127.0.0.1:49877?');
+    const older = deleteQuestion(item, true);
+    expect(older).toMatch(/^Delete the crawl file of 127\.0\.0\.1:49877 from 15 Nov 2026, \d{2}:\d{2}\?$/);
+    expect(older).not.toMatch(/’s|'s/);
+    expect(deleteQuestion(item, false, 'site check file')).toBe('Delete the site check file of 127.0.0.1:49877?');
   });
 });

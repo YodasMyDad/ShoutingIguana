@@ -66,7 +66,7 @@ describe('ConfirmDialog', () => {
       <ConfirmDialog
         open
         onOpenChange={onOpenChange}
-        title="Delete example.com’s crawl file?"
+        title="Delete the crawl file of example.com?"
         description="The file and its 4,521 URLs are deleted from the disk. This can’t be undone."
         confirmLabel="Delete crawl file"
         destructive
@@ -74,7 +74,7 @@ describe('ConfirmDialog', () => {
         onConfirm={onConfirm}
       />,
     );
-    const dialog = screen.getByRole('dialog', { name: 'Delete example.com’s crawl file?' });
+    const dialog = screen.getByRole('dialog', { name: 'Delete the crawl file of example.com?' });
     await userEvent.click(screen.getByRole('button', { name: 'Delete crawl file' }));
     const alert = await screen.findByRole('alert');
     expect(dialog).toContainElement(alert);

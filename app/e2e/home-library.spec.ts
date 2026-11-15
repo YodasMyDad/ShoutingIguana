@@ -143,7 +143,7 @@ test('a crawl’s actions are in its menu: Remove puts it back with Undo, Delete
   // Delete file… names the crawl and its file, and Cancel leaves it be.
   await library.getByRole('button', { name: `Actions for ${siteRow()}` }).click();
   await page.getByRole('menuitem', { name: 'Delete file…' }).click();
-  const dialog = page.getByRole('dialog', { name: `Delete ${siteRow()}’s crawl file?` });
+  const dialog = page.getByRole('dialog', { name: `Delete the crawl file of ${siteRow()}?` });
   await expect(dialog).toContainText('is deleted from the disk');
   await shoot(page, 'home-delete');
   await dialog.getByRole('button', { name: 'Cancel' }).click();

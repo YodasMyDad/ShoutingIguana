@@ -121,6 +121,60 @@ describe('the chart of a continued crawl', () => {
     expect([stored?.offsetMs, stored?.runStarts]).toEqual([160_000, [100_000, 160_000]]);
   });
 
+  // Round 5's polish: a crawl paused for minutes, Overview opened on it after: the history's points came at the wall
+  // time since the run began, so the chart said "over 3 min 53 s" beside Elapsed 13 s, the pause a long flat line.
+  it('places the run being watched by its time spent crawling too: a pause before the screen opened takes no room', () => {
+    const start = T0 + 2 * DAY;
+    const watched: CrawlRun = {
+      startedAt: iso(start + 20),
+      endedAt: null,
+      crawlingMs: 13_000,
+      crawling: [
+        { from: iso(start + 20), to: iso(start + 5_020) },
+        { from: iso(start + 225_000), to: iso(start + 233_000) },
+      ],
+    };
+    const points = [0, 2_000, 5_000, 60_000, 120_000, 224_000, 228_000, 233_000].map((ms, index) => ({
+      ...point(start + ms, index * 10),
+      elapsedMs: ms,
+    }));
+    const series = progressSeries(
+      { crawlId: 'a', startedAt: iso(start), liveFrom: iso(start), points, crawlingMs: 13_000, runs: [watched] },
+      [{ at: start + 234_000, runMs: 14_000, fetched: 90, internalFetched: 90, internalFound: 500 }],
+    );
+    expect(series?.spanMs).toBe(14_000);
+    // The pause closes up: every point between its ends sits at 5 s.
+    expect(series?.points.map((entry) => entry.elapsedMs)).toEqual([
+      0, 1_980, 4_980, 5_000, 5_000, 5_000, 8_000, 13_000, 14_000,
+    ]);
+  });
+
+  it('places the trail by the engine’s time spent crawling: a page loaded again part-way can’t know of a pause', () => {
+    // The page loaded while the crawl was paused: its run clock began at the engine's wall time since the run began,
+    // 2 min 11 s, where the engine had crawled 20 s. Elapsed shows the engine's.
+    const start = T0 + 3 * DAY;
+    const series = progressSeries({ crawlId: 'a', startedAt: iso(start), liveFrom: iso(start), points: [] }, [
+      {
+        at: start + 131_000,
+        runMs: 131_000,
+        crawlingMs: 20_000,
+        fetched: 400,
+        internalFetched: 400,
+        internalFound: 900,
+      },
+      {
+        at: start + 141_000,
+        runMs: 141_000,
+        crawlingMs: 30_000,
+        fetched: 600,
+        internalFetched: 600,
+        internalFound: 950,
+      },
+    ]);
+    expect(series?.spanMs).toBe(30_000);
+    expect(series?.points.map((entry) => entry.elapsedMs)).toEqual([20_000, 30_000]);
+  });
+
   it('draws only the run being watched for an earlier engine, which kept no run times', () => {
     const { runs: _runs, crawlingMs: _ms, ...older } = history;
     const live = { ...older, liveFrom: iso(T0 + DAY) };

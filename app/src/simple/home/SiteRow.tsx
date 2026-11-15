@@ -40,6 +40,7 @@ import { RelativeTime } from '../../ui/RelativeTime';
 import { ScoreRing } from '../../ui/ScoreRing';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { TextLink } from '../../ui/TextLink';
+import { deleteQuestion } from '../../screens/home/libraryActions';
 import {
   problemCounts,
   problemWords,
@@ -418,7 +419,7 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Delete ${target.name}’s site check file?`}
+        title={deleteQuestion(target.item, false, 'site check file')}
         description={`The file ${target.item.fileName} is deleted from the disk, with everything this check found. This can’t be undone.`}
         confirmLabel="Delete file"
         destructive
