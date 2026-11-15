@@ -151,6 +151,18 @@ leaves the installer's remembered folder (`HKCU\Software\Aptitude\Shouting Iguan
 into its deleted temp folder. The test now puts that key back as it found it, and refuses to run beside a real install
 (it would take over and then remove that install's registration, association and shortcuts).
 
+**In progress 2026-11-15, from the owner's first use of the installed app** (two agents, each on its own branch and
+worktree, not merged):
+- `ui/overview-offset`: in a big window the Overview's content was shoved right and cut off at the right edge (owner's
+  screenshot, a live crawl). Root cause, fix and a test.
+- `ui/framed`: the owner found the shell "wishy washy", with no clear segmentation, and the accent rule on the current
+  item "looks AI made". From three mocked directions (canvas <https://claude.ai/artifact/4srqyFoFVHsEmzeTrqTRBx>) they
+  chose **B, framed workspace**: the sidebar on a grey frame, everything else one bordered inset panel, a working crawl
+  switcher, the current item as a neutral fill (no accent rule, here or in Settings, the palette or the grid), stronger
+  card borders. Also on that branch: **Settings are the full Settings in both modes** (owner: the modes are for using
+  the app, not for hiding settings). The agent brings review shots first; the full gallery is re-shot after the owner
+  approves.
+
 **Then:** the owner and friends try it (rebuild with `npm run tauri build -- --bundles nsis`, then `check:orphans`,
 `smoke:tauri`, `scripts/smoke-installer.ps1` on a machine without it installed; unsigned, so SmartScreen warns; no
 auto-update until a release carries the updater key). Then step 3b, the check audit on the three real sites above. Then the release
