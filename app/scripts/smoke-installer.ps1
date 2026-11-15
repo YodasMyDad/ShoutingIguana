@@ -44,9 +44,26 @@ $Installer = (Resolve-Path -LiteralPath $Installer).Path
 # "_<version>".
 $product = ([IO.Path]::GetFileNameWithoutExtension($Installer)) -replace '_[^_]+_[^_]+-setup$', ''
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$product"
+# Where the installer remembers its folder (HKCU\Software\<publisher>\<product>): the next install goes there unless
+# told otherwise, and the uninstaller leaves it. Left pointing at this test's deleted folder, it sent the next real
+# install into the temp folder, so the test puts it back as it found it.
+$publisher = (Get-Content -Raw -LiteralPath (Join-Path $appRoot 'src-tauri\tauri.conf.json') | ConvertFrom-Json).bundle.publisher
+$publisherKey = "HKCU:\Software\$publisher"
+$rememberedKey = "$publisherKey\$product"
+$hadPublisherKey = Test-Path -LiteralPath $publisherKey
+$hadRememberedKey = Test-Path -LiteralPath $rememberedKey
+$rememberedFolder = if ($hadRememberedKey) { (Get-Item -LiteralPath $rememberedKey).GetValue('') } else { $null }
 $installDir = Join-Path ([IO.Path]::GetTempPath()) "si-install-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
 $script:failed = $false
 $installed = $false
+
+# A real install here shares this test's registration, .sicrawl association and shortcuts: the test's install would
+# take them over and its uninstall would remove them, so it doesn't run beside one.
+if (Test-Path -LiteralPath $uninstallKey) {
+    $existing = (Get-Item -LiteralPath $uninstallKey).GetValue('UninstallString')
+    [Console]::Error.WriteLine("smoke-installer: $product is installed for this user ($existing): uninstall it first, or run this on another account or machine.")
+    exit 1
+}
 
 function Wait-Until([scriptblock]$Condition, [TimeSpan]$Timeout) {
     $watch = [Diagnostics.Stopwatch]::StartNew()
@@ -115,6 +132,20 @@ finally {
             if (Test-Path -LiteralPath $shortcut) { Fail "the uninstall left the shortcut $shortcut." }
         }
         if ($gone) { Write-Host 'smoke-installer: uninstalled' }
+    }
+    # The installer's remembered folder, as it was before the test.
+    if ($hadRememberedKey) {
+        Set-Item -LiteralPath $rememberedKey -Value $rememberedFolder
+    }
+    elseif (Test-Path -LiteralPath $rememberedKey) {
+        Remove-Item -LiteralPath $rememberedKey -Recurse
+        if (-not $hadPublisherKey -and -not (Get-ChildItem -LiteralPath $publisherKey) -and
+            -not (Get-Item -LiteralPath $publisherKey).ValueCount) {
+            Remove-Item -LiteralPath $publisherKey
+        }
+    }
+    if ((Test-Path -LiteralPath $rememberedKey) -and (Get-Item -LiteralPath $rememberedKey).GetValue('') -like "*$installDir*") {
+        Fail "the installer's remembered folder ($rememberedKey) still points at the test's $installDir."
     }
 }
 

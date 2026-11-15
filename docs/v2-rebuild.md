@@ -144,9 +144,16 @@ polish 2 replaced; rewritten for the new rule, seen failing on the old CSS, fixe
 One thing left to the owner's eye: at 1280x720 with an export running, the sidebar scrolls and the export's row sits
 half below its fold (gallery 32); the export's toast shows it too.
 
-**Next:** a fresh local Windows installer for the owner and friends to try (`npm run tauri build -- --bundles nsis`,
-then `check:orphans`, `smoke:tauri`, `scripts/smoke-installer.ps1`; unsigned, so SmartScreen warns; no auto-update
-until a release carries the updater key). Then step 3b, the check audit on the three real sites above. Then the release
+**Installed on the owner's machine 2026-11-15** from `06677e9` (`Shouting Iguana_2.0.0-alpha.1_x64-setup.exe`, 43.8 MB,
+unsigned; per-user in `%LOCALAPPDATA%\Shouting Iguana`, crawls in `Documents\Shouting Iguana`). Its checks: `smoke:tauri`,
+`check:orphans` and `smoke-installer.ps1` pass. That found a bug in `smoke-installer.ps1`, now fixed: Tauri's uninstaller
+leaves the installer's remembered folder (`HKCU\Software\Aptitude\Shouting Iguana`), so the test sent the next real install
+into its deleted temp folder. The test now puts that key back as it found it, and refuses to run beside a real install
+(it would take over and then remove that install's registration, association and shortcuts).
+
+**Then:** the owner and friends try it (rebuild with `npm run tauri build -- --bundles nsis`, then `check:orphans`,
+`smoke:tauri`, `scripts/smoke-installer.ps1` on a machine without it installed; unsigned, so SmartScreen warns; no
+auto-update until a release carries the updater key). Then step 3b, the check audit on the three real sites above. Then the release
 step (signing, licences, updater secrets, CI on all three OSes), at the owner's word.
 
 The resume list from the pause, all done now:
