@@ -168,6 +168,28 @@ worktree, not merged):
   the app, not for hiding settings). The agent brings review shots first; the full gallery is re-shot after the owner
   approves.
 
+- `ui/found-on` (worktree `.claude/worktrees/found-on`, from `ui/step-3` at `dfa9a70`, not merged): **where each URL
+  was found**, from the owner's "when we show 404 links or 302 or whatever they are, it needs to show the page that
+  they were found on", and **open any listed URL in the browser**. Each check says how its URLs stand to references
+  (the engine's `IssueDefinition.References`: 13 `sources`, 17 `targets`, the rest `none`; the list is in
+  [the IA](v2-ui-ia.md#where-its-found-uifound-on)). Engine: `FoundOnReader` and two reads (`POST /urls/found-on`,
+  `POST /issues/{checkId}/targets`, up to 100 URLs a call); the report's "Where to fix it"; a check's file gains
+  where-found columns. App: Advanced Issues' rows say "Found on 3 pages · /garden-furniture/ +2" or "Links to /old/
+  (404) +2" and open to list the sources (each to the inspector, all to Links); Simple's problem page says "Linked
+  from …" and names the one page linking to most; every grid's URL cell and Simple's addresses have an
+  open-in-browser button, and Shift+Enter opens the cursor row's URL. **Built and verified, not merged** (local
+  commits only). Checks: `verify-engine.sh` on `8c879c8` all exit 0 (tests 1,498 + 286 + 28, the 100k bench found
+  every planted issue at a 196 MB peak, the readbench gate); `verify-app.sh` on `8c879c8`: ci, typecheck, lint, format,
+  unit 3,818, scripts, sidecar exit 0; its story runs failed only on `screens-overview--mock-crawl`, as the new
+  worktree lacked the gitignored design fixtures (copied from `ui-step-3`; rerun on the Storybook build of `0559a2f`:
+  528 x 2 clean plain, forced and reduced; the 39 Issues stories again on `9ae127b`, all three, clean); its e2e had 3 failures in `links.spec` (they took a URL
+  cell's first button, now there are two: fixed in `0559a2f`); the full e2e rerun on `aad3d5f` 236 passed, 1 failed
+  in the new `found-on.spec` (its regex didn't allow a 3xx target that ends broken: fixed in `9ae127b`, rerun 4/4);
+  `e2e:filled` 30; the release build (`build:sidecar`, `tauri build --no-bundle`) of `aad3d5f` with `smoke:shell` 19 + 9.
+  `app/src-tauri/` unchanged, so no Linux check. Review shots (release shell, both themes, 1280x720 at 150%) in the
+  session scratchpad's `found-on/shots/`. Engine tests were written with the code, not seen failing first; the export
+  tests, the Shift+Enter test and the links e2e were seen failing on the old shape.
+
 **Then:** the owner and friends try it (rebuild with `npm run tauri build -- --bundles nsis`, then `check:orphans`,
 `smoke:tauri`, `scripts/smoke-installer.ps1` on a machine without it installed; unsigned, so SmartScreen warns; no
 auto-update until a release carries the updater key). Then step 3b, the check audit on the three real sites above. Then the release
