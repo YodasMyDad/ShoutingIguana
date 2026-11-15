@@ -166,7 +166,13 @@ worktree, not merged):
   switcher, the current item as a neutral fill (no accent rule, here or in Settings, the palette or the grid), stronger
   card borders. Also on that branch: **Settings are the full Settings in both modes** (owner: the modes are for using
   the app, not for hiding settings). The agent brings review shots first; the full gallery is re-shot after the owner
-  approves.
+  approves. Also on it (owner's choice): on wide windows Overview, Home and Simple's screens grow with the window (to
+  about 1,800 px of content).
+- `ui/found-on`: the owner, on a real crawl: a 404 (or 302, …) listed without the pages it was found on can't be fixed.
+  Every check whose affected URL is something referenced (4xx, 5xx, redirects, canonicals/hreflang to bad URLs,
+  sitemap entries, …) shows where it's referenced, in Advanced's Issues (inline count + first source, expandable list,
+  "Show all in Links"), the source-side checks, Simple's problem page, exports and the report. Also: **an "open in
+  browser" button on every listed URL** (URLs, Links, Issues, found-on lists, Simple), plus a row menu item.
 
 **Then:** the owner and friends try it (rebuild with `npm run tauri build -- --bundles nsis`, then `check:orphans`,
 `smoke:tauri`, `scripts/smoke-installer.ps1` on a machine without it installed; unsigned, so SmartScreen warns; no
