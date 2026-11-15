@@ -8,9 +8,11 @@ import type { CrawlListItem } from '../api/types';
 import { goToSection } from '../app/goToSection';
 import { sectionOf } from '../app/sections';
 import { CrawlFavicon } from '../crawl/CrawlFavicon';
-import { crawlName } from '../crawl/status';
+import { effectiveStatus, statusLabel } from '../crawl/status';
 import { formatExactTime } from '../lib/format';
+import { useLiveCrawl } from '../live/liveStore';
 import type { Mode } from '../mode/mode';
+import { siteName } from '../simple/home/sites';
 import { Icon } from '../ui/Icon';
 import { DropdownMenu, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator } from '../ui/Menu';
 import { Tooltip } from '../ui/Tooltip';
@@ -67,6 +69,34 @@ function SwitcherButton({ ref, crawl, name, date, label, switchTo, collapsed, cl
 }
 
 /**
+ * A crawl in the switcher's menu: the site, as Home names it, then when it was crawled and, unless it simply finished,
+ * its state in the mode's words, as Home says it ("Paused", "Stopped early"): two crawls of a site in the same minute
+ * are told apart by it (gallery 6). Two lines, so a long name keeps its room. The state is the live one while this
+ * sidecar works on the crawl.
+ */
+function SwitcherRow({ item, mode }: { item: CrawlListItem; mode: Mode }) {
+  const live = useLiveCrawl(item.id);
+  const status = effectiveStatus(item, live);
+  const state = status && status !== 'completed' ? statusLabel(status, mode) : null;
+  const date = item.startedAt ? formatExactTime(item.startedAt) : null;
+  return (
+    <span className="flex min-w-0 items-center gap-2.5">
+      <CrawlFavicon item={item} size="md" />
+      <span className="flex min-w-0 flex-col">
+        <span className="si-switcher-menu__name truncate">{siteName(item)}</span>
+        {date || state ? (
+          <span className="si-switcher-menu__date truncate">
+            {date}
+            {date && state ? ' · ' : null}
+            {state ? <span className="si-switcher-menu__state">{state}</span> : null}
+          </span>
+        ) : null}
+      </span>
+    </span>
+  );
+}
+
+/**
  * The sidebar's open crawl, as a switcher (the framed workspace, docs/v2-ui-ia.md, The shell): a menu of the library's
  * recent crawls, the open one ticked, each opening on the section you're on; then Home, for the whole library. A
  * Radix menu as the app's others: Enter, Space or the down arrow opens it, the arrows and typing move, Esc closes it
@@ -87,7 +117,8 @@ export function CrawlSwitcher({
   const pathname = useLocation({ select: (location) => location.pathname });
   const library = useQuery(libraryQuery()).data;
   const words = WORDS[mode];
-  const name = crawlName(crawl);
+  // The site as Home names it, with a port of its own ("127.0.0.1:62801"): two test sites on one host are two names.
+  const name = crawl ? siteName(crawl) : 'This crawl';
   const date = crawl?.startedAt ? formatExactTime(crawl.startedAt) : null;
   const label = `${words.switchTo}: ${name}${date ? `, ${date}` : ''}`;
   const recent = recentCrawls(library ?? (crawl ? [crawl] : []), crawlId);
@@ -117,16 +148,7 @@ export function CrawlSwitcher({
       <MenuRadioGroup value={crawlId} onValueChange={open}>
         {recent.map((item) => (
           <MenuRadioItem key={item.id} value={item.id}>
-            {/* The site, then when it was crawled: two lines, so a long name keeps its room. */}
-            <span className="flex min-w-0 items-center gap-2.5">
-              <CrawlFavicon item={item} size="md" />
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{crawlName(item)}</span>
-                {item.startedAt ? (
-                  <span className="si-switcher-menu__date truncate">{formatExactTime(item.startedAt)}</span>
-                ) : null}
-              </span>
-            </span>
+            <SwitcherRow item={item} mode={mode} />
           </MenuRadioItem>
         ))}
       </MenuRadioGroup>

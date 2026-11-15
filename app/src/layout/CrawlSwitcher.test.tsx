@@ -10,6 +10,7 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { updateSettings } from '../settings/settingsStore';
 import { resetConnectionForTests } from '../shell/connection';
+import type { CrawlListItem } from '../api/types';
 import { TEST_CRAWL_ID, fakeSidecar, json, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
 
 const OPEN = testCrawlItem();
@@ -118,5 +119,57 @@ describe('the crawl switcher', () => {
     await open('/');
     await within(sidebar()).findByRole('link', { name: 'Home' });
     expect(within(sidebar()).queryByRole('button', { name: /^Switch/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('the crawl switcher’s rows (gallery 6: every test-site crawl read "127.0.0.1", two crawls alike)', () => {
+  const site = (id: string, status: CrawlListItem['status'], port: number) =>
+    testCrawlItem({
+      id,
+      site: '127.0.0.1',
+      fileName: `127.0.0.1-${id}.sicrawl`,
+      startUrl: `http://127.0.0.1:${port}/`,
+      startedAt: '2026-11-15T20:20:00Z',
+      status,
+    });
+  const PAUSED = site('aaaa000000000001', 'paused', 62801);
+  const STOPPED = site('aaaa000000000002', 'stopped', 62801);
+  const RUNNING = site('aaaa000000000003', 'running', 62803);
+  const DONE = testCrawlItem({ startUrl: 'https://example.com:8443/' });
+
+  beforeEach(() => {
+    setTransport(
+      fakeSidecar([['GET', /^\/api\/crawls$/, () => json([DONE, PAUSED, STOPPED, RUNNING])], ...standardRoutes(DONE)]),
+    );
+  });
+
+  async function rows(mode: 'simple' | 'advanced') {
+    updateSettings({ mode });
+    await open(`/crawls/${TEST_CRAWL_ID}/overview`);
+    await userEvent.click(await within(sidebar()).findByRole('button', { name: /^Switch (crawl|site):/ }));
+    const menu = await screen.findByRole('menu');
+    return within(menu).getAllByRole('menuitemradio');
+  }
+
+  it('name each site as Home does, with a port of its own, and the button too', async () => {
+    const items = await rows('advanced');
+    // The name is the row's first line (the old one, and the new one, both truncate a long name).
+    const names = items.map((item) => item.querySelector('.truncate')?.textContent);
+    expect(names).toEqual(['127.0.0.1:62801', '127.0.0.1:62801', '127.0.0.1:62803', 'example.com:8443']);
+    expect(within(sidebar()).getByRole('button', { name: /^Switch crawl:\s*example\.com:8443\s*,/ })).toBeVisible();
+  });
+
+  it('say the state of each crawl that isn’t simply finished, in Advanced’s words', async () => {
+    const items = await rows('advanced');
+    const states = items.map((item) => item.querySelector('.si-switcher-menu__state')?.textContent ?? null);
+    expect(states).toEqual(['Paused', 'Stopped', 'Running', null]);
+    // A screen reader hears it with the crawl: the site, when, and the state.
+    expect(items[0]).toHaveAccessibleName(/127\.0\.0\.1:62801.*Paused/);
+  });
+
+  it('and in Simple’s', async () => {
+    const items = await rows('simple');
+    const states = items.map((item) => item.querySelector('.si-switcher-menu__state')?.textContent ?? null);
+    expect(states).toEqual(['Paused', 'Stopped early', 'Checking', null]);
   });
 });
