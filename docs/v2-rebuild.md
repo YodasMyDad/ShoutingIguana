@@ -142,9 +142,17 @@ view's ends counted against an older URL total). Every closing-audit gap and bot
 **Gallery re-shot and published** (2026-11-15, version 3, 42 views x 2 themes, release shell at `9bbd588`): six of
 the 2026-11-14 defects confirmed fixed in the real shell; it found ten more, two of them round 5's G6 (the Report
 frame keeps Windows' classic scroll bar, and the subtitle still wraps) that passed in Chromium and fail in WebView2.
-**Left: the polish round** (`ui/r5-polish` from [`brief-polish.md`](handoff/2026-11-15/brief-polish.md), every fix
-proved in the release shell; scratch `a539aa23-…/r5-polish/`), then merge, re-shoot the views it changes, and tell
-the owner step 3 is finished; step 3b (the check audit on real sites) follows. Known and left: the tray shows "Shouting Iguana" for a few ms between a check's end and its analysis;
+**The polish round is merged** (`2b1229f`, pushed; from [`brief-polish.md`](handoff/2026-11-15/brief-polish.md)):
+all ten fixed and proved in the release shell with before/after shots (scratch `a539aa23-…/r5-polish/shots/`), each
+with a test seen failing first, and new `smoke:shell` steps that failed on the old build (Advanced 19 + Simple 9
+pass). Causes worth knowing: the top bar's flicker was reduced motion (0.01 ms transitions made every resize a tiny
+animation, so the give-way measure read stale widths), not WebView2; the Report frame's scroll-bar style was refused
+by the engine's own report CSP (the app's style now goes first in the frame's copy; the saved file is unchanged).
+Checks: `verify-app.sh` all exit 0 on `5cb952c` (unit, stories 528 x 3 clean, e2e rerun 228 after updating two toast
+specs), `e2e:filled` 30, cargo fmt, clippy, test 141 + 3 on the final commit, Linux in Docker on `2b1229f` (clippy,
+cargo test 136 + 3); the engine untouched. Not verified in the shell: the "stopping" top bar (under a second), the
+updater's untrusted, unreadable and unavailable cases, Advanced's toast changes (unit tests). **Left: the gallery's
+twelve changed views (re-shooting), publish, then tell the owner step 3 is finished;** step 3b follows. Known and left: the tray shows "Shouting Iguana" for a few ms between a check's end and its analysis;
 a real screen reader not tried; installing a real update needs a release with `latest.json` (the release workflow's
 secrets are the owner's to add: see the architecture doc). The account of how it got here follows (2026-11-13 on).
 
