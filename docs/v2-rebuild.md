@@ -905,6 +905,23 @@ Everything below is public in `ShoutingIguana.Engine`.
 - **Decided this round under delegation, easy to revisit:**
   - stopping after 10 minutes without an answer;
   - the checks skipped on crawls that can't support them.
+- **Releases: signing and licences (raised by the owner 2026-11-15, for the release step).** Build and publish on
+  GitHub for Windows, macOS and Linux, with signed installers. The owner wants ONE signing set-up, as cheap as
+  possible, that signs any of their software, free or paid, whenever they release. Not just this app. Options as
+  known on 2026-11-15 (check prices and eligibility when the step comes):
+  - Windows: **Azure Trusted Signing** (~$10/month; signs anything, from GitHub Actions; eligibility has been
+    limited: companies with ~3 years' history in certain countries incl. the UK, individuals in fewer countries).
+    Fallback: a cloud OV code-signing certificate (Certum, SSL.com; ~£100–250/year). Ruled out for paid software:
+    SignPath Foundation (free, open source only, signs as SignPath) and Certum's open-source certificate. EV no
+    longer skips SmartScreen; a new signature still builds reputation over the first downloads.
+  - macOS: Apple Developer Program, $99/year (individual), covers signing and notarising every app; no cheaper route.
+  - Linux: no signing needed for AppImage, .deb, .rpm; a free GPG key if a package repository is published.
+  - The updater's minisign key (`%USERPROFILE%\.shouting-iguana\`) is separate and free; its two GitHub secrets
+    still need adding.
+  - Total about $220/year (Azure + Apple), or ~$250–350 with a certificate instead of Azure.
+  - Licences for paid software (other products, maybe later this one): to decide. Options: Keygen (free tier,
+    offline checks), a merchant of record that issues keys and handles VAT (Lemon Squeezy, Paddle, Gumroad; a share
+    per sale, nothing up front), or the app's own licence files signed with a private key (free).
 
 ## Known limitations
 
