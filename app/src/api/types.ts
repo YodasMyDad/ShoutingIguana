@@ -98,6 +98,13 @@ export interface Check {
    */
   subject?: CheckSubject;
   /**
+   * Where to fix what it flags: `sources` when each URL is something other URLs refer to (a 404, a redirect, a sitemap
+   * entry), so a view shows where it's found (`api.foundOn`); `targets` when each page holds the bad references (it links
+   * to broken URLs), so a view shows what its issue names (`api.issueTargets`); `none` otherwise. Left out by a
+   * sidecar from before it, which reads as `none`.
+   */
+  references?: CheckReferences;
+  /**
    * The score: the check finds one fault of the whole site, not a page's (robots.txt search engines can't read, no
    * HTTPS), which the score counts as the whole site whatever its count. Optional here, as every field from here on
    * is: a sidecar from before the score doesn't send them.
@@ -133,6 +140,9 @@ export interface Check {
    */
   plainLooksFor?: string | null;
 }
+
+/** How a check's flagged URLs stand to the links between URLs: where they're found, what they name, or neither. */
+export type CheckReferences = 'sources' | 'targets' | 'none';
 
 /** What a check's flagged URLs are: `GET /api/checks` gives it as each check's `subject` (E3b). */
 export type CheckSubject = 'page' | 'url';

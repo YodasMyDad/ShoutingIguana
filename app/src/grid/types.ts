@@ -56,9 +56,10 @@ export interface GridTree {
   /**
    * A group's row is a thing of its own that Enter and a double-click open, as they do any other row (a sitemap
    * index has URLs of its own to show): the group then opens and closes with Right, Left and its chevron only. When
-   * left out, Enter and a double-click on a group open and close it.
+   * left out, Enter and a double-click on a group open and close it. A function says it of each row: an issue's URL
+   * opens to show where it's found, while Enter still inspects it, and a group's row still opens on Enter.
    */
-  activates?: boolean | undefined;
+  activates?: boolean | ((index: number) => boolean) | undefined;
 }
 
 /** What Ctrl+C asks the data layer for: rows by index, fetched if they aren't loaded. */

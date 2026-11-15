@@ -2,6 +2,7 @@
 // what to refresh. Freshness comes from events (`library`, `crawl`), not polling: reads stay fresh until told.
 import { mutationOptions, queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
+import { loadFoundOn, loadIssueTargets } from './whereFoundBatch';
 import type {
   CheckGroupRef,
   FacetsQuery,
@@ -53,6 +54,13 @@ export const queryKeys = {
   /** Where one of a check's groups is among its groups, to open it from the route. */
   issueGroupPlace: (id: string, checkId: string, group: CheckGroupRef) =>
     ['crawl', id, 'issues', checkId, 'place', group] as const,
+  /**
+   * Where a page of URLs is found (their links, pages and sitemaps), and what a page of a check's flagged pages names:
+   * under the crawl's prefix, so a crawl continued or analysed again reads them afresh.
+   */
+  foundOn: (id: string, urlId: number, limit: number) => ['crawl', id, 'found-on', urlId, limit] as const,
+  issueTargets: (id: string, checkId: string, urlId: number, limit: number) =>
+    ['crawl', id, 'issues', checkId, 'targets', urlId, limit] as const,
   /** One URL in full, for the inspector. Under the crawl's prefix, so whatever changes the crawl refreshes it. */
   urlDetail: (id: string, urlId: number) => ['crawl', id, 'inspect', urlId] as const,
   /** Every URL the inspector has read of one crawl: what a running crawl may change. */
@@ -239,6 +247,25 @@ export const urlDetailQuery = (id: string, urlId: number) =>
   queryOptions({
     queryKey: queryKeys.urlDetail(id, urlId),
     queryFn: ({ signal }) => api.urlDetail(id, urlId, signal),
+    staleTime: Infinity,
+  });
+
+/**
+ * Where one URL is found, read with the other URLs shown at the same moment in one request (whereFoundBatch.ts): a
+ * grid's rows each ask for their own, and a page of them costs one read. Null for a URL the crawl doesn't have.
+ */
+export const foundOnQuery = (id: string, urlId: number, limit: number) =>
+  queryOptions({
+    queryKey: queryKeys.foundOn(id, urlId, limit),
+    queryFn: () => loadFoundOn(id, urlId, limit),
+    staleTime: Infinity,
+  });
+
+/** What one of a check's flagged pages names, batched as `foundOnQuery` is. Null for a page the check didn't flag. */
+export const issueTargetsQuery = (id: string, checkId: string, urlId: number, limit: number) =>
+  queryOptions({
+    queryKey: queryKeys.issueTargets(id, checkId, urlId, limit),
+    queryFn: () => loadIssueTargets(id, checkId, urlId, limit),
     staleTime: Infinity,
   });
 

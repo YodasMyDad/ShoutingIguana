@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ChevronRight, Layers } from 'lucide-react';
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import type { CheckGroupRef, IssueGroup, IssueRow } from '../../api/grids';
 import {
@@ -35,20 +35,57 @@ import { ShareBar } from '../../ui/ShareBar';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
-import { FIRST_GROUP_ROWS, childRows, groupFilter, groupRefOf, treeLayout, type OpenGroup } from './groupTree';
+import { followWords } from '../../inspector/links';
+import { StatusCode } from '../../ui/StatusCode';
+import { linksOfUrl } from '../links/linkPlaces';
+import {
+  FIRST_GROUP_ROWS,
+  childPlace,
+  childRows,
+  groupFilter,
+  groupRefOf,
+  pageChildren,
+  treeLayout,
+  type ChildPlace,
+  type OpenGroup,
+  type OpenPage,
+} from './groupTree';
 import { IssuePageMenu } from './IssuePageMenu';
 import { checkUrlsReader, copyUrls } from './copyUrls';
+import { useTemplateLink, useWhereFoundOf } from './useWhereFound';
+import { WhereFoundLine } from './WhereFoundLine';
+import {
+  allWords,
+  foundOnRows,
+  linkPlaceWords,
+  referencesOf,
+  targetRows,
+  templateLinkWords,
+  whereRowText,
+  type WhereRow,
+} from './whereFound';
 
-/** A row of the tree: a group, one of the open group's first pages or URLs, or its link to all of them. */
+/**
+ * A row of the tree: a group, one of the open group's first pages or URLs, a row under the one expanded to show where
+ * it's found (a page linking to it, a sitemap listing it, a URL it names), or the group's link to all its pages.
+ */
 type TreeRow =
   | { kind: 'group'; group: IssueGroup }
   | { kind: 'page'; row: IssueRow; group: IssueGroup }
+  | { kind: 'where'; where: WhereRow; at: number; page: IssueRow; group: IssueGroup }
   | { kind: 'more'; group: IssueGroup };
 
 /** Wrappers kept per row object, so a row the grid has drawn keeps its identity (and its memoised cells). */
 const groupRows = new WeakMap<IssueGroup, TreeRow>();
 const pageRows = new WeakMap<IssueRow, TreeRow>();
+const whereTreeRows = new WeakMap<WhereRow, TreeRow>();
 const moreRows = new WeakMap<IssueGroup, TreeRow>();
+
+/** The page under the open group expanded to show where it's found, by the group it's in and its URL id. */
+interface ExpandedPage {
+  group: string;
+  page: number;
+}
 
 /** A group's identity: its detail and its related URL, as the engine keys it. */
 const groupKey = (group: IssueGroup) => `${group.detail ?? ''}|${group.relatedUrlId ?? ''}`;
@@ -60,6 +97,8 @@ function treeRowKey(row: TreeRow): string {
       return `g|${groupKey(row.group)}`;
     case 'page':
       return `p|${groupKey(row.group)}|${row.row.id}|${row.row.detail ?? ''}|${row.row.relatedUrlId ?? ''}`;
+    case 'where':
+      return `w|${groupKey(row.group)}|${row.page.id}|${row.where.kind}|${row.at}`;
     case 'more':
       return `m|${groupKey(row.group)}`;
   }
@@ -177,7 +216,40 @@ export function IssueGroups({
   // error above the grid with Try again.
   const rowsFailed = firstRows.isError && loadedRows === null;
   const openIndex = openGroup?.index ?? null;
-  const openChildren = openGroup ? (rowsFailed ? 1 : childRows(openGroup.group, loadedRows?.length ?? null)) : 0;
+
+  // One of the open group's pages opened to show where it's found (a check whose URLs are referred to) or what it names
+  // (a check whose pages hold the bad references): its rows follow it, read when it opens.
+  const references = referencesOf(check);
+  const [expanded, setExpanded] = useState<ExpandedPage | null>(null);
+  const openKey = openGroup ? groupKey(openGroup.group) : null;
+  const expandedId = openKey !== null && expanded?.group === openKey ? expanded.page : null;
+  const expandedAt = expandedId !== null && loadedRows ? loadedRows.findIndex((row) => row.id === expandedId) : -1;
+  const where = useWhereFoundOf(crawlId, check, expandedAt >= 0 ? expandedId : null);
+  const whereRows = useMemo<WhereRow[] | null>(() => {
+    if (where.foundOn) return foundOnRows(where.foundOn);
+    if (where.targets) return targetRows(where.targets);
+    if (where.error) return [{ kind: 'nothing', words: 'Where it’s found couldn’t be read' }];
+    return null;
+  }, [where.foundOn, where.targets, where.error]);
+  // While its rows are read, one row stands in for them (drawn as a placeholder).
+  const openPage: OpenPage | null = expandedAt >= 0 ? { page: expandedAt, rows: whereRows?.length ?? 1 } : null;
+  const openChildren = openGroup
+    ? rowsFailed
+      ? 1
+      : loadedRows
+        ? pageChildren(loadedRows.length, openPage)
+        : childRows(openGroup.group, null)
+    : 0;
+  /** Which of the open group's rows a child is. */
+  const childAt = useCallback(
+    (child: number): ChildPlace =>
+      loadedRows
+        ? childPlace(child, loadedRows.length, openPage)
+        : child === openChildren - 1
+          ? { kind: 'more' }
+          : { kind: 'page', page: child },
+    [loadedRows, openPage?.page, openPage?.rows, openChildren], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // A group the route opens (a link, back or forward) may be thousands of rows down: bring it into view, with as many
   // of its pages as fit, and the grid into view in the panel (which comes back scrolled to its top). One opened here
@@ -220,11 +292,17 @@ export function IssueGroups({
       }
       if (!openGroup) return undefined;
       const { group } = openGroup;
-      if (place.child === openChildren - 1) return wrap(moreRows, group, () => ({ kind: 'more', group }));
-      const row = loadedRows?.[place.child];
-      return row ? wrap(pageRows, row, () => ({ kind: 'page', row, group })) : undefined;
+      const child = childAt(place.child);
+      if (child.kind === 'more') return wrap(moreRows, group, () => ({ kind: 'more', group }));
+      const row = loadedRows?.[child.page];
+      if (!row) return undefined;
+      if (child.kind === 'page') return wrap(pageRows, row, () => ({ kind: 'page', row, group }));
+      const entry = whereRows?.[child.row];
+      return entry
+        ? wrap(whereTreeRows, entry, () => ({ kind: 'where', where: entry, at: child.row, page: row, group }))
+        : undefined;
     },
-    [layout, getGroup, openGroup, openChildren, loadedRows],
+    [layout, getGroup, openGroup, childAt, loadedRows, whereRows],
   );
 
   // Copying a selection that spans groups not read yet (Ctrl+A, Ctrl+C on thousands): their pages are fetched, as the
@@ -257,17 +335,38 @@ export function IssueGroups({
 
   const tree = useMemo<GridTree>(
     () => ({
-      level: (index) => (layout.place(index).kind === 'group' ? 1 : 2),
+      level: (index) => {
+        const place = layout.place(index);
+        if (place.kind === 'group') return 1;
+        return childAt(place.child).kind === 'where' ? 3 : 2;
+      },
       expanded: (index) => {
         const place = layout.place(index);
-        return place.kind === 'group' ? place.group === openIndex : undefined;
+        if (place.kind === 'group') return place.group === openIndex;
+        // A page opens to show where it's found, for a check whose URLs are referred to, or what it names.
+        const child = childAt(place.child);
+        if (references === 'none' || child.kind !== 'page') return undefined;
+        const row = loadedRows?.[child.page];
+        return row ? row.id === expandedId : undefined;
       },
       parent: (index) => {
         const place = layout.place(index);
-        return place.kind === 'child' ? layout.rowOfGroup(place.group) : null;
+        if (place.kind !== 'child') return null;
+        const child = childAt(place.child);
+        const groupRow = layout.rowOfGroup(place.group);
+        return child.kind === 'where' ? groupRow + 1 + child.page : groupRow;
       },
+      // Enter inspects a page, and opens a group: a page opens with Right, Left and its chevron.
+      activates: (index) => layout.place(index).kind !== 'group',
       onToggle: (index, opening) => {
         const place = layout.place(index);
+        if (place.kind === 'child') {
+          const child = childAt(place.child);
+          const row = child.kind === 'page' ? loadedRows?.[child.page] : undefined;
+          if (!row || !openKey) return undefined;
+          setExpanded(opening ? { group: openKey, page: row.id } : null);
+          return index;
+        }
         const group = getGroup(place.group);
         if (!group) return undefined;
         if (!opening) {
@@ -282,7 +381,43 @@ export function IssueGroups({
         return place.group;
       },
     }),
-    [layout, openIndex, getGroup, onOpenChange, queryClient, crawlId, check.id],
+    [
+      layout,
+      openIndex,
+      getGroup,
+      onOpenChange,
+      queryClient,
+      crawlId,
+      check.id,
+      childAt,
+      references,
+      loadedRows,
+      expandedId,
+      openKey,
+    ],
+  );
+
+  /** What Enter (or a double-click) on a row under an expanded page does: inspects the page or URL it names, or goes on. */
+  const activateWhere = useCallback(
+    (row: Extract<TreeRow, { kind: 'where' }>) => {
+      const { where: entry, page } = row;
+      if (entry.kind === 'source') onInspect(entry.link.id);
+      else if (entry.kind === 'target') onInspect(entry.target.id);
+      else if (entry.kind === 'start' || (entry.kind === 'all' && entry.of === 'targets')) onInspect(page.id);
+      else if (entry.kind === 'sitemap') {
+        void navigate({
+          to: '/crawls/$crawl/sitemaps/{-$sitemap}',
+          params: { crawl: crawlId, sitemap: String(entry.sitemap.id) },
+        });
+      } else if (entry.kind === 'all') {
+        void navigate({
+          to: '/crawls/$crawl/links',
+          params: { crawl: crawlId },
+          search: { filter: linksOfUrl('inlinks', page.id, 'all') },
+        });
+      }
+    },
+    [onInspect, navigate, crawlId],
   );
 
   const showAll = useCallback(
@@ -334,7 +469,13 @@ export function IssueGroups({
                 return groupTitle(row, relatedCell(group), group.relatedUrl ?? 'No other URL');
               },
               text: (row) =>
-                row.kind === 'group' ? (row.group.relatedUrl ?? '') : row.kind === 'page' ? (row.row.url ?? '') : '',
+                row.kind === 'group'
+                  ? (row.group.relatedUrl ?? '')
+                  : row.kind === 'page'
+                    ? (row.row.url ?? '')
+                    : row.kind === 'where'
+                      ? whereRowText(row.where)
+                      : '',
             },
           ]
         : [
@@ -349,7 +490,13 @@ export function IssueGroups({
                 return groupTitle(row, detail, detail);
               },
               text: (row) =>
-                row.kind === 'group' ? (row.group.detail ?? '') : row.kind === 'page' ? (row.row.url ?? '') : '',
+                row.kind === 'group'
+                  ? (row.group.detail ?? '')
+                  : row.kind === 'page'
+                    ? (row.row.url ?? '')
+                    : row.kind === 'where'
+                      ? whereRowText(row.where)
+                      : '',
             },
             ...(showRelated
               ? [
@@ -397,6 +544,11 @@ export function IssueGroups({
       if (row.kind === 'page') {
         return (
           <span className="flex min-w-0 items-center gap-3">
+            {references === 'none' ? null : (
+              <span data-tree-toggle aria-hidden="true" className="si-tree-toggle -me-2">
+                <Icon icon={ChevronRight} size="sm" />
+              </span>
+            )}
             <Url
               url={row.row.url ?? ''}
               siteOrigin={siteOrigin}
@@ -404,8 +556,17 @@ export function IssueGroups({
               openable={false}
               className="min-w-0 flex-1"
             />
+            {references === 'none' ? null : (
+              <WhereFoundLine
+                crawlId={crawlId}
+                check={check}
+                urlId={row.row.id}
+                siteOrigin={siteOrigin}
+                className="max-w-1/2 shrink"
+              />
+            )}
             {row.row.detail && row.row.detail !== row.group.detail ? (
-              <span className="max-w-1/2 shrink-0 truncate text-text-muted" title={row.row.detail}>
+              <span className="max-w-1/3 shrink-0 truncate text-text-muted" title={row.row.detail}>
                 {row.row.detail}
               </span>
             ) : null}
@@ -413,6 +574,7 @@ export function IssueGroups({
           </span>
         );
       }
+      if (row.kind === 'where') return <WhereCell row={row} crawlId={crawlId} siteOrigin={siteOrigin} />;
       const { group } = row;
       // The group's own parts, as the URL grid's chips will read them: its related URL, or its detail and any URL.
       const parts =
@@ -449,7 +611,7 @@ export function IssueGroups({
         </span>
       );
     },
-    [crawlId, check, grouping, siteOrigin],
+    [crawlId, check, grouping, siteOrigin, references],
   );
 
   // The insight: the open group when it's probably the template's, else the largest group that is.
@@ -470,7 +632,9 @@ export function IssueGroups({
 
   return (
     <div className="flex flex-col gap-3">
-      {insight ? <TemplateCallout group={insight} total={total} check={check} siteOrigin={siteOrigin} /> : null}
+      {insight ? (
+        <TemplateCallout crawlId={crawlId} group={insight} total={total} check={check} siteOrigin={siteOrigin} />
+      ) : null}
       {rowsFailed ? (
         <ErrorState error={firstRows.error} title={words.unread} onRetry={() => void firstRows.refetch()} compact />
       ) : null}
@@ -492,16 +656,18 @@ export function IssueGroups({
           spanRow={spanRow}
           onActivate={(_index, row) => {
             if (row?.kind === 'page') onInspect(row.row.id);
+            else if (row?.kind === 'where') activateWhere(row);
             else if (row?.kind === 'more') showAll(row.group);
           }}
           onActiveRowChange={(index) => {
             const row = onFollow && index !== null ? getRow(index) : undefined;
-            if (row?.kind === 'page') onFollow?.(row.row.id);
+            const followed = row ? urlIdOf(row) : null;
+            if (followed !== null) onFollow?.(followed);
           }}
           rowKey={treeRowKey}
           onContextMenu={rowMenu.onContextMenu}
           busy={groups.isRefreshing}
-          className="flex-1 rounded-md border border-border"
+          className="si-issue-tree flex-1 rounded-md border border-border"
         />
       </div>
       <IssuePageMenu<TreeRow>
@@ -509,9 +675,12 @@ export function IssueGroups({
         state={rowMenu.state}
         onOpenChange={rowMenu.onOpenChange}
         siteOrigin={siteOrigin}
-        page={menuRow?.kind === 'page' && menuRow.row.url ? { id: menuRow.row.id, url: menuRow.row.url } : null}
+        page={menuRow ? pageOf(menuRow) : null}
+        foundIn={
+          menuRow?.kind === 'page' && references === 'sources' ? linksOfUrl('inlinks', menuRow.row.id, 'all') : null
+        }
         group={
-          menuRow && menuRow.kind !== 'page'
+          menuRow && (menuRow.kind === 'group' || menuRow.kind === 'more')
             ? {
                 words: showInUrlsWords(check, menuRow.group.pages),
                 filter: groupFilter(check.id, groupRefOf(menuRow.group)),
@@ -524,11 +693,129 @@ export function IssueGroups({
               }
             : null
         }
-        urlOf={(row) => (row.kind === 'page' ? row.row.url : null)}
+        urlOf={(row) => pageOf(row)?.url ?? null}
         onInspect={onInspect}
       />
     </div>
   );
+}
+
+/** The URL a row stands for, which the inspector follows and the row menu acts on: a page, or one its row names. */
+function pageOf(row: TreeRow): { id: number; url: string } | null {
+  if (row.kind === 'page') return row.row.url ? { id: row.row.id, url: row.row.url } : null;
+  if (row.kind !== 'where') return null;
+  const { where } = row;
+  if (where.kind === 'source') return { id: where.link.id, url: where.link.url };
+  if (where.kind === 'target') return { id: where.target.id, url: where.target.url };
+  return row.page.url ? { id: row.page.id, url: row.page.url } : null;
+}
+
+function urlIdOf(row: TreeRow): number | null {
+  return pageOf(row)?.id ?? null;
+}
+
+/**
+ * A row under a page expanded to show where it's found: the page linking to it with where on that page the link is,
+ * what it says and whether it's followed; the sitemap listing it; its being the start URL; a URL the page names, with
+ * its status; or the way on to all of them.
+ */
+function WhereCell({
+  row,
+  crawlId,
+  siteOrigin,
+}: {
+  row: Extract<TreeRow, { kind: 'where' }>;
+  crawlId: string;
+  siteOrigin: string | null;
+}) {
+  const { where, page } = row;
+  switch (where.kind) {
+    case 'source': {
+      const place = linkPlaceWords(where.link);
+      const follow = followWords(where.link);
+      return (
+        <span className="si-where-row flex min-w-0 items-center gap-3" data-where="source">
+          <span className="shrink-0 text-text-muted">Linked from</span>
+          <Url
+            url={where.link.url}
+            siteOrigin={siteOrigin}
+            copyable={false}
+            openable={false}
+            className="min-w-0 flex-1"
+          />
+          {place ? (
+            <span className="max-w-1/2 shrink truncate text-text-muted" title={place}>
+              {place}
+            </span>
+          ) : null}
+          {follow ? <span className="shrink-0 text-text-muted">{follow}</span> : null}
+        </span>
+      );
+    }
+    case 'target': {
+      const place = linkPlaceWords(where.target);
+      return (
+        <span className="si-where-row flex min-w-0 items-center gap-3" data-where="target">
+          <span className="shrink-0 text-text-muted">Names</span>
+          <Url
+            url={where.target.url}
+            siteOrigin={siteOrigin}
+            copyable={false}
+            openable={false}
+            className="min-w-0 flex-1"
+          />
+          <StatusCode code={where.target.statusCode} className="shrink-0" />
+          {place ? (
+            <span className="max-w-1/3 shrink truncate text-text-muted" title={place}>
+              {place}
+            </span>
+          ) : null}
+        </span>
+      );
+    }
+    case 'sitemap':
+      return (
+        <span className="si-where-row flex min-w-0 items-center gap-3" data-where="sitemap">
+          <span className="shrink-0 text-text-muted">Listed in the sitemap</span>
+          <Url
+            url={where.sitemap.url}
+            siteOrigin={siteOrigin}
+            copyable={false}
+            openable={false}
+            className="min-w-0 flex-1"
+          />
+        </span>
+      );
+    case 'start':
+      return (
+        <span className="si-where-row text-text-muted" data-where="start">
+          The URL the crawl started from
+        </span>
+      );
+    case 'all':
+      return (
+        <span className="si-where-row flex min-w-0 items-center" data-where="all">
+          {where.of === 'links' ? (
+            <TextLink
+              to="/crawls/$crawl/links"
+              params={{ crawl: crawlId }}
+              search={{ filter: linksOfUrl('inlinks', page.id, 'all') }}
+              tabIndex={-1}
+            >
+              {allWords(where)}
+            </TextLink>
+          ) : (
+            <span className="text-text-muted">{allWords(where)}</span>
+          )}
+        </span>
+      );
+    case 'nothing':
+      return (
+        <span className="si-where-row text-text-muted" data-where="nothing">
+          {where.words}
+        </span>
+      );
+  }
 }
 
 /**
@@ -537,11 +824,13 @@ export function IssueGroups({
  * for a check that flags nothing else.
  */
 function TemplateCallout({
+  crawlId,
   group,
   total,
   check,
   siteOrigin,
 }: {
+  crawlId: string;
   group: IssueGroup;
   total: number;
   check: Check;
@@ -549,12 +838,15 @@ function TemplateCallout({
 }) {
   const grouping = check.grouping;
   const share = partOfAffected(check, group.pages, total);
+  // Where on the pages the shared link is, for a check whose pages hold it: "It’s a link in the footer."
+  const place = templateLinkWords(useTemplateLink(crawlId, check, group));
   return (
     <Callout tone="insight" title="Likely in the site’s template">
       {grouping === 'relatedUrl' && group.relatedUrl ? (
         <>
           The same URL, <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>, on{' '}
           {share}, so it’s likely in the site’s template: one fix clears the group.
+          {place ? ` ${place}.` : null}
         </>
       ) : grouping === 'relatedUrl' ? (
         <>

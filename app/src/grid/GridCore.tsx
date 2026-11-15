@@ -492,7 +492,7 @@ function GridCoreInner<Row>({
     if (!tree || !active || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
     const firstCell = active.col === 0 || spans(active.row);
     const expanded = tree.expanded(active.row);
-    if (event.key === 'Enter' && expanded !== undefined && !tree.activates) {
+    if (event.key === 'Enter' && expanded !== undefined && !activatesAt(tree, active.row)) {
       toggle(active.row, !expanded);
       return true;
     }
@@ -939,7 +939,7 @@ function GridCoreInner<Row>({
     // The chevron's own press has opened or closed the group already.
     if (event.target instanceof Element && event.target.closest('[data-tree-toggle]')) return;
     const expanded = tree?.expanded(position.row);
-    if (expanded !== undefined && !tree?.activates) toggle(position.row, !expanded);
+    if (expanded !== undefined && !(tree && activatesAt(tree, position.row))) toggle(position.row, !expanded);
     else activate(position.row, position.col);
   };
 
@@ -1446,6 +1446,11 @@ function pinOf(pins: readonly (number | undefined)[] | undefined, col: number, e
   return left === undefined
     ? { className: undefined, style: undefined }
     : { className: clsx('si-grid-cell--pinned', col === edge && 'si-grid-cell--pin-edge'), style: { left } };
+}
+
+/** Whether Enter and a double-click on a tree's row activate it (rather than open or close it). */
+function activatesAt(tree: GridTree, row: number): boolean {
+  return typeof tree.activates === 'function' ? tree.activates(row) : tree.activates === true;
 }
 
 /** A row's place in a tree, for its `role="row"`. */

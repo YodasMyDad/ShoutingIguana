@@ -2172,6 +2172,16 @@
     opacity: 1;
   }
 
+  /* ------------------------------------------------- Where an issue's URL is found */
+  /* A page that opens to show where it's found reads as a page, not as a group: the tree's heavier group title is for groups. */
+  .si-issue-tree .si-grid-row[data-level='2'][aria-expanded] {
+    font-weight: inherit;
+  }
+
+  .si-where-line {
+    font-size: var(--text-12);
+  }
+
   /* -------------------------------------------------------------- Favicons */
   .si-favicon {
     display: inline-grid;

@@ -2,7 +2,8 @@
 // check of each kind (grouped by detail, by related URL, flat, skipped and passed), and groups and rows answered as
 // the real `/groups` and `/rows` do (a group narrows the rows, `after` reads on, `detail` sorts).
 import type { GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
-import type { Analysis, Check, CheckSubject, Checks, CrawlListItem } from '../api/types';
+import type { IssueTargetsOfUrl, LinkRow, UrlFoundOn } from '../api/inspector';
+import type { Analysis, Check, CheckReferences, CheckSubject, Checks, CrawlListItem } from '../api/types';
 import { json, problem, standardRoutes, testCrawlItem, type FakeRoute } from './fakeSidecar';
 
 const check = (
@@ -12,6 +13,7 @@ const check = (
   title: string,
   grouping: Check['grouping'],
   subject: CheckSubject,
+  references: CheckReferences = 'none',
 ) =>
   ({
     id,
@@ -25,6 +27,7 @@ const check = (
       id === 'empty-anchor-text' ? 'https://developers.google.com/search/docs/crawling-indexing/links-crawlable' : null,
     grouping,
     subject,
+    references,
   }) satisfies Check;
 
 export const ISSUES_CHECKS: Checks = {
@@ -35,10 +38,20 @@ export const ISSUES_CHECKS: Checks = {
   ],
   checks: [
     // Each check's subject is the engine's own: the response codes flag any URL, the rest only pages.
-    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail', 'url'),
-    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail', 'url'),
-    check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl', 'page'),
-    check('orphan-page', 'links', 'notice', 'Orphan page in a sitemap', 'none', 'page'),
+    // And where to fix each, as the engine's catalog says: a 404 is found on the pages linking to it, a page without
+    // anchor text names the URLs it links to.
+    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail', 'url', 'sources'),
+    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail', 'url', 'sources'),
+    check(
+      'empty-anchor-text',
+      'links',
+      'notice',
+      'Internal links without anchor text',
+      'relatedUrl',
+      'page',
+      'targets',
+    ),
+    check('orphan-page', 'links', 'notice', 'Orphan page in a sitemap', 'none', 'page', 'sources'),
     check('title-too-long', 'titles', 'notice', 'Title too long', 'none', 'page'),
   ],
 };
@@ -124,6 +137,76 @@ export const ISSUE_ROWS: Record<string, (IssueRow & { group?: number })[]> = {
   ],
 };
 
+/** A link to a broken URL, as `/urls/found-on` names its page. */
+const sourceLink = (id: number, url: string, position: LinkRow['position'], text: string | null): LinkRow => ({
+  id,
+  url,
+  kind: 'hyperlink',
+  text,
+  position,
+  flags: [],
+  followed: true,
+  fragment: null,
+  statusCode: 200,
+  indexable: true,
+  fetched: true,
+  outcome: 'success',
+});
+
+/**
+ * Where each broken URL is found: /old/ on three pages (the first in its footer), /gone/ on one page and in the
+ * sitemap. Answered as `/urls/found-on` does: in the order asked, a URL it doesn't have left out.
+ */
+export const FOUND_ON: Record<number, UrlFoundOn> = {
+  10: {
+    urlId: 10,
+    links: 3,
+    pages: 3,
+    pagesExact: true,
+    sources: [
+      sourceLink(20, 'https://example.com/garden-furniture/', 'footer', 'Old range'),
+      sourceLink(21, 'https://example.com/sofas/', 'content', 'See the old range'),
+      sourceLink(22, 'https://example.com/blog/', 'content', null),
+    ],
+    sitemaps: { total: 0, sitemaps: [] },
+    start: false,
+  },
+  11: {
+    urlId: 11,
+    links: 1,
+    pages: 1,
+    pagesExact: true,
+    sources: [sourceLink(20, 'https://example.com/garden-furniture/', 'content', 'Gone for good')],
+    sitemaps: { total: 1, sitemaps: [{ id: 1, url: 'https://example.com/sitemap.xml' }] },
+    start: false,
+  },
+};
+
+/** What each page without anchor text names: the home page from its header, page 7 /garden/ from its content. */
+export const ISSUE_TARGETS: Record<string, Record<number, IssueTargetsOfUrl>> = {
+  'empty-anchor-text': Object.fromEntries(
+    ANCHOR_ROWS.map((row): [number, IssueTargetsOfUrl] => [
+      row.id,
+      {
+        urlId: row.id,
+        total: 1,
+        targets: [
+          {
+            id: row.group,
+            url: row.relatedUrl ?? '',
+            statusCode: 200,
+            fetched: true,
+            outcome: 'success',
+            kind: 'hyperlink',
+            text: null,
+            position: row.group === 1 ? 'header' : 'content',
+          },
+        ],
+      },
+    ]),
+  ),
+};
+
 export function issueRowsPage(
   checkId: string,
   query: GridQuery,
@@ -160,6 +243,10 @@ export interface IssuesSidecarOptions {
   checks?: Checks;
   groups?: Record<string, IssueGroup[]>;
   rows?: Record<string, (IssueRow & { group?: number })[]>;
+  /** Where each URL is found, by id. */
+  foundOn?: Record<number, UrlFoundOn>;
+  /** What each flagged page names, by check and page id. */
+  targets?: Record<string, Record<number, IssueTargetsOfUrl>>;
   onAnalyse?: () => void;
   onCancelAnalysis?: () => void;
   onContinue?: () => void;
@@ -235,6 +322,30 @@ export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
           offset,
           groups: list.slice(offset, offset + limit),
         });
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/urls\/found-on$/,
+      (request) => {
+        const { urlIds, limit = 5 } = request.body as { urlIds: number[]; limit?: number };
+        const known = options.foundOn ?? FOUND_ON;
+        return json({
+          urls: [...new Set(urlIds)]
+            .map((id) => known[id])
+            .filter((url): url is UrlFoundOn => url !== undefined)
+            .map((url) => ({ ...url, sources: url.sources.slice(0, limit) })),
+        });
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([a-z0-9-]+)\/targets$/,
+      (request, match) => {
+        const checkId = match[1] ?? '';
+        const { urlIds } = request.body as { urlIds: number[] };
+        const named = (options.targets ?? ISSUE_TARGETS)[checkId] ?? {};
+        return json({ checkId, urls: [...new Set(urlIds)].map((id) => named[id]).filter((url) => url !== undefined) });
       },
     ],
     [
