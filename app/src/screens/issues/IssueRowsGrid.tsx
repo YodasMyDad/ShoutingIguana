@@ -18,6 +18,7 @@ import { linksOfUrl } from '../links/linkPlaces';
 import { IssuePageMenu } from './IssuePageMenu';
 import { WhereFoundLine } from './WhereFoundLine';
 import { referencesOf } from './whereFound';
+import { evidenceFrameClass } from './evidenceFrame';
 
 /** An issue's identity among a check's rows: a URL can be flagged more than once, by detail or by related URL. */
 function issueRowKey(row: IssueRow): string {
@@ -135,7 +136,7 @@ export function IssueRowsGrid({
   if (rows.error && rows.rowCount === null) return <ErrorState error={rows.error} onRetry={rows.refetch} compact />;
 
   return (
-    <div ref={measure} className="flex max-h-(--evidence-max-height) min-h-0 flex-col" style={{ height }}>
+    <div ref={measure} className={evidenceFrameClass(shown)} style={{ height }}>
       <GridCore<IssueRow>
         key={JSON.stringify(queryKey)}
         label={`${check.title}: ${affectedWords(check).named}`}

@@ -163,8 +163,20 @@
     overflow-anchor: none;
   }
 
-  /* The grid's own focus: an outline, so forced colours keep it. */
-  .si-grid:focus-visible {
+  /*
+    The grid's own focus: an outline, so forced colours keep it, drawn by its frame on top of everything in it. On the
+    grid itself the sticky header, the rows and the scroll bar drew over it, and left stubs of it (gallery 6).
+  */
+  .si-grid-frame::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .si-grid-frame:has(> .si-grid:focus-visible)::after {
     outline: var(--hairline) solid var(--color-focus);
     outline-offset: calc(var(--hairline) * -1);
   }
