@@ -1,11 +1,11 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import clsx from 'clsx';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { formatCount } from '../lib/format';
-import { revealOffset } from '../lib/scroll';
 import { Button } from './Button';
 import { DropdownMenu, MenuItem } from './Menu';
+import { tabsShown } from './tabsFit';
 
 export interface TabItem<T extends string> {
   value: T;
@@ -29,47 +29,51 @@ export interface TabsProps<T extends string> {
   panelClassName?: string | undefined;
 }
 
-/** Brings the chosen tab into view in its strip, scrolling the strip alone and only as far as it must. */
-function revealChosen(list: HTMLElement) {
-  const active = list.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
-  if (!active) return;
-  const left = active.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft;
-  const next = revealOffset(left, active.getBoundingClientRect().width, list.scrollLeft, list.clientWidth);
-  if (next !== null) list.scrollLeft = next;
+/** The "N more" button's width before it has been drawn once: about what "7 more" takes. */
+const MORE_GUESS = 96;
+
+/** An element's width with its side margins: what it takes in its row. */
+function outerWidth(element: Element): number {
+  const style = getComputedStyle(element);
+  return (
+    element.getBoundingClientRect().width + (parseFloat(style.marginLeft) || 0) + (parseFloat(style.marginRight) || 0)
+  );
 }
 
 /**
- * Marks the strip's ends that have more tabs past them (`data-more-start`, `data-more-end`), which the strip's CSS
- * fades out, and says which tabs aren't wholly in view, by value: the overflow menu lists them.
+ * The tabs the strip leaves to its menu, by value: it measures its room, the tabs (those in the menu too: they're
+ * laid out, unseen, after the others) and the button, and keeps the chosen tab in the strip.
  */
-function markEnds(list: HTMLElement): string[] {
-  const before = list.scrollLeft > 0.5;
-  const after = list.scrollLeft + list.clientWidth < list.scrollWidth - 0.5;
-  list.toggleAttribute('data-more-start', before);
-  list.toggleAttribute('data-more-end', after);
-  if (!before && !after) return [];
-  const room = list.getBoundingClientRect();
-  return [...list.querySelectorAll<HTMLElement>('[role="tab"]')]
-    .filter((tab) => {
-      const box = tab.getBoundingClientRect();
-      return box.left < room.left - 0.5 || box.right > room.right + 0.5;
-    })
-    .map((tab) => tab.dataset.value ?? '');
+function measureHidden(bar: HTMLElement, list: HTMLElement, chosen: string | undefined, moreWidth: number): string[] {
+  const tabs = [...list.querySelectorAll<HTMLElement>('[role="tab"]')];
+  const listStyle = getComputedStyle(list);
+  const padding = (parseFloat(listStyle.paddingLeft) || 0) + (parseFloat(listStyle.paddingRight) || 0);
+  const gap = parseFloat(listStyle.columnGap) || 0;
+  const barGap = parseFloat(getComputedStyle(bar).columnGap) || 0;
+  const room = bar.clientWidth - padding;
+  const shown = tabsShown(
+    tabs.map(outerWidth),
+    tabs.findIndex((tab) => tab.dataset.value === chosen),
+    room,
+    room - moreWidth - barGap,
+    gap,
+  );
+  return tabs.filter((_, index) => !shown[index]).map((tab) => tab.dataset.value ?? '');
 }
 
 const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((value, index) => value === b[index]);
 
 /**
- * Tabs: the selected one has the accent underline (3:1). The arrow keys move between tabs and show each as they go;
- * Tab moves on, to the overflow button when there is one, then into the panel. A strip wider than its room scrolls
- * sideways without a bar (one under a strip of tabs read as a broken layout in the real shell): the arrow keys, a
- * touchpad, Shift and the wheel, and the plain wheel too, which the strip turns sideways. An end with more tabs past it
- * fades out, and a button at the strip's end says how many aren't in view ("5 more") and lists them (round 5's polish:
- * the inspector showed 3½ of its 9 tabs at 1280 px, and no sign of the rest). A tab chosen there is scrolled into view
- * and takes focus. The chosen tab is scrolled into view whenever it changes (a section remembered from the last URL, a
- * palette command), and whenever the tabs change size (counts arriving as the inspector walks from URL to URL), so
- * it's never chosen out of sight.
+ * Tabs: the selected one has the accent underline (3:1). A strip wider than its room shows the tabs that fit whole,
+ * in order, the chosen one always among them, and ends in a button that says how many it leaves out ("5 more") and
+ * lists exactly those: a tab is in the strip or in the menu, never both and never cut (polish 2: the inspector's
+ * Inlinks tab showed half beside "7 more", which listed it too; round 5's polish had made it a scrolling strip that
+ * cut tabs at its ends). A tab chosen from the menu takes its place in the strip, in place of the last that fitted, and
+ * takes focus. The strip never scrolls. The arrow keys move between the tabs in the strip; Tab moves on to the button,
+ * then into the panel. The strip measures again whenever it or a tab changes size (counts arriving as the inspector
+ * walks from URL to URL, a narrower panel) and whenever the chosen tab changes (a section remembered from the last
+ * URL, a palette command), so the chosen tab is never out of sight.
  */
 export function Tabs<T extends string>({
   label,
@@ -81,6 +85,7 @@ export function Tabs<T extends string>({
   className,
   panelClassName,
 }: TabsProps<T>) {
+  const barRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   // Uncontrolled, the strip keeps its own choice, so a tab chosen from the overflow menu is chosen.
   const [own, setOwn] = useState<T | undefined>(defaultValue ?? tabs[0]?.value);
@@ -89,51 +94,36 @@ export function Tabs<T extends string>({
     if (value === undefined) setOwn(next);
     onValueChange?.(next);
   };
-  // The tabs not wholly in view, and the one just chosen from the menu, which takes focus as the menu closes.
-  const [outOfView, setOutOfView] = useState<readonly string[]>([]);
+  // The tabs left to the menu, and the one just chosen there, which takes focus as the menu closes.
+  const [outOfStrip, setOutOfStrip] = useState<readonly string[]>([]);
   const chosenFromMenu = useRef<string | null>(null);
-  useLayoutEffect(() => {
+  const moreWidth = useRef<number | null>(null);
+  const measure = useCallback(() => {
+    const bar = barRef.current;
     const list = listRef.current;
-    if (!list) return;
-    revealChosen(list);
-    const next = markEnds(list);
-    setOutOfView((previous) => (sameList(previous, next) ? previous : next));
+    if (!bar || !list) return;
+    const more = bar.querySelector('.si-tabs-bar__more');
+    if (more) moreWidth.current = outerWidth(more);
+    const next = measureHidden(bar, list, current, moreWidth.current ?? MORE_GUESS);
+    setOutOfStrip((previous) => (sameList(previous, next) ? previous : next));
   }, [current]);
+  // Before the strip is painted: when the chosen tab changes, the tabs change, or the button comes or goes (its own
+  // width then known).
+  const labels = tabs.map((tab) => `${tab.value} ${tab.label} ${tab.count ?? ''}`).join('|');
+  useLayoutEffect(measure, [measure, labels, outOfStrip.length > 0]);
   useEffect(() => {
+    const bar = barRef.current;
     const list = listRef.current;
-    if (!list) return;
-    const mark = () => {
-      const next = markEnds(list);
-      setOutOfView((previous) => (sameList(previous, next) ? previous : next));
-    };
-    // The strip or a tab changing size (a count arriving, a narrower panel): the chosen tab back in view, the ends
-    // marked again.
-    const resized = new ResizeObserver(() => {
-      revealChosen(list);
-      mark();
-    });
-    resized.observe(list);
+    if (!bar || !list) return;
+    const resized = new ResizeObserver(() => measure());
+    resized.observe(bar);
     for (const tab of list.children) resized.observe(tab);
-    const onScroll = () => mark();
-    // A plain wheel scrolls the strip sideways when it's wider than its room; a wheel that already goes sideways (a
-    // touchpad, Shift) is left as it is, and a strip that fits lets the wheel scroll the page.
-    const onWheel = (event: WheelEvent) => {
-      if (list.scrollWidth <= list.clientWidth || event.deltaX !== 0 || event.deltaY === 0) return;
-      event.preventDefault();
-      list.scrollLeft += event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
-    };
-    list.addEventListener('scroll', onScroll, { passive: true });
-    list.addEventListener('wheel', onWheel, { passive: false });
-    return () => {
-      resized.disconnect();
-      list.removeEventListener('scroll', onScroll);
-      list.removeEventListener('wheel', onWheel);
-    };
-  }, [tabs.length]);
-  // While its menu is open, the list it was opened on: counts arriving can move tabs in or out of view, and items
+    return () => resized.disconnect();
+  }, [measure, tabs.length]);
+  // While its menu is open, the list it was opened on: counts arriving can move tabs in or out of the strip, and items
   // coming and going under the keyboard lost its place in the menu (seen in the release shell).
   const [listed, setListed] = useState<readonly string[] | null>(null);
-  const hidden = tabs.filter((tab) => (listed ?? outOfView).includes(tab.value));
+  const hidden = tabs.filter((tab) => (listed ?? outOfStrip).includes(tab.value));
   return (
     <TabsPrimitive.Root
       {...(current === undefined ? {} : { value: current })}
@@ -143,7 +133,7 @@ export function Tabs<T extends string>({
       }}
       className={className}
     >
-      <div className={clsx('si-tabs-bar', flush && 'si-tabs-bar--flush')}>
+      <div ref={barRef} className={clsx('si-tabs-bar', flush && 'si-tabs-bar--flush')}>
         <TabsPrimitive.List ref={listRef} aria-label={label} className={clsx('si-tabs', flush && 'si-tabs--flush')}>
           {tabs.map((tab) => (
             <TabsPrimitive.Trigger
@@ -151,6 +141,8 @@ export function Tabs<T extends string>({
               value={tab.value}
               disabled={tab.disabled}
               data-value={tab.value}
+              // Left to the menu: laid out after the others, unseen and out of the keyboard's way, so it's measured.
+              data-overflow={outOfStrip.includes(tab.value) ? '' : undefined}
               className="si-tab"
             >
               {tab.label}
@@ -166,7 +158,7 @@ export function Tabs<T extends string>({
         {hidden.length > 0 ? (
           <DropdownMenu
             align="end"
-            onOpenChange={(open) => setListed(open ? outOfView : null)}
+            onOpenChange={(open) => setListed(open ? outOfStrip : null)}
             closeFocus={() => {
               const chosen = chosenFromMenu.current;
               chosenFromMenu.current = null;

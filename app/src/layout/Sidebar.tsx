@@ -79,11 +79,11 @@ export function Sidebar() {
     <nav
       aria-label="Main"
       className={clsx(
-        'flex shrink-0 flex-col gap-5 border-r border-border-subtle bg-canvas p-3 transition-width duration-(--duration-panel) ease-out',
+        'flex min-h-0 shrink-0 flex-col border-r border-border-subtle bg-canvas p-3 transition-width duration-(--duration-panel) ease-out',
         collapsed ? 'w-(--sidebar-width-collapsed) px-2' : 'w-(--sidebar-width)',
       )}
     >
-      <div className={clsx('flex h-(--control-height) items-center gap-2.5', collapsed ? 'flex-col' : 'pl-1')}>
+      <div className={clsx('mb-5 flex h-(--control-height) items-center gap-2.5', collapsed ? 'flex-col' : 'pl-1')}>
         {collapsed ? null : (
           <>
             <img src={logoUrl} alt="" className="size-(--favicon-lg) shrink-0" />
@@ -100,61 +100,74 @@ export function Sidebar() {
         />
       </div>
 
-      <ul className="flex flex-col gap-0.5">
-        <li>
-          <NavItem to="/" search={{}} activeOptions={{ exact: true }} label="Home" icon={House} collapsed={collapsed} />
-        </li>
-      </ul>
+      {/* Between the name and Settings, what scrolls when the sidebar's room runs out: the crawl's sections and the
+          live ones, as many crawls and exports as are running (polish 2: a paused crawl and an export ran 7 px past a
+          720 px window, Settings on its edge). Settings stays whole below it. The padding, taken back by the margin,
+          keeps the focus rings inside what clips. */}
+      <div className="-m-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-1">
+        <ul className="flex flex-col gap-0.5">
+          <li>
+            <NavItem
+              to="/"
+              search={{}}
+              activeOptions={{ exact: true }}
+              label="Home"
+              icon={House}
+              collapsed={collapsed}
+            />
+          </li>
+        </ul>
 
-      {crawlId ? (
-        <section aria-label={crawlName(crawl)} className="flex flex-col gap-1.5">
-          <div className={clsx('flex items-center gap-2.5 py-1', collapsed ? 'justify-center' : 'px-2')}>
-            <CrawlFavicon item={crawl} size="lg" />
-            {collapsed ? null : (
-              <div className="flex min-w-0 flex-col">
-                <h2 className="truncate text-13 font-semibold" title={crawl?.startUrl ?? undefined}>
-                  {crawlName(crawl)}
-                </h2>
-                {crawl?.startedAt ? (
-                  <span className="truncate text-12 text-text-muted">{formatExactTime(crawl.startedAt)}</span>
-                ) : null}
-              </div>
-            )}
-          </div>
-          <ul className="flex flex-col gap-0.5">
-            {sections.map((section) => (
-              <SectionLink
-                key={section.id}
-                crawlId={crawlId}
-                section={section}
-                title={(mode === 'simple' ? section.simpleTitle : undefined) ?? section.title}
-                collapsed={collapsed}
-                count={section.id === 'issues' ? issues : null}
-                // Simple counts problems, not severities: no Errors, Warnings and Notices under What to fix.
-                issueCounts={section.id === 'issues' && mode === 'advanced' ? counts : null}
-              />
-            ))}
-          </ul>
-          {mode === 'advanced' && report ? (
-            <ul className="flex flex-col gap-0.5 border-t border-border-subtle pt-1.5">
-              <SectionLink
-                crawlId={crawlId}
-                section={REPORT_SECTION}
-                title="Report"
-                collapsed={collapsed}
-                count={null}
-              />
+        {crawlId ? (
+          <section aria-label={crawlName(crawl)} className="flex flex-col gap-1.5">
+            <div className={clsx('flex items-center gap-2.5 py-1', collapsed ? 'justify-center' : 'px-2')}>
+              <CrawlFavicon item={crawl} size="lg" />
+              {collapsed ? null : (
+                <div className="flex min-w-0 flex-col">
+                  <h2 className="truncate text-13 font-semibold" title={crawl?.startUrl ?? undefined}>
+                    {crawlName(crawl)}
+                  </h2>
+                  {crawl?.startedAt ? (
+                    <span className="truncate text-12 text-text-muted">{formatExactTime(crawl.startedAt)}</span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            <ul className="flex flex-col gap-0.5">
+              {sections.map((section) => (
+                <SectionLink
+                  key={section.id}
+                  crawlId={crawlId}
+                  section={section}
+                  title={(mode === 'simple' ? section.simpleTitle : undefined) ?? section.title}
+                  collapsed={collapsed}
+                  count={section.id === 'issues' ? issues : null}
+                  // Simple counts problems, not severities: no Errors, Warnings and Notices under What to fix.
+                  issueCounts={section.id === 'issues' && mode === 'advanced' ? counts : null}
+                />
+              ))}
             </ul>
-          ) : null}
-        </section>
-      ) : null}
+            {mode === 'advanced' && report ? (
+              <ul className="flex flex-col gap-0.5 border-t border-border-subtle pt-1.5">
+                <SectionLink
+                  crawlId={crawlId}
+                  section={REPORT_SECTION}
+                  title="Report"
+                  collapsed={collapsed}
+                  count={null}
+                />
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
 
-      <div className="mt-auto flex flex-col gap-2">
-        <RunningCrawls collapsed={collapsed} simple={mode === 'simple'} />
-        <ExportsInProgress collapsed={collapsed} />
-        <div className="border-t border-border-subtle pt-2">
-          <NavItem to="/settings/{-$section}" params={{}} label="Settings" icon={Settings} collapsed={collapsed} />
+        <div className="mt-auto flex flex-col gap-2 empty:hidden">
+          <RunningCrawls collapsed={collapsed} simple={mode === 'simple'} />
+          <ExportsInProgress collapsed={collapsed} />
         </div>
+      </div>
+      <div className="mt-2 border-t border-border-subtle pt-2">
+        <NavItem to="/settings/{-$section}" params={{}} label="Settings" icon={Settings} collapsed={collapsed} />
       </div>
     </nav>
   );

@@ -375,7 +375,6 @@
   --underline-offset: 3px;
   --scrollbar-size: 10px;
   --scrollbar-thumb-min: 24px;
-  --tabs-fade: var(--space-8); /* how far in a strip of tabs fades where more tabs are past its end */
   --scrollbar-inset: 2px; /* the clear edge around a thumb, so a 10px bar draws a 6px thumb */
 
   /* Component sizes */

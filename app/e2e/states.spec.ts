@@ -468,13 +468,16 @@ test.describe('the design system’s states', () => {
     expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   });
 
-  test('tabs past the edge scroll without a bar, and the list never scrolls up and down', async ({ page }) => {
+  test('tabs past the edge are clipped, never scrolled either way, and a tab left to the menu is unseen and last', async ({
+    page,
+  }) => {
     const tabs = ['Overview', 'Response', 'Headers', 'Links', 'Images', 'Structured data', 'Hreflang', 'Source'];
+    // Which tabs go to the "N more" menu is Tabs.tsx's job (tabsFit); here the third is marked, as Tabs.tsx marks one.
     const markup = (id: string) =>
       `<div class="si-tabs" role="tablist" id="${id}">${tabs
         .map(
           (name, index) =>
-            `<button type="button" class="si-tab" role="tab" aria-selected="${String(index === 0)}">${name}</button>`,
+            `<button type="button" class="si-tab" role="tab" aria-selected="${String(index === 0)}"${index === 2 ? ' data-overflow=""' : ''}>${name}</button>`,
         )
         .join('')}</div>`;
     const host = await fixture(
@@ -482,16 +485,31 @@ test.describe('the design system’s states', () => {
       `<div style="width:300px">${markup('narrow')}</div><div style="width:1000px">${markup('wide')}</div>`,
     );
     const measure = (locator: Locator) =>
-      locator.evaluate((element) => ({
-        overflowing: element.scrollWidth > element.clientWidth,
-        // No bar under a strip of tabs, which read as a broken layout in the real shell: the wheel, a touchpad and the
-        // arrow keys scroll it, and the chosen tab is scrolled into view (ui/Tabs.tsx).
-        scrollbar: getComputedStyle(element).scrollbarWidth,
-        scrollsUpAndDown: element.scrollHeight > element.clientHeight,
-      }));
+      locator.evaluate((element) => {
+        // A strip that scrolled cut a tab in half at its end (polish 2): it clips, so nothing can scroll it sideways.
+        element.scrollLeft = 200;
+        return {
+          overflowing: element.scrollWidth > element.clientWidth,
+          overflowX: getComputedStyle(element).overflowX,
+          scrolledSideways: element.scrollLeft,
+          scrollsUpAndDown: element.scrollHeight > element.clientHeight,
+        };
+      });
     const narrow = await measure(host.locator('#narrow'));
-    expect(narrow).toEqual({ overflowing: true, scrollbar: 'none', scrollsUpAndDown: false });
+    expect(narrow).toEqual({ overflowing: true, overflowX: 'clip', scrolledSideways: 0, scrollsUpAndDown: false });
     expect((await measure(host.locator('#wide'))).scrollsUpAndDown).toBe(false);
+    // The tab left to the menu stays laid out, so the strip can measure it, but unseen and after the others.
+    const left = await host.locator('#wide').evaluate((list) => {
+      const marked = list.querySelector('[data-overflow]');
+      const last = list.lastElementChild;
+      if (!marked || !last) return null;
+      return {
+        visibility: getComputedStyle(marked).visibility,
+        width: marked.getBoundingClientRect().width > 0,
+        afterTheLast: marked.getBoundingClientRect().left > last.getBoundingClientRect().left,
+      };
+    });
+    expect(left).toEqual({ visibility: 'hidden', width: true, afterTheLast: true });
     // The chosen tab's rule is drawn in full, at the list's very bottom, over its hairline.
     const rule = await host.locator('#wide [aria-selected="true"]').evaluate((element) => ({
       bottom: getComputedStyle(element, '::after').bottom,

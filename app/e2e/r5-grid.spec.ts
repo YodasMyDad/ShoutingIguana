@@ -9,7 +9,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { readCsv, readXlsx } from './files';
 import { gridInView } from './gridView';
-import { colourTweensEnd, expectNoViolations, read, seededCrawl } from './support';
+import { chooseTab, colourTweensEnd, expectNoViolations, read, seededCrawl } from './support';
 
 interface UrlPage {
   rows: Record<string, string | number | boolean | null>[];
@@ -180,7 +180,7 @@ test('filters by the value under the row menu, landing on the sidecar’s count 
 test('searches the source on Ctrl+F from the Source tab and its panel (gap 8)', async ({ page }) => {
   await openUrls(page, '?inspect=1');
   const tab = page.getByRole('tab', { name: /^Source/ });
-  await tab.click();
+  await chooseTab(page.getByRole('complementary', { name: 'Inspector' }), /^Source/);
   const field = page.getByRole('searchbox', { name: 'Search the HTML source' });
   await expect(field).toBeVisible();
   await tab.focus();
@@ -298,7 +298,7 @@ test('leaves a check hidden in this crawl out of the workbook, and exports an Is
 
 test('exports the inspector’s inlinks as its list holds them (gap 22)', async ({ page }) => {
   await openUrls(page, '?inspect=1');
-  await page.getByRole('tab', { name: /^Inlinks/ }).click();
+  await chooseTab(page.getByRole('complementary', { name: 'Inspector' }), /^Inlinks/);
   const figure = async () =>
     Number((await page.getByRole('tabpanel').locator('p.figures').first().innerText()).replace(/\D/g, ''));
   await expect.poll(figure).toBeGreaterThan(0);

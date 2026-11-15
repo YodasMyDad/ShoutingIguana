@@ -776,37 +776,23 @@
 
   /* ------------------------------------------------------------------ Tabs */
   /*
-    Tabs past the edge (a narrow inspector, 200% zoom) scroll sideways without a bar: the arrow keys move along them,
-    a touchpad, Shift and the wheel, or the plain wheel (Tabs.tsx turns it sideways) scroll them, and the chosen tab
-    is scrolled into view. An end with more tabs past it fades out (`data-more-start`, `data-more-end`), so a mouse can
-    see there are more. A bar under a strip of tabs reads as a broken layout (the real shell showed one). The hairline under them is an inset shadow, so the chosen tab's
-    rule sits on it inside the list rather than below it, where the list would clip it and scroll a pixel up and down.
+    A strip wider than its room (a narrow inspector, 200% zoom) shows the tabs that fit whole and leaves the others to
+    its "N more" menu (Tabs.tsx): those stay laid out, after the others and unseen, so the strip can measure them, and
+    the strip clips them rather than scrolling (polish 2: a scrolling strip cut a tab in half at its end). The hairline
+    under the tabs is an inset shadow, so the chosen tab's rule sits on it inside the list rather than below it, where
+    the list would clip it.
   */
   .si-tabs {
     display: flex;
     gap: var(--space-5);
     padding: 0 var(--space-5);
     box-shadow: inset 0 calc(var(--hairline) * -1) 0 var(--color-border-subtle);
-    overflow-x: auto;
-    scrollbar-width: none;
+    overflow-x: clip;
   }
 
-  .si-tabs[data-more-start] {
-    mask-image: linear-gradient(to right, transparent, black var(--tabs-fade));
-  }
-
-  .si-tabs[data-more-end] {
-    mask-image: linear-gradient(to left, transparent, black var(--tabs-fade));
-  }
-
-  .si-tabs[data-more-start][data-more-end] {
-    mask-image: linear-gradient(
-      to right,
-      transparent,
-      black var(--tabs-fade),
-      black calc(100% - var(--tabs-fade)),
-      transparent
-    );
+  .si-tab[data-overflow] {
+    order: 1;
+    visibility: hidden;
   }
 
   /* Flush with the panel's own padding: the list keeps room for the first tab's focus ring. */
@@ -816,7 +802,7 @@
   }
 
   /* The strip with its overflow button (round 5's polish): the bar draws the hairline under both, the strip takes the
-     room the button leaves, and the button sits at the end, where the faded tabs are. */
+     room the button leaves, and the button sits at the end, after the last tab shown. */
   .si-tabs-bar {
     display: flex;
     align-items: center;

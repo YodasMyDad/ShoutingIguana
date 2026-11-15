@@ -6,7 +6,7 @@
 // - Gap 26: each screen names the window.
 import { expect, test, type Page } from '@playwright/test';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
-import { env, read, seededCrawl, site } from './support';
+import { env, expectNoViolations, read, seededCrawl, sidecar, site } from './support';
 
 type Mode = 'simple' | 'advanced';
 
@@ -149,6 +149,83 @@ test.describe('G2: no screen scrolls the window', () => {
           if (offset !== 0) scrolled.push(`${route.name}: the wheel scrolled the window ${offset}px`);
         }
         expect(scrolled).toEqual([]);
+      });
+    }
+  }
+});
+
+/**
+ * What the sidebar holds, against its room: how far its content runs past its foot, Settings' place in it, and the
+ * links and buttons that are out of its view with nothing to scroll them into it.
+ */
+async function sidebarState(page: Page) {
+  return page.evaluate(() => {
+    const nav = document.querySelector<HTMLElement>('nav[aria-label="Main"]');
+    if (!nav) throw new Error('no sidebar');
+    const box = nav.getBoundingClientRect();
+    const bottom = Math.min(box.bottom, window.innerHeight);
+    const settings = nav.querySelector<HTMLElement>('a[href="/settings"]')?.getBoundingClientRect();
+    const scrolls = (element: HTMLElement) => {
+      for (let at = element.parentElement; at && at !== nav; at = at.parentElement)
+        if (/auto|scroll/.test(getComputedStyle(at).overflowY)) return true;
+      return false;
+    };
+    const unreachable = [...nav.querySelectorAll<HTMLElement>('a, button')]
+      .filter((item) => {
+        const rect = item.getBoundingClientRect();
+        return (rect.top < box.top - 0.5 || rect.bottom > bottom + 0.5) && !scrolls(item);
+      })
+      .map((item) => item.getAttribute('aria-label') ?? item.textContent.trim());
+    return {
+      overflow: nav.scrollHeight - nav.clientHeight,
+      settingsWhole: settings ? settings.top >= box.top - 0.5 && settings.bottom <= bottom + 0.5 : false,
+      unreachable,
+    };
+  });
+}
+
+// Polish 2 (gallery 32): with a crawl paused and an export running, the sidebar's content was 727 px in a 720 px
+// window, and Settings sat on its bottom edge. Its live sections now scroll inside it, Settings below them.
+test.describe('the sidebar with its live sections keeps Settings whole', () => {
+  let paused: string[] = [];
+  test.beforeAll(async () => {
+    // Two more crawls of the test site, paused: with the running one, three live crawls.
+    for (let index = 0; index < 2; index++) {
+      const { id } = await read<{ id: string }>('/api/crawls', {
+        options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
+      });
+      expect((await sidecar(`/api/crawls/${id}/pause`, { method: 'POST' })).ok).toBe(true);
+      paused.push(id);
+    }
+  });
+  test.afterAll(async () => {
+    for (const id of paused) await sidecar(`/api/crawls/${id}/stop`, { method: 'POST' });
+    paused = [];
+  });
+
+  for (const mode of ['advanced', 'simple'] as const) {
+    for (const size of [
+      { name: '1280x720', width: 1280, height: 720 },
+      { name: '200%', width: 640, height: 360 },
+    ]) {
+      test(`${mode} at ${size.name}`, async ({ page }) => {
+        const route = mode === 'advanced' ? `/crawls/${idle}/urls` : `/crawls/${idle}`;
+        await openIn(page, mode, route, size);
+        const live = page
+          .getByRole('navigation', { name: 'Main' })
+          .getByRole('region', { name: mode === 'simple' ? 'Checking now' : 'Running crawls' });
+        // The spec's running crawl and these two, and any other of its tests left live.
+        await expect.poll(() => live.getByRole('link').count(), { timeout: 20_000 }).toBeGreaterThanOrEqual(3);
+        expect(await sidebarState(page)).toEqual({ overflow: 0, settingsWhole: true, unreachable: [] });
+        // The last live crawl scrolled to: in view above Settings.
+        const last = live.getByRole('link').last();
+        await last.scrollIntoViewIfNeeded();
+        const [crawlBox, settingsBox] = await Promise.all([
+          last.boundingBox(),
+          page.getByRole('navigation', { name: 'Main' }).locator('a[href="/settings"]').boundingBox(),
+        ]);
+        expect(crawlBox!.y + crawlBox!.height).toBeLessThanOrEqual(settingsBox!.y + 0.5);
+        await expectNoViolations(page);
       });
     }
   }

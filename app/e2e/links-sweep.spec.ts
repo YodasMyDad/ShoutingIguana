@@ -7,6 +7,7 @@
 // a real crawl's file (the garden crawl, the 100k crawl) it sweeps every preset as well:
 //   SI_E2E_CRAWL="%LOCALAPPDATA%\ShoutingIguana\dev-crawls\synthetic-100k.sicrawl" npx playwright test e2e/links-sweep.spec.ts
 import { expect, test, type Page } from '@playwright/test';
+import { chooseTab } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -205,8 +206,7 @@ test('the inspector’s “All N in Links” lands on its count, both ways, for 
     ] as const) {
       await page.goto(`/crawls/${crawl}/links?inspect=${id}`);
       const inspector = page.getByRole('complementary', { name: 'Inspector' });
-      await inspector.getByRole('tab', { name: tab }).click();
-      await expect(inspector.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
+      await chooseTab(inspector, tab);
       // The section says how many links it has once it has counted them: only then is there a link, or none.
       const count = inspector.getByText(/^[\d,]+ (in|out)links?$/);
       await expect(count).toBeVisible({ timeout: 30_000 });

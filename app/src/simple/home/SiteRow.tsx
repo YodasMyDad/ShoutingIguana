@@ -145,7 +145,9 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
               {name}
             </TextLink>
             <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-12 text-text-muted">
-              {/* Each part whole, the line wrapping between them, never cut ("5,710 pages re…": round 5's polish). */}
+              {/* Each part whole, the line wrapping between them, never cut ("5,710 pages re…": round 5's polish). The
+                  dot between two parts ends the first, so a wrapped line never starts with it ("· 14,414 pages read"
+                  alone on the second line: polish 2). */}
               {nested ? (
                 <span className="truncate">
                   <RelativeTime iso={item.startedAt} />
@@ -155,10 +157,10 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
                 [
                   ...rowMeta(item, status, 0).split(' · '),
                   ...(item.outOfDate && kind !== 'live' ? ['results out of date'] : []),
-                ].map((part, index) => (
+                ].map((part, index, parts) => (
                   <span key={part} className="whitespace-nowrap">
-                    {index > 0 ? '· ' : ''}
                     {part}
+                    {index < parts.length - 1 || earlier.length > 0 ? ' ·' : ''}
                   </span>
                 ))
               )}
@@ -170,7 +172,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
                   onClick={() => setOpen((shown) => !shown)}
                   className="si-link relative inline-flex min-h-6 items-center gap-0.5 text-12"
                 >
-                  · {formatCount(earlier.length)} {earlier.length === 1 ? 'earlier check' : 'earlier checks'}
+                  {formatCount(earlier.length)} {earlier.length === 1 ? 'earlier check' : 'earlier checks'}
                   {open ? (
                     <ChevronUp aria-hidden className="size-(--icon-sm)" />
                   ) : (

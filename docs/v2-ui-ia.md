@@ -39,7 +39,9 @@ the switch in the shell, the Report route and screen, a Simple line in the flows
     with; opening it there lasts while the window stays narrow, and leaves the wider window's choice alone.
   - Home first.
   - The open crawl's sections, with live counts.
-  - At the bottom: crawls running in the background, each a link with its progress, and app Settings.
+  - At the bottom: crawls running in the background, each a link with its progress, and app Settings. When the
+    window is too short for them all (several crawls and exports, 200% zoom), what's between the name and Settings
+    scrolls inside the sidebar; Settings stays whole below it.
 - **Top bar.**
   - Back and forward.
   - Where you are: the site with its favicon, the crawl, the section.
