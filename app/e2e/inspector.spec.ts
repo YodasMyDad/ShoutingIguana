@@ -5,7 +5,7 @@
 // colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { siteRow } from './support';
+import { chooseTab, siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -50,10 +50,8 @@ async function inspectPlant(page: Page, plant: string): Promise<Locator> {
   return inspector;
 }
 
-const showTab = async (inspector: Locator, name: RegExp) => {
-  await inspector.getByRole('tab', { name }).click();
-  await expect(inspector.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
-};
+// From the strip, or from its "N more" menu when the tab isn't in the strip.
+const showTab = (inspector: Locator, name: RegExp) => chooseTab(inspector, name);
 
 test('inspect a URL: walk an inlink, then an outlink; back and forward retrace it; Esc closes to the grid', async ({
   page,
@@ -254,6 +252,8 @@ test('from a check’s pages: Enter inspects one, its issue leads back to the ch
   await groups.focus();
   await page.keyboard.press('ArrowRight');
   await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
+  // Its pages read first: ArrowDown pressed before they came found no row to move to (1 run in 5).
+  await expect(groups.getByRole('row', { level: 2 }).first()).toBeVisible();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   const inspector = inspectorOf(page);
@@ -540,32 +540,71 @@ const SECTIONS = [
   /^Source/,
 ];
 
-// Round 5's polish: at 1280 px the inspector showed 3½ of its tabs, the rest out of sight with no sign of them.
-test('at 1280 px the tabs out of view are counted and listed, and the keyboard reaches them', async ({ page }) => {
+/**
+ * The strip as drawn: the tabs shown, each with whether it's whole in the strip's box, and the ones left to the menu
+ * (laid out unseen after the others), by their words.
+ */
+async function stripState(strip: Locator) {
+  return strip.evaluate((list) => {
+    const room = list.getBoundingClientRect();
+    const tabs = [...list.querySelectorAll<HTMLElement>('[role="tab"]')];
+    const name = (tab: HTMLElement) => tab.dataset.value ?? '';
+    const hidden = (tab: HTMLElement) => getComputedStyle(tab).visibility === 'hidden';
+    return {
+      all: tabs.map(name),
+      shown: tabs.filter((tab) => !hidden(tab)).map(name),
+      cut: tabs
+        .filter((tab) => !hidden(tab))
+        .filter((tab) => {
+          const box = tab.getBoundingClientRect();
+          return box.left < room.left - 0.5 || box.right > room.right + 0.5;
+        })
+        .map(name),
+      inMenu: tabs.filter(hidden).map(name),
+    };
+  });
+}
+
+// Round 5's polish: at 1280 px the inspector showed 3½ of its tabs, the rest out of sight with no sign of them. Polish
+// 2: the Inlinks tab showed cut in half beside "7 more", which listed it too. A tab is whole in the strip or in the
+// menu, never both, never cut.
+test('at 1280 px each tab is whole in the strip or in its menu, which lists exactly those, and the keyboard reaches them', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   const inspector = await inspectPlant(page, 'hreflang-en');
   const strip = inspector.getByRole('tablist', { name: 'About this URL' });
-  const tabs = await strip.getByRole('tab').count();
+  // The link counts arrive 200 ms after the URL, and the strip measures again with them: the Inlinks tab has its count
+  // (laid out whether it's in the strip or not).
+  await expect(strip.locator('[data-value="inlinks"] .si-tab__count')).toBeAttached();
+  const state = await stripState(strip);
+  expect(state.cut).toEqual([]);
+  expect(state.inMenu.length).toBeGreaterThan(0);
+  expect([...state.shown, ...state.inMenu].sort()).toEqual([...state.all].sort());
   const more = inspector.getByRole('button', { name: /^\d+ more: / });
-  await expect(more).toBeVisible();
-  const counted = Number(/^(\d+)/.exec((await more.innerText()).trim())?.[1]);
-  expect(counted).toBeGreaterThan(0);
-  expect(counted).toBeLessThan(tabs);
-  // From the chosen tab, Tab reaches the button; its menu lists the tabs out of view, and the last is chosen there.
+  await expect(more).toHaveText(`${state.inMenu.length} more`);
+  // From the chosen tab, Tab reaches the button; its menu lists exactly the tabs not in the strip.
   await strip.getByRole('tab', { selected: true }).focus();
   await page.keyboard.press('Tab');
   await expect(more).toBeFocused();
   await page.keyboard.press('Enter');
   const menu = page.getByRole('menu');
-  await expect(menu.getByRole('menuitem')).toHaveCount(counted);
+  await expect(menu.getByRole('menuitem')).toHaveCount(state.inMenu.length);
+  // The last there is chosen: it takes its place in the strip, whole and focused, and the strip holds the rule.
   const last = (await menu.getByRole('menuitem').last().innerText()).split('\n')[0]?.trim() ?? '';
   await menu.getByRole('menuitem').last().click();
   const chosen = strip.getByRole('tab', { name: new RegExp(`^${last}`) });
   await expect(chosen).toHaveAttribute('aria-selected', 'true');
   await expect(chosen).toBeFocused();
-  // Wholly in view in its strip.
-  const [box, room] = await Promise.all([chosen.boundingBox(), strip.boundingBox()]);
-  expect(box && room && box.x >= room.x - 0.5 && box.x + box.width <= room.x + room.width + 0.5).toBe(true);
+  const after = await stripState(strip);
+  expect(after.cut).toEqual([]);
+  const value = await chosen.getAttribute('data-value');
+  expect(after.shown).toContain(value);
+  expect(after.inMenu).not.toContain(value);
+  await expect(more).toHaveText(`${after.inMenu.length} more`);
+  // The arrow keys move between the tabs in the strip, and come round from its last to its first.
+  await page.keyboard.press('ArrowRight');
+  await expect(strip.getByRole('tab').first()).toBeFocused();
   await expectNoViolations(page);
 });
 

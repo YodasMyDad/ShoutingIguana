@@ -212,19 +212,22 @@ test('a site whose newer crawl is paused keeps its address readable beside the b
   // 1024 px it has least. The address holds the whole start URL beside the badge, or has a line of its own.
   for (const width of [1280, 1024]) {
     await page.setViewportSize({ width, height: 720 });
-    const fit = await row.locator('.font-mono').first().evaluate(
-      (address, [url, badgeBottom]) => {
-        const context = document.createElement('canvas').getContext('2d')!;
-        const style = getComputedStyle(address);
-        context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-        return {
-          room: address.clientWidth,
-          needs: Math.ceil(context.measureText(url).width),
-          ownLine: address.getBoundingClientRect().top >= badgeBottom - 0.5,
-        };
-      },
-      [startUrl, (await badge.boundingBox())!.y + (await badge.boundingBox())!.height] as const,
-    );
+    const fit = await row
+      .locator('.font-mono')
+      .first()
+      .evaluate(
+        (address, [url, badgeBottom]) => {
+          const context = document.createElement('canvas').getContext('2d')!;
+          const style = getComputedStyle(address);
+          context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          return {
+            room: address.clientWidth,
+            needs: Math.ceil(context.measureText(url).width),
+            ownLine: address.getBoundingClientRect().top >= badgeBottom - 0.5,
+          };
+        },
+        [startUrl, (await badge.boundingBox())!.y + (await badge.boundingBox())!.height] as const,
+      );
     expect(
       fit.ownLine || fit.room >= fit.needs,
       `${width} px: ${fit.room} px beside the badge for an address ${fit.needs} px wide`,

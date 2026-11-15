@@ -4,7 +4,7 @@
 // with its counts (`pagesAnalyzed`, `crawledUrlCount`), and no check's count is more than it. Overview's "Fix first"
 // and the inspector word the same counts the same way, and six-digit counts keep their room. Nothing here waits on a clock: every expectation is of what the screen says in the end.
 import { expect, test, type Page } from '@playwright/test';
-import { siteRow } from './support';
+import { chooseTab, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -384,7 +384,7 @@ test('the inspector counts the URLs whose issues name a URL in what their check 
     await page.goto(`/crawls/${item.id}/urls?inspect=${picked.urlId}`);
     const inspector = page.getByRole('complementary', { name: 'Inspector' });
     await expect(inspector).toBeVisible();
-    await inspector.getByRole('tab', { name: /^Issues/ }).click();
+    await chooseTab(inspector, /^Issues/);
     const named = inspector.getByRole('list', { name: 'Issues on other URLs that name this one' });
     const row = named.getByRole('listitem').filter({
       has: page.getByRole('link', { name: picked.check.title, exact: true }),

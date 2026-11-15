@@ -13,133 +13,134 @@ const TABS: TabItem<Section>[] = (['summary', 'inlinks', 'outlinks', 'hreflang']
   content: value,
 }));
 
-/** jsdom lays nothing out: each tab 100 px wide side by side, in a strip 150 px wide. */
-function layOut(list: HTMLElement) {
-  Object.defineProperty(list, 'clientWidth', { configurable: true, value: 150 });
-  vi.spyOn(list, 'getBoundingClientRect').mockImplementation(() => DOMRect.fromRect({ x: 0, width: 150 }));
-  screen.getAllByRole('tab').forEach((tab, index) => {
-    vi.spyOn(tab, 'getBoundingClientRect').mockImplementation(() =>
-      DOMRect.fromRect({ x: index * 100 - list.scrollLeft, width: 100 }),
-    );
+/**
+ * jsdom lays nothing out: the strip's bar `bar` px wide, each tab `tab` px wide, the "N more" button `more` px wide,
+ * no gaps. Read when the strip measures, so set before it renders or before a resize is heard.
+ */
+const room = { bar: 250, tab: 100, more: 60 };
+function layOut() {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('si-tabs-bar') ? room.bar : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const width =
+      this.getAttribute('role') === 'tab'
+        ? room.tab
+        : this.classList.contains('si-tabs-bar__more')
+          ? room.more
+          : this.classList.contains('si-tabs-bar')
+            ? room.bar
+            : 0;
+    return DOMRect.fromRect({ width, height: 32 });
   });
 }
 
-afterEach(() => vi.restoreAllMocks());
+/** The tabs the strip shows, and the ones it leaves to its menu. */
+const shownTabs = () =>
+  screen
+    .getAllByRole('tab')
+    .filter((tab) => !tab.hasAttribute('data-overflow'))
+    .map((tab) => tab.textContent);
+const tabsInMenu = () =>
+  screen
+    .getAllByRole('tab')
+    .filter((tab) => tab.hasAttribute('data-overflow'))
+    .map((tab) => tab.textContent);
 
+/** A ResizeObserver whose callbacks the test calls: a resize heard. */
+function hearResizes() {
+  const observers: (() => void)[] = [];
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      // No entries: the strip measures for itself, and the menu's positioning reads none.
+      constructor(private readonly callback: (entries: unknown[]) => void) {
+        observers.push(() => this.callback([]));
+      }
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    },
+  );
+  return () =>
+    act(() => {
+      for (const notify of observers) notify();
+    });
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  Object.assign(room, { bar: 250, tab: 100, more: 60 });
+});
+
+// Polish 2 (gallery 27): the inspector's Inlinks tab was cut in half beside "7 more", whose menu listed it too.
 describe('a strip of tabs wider than its room', () => {
-  it('scrolls the chosen tab into view when it changes, so it’s never chosen out of sight', () => {
-    const { rerender } = render(<Tabs label="Sections" tabs={TABS} value="summary" />);
-    const list = screen.getByRole('tablist', { name: 'Sections' });
-    layOut(list);
-    rerender(<Tabs label="Sections" tabs={TABS} value="hreflang" />);
-    // The fourth tab, 300 to 400 px in: the strip scrolls just enough to show all of it.
-    expect(list.scrollLeft).toBe(250);
-    rerender(<Tabs label="Sections" tabs={TABS} value="summary" />);
-    expect(list.scrollLeft).toBe(0);
-  });
-
-  it('scrolls the chosen tab back into view when the tabs change size, as counts arrive', () => {
-    const observers: (() => void)[] = [];
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        constructor(private readonly callback: () => void) {
-          observers.push(() => this.callback());
-        }
-        observe = vi.fn();
-        unobserve = vi.fn();
-        disconnect = vi.fn();
-      },
-    );
-    render(<Tabs label="Sections" tabs={TABS} value="hreflang" />);
-    const list = screen.getByRole('tablist', { name: 'Sections' });
-    layOut(list);
-    // The tabs before it grew (their counts came): it's out of sight, until the strip hears of the new sizes.
-    list.scrollLeft = 0;
-    for (const notify of observers) notify();
-    expect(list.scrollLeft).toBe(250);
-    vi.unstubAllGlobals();
-  });
-
-  it('turns a plain wheel sideways while the strip is wider than its room, and leaves it alone when it fits', () => {
+  it('shows each tab whole or lists it in the menu, never both, never cut', async () => {
+    layOut();
     render(<Tabs label="Sections" tabs={TABS} value="summary" />);
-    const list = screen.getByRole('tablist', { name: 'Sections' });
-    Object.defineProperty(list, 'clientWidth', { configurable: true, value: 150 });
-    Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 400 });
-    const wheel = (init: WheelEventInit) => {
-      const event = new WheelEvent('wheel', { cancelable: true, bubbles: true, ...init });
-      list.dispatchEvent(event);
-      return event;
-    };
-    expect(wheel({ deltaY: 120 }).defaultPrevented).toBe(true);
-    expect(list.scrollLeft).toBe(120);
-    // Already sideways (a touchpad, Shift): the browser's own.
-    expect(wheel({ deltaX: 40, deltaY: 5 }).defaultPrevented).toBe(false);
-    Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 150 });
-    expect(wheel({ deltaY: 120 }).defaultPrevented).toBe(false);
-  });
-
-  it('marks the ends with more tabs past them, which fade, so a mouse can see there are more', () => {
-    render(<Tabs label="Sections" tabs={TABS} value="summary" />);
-    const list = screen.getByRole('tablist', { name: 'Sections' });
-    Object.defineProperty(list, 'clientWidth', { configurable: true, value: 150 });
-    Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 400 });
-    list.dispatchEvent(new Event('scroll'));
-    expect([list.hasAttribute('data-more-start'), list.hasAttribute('data-more-end')]).toEqual([false, true]);
-    list.scrollLeft = 100;
-    list.dispatchEvent(new Event('scroll'));
-    expect([list.hasAttribute('data-more-start'), list.hasAttribute('data-more-end')]).toEqual([true, true]);
-    list.scrollLeft = 250;
-    list.dispatchEvent(new Event('scroll'));
-    expect([list.hasAttribute('data-more-start'), list.hasAttribute('data-more-end')]).toEqual([true, false]);
-    const css = readFileSync(path.join(__dirname, '..', 'styles', 'components.css'), 'utf8');
-    expect(css).toMatch(
-      /\.si-tabs\[data-more-end\] \{\s*mask-image: linear-gradient\(to left, transparent, black var\(--tabs-fade\)\);/,
-    );
-  });
-
-  // Round 5's polish: the inspector showed 3½ of its 9 tabs at 1280 px, the rest out of sight with no sign of them.
-  it('says how many tabs are out of view and lists them; one chosen there is chosen, in view and focused', async () => {
-    const user = userEvent.setup();
-    const chosen = vi.fn();
-    const { rerender } = render(<Tabs label="Sections" tabs={TABS} value="summary" onValueChange={chosen} />);
-    expect(screen.queryByRole('button', { name: /more:/ })).toBeNull();
-    const list = screen.getByRole('tablist', { name: 'Sections' });
-    layOut(list);
-    Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 400 });
-    list.dispatchEvent(new Event('scroll'));
-    // 150 px of a 400 px strip: summary whole, inlinks half in view, outlinks and hreflang out of it.
-    const more = await screen.findByRole('button', { name: '3 more: inlinks, outlinks, hreflang' });
+    // 250 px: 190 beside the 60 px button, so one tab of 100 px, and none half in view.
+    expect(shownTabs()).toEqual(['summary']);
+    expect(tabsInMenu()).toEqual(['inlinks', 'outlinks', 'hreflang']);
+    const more = screen.getByRole('button', { name: '3 more: inlinks, outlinks, hreflang' });
     expect(more).toHaveTextContent('3 more');
-    await user.click(more);
-    const menu = await screen.findByRole('menu');
+    await userEvent.setup().click(more);
     expect(
-      within(menu)
+      within(await screen.findByRole('menu'))
         .getAllByRole('menuitem')
         .map((item) => item.textContent),
-    ).toEqual(['inlinks', 'outlinks', 'hreflang']);
-    await user.click(within(menu).getByRole('menuitem', { name: 'hreflang' }));
-    expect(chosen).toHaveBeenCalledWith('hreflang');
-    rerender(<Tabs label="Sections" tabs={TABS} value="hreflang" onValueChange={chosen} />);
-    expect(list.scrollLeft).toBe(250);
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'hreflang' })).toHaveFocus());
-    // Now the ones before it are out of view, at the start.
-    expect(await screen.findByRole('button', { name: '3 more: summary, inlinks, outlinks' })).toBeInTheDocument();
+    ).toEqual(tabsInMenu());
   });
 
-  it('chooses from the list on its own when nothing controls it', async () => {
+  it('shows every tab and no button when they fit', () => {
+    room.bar = 400;
+    layOut();
+    render(<Tabs label="Sections" tabs={TABS} value="summary" />);
+    expect(shownTabs()).toEqual(['summary', 'inlinks', 'outlinks', 'hreflang']);
+    expect(screen.queryByRole('button', { name: /more:/ })).toBeNull();
+  });
+
+  it('keeps the chosen tab in the strip, whichever it is: one chosen from the menu is shown and focused', async () => {
     const user = userEvent.setup();
+    const chosen = vi.fn();
+    room.bar = 360;
+    layOut();
+    const { rerender } = render(<Tabs label="Sections" tabs={TABS} value="summary" onValueChange={chosen} />);
+    // 300 px beside the button: three tabs.
+    expect(shownTabs()).toEqual(['summary', 'inlinks', 'outlinks']);
+    await user.click(screen.getByRole('button', { name: '1 more: hreflang' }));
+    await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'hreflang' }));
+    expect(chosen).toHaveBeenCalledWith('hreflang');
+    rerender(<Tabs label="Sections" tabs={TABS} value="hreflang" onValueChange={chosen} />);
+    // In the place of the last that fitted, and the one it took the place of is in the menu.
+    expect(shownTabs()).toEqual(['summary', 'inlinks', 'hreflang']);
+    expect(tabsInMenu()).toEqual(['outlinks']);
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'hreflang' })).toHaveFocus());
+    expect(screen.getByRole('button', { name: '1 more: outlinks' })).toBeInTheDocument();
+  });
+
+  it('measures again when the strip or a tab changes size, as counts arrive or the panel narrows', () => {
+    const resize = hearResizes();
+    room.bar = 400;
+    layOut();
+    render(<Tabs label="Sections" tabs={TABS} value="outlinks" />);
+    expect(tabsInMenu()).toEqual([]);
+    // The tabs grew (their counts came): two fit beside the button, the chosen one among them.
+    room.tab = 150;
+    resize();
+    expect(shownTabs()).toEqual(['summary', 'outlinks']);
+    expect(tabsInMenu()).toEqual(['inlinks', 'hreflang']);
+  });
+
+  it('chooses from the list on its own when nothing controls it, and keeps the list as it was opened', async () => {
+    const user = userEvent.setup();
+    const resize = hearResizes();
+    layOut();
     render(<Tabs label="Sections" tabs={TABS} defaultValue="summary" />);
-    const list = screen.getByRole('tablist', { name: 'Sections' });
-    layOut(list);
-    Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 400 });
-    list.dispatchEvent(new Event('scroll'));
-    await user.click(await screen.findByRole('button', { name: /^3 more:/ }));
-    // Tabs moving in or out of view while it's open (counts arriving) leave its items as they were opened.
-    act(() => {
-      list.scrollLeft = 250;
-      list.dispatchEvent(new Event('scroll'));
-    });
+    await user.click(screen.getByRole('button', { name: /^3 more:/ }));
+    // Tabs moving in or out of the strip while it's open (counts arriving) leave its items as they were opened.
+    room.bar = 360;
+    resize();
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'inlinks',
       'outlinks',
@@ -147,12 +148,19 @@ describe('a strip of tabs wider than its room', () => {
     ]);
     await user.click(screen.getByRole('menuitem', { name: 'outlinks' }));
     expect(screen.getByRole('tab', { name: 'outlinks' })).toHaveAttribute('aria-selected', 'true');
+    expect(shownTabs()).toContain('outlinks');
   });
 
-  it('scrolls without a bar: the tab strip asks for none, where every other part has a thin one without arrows', () => {
+  it('hides a tab in the menu from sight and from the keyboard, after the ones shown, in a strip that never scrolls', () => {
+    const css = readFileSync(path.join(__dirname, '..', 'styles', 'components.css'), 'utf8');
+    expect(css).toMatch(/\.si-tab\[data-overflow\] \{\s*order: 1;\s*visibility: hidden;/);
+    const tabs = /\.si-tabs \{[^}]*\}/.exec(css)?.[0] ?? '';
+    expect(tabs).toContain('overflow-x: clip;');
+    expect(tabs).not.toContain('overflow-x: auto');
+  });
+
+  it('gives every other part that scrolls a thin bar without arrows', () => {
     const styles = (file: string) => readFileSync(path.join(__dirname, '..', 'styles', file), 'utf8');
-    const tabs = /\.si-tabs \{[^}]*\}/.exec(styles('components.css'))?.[0] ?? '';
-    expect(tabs).toContain('scrollbar-width: none;');
     const base = styles('base.css');
     // Chromium (WebView2) by its scroll bar parts, which have no arrow buttons, outside forced colours only.
     expect(base).toMatch(

@@ -160,6 +160,49 @@ try {
   };
   attach(page);
   const heading = () => inspector.getByRole('heading', { level: 2 }).innerText();
+  /**
+   * The inspector's tab strip as drawn: the tabs shown and those of them not whole in its box, and the tabs left to its
+   * "N more" menu (laid out unseen after the others), by value.
+   */
+  const stripState = () =>
+    inspector.getByRole('tablist', { name: 'About this URL' }).evaluate((list) => {
+      const room = list.getBoundingClientRect();
+      const tabs = [...list.querySelectorAll('[role="tab"]')];
+      const hidden = (tab) => getComputedStyle(tab).visibility === 'hidden';
+      const shown = tabs.filter((tab) => !hidden(tab));
+      return {
+        shown: shown.map((tab) => tab.dataset.value),
+        cut: shown
+          .filter((tab) => {
+            const box = tab.getBoundingClientRect();
+            return box.left < room.left - 0.5 || box.right > room.right + 0.5;
+          })
+          .map((tab) => tab.dataset.value),
+        inMenu: tabs.filter(hidden).map((tab) => tab.dataset.value),
+      };
+    });
+  /** The strip once the link counts have come (200 ms after the URL) and it has measured itself with them. */
+  const stripSettled = () =>
+    inspector
+      .locator('[data-value="inlinks"] .si-tab__count')
+      .waitFor({ state: 'attached', timeout: 5_000 })
+      .catch(() => undefined);
+  /** One of the inspector's tabs, from its strip or, when it isn't there, from its "N more" menu (polish 2). */
+  const chooseTab = async (name) => {
+    await inspector.getByRole('tablist', { name: 'About this URL' }).waitFor();
+    await stripSettled();
+    const tab = inspector.getByRole('tab', { name });
+    if (await tab.isVisible()) await tab.click();
+    else {
+      await inspector.getByRole('button', { name: /^\d+ more: / }).click();
+      await page.getByRole('menu').getByRole('menuitem', { name }).click();
+    }
+    await until(
+      `the ${name.source} tab chosen`,
+      async () => (await tab.getAttribute('aria-selected')) === 'true',
+      5_000,
+    );
+  };
   const count = (text) => Number((text ?? '').replace(/[^\d]/g, ''));
   const picture = async (name) => {
     if (options.shots) await page.screenshot({ path: path.join(options.shots, `${name}.png`) });
@@ -243,7 +286,7 @@ try {
       await page.keyboard.press('Enter');
       await inspector.getByRole('list', { name: 'Indexability tests' }).waitFor();
       const first = await heading();
-      await inspector.getByRole('tab', { name: /^Outlinks/ }).click();
+      await chooseTab(/^Outlinks/);
       const links = inspector.getByRole('grid', { name: 'Outlinks' });
       await links.getByRole('row').nth(1).waitFor();
       await links.focus();
@@ -264,7 +307,7 @@ try {
   await walk.step('Source shows the stored HTML, and Ctrl+F searches it', async () => {
     await grid.getByRole('row').nth(1).getByRole('gridcell').nth(1).click();
     await page.keyboard.press('Enter');
-    await inspector.getByRole('tab', { name: /^Source/ }).click();
+    await chooseTab(/^Source/);
     const source = inspector.getByRole('textbox', { name: 'HTML source' });
     await source.waitFor({ timeout: 15_000 });
     await source.click();
@@ -287,8 +330,9 @@ try {
   });
 
   // Round 5's polish: at 1280 px the inspector showed 3½ of its 9 tabs, the rest out of sight with no sign of them.
+  // Polish 2: in the release shell the Inlinks tab showed cut in half beside "7 more", whose menu listed it too.
   await walk.step(
-    'at 1280 px the inspector counts the tabs out of view, lists them, and the keyboard reaches them',
+    'at 1280 px each of the inspector’s tabs is whole in its strip or in its menu, which lists exactly those, and the keyboard reaches them',
     async () => {
       await page.setViewportSize({ width: 1280, height: 720 });
       await nav.getByRole('link', { name: /^URLs/ }).click();
@@ -298,6 +342,13 @@ try {
       await strip.waitFor();
       const more = inspector.getByRole('button', { name: /^\d+ more: / });
       await more.waitFor({ timeout: 5_000 });
+      await stripSettled();
+      const before = await stripState();
+      expectThat(before.cut.length === 0, `cut in the strip: ${before.cut.join(', ')}`);
+      expectThat(
+        (await more.innerText()).trim() === `${before.inMenu.length} more`,
+        `"${(await more.innerText()).trim()}" beside ${before.inMenu.length} tabs left out of the strip`,
+      );
       const name = await more.getAttribute('aria-label');
       await strip.getByRole('tab', { selected: true }).focus();
       await page.keyboard.press('Tab');
@@ -308,6 +359,10 @@ try {
       await page.keyboard.press('Enter');
       const items = page.getByRole('menu').getByRole('menuitem');
       await items.first().waitFor();
+      expectThat(
+        (await items.count()) === before.inMenu.length,
+        `the menu lists ${await items.count()} tabs for the ${before.inMenu.length} not in the strip`,
+      );
       const last = (await items.last().innerText()).split('\n')[0].trim();
       // Down the menu to its last item, once the menu has the keyboard.
       await until('the menu taking the keyboard', () =>
@@ -347,18 +402,18 @@ try {
         }));
         throw new Error(`${error.message}: "${last}" asked for; ${now.selected} chosen; focus on ${now.focused}`);
       });
-      const inView = await chosen.evaluate((tab) => {
-        const box = tab.getBoundingClientRect();
-        const room = tab.parentElement.getBoundingClientRect();
-        return box.left >= room.left - 0.5 && box.right <= room.right + 0.5;
-      });
-      expectThat(inView, `${last} was chosen out of view`);
+      const after = await stripState();
+      const value = await chosen.getAttribute('data-value');
+      expectThat(
+        after.shown.includes(value) && !after.inMenu.includes(value) && after.cut.length === 0,
+        `${last} was chosen out of the strip, or cut: ${JSON.stringify(after)}`,
+      );
       await picture('04b-inspector-more');
       await inspector.getByRole('tab', { name: /^Summary/ }).click();
       await page.keyboard.press('Escape');
       await inspector.waitFor({ state: 'hidden' });
       await windowSize();
-      return `"${name}"; ${last} chosen from it, focused and in view`;
+      return `${before.shown.length} tabs whole in the strip, "${name}"; ${last} chosen from it, focused and whole in the strip`;
     },
   );
 

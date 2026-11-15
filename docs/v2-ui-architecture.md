@@ -205,9 +205,9 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   arrows and all, and one under the inspector's tabs. They are now `base.css`'s: thin, a border-control thumb on no
   track and no arrows, by the `::-webkit-scrollbar` parts in Chromium (which ignores the parts on an element that sets
   `scrollbar-width` or `scrollbar-color`, and with `scrollbar-width: thin` alone still draws small arrows), the
-  standard properties in a browser without the parts, and the system's own under forced colours; a strip of tabs has
-  none (`scrollbar-width: none`): a plain wheel scrolls it sideways, an end with more tabs past it fades
-  (`--tabs-fade`), and its chosen tab is scrolled into view when it changes and when the tabs change size. Headless Chromium draws these parts too, so the
+  standard properties in a browser without the parts, and the system's own under forced colours; a strip of tabs
+  doesn't scroll at all since polish 2 (below): it shows the tabs that fit whole and lists the rest in its "N more"
+  menu. Headless Chromium draws these parts too, so the
   end-to-end tests now lay out with the shell's 10 px bars. Seen in the release build through this walk, before and
   after (12 Nov 2026). The quit question and the tray's menu are Windows' own, so they don't follow the app's theme. With the browser
   keys turned off, WebView2 still raises nothing of its own for F5, Ctrl+R, F3, Ctrl+G, Ctrl+J, Ctrl+P, Ctrl+S, Ctrl+U,
@@ -2212,3 +2212,25 @@ Ten things the gallery found in the release shell, each fixed and walked by `smo
   being analysed until its analysis begins, or the end's own library lookup says none followed (`settle`). The icon no
   longer went for a moment between a check and the working out of its results, nor said plain "Shouting Iguana" from
   the tray. `smoke:shell`'s Simple walk reads the icon's removals from the log (`trayWords`' `shown`) and fails on a gap.
+
+## Polish 2 (the gallery after the polish, 2026-11-15)
+
+Four things the re-shot gallery found, each proved in the release shell.
+
+- **A tab is whole in its strip or in its menu** (`ui/Tabs.tsx`, `ui/tabsFit.ts`): the strip no longer scrolls. It
+  measures its room, its tabs and the "N more" button, and shows the tabs that fit whole, in order, the chosen one
+  always among them (in place of the last that fitted when it comes later); the button lists exactly the others. Those
+  stay laid out after the shown ones, unseen (`data-overflow`: `order: 1`, `visibility: hidden`), so they can be
+  measured and the keyboard passes them by; the strip clips them (`overflow-x: clip`). It measures again before paint
+  when the chosen tab or the tabs' words change, and on a resize of the bar or a tab. The scrolling strip of round 5's
+  polish cut a tab at its end and listed it in the menu too (the inspector's Inlinks beside "7 more"). The arrow keys
+  move between the tabs in the strip; a tab in the menu is chosen there. End-to-end tests pick a tab with
+  `chooseTab` (`e2e/support.ts`), from the strip or the menu; `smoke:shell` does the same and checks the rule at 1280 px.
+- **The sidebar scrolls between its name and Settings** (`layout/Sidebar.tsx`): Home, the crawl's sections and the
+  live ones (crawls running, paused, analysing; exports) are one column that scrolls when the window is too short, and
+  Settings is below it, whole. A paused crawl and an export ran it 7 px past a 720 px window, Settings on the edge; at
+  200% the crawl's sections alone did. The column's padding, taken back by its margin, keeps focus rings unclipped.
+- **The Library's address under the other crawl's badge**: the line under a site's name wraps, so the address keeps
+  its whole width on a line of its own when it can't sit whole beside "Newer crawl paused" (it had room for "http:…").
+- **Simple Home's dots end a line**: each part of a site's line carries the dot after it, so a wrapped line never starts
+  with one ("Stopped early ·" / "14,414 pages read"); the earlier-checks toggle no longer starts with its own.

@@ -175,7 +175,7 @@ async function sidebarState(page: Page) {
         const rect = item.getBoundingClientRect();
         return (rect.top < box.top - 0.5 || rect.bottom > bottom + 0.5) && !scrolls(item);
       })
-      .map((item) => item.getAttribute('aria-label') ?? item.textContent?.trim() ?? '?');
+      .map((item) => item.getAttribute('aria-label') ?? item.textContent.trim());
     return {
       overflow: nav.scrollHeight - nav.clientHeight,
       settingsWhole: settings ? settings.top >= box.top - 0.5 && settings.bottom <= bottom + 0.5 : false,

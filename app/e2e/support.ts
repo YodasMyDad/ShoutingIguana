@@ -1,7 +1,7 @@
 // What the end-to-end specs share: the sidecar the tests run against (asked from the test itself, to know what the
 // crawl holds), the way into a crawl's section as a user goes, and axe with the wait for a theme's colours to settle.
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { colourTweensEnd } from './colourTweens';
 
 // The wait itself is one function for every spec (e2e/colourTweens.ts): still reachable from here, as it was.
@@ -116,3 +116,20 @@ export async function openSection(page: Page, section: RegExp) {
 
 /** A count as written on screen ("101,081", "2,348 URLs"), as a number. */
 export const countOf = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));
+
+/**
+ * Chooses one of a strip's tabs by its name, as a user does: in the strip when it's shown there, from the strip's
+ * "N more" menu when it isn't (polish 2: a tab is in one or the other). Tried again until chosen, as counts arriving
+ * can move a tab between the two.
+ */
+export async function chooseTab(scope: Locator, name: RegExp) {
+  const tab = scope.getByRole('tab', { name });
+  await expect(async () => {
+    if (await tab.isVisible()) await tab.click({ timeout: 2_000 });
+    else {
+      await scope.getByRole('button', { name: /^\d+ more: / }).click({ timeout: 2_000 });
+      await scope.page().getByRole('menu').getByRole('menuitem', { name }).click({ timeout: 2_000 });
+    }
+    await expect(tab).toHaveAttribute('aria-selected', 'true', { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+}

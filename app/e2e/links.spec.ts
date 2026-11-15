@@ -7,7 +7,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { colourTweensEnd } from './colourTweens';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
-import { siteRow } from './support';
+import { chooseTab, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -330,7 +330,7 @@ async function inspectBrokenTarget(page: Page): Promise<{ inspector: Locator; ta
 
 test('opens a link’s target in the inspector, walks to a page that links to it, and walks back', async ({ page }) => {
   const { inspector, target, broken } = await inspectBrokenTarget(page);
-  await inspector.getByRole('tab', { name: /^Inlinks/ }).click();
+  await chooseTab(inspector, /^Inlinks/);
   const inlinks = inspector.getByRole('grid', { name: 'Inlinks' });
   const source = inlinks.getByRole('row').nth(1).getByRole('button').first();
   const sourceUrl = (await source.getAttribute('aria-label')) ?? (await source.innerText());
@@ -372,8 +372,7 @@ test('“All N in Links” from the inspector lists exactly the links its sectio
     [/^Inlinks/, 'Inlinks', 'Target URL'],
     [/^Outlinks/, 'Outlinks', 'Source URL'],
   ] as const) {
-    await inspector.getByRole('tab', { name: tab }).click();
-    await expect(inspector.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
+    await chooseTab(inspector, tab);
     // The section says how many links it has once it has counted them: only then is there a link, or none.
     const said = inspector.getByText(new RegExp(`^[\\d,]+ ${section.toLowerCase().slice(0, -1)}s?$`));
     await expect(said).toBeVisible();
@@ -412,7 +411,7 @@ test('“All N in Links” keeps the kind chosen, and leaves out a page’s link
   await openLinks(page);
   await page.goto(`${new URL(page.url()).pathname}?inspect=${id}`);
   const inspector = inspectorOf(page);
-  await inspector.getByRole('tab', { name: /^Inlinks/ }).click();
+  await chooseTab(inspector, /^Inlinks/);
   await inspector.getByRole('button', { name: /^Kind of link/ }).click();
   await page.getByRole('menuitemradio', { name: 'Hyperlink' }).click();
   const all = inspector.getByRole('link', { name: IN_LINKS });
