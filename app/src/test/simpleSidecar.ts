@@ -306,5 +306,118 @@ export function problemRoutes(): FakeRoute[] {
           ),
         ),
     ],
+    // The broken addresses themselves, with where each is linked from: three of four from the same footer.
+    [
+      'POST',
+      /\/issues\/internal-client-error\/groups$/,
+      () =>
+        json(
+          groupPage(
+            'internal-client-error',
+            [
+              {
+                detail: '404 Not Found',
+                relatedUrlId: null,
+                relatedUrl: null,
+                pages: 4,
+                urls: 4,
+                share: 1,
+                likelyTemplate: false,
+              },
+            ],
+            4,
+          ),
+        ),
+    ],
+    [
+      'POST',
+      /\/issues\/internal-client-error\/rows$/,
+      (request) => {
+        const body = request.body as { limit: number };
+        const rows = BROKEN_ADDRESSES.slice(0, body.limit).map((path, index) => ({
+          ...issuePage(60 + index, path, null),
+          detail: '404 Not Found',
+        }));
+        return json(rowsPage(rows, BROKEN_ADDRESSES.length));
+      },
+    ],
+    [
+      'POST',
+      /\/urls\/found-on$/,
+      (request) => {
+        const { urlIds } = request.body as { urlIds: number[] };
+        return json({ urls: urlIds.filter((id) => id >= 60 && id < 60 + BROKEN_ADDRESSES.length).map(brokenFoundOn) });
+      },
+    ],
+    // The logo's link to the home page, in every page's header.
+    [
+      'POST',
+      /\/issues\/empty-anchor-text\/targets$/,
+      (request) => {
+        const { urlIds } = request.body as { urlIds: number[] };
+        return json({
+          checkId: 'empty-anchor-text',
+          urls: urlIds.map((urlId) => ({
+            urlId,
+            total: 1,
+            targets: [
+              {
+                id: 1,
+                url: `${SITE}/`,
+                statusCode: 200,
+                fetched: true,
+                outcome: 'success',
+                kind: 'hyperlink',
+                text: null,
+                position: 'header',
+              },
+            ],
+          })),
+        });
+      },
+    ],
   ];
+}
+
+/** Broken addresses a check of addresses flags, ids 60 on. */
+export const BROKEN_ADDRESSES = [
+  '/outdoor-pe-rattan-dining-set-with-fire-pit-table/',
+  '/monaco-corner-sofa/',
+  '/old-range/',
+  '/gone-for-good/',
+];
+
+/** Where each broken address is found: the first three in /garden-furniture/'s footer (and on other pages), the last in the sitemap only. */
+function brokenFoundOn(urlId: number) {
+  const index = urlId - 60;
+  const link = (id: number, path: string, position: string, text: string | null) => ({
+    id,
+    url: `${SITE}${path}`,
+    kind: 'hyperlink',
+    text,
+    position,
+    flags: [],
+    followed: true,
+    fragment: null,
+    statusCode: 200,
+    indexable: true,
+    fetched: true,
+    outcome: 'success',
+  });
+  const last = index === BROKEN_ADDRESSES.length - 1;
+  return {
+    urlId,
+    links: last ? 0 : index + 1,
+    pages: last ? 0 : index + 1,
+    pagesExact: true,
+    sources: last
+      ? []
+      : [
+          link(300, '/garden-furniture/', 'footer', 'Our range'),
+          link(301, '/sofas/', 'content', null),
+          link(302, '/blog/', 'content', null),
+        ].slice(0, index + 1),
+    sitemaps: last ? { total: 1, sitemaps: [{ id: 1, url: `${SITE}/sitemap.xml` }] } : { total: 0, sitemaps: [] },
+    start: false,
+  };
 }
