@@ -56,6 +56,7 @@ async function start() {
         : view === 'report'
           ? router.navigate({ to: '/crawls/$crawl/report', params: { crawl } })
           : router.navigate({ to: '/crawls/$crawl/overview', params: { crawl } })),
+    viewing: () => router.state.location.pathname,
   });
   // Exports outlive the screen that started them: their toasts and the sidebar's list follow the live stream.
   startExports();
