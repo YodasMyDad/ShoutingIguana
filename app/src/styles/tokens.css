@@ -385,6 +385,8 @@
     Was 1136 px, which left a wide empty band each side of a maximised window (the owner took it for a bug).
   */
   --content-max: 1800px;
+  /* Home's address field and its words, in a wide column: no longer than the column was before it grew. */
+  --start-form-max: 1136px;
   --page-gutter: var(--space-8);
   --sheet-inset: var(--space-2);
   --hairline: 1px;

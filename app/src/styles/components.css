@@ -2471,6 +2471,7 @@
 
   /* The current place: the neutral fill (base.css), its label, icon and count in the current text, at 600. */
   .si-nav-item.si-current {
+    color: var(--color-current-text);
     font-weight: var(--font-weight-semibold);
   }
 

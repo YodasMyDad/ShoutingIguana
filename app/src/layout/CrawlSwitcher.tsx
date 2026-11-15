@@ -28,11 +28,13 @@ type TriggerProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   name: string;
   date: string | null;
   label: string;
+  /** "Switch crawl", read before the crawl's name. */
+  switchTo: string;
   collapsed: boolean;
 };
 
 /** The open crawl, as a bordered button: its icon, name and date, and the up and down chevron that says it opens. */
-function SwitcherButton({ ref, crawl, name, date, label, collapsed, className, ...rest }: TriggerProps) {
+function SwitcherButton({ ref, crawl, name, date, label, switchTo, collapsed, className, ...rest }: TriggerProps) {
   return (
     // Collapsed, it's the site's icon alone: its tooltip says what it is.
     <Tooltip content={collapsed ? label : undefined} side="right" triggerName={label}>
@@ -40,7 +42,9 @@ function SwitcherButton({ ref, crawl, name, date, label, collapsed, className, .
         ref={ref}
         type="button"
         {...rest}
-        aria-label={label}
+        // Collapsed, nothing shows but the icon: the label names it. Open, its words name it, with what's read but not
+        // shown around them, so the name holds what's seen (WCAG 2.5.3).
+        aria-label={collapsed ? label : undefined}
         className={clsx('si-switcher', collapsed && 'si-switcher--collapsed', className)}
       >
         <CrawlFavicon item={crawl} size="lg" />
@@ -48,7 +52,9 @@ function SwitcherButton({ ref, crawl, name, date, label, collapsed, className, .
           <>
             <span className="si-switcher__text">
               <span className="si-switcher__name" title={crawl?.startUrl ?? undefined}>
+                <span className="sr-only">{switchTo}: </span>
                 {name}
+                {date ? <span className="sr-only">, </span> : null}
               </span>
               {date ? <span className="si-switcher__date">{date}</span> : null}
             </span>
@@ -96,7 +102,16 @@ export function CrawlSwitcher({
       align="start"
       side={collapsed ? 'right' : 'bottom'}
       className="si-switcher-menu"
-      trigger={<SwitcherButton crawl={crawl} name={name} date={date} label={label} collapsed={collapsed} />}
+      trigger={
+        <SwitcherButton
+          crawl={crawl}
+          name={name}
+          date={date}
+          label={label}
+          switchTo={words.switchTo}
+          collapsed={collapsed}
+        />
+      }
     >
       <MenuLabel>{words.recent}</MenuLabel>
       <MenuRadioGroup value={crawlId} onValueChange={open}>

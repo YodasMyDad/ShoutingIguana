@@ -32,8 +32,11 @@ function contrast(foreground: string, background: string): number {
   return ((light ?? 0) + 0.05) / ((dark ?? 0) + 0.05);
 }
 
-/** The colour of an inset box-shadow rule, as computed: `rgb(31, 134, 245) 2px 0px 0px 0px inset`. */
-const shadowColour = (shadow: string) => /rgba?\([^)]*\)/.exec(shadow)?.[0] ?? '';
+/** A colour with no hue (the framed workspace's neutral fills and text): its channels within a few steps of each other. */
+const neutral = (colour: string) => {
+  const [r = 0, g = 0, b = 0] = (colour.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+  return Math.max(r, g, b) - Math.min(r, g, b) <= 8;
+};
 
 const style = (locator: Locator, ...properties: string[]) =>
   locator.evaluate(
@@ -112,7 +115,7 @@ async function selectRow(page: Page, grid: Locator) {
 }
 
 for (const colorScheme of ['light', 'dark'] as const) {
-  test(`what's selected, current or highlighted stands out at 3:1, its text at 4.5:1 (${colorScheme})`, async ({
+  test(`what's selected, current or highlighted stands out with no accent rule, its text at 4.5:1 (${colorScheme})`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
@@ -120,31 +123,37 @@ for (const colorScheme of ['light', 'dark'] as const) {
     const row = await selectRow(page, grid);
     const plainRow = grid.locator('[role="row"][aria-rowindex="5"]');
 
-    // The selected row: its accent rule against the row and against the grid around it.
-    const mark = grid.locator('.si-grid-mark').first();
-    await expect(mark).toBeVisible();
-    const markColour = (await style(mark, 'background-color'))['background-color'] ?? '';
-    const rowColours = await style(row, 'background-color', 'color');
+    // The selected row: the selection's tint alone (the framed workspace took the accent rule from its edge), its own
+    // colour beside a plain row and beside a hovered one, its text at 4.5:1.
+    await expect(grid.locator('.si-grid-mark')).toHaveCount(0);
+    const rowColours = await style(row, 'background-color', 'color', 'box-shadow');
     const plainBackground = await shownBackground(plainRow);
-    expect(contrast(markColour, rowColours['background-color'] ?? '')).toBeGreaterThanOrEqual(3);
-    expect(contrast(markColour, plainBackground)).toBeGreaterThanOrEqual(3);
+    expect(rowColours['box-shadow']).toBe('none');
+    expect(rowColours['background-color']).not.toBe(plainBackground);
     expect(contrast(rowColours.color ?? '', rowColours['background-color'] ?? '')).toBeGreaterThanOrEqual(4.5);
 
-    // Hovering it keeps it selected.
+    // Hovering it keeps it selected; a hovered plain row takes another colour than the selection's.
     await row.getByRole('gridcell').first().hover();
     await expect(row).toHaveCSS('background-color', rowColours['background-color'] ?? '');
     await plainRow.getByRole('gridcell').first().hover();
     await expect(plainRow).not.toHaveCSS('background-color', plainBackground);
+    await expect(plainRow).not.toHaveCSS('background-color', rowColours['background-color'] ?? '');
     await page.mouse.move(0, 0);
 
-    // The current section in the sidebar.
+    // The current section in the sidebar: a solid neutral fill on the frame, its text near-black (white) at 600, no
+    // accent rule and no accent text.
     const current = page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"]');
     await expect(current).toHaveText(/URLs/);
-    const place = await style(current, 'box-shadow', 'background-color', 'color');
-    expect(contrast(shadowColour(place['box-shadow'] ?? ''), place['background-color'] ?? '')).toBeGreaterThanOrEqual(
-      3,
-    );
+    const place = await style(current, 'box-shadow', 'background-color', 'color', 'font-weight');
+    const frame = await shownBackground(page.getByRole('navigation', { name: 'Main' }));
+    expect(place['box-shadow']).toBe('none');
+    expect(place['background-color']).not.toBe(frame);
+    expect(neutral(place['background-color'] ?? '')).toBe(true);
+    expect(neutral(place.color ?? '')).toBe(true);
+    expect(place['font-weight']).toBe('600');
     expect(contrast(place.color ?? '', place['background-color'] ?? '')).toBeGreaterThanOrEqual(4.5);
+    const plainPlace = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Links', exact: true });
+    expect((await style(plainPlace, 'font-weight'))['font-weight']).toBe('500');
 
     // A placeholder is a field's only visible label.
     const search = page.getByRole('searchbox', { name: 'Search URLs and titles' });
@@ -158,9 +167,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
       .locator('[role="option"][aria-selected="true"]');
     await expect(option).toBeVisible();
     const highlight = await style(option, 'box-shadow', 'background-color', 'color');
-    expect(
-      contrast(shadowColour(highlight['box-shadow'] ?? ''), highlight['background-color'] ?? ''),
-    ).toBeGreaterThanOrEqual(3);
+    const dialog = await shownBackground(page.getByRole('dialog', { name: 'Command palette' }));
+    expect(highlight['box-shadow']).toBe('none');
+    expect(highlight['background-color']).not.toBe(dialog);
+    expect(neutral(highlight['background-color'] ?? '')).toBe(true);
+    expect(neutral(highlight.color ?? '')).toBe(true);
     expect(contrast(highlight.color ?? '', highlight['background-color'] ?? '')).toBeGreaterThanOrEqual(4.5);
     await page.keyboard.press('Escape');
 

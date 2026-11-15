@@ -45,7 +45,7 @@ export function HomeScreen() {
       ref={screenRef}
       className="@container mx-auto box-content flex max-w-(--content-max) flex-col gap-8 px-(--page-gutter) pt-7 pb-10"
     >
-      <section aria-labelledby="home-title" className="flex flex-col gap-3">
+      <section aria-labelledby="home-title" className="flex max-w-(--start-form-max) flex-col gap-3">
         <PageHeader
           title={<span id="home-title">Crawl a site</span>}
           subtitle="Paste a URL and press Enter. It crawls with your default settings."
