@@ -139,8 +139,12 @@ clean, sidecar, e2e 226) exit 0; `e2e:filled` 29; cargo fmt, clippy, test 139 + 
 under load; the release build with `smoke:shell` Advanced 17 + Simple 8; Linux in Docker (clippy, cargo test 134 +
 3). The verify found and fixed one engine bug from before round 5 (a running crawl's URL grid narrowed to a links
 view's ends counted against an older URL total). Every closing-audit gap and both reviews' findings are fixed.
-**Left: the gallery re-shoot (running), then tell the owner step 3 is finished;** step 3b (the check audit on real
-sites) follows. Known and left: the tray shows "Shouting Iguana" for a few ms between a check's end and its analysis;
+**Gallery re-shot and published** (2026-11-15, version 3, 42 views x 2 themes, release shell at `9bbd588`): six of
+the 2026-11-14 defects confirmed fixed in the real shell; it found ten more, two of them round 5's G6 (the Report
+frame keeps Windows' classic scroll bar, and the subtitle still wraps) that passed in Chromium and fail in WebView2.
+**Left: the polish round** (`ui/r5-polish` from [`brief-polish.md`](handoff/2026-11-15/brief-polish.md), every fix
+proved in the release shell; scratch `a539aa23-…/r5-polish/`), then merge, re-shoot the views it changes, and tell
+the owner step 3 is finished; step 3b (the check audit on real sites) follows. Known and left: the tray shows "Shouting Iguana" for a few ms between a check's end and its analysis;
 a real screen reader not tried; installing a real update needs a release with `latest.json` (the release workflow's
 secrets are the owner's to add: see the architecture doc). The account of how it got here follows (2026-11-13 on).
 
