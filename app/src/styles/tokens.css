@@ -365,7 +365,7 @@
   --checks-width: 372px;
   --issues-columns: var(--checks-width) minmax(0, 1fr); /* the checks list, then the selected check */
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
-  --evidence-max-height: 64vh; /* a check's affected pages: its grid scrolls inside this */
+  --evidence-max-height: 64vh; /* a check's affected pages past 100 rows: its grid scrolls inside this */
   --explain-columns: repeat(auto-fit, minmax(13rem, 1fr)); /* what's wrong, why it matters, how to fix it */
   --overview-live-columns: minmax(0, 1.7fr) minmax(0, 1fr); /* the live Overview: the chart, then codes and alerts */
   --overview-columns: minmax(0, 1.2fr) minmax(0, 1fr); /* the answer: Fix first, then categories and what was skipped */
