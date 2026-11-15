@@ -127,10 +127,22 @@ The owner answered this plan's four questions on 2026-11-10, and nothing here wa
 flags and explains, and doesn't draft or make fixes; the comparison reads the vendors' sites and screenshots; and
 the three audit sites above.
 
-## Where step 3 stands (2026-11-13)
+## Where step 3 stands (2026-11-15)
 
 Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3`. `v2` and `master`
 were not moved. This section is the place to resume. Merging to `master` or releasing still needs an explicit yes.
+
+**Now (2026-11-15): round 5 is merged into `ui/step-3` (`d6ea51a`) and the whole of it is verified.** On its code
+(`a8f8acc`, which differs from the merge only in docs): `verify-engine.sh` (build, tests 1,489 + 285 + 28, the 100k
+bench, readbench gate) and `verify-app.sh` (every step: unit 3,734, stories 528 x 2 themes plain, forced and reduced
+clean, sidecar, e2e 226) exit 0; `e2e:filled` 29; cargo fmt, clippy, test 139 + 3; round 5's six specs x5; unit
+under load; the release build with `smoke:shell` Advanced 17 + Simple 8; Linux in Docker (clippy, cargo test 134 +
+3). The verify found and fixed one engine bug from before round 5 (a running crawl's URL grid narrowed to a links
+view's ends counted against an older URL total). Every closing-audit gap and both reviews' findings are fixed.
+**Left: the gallery re-shoot (running), then tell the owner step 3 is finished;** step 3b (the check audit on real
+sites) follows. Known and left: the tray shows "Shouting Iguana" for a few ms between a check's end and its analysis;
+a real screen reader not tried; installing a real update needs a release with `latest.json` (the release workflow's
+secrets are the owner's to add: see the architecture doc). The account of how it got here follows (2026-11-13 on).
 
 **Stopped for the day on 2026-11-13 (evening), at the owner's word** ("merge and push so everything is on github,
 then get all docs up to date so I can continue tomorrow"). **Every screen of both modes is built, reviewed, fixed
