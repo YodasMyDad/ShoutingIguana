@@ -309,8 +309,29 @@ try {
       const items = page.getByRole('menu').getByRole('menuitem');
       await items.first().waitFor();
       const last = (await items.last().innerText()).split('\n')[0].trim();
-      // The menu loops: up from its first item is its last.
-      await page.keyboard.press('ArrowUp');
+      // Down the menu to its last item, once the menu has the keyboard.
+      await until('the menu taking the keyboard', () =>
+        page.evaluate(() => document.activeElement?.getAttribute('role') === 'menuitem'),
+      );
+      // A key at a time, as a hand presses them: pressed together, WebView2 dropped some.
+      const focusedItem = () => page.evaluate(() => document.activeElement?.textContent ?? '');
+      for (let step = 1; step < (await items.count()) && !(await focusedItem()).startsWith(last); step++) {
+        const before = await focusedItem();
+        await page.keyboard.press('ArrowDown');
+        await until('the next item', async () => (await focusedItem()) !== before, 2_000).catch(() => undefined);
+      }
+      await until(
+        'the last item focused',
+        async () => (await page.evaluate(() => document.activeElement?.textContent ?? '')).startsWith(last),
+        5_000,
+      ).catch(async (error) => {
+        const now = await page.evaluate(() => ({
+          menus: document.querySelectorAll('[role="menu"]').length,
+          items: [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent).join('|'),
+          focused: `${document.activeElement?.getAttribute('role')} ${document.activeElement?.textContent?.slice(0, 30)}`,
+        }));
+        throw new Error(`${error.message}: "${last}" wanted; ${JSON.stringify(now)}`);
+      });
       await page.keyboard.press('Enter');
       const chosen = strip.getByRole('tab', { name: new RegExp(`^${last}`) });
       await until(
@@ -318,7 +339,14 @@ try {
         async () =>
           (await chosen.getAttribute('aria-selected')) === 'true' &&
           (await chosen.evaluate((tab) => tab === document.activeElement)),
-      );
+        5_000,
+      ).catch(async (error) => {
+        const now = await page.evaluate(() => ({
+          selected: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent,
+          focused: `${document.activeElement?.tagName} ${document.activeElement?.getAttribute('role')} ${document.activeElement?.textContent?.slice(0, 30)}`,
+        }));
+        throw new Error(`${error.message}: "${last}" asked for; ${now.selected} chosen; focus on ${now.focused}`);
+      });
       const inView = await chosen.evaluate((tab) => {
         const box = tab.getBoundingClientRect();
         const room = tab.parentElement.getBoundingClientRect();
