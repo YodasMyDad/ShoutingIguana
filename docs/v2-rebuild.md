@@ -134,14 +134,21 @@ were not moved. This section is the place to resume. Merging to `master` or rele
 
 **PAUSED 2026-11-15 at the owner's word (usage). To resume, in this order:**
 
-1. **Polish 2** (`ui/r5-polish2`, worktree `.claude/worktrees/r5-polish2`, pushed; brief
-   [`brief-polish-2.md`](handoff/2026-11-15/brief-polish-2.md)) was stopped part-way. Its state, item by item, is in
-   `handoff-polish2.md` and `checkpoint.md` in the scratch folder `C:\Users\LEEMES~1\AppData\Local\Temp\claude\e2e5beaddde4c070\a539aa23-e856-44c1-bd21-ca484e8740e2\scratchpad\r5-polish2\`
-   (if that folder is gone, read the branch's log against `ui/step-3` and its commit messages). Relaunch one agent
-   from the brief with "resume from your handoff": finish the four items, the checks, and the five gallery shots.
+1. **Polish 2** (`ui/r5-polish2` at `76eeb28`, worktree `.claude/worktrees/r5-polish2`, pushed; brief
+   [`brief-polish-2.md`](handoff/2026-11-15/brief-polish-2.md)): **all four items are done**, each with a test seen
+   failing first and proved in the release shell (inspector tabs whole or in the menu, never both; the sidebar's
+   middle scrolls so Settings stays whole; the Library address gets its own line beside the badge; Simple's stopped
+   row wraps after the dot), and `smoke:shell` passes (19 + 9) on that build. **The five gallery views are re-shot
+   and the page rebuilt in `_gallery/site/` (13.5 MB), not published.** Left of its checks: `verify-app.sh` stopped
+   after the Storybook build (ci, typecheck, lint, format, unit 3,769, scripts, build-storybook all exit 0): run it
+   in full on `76eeb28`, then `npm run e2e:filled`. If either needs an app fix: rebuild, `smoke:shell`, re-shoot the
+   five views (scripts in the scratch folder). Its handoff: `handoff-polish2.md` and `checkpoint.md` in
+   `C:\Users\LEEMES~1\AppData\Local\Temp\claude\e2e5beaddde4c070\a539aa23-e856-44c1-bd21-ca484e8740e2\scratchpad\r5-polish2\`.
+   One thing the owner may judge: at 1280x720 with an export running, the sidebar now scrolls and the export's row
+   sits half below the fold.
 2. Merge `ui/r5-polish2` into `ui/step-3` (`--no-ff`), push, and run the Linux check
    (`docs/handoff/2026-11-14/tools/linux-ci.sh`, Docker) if `app/src-tauri/` changed.
-3. Look at the five re-shot views (02, 18, 27, 32, 42) and the page's diff against the published version 4, then
+3. Look at the five re-shot views (02, 18, 27, 32, 42; already rebuilt into `_gallery/site/`) and the page's diff against version 4 (backup in the scratchpad's `gallerysite-backup`), then
    publish `_gallery/site/shouting-iguana-screens.html` with those ten images to
    https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR (same file path; read the artifact first in a new session).
 4. If the shots show nothing else wrong, tell the owner step 3 is finished. Step 3b (the check audit on real sites)
