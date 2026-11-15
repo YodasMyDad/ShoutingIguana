@@ -1561,6 +1561,9 @@
   .si-stats--cards > .si-stat,
   .si-stats--cards > .si-stat:first-child,
   .si-stats--cards > .si-stat:last-child {
+    /* Its figure stays inside it: for the frame before a narrowed row takes fewer columns (the gaps make five
+       columns wider than the hairlines did), a long figure is clipped, never a sideways scroll of the screen. */
+    overflow: hidden;
     padding: var(--space-4) var(--space-5);
     border: var(--hairline) solid var(--color-border-card);
     border-radius: var(--radius-lg);
