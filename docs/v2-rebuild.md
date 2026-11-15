@@ -153,8 +153,11 @@ into its deleted temp folder. The test now puts that key back as it found it, an
 
 **In progress 2026-11-15, from the owner's first use of the installed app** (two agents, each on its own branch and
 worktree, not merged):
-- `ui/overview-offset`: in a big window the Overview's content was shoved right and cut off at the right edge (owner's
-  screenshot, a live crawl). Root cause, fix and a test.
+- `ui/overview-offset` (no commits): the Overview looked shoved right and cut off in the owner's screenshot. **Not a
+  bug**: the window was maximised on a 3840x2160 screen at 150% (about 2560 CSS px), the screenshot was its left 58%,
+  and the Overview is its 1,136 px column (`--content-max`, `tokens.css:345`) centred in a 2,320 px main area, as
+  designed (checked at that size during a live testsite crawl; nothing ran past the edge). Open for the owner: on
+  wide windows, should Overview, Home and Simple's screens grow with the window, or keep the column on the left?
 - `ui/framed`: the owner found the shell "wishy washy", with no clear segmentation, and the accent rule on the current
   item "looks AI made". From three mocked directions (canvas <https://claude.ai/artifact/4srqyFoFVHsEmzeTrqTRBx>) they
   chose **B, framed workspace**: the sidebar on a grey frame, everything else one bordered inset panel, a working crawl
