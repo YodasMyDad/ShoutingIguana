@@ -682,6 +682,23 @@ describe('the Overview while the crawl runs', () => {
     expect(region('Alerts').getByText('None so far')).toBeVisible();
   });
 
+  // Round 5's polish: the card said Queued 92,111 ("5 on their way") and the bar under it Queued 92,116.
+  it('says one Queued: the card and the bar under the chart count the URLs on their way alike', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM, history: historyUntil(60, POLITE) });
+    await open();
+    await heard(...Array.from({ length: 121 }, (_, index) => progress(index / 2)));
+    const last = progressAt(60, POLITE);
+    const queued = (last.queued + last.inFlight).toLocaleString('en-GB');
+    expect(last.inFlight).toBeGreaterThan(0);
+    expect(figure('Queued')).toHaveTextContent(queued);
+    expect(cell('Queued')).toHaveTextContent(`${last.inFlight} of them on their way`);
+    const bar =
+      main()
+        .getByLabelText(/^Of [\d,]+ URLs found: /)
+        .getAttribute('aria-label') ?? '';
+    expect(/, ([\d,]+) queued,/.exec(bar)?.[1]).toBe(queued);
+  });
+
   it('draws at most 4 times a second, and updates its figures in place: nothing is added, removed or moved', async () => {
     sidecar({ analysis: null, item: LIVE_ITEM });
     await open();

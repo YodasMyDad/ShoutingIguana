@@ -3,6 +3,7 @@
 // from what the live store keeps. Every time here is the run's time spent crawling (the store's `RunClock`): it stands
 // still while the crawl is paused, so a pause is no part of the pace.
 import type { CrawlPhase, CrawlStatus } from '../../api/types';
+import { formatCount } from '../../lib/format';
 import { PACE_WINDOW_MS, type LiveProgress, type PaceSample } from '../../live/liveStore';
 
 /**
@@ -137,6 +138,22 @@ export function notCheckedSoFar(progress: Pick<LiveProgress, 'fetched' | 'noResp
   return Math.max(0, Math.min(progress?.noResponse?.notChecked ?? 0, progress?.fetched ?? 0));
 }
 
+/**
+ * Queued, said one way wherever it's said (round 5's polish: a crawl's card said Queued 92,111, "5 on their way", and
+ * the bar under it Queued 92,116): the URLs waiting their turn and the ones on their way, as the found bar splits them,
+ * from the same read. Null until the stream has said.
+ */
+export function queuedSoFar(progress: Pick<LiveProgress, 'queued' | 'inFlight'> | null): number | null {
+  const queued = progress?.queued ?? null;
+  return queued === null ? null : queued + (progress?.inFlight ?? 0);
+}
+
+/** The line under Queued: how many of them are on their way now, which Queued counts. */
+export function queuedLine(progress: Pick<LiveProgress, 'inFlight'> | null): string {
+  const inFlight = progress?.inFlight ?? null;
+  return inFlight !== null && inFlight > 0 ? `${formatCount(inFlight)} of them on their way` : 'Waiting their turn';
+}
+
 export interface FoundSplit {
   /** Every URL found. */
   found: number;
@@ -164,7 +181,7 @@ export function foundSplit(
   return {
     found: discovered,
     crawled: crawledSoFar(progress) ?? fetched - notChecked,
-    queued: queued + (inFlight ?? 0),
+    queued: queuedSoFar({ queued, inFlight }) ?? queued,
     notFollowed: skipped,
     notChecked,
   };

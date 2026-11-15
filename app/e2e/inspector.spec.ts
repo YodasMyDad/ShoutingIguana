@@ -558,7 +558,7 @@ test('at 1280 px the tabs out of view are counted and listed, and the keyboard r
   await page.keyboard.press('Enter');
   const menu = page.getByRole('menu');
   await expect(menu.getByRole('menuitem')).toHaveCount(counted);
-  const last = (await menu.getByRole('menuitem').last().innerText()).split('\n')[0].trim();
+  const last = (await menu.getByRole('menuitem').last().innerText()).split('\n')[0]?.trim() ?? '';
   await menu.getByRole('menuitem').last().click();
   const chosen = strip.getByRole('tab', { name: new RegExp(`^${last}`) });
   await expect(chosen).toHaveAttribute('aria-selected', 'true');

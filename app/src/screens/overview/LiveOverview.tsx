@@ -22,7 +22,16 @@ import { AlertList, WaitList } from './AlertList';
 import { alertEntries } from './alerts';
 import { countTicks, progressSeries, timeTicks } from './foundAndCrawled';
 import { ANSWERED_SITE_PAGES } from './links';
-import { activityWords, atUrlLimit, crawledSoFar, foundSplit, sparkOf, timeLeft } from './liveFigures';
+import {
+  activityWords,
+  atUrlLimit,
+  crawledSoFar,
+  foundSplit,
+  queuedLine,
+  queuedSoFar,
+  sparkOf,
+  timeLeft,
+} from './liveFigures';
 import { linkProps } from './overviewLinks';
 import { StatusCodes } from './StatusCodes';
 import { NO_FIGURES_YET, statusSplit } from './statusSplit';
@@ -237,12 +246,8 @@ export function LiveOverview({
             <Stat
               size={size}
               label="Queued"
-              value={<Num value={progress?.queued} />}
-              context={
-                progress?.inFlight != null
-                  ? `${formatCount(progress.inFlight)} more on their way`
-                  : 'Waiting their turn'
-              }
+              value={<Num value={queuedSoFar(progress)} />}
+              context={queuedLine(progress)}
             />
             <StatLink
               {...linkProps(crawlId, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })}
