@@ -81,8 +81,8 @@ links and "reopen where I left off" all work.
 | `/settings/:section?` | App settings: `general` (none), `crawl-defaults`, `analysis`, `data`, `shortcuts`, `diagnostics`, `updates`, `about`. Analysis is listed once it can be set; a section there's none of opens General |
 
 **In Simple** the same routes show Simple's screens: `/` is its Home, `/new` its four questions, `overview` the
-Summary, `issues/:check?` What to fix and one problem, and `settings` four of the sections. URLs, Links, Sitemaps,
-robots.txt and the crawl's settings are Advanced only. The table is in [Simple mode](v2-ui-simple.md#routes).
+Summary, `issues/:check?` What to fix and one problem; `settings` is the same screen in both modes, every section.
+URLs, Links, Sitemaps, robots.txt and the crawl's settings are Advanced only. The table is in [Simple mode](v2-ui-simple.md#routes).
 
 ## Screens
 
@@ -150,9 +150,11 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 **Settings.**
 
-- General (Mode, Theme, and Density in Advanced), Crawl defaults (New crawl's form, saved as it changes), Analysis
-  (once the engine can save limits), Data folder, Shortcuts, Diagnostics (Copy diagnostics, the logs' folder), Updates,
-  About. Simple lists General, Data folder, Updates and About, and says where the rest are.
+- General (Mode, Theme, Density), Crawl defaults (New crawl's form, saved as it changes), Analysis (once the engine
+  can save limits), Data folder, Shortcuts, Diagnostics (Copy diagnostics, the logs' folder), Updates, About.
+- The same in both modes, every section and every word (the owner, 2026-11-15: "the Simple and Advanced modes are just
+  for the UI for the user of using the app, not for settings. I still need the settings whatever version they're
+  using"). See [Simple mode, Settings in each mode](v2-ui-simple.md#settings-in-each-mode).
 
 **Overview (live).**
 

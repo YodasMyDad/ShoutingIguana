@@ -1,4 +1,4 @@
-// Settings in each mode (docs/v2-ui-simple.md, Settings in each mode): every section, Simple's four and its note.
+// Settings in each mode (docs/v2-ui-simple.md, Settings in each mode): every section, the same in both modes.
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '../app/queryClient';
@@ -36,17 +36,22 @@ const at = (path: string, mode: Mode, setup: () => void = freshStory, at200 = fa
   render: () => <ScreenApp path={path} mode={mode} size={at200 ? AT_200_PERCENT : undefined} />,
 });
 
-/** Simple: General (Mode and Theme), four sections, and where the rest are. */
+/** Simple: Mode, Theme and Density, and every section there is, as in Advanced. */
 export const GeneralSimple = at('/settings', 'simple');
-/** Advanced: Mode, Theme and Density, and every section there is. */
+/** Advanced: the same. */
 export const GeneralAdvanced = at('/settings', 'advanced');
 /** The New crawl form, saved as defaults as it changes. */
 export const CrawlDefaults = at('/settings/crawl-defaults', 'advanced');
+/** The same form in Simple: Settings is the same in both modes. */
+export const CrawlDefaultsSimple = at('/settings/crawl-defaults', 'simple');
 export const DataFolder = at('/settings/data', 'simple');
 export const Shortcuts = at('/settings/shortcuts', 'advanced');
+/** In Simple, the keys that work in Simple: the `?` sheet's list. */
+export const ShortcutsSimple = at('/settings/shortcuts', 'simple');
 export const Diagnostics = at('/settings/diagnostics', 'advanced');
+export const DiagnosticsSimple = at('/settings/diagnostics', 'simple');
 export const Updates = at('/settings/updates', 'simple');
-/** About in Simple carries Copy diagnostics, as Simple has no Diagnostics section. */
+/** About, the same in both modes: Copy diagnostics is in Diagnostics. */
 export const AboutSimple = at('/settings/about', 'simple');
 export const AboutAdvanced = at('/settings/about', 'advanced');
 /** The engine can't be reached: what the sections that ask it say. */

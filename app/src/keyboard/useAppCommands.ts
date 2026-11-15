@@ -278,8 +278,9 @@ export function useAppCommands(): void {
         enabled: () => getSettings().theme !== theme.value,
         run: () => updateSettings({ theme: theme.value }),
       })),
-      // Density is the grids', which are Advanced's.
-      ...(simple ? [] : DENSITIES).map<Command>((density) => ({
+      // Density is a setting, so in both modes, as in Settings > General: "the Simple and Advanced modes are just for
+      // the UI for the user of using the app, not for settings" (the owner).
+      ...DENSITIES.map<Command>((density) => ({
         id: `view.density.${density.value}`,
         title: density.title,
         group: 'View',

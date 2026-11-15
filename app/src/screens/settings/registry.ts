@@ -8,10 +8,11 @@
 //                                     // Shortcuts 50, Diagnostics 60, Updates 70, About 80
 //   export function Section() { … }   // the section itself
 //
-// Which mode lists a section is app/modeRoutes.ts's ADVANCED_ONLY_SETTINGS: Simple lists the rest.
+// Both modes list every section, the same: the owner's word, "the Simple and Advanced modes are just for the UI for
+// the user of using the app, not for settings. I still need the settings whatever version they're using." A section
+// says the same in both modes too. Two things read the mode, and aren't settings: General's Mode choice, which is the
+// mode, and Shortcuts' list, which is the keys that work in the mode shown (the `?` sheet's list).
 import type { ComponentType } from 'react';
-import { isAdvancedOnlySetting } from '../../app/modeRoutes';
-import type { Mode } from '../../mode/mode';
 
 export interface SettingsSection {
   id: string;
@@ -31,14 +32,7 @@ function isSection(module: Partial<SettingsSection>): module is SettingsSection 
   );
 }
 
-/** Every section, in order. */
+/** Every section, in order: the list in both modes. */
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = Object.values(modules)
   .filter(isSection)
   .sort((a, b) => a.order - b.order);
-
-/** The sections a mode lists: all of them in Advanced, four in Simple. */
-export function sectionsFor(mode: Mode): readonly SettingsSection[] {
-  return mode === 'advanced'
-    ? SETTINGS_SECTIONS
-    : SETTINGS_SECTIONS.filter((entry) => !isAdvancedOnlySetting(entry.id));
-}

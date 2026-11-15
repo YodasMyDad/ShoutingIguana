@@ -3,7 +3,6 @@ import { useEffect, useReducer, useRef } from 'react';
 import { announce } from '../../../feedback/announce';
 import { formatBytes, formatExactTime } from '../../../lib/format';
 import { useLiveIds } from '../../../live/liveStore';
-import type { Mode } from '../../../mode/mode';
 import {
   parseUpdateCheckFailure,
   type UpdateCheck,
@@ -70,7 +69,7 @@ const messageOf = (error: unknown) =>
       : (parseUpdateCheckFailure(error)?.message ?? 'Something went wrong.');
 
 /**
- * A check that showed no update, case by case, in both modes' words (round 5's polish: GitHub answering that there's
+ * A check that showed no update, case by case, in plain words (round 5's polish: GitHub answering that there's
  * no update information yet read as "check the internet connection"). No update information yet isn't a fault: it's
  * said as information, with the version running.
  */
@@ -121,12 +120,10 @@ function publishedOn(iso: string | null): string | null {
  */
 export function UpdatePanel({
   updater,
-  mode,
   initial = { step: 'idle' },
   busy: busyOverride,
 }: {
   updater: Updater;
-  mode: Mode;
   /** For stories: the state to start in. */
   initial?: UpdateState;
   /** For stories: whether a crawl or an analysis is running, in place of the live store's word. */
@@ -135,7 +132,6 @@ export function UpdatePanel({
   const [state, dispatch] = useReducer(reduce, initial);
   const liveBusy = useLiveIds().length > 0;
   const busy = busyOverride ?? liveBusy;
-  const simple = mode === 'simple';
   const checkRef = useRef<HTMLButtonElement>(null);
   // Install, pressed, goes as the download starts: when it fails, focus goes to Check for updates, enabled again.
   const refocus = useRef(false);
@@ -196,7 +192,6 @@ export function UpdatePanel({
   };
 
   const working = state.step === 'checking' || state.step === 'downloading' || state.step === 'installing';
-  const kept = simple ? 'site checks' : 'crawls';
   return (
     <div className="flex w-full flex-col items-start gap-3">
       <Button
@@ -245,10 +240,8 @@ export function UpdatePanel({
                 </Button>
                 <p id="update-install-help" className="text-12 text-text-secondary">
                   {busy
-                    ? simple
-                      ? 'A site check is running. Install once it has finished.'
-                      : 'A crawl or an analysis is running. Install once it has finished.'
-                    : `Shouting Iguana closes while the installer runs, then opens again. Your ${kept} and settings stay as they are.`}
+                    ? 'A crawl or an analysis is running. Install once it has finished.'
+                    : 'Shouting Iguana closes while the installer runs, then opens again. Your crawls and settings stay as they are.'}
                 </p>
               </div>
             ) : null}

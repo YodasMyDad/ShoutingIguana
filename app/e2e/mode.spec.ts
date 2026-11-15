@@ -1,6 +1,7 @@
 // The mode and its switch (docs/v2-ui-simple.md, The switch), against the real sidecar: a first start is Simple; the
 // switch works by click, by Ctrl+Shift+A and from the palette, keeps the screen, and is kept across a restart; an
-// Advanced-only screen reached in Simple turns Advanced on. Each test starts from nothing stored, as a first start.
+// Advanced-only screen reached in Simple turns Advanced on; Settings is the same in both modes, every section. Each test
+// starts from nothing stored, as a first start.
 import { expect, test, type Page } from '@playwright/test';
 import { expectNoViolations, seededCrawl } from './support';
 
@@ -78,6 +79,63 @@ test('an Advanced-only screen reached in Simple turns Advanced on, with Back to 
   await chosen(page, 'Advanced');
   await page.getByRole('button', { name: 'Back to Simple' }).click();
   await expect(page).toHaveURL(new RegExp(`/crawls/${crawl.id}/overview$`));
+  await chosen(page, 'Simple');
+});
+
+// The owner: "the Simple and Advanced modes are just for the UI for the user of using the app, not for settings".
+test('Settings is the full screen in Simple: every section, by the sidebar and the palette, and Simple stays on', async ({
+  page,
+}) => {
+  const everySection = [
+    'General',
+    'Crawl defaults',
+    'Analysis',
+    'Data folder',
+    'Shortcuts',
+    'Diagnostics',
+    'Updates',
+    'About',
+  ];
+  const settingsNav = page.getByRole('navigation', { name: 'Settings' });
+  await page.goto('/');
+  await chosen(page, 'Simple');
+  await sidebar(page).getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'General' })).toBeVisible();
+  await expect(settingsNav.getByRole('link')).toHaveText(everySection);
+  await expect(page.getByRole('radiogroup', { name: 'Density' })).toBeVisible();
+  await expect(page.getByText(/Advanced settings?\./)).toHaveCount(0);
+
+  // A section Simple once left out: Simple stays on, with no toast.
+  await settingsNav.getByRole('link', { name: 'Crawl defaults' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Crawl defaults' })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/crawl-defaults$/);
+  await chosen(page, 'Simple');
+  await expect(page.getByText('Advanced is on')).toHaveCount(0);
+  await expectNoViolations(page);
+
+  // Reached by its address, or reopened there, in Simple: the same.
+  await page.goto('/settings/diagnostics');
+  await expect(page.getByRole('heading', { level: 1, name: 'Diagnostics' })).toBeVisible();
+  await chosen(page, 'Simple');
+  await expect(page.getByText('Advanced is on')).toHaveCount(0);
+
+  // Switching on a section stays on it, in both directions.
+  await modeSwitch(page).getByRole('radio', { name: 'Advanced' }).click();
+  await chosen(page, 'Advanced');
+  await modeSwitch(page).getByRole('radio', { name: 'Simple' }).click();
+  await chosen(page, 'Simple');
+  await expect(page).toHaveURL(/\/settings\/diagnostics$/);
+  await expect(settingsNav.getByRole('link')).toHaveText(everySection);
+
+  // The palette's Open settings, in Simple.
+  await page.goto('/');
+  await chosen(page, 'Simple');
+  await page.keyboard.press('Control+K');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await palette.getByRole('combobox').fill('open settings');
+  await palette.getByRole('option', { name: /Open settings/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'General' })).toBeVisible();
+  await expect(settingsNav.getByRole('link')).toHaveText(everySection);
   await chosen(page, 'Simple');
 });
 

@@ -47,17 +47,22 @@ const ADVANCED_WORDS =
  */
 const SEVERITY_WORDS = /\b(?:Errors?|Warnings?|Notices?)\b|\b\d[\d,]*\s+(?:errors?|warnings?|notices?)\b/g;
 
-/** The words a screen shows or reads out: its text, and the names and hints its controls carry. */
-function wordsShown(root: ParentNode = document.body): string[] {
+/**
+ * The words a screen shows or reads out: its text, and the names and hints its controls carry. `exempt` is a part of
+ * the page that isn't Simple's to word: Settings, which says Advanced's words in both modes.
+ */
+function wordsShown(root: ParentNode = document.body, exempt: Element | null = null): string[] {
   const texts: string[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const parent = node.parentElement;
+    if (parent && exempt?.contains(parent)) continue;
     // The site's own addresses and titles are the site's words, not the app's.
     if (parent?.closest('script, style, iframe, [data-site-text], .font-mono, .si-url')) continue;
     if (node.textContent?.trim()) texts.push(node.textContent.trim());
   }
   for (const element of root.querySelectorAll('*')) {
+    if (exempt?.contains(element)) continue;
     if (element.closest('[data-site-text], .font-mono, .si-url')) continue;
     for (const name of ['aria-label', 'title', 'placeholder', 'aria-description', 'aria-valuetext', 'alt']) {
       const value = element.getAttribute(name);
@@ -90,9 +95,9 @@ async function open(path: string, item: CrawlListItem, analysis: Analysis | 'not
   await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeNull(), { timeout: 10_000 });
 }
 
-/** The screen, then the palette and the `?` sheet over it: each must speak Simple. */
-async function expectSimpleEverywhere() {
-  expect(advancedWordsIn(wordsShown())).toEqual([]);
+/** The screen (but for `exempt`), then the palette and the `?` sheet over it: each must speak Simple. */
+async function expectSimpleEverywhere(exempt: Element | null = null) {
+  expect(advancedWordsIn(wordsShown(document.body, exempt))).toEqual([]);
   act(() => setOverlay('palette'));
   const palette = await screen.findByRole('dialog', { name: /command/i });
   expect(advancedWordsIn(wordsShown(palette))).toEqual([]);
@@ -236,10 +241,23 @@ describe.skipIf(TABLE_STUBBED)('Simple’s screens say none of Advanced’s word
     expect(advancedWordsIn(wordsShown(dialog))).toEqual([]);
   });
 
-  it.each(['/new', '/settings', '/settings/data', '/settings/updates', '/settings/about'])('%s', async (path) => {
-    await open(path, gardenItem(), GARDEN_ANALYSIS, [DEFAULTS_ROUTE]);
+  it('/new', async () => {
+    await open('/new', gardenItem(), GARDEN_ANALYSIS, [DEFAULTS_ROUTE]);
     await expectSimpleEverywhere();
   });
+
+  // Settings itself says Advanced's words in both modes, as the owner asked: "the Simple and Advanced modes are just
+  // for the UI for the user of using the app, not for settings" (docs/v2-ui-simple.md, Settings in each mode). The
+  // shell around it, the palette and the sheet are Simple's.
+  it.each(['/settings', '/settings/data', '/settings/updates', '/settings/about'])(
+    '%s: the shell, the palette and the sheet, Settings itself left out',
+    async (path) => {
+      await open(path, gardenItem(), GARDEN_ANALYSIS, [DEFAULTS_ROUTE]);
+      const settings = screen.getByRole('navigation', { name: 'Settings' }).parentElement;
+      expect(settings).not.toBeNull();
+      await expectSimpleEverywhere(settings);
+    },
+  );
 });
 
 const JOB: ExportJob = {

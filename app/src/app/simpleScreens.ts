@@ -6,9 +6,9 @@
 //   overview: simpleScreen(() => import('../simple/SummaryScreen'), 'SummaryScreen'),
 //
 // Each row is one line with a comment line between it and the next, so screens added on separate branches never
-// touch the same lines. Routes Simple doesn't have (URLs, Links, Sitemaps, robots.txt, the crawl's settings and four
-// of Settings' sections) aren't rows: they're Advanced only (app/modeRoutes.ts). New crawl and Settings aren't rows
-// either: each is one screen that reads the mode itself.
+// touch the same lines. Routes Simple doesn't have (URLs, Links, Sitemaps, robots.txt, the crawl's settings) aren't
+// rows: they're Advanced only (app/modeRoutes.ts). New crawl and Settings aren't rows either: New crawl is one screen
+// that reads the mode itself, and Settings is one screen, every section of it, the same in both modes.
 import { lazyRouteComponent, type RouteComponent } from '@tanstack/react-router';
 
 /** A route's Simple screen: a component of its own chunk, loaded when it's first shown. */

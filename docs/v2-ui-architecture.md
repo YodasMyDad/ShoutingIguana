@@ -1507,20 +1507,21 @@ giving way, Settings, New crawl in both modes and the crawl's own settings.
   existed (or with a mode this app doesn't know) read as Advanced: that's someone who has used the app as it was.
 - **Read** through `useMode()` (or `getMode()` outside React), in `mode/mode.ts`. **Changed** through
   `switchMode(router, mode)` (`mode/switchMode.ts`), which the switch, Ctrl+Shift+A (`app.mode`), the palette's
-  "Switch to …", Settings > General > Mode, "Show them in Advanced" and "Back to Simple" all call. A change the user
-  made is announced once ("Advanced is on").
+  "Switch to …", Settings > General > Mode, New crawl's "Show them in Advanced" and "Back to Simple" all call. A
+  change the user made is announced once ("Advanced is on").
 - **Switching keeps the route.** The same route renders its other view, its search params kept (Simple ignores
   Issues' `group`, `severity`, `inspect`), so switching back restores them. From an Advanced-only screen, switching to
   Simple navigates (a push, so Back returns) to the nearest screen Simple has: the crawl's Summary
-  (`/crawls/:crawl/overview`), or Settings > General. `app/modeRoutes.ts` says which screens are Advanced only
-  (`advancedOnlyScreen`) and where a switch lands (`simpleLanding`).
+  (`/crawls/:crawl/overview`). `app/modeRoutes.ts` says which screens are Advanced only (`advancedOnlyScreen`: a
+  crawl's URLs, Links, Sitemaps, robots.txt and settings) and where a switch lands (`simpleLanding`). Settings is in
+  both modes, every section, so a switch on it stays put and the guard below never turns Advanced on for it.
 - **Arriving at an Advanced-only screen in Simple** (a link, Back or Forward, a reopened session) turns Advanced on,
   with the toast "Advanced is on" and **Back to Simple** (`mode/useModeGuard.ts`). The guard looks at where each
   navigation lands (`onResolved`) and at the place the app opens on, never at a change of mode, so switching to Simple
   on such a screen (which then leaves it) isn't undone. It turns Advanced on only for a screen that's there: a crawl
-  the library has, and a section of Settings with a file (the route sends any other to General). New crawl does the
-  same, with the same toast, for a setting Simple doesn't show (`focus=userAgent` in Simple). A link in Simple to an
-  Advanced-only screen says so in its words ("See it in Advanced").
+  the library has. New crawl does the same, with the same toast, for a setting Simple doesn't show
+  (`focus=userAgent` in Simple). A link in Simple to an Advanced-only screen says so in its words ("See it in
+  Advanced").
 - **`/crawls/:crawl`** opens the crawl's last view in the current mode: in Simple, a last view Simple doesn't have
   opens the Summary.
 - **No inspector in Simple**: the shell leaves the inspector's slot out while a Simple screen is shown
@@ -1528,9 +1529,10 @@ giving way, Settings, New crawl in both modes and the crawl's own settings.
 - **The palette and the `?` sheet** list what's registered, and `useAppCommands` registers each mode's own: in Simple
   its sections (Summary, What to fix, the Report once it exists) on Ctrl+1 to Ctrl+3, its words ("Check a website",
   "Pause the check", "Work out the results again", "Open a site check file…"), and no Advanced-only command (Go to
-  URLs, Go to URL…, Density) but "Switch to Advanced". Both list their groups in the mode's words ("Site check", "Your
-  sites") and, in Simple, none of the grids' or the inspector's keys (`keyboard/modeWords.ts`). A check is found by
-  either of its titles, and shows the mode's own.
+  URLs, Go to URL…) but "Switch to Advanced". Density's commands are in both: they change a setting, and settings are
+  the same in both modes. Both list their groups in the mode's words ("Site check", "Your sites") and, in Simple,
+  none of the grids' or the inspector's keys (`keyboard/modeWords.ts`). A check is found by either of its titles, and
+  shows the mode's own.
 - **Tests, stories and the e2e start in Advanced**, which every screen built before Simple was written for:
   `test/setup.ts` puts `mode: 'advanced'` in place before each test (`replaceSettings`, which doesn't save),
   `.storybook/preview.tsx` before each story, and the e2e's browsers start with it stored (`e2e/storage.ts`,
@@ -1599,19 +1601,22 @@ touch the same lines:
 - **One file a section**, in `screens/settings/sections/`, found by `screens/settings/registry.ts`
   (`import.meta.glob`). A section file exports `id` (its place in `/settings/:section`), `title`, `order` (General
   10, Crawl defaults 20, Analysis 30, Data folder 40, Shortcuts 50, Diagnostics 60, Updates 70, About 80) and
-  `function Section()`. **The Analysis section is one new file, `sections/Analysis.tsx`, and nothing else**: it is
-  Advanced only already (`ADVANCED_ONLY_SETTINGS`), Simple's note names "the checks' limits" once it exists, and
-  until then Analysis isn't listed. An address naming a section with no file opens General.
-- **Each mode's list**: Simple lists General, Data folder, Updates and About, with a note naming the Advanced-only
-  sections that exist and **Show them in Advanced** (focus goes to the first section it brings into the list).
-- **General**: Mode (the switch's value, as two choice cards, each with its line), Theme, and Density in Advanced.
+  `function Section()`. An address naming a section with no file opens General.
+- **Both modes list every section, the same, in Advanced's words** (the owner, 2026-11-15: "the Simple and Advanced
+  modes are just for the UI for the user of using the app, not for settings. I still need the settings whatever
+  version they're using"). No section reads the mode but General's Mode choice (the mode itself) and Shortcuts' list
+  (the keys that work in the mode shown). `SettingsScreen.test.tsx` draws every section in both modes and compares the
+  list, every heading and control by name and description, and the words. Until then Simple listed four sections with
+  a note and **Show them in Advanced**, and arriving at another section in Simple turned Advanced on.
+- **General**: Mode (the switch's value, as two choice cards, each with its line, and the switch's keys), Theme and
+  Density.
 - **Crawl defaults**: New crawl's form in Advanced, without a start URL, saved a moment after each change once the
   engine finds nothing wrong (`PUT /api/crawl-options/defaults`), with "Put back the engine's defaults" (with Undo).
   Every new crawl starts from them, and so does Home's Enter: `startCrawl` sends the saved defaults, since a setting
   left out of `POST /api/crawls` takes the engine's default, not the user's.
 - **Data folder**, **Diagnostics** (Copy diagnostics: versions, folders, mode, theme, zoom, page, browser; nothing
-  from a crawl, the home folder as `%USERPROFILE%` or `~` and the account name nowhere), **Updates**, **About** (with Copy diagnostics in Simple) and **Shortcuts** (the registry's list) show
-  what is true today. Since round 5, Data folder changes the folder (a switch, with Go back), Updates checks and
+  from a crawl, the home folder as `%USERPROFILE%` or `~` and the account name nowhere), **Updates**, **About** and
+  **Shortcuts** (the registry's list, as the mode shown has it) show what is true today. Since round 5, Data folder changes the folder (a switch, with Go back), Updates checks and
   installs signed updates, Diagnostics opens the log folders and About lists the third-party licences ("The shell
   and the platform (round 5)", below).
 

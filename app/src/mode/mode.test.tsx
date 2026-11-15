@@ -102,11 +102,18 @@ describe('the switch', () => {
     expect(await screen.findByText('Advanced is on')).toBeVisible();
   });
 
-  it('from an Advanced-only section of Settings, goes to General', async () => {
-    const router = await open('/settings/shortcuts', 'advanced');
-    fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Simple' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
-  });
+  // Settings is the same in both modes, every section (docs/v2-ui-simple.md, Settings in each mode).
+  it.each(['/settings/crawl-defaults', '/settings/analysis', '/settings/shortcuts', '/settings/diagnostics'])(
+    'on %s, stays there, with every section listed',
+    async (path) => {
+      const router = await open(path, 'advanced');
+      fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Simple' }));
+      expect(getSettings().mode).toBe('simple');
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(router.state.location.pathname).toBe(path);
+      expect(within(screen.getByRole('navigation', { name: 'Settings' })).getAllByRole('link')).toHaveLength(8);
+    },
+  );
 });
 
 describe('arriving at an Advanced-only screen in Simple', () => {
@@ -120,9 +127,18 @@ describe('arriving at an Advanced-only screen in Simple', () => {
     expect(getSettings().mode).toBe('simple');
   });
 
+  it.each(['/settings/crawl-defaults', '/settings/analysis', '/settings/shortcuts', '/settings/diagnostics'])(
+    'leaves Simple as it is on %s: Settings is the same in both modes',
+    async (path) => {
+      const router = await open(path, 'simple');
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(router.state.location.pathname).toBe(path);
+      expect(getSettings().mode).toBe('simple');
+      expect(screen.queryByText('Advanced is on')).toBeNull();
+    },
+  );
+
   it('leaves Simple as it is for a section of Settings there isn’t, which opens General', async () => {
-    // Every Advanced-only section has its file now (Analysis was the last): a section there's no file for is one
-    // no mode lists.
     const router = await open('/settings/nothing-here', 'simple');
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
@@ -203,9 +219,9 @@ describe('Simple’s words in what the modes share', () => {
     act(() => setOverlay(null));
   });
 
-  it('Settings’ Data folder speaks of site checks', async () => {
+  it('Settings’ Data folder says what Advanced’s says: Settings is the same in both modes', async () => {
     await open('/settings/data', 'simple');
-    expect(await screen.findByText(/Where your site checks are saved/)).toBeVisible();
-    expect(screen.getByText('Site checks are saved in')).toBeVisible();
+    expect(await screen.findByText(/Where your crawls are saved/)).toBeVisible();
+    expect(screen.getByText('Crawls are saved in')).toBeVisible();
   });
 });

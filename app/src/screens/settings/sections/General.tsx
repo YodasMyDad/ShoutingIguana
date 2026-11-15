@@ -24,8 +24,8 @@ const DENSITY_HINTS: Record<Density, string> = {
 };
 
 /**
- * General: the mode (the switch in the top bar, the same value), the theme, and in Advanced the grids' density. Each
- * applies at once and is remembered.
+ * General: the mode (the switch in the top bar, the same value), the theme and the grids' density, the same in both
+ * modes. Each applies at once and is remembered.
  */
 export function Section() {
   const router = useRouter();
@@ -40,7 +40,7 @@ export function Section() {
     >
       <ChoiceCards<Mode>
         legend="Mode"
-        description={`The same site check either way, with the same checks and the same numbers. This is the switch at the top right of every screen${mode === 'advanced' && switchKeys ? ` (${switchKeys})` : ''}.`}
+        description={`The same site check either way, with the same checks and the same numbers. This is the switch at the top right of every screen${switchKeys ? ` (${switchKeys})` : ''}.`}
         columns={2}
         options={MODES.map((value) => ({ value, title: MODE_NAMES[value], text: MODE_LINES[value] }))}
         value={mode}
@@ -58,20 +58,18 @@ export function Section() {
           onValueChange={(value) => updateSettings({ theme: value })}
         />
       </Setting>
-      {mode === 'advanced' ? (
-        <Setting label="Density" help={`How tall the rows of every grid are. ${DENSITY_HINTS[density]}.`}>
-          <SegmentedControl<Density>
-            label="Density"
-            value={density}
-            options={(Object.keys(DENSITY_HINTS) as Density[]).map((value) => ({
-              value,
-              label: value === 'compact' ? 'Compact' : value === 'standard' ? 'Standard' : 'Comfortable',
-              description: DENSITY_HINTS[value],
-            }))}
-            onValueChange={(value) => updateSettings({ density: value })}
-          />
-        </Setting>
-      ) : null}
+      <Setting label="Density" help={`How tall the rows of every grid are. ${DENSITY_HINTS[density]}.`}>
+        <SegmentedControl<Density>
+          label="Density"
+          value={density}
+          options={(Object.keys(DENSITY_HINTS) as Density[]).map((value) => ({
+            value,
+            label: value === 'compact' ? 'Compact' : value === 'standard' ? 'Standard' : 'Comfortable',
+            description: DENSITY_HINTS[value],
+          }))}
+          onValueChange={(value) => updateSettings({ density: value })}
+        />
+      </Setting>
     </SectionPage>
   );
 }

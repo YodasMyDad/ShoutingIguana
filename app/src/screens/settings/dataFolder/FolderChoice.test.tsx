@@ -21,7 +21,7 @@ describe('FolderChoice (gap 18: a data folder the user can change)', () => {
   it('changes the folder with the system’s dialog, then offers the way back', async () => {
     const user = userEvent.setup();
     const commands = shell(DEFAULT);
-    render(<FolderChoice shell={commands} simple={false} busy={false} />);
+    render(<FolderChoice shell={commands} busy={false} />);
     await waitFor(() => expect(commands.choice).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: /Go back/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Change folder…' }));
@@ -33,22 +33,24 @@ describe('FolderChoice (gap 18: a data folder the user can change)', () => {
   it('a cancelled dialog changes nothing', async () => {
     const user = userEvent.setup();
     const commands = shell(DEFAULT, { choose: vi.fn(() => Promise.resolve(null)) });
-    render(<FolderChoice shell={commands} simple={false} busy={false} />);
+    render(<FolderChoice shell={commands} busy={false} />);
     await user.click(screen.getByRole('button', { name: 'Change folder…' }));
     await waitFor(() => expect(commands.choose).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: /Go back/ })).toBeNull();
   });
 
-  it('won’t change while something runs, and says why in the mode’s words', async () => {
-    render(<FolderChoice shell={shell(CHOSEN)} simple busy />);
+  it('won’t change while something runs, and says why', async () => {
+    render(<FolderChoice shell={shell(CHOSEN)} busy />);
     const change = screen.getByRole('button', { name: 'Change folder…' });
     expect(change).toBeDisabled();
-    expect(change).toHaveAccessibleDescription('A site check is running. Change the folder once it has finished.');
+    expect(change).toHaveAccessibleDescription(
+      'A crawl or an analysis is running. Change the folder once it has finished.',
+    );
     expect(await screen.findByRole('button', { name: 'Go back to the folder before' })).toBeDisabled();
   });
 
   it('says a folder set by the run’s environment can’t be changed', async () => {
-    render(<FolderChoice shell={shell({ ...DEFAULT, fixed: true })} simple={false} busy={false} />);
+    render(<FolderChoice shell={shell({ ...DEFAULT, fixed: true })} busy={false} />);
     expect(await screen.findByText(/can’t be changed here/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change folder…' })).toBeNull();
   });
