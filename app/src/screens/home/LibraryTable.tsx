@@ -226,10 +226,14 @@ function CrawlRow({
                 {/* An older crawl is named by when it started, in full: its site is the row above's. */}
                 {nested ? label : siteName(item)}
               </TextLink>
-              {runningId ? <RunningBadge id={runningId} newer={runningNewer} /> : null}
             </span>
-            <span className="truncate font-mono text-12 text-text-muted" title={item.path}>
-              {nested ? item.fileName : (item.startUrl ?? item.fileName)} · {formatBytes(item.sizeBytes)}
+            {/* The other crawl's badge leads the line under the name, so the name keeps its room: beside it, "Newer
+                crawl paused" cut the site's name short at 1280 px. The address gives way to it. */}
+            <span className="flex min-w-0 items-center gap-2">
+              {runningId ? <RunningBadge id={runningId} newer={runningNewer} /> : null}
+              <span className="truncate font-mono text-12 text-text-muted" title={item.path}>
+                {nested ? item.fileName : (item.startUrl ?? item.fileName)} · {formatBytes(item.sizeBytes)}
+              </span>
             </span>
           </div>
         </div>
