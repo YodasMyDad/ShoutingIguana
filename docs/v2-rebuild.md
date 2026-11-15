@@ -157,8 +157,9 @@ worktree, not merged):
 - `ui/overview-offset` (no commits): the Overview looked shoved right and cut off in the owner's screenshot. **Not a
   bug**: the window was maximised on a 3840x2160 screen at 150% (about 2560 CSS px), the screenshot was its left 58%,
   and the Overview is its 1,136 px column (`--content-max`, `tokens.css:345`) centred in a 2,320 px main area, as
-  designed (checked at that size during a live testsite crawl; nothing ran past the edge). Open for the owner: on
-  wide windows, should Overview, Home and Simple's screens grow with the window, or keep the column on the left?
+  designed (checked at that size during a live testsite crawl; nothing ran past the edge). The owner chose:
+  on wide windows those screens grow with the window (to about 1,800 px of content, centred beyond), on `ui/framed`.
+  The branch was deleted.
 - `ui/framed`: the owner found the shell "wishy washy", with no clear segmentation, and the accent rule on the current
   item "looks AI made". From three mocked directions (canvas <https://claude.ai/artifact/4srqyFoFVHsEmzeTrqTRBx>) they
   chose **B, framed workspace**: the sidebar on a grey frame, everything else one bordered inset panel, a working crawl
