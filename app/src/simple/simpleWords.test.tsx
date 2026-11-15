@@ -140,6 +140,14 @@ describe.skipIf(TABLE_STUBBED)('Simple’s screens say none of Advanced’s word
     await expectSimpleEverywhere();
   });
 
+  // Round 5's polish: a first start asked "Have a crawl file already?", where Simple calls it a site check file. No
+  // case drew Home with nothing checked yet, the only state that says it.
+  it('Home, on a first start: nothing checked yet', async () => {
+    await open('/', gardenItem(), GARDEN_ANALYSIS, [DEFAULTS_ROUTE, ['GET', /^\/api\/crawls$/, () => json([])]]);
+    await screen.findByRole('region', { name: 'What happens' });
+    await expectSimpleEverywhere();
+  });
+
   it('the Summary', async () => {
     await open(`${CRAWL}/overview`, gardenItem(), GARDEN_ANALYSIS);
     await expectSimpleEverywhere();
