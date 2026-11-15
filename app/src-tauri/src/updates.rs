@@ -292,7 +292,11 @@ mod tests {
         );
         assert_eq!(*lock(&quit), QuitPhase::Running);
 
+        // Stopped, it's held as being analysed (its results so far come next): still something running.
         lock(&live).crawl(&CrawlChange { crawl_id: "a".into(), status: "stopped".into(), error: None });
+        assert!(begin_stopping(&quit, &live).is_err());
+        // The library says no analysis followed: nothing runs.
+        assert!(lock(&live).settle("a"));
         assert_eq!(begin_stopping(&quit, &live), Ok(()));
         assert_eq!(*lock(&quit), QuitPhase::Stopping);
         assert_eq!(begin_stopping(&quit, &live), Err("The app is quitting.".to_owned()));
