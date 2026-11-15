@@ -226,7 +226,11 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     await open([stopped, unanalysed, missing, clean]);
 
     const stoppedRow = await rowOf('stopped.example');
-    expect(within(stoppedRow).getByText('Stopped early · 312 pages read')).toBeInTheDocument();
+    // Each part whole, the line wrapping between them, never cut (round 5's polish: '5,710 pages re…').
+    for (const part of ['Stopped early', '· 312 pages read']) {
+      expect(within(stoppedRow).getByText(part)).toHaveClass('whitespace-nowrap');
+      expect(within(stoppedRow).getByText(part).closest('.truncate')).toBeNull();
+    }
     expect(
       within(stoppedRow).getByRole('img', { name: 'Score 71 out of 100 so far, Good so far' }),
     ).toBeInTheDocument();

@@ -156,6 +156,10 @@ function Library({ titleRef }: { titleRef: Ref<HTMLSpanElement> }) {
   const items = library.data;
   const view = useMemo(() => libraryView(items ?? [], live, q), [items, live, q]);
   const running = useMemo(() => runningBySite(items ?? [], view.running), [items, view.running]);
+  const runningStartedAt = useMemo(
+    () => new Map(view.running.map((item) => [item.id, item.startedAt ?? null])),
+    [view.running],
+  );
   // What each card's crawl does now, read as one string so the store's answer is stable between changes: the cards'
   // heading says it as the sidebar's does, "1 crawling, 1 paused" (round 5 review R1-3).
   const doing = useLive((state) => view.running.map((item) => state.crawls[item.id]?.status ?? '').join(' '))
@@ -246,7 +250,7 @@ function Library({ titleRef }: { titleRef: Ref<HTMLSpanElement> }) {
       {q ? `No other crawls match “${q}”.` : 'Every crawl is running now: they show above.'}
     </p>
   ) : (
-    <LibraryTable sites={view.sites} running={running} />
+    <LibraryTable sites={view.sites} running={running} runningStartedAt={runningStartedAt} />
   );
 
   return (

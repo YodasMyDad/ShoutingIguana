@@ -25,7 +25,7 @@ import { StatusPill } from '../../ui/StatusPill';
 import { TextLink } from '../../ui/TextLink';
 import { CrawlMenu } from './CrawlMenu';
 import { crawlLabel } from './libraryActions';
-import { analyseWords, crawlActions, crawlNote, neverAnalysed, runningBadge } from './library';
+import { analyseWords, crawlActions, crawlNote, neverAnalysed, runningBadge, startedLater } from './library';
 
 /**
  * The library's table (docs/v2-ui-ia.md, Home; `clarity/home.html`): a row a site, its latest crawl's status, URLs,
@@ -37,10 +37,13 @@ import { analyseWords, crawlActions, crawlNote, neverAnalysed, runningBadge } fr
 export function LibraryTable({
   sites,
   running,
+  runningStartedAt,
 }: {
   sites: readonly SiteGroup[];
   /** The crawl running now of each site that has one, by the site group's key (`runningBySite`). */
   running: ReadonlyMap<string, string>;
+  /** When each crawl running now started, by its id: whether it's newer than its site's row says so. */
+  runningStartedAt?: ReadonlyMap<string, string | null> | undefined;
 }) {
   return (
     // Should the card ever be narrower than its columns (the sidebar open at 200% zoom), the table scrolls in it, never
@@ -65,7 +68,12 @@ export function LibraryTable({
         </thead>
         <tbody>
           {sites.map((group) => (
-            <SiteRows key={group.key} group={group} runningId={running.get(group.key)} />
+            <SiteRows
+              key={group.key}
+              group={group}
+              runningId={running.get(group.key)}
+              runningStartedAt={runningStartedAt}
+            />
           ))}
         </tbody>
       </table>
@@ -110,7 +118,15 @@ const FOLDED = 'hidden text-12 text-text-muted @max-library/library:block';
 const CELL = `${CELL_BOX} whitespace-nowrap`;
 
 /** A site's row, its latest crawl, and its older crawls under it once unfolded. */
-function SiteRows({ group, runningId }: { group: SiteGroup; runningId: string | undefined }) {
+function SiteRows({
+  group,
+  runningId,
+  runningStartedAt,
+}: {
+  group: SiteGroup;
+  runningId: string | undefined;
+  runningStartedAt: ReadonlyMap<string, string | null> | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const olderId = useId();
   const older = group.earlier.length;
@@ -119,6 +135,11 @@ function SiteRows({ group, runningId }: { group: SiteGroup; runningId: string | 
       <CrawlRow
         item={group.latest}
         runningId={runningId}
+        runningNewer={
+          runningId && runningStartedAt
+            ? startedLater(runningStartedAt.get(runningId), group.latest.startedAt)
+            : undefined
+        }
         older={
           older > 0 ? (
             <button
@@ -148,12 +169,12 @@ function SiteRows({ group, runningId }: { group: SiteGroup; runningId: string | 
 }
 
 /** What the site's crawl running now is doing, by its live status: crawling, paused, stopping or being analysed. */
-function RunningBadge({ id }: { id: string }) {
+function RunningBadge({ id, newer }: { id: string; newer: boolean | undefined }) {
   const status = useLiveCrawl(id)?.status;
   return (
     <Badge variant="accent" className="flex-none">
       <LiveDot />
-      {runningBadge(status)}
+      {runningBadge(status, newer)}
     </Badge>
   );
 }
@@ -162,6 +183,7 @@ function CrawlRow({
   item,
   nested = false,
   runningId,
+  runningNewer,
   older = null,
   id,
 }: {
@@ -170,6 +192,8 @@ function CrawlRow({
   nested?: boolean;
   /** Another crawl of the site running now, in a card above: the row says what it's doing. */
   runningId?: string | undefined;
+  /** Whether that crawl started after this row's: its badge says whose state it is. */
+  runningNewer?: boolean | undefined;
   /** The toggle for the site's older crawls. */
   older?: ReactNode;
   id?: string | undefined;
@@ -202,7 +226,7 @@ function CrawlRow({
                 {/* An older crawl is named by when it started, in full: its site is the row above's. */}
                 {nested ? label : siteName(item)}
               </TextLink>
-              {runningId ? <RunningBadge id={runningId} /> : null}
+              {runningId ? <RunningBadge id={runningId} newer={runningNewer} /> : null}
             </span>
             <span className="truncate font-mono text-12 text-text-muted" title={item.path}>
               {nested ? item.fileName : (item.startUrl ?? item.fileName)} · {formatBytes(item.sizeBytes)}
@@ -214,7 +238,7 @@ function CrawlRow({
       <td className={CELL_BOX}>
         <div className="max-w-(--library-status-width)">
           <StatusPill status={status} fetched={null} variant="plain" />
-          <StatusNote item={item} status={status} />
+          <StatusNote item={item} status={status} superseded={runningId !== undefined} />
           {item.startedAt ? (
             <span className={FOLDED}>
               Started <RelativeTime iso={item.startedAt} />
@@ -247,8 +271,20 @@ function CrawlRow({
   );
 }
 
-/** The line under a crawl's status, with the one action its state needs. */
-function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus }) {
+/**
+ * The line under a crawl's status, with the one action its state needs, each phrase kept whole so the cell is at most
+ * two lines under its status (round 5's polish: "Stopped", "Analysed so", "far.", "Continue" took four). A crawl whose
+ * site has another crawl going (`superseded`, in the card above) isn't offered Continue: that one is the site's crawl now.
+ */
+function StatusNote({
+  item,
+  status,
+  superseded = false,
+}: {
+  item: CrawlListItem;
+  status: CrawlStatus;
+  superseded?: boolean;
+}) {
   const note = crawlNote(item, status);
   const actions = crawlActions(item, status);
   switch (note) {
@@ -264,8 +300,15 @@ function StatusNote({ item, status }: { item: CrawlListItem; status: CrawlStatus
     case 'unfinished':
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">
-          {item.issues ? 'Analysed so far. ' : 'Part way. '}
-          <InlineAction words="Continue" crawl={siteName(item)} onClick={() => void continueCrawl(item.id)} />
+          <span className="whitespace-nowrap">{item.issues ? 'Analysed so far' : 'Part way'}</span>
+          {superseded ? null : (
+            <>
+              {' · '}
+              <span className="whitespace-nowrap">
+                <InlineAction words="Continue" crawl={siteName(item)} onClick={() => void continueCrawl(item.id)} />
+              </span>
+            </>
+          )}
         </span>
       ) : null;
     case 'outOfDate':
