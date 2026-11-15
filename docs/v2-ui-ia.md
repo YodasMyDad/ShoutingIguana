@@ -312,6 +312,50 @@ report (both modes), and the palette has "Show the full report", "Show the summa
 everything…". A crawl never analysed has no report: it says so, with Work out the results (Analyse it in Advanced); a
 running one says the report comes when it ends; results out of date say why over the sheet.
 
+## Where it's found (ui/found-on)
+
+What a check flags is often not where it's fixed: a 404 is fixed on the pages that link to it. Each check says which
+of three it is (the engine's `IssueDefinition.References`, `references` in `GET /api/checks`), and every view of
+its URLs follows that.
+
+| `references` | The flagged URL is | Checks |
+| --- | --- | --- |
+| `sources` | Something other URLs refer to: show where it's found (the pages linking to it, by any kind of link, the sitemaps listing it, the start URL) | `internal-client-error`, `internal-server-error`, `internal-unreachable`, `internal-blocked`, `redirect-chain`, `redirect-loop`, `redirect-broken`, `redirect-temporary`, `redirect-downgrade`, `orphan-page` (its sitemap), `blocked-by-robots`, `sitemap-non-indexable`, `sitemap-url-other-host` |
+| `targets` | The page holding the bad references: show what its issue names (each target with its status and the page's link to it) | `broken-internal-links`, `broken-external-links`, `links-to-redirects`, `internal-nofollow-links`, `empty-anchor-text`, `broken-fragment-links`, `canonicalised-page`, `canonical-broken`, `canonical-to-redirect`, `canonical-to-non-indexable`, `noindex-with-canonical`, `image-broken`, `image-too-large`, `hreflang-missing-return`, `hreflang-broken-target`, `hreflang-to-non-indexable`, `mixed-content` |
+| `none` | The fault is in the URL itself (its title, its size) or in the site as a whole | the other 57, among them `duplicate-site-version` (a probe, which nothing links to), `robots-txt-*`, `sitemap-error`, `sitemap-missing` |
+
+A broken external link is a `targets` check (the engine flags the page, not the other site's URL); its groups are by
+the external URL, so a group is the URL and its rows the pages linking to it, which reads both ways round.
+
+- **Advanced, Issues.** Each URL of a `sources` check says on its row "Found on 3 pages · /garden-furniture/ +2" (or
+  "In a sitemap · /sitemap.xml", "The start URL", "Not linked from any page crawled"); a page of a `targets` check
+  says "Links to /old/ (404) +2" ("Canonical …", "Shows …" for images, "Loads …" for mixed content). In a check's
+  groups the row opens (Right, or its chevron; Enter still inspects it) to list its first five links, each with the
+  page it's on, where on that page (header, navigation, content, footer, sidebar, head), its anchor or alt text and
+  whether it's followed, then its first two sitemaps, its being the start URL, and "Show all N links in Links" (Links
+  filtered to links to it, every kind, a page's own left out). Enter on a source inspects the page linking; on a
+  sitemap, opens it. A `targets` page lists the URLs it names, each to the inspector. A check that doesn't group
+  (`redirect-loop`, `orphan-page`) has a "Found on" column instead, and Enter inspects (the inspector's Inlinks list
+  them all). The row menu has "Show where it's found in Links". A likely-template group of a `targets` check says
+  where on the pages the shared link is ("It's a link in the header").
+- **Simple, one problem.** Under each broken or redirected address in Where it is: "Linked from /garden/, /sofas/ and
+  3 more", "Listed in your sitemap", or "It's the address the check started from". When one page links to at least
+  half of the first 25 addresses (and two or more), a callout says so: "One page links to 3 of these 4 addresses:
+  /garden-furniture/ links to most of them, from its footer." A One fix of a `targets` check says where its link
+  is and what it leads to ("It's a link in the header, to /.").
+- **The report** lists, beside a `sources` check's first addresses, "Where to fix it": "Linked from 3 pages: /a/,
+  /b/ and 1 more", the sitemap, the start address. A `targets` page naming several says "→ /old/ and 2 others".
+- **A check's file** (the workbook's sheets, "This check", a group's pages) adds, for `sources`: "Linked from
+  (pages)", "Linked from" (the first ten pages, each with where the link is and its text, then "and N more") and
+  "Listed in sitemaps"; for `targets`: "Links to (addresses)" and "Links to" (the first ten with their status). One
+  row a URL, as the sheet already is: a row per reference would make a footer link on every page a million rows, and
+  the full list of one URL's links is Links' export. "Copy URLs" stays a plain list of the URLs.
+
+Every URL shown in a grid (URLs, Links' two ends, Issues' rows and their sources, Sitemaps, robots.txt's blocked URLs
+and origins, the inspector's links) and in Simple's lists has a button that opens it in the browser, named "Open
+<url> in your browser". In a grid it shows on the row's hover, on the cursor's row while the grid has focus, and
+always on a selected row; it's no Tab stop (Shift+Enter is its key) and a press leaves the cursor where it was.
+
 ## The five flows
 
 1. **New crawl.** Ctrl+N, or the URL field on Home. Paste, press Enter, and you land on the crawl's Overview, live.
@@ -383,6 +427,8 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Ctrl+C | Copy as tab-separated text |
 | Home, End, Page Up, Page Down | Jump |
 | Shift+F10 or the menu key | Right-click menu: for the row, or the selection it's in. Esc gives the keyboard back to the row |
+| Shift+Enter | Open the row's URL in the browser (on Links, the end the cursor is on), as its cell's button does |
+| Right, Left on an issue's URL | Open it to list where it's found (or what it names), and close it; Left from a row under it goes back up |
 | Up from the first row, then Enter | Sort by the header the cursor is on, where the grid sorts by it; Shift+Enter (or Shift+click) adds it to the sort, on the URL grid |
 | On a header: Shift+Left, Shift+Right | The column narrower or wider |
 | On a header: Ctrl+Shift+Left, Ctrl+Shift+Right | Move the column (never across the pinned columns' edge) |
