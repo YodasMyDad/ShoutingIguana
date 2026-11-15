@@ -44,6 +44,10 @@ internal static class GridEndpoints
             TypedResults.Json(await data.LinksAsync(id, LinkDirection.Outlinks, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.LinksRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.LinkPageDto));
 
+        api.MapPost("/api/crawls/{id}/urls/found-on", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.FoundOnAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.FoundOnRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.FoundOnDto));
+
         api.MapPost("/api/crawls/{id}/urls/source", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             await data.SourceAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlRequest).ConfigureAwait(false), cancellationToken)
                 .ConfigureAwait(false));
@@ -95,5 +99,9 @@ internal static class GridEndpoints
         api.MapPost("/api/crawls/{id}/issues/{checkId}/rows", async (string id, string checkId, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.RowsAsync(id, checkId, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GridQueryRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlPageDto));
+
+        api.MapPost("/api/crawls/{id}/issues/{checkId}/targets", async (string id, string checkId, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.TargetsAsync(id, checkId, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.FoundOnRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.IssueTargetsDto));
     }
 }

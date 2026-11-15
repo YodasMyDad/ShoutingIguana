@@ -422,6 +422,58 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     }
 
     /// <summary>
+    /// Where a page of flagged URLs is found, in one call: each URL's links and pages, its first sources as inlinks name
+    /// them, its sitemaps; and what a page of a check's flagged pages each names, with the page's link to it. A check says
+    /// which of the two it wants.
+    /// </summary>
+    [Fact]
+    public async Task FlaggedUrlsSayWhereTheyAreFoundAndPagesWhatTheyName()
+    {
+        var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
+        string? References(string id) => (string?)checks.Single(check => (string?)check!["id"] == id)!["references"];
+        Assert.Equal("sources", References("internal-client-error"));
+        Assert.Equal("targets", References("broken-internal-links"));
+        Assert.Equal("none", References("title-too-long"));
+
+        // The 404 an hreflang names, found on the page declaring it.
+        var gone = IdOf("/plants/gone");
+        var found = await PostOkAsync($"api/crawls/{grid.Id}/urls/found-on", new JsonObject { ["urlIds"] = new JsonArray(gone, 999_999_999), ["limit"] = 2 });
+        var url = found["urls"]!.AsArray().Single()!;
+        Assert.Equal(["urlId", "links", "pages", "pagesExact", "sources", "sitemaps", "start"], url.AsObject().Select(property => property.Key));
+        Assert.Equal(gone, (int?)url["urlId"]);
+        Assert.True((bool)url["pagesExact"]!);
+        Assert.False((bool)url["start"]!);
+        var inlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", new JsonObject { ["urlId"] = gone, ["limit"] = 2 });
+        Assert.Equal(inlinks["rows"]!.ToJsonString(), url["sources"]!.ToJsonString());
+        Assert.Equal((long?)inlinks["total"], (long?)url["links"]);
+        Assert.Contains(url["sources"]!.AsArray(), source => (string?)source!["kind"] == "hreflang" && (string?)source["url"] == grid.Url("/plants/hreflang-broken"));
+        Assert.Equal("""{"total":0,"sitemaps":[]}""", url["sitemaps"]!.ToJsonString());
+
+        var pages = await PostOkAsync($"api/crawls/{grid.Id}/issues/broken-internal-links/rows", JsonNode.Parse("""{"columns":["id"],"limit":3}"""));
+        var ids = pages["rows"]!.AsArray().Select(row => (int)row!["id"]!).ToList();
+        var named = await PostOkAsync($"api/crawls/{grid.Id}/issues/broken-internal-links/targets", new JsonObject { ["urlIds"] = new JsonArray([.. ids.Select(id => JsonValue.Create(id))]) });
+        Assert.Equal("broken-internal-links", (string?)named["checkId"]);
+        Assert.Equal(ids, named["urls"]!.AsArray().Select(page => (int)page!["urlId"]!));
+        var target = named["urls"]![0]!["targets"]![0]!;
+        Assert.Equal(["id", "url", "statusCode", "fetched", "outcome", "kind", "text", "position"], target.AsObject().Select(property => property.Key));
+        Assert.True((int?)target["statusCode"] >= 400);
+        Assert.Equal("hyperlink", (string?)target["kind"]);
+
+        // Bounded, and refused where the request can't be read.
+        foreach (var body in new[] { "{}", """{"urlIds":[]}""", $$"""{"urlIds":[{{string.Join(",", Enumerable.Range(1, 101))}}]}""", """{"urlIds":[1],"limit":51}""" })
+        {
+            TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/found-on", JsonNode.Parse(body)), HttpStatusCode.UnprocessableEntity, "invalid-query");
+            TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/issues/broken-internal-links/targets", JsonNode.Parse(body)),
+                HttpStatusCode.UnprocessableEntity, "invalid-query");
+        }
+
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/issues/no-such-check/targets", JsonNode.Parse("""{"urlIds":[1]}""")),
+            HttpStatusCode.NotFound, "check-not-found");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.FreshId}/issues/broken-internal-links/targets", JsonNode.Parse("""{"urlIds":[1]}""")),
+            HttpStatusCode.NotFound, "not-analyzed");
+    }
+
+    /// <summary>
     /// The checks the user hid are left out of the issue counts the URL grid reads, sorts and filters by, of the severity
     /// facet, and of a links view's target counts, as the engine leaves them out (round 5 review).
     /// </summary>

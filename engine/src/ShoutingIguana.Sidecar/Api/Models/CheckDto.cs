@@ -9,6 +9,11 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// <param name="LearnMore">A page that explains the check, or null.</param>
 /// <param name="Grouping">How the check's issues group (E3a): <c>detail</c>, <c>relatedUrl</c> or <c>none</c>.</param>
 /// <param name="Subject">What the URLs it flags are (E3b): <c>page</c> when always pages, <c>url</c> when any URL.</param>
+/// <param name="References">
+/// Where to fix what it flags (found-on): <c>sources</c> when each URL is something other URLs refer to (show where it's found,
+/// <c>/urls/found-on</c>), <c>targets</c> when each page holds the bad references (show what its issue names,
+/// <c>/issues/{checkId}/targets</c>), <c>none</c> otherwise.
+/// </param>
 /// <param name="SiteWide">The check finds one fault of the whole site, which the score counts as the whole site whatever its count.</param>
 /// <param name="ReportedOnce">
 /// The check reports one issue for the whole site (or one for each other version of it), not one a page: its count isn't
@@ -35,6 +40,7 @@ internal sealed record CheckDto(
     string? LearnMore,
     string Grouping,
     IssueSubject Subject,
+    IssueReferences References,
     bool SiteWide,
     bool ReportedOnce,
     string? PlainTitle,
@@ -50,7 +56,7 @@ internal sealed record CheckDto(
     {
         var plain = PlainLimits.Fill(check.Plain, settings);
         return new CheckDto(check.Id, check.Category, check.Severity, check.Title, check.Description, check.Fix, check.Why, check.LearnMore,
-            GridRequests.Grouping(check.Grouping), check.Subject, check.SiteWide, check.ReportedOnce,
+            GridRequests.Grouping(check.Grouping), check.Subject, check.References, check.SiteWide, check.ReportedOnce,
             plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor);
     }
 }
