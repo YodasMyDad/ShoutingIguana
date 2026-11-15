@@ -151,7 +151,7 @@ export function queuedSoFar(progress: Pick<LiveProgress, 'queued' | 'inFlight'> 
 /** The line under Queued: how many of them are on their way now, which Queued counts. */
 export function queuedLine(progress: Pick<LiveProgress, 'inFlight'> | null): string {
   const inFlight = progress?.inFlight ?? null;
-  return inFlight !== null && inFlight > 0 ? `${formatCount(inFlight)} of them on their way` : 'Waiting their turn';
+  return inFlight !== null && inFlight > 0 ? `${formatCount(inFlight)} on their way` : 'Waiting their turn';
 }
 
 export interface FoundSplit {

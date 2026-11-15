@@ -2194,7 +2194,7 @@ Ten things the gallery found in the release shell, each fixed and walked by `smo
   which lists them as it opened (counts arriving while it's open don't move its items). Tab reaches it from the strip;
   a tab chosen there is chosen, scrolled into view and focused (`DropdownMenu`'s optional `closeFocus`).
 - **Queued is one number** (`queuedSoFar`, `queuedLine` in `liveFigures.ts`): the URLs waiting and the ones on their
-  way, as the found bar splits them, on a running crawl's card and Overview's live figures, "5 of them on their way".
+  way, as the found bar splits them, on a running crawl's card and Overview's live figures, "5 on their way".
 - **The library's badge says whose state it is** (`runningBadge(status, newer)`): "Newer crawl paused" beside the row's
   own "Stopped", "Another crawl" when the running one began before the row's; Crawling now as before. The status note
   keeps each phrase whole, and a row whose site has another crawl going offers no Continue. Simple Home's line under a

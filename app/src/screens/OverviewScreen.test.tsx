@@ -693,7 +693,7 @@ describe('the Overview while the crawl runs', () => {
     const queued = (last.queued + last.inFlight).toLocaleString('en-GB');
     expect(last.inFlight).toBeGreaterThan(0);
     expect(figure('Queued')).toHaveTextContent(queued);
-    expect(cell('Queued')).toHaveTextContent(`${last.inFlight} of them on their way`);
+    expect(cell('Queued')).toHaveTextContent(`${last.inFlight} on their way`);
     const bar =
       main()
         .getByLabelText(/^Of [\d,]+ URLs found: /)
