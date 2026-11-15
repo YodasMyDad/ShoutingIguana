@@ -130,7 +130,10 @@ export function Tabs<T extends string>({
       list.removeEventListener('wheel', onWheel);
     };
   }, [tabs.length]);
-  const hidden = tabs.filter((tab) => outOfView.includes(tab.value));
+  // While its menu is open, the list it was opened on: counts arriving can move tabs in or out of view, and items
+  // coming and going under the keyboard lost its place in the menu (seen in the release shell).
+  const [listed, setListed] = useState<readonly string[] | null>(null);
+  const hidden = tabs.filter((tab) => (listed ?? outOfView).includes(tab.value));
   return (
     <TabsPrimitive.Root
       {...(current === undefined ? {} : { value: current })}
@@ -163,6 +166,7 @@ export function Tabs<T extends string>({
         {hidden.length > 0 ? (
           <DropdownMenu
             align="end"
+            onOpenChange={(open) => setListed(open ? outOfView : null)}
             closeFocus={() => {
               const chosen = chosenFromMenu.current;
               chosenFromMenu.current = null;

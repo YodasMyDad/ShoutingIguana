@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -135,6 +135,16 @@ describe('a strip of tabs wider than its room', () => {
     Object.defineProperty(list, 'scrollWidth', { configurable: true, value: 400 });
     list.dispatchEvent(new Event('scroll'));
     await user.click(await screen.findByRole('button', { name: /^3 more:/ }));
+    // Tabs moving in or out of view while it's open (counts arriving) leave its items as they were opened.
+    act(() => {
+      list.scrollLeft = 250;
+      list.dispatchEvent(new Event('scroll'));
+    });
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'inlinks',
+      'outlinks',
+      'hreflang',
+    ]);
     await user.click(screen.getByRole('menuitem', { name: 'outlinks' }));
     expect(screen.getByRole('tab', { name: 'outlinks' })).toHaveAttribute('aria-selected', 'true');
   });

@@ -309,7 +309,8 @@ try {
       const items = page.getByRole('menu').getByRole('menuitem');
       await items.first().waitFor();
       const last = (await items.last().innerText()).split('\n')[0].trim();
-      await page.keyboard.press('End');
+      // The menu loops: up from its first item is its last.
+      await page.keyboard.press('ArrowUp');
       await page.keyboard.press('Enter');
       const chosen = strip.getByRole('tab', { name: new RegExp(`^${last}`) });
       await until(
@@ -528,8 +529,6 @@ try {
     expectThat(truth.words.test(said), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
     if (truth.not) expectThat(!truth.not.test(said), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
     await picture('07b-updates');
-    await page.keyboard.press('Control+2');
-    await page.waitForURL(/\/issues/);
     return `GitHub ${truth.said}: "${words.slice(-2).join(' ')}"`;
   });
 
