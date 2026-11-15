@@ -131,10 +131,25 @@ the three audit sites above.
 
 ## Where step 3 stands (2026-11-15)
 
-Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3`. `v2` and `master`
-were not moved. This section is the place to resume. Merging to `master` or releasing still needs an explicit yes.
+Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`. Since 2026-11-15 commits stay local (no push until
+the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not moved. This section is the place to
+resume. Merging to `master` or releasing still needs an explicit yes.
 
-**PAUSED 2026-11-15 at the owner's word (usage). To resume, in this order:**
+**STEP 3 FINISHED 2026-11-15.** Polish 2 is merged (`9be9c71`, local). Its last checks, on `84ebeeb` (the merge differs
+only in docs and CI): `verify-app.sh` every step exit 0 (unit 3,769; stories x3, plain, forced and reduced; sidecar),
+full e2e 233 (the first run failed one test, `states.spec` "tabs past the edge", which still held the scrolling strip
+polish 2 replaced; rewritten for the new rule, seen failing on the old CSS, fixed in `84ebeeb`), `e2e:filled` 30,
+`smoke:shell` 19 + 9 on the release build of `76eeb28`. No `app/src-tauri/` change, so no Linux check was needed.
+**Gallery version 5 published** (<https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>, the five polish 2 views re-shot).
+One thing left to the owner's eye: at 1280x720 with an export running, the sidebar scrolls and the export's row sits
+half below its fold (gallery 32); the export's toast shows it too.
+
+**Next:** a fresh local Windows installer for the owner and friends to try (`npm run tauri build -- --bundles nsis`,
+then `check:orphans`, `smoke:tauri`, `scripts/smoke-installer.ps1`; unsigned, so SmartScreen warns; no auto-update
+until a release carries the updater key). Then step 3b, the check audit on the three real sites above. Then the release
+step (signing, licences, updater secrets, CI on all three OSes), at the owner's word.
+
+The resume list from the pause, all done now:
 
 1. **Polish 2** (`ui/r5-polish2` at `76eeb28`, worktree `.claude/worktrees/r5-polish2`, pushed; brief
    [`brief-polish-2.md`](handoff/2026-11-15/brief-polish-2.md)): **all four items are done**, each with a test seen
@@ -156,7 +171,8 @@ were not moved. This section is the place to resume. Merging to `master` or rele
 4. If the shots show nothing else wrong, tell the owner step 3 is finished. Step 3b (the check audit on real sites)
    follows. Merging to `master` or releasing still needs the owner's explicit yes.
 
-No agent is running. Every `ui/r5-*` branch is on GitHub. The published gallery is version 4 (42 views, 2026-11-15).
+No agent is running. The `ui/r5-*` branches up to polish 2's `76eeb28` are on GitHub; later commits are local only.
+The published gallery is version 5 (42 views, 2026-11-15).
 
 **Where it stood before the pause (2026-11-15): round 5 is merged into `ui/step-3` (`d6ea51a`) and the whole of it is verified.** On its code
 (`a8f8acc`, which differs from the merge only in docs): `verify-engine.sh` (build, tests 1,489 + 285 + 28, the 100k
