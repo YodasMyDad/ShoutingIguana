@@ -2150,7 +2150,8 @@ Two reviewers read round 5 joined; every finding was fixed with a test seen fail
   closed before the Undo runs out leaves nothing behind. A quick start (`quickStartUrl`) asks `start-url` with the saved
   defaults, their secrets in.
 - **Home's running cards** are headed by `runningTitle` ("1 crawling, 1 paused"), and a site's row badge follows its
-  running crawl's status (Crawling now, Paused, Stopping, Analysing). A crawl only being analysed has a card of its own:
+  running crawl's status (Crawling now; Newer crawl paused, stopping, being analysed: round 5's polish, below). A crawl
+  only being analysed has a card of its own:
   Crawled and Pages from what it holds, no queue, rate or bar. Crawled's line is Overview's, "URLs the crawl asked for".
   The card's status line is one line whatever phase arrives, and `useElementWidth` measures before the first paint, so
   the card's height holds from its first frame (an e2e test reads it on every frame).
@@ -2169,3 +2170,45 @@ Two reviewers read round 5 joined; every finding was fixed with a test seen fail
   `watchHiddenChecks` (`api/hiddenChecksRefresh.ts`) reads the grids again when they change.
 - A column the engine refuses is named by its place in the columns the query sent (sorted), not the view's order.
 - `GoToUrl.test.tsx` pays for the app's first render once, in a `beforeAll`, and keeps the suite's 5 s limit.
+
+## Round 5's polish (the gallery in the release shell, 2026-11-15)
+
+Ten things the gallery found in the release shell, each fixed and walked by `smoke:shell` there.
+
+- **Reduced motion takes no time.** `base.css`'s reduced-motion rule sets `transition-duration: 0s` (and no delay),
+  never a short duration: every element's `transition-property` is `all` unless it says otherwise, so 0.01ms made every
+  change of every property a transition, and what was measured just after a change read the old size. The top bar's
+  give-way measure flipped between two steps every frame, the search field's Ctrl K poking out under the switch (in
+  Chromium too, under reduced motion; `e2e/topbar.spec.ts` watches the bar frame by frame under it).
+- **The report frame's scroll bars** go first in the frame copy's head (`withAppScrollBars`), ahead of the report's own
+  Content-Security-Policy meta, which allows its one style sheet by hash and governs only what follows it. The saved
+  file is the engine's, untouched. The Report's title and line are a row of their own, the line wrapping only between
+  its parts; the controls are the next row, the cut then Spreadsheet, Save and Print together.
+- **Updates** tell a failed check's case apart by the updater's error kind (`updates.rs`, `CheckProblem`): no answer
+  (`noConnection`), GitHub answering without update information, a 404 for a release with no `latest.json` among them
+  (`noUpdateInformation`, which the plugin reports as `ReleaseNotFound`), a manifest this version can't read
+  (`unreadable`), a signature or signed version that doesn't match (`untrusted`), an updater that can't be set up
+  (`unavailable`). `update_check` rejects with `{ problem, message, currentVersion }`; the panel words each case in
+  both modes, no update information yet as information ("you have 2.0.0"), the others as errors.
+- **A tab strip too wide for its room** (`ui/Tabs.tsx`) ends in a button, "5 more", named for the tabs out of view,
+  which lists them as it opened (counts arriving while it's open don't move its items). Tab reaches it from the strip;
+  a tab chosen there is chosen, scrolled into view and focused (`DropdownMenu`'s optional `closeFocus`).
+- **Queued is one number** (`queuedSoFar`, `queuedLine` in `liveFigures.ts`): the URLs waiting and the ones on their
+  way, as the found bar splits them, on a running crawl's card and Overview's live figures, "5 of them on their way".
+- **The library's badge says whose state it is** (`runningBadge(status, newer)`): "Newer crawl paused" beside the row's
+  own "Stopped", "Another crawl" when the running one began before the row's; Crawling now as before. The status note
+  keeps each phrase whole, and a row whose site has another crawl going offers no Continue. Simple Home's line under a
+  site wraps between its parts instead of cutting one.
+- **Simple's words** on a first start: a site check file, every address. `simpleWords.test.tsx` draws a first start.
+- **A finished check's toast** offers what's useful from where the user is (`startLiveBridge`'s `viewing`, the router's
+  path): from the Summary the report and what to fix, from the Report the summary, elsewhere both; Advanced's leaves out
+  View issues on Issues and the report on the Report.
+- **Overview's chart is on Elapsed's clock**, the engine's time spent crawling: a trail point keeps the progress event's
+  `crawlingMs` and sits there, and the history's points of the run being watched go by its stretches once the file has
+  the run. A page loaded again while a crawl was paused had seeded its run clock with the engine's wall time and drawn
+  the pause ("over 2 min 21 s" beside Elapsed 30 s). The subtitle says "of crawling". Delete's question names the file
+  plainly (`deleteQuestion`): "Delete the crawl file of 127.0.0.1:49877 from 15 Nov 2026, 01:42?".
+- **The tray across the hand-over** (`live/model.rs`): a crawl that ended crawling here stays in the shell's live view as
+  being analysed until its analysis begins, or the end's own library lookup says none followed (`settle`). The icon no
+  longer went for a moment between a check and the working out of its results, nor said plain "Shouting Iguana" from
+  the tray. `smoke:shell`'s Simple walk reads the icon's removals from the log (`trayWords`' `shown`) and fails on a gap.
