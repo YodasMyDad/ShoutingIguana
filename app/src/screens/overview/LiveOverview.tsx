@@ -226,8 +226,8 @@ export function LiveOverview({
       ) : null}
 
       <div ref={widthRef}>
-        <Card as="section" aria-label="Progress">
-          <Stats columns={columns} wrap={columns < 6}>
+        <section aria-label="Progress">
+          <Stats columns={columns} cards>
             <StatLink
               {...linkProps(crawlId, { to: 'urls', filters: [{ column: 'fetched', op: 'is', value: true }] })}
               size={size}
@@ -275,7 +275,7 @@ export function LiveOverview({
             />
             <Stat size={size} label="Elapsed" value={<Duration ms={elapsedMs} />} context={lines(elapsedContext)} />
           </Stats>
-        </Card>
+        </section>
       </div>
 
       <div className="grid grid-cols-(--overview-live-columns) items-start gap-4 @max-split:grid-cols-1">

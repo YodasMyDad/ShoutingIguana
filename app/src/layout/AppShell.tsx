@@ -23,8 +23,8 @@ import { useShellIntegration } from './useShellIntegration';
 import { useDocumentTitle } from './documentTitle';
 
 /**
- * The shell (docs/v2-ui-ia.md): the sidebar, the top bar, the main area and the inspector's slot, plus the
- * app-wide overlays. Its parts take their look from the design system (src/ui, styles/components.css).
+ * The shell (docs/v2-ui-ia.md): the sidebar on the frame, then one panel holding the top bar, the main area and the
+ * inspector's slot, plus the app-wide overlays. Its parts take their look from the design system (src/ui, styles/components.css).
  *
  * - While anything modal is open (the palette, the `?` sheet, "Stopping crawls…"), everything behind it is inert:
  *   neither the keyboard nor a screen reader can reach it. Toasts and the live regions stay outside, so they're heard.
@@ -54,7 +54,9 @@ export function AppShell() {
   }, []);
   return (
     <>
-      <div inert={modal} className="relative flex h-full overflow-hidden bg-canvas text-text">
+      {/* The framed workspace (docs/v2-ui-design.md): the window is the frame, the sidebar sits on it, and the top bar,
+          the screen and the inspector are one panel inset from the window's edge, the screen scrolling inside it. */}
+      <div inert={modal} className="relative flex h-full overflow-hidden bg-frame text-text">
         <a
           href="#main"
           className="sr-only z-50 rounded-sm bg-surface-overlay px-3 py-2 text-13 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
@@ -64,7 +66,7 @@ export function AppShell() {
         <RegionBoundary name="sidebar">
           <Sidebar />
         </RegionBoundary>
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div data-panel="" className="si-panel flex min-w-0 flex-1 flex-col">
           <RegionBoundary name="top bar">
             <TopBar />
           </RegionBoundary>

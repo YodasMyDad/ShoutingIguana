@@ -260,7 +260,7 @@ export function SitemapTree({
           onOpen(row.sitemap, counted ? COUNT_FILTERS[count] : []);
         }}
         busy={busy}
-        className="si-grid-frame--two-line-head flex-1 rounded-lg border border-border shadow-1"
+        className="si-grid-frame--two-line-head flex-1 rounded-lg border border-border-card"
       />
     </div>
   );

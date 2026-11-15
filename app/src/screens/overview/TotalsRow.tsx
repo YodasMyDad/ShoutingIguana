@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { formatCount, formatPercent } from '../../lib/format';
-import { Card } from '../../ui/Card';
 import { Num } from '../../ui/Num';
 import { StatLink, Stats } from '../../ui/Stat';
 import { ANSWERED_SITE_PAGES } from './links';
@@ -26,8 +25,8 @@ export function TotalsRow({ crawlId }: { crawlId: string }) {
     totals && part !== undefined ? `${formatPercent(part, totals.crawled)} of those crawled` : undefined;
   return (
     <div ref={widthRef}>
-      <Card as="section" aria-label="Totals">
-        <Stats columns={columns} wrap={columns < 5}>
+      <section aria-label="Totals">
+        <Stats columns={columns} cards>
           <StatLink
             {...linkProps(crawlId, { to: 'urls', filters: [...CRAWLED] })}
             size="md"
@@ -68,7 +67,7 @@ export function TotalsRow({ crawlId }: { crawlId: string }) {
             }
           />
         </Stats>
-      </Card>
+      </section>
     </div>
   );
 }

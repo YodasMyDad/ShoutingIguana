@@ -130,9 +130,10 @@
   --radius-xs: 4px; /* keycaps, status marks, small badges */
   --radius-sm: 6px; /* buttons, inputs, filter chips */
   --radius-md: 8px; /* menus, segmented controls, list rows */
-  --radius-lg: 12px; /* cards and grids */
+  --radius-lg: 8px; /* cards and grids (the framed workspace: 12 px read as soft; enterprise apps keep cards tight) */
   --radius-xl: 14px; /* the inspector sheet, the URL field */
   --radius-full: 999px; /* the status pill, progress bars */
+  --radius-panel: 10px; /* the workspace panel the top bar and the screens sit in */
 
   /* ----------------------------------------------------------- Breakpoints */
   /* `wide:` is 1920 px and up. Below 1360 px is `narrow:`, a max-width variant (above). */
@@ -168,8 +169,14 @@
 
   /* -------------------------------------------------------------- Colour */
   /* Neutrals carry no hue in either theme, so colour always means something. */
-  --color-canvas: light-dark(#f5f5f7, #0a0a0b);
-  --color-surface: light-dark(#ffffff, #121214);
+  /*
+    The framed workspace (docs/v2-ui-design.md, The framed workspace): the window is the frame, the sidebar sits on it, and
+    everything right of the sidebar is one panel inset from the window's edge. The canvas is the panel's own colour,
+    what a screen is drawn on; cards are the surface on it, with the card border.
+  */
+  --color-frame: light-dark(#eeeef1, #09090b);
+  --color-canvas: light-dark(#ffffff, #101012);
+  --color-surface: light-dark(#ffffff, #161619);
   --color-surface-raised: light-dark(#ffffff, #18181b);
   --color-surface-overlay: light-dark(#ffffff, #1e1e22);
   --color-surface-sunken: light-dark(#fafafb, #0e0e10);
@@ -181,6 +188,27 @@
   --color-border: light-dark(#e3e3e7, #28282d);
   --color-border-strong: light-dark(#cfcfd5, #3a3a40);
   --color-border-control: light-dark(#8a8a93, #6e6e77); /* inputs and toggles: 3:1 */
+  --color-border-panel: light-dark(#d6d6dc, #26262b); /* the workspace panel's edge, against the frame */
+  --color-border-card: light-dark(#dcdce1, #2c2c32); /* a card's edge, and a grid's frame: stronger than a divider */
+  --color-border-switcher: light-dark(#d6d6dc, #2c2c32); /* the sidebar's crawl switcher, on the frame */
+
+  /* The sidebar, on the frame: its items, their icons, group labels and hover. */
+  --color-nav-text: light-dark(#3a3a41, #c9c9cf);
+  --color-nav-icon: light-dark(#5c5c64, #9a9aa2);
+  --color-nav-label: light-dark(#5f5f67, #8e8e96);
+  --color-nav-hover: light-dark(#e4e4e8, #18181b);
+
+  /*
+    What's current (the sidebar's place, Settings' section, the palette's and a menu's highlighted item, a list's chosen
+    row): a solid neutral fill and near-black or white text at 600, never the accent (the owner: the accent rule along
+    the edge "looks AI made"). On the frame, the sidebar's fill; on the panel or a menu, the inset one, light enough
+    that the muted text on it keeps 4.5:1.
+  */
+  --color-current: light-dark(#dcdce2, #232328);
+  --color-current-inset: light-dark(#e8e8ec, #26262b);
+  /* A menu's or the palette's highlighted item, on the overlay: a step stronger in dark, its muted words secondary. */
+  --color-current-overlay: light-dark(#e8e8ec, #2e2e34);
+  --color-current-text: light-dark(#111113, #ffffff);
 
   --color-text: light-dark(#18181b, #ededef);
   --color-text-secondary: light-dark(#46464d, #b4b4bb);
@@ -279,6 +307,7 @@
   --shadow-3: var(--elevation-3);
   --shadow-4: var(--elevation-4);
   --shadow-control: var(--elevation-control);
+  --shadow-panel: var(--elevation-panel);
 }
 
 :root {
@@ -302,6 +331,8 @@
     0 8px 16px -4px light-dark(rgb(16 16 20 / 0.08), rgb(0 0 0 / 0.5)),
     0 32px 64px -16px light-dark(rgb(16 16 20 / 0.24), rgb(0 0 0 / 0.8));
   --elevation-control: 0 1px 1px 0 light-dark(rgb(16 16 20 / 0.05), rgb(0 0 0 / 0.35));
+  /* The workspace panel: a faint lift off the frame in light; none in dark, where its border does it. */
+  --elevation-panel: 0 1px 2px 0 light-dark(rgb(16 16 20 / 0.06), rgb(0 0 0 / 0));
   --highlight-top: inset 0 1px 0 0 light-dark(rgb(255 255 255 / 0), rgb(255 255 255 / 0.05));
   --highlight-accent: inset 0 1px 0 0 light-dark(rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.14));
 
@@ -319,6 +350,12 @@
 
   /* --------------------------------------------------------------- Layout */
   --sidebar-width: 240px;
+  /*
+    The panel's inset from the window's edges (top, right and bottom; the sidebar's side has none). It narrows with the
+    window: 4 px at 800 px and under, none at 640 px and under (1280 px at 200% zoom), where every pixel is the screen's
+    and the panel keeps only its edge against the sidebar.
+  */
+  --frame-inset: var(--space-2);
   --sidebar-width-collapsed: 56px;
   --topbar-height: 52px;
   --inspector-width: 400px;
@@ -342,7 +379,12 @@
   --chain-columns: var(--icon-box) minmax(0, 1fr); /* a redirect chain's rail, then each step */
   --hreflang-columns: 5.5rem minmax(0, 1fr); /* the language ("x-default"), then where it points */
   --tree-row-min: 12rem; /* a structured data tree's row, however deep: past the sheet's width it scrolls sideways */
-  --content-max: 1136px;
+  /*
+    The widest a capped screen's column runs (Overview, Home, Simple's Home and checking screen): it fills the panel up
+    to this, and only past it centres. Prose and fields inside keep their own measures (--measure-text, --form-max).
+    Was 1136 px, which left a wide empty band each side of a maximised window (the owner took it for a bug).
+  */
+  --content-max: 1800px;
   --page-gutter: var(--space-8);
   --sheet-inset: var(--space-2);
   --hairline: 1px;
@@ -466,6 +508,7 @@
   --checkbox-size: 16px;
   --tooltip-max-width: 320px;
   --menu-min-width: 208px;
+  --switcher-menu-width: 288px; /* the sidebar's crawl switcher: a site's name over its date */
   --popover-width: 320px;
   /* The grid's filter editor and column chooser (the Links slice): a list in a popover scrolls past this height. */
   --filter-values-height: 224px;
@@ -546,6 +589,19 @@
   }
 }
 
+/* A small window, or a big zoom: the panel's inset narrows, then goes (--frame-inset, above). */
+@media (max-width: 800px) {
+  :root {
+    --frame-inset: var(--space-1);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --frame-inset: 0px;
+  }
+}
+
 /*
   High contrast (Windows contrast themes). The browser already forces text, backgrounds and borders to the user's
   system colours; these mappings cover what it leaves alone: SVG marks and bars, shadows, and anything drawn with
@@ -568,6 +624,19 @@
     --color-border: CanvasText;
     --color-border-strong: CanvasText;
     --color-border-control: ButtonText;
+    --color-frame: Canvas;
+    --color-border-panel: CanvasText;
+    --color-border-card: CanvasText;
+    --color-border-switcher: ButtonText;
+    --color-nav-text: CanvasText;
+    --color-nav-icon: CanvasText;
+    --color-nav-label: CanvasText;
+    --color-nav-hover: Canvas;
+    /* The current place keeps the page's colours and gets a Highlight ring (components.css). */
+    --color-current: Canvas;
+    --color-current-inset: Canvas;
+    --color-current-overlay: Canvas;
+    --color-current-text: CanvasText;
     --color-text: CanvasText;
     --color-text-secondary: CanvasText;
     --color-text-muted: CanvasText;
@@ -636,6 +705,7 @@
     --elevation-3: none;
     --elevation-4: none;
     --elevation-control: none;
+    --elevation-panel: none;
     --highlight-top: none;
     --highlight-accent: none;
   }

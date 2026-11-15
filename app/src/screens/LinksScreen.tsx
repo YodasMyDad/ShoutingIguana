@@ -844,7 +844,7 @@ export function LinksScreen() {
                 />
               )
             }
-            className="flex-1 rounded-lg border border-border shadow-1"
+            className="flex-1 rounded-lg border border-border-card"
           />
         </GridScreenBody>
       )}

@@ -33,8 +33,8 @@ export function SeverityFigures({
   columns: number;
 }) {
   return (
-    <Card as="section" aria-label="Issues by severity">
-      <Stats columns={columns} wrap={columns < 4}>
+    <section aria-label="Issues by severity">
+      <Stats columns={columns} cards>
         {severityFigures(entries).map((figure) => (
           <StatLink
             key={figure.severity}
@@ -66,7 +66,7 @@ export function SeverityFigures({
           }
         />
       </Stats>
-    </Card>
+    </section>
   );
 }
 

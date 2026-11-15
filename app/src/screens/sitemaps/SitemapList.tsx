@@ -101,7 +101,7 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
   if (loading) {
     // The frame from the start: the list's own rows, once the wait is worth a skeleton.
     body = (
-      <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border shadow-1" aria-busy="true">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border-card" aria-busy="true">
         {skeleton ? <SkeletonRows rows={8} label="Loading the sitemaps" /> : null}
       </div>
     );
