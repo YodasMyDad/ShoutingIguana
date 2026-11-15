@@ -226,11 +226,13 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     await open([stopped, unanalysed, missing, clean]);
 
     const stoppedRow = await rowOf('stopped.example');
-    // Each part whole, the line wrapping between them, never cut (round 5's polish: '5,710 pages re…').
-    for (const part of ['Stopped early', '· 312 pages read']) {
+    // Each part whole, the line wrapping between them, never cut (round 5's polish: '5,710 pages re…'), and the dot
+    // between two parts ends the first, so a wrapped line never starts with it (polish 2: '· 14,414 pages read').
+    for (const part of ['Stopped early ·', '312 pages read']) {
       expect(within(stoppedRow).getByText(part)).toHaveClass('whitespace-nowrap');
       expect(within(stoppedRow).getByText(part).closest('.truncate')).toBeNull();
     }
+    expect(within(stoppedRow).queryByText(/^·/)).toBeNull();
     expect(
       within(stoppedRow).getByRole('img', { name: 'Score 71 out of 100 so far, Good so far' }),
     ).toBeInTheDocument();
@@ -283,6 +285,9 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     const row = await rowOf('gardenfurnituresets.co.uk');
     const toggle = within(row).getByRole('button', { name: /1 earlier check/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // The dot before it ends the part before, so a wrapped line doesn't start with it (polish 2).
+    expect(toggle.textContent).toMatch(/^1 earlier check/);
+    expect(toggle.previousElementSibling?.textContent).toMatch(/ ·$/);
     await userEvent.click(toggle);
     const earlier = screen.getByRole('list', { name: 'Earlier checks of gardenfurnituresets.co.uk' });
     expect(within(earlier).getByRole('img', { name: 'Score 80 out of 100, Good' })).toBeInTheDocument();
