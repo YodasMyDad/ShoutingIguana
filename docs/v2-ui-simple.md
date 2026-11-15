@@ -84,11 +84,13 @@ session decide the mode again, and the two views would drift into two apps.
 
 The same shell: sidebar, top bar, main area. No inspector in Simple: a page's detail is Advanced.
 
-- **Sidebar.** Home; the open site, with when it was checked; its three sections, **Summary**, **What to fix** and
+- **Sidebar.** Home; the open site, with when it was checked, as a switcher to your recent sites ("Switch site",
+  "Recent checks", "All your sites, on Home"); its three sections, **Summary**, **What to fix** and
   **Report**; at the bottom, "Checking now" (crawls running) and Settings. What to fix carries a count: the
   problems that are Serious or Worth fixing (6 on the garden crawl). Why not all 19: a site with nothing but things
   worth a look would show a to-do count it can't clear.
-- **Advanced's sidebar gains Report** as an eighth section, after a rule, below the crawl's Settings. Why last and
+- **Advanced's sidebar gains Report** as an eighth section, after a small gap (a rule until the framed workspace),
+  below the crawl's Settings. Why last and
   not beside Issues: Ctrl+1 to Ctrl+7 are built and stay as they are.
 - **Pause, Stop and Continue stay in the top bar only**, with their words, as Advanced decided. Why: one place, on
   every screen. The checking screen says where they are.

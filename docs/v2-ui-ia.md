@@ -34,11 +34,16 @@ the switch in the shell, the Report route and screen, a Simple line in the flows
 └──────────────┴──────────────────────────────────────────────┴───────────────────────┘
 ```
 
+- **The frame** (2026-11-15, [the framed workspace](v2-ui-design.md#the-framed-workspace-2026-11-15)): the sidebar
+  sits on the window's frame colour; the top bar, the main area and the inspector are one panel inset from the
+  window's edge, its own edge and corners, the main area scrolling inside it. The drawing above predates it.
 - **Sidebar.**
   - Collapsible to icons. A window narrower than 1024 px (200% zoom on a 1280 px one) shows it collapsed to start
     with; opening it there lasts while the window stays narrow, and leaves the wider window's choice alone.
   - Home first.
-  - The open crawl's sections, with live counts.
+  - The open crawl, as a switcher: a button with its favicon, site and date that opens the library's recent crawls
+    (the open one ticked; each opens on the section you're on) and a way Home to them all. Then its sections, with
+    live counts; the current one a neutral fill, never the accent (the owner: the accent rule "looks AI made").
   - At the bottom: crawls running in the background, each a link with its progress, and app Settings. When the
     window is too short for them all (several crawls and exports, 200% zoom), what's between the name and Settings
     scrolls inside the sidebar; Settings stays whole below it.

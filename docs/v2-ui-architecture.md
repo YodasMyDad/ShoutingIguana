@@ -157,6 +157,37 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   the WebView2 profile, the engine's unpacked files and the log, and keeps it out of single instance. The smoke test
   and the orphan check use it, so they never touch the user's own copy, and run beside it.
 
+## The framed workspace (the shell's frame)
+
+The owner chose design B, framed workspace ([the design](v2-ui-design.md#the-framed-workspace-2026-11-15)): the
+left side and the segmentation had been "wishy washy and difficult to see". How it's built:
+
+- `AppShell` draws the frame (`bg-frame`), the `Sidebar` on it, then one `.si-panel` (`data-panel`) holding the
+  `TopBar`, the engine's banner, `main#main` (the one scroller) and the `InspectorSlot`. The panel clips what scrolls
+  to its corners (`overflow: hidden`), so nothing in a screen may be positioned to escape it; the app's overlays
+  (palette, dialogs, menus, toasts, the drop overlay, "Stopping crawls…") are portals or fixed, outside it. Its inset
+  is `--frame-inset` (8, then 4 px at 800 px wide, none at 640 px, where the panel keeps only its left edge).
+- `CrawlSwitcher` (`layout/`) is the sidebar's open crawl: a `DropdownMenu` (Radix, as the app's other menus: Enter,
+  Space or the down arrow opens it on its first item, arrows and typing move, Esc gives focus back) of a
+  `MenuRadioGroup`, so the open crawl is announced as checked. `recentCrawls` picks the library's eight newest (by
+  start, else last change), the open one always among them. Choosing one goes to the same section of it
+  (`app/goToSection.ts`, shared with Ctrl+1 to Ctrl+8); the last item goes Home. Its button's name is its visible
+  words plus "Switch crawl:" and a comma read but not shown (WCAG 2.5.3); collapsed, it's the favicon with an
+  `aria-label` and a tooltip.
+- The sidebar's colours are its own tokens (`--color-nav-*`, `--color-current`) under `.si-sidebar`; `.si-current`
+  elsewhere takes `--color-current-inset`, menus and the palette `--color-current-overlay`.
+- **Capped screens grow with the window.** Overview, Home (both modes) and Simple's checking screen centre a column
+  of `--content-max`, now 1,800 px (was 1,136): on a maximised 4K window at 150% the main area is about 2,300 px, and
+  the old cap left a wide empty band each side (the owner took it for a layout bug). The column fills the panel up to
+  that and only centres past it; what's inside spreads (the figures, the charts, the library and Your sites) while
+  prose keeps `--measure-text`, forms `--form-max`, and Home's address field `--start-form-max` (1,136 px).
+  `e2e/framed.spec.ts` measures it at 1920 and 2560 px.
+- Tests: `e2e/framed.spec.ts` (the panel and its inset at 1280 and 640 px, the screen scrolling inside it, forced
+  colours, the current place's exact fill and text in both themes and modes, the switcher by keyboard and in a
+  collapsed sidebar and Simple, the wide column), `e2e/states.spec.ts` (no accent rule, 4.5:1, neutral, hover apart
+  from selection), `layout/CrawlSwitcher.test.tsx`, `layout/recentCrawls.test.ts`, and the `Shell/App` stories
+  `CrawlSwitcherOpen` and `SidebarCollapsed`.
+
 ## The shell smoke walk
 
 Every other test of the UI runs in headless Chromium against a Vite build. `npm run smoke:shell`
@@ -357,9 +388,10 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   or End), Page Up and Down, Enter inspects, Space selects, Shift extends, Ctrl+A, Ctrl+C, Shift+F10 and the menu key.
   A row picked by a plain click follows the cursor; a selection built with Space or Shift stays put. Every move scrolls
   the cursor's cell into view, sideways too. Focus arriving lands on the first row wholly in view.
-- **Selection** shows as the selected tint and the accent rule (3:1 or more) in a gutter that sticks to the grid's left
-  edge; hover never covers it. Under forced colours a selected row is a Highlight outline, and the cursor on it
-  CanvasText.
+- **Selection** shows as the selected tint; hover never covers it, and the keyboard's cursor is the focus outline over
+  it. The accent rule it had in a gutter at the grid's left edge went with the framed workspace (the owner: it "looks
+  AI made"; [the design](v2-ui-design.md#the-framed-workspace-2026-11-15)). Under forced colours a selected row is a
+  Highlight outline, and the cursor on it CanvasText.
 - **Copy**: the selection as tab-separated text with a header row, quoted as Excel does, up to 10,000 rows (fetching
   rows that aren't loaded). Crawled text is the site's, so a copied row's value starting with =, +, -, @, a tab or a
   carriage return gets a `'` in front (OWASP's advice against CSV injection): a spreadsheet shows it as text, without
@@ -525,9 +557,12 @@ see [The full grid's pieces](#the-full-grids-pieces). Column presets and saved v
   motion tokens, not Tailwind's. `narrow:` is below 1360 px, as the layout tokens' own query. ESLint refuses arbitrary
   values (`w-[37px]`, `[mask:x]`) and `dangerouslySetInnerHTML`.
 - Themes use `light-dark()`: the page follows the OS unless `data-theme` says otherwise. Density is `data-density`.
-- State indicators meet WCAG 2.2 AA (1.4.11): what's selected, current or highlighted carries the accent rule against
-  its tint (`.si-current`, the grid's gutter, the palette's option), never the tint alone; text on it is 4.5:1 or
-  more; placeholders are `text-muted`. High contrast maps the roles to system colours under `forced-colors: active`,
+- State indicators (the framed workspace, [the design](v2-ui-design.md#the-framed-workspace-2026-11-15)): what's
+  current or highlighted (`.si-current`, the palette's and a menu's option, a list's chosen row) is a solid neutral
+  fill with near-black (white) text at 600, never the accent: no rule along its edge, no blue text. The owner found
+  the accent rule "what all AI does". It reads by the fill, the weight and the darker text together; its text is 4.5:1
+  or more on the fill, and what's muted on an overlay's highlight turns secondary to keep that. A grid's selected rows
+  keep the selection's tint alone. Placeholders are `text-muted`. High contrast maps the roles to system colours under `forced-colors: active`,
   with `surface-selected` as `Canvas`: selected and current things get a `Highlight` mark on the page's own colours,
   so no text sits on Highlight unreadable, and selected text is HighlightText on Highlight. Focus rings, the grid's
   included, are outlines, so they survive it. What can be selected and focused at once (a chosen segment, a pressed

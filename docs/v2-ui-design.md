@@ -63,6 +63,45 @@ Why B:
   - Notices are the quietest, since they're most of the issues (829 of 933 on the garden crawl), so errors stand
     out.
 
+## The framed workspace (2026-11-15)
+
+The owner, using the installed app (light theme especially, dark too): the left side and the segmentation were
+"wishy washy and difficult to see", there was "no clear segmentation between areas or the navigation", and the accent
+rule along the current item's edge looked AI-made: "that's what all AI does and it looks AI made". They wanted hints
+from good enterprise apps. Three directions were mocked (scratch `navdesign/`); they chose **B, framed workspace**. Its
+colours and spacings are the spec (`styles/tokens.css` holds them as tokens, `light-dark()` as ever):
+
+- **The frame and the panel.** The window is the frame (`--color-frame`: light `#eeeef1`, dark `#09090b`). The sidebar
+  sits on it with no edge of its own. Everything right of the sidebar, the top bar and the screen (and the inspector
+  docked in it), is **one panel** inset from the window's edge (`--frame-inset`, 8 px top, right and bottom, none on
+  the sidebar's side), with a 1 px edge (`--color-border-panel`: `#d6d6dc`, `#26262b`), 10 px corners
+  (`--radius-panel`), a faint lift in light (`--shadow-panel`) and none in dark. The canvas is the panel's colour now
+  (`#ffffff`, `#101012`); the screen scrolls inside the panel, under the top bar's bottom edge. **Small windows:** the
+  inset is 4 px at 800 px wide and under, and none at 640 px and under (1280 px at 200% zoom), where the panel keeps
+  only its edge against the sidebar and square corners: at that size every pixel is the screen's, and an 8 px moat
+  round a 640 px window reads as waste, not structure.
+- **The sidebar.** The brand row; Home; the open crawl as a **switcher** (a bordered button: favicon, site, date, an
+  up and down chevron) that opens a menu of the library's eight most recent crawls, the open one ticked, each opening
+  on the section you're on, then "All crawls, on Home"; the crawl's sections; Report after a small gap (no rule);
+  the live section ("Crawling now", exports) near the bottom; Settings at the very bottom. Group labels are sentence
+  case, 12 px, semibold, muted. Items are 32 px, in the sidebar's own text and icon colours, with their own hover.
+- **The current place** (`.si-current`, everywhere: the sidebar, Settings' sections, the palette's and a menu's
+  highlighted item, a list's chosen row, Simple's row under J and K) is **a solid neutral fill** (the sidebar's
+  `#dcdce2` / `#232328` on the frame; `--color-current-inset` on the panel, `--color-current-overlay` in a menu),
+  its text and icon near-black or white (`#111113` / `#ffffff`) at 600. **No accent rule, no blue text.** Counts on
+  it take its text colour; severity marks keep theirs (they're data). Why this still reads: the fill, the weight and
+  the darker text together, aria-current or aria-selected for a screen reader, its text at 4.5:1 on the fill, and a
+  Highlight ring under forced colours. The 3:1 the old accent rule kept against its tint is given up on purpose: the
+  owner's call, as enterprise apps such as Linear and GitHub draw their current place.
+- **The grid's selected rows** lose their accent rule too and keep the selection's tint (`surface-selected`), which
+  hover never covers; the keyboard's cursor is the focus outline over it. The tint stays blue-grey rather than a
+  neutral so that a selection (data you picked) isn't confused with the place you are.
+- **Segmentation in screens.** Cards are the surface with a stronger edge (`--color-border-card`: `#dcdce1`,
+  `#2c2c32`), 8 px corners (`--radius-lg`, was 12) and no shadow; a card's header is divided from its body by that
+  edge, never a tinted band. Grids' frames take the same edge. The Overview's figures are cards of their own in a row
+  with a 12 px gap (`Stats cards`). In dark the surface is `#161619`, a step up from the panel.
+- **Focus rings are unchanged** (an outline in `--color-focus`), and reduced motion is respected as before.
+
 ## What the engine needs for this design
 
 | Need | Why | When |
