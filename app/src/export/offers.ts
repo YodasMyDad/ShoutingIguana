@@ -2,7 +2,7 @@
 // Excel (its columns, filters, search and sort, exactly as its read takes them), a check, and on Overview and Issues
 // the report and the spreadsheet of everything. Pure: each screen hands in its state, and the tests hold every request.
 import type { CheckGroupRef, GridFilter, GridSort, LinkEnds, RobotsBlockReason } from '../api/grids';
-import type { CrawlListItem } from '../api/types';
+import type { CrawlListItem, CheckReferences } from '../api/types';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatCountOf } from '../lib/format';
 import { currentHiddenChecks } from '../settings/hiddenChecks';
@@ -373,6 +373,16 @@ export function overviewOffer(item: CrawlListItem, crawling: boolean, simple: bo
 }
 
 /**
+ * What a check's file adds, where its URLs are referred to (the engine's where-found columns): the pages linking to
+ * each, or the URLs each page links to.
+ */
+function whereInTheFile(references: CheckReferences | undefined): string {
+  if (references === 'sources') return ' and the pages that link to it';
+  if (references === 'targets') return ' and the URLs it links to';
+  return '';
+}
+
+/**
  * Issues: this check (its sheet of the workbook, as a file of its own), the open group's pages, then the report and
  * every check (the spreadsheet of everything).
  */
@@ -384,7 +394,15 @@ export function issuesOffer(args: {
    * The check selected. `flat` is a check whose pages the screen lists as they are (its grid, sorted as its route
    * says), not in groups: its export is that list, in that order.
    */
-  check: { id: string; title: string; urls: number | null; flat?: boolean; sort?: readonly GridSort[] } | null;
+  check: {
+    id: string;
+    title: string;
+    urls: number | null;
+    flat?: boolean;
+    sort?: readonly GridSort[];
+    /** How its URLs stand to references: the file says where each is found, or what each page names. */
+    references?: CheckReferences | undefined;
+  } | null;
   /** The open group, with its pages' count and its words. */
   group: { ref: CheckGroupRef; pages: number | null; words: string } | null;
   /**
@@ -400,9 +418,10 @@ export function issuesOffer(args: {
       id: 'check',
       title: 'This check',
       description:
-        check.urls === null
+        (check.urls === null
           ? `${check.title}: every page it found, with what was found on each`
-          : `${check.title}: ${formatCountOf(check.urls, 'page')}, with what was found on each`,
+          : `${check.title}: ${formatCountOf(check.urls, 'page')}, with what was found on each`) +
+        whereInTheFile(check.references),
       formats: ['xlsx', 'csv'],
       fileView: check.title,
       sortedWhileCrawling: check.flat === true && sortedWhileCrawling(args.crawling, check.sort ?? []),

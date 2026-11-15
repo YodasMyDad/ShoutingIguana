@@ -464,6 +464,7 @@ export function IssuesScreen() {
                     // A check that doesn't group is its sorted list: its export is that list, in that order.
                     flat: selected.check.grouping === 'none',
                     sort,
+                    references: selected.check.references,
                   }
                 : null,
             group: placed
