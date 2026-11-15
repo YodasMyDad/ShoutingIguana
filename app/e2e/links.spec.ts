@@ -175,7 +175,7 @@ test('opens from the sidebar on every link, in crawl order, with what each is an
       [1, 'to.url'],
     ] as const) {
       // The whole URL is the cell's name; what shows of it is its path on the site.
-      const url = row.getByRole('gridcell').nth(cell).getByRole('button');
+      const url = row.getByRole('gridcell').nth(cell).locator('.si-url__go');
       await expect(url).toHaveAccessibleName(String(link[end]));
       await expect(url.locator('.si-url__shown')).toHaveText(shownIn(String(link[end])));
     }
@@ -199,7 +199,7 @@ test('shows a link from another host by its whole URL, whichever link the crawl 
   await page.goto(`/crawls/${crawl}/links?filter=${encodeURIComponent(JSON.stringify(filters))}`);
   await expectShown(page, other.matching);
   const cells = grid(page).getByRole('row').nth(1).getByRole('gridcell');
-  await expect(cells.nth(0).getByRole('button')).toHaveAccessibleName(source);
+  await expect(cells.nth(0).locator('.si-url__go')).toHaveAccessibleName(source);
   // By the site's origin, which is the start URL's: a test that took it from this row would expect a path here.
   await expect(cells.nth(0).locator('.si-url__shown')).toHaveText(shownIn(source));
   await expect(cells.nth(1).locator('.si-url__shown')).toHaveText(shownIn(String(first?.['to.url'])));
@@ -516,7 +516,7 @@ test('has no accessibility violations, in both themes and under forced colours',
   await page.emulateMedia({ colorScheme: 'light', forcedColors: 'active' });
   await expectNoViolations(page);
   // With the inspector open on a link's target, under forced colours and then in the dark theme.
-  await grid(page).getByRole('row').nth(1).getByRole('button').nth(1).click();
+  await grid(page).getByRole('row').nth(1).locator('.si-url__go').nth(1).click();
   await expect(inspectorOf(page)).toBeVisible();
   await expectNoViolations(page);
   await page.emulateMedia({ colorScheme: 'dark', forcedColors: 'none' });
