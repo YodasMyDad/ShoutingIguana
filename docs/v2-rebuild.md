@@ -151,8 +151,14 @@ by the engine's own report CSP (the app's style now goes first in the frame's co
 Checks: `verify-app.sh` all exit 0 on `5cb952c` (unit, stories 528 x 3 clean, e2e rerun 228 after updating two toast
 specs), `e2e:filled` 30, cargo fmt, clippy, test 141 + 3 on the final commit, Linux in Docker on `2b1229f` (clippy,
 cargo test 136 + 3); the engine untouched. Not verified in the shell: the "stopping" top bar (under a second), the
-updater's untrusted, unreadable and unavailable cases, Advanced's toast changes (unit tests). **Left: the gallery's
-twelve changed views (re-shooting), publish, then tell the owner step 3 is finished;** step 3b follows. Known and left: the tray shows "Shouting Iguana" for a few ms between a check's end and its analysis;
+updater's untrusted, unreadable and unavailable cases, Advanced's toast changes (unit tests). The gallery's twelve
+changed views were re-shot and published (version 4); they showed four small things still wrong (the inspector's
+Inlinks tab cut beside "7 more"; the sidebar 7 px taller than 720 px with a crawl paused and an export running; the
+Library badge squeezing the address to "http:…"; Simple Home's stopped row wrapping at the dot) and the drop
+overlay's shot still showing the old wording. **Left: polish 2** (`ui/r5-polish2` from
+[`brief-polish-2.md`](handoff/2026-11-15/brief-polish-2.md); the same agent re-shoots the five views into
+`_gallery/site/`; scratch `a539aa23-…/r5-polish2/`), then merge, publish the gallery, and tell the owner step 3 is
+finished; step 3b follows. Known and left: the tray shows "Shouting Iguana" for a few ms between a check's end and its analysis;
 a real screen reader not tried; installing a real update needs a release with `latest.json` (the release workflow's
 secrets are the owner's to add: see the architecture doc). The account of how it got here follows (2026-11-13 on).
 
