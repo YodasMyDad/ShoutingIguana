@@ -135,114 +135,75 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`. Since 2026-1
 the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not moved. This section is the place to
 resume. Merging to `master` or releasing still needs an explicit yes.
 
-**AFTER STEP 3, 2026-11-15: the framed workspace, on branch `ui/framed`** (worktree `.claude/worktrees/framed`, local
-only, NOT merged into `ui/step-3`; awaiting the owner's look at the review shots). The owner, on the installed app: the
-left side and the segmentation were "wishy washy and difficult to see", and the accent rule along the current item
-"looks AI made". Of three mocked directions they chose B, framed workspace; plus two decisions on the same branch:
-**Settings is the full Settings in both modes** ("the Simple and Advanced modes are just for the UI … not for
-settings"), and **capped screens grow with a wide window** (`--content-max` 1,136 → 1,800 px). What's built: the frame
-and one inset panel (top bar, screen, inspector), the sidebar on the frame with the crawl switcher (a Radix menu of the
-recent crawls, then Home), `.si-current` as a neutral fill everywhere (no accent rule, no accent text), the grid's
-selection without its rule, stronger card edges and divided card headers, the Overview's figures as cards. Design and
-why: [v2-ui-design.md](v2-ui-design.md#the-framed-workspace-2026-11-15); build: v2-ui-architecture.md, "The framed
-workspace". Checks: `verify-app.sh` on `dad6f78` every step exit 0 (unit 3,817, stories x3 plain, forced, reduced)
-except e2e, 247 of 248: Overview's sideways-scroll check at 640 px failed in the frame before the totals' row took
-fewer columns (the cards' gaps made five columns wider); fixed by clipping a figure card, then the full e2e 248 passed,
-and `framed` + `home-library` 3 times in a row; `e2e:filled` 31; release build and `smoke:shell` 19 + 9. The stories
-weren't run again after that one CSS line. Review shots (release shell, 1280 x 720 at 150%, both themes; the wide one
-2560 x 1362): scratch `a539aa23-…/framed/shots/`. **Left:** the owner's verdict on the shots; then merge into
-`ui/step-3`, re-shoot the gallery, rebuild the installer.
+**Merged 2026-11-15: the framed workspace and where each URL was found** (`66f5c46` merges `ui/framed`, which holds
+`ui/framed-settings`; `ba72f75` merges `ui/found-on`; local only). All of it came from the owner's first use of the
+installed app:
 
-**STEP 3 FINISHED 2026-11-15.** Polish 2 is merged (`9be9c71`, local). Its last checks, on `84ebeeb` (the merge differs
-only in docs and CI): `verify-app.sh` every step exit 0 (unit 3,769; stories x3, plain, forced and reduced; sidecar),
-full e2e 233 (the first run failed one test, `states.spec` "tabs past the edge", which still held the scrolling strip
-polish 2 replaced; rewritten for the new rule, seen failing on the old CSS, fixed in `84ebeeb`), `e2e:filled` 30,
-`smoke:shell` 19 + 9 on the release build of `76eeb28`. No `app/src-tauri/` change, so no Linux check was needed.
-**Gallery version 5 published** (<https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>, the five polish 2 views re-shot).
-One thing left to the owner's eye: at 1280x720 with an export running, the sidebar scrolls and the export's row sits
-half below its fold (gallery 32); the export's toast shows it too.
+- **The framed workspace.** The owner found the shell "wishy washy, … no clear segmentation", and said the accent rule
+  on the current item "looks AI made". Of three mocked directions (canvas
+  <https://claude.ai/artifact/4srqyFoFVHsEmzeTrqTRBx>) they chose B. What changed:
+  - the sidebar sits on a grey frame, and the top bar, screen and inspector form one bordered inset panel;
+  - the crawl at the top of the sidebar is now a working switcher (recent crawls, then Home);
+  - `.si-current` is a neutral fill and bold text everywhere, with no accent rule or accent text;
+  - the grid's selection keeps its tint but loses the rule;
+  - cards have stronger borders and ruled headers, and the Overview's figures are separate cards.
 
-**Installed on the owner's machine 2026-11-15** from `06677e9` (`Shouting Iguana_2.0.0-alpha.1_x64-setup.exe`, 43.8 MB,
-unsigned; per-user in `%LOCALAPPDATA%\Shouting Iguana`, crawls in `Documents\Shouting Iguana`). Its checks: `smoke:tauri`,
-`check:orphans` and `smoke-installer.ps1` pass. That found a bug in `smoke-installer.ps1`, now fixed: Tauri's uninstaller
-leaves the installer's remembered folder (`HKCU\Software\Aptitude\Shouting Iguana`), so the test sent the next real install
-into its deleted temp folder. The test now puts that key back as it found it, and refuses to run beside a real install
-(it would take over and then remove that install's registration, association and shortcuts).
+  Design and reasons: [v2-ui-design.md](v2-ui-design.md#the-framed-workspace-2026-11-15). Build notes:
+  v2-ui-architecture.md, "The framed workspace".
+- **Settings are the full Settings in both modes.** The owner: the modes are "just for the UI … not for settings".
+- **Wide windows.** Overview, Home and Simple's capped screens grow with the window (`--content-max` 1,136 → 1,800 px).
+  The "offset Overview" the owner saw was not a bug: it was a cropped shot of a maximised 4K window at 150%.
+- **Where it was found.** The owner: "when we show 404 links or 302 … it needs to show the page that they were found
+  on". Each check declares `IssueDefinition.References`: 13 checks list `sources`, 17 list `targets`, and the rest
+  `none` (the full list is in [the IA](v2-ui-ia.md#where-its-found-uifound-on)).
+  - The engine adds `FoundOnReader` and two reads, `POST /urls/found-on` and `POST /issues/{checkId}/targets` (up to
+    100 URLs a call).
+  - The data appears in Advanced Issues ("Found on 3 pages · /x/ +2", which expands to the sources), in the
+    source-side checks ("Links to /old/ (404) +2"), in Simple ("Linked from …"), in exports ("Linked from" columns)
+    and in the report ("Where to fix it").
+- **Open in the browser.** Every listed URL has an open button, Shift+Enter opens the cursor row's URL, and the row
+  menus have "Open in browser".
 
-**In progress 2026-11-15, from the owner's first use of the installed app** (two agents, each on its own branch and
-worktree, not merged):
+**Checks on the merged `ba72f75`: all green.** Neither merge touched `app/src-tauri/`, so the Linux check was not
+needed.
 
-- `ui/overview-offset` (no commits): the Overview looked shoved right and cut off in the owner's screenshot. **Not a
-  bug**: the window was maximised on a 3840x2160 screen at 150% (about 2560 CSS px), the screenshot was its left 58%,
-  and the Overview is its 1,136 px column (`--content-max`, `tokens.css:345`) centred in a 2,320 px main area, as
-  designed (checked at that size during a live testsite crawl; nothing ran past the edge). The owner chose:
-  on wide windows those screens grow with the window (to about 1,800 px of content, centred beyond), on `ui/framed`.
-  The branch was deleted.
-- `ui/framed`: the owner found the shell "wishy washy", with no clear segmentation, and the accent rule on the current
-  item "looks AI made". From three mocked directions (canvas <https://claude.ai/artifact/4srqyFoFVHsEmzeTrqTRBx>) they
-  chose **B, framed workspace**: the sidebar on a grey frame, everything else one bordered inset panel, a working crawl
-  switcher, the current item as a neutral fill (no accent rule, here or in Settings, the palette or the grid), stronger
-  card borders. Also on that branch: **Settings are the full Settings in both modes** (owner: the modes are for using
-  the app, not for hiding settings). The agent brings review shots first; the full gallery is re-shot after the owner
-  approves. Also on it (owner's choice): on wide windows Overview, Home and Simple's screens grow with the window (to
-  about 1,800 px of content).
-- `ui/found-on`: the owner, on a real crawl: a 404 (or 302, …) listed without the pages it was found on can't be fixed.
-  Every check whose affected URL is something referenced (4xx, 5xx, redirects, canonicals/hreflang to bad URLs,
-  sitemap entries, …) shows where it's referenced, in Advanced's Issues (inline count + first source, expandable list,
-  "Show all in Links"), the source-side checks, Simple's problem page, exports and the report. Also: **an "open in
-  browser" button on every listed URL** (URLs, Links, Issues, found-on lists, Simple), plus a row menu item.
+| Check | Result |
+| --- | --- |
+| `verify-engine.sh` | Build passed; tests 1,498 + 286 + 28 passed. |
+| 100k bench | 101,114 of 101,114 pages and only the planted issues; memory grew 1.9 MB, peak 191 MB. |
+| Readbench gate | Passed. |
+| `verify-app.sh` | Every step exit 0. Unit 3,868 passed. Stories 531 × 2 themes clean plain, forced and reduced (the first story runs since framed's last CSS fix). |
+| e2e | 252 passed; 2 skipped (the measurement specs, which run only with `SI_E2E_MEASURE`). |
+| `e2e:filled` | 31 passed. |
+| Release build | Sidecar and NSIS installer built (`Shouting Iguana_2.0.0-alpha.1_x64-setup.exe`, 46.0 MB, unsigned). |
+| Shell smoke | `smoke:tauri`, `check:orphans` and `smoke:shell` passed (19 + 9). |
 
-- `ui/found-on` (worktree `.claude/worktrees/found-on`, from `ui/step-3` at `dfa9a70`, not merged): **where each URL
-  was found**, from the owner's "when we show 404 links or 302 or whatever they are, it needs to show the page that
-  they were found on", and **open any listed URL in the browser**. Each check says how its URLs stand to references
-  (the engine's `IssueDefinition.References`: 13 `sources`, 17 `targets`, the rest `none`; the list is in
-  [the IA](v2-ui-ia.md#where-its-found-uifound-on)). Engine: `FoundOnReader` and two reads (`POST /urls/found-on`,
-  `POST /issues/{checkId}/targets`, up to 100 URLs a call); the report's "Where to fix it"; a check's file gains
-  where-found columns. App: Advanced Issues' rows say "Found on 3 pages · /garden-furniture/ +2" or "Links to /old/
-  (404) +2" and open to list the sources (each to the inspector, all to Links); Simple's problem page says "Linked
-  from …" and names the one page linking to most; every grid's URL cell and Simple's addresses have an
-  open-in-browser button, and Shift+Enter opens the cursor row's URL. **Built and verified, not merged** (local
-  commits only). Checks: `verify-engine.sh` on `8c879c8` all exit 0 (tests 1,498 + 286 + 28, the 100k bench found
-  every planted issue at a 196 MB peak, the readbench gate); `verify-app.sh` on `8c879c8`: ci, typecheck, lint, format,
-  unit 3,818, scripts, sidecar exit 0; its story runs failed only on `screens-overview--mock-crawl`, as the new
-  worktree lacked the gitignored design fixtures (copied from `ui-step-3`; rerun on the Storybook build of `0559a2f`:
-  528 x 2 clean plain, forced and reduced; the 39 Issues stories again on `9ae127b`, all three, clean); its e2e had 3 failures in `links.spec` (they took a URL
-  cell's first button, now there are two: fixed in `0559a2f`); the full e2e rerun on `aad3d5f` 236 passed, 1 failed
-  in the new `found-on.spec` (its regex didn't allow a 3xx target that ends broken: fixed in `9ae127b`, rerun 4/4);
-  `e2e:filled` 30; the release build (`build:sidecar`, `tauri build --no-bundle`) of `aad3d5f` with `smoke:shell` 19 + 9.
-  `app/src-tauri/` unchanged, so no Linux check. Review shots (release shell, both themes, 1280x720 at 150%) in the
-  session scratchpad's `found-on/shots/`. Engine tests were written with the code, not seen failing first; the export
-  tests, the Shift+Enter test and the links e2e were seen failing on the old shape.
+The branches' own checks, and the review shots both agents made (in the session scratchpad's `framed/` and
+`found-on/`), are in their commits (`42b6938`, `88f4c4b`).
 
-**Then:** the owner and friends try it (rebuild with `npm run tauri build -- --bundles nsis`, then `check:orphans`,
-`smoke:tauri`, `scripts/smoke-installer.ps1` on a machine without it installed; unsigned, so SmartScreen warns; no
-auto-update until a release carries the updater key). Then step 3b, the check audit on the three real sites above. Then the release
-step (signing, licences, updater secrets, CI on all three OSes), at the owner's word.
+**Left, in order:**
 
-The resume list from the pause, all done now:
+1. Re-shoot the whole gallery on this build: the 42 views, plus the switcher, a found-on list opened and the open
+   button. Publish it as version 6 to <https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>.
+2. Update the owner's installed copy:
+   1. The owner closes the app.
+   2. Run the new setup with `/S`. NSIS upgrades it in place in `%LOCALAPPDATA%\Shouting Iguana`.
 
-1. **Polish 2** (`ui/r5-polish2` at `76eeb28`, worktree `.claude/worktrees/r5-polish2`, pushed; brief
-   [`brief-polish-2.md`](handoff/2026-11-15/brief-polish-2.md)): **all four items are done**, each with a test seen
-   failing first and proved in the release shell (inspector tabs whole or in the menu, never both; the sidebar's
-   middle scrolls so Settings stays whole; the Library address gets its own line beside the badge; Simple's stopped
-   row wraps after the dot), and `smoke:shell` passes (19 + 9) on that build. **The five gallery views are re-shot
-   and the page rebuilt in `_gallery/site/` (13.5 MB), not published.** Left of its checks: `verify-app.sh` stopped
-   after the Storybook build (ci, typecheck, lint, format, unit 3,769, scripts, build-storybook all exit 0): run it
-   in full on `76eeb28`, then `npm run e2e:filled`. If either needs an app fix: rebuild, `smoke:shell`, re-shoot the
-   five views (scripts in the scratch folder). Its handoff: `handoff-polish2.md` and `checkpoint.md` in
-   `C:\Users\LEEMES~1\AppData\Local\Temp\claude\e2e5beaddde4c070\a539aa23-e856-44c1-bd21-ca484e8740e2\scratchpad\r5-polish2\`.
-   One thing the owner may judge: at 1280x720 with an export running, the sidebar now scrolls and the export's row
-   sits half below the fold.
-2. Merge `ui/r5-polish2` into `ui/step-3` (`--no-ff`, committed locally, not pushed), and run the Linux check
-   (`docs/handoff/2026-11-14/tools/linux-ci.sh`, Docker) if `app/src-tauri/` changed.
-3. Look at the five re-shot views (02, 18, 27, 32, 42; already rebuilt into `_gallery/site/`) and the page's diff against version 4 (backup in the scratchpad's `gallerysite-backup`), then
-   publish `_gallery/site/shouting-iguana-screens.html` with those ten images to
-   https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR (same file path; read the artifact first in a new session).
-4. If the shots show nothing else wrong, tell the owner step 3 is finished. Step 3b (the check audit on real sites)
-   follows. Merging to `master` or releasing still needs the owner's explicit yes.
+   `smoke-installer.ps1` refuses to run beside a real install by design.
+3. Step 3b: the check audit on the three real sites above.
+4. The release step (signing, licences, updater secrets, CI on all three OSes), at the owner's word. Merging to
+   `master` or releasing still needs an explicit yes.
 
-No agent is running. The `ui/r5-*` branches up to polish 2's `76eeb28` are on GitHub; later commits are local only.
-The published gallery is version 5 (42 views, 2026-11-15).
+Still for the owner's eye: at 1280x720 with an export running, the sidebar scrolls and the export's row sits half below
+its fold.
+
+**Step 3 finished 2026-11-15, before the owner's feedback above.** Polish 2 was merged (`9be9c71`) and verified:
+`verify-app.sh` all green, e2e 233, `e2e:filled` 30, `smoke:shell` 19 + 9. Gallery version 5 was published (42 views).
+
+That day the owner's machine got an install from `06677e9`, per-user in `%LOCALAPPDATA%\Shouting Iguana`, with crawls
+in `Documents\Shouting Iguana`. The install found a bug in `smoke-installer.ps1`, fixed in `c4a69dd`. Tauri's
+uninstaller leaves the remembered folder (`HKCU\Software\Aptitude\Shouting Iguana`), so the next real install went into
+the test's deleted temp folder. The test now restores that key as it found it, and refuses to run beside a real install.
 
 **Where it stood before the pause (2026-11-15): round 5 is merged into `ui/step-3` (`d6ea51a`) and the whole of it is verified.** On its code
 (`a8f8acc`, which differs from the merge only in docs): `verify-engine.sh` (build, tests 1,489 + 285 + 28, the 100k
