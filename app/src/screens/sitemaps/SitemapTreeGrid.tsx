@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { GridFilter, Sitemap, SitemapDiscovery } from '../../api/grids';
 import { GridCore } from '../../grid/GridCore';
 import { useColumnLayout } from '../../grid/useColumnLayout';
@@ -9,6 +9,7 @@ import type { GridColumn, GridTree } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { withRecorded } from '../../lib/failure';
 import { formatCount, formatCountOf } from '../../lib/format';
+import { textWidth, tokenValue, twoLineWidth } from '../../lib/textWidth';
 import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
 import { TextLink } from '../../ui/TextLink';
@@ -27,11 +28,14 @@ const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'notCrawled', 'nonIndexable'];
 
 // Five counts, how the sitemap was found and what became of it have to fit beside its address in a 1280 px window.
-// Each count's column is as wide as a count in the millions (1,234,567) and its name need; "Blocked by robots.txt"
-// takes two lines over its count (`TWO_LINE_HEAD`), which keeps its column as narrow as the others.
 const FOUND_WIDTH = 112;
 /** "Couldn’t be read: 404 Not Found", "Read, 11 of its 12 sitemaps", whole. */
 const STATE_WIDTH = 198;
+/**
+ * Each count's column at most: as wide as a count in the millions (1,234,567) and its name on one line. A column is
+ * only as wide as its name on two lines (`TWO_LINE_HEAD`) and its widest count need,
+ * so the room the counts don't use goes to the sitemaps' names (gallery 6: "/si….xml" beside columns of "300").
+ */
 const COUNT_WIDTHS: Record<SitemapCount, number> = {
   listed: 88,
   crawled: 88,
@@ -40,6 +44,8 @@ const COUNT_WIDTHS: Record<SitemapCount, number> = {
   indexable: 96,
   nonIndexable: 112,
 };
+/** What a count's column keeps beside its words: a pixel or two of rounding, so a word that just fits isn't cut. */
+const COUNT_SLACK = 4;
 const MIN_URL_WIDTH = 180;
 /** The address column as wide as this has room for "Index of 12" beside an index's address; narrower, "Index". */
 const BADGE_COUNT_WIDTH = 260;
@@ -47,6 +53,30 @@ const BADGE_COUNT_WIDTH = 260;
 const TWO_LINE_HEAD = 12;
 /** The grid's edges, and the room its scrollbar takes. */
 const FRAME_SLACK = 18;
+
+/**
+ * Each count's column as wide as it needs to be, never more than `COUNT_WIDTHS`: its name on at most two lines in the
+ * header's font, or its widest count in the cells' (each digit drawn as a 0, as tabular figures are), with the cells' padding.
+ * The widest count of a sitemap is what it lists, which its other counts can't pass: known once it's read, so a running
+ * crawl's counts don't move the columns as they grow.
+ */
+function countWidths(sitemaps: readonly Sitemap[]): Record<SitemapCount, number> {
+  const family = tokenValue('--font-sans', 'sans-serif');
+  const headFont = `${tokenValue('--font-weight-medium', '500')} ${tokenValue('--text-12', '12px')} ${family}`;
+  const cellFont = `${tokenValue('--grid-font-size', '13px')} ${family}`;
+  const padding = 2 * (Number.parseFloat(tokenValue('--grid-cell-x', '12px')) || 12);
+  const widest = Math.max(
+    0,
+    ...sitemaps.flatMap((sitemap) => LIST_COUNTS.map((count) => countOf(sitemap, count) ?? 0)),
+  );
+  const figures = textWidth(formatCount(widest).replace(/\d/g, '0'), cellFont);
+  const width = (count: SitemapCount) =>
+    Math.min(
+      COUNT_WIDTHS[count],
+      Math.ceil(Math.max(twoLineWidth(COUNT_WORDS[count], headFont), figures) + padding + COUNT_SLACK),
+    );
+  return { ...COUNT_WIDTHS, ...Object.fromEntries(LIST_COUNTS.map((count) => [count, width(count)])) };
+}
 
 /** A sitemap's row is its sitemap, wherever a running crawl moves it in the tree. */
 const sitemapOf = (row: SitemapRow) => row.sitemap.id;
@@ -120,7 +150,21 @@ export function SitemapTree({
     [rows],
   );
 
-  const fixed = FOUND_WIDTH + STATE_WIDTH + LIST_COUNTS.reduce((sum, count) => sum + COUNT_WIDTHS[count], 0);
+  // The fonts the widths are measured in may still be on their way: measured again once they're in.
+  const [fontsIn, setFontsIn] = useState(() => typeof document.fonts === 'undefined');
+  useEffect(() => {
+    if (fontsIn) return undefined;
+    let current = true;
+    void document.fonts.ready.then(() => {
+      if (current) setFontsIn(true);
+    });
+    return () => {
+      current = false;
+    };
+  }, [fontsIn]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts and the density change what's measured
+  const counted = useMemo(() => countWidths(sitemaps), [sitemaps, fontsIn, metrics]);
+  const fixed = FOUND_WIDTH + STATE_WIDTH + LIST_COUNTS.reduce((sum, count) => sum + counted[count], 0);
   const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 960) - fixed - FRAME_SLACK);
   // A frame too narrow for every column (200% zoom) scrolls sideways: the counts, which the list is for, then come
   // straight after the address, and how each sitemap was found and what became of it after them. A frame not laid
@@ -209,13 +253,13 @@ export function SitemapTree({
     const counts = LIST_COUNTS.map((count): GridColumn<SitemapRow> => ({
       id: count,
       header: COUNT_WORDS[count],
-      width: COUNT_WIDTHS[count],
+      width: counted[count],
       numeric: true,
       cell: (row) => countCell(row, count),
       text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count) ?? '') : ''),
     }));
     return narrow ? [address, ...counts, state, found] : [address, found, state, ...counts];
-  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow]);
+  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow, counted]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('sitemaps.list', columns);
 
