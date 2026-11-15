@@ -128,7 +128,7 @@ public sealed class GridExportTests : IDisposable
         var fromGrid = Rows(shown, at => Page(IssueGroupReader.ReadRows(_crawl.Path, check, at, null, _cache)!.Page!), checkRows);
         Assert.All(fromGrid, row => Assert.Equal(reference.Rows[(int)(long)row[0]!]["issues"], row[2]));
         var (_, file) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, Query = checkRows, CheckId = check }, check);
-        AssertSame(shown, fromGrid, file, ExportFormat.Csv);
+        AssertSame(shown, fromGrid, file, ExportFormat.Csv, check);
     }
 
     /// <summary>The header's words and a row's, as literals: a grid's own titles and value words, a number's unit after its title.</summary>
@@ -287,13 +287,15 @@ public sealed class GridExportTests : IDisposable
             {
                 var request = new ExportRequest { Kind = ExportKind.IssueRows, Format = format, Query = query, CheckId = check.Id, Group = narrowed };
                 var (_, rows) = Export(_crawl.Path, request, XlsxSheetName(check.Title));
-                AssertSame(shown, expected, rows, format);
+                AssertSame(shown, expected, rows, format, check.Id);
             }
         }
 
-        // With no columns asked for, a check's rows are its URL, detail and other URL.
+        // With no columns asked for, a check's rows are its URL, detail and other URL, then where to fix it where its URLs
+        // are referred to (this check's are: a 404 is linked from pages).
         var (_, plain) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, CheckId = check.Id }, check.Title);
-        Assert.Equal(["URL", "Detail", "Related URL"], plain[0]);
+        Assert.Equal(IssueReferences.Sources, check.References);
+        Assert.Equal(["URL", "Detail", "Related URL", "Linked from (pages)", "Linked from", "Listed in sitemaps"], plain[0]);
         Assert.Equal(counts[check.Id], plain.Count - 1);
     }
 
@@ -664,9 +666,16 @@ public sealed class GridExportTests : IDisposable
     }
 
     /// <summary>The file's rows are the grid's, in its order, under the grid's titles.</summary>
-    private static void AssertSame(IReadOnlyList<UrlColumnInfo> shown, List<object?[]> grid, List<object?[]> file, ExportFormat format)
+    /// <param name="checkId">A check's rows: after the grid's columns, where to fix each URL, for a check whose URLs are referred to.</param>
+    private static void AssertSame(IReadOnlyList<UrlColumnInfo> shown, List<object?[]> grid, List<object?[]> file, ExportFormat format, string? checkId = null)
     {
-        Assert.Equal(shown.Select(GridExport.Title), file[0].Select(title => (string)title!));
+        string[] where = (checkId is null ? null : IssueCatalog.Find(checkId)?.References) switch
+        {
+            IssueReferences.Sources => ["Linked from (pages)", "Linked from", "Listed in sitemaps"],
+            IssueReferences.Targets => ["Links to (addresses)", "Links to"],
+            _ => []
+        };
+        Assert.Equal([.. shown.Select(GridExport.Title), .. where], file[0].Select(title => (string)title!));
         AssertSameCells(grid, file, format, shown);
     }
 

@@ -59,6 +59,7 @@ internal static class ReportReader
             var check = IssueCatalog.Find(id)!;
             var listed = examples(check.Severity);
             var rows = listed > 0 ? IssueReader.ReadIssues(crawlPath, id, listed) : [];
+            var (foundOn, targets) = References(crawlPath, check, rows, export, cancellationToken);
             var group = check.Grouping == IssueGrouping.None ? null : IssueGroupReader.ReadGroups(crawlPath, id, 0, 1, export.Cache, cancellationToken)?.Groups.FirstOrDefault();
             problems.Add(new ReportProblem(
                 problems.Count + 1,
@@ -66,7 +67,7 @@ internal static class ReportReader
                 ReportSources.Words(check, settings),
                 counts[id],
                 score?.Lines.FirstOrDefault(line => line.CheckId == id),
-                [.. rows.Select(row => new ReportExample(row.Url, row.Detail, row.RelatedUrl))],
+                [.. rows.Select(row => new ReportExample(row.Url, row.Detail, row.RelatedUrl, foundOn.GetValueOrDefault(row.UrlId), targets.TryGetValue(row.UrlId, out var named) ? named : null))],
                 group is { LikelyTemplate: true } ? new ReportOneFix(group.Pages, group.RelatedUrl, group.Detail) : null));
         }
 
@@ -123,6 +124,33 @@ internal static class ReportReader
             EngineVersion = EngineInfo.Version
         };
     }
+
+    /// <summary>
+    /// Where to fix each of a problem's first pages, in one read: for a check whose URLs are referred to, where each is found
+    /// (the first pages linking to it, and the sitemaps listing it); for one whose pages hold the bad references, how many
+    /// URLs each names. Nothing for other checks, or none listed.
+    /// </summary>
+    private static (IReadOnlyDictionary<int, Storage.Models.UrlFoundOn> FoundOn, IReadOnlyDictionary<int, long> Targets) References(string crawlPath,
+        IssueDefinition check, IReadOnlyList<Storage.Models.IssueRow> rows, ExportSettings export, CancellationToken cancellationToken)
+    {
+        List<int> ids = [.. rows.Select(row => row.UrlId).Distinct().Take(FoundOnReader.MAX_URLS)];
+        if (ids.Count == 0)
+        {
+            return (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, long>());
+        }
+
+        return check.References switch
+        {
+            IssueReferences.Sources => (FoundOnReader.ReadFoundOn(crawlPath, ids, LISTED_SOURCES, export.Cache, cancellationToken).ToDictionary(url => url.UrlId),
+                new Dictionary<int, long>()),
+            IssueReferences.Targets => (new Dictionary<int, Storage.Models.UrlFoundOn>(),
+                (FoundOnReader.ReadTargets(crawlPath, check.Id, ids, 0, export.Cache, cancellationToken) ?? []).ToDictionary(url => url.UrlId, url => url.Total)),
+            _ => (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, long>())
+        };
+    }
+
+    /// <summary>The pages linking to each listed URL that the report names, before "and N more".</summary>
+    internal const int LISTED_SOURCES = 3;
 
     /// <summary>The site's home page: where the start URL's redirects end, or the start URL when the crawl has no such page.</summary>
     private static string Home(string crawlPath, string startUrl, CancellationToken cancellationToken)

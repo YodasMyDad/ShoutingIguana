@@ -710,6 +710,53 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
+    /// A report handed to a developer says where to fix what it lists: each broken address with the pages linking to it
+    /// (the first few, then how many more) and the sitemaps listing it, in a column of its own; and a page linking to
+    /// several broken addresses says how many others there are beside the first.
+    /// </summary>
+    [Fact]
+    public void AnAddressOtherPagesReferToSaysWhereItIsFound()
+    {
+        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10 }, SETTINGS));
+        var origin = crawl.Server.BaseUri.GetLeftPart(UriPartial.Authority);
+        AngleSharp.Dom.IElement Problem(string checkId) => document.QuerySelectorAll("article.problem")
+            .Single(article => article.QuerySelector(".problem__tech")!.TextContent.StartsWith(IssueCatalog.Find(checkId)!.Title + " ·", StringComparison.Ordinal));
+
+        var broken = Problem("internal-client-error");
+        Assert.Equal(["Address", "What was found", "Where to fix it"], broken.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+        var rows = broken.QuerySelectorAll(".examples tbody tr").ToList();
+        Assert.NotEmpty(rows);
+        var ids = IssueReader.ReadIssues(crawl.Path, "internal-client-error", rows.Count).Select(row => row.UrlId).ToList();
+        var found = FoundOnReader.ReadFoundOn(crawl.Path, ids, ReportReader.LISTED_SOURCES);
+        Assert.Equal(ids, found.Select(url => url.UrlId));
+        foreach (var (row, url) in rows.Zip(found))
+        {
+            var where = row.QuerySelectorAll("td")[2];
+            var text = where.TextContent;
+            if (url.Pages > 0)
+            {
+                Assert.StartsWith(url.Pages == 1 ? "Linked from 1 page: " : $"Linked from {url.Pages} pages: ", text, StringComparison.Ordinal);
+                Assert.Equal(url.Sources[0].Url, where.QuerySelector("a")!.GetAttribute("href"));
+                Assert.Contains(url.Sources[0].Url[origin.Length..], text, StringComparison.Ordinal);
+                var shown = url.Sources.Select(source => source.Url).Distinct().Count();
+                Assert.Equal(url.Pages > shown, text.Contains($" and {url.Pages - shown} more", StringComparison.Ordinal));
+            }
+
+            Assert.Equal(url.Sitemaps.Total > 0, text.Contains("Listed in", StringComparison.Ordinal));
+            Assert.False(string.IsNullOrWhiteSpace(text));
+        }
+
+        // A check of pages holding the bad links has no such column: the page is where to fix it. One naming several says so.
+        var pages = Problem("broken-internal-links");
+        Assert.Equal(["Page", "What was found"], pages.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+        var named = FoundOnReader.ReadTargets(crawl.Path, "broken-internal-links", [.. IssueReader.ReadIssues(crawl.Path, "broken-internal-links", 10).Select(row => row.UrlId)], 0)!;
+        foreach (var (row, page) in pages.QuerySelectorAll(".examples tbody tr").Zip(named))
+        {
+            Assert.Equal(page.Total > 1, row.TextContent.Contains($" and {page.Total - 1} other", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
     /// What a site wrote can be one unbroken run of any length (a detail, a fault's text): it wraps inside its cell, where
     /// it would otherwise widen its table past the edge of the page and be cut off in print.
     /// </summary>

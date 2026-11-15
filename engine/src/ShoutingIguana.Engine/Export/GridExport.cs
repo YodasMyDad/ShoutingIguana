@@ -42,7 +42,7 @@ internal static class GridExport
                 break;
             case ExportKind.IssueRows:
                 WriteGrid(run, table, IssueCatalog.Find(request.CheckId!)!.Title, Columns(request.Query.Columns, DEFAULT_ISSUE_COLUMNS, URL_COLUMNS), links: false,
-                    request.CheckId, sitemapId: null);
+                    request.CheckId, sitemapId: null, extra: WhereFoundColumns.For(run, request.CheckId));
                 break;
             case ExportKind.Links:
                 WriteGrid(run, table, "Links", Columns(request.Query.Columns, DEFAULT_LINK_COLUMNS, LINK_COLUMNS), links: true, checkId: null, sitemapId: null);
@@ -61,12 +61,13 @@ internal static class GridExport
     /// </summary>
     /// <param name="columns">The columns written, which the query is asked for.</param>
     /// <param name="titles">The header's words, where they aren't the columns' own.</param>
+    /// <param name="extra">Columns after the grid's own, read a page of rows at a time (where a check's URLs are found).</param>
     public static void WriteGrid(ExportRun run, ITableWriter table, string name, IReadOnlyList<UrlColumnInfo> columns, bool links, string? checkId, int? sitemapId,
-        IReadOnlyList<string>? titles = null, IssueGroupKey? group = null, UrlQuery? query = null)
+        IReadOnlyList<string>? titles = null, IssueGroupKey? group = null, UrlQuery? query = null, ExportExtraColumns? extra = null)
     {
         query = (query ?? run.Request.Query) with { Columns = [.. columns.Select(column => column.Id).Distinct(StringComparer.Ordinal)] };
         group ??= run.Request.Kind == ExportKind.IssueRows ? run.Request.Group : null;
-        var cells = new object?[columns.Count];
+        var cells = new object?[columns.Count + (extra?.Titles.Count ?? 0)];
         var places = new int[columns.Count];
         var begun = false;
         string? after = null;
@@ -78,7 +79,7 @@ internal static class GridExport
             if (!begun)
             {
                 begun = true;
-                Begin(run, table, name, titles ?? [.. columns.Select(Title)], page, query);
+                Begin(run, table, name, [.. titles ?? [.. columns.Select(Title)], .. extra?.Titles ?? []], page, query);
             }
 
             for (var index = 0; index < columns.Count; index++)
@@ -89,6 +90,7 @@ internal static class GridExport
             // What a running crawl found after the export began is no part of it.
             var bound = !began.Live ? long.MaxValue : links ? began.MaxLinkId : began.MaxUrlId;
             long written = 0;
+            var added = Extra(extra, [.. page.Rows.Where(row => row.Id <= bound).Select(row => (int)row.Id)]);
             foreach (var row in page.Rows)
             {
                 if (row.Id > bound)
@@ -96,9 +98,18 @@ internal static class GridExport
                     continue;
                 }
 
-                for (var index = 0; index < cells.Length; index++)
+                for (var index = 0; index < columns.Count; index++)
                 {
                     cells[index] = places[index] < 0 ? null : Cell(columns[index], row.Values[places[index]]);
+                }
+
+                if (extra is not null)
+                {
+                    var cellsOf = added.GetValueOrDefault((int)row.Id);
+                    for (var index = 0; index < extra.Titles.Count; index++)
+                    {
+                        cells[columns.Count + index] = cellsOf?[index];
+                    }
                 }
 
                 table.WriteRow(cells);
@@ -111,6 +122,26 @@ internal static class GridExport
         while (after is not null);
 
         table.End();
+    }
+
+    /// <summary>The added cells of a page's rows, read as many URLs at a time as the reader takes.</summary>
+    private static Dictionary<int, object?[]> Extra(ExportExtraColumns? extra, IReadOnlyList<int> ids)
+    {
+        Dictionary<int, object?[]> cells = [];
+        if (extra is null)
+        {
+            return cells;
+        }
+
+        foreach (var chunk in ids.Chunk(FoundOnReader.MAX_URLS))
+        {
+            foreach (var (id, row) in extra.Read(chunk))
+            {
+                cells[id] = row;
+            }
+        }
+
+        return cells;
     }
 
     /// <summary>What an export of what an analysis found says of a crawl that has none.</summary>

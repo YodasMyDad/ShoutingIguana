@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Export;
@@ -63,7 +64,7 @@ public sealed class WorkbookExportTests : IDisposable
             Assert.True(sheet.Name.Length <= 31, sheet.Name);
             Assert.StartsWith($"{number} ", sheet.Name, StringComparison.Ordinal);
             Assert.Equal(1, sheet.FrozenRows);
-            Assert.Equal(SHEET_TITLES, sheet.Values[0]);
+            Assert.Equal(Titles(check.Id), sheet.Values[0]);
             Assert.All(sheet.Rows[0], cell => Assert.Equal(1u, cell.Style));
             AssertHoldsTheChecksRows(check.Id, sheet.Values);
         }
@@ -129,14 +130,14 @@ public sealed class WorkbookExportTests : IDisposable
         if (format == ExportFormat.Csv)
         {
             var rows = CsvFile.Read(path).Select(row => row.Select(field => field.Length == 0 ? null : (object)field).ToArray()).ToList();
-            Assert.Equal(SHEET_TITLES, rows[0]);
+            Assert.Equal(Titles(check.Id), rows[0]);
             AssertHoldsTheChecksRows(check.Id, rows, guarded: true);
             return;
         }
 
         var sheet = Assert.Single(XlsxFile.Read(path).Sheets);
         Assert.StartsWith("3 ", sheet.Name, StringComparison.Ordinal);
-        Assert.Equal(SHEET_TITLES, sheet.Values[0]);
+        Assert.Equal(Titles(check.Id), sheet.Values[0]);
         AssertHoldsTheChecksRows(check.Id, sheet.Values);
     }
 
@@ -179,7 +180,7 @@ public sealed class WorkbookExportTests : IDisposable
         var path = Path.Combine(_folder, "clean.xlsx");
         var result = CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Check, Format = ExportFormat.Xlsx, CheckId = clean.Id }, path);
         Assert.Equal(0, result.Rows);
-        Assert.Equal([SHEET_TITLES], Assert.Single(XlsxFile.Read(path).Sheets).Values);
+        Assert.Equal([Titles(clean.Id)], Assert.Single(XlsxFile.Read(path).Sheets).Values);
     }
 
     [Fact]
@@ -237,6 +238,56 @@ public sealed class WorkbookExportTests : IDisposable
                 var expected = rows[row][column + 1] as string;
                 expected = string.IsNullOrEmpty(expected) ? null : guarded && "=+-@\t\r".Contains(expected[0], StringComparison.Ordinal) ? "'" + expected : expected;
                 Assert.True(Equals(expected, sheet[row + 1][column]), $"{checkId}, row {row + 1}, {SHEET_TITLES[column]}: the grid has '{expected}', the sheet '{sheet[row + 1][column]}'.");
+            }
+        }
+
+        AssertSaysWhereToFix(checkId, [.. rows.Select(row => Convert.ToInt32(row[0], CultureInfo.InvariantCulture))], sheet);
+    }
+
+    /// <summary>A check's file's header: its sheet's, then where to fix each URL where the check's URLs are referred to.</summary>
+    private static object?[] Titles(string checkId) => IssueCatalog.Find(checkId)!.References switch
+    {
+        IssueReferences.Sources => [.. SHEET_TITLES, "Linked from (pages)", "Linked from", "Listed in sitemaps"],
+        IssueReferences.Targets => [.. SHEET_TITLES, "Links to (addresses)", "Links to"],
+        _ => [.. SHEET_TITLES]
+    };
+
+    /// <summary>
+    /// Each row's added cells say where to fix it, as the found-on reader reads it: how many pages link to the URL and the
+    /// first of them, or how many URLs the page's issue names and the first of them.
+    /// </summary>
+    private void AssertSaysWhereToFix(string checkId, IReadOnlyList<int> ids, List<object?[]> sheet)
+    {
+        var references = IssueCatalog.Find(checkId)!.References;
+        if (references == IssueReferences.None)
+        {
+            Assert.All(sheet, row => Assert.Equal(SHEET_TITLES.Length, row.Length));
+            return;
+        }
+
+        foreach (var (id, index) in ids.Select((id, index) => (id, index)).Take(FoundOnReader.MAX_URLS))
+        {
+            var row = sheet[index + 1];
+            string? Cell(int column) => row.Length > SHEET_TITLES.Length + column && row[SHEET_TITLES.Length + column] is { } value ? Convert.ToString(value, CultureInfo.InvariantCulture) : null;
+            if (references == IssueReferences.Sources)
+            {
+                var found = FoundOnReader.ReadFoundOn(_crawl.Path, [id], WhereFoundColumns.LISTED).Single();
+                Assert.Equal(found.Pages.ToString(CultureInfo.InvariantCulture), Cell(0));
+                if (found.Sources.Count > 0)
+                {
+                    Assert.StartsWith(found.Sources[0].Url, Cell(1)!.TrimStart('\''),StringComparison.Ordinal);
+                }
+
+                Assert.Equal(found.Sitemaps.Total > 0, Cell(2) is not null);
+            }
+            else
+            {
+                var named = FoundOnReader.ReadTargets(_crawl.Path, checkId, [id], WhereFoundColumns.LISTED)!.Single();
+                Assert.Equal(named.Total.ToString(CultureInfo.InvariantCulture), Cell(0));
+                if (named.Targets.Count > 0)
+                {
+                    Assert.StartsWith(named.Targets[0].Url, Cell(1)!, StringComparison.Ordinal);
+                }
             }
         }
     }

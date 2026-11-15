@@ -14,7 +14,8 @@ namespace ShoutingIguana.Engine.Export;
 /// <summary>
 /// The workbook that goes with the report: a summary sheet (the score, the counts, and every check with its severity,
 /// its plain and technical titles, its count and its share), then a sheet for each check that found something, with
-/// every URL it flagged, the page's title, what was found, and the other URL involved. A check's sheet is named by its
+/// every URL it flagged, the page's title, what was found, and the other URL involved, then where to fix it where the
+/// check's URLs are referred to (<see cref="WhereFoundColumns"/>). A check's sheet is named by its
 /// number in the report and the start of its title ("3 Large images that slow pag…"), so the report's "the full list is
 /// on sheet 3" finds it, and the summary lists each number with its sheet and its full title.
 /// <para>One check's sheet can also be written as a file of its own, as a workbook or as CSV.</para>
@@ -74,7 +75,7 @@ internal static class WorkbookExport
 
     private static void WriteSheet(ExportRun run, ITableWriter table, string name, string checkId) =>
         GridExport.WriteGrid(run, table, name, [.. CHECK_COLUMNS.Select(id => COLUMNS[id])], links: false, checkId, sitemapId: null, CHECK_TITLES,
-            query: new UrlQuery());
+            query: new UrlQuery(), extra: WhereFoundColumns.For(run, checkId));
 
     private static void WriteSummary(XlsxWriter workbook, string name, ReportModel model, IReadOnlyList<string> sheets)
     {
