@@ -57,7 +57,9 @@ test('an address typed without its scheme is checked where the site answers: htt
   expect(Date.now() - started).toBeLessThan(60_000);
 });
 
-test('a stopped check has its results so far, and its toast’s two actions sit under its text', async ({ page }) => {
+test('a stopped check has its results so far, and its toast keeps a readable measure beside its one action', async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   await sidecar('/api/crawl-options/defaults', {
     method: 'PUT',
@@ -87,7 +89,8 @@ test('a stopped check has its results so far, and its toast’s two actions sit 
   expect(item.analyzedAt).not.toBeNull();
   expect(item.score?.partial).toBe(true);
 
-  // Its toast says the results so far, its two actions under its text, which keeps a readable measure.
+  // Its toast says the results so far, a readable measure beside its one action: Continue alone,
+  // as the Summary is on screen (round 5's polish: See the summary was offered over it).
   const toast = page.locator('.si-toast').filter({ hasText: 'was stopped' });
   await expect(toast).toContainText(/Score \d+ so far/, { timeout: 20_000 });
   await toast.hover();
@@ -95,9 +98,10 @@ test('a stopped check has its results so far, and its toast’s two actions sit 
   const buttons = await toast
     .locator('[data-button]')
     .evaluateAll((all) => all.map((button) => button.getBoundingClientRect().top));
-  expect(buttons).toHaveLength(2);
+  expect(buttons).toHaveLength(1);
+  await expect(toast.getByRole('button', { name: 'Continue' })).toBeVisible();
+  await expect(toast.getByRole('button', { name: 'See the summary' })).toHaveCount(0);
   expect(text?.width ?? 0).toBeGreaterThanOrEqual(200);
-  for (const top of buttons) expect(top).toBeGreaterThanOrEqual((text?.y ?? 0) + (text?.height ?? 0));
   await expectNoViolations(page);
   await shoot(page, 'summary-stopped-1280-light');
   await page.emulateMedia({ colorScheme: 'dark' });
