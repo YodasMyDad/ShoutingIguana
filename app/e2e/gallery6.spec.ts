@@ -43,6 +43,25 @@ test('every sitemap’s name shows whole while the table has room for it', async
   }
 });
 
+test('what became of each sitemap shows whole, beside its whole name, once the window has room past the names', async ({
+  page,
+}) => {
+  // At 1280 px the names come first and a failure's reason is cut (its words a hover away); at 1440 both are whole.
+  await page.setViewportSize({ width: 1440, height: 720 });
+  await openSection(page, /^Sitemaps/);
+  const rows = page.getByRole('treegrid', { name: 'Sitemaps' }).locator('[role="row"][aria-level]');
+  await expect(rows.nth(1)).toBeVisible();
+  const count = await rows.count();
+  for (let index = 0; index < count; index += 1) {
+    const full = (await rows.nth(index).locator('.si-url__full').textContent()) ?? '';
+    expect(await cut(rows.nth(index).locator('.si-url__shown')), `row ${index + 1}: ${full}`).toBe(false);
+    const status = rows.nth(index).getByRole('gridcell').nth(2);
+    await expect(status).toHaveText(/^(Read|Couldn’t be read)/);
+    expect(await cut(status), `row ${index + 1}: ${await status.textContent()}`).toBe(false);
+  }
+  await expect(page.getByRole('treegrid', { name: 'Sitemaps' })).toContainText('Couldn’t be read: 404 Not Found');
+});
+
 test.describe('Simple Home', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 

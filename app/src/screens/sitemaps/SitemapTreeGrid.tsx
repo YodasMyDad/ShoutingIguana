@@ -29,8 +29,15 @@ const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'n
 
 // Five counts, how the sitemap was found and what became of it have to fit beside its address in a 1280 px window.
 const FOUND_WIDTH = 112;
-/** "Couldn’t be read: 404 Not Found", "Read, 11 of its 12 sitemaps", whole. */
+/**
+ * What became of a sitemap: at least this wide, and wider for the longest words in the list ("Couldn’t be read: 404 Not
+ * Found" whole, gallery 6's re-shoot), up to `STATE_MAX_WIDTH`, past which its words are a hover away. It grows only
+ * into room the address doesn't need: the address keeps `URL_ROOM_FIRST` first, as names are what tell the rows
+ * apart, so a 1280 px window shows every name whole and a failure's reason cut, a wider one both whole.
+ */
 const STATE_WIDTH = 198;
+const STATE_MAX_WIDTH = 300;
+const URL_ROOM_FIRST = 300;
 /**
  * Each count's column at most: as wide as a count in the millions (1,234,567) and its name on one line. A column is
  * only as wide as its name on two lines (`TWO_LINE_HEAD`) and its widest count need,
@@ -76,6 +83,20 @@ function countWidths(sitemaps: readonly Sitemap[]): Record<SitemapCount, number>
       Math.ceil(Math.max(twoLineWidth(COUNT_WORDS[count], headFont), figures) + padding + COUNT_SLACK),
     );
   return { ...COUNT_WIDTHS, ...Object.fromEntries(LIST_COUNTS.map((count) => [count, width(count)])) };
+}
+
+/**
+ * The Status column as wide as the longest of its words, every sitemap's (an index's closed too, so opening or closing
+ * one never moves the columns), measured at the weight of an index's row, the heaviest, with the cells' padding.
+ */
+function stateWidth(rows: readonly SitemapRow[], crawling: boolean): number {
+  const font = `${tokenValue('--font-weight-semibold', '600')} ${tokenValue('--grid-font-size', '13px')} ${tokenValue('--font-sans', 'sans-serif')}`;
+  const padding = 2 * (Number.parseFloat(tokenValue('--grid-cell-x', '12px')) || 12);
+  const widest = Math.max(
+    0,
+    ...rows.map((row) => textWidth(stateWords(row.sitemap, crawling, row.subtree).short, font)),
+  );
+  return Math.min(STATE_MAX_WIDTH, Math.max(STATE_WIDTH, Math.ceil(widest + padding + COUNT_SLACK)));
 }
 
 /** A sitemap's row is its sitemap, wherever a running crawl moves it in the tree. */
@@ -164,8 +185,17 @@ export function SitemapTree({
   }, [fontsIn]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts and the density change what's measured
   const counted = useMemo(() => countWidths(sitemaps), [sitemaps, fontsIn, metrics]);
-  const fixed = FOUND_WIDTH + STATE_WIDTH + LIST_COUNTS.reduce((sum, count) => sum + counted[count], 0);
-  const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 960) - fixed - FRAME_SLACK);
+  const stateNeeds = useMemo(
+    () => stateWidth(sitemapRows(sitemaps, new Set(), discovery), crawling),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts and the density change what's measured
+    [sitemaps, discovery, crawling, fontsIn, metrics],
+  );
+  const others = FOUND_WIDTH + LIST_COUNTS.reduce((sum, count) => sum + counted[count], 0);
+  // The room the address and the Status share; Status takes what the address leaves past `URL_ROOM_FIRST`.
+  const shared = (width ?? 960) - others - FRAME_SLACK;
+  const stated = Math.max(STATE_WIDTH, Math.min(stateNeeds, shared - URL_ROOM_FIRST));
+  const fixed = others + stated;
+  const urlWidth = Math.max(MIN_URL_WIDTH, shared - stated);
   // A frame too narrow for every column (200% zoom) scrolls sideways: the counts, which the list is for, then come
   // straight after the address, and how each sitemap was found and what became of it after them. A frame not laid
   // out yet has no width to be narrow in.
@@ -242,7 +272,7 @@ export function SitemapTree({
     const state: GridColumn<SitemapRow> = {
       id: 'state',
       header: 'Status',
-      width: STATE_WIDTH,
+      width: stated,
       cell: (row) => {
         const words = stateWords(row.sitemap, crawling, row.subtree);
         // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
@@ -259,7 +289,7 @@ export function SitemapTree({
       text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count) ?? '') : ''),
     }));
     return narrow ? [address, ...counts, state, found] : [address, found, state, ...counts];
-  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow, counted]);
+  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow, counted, stated]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('sitemaps.list', columns);
 
