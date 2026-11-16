@@ -186,10 +186,11 @@ function YourSites({
             onRetry={() => void library.refetch()}
           />
         ) : groups ? (
-          <>
+          // The list's columns, which every row shares (a subgrid): the action's as wide as the widest action.
+          <div className="grid grid-cols-(--site-row-columns) gap-x-4 @max-sites/sites:grid-cols-(--site-row-columns-narrow)">
             <div
               aria-hidden="true"
-              className="grid grid-cols-(--site-row-columns) gap-x-4 border-b border-border px-5 py-2.5 text-12 text-text-secondary @max-sites/sites:hidden"
+              className="col-span-full grid grid-cols-subgrid border-b border-border px-5 py-2.5 text-12 text-text-secondary @max-sites/sites:hidden"
             >
               <span>Site</span>
               <span>Score</span>
@@ -197,7 +198,7 @@ function YourSites({
               <span>Last checked</span>
               <span />
             </div>
-            <ul aria-label="Your sites, the checks running now first">
+            <ul aria-label="Your sites, the checks running now first" className="col-span-full grid grid-cols-subgrid">
               {groups.running.map((item) => (
                 <SiteRow key={item.id} item={item} />
               ))}
@@ -205,7 +206,7 @@ function YourSites({
                 <SiteRow key={group.key} item={group.latest} earlier={group.earlier} />
               ))}
             </ul>
-          </>
+          </div>
         ) : null}
       </Card>
     </section>

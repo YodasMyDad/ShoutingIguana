@@ -300,7 +300,13 @@ test('under forced colours, what is selected or current is outlined, and every s
   await page.getByRole('button', { name: 'Add filter' }).focus();
   await page.keyboard.press('Tab');
   await expect(grid).toBeFocused();
-  expect((await style(grid, 'outline-style'))['outline-style']).toBe('solid');
+  // The grid's focus ring is drawn by its frame, over the rows and the scroll bar (gallery 6): an outline still.
+  const ring = await grid.evaluate((element) => {
+    const after = getComputedStyle(element.parentElement as Element, '::after');
+    return { style: after.outlineStyle, width: Number.parseFloat(after.outlineWidth) };
+  });
+  expect(ring.style).toBe('solid');
+  expect(ring.width).toBeGreaterThan(0);
   const cursor = row.locator('[data-active]');
   await expect(cursor).toHaveCount(1);
   const cell = await style(cursor, 'outline-style', 'outline-color');

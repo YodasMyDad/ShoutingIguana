@@ -235,6 +235,15 @@ const REANCHOR_REACH = 500;
 const FRAME_ROOM = 12;
 
 /** The width the custom vertical scrollbar covers at the right of a windowed grid (tokens.css `--scrollbar-size`). */
+/** The nearest element round this one that scrolls up and down, if any. */
+function scrollingAncestor(element: HTMLElement): HTMLElement | null {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const overflow = getComputedStyle(node).overflowY;
+    if ((overflow === 'auto' || overflow === 'scroll') && node.scrollHeight > node.clientHeight + 1) return node;
+  }
+  return null;
+}
+
 function coveredWidth(element: HTMLElement, windowed: boolean): number {
   if (!windowed) return 0;
   const size = Number.parseFloat(getComputedStyle(element).getPropertyValue('--scrollbar-size'));
@@ -451,6 +460,22 @@ function GridCoreInner<Row>({
   for (let index = view.first; index <= view.last; index++) indices.push(index);
   const activeOffscreen = active !== null && (active.row < view.first || active.row > view.last);
 
+  /**
+   * A grid drawn whole doesn't scroll up and down itself (a check's few affected URLs, in a pane that scrolls): the row
+   * the cursor moved to is brought into view, just enough, in what holds it and scrolls.
+   */
+  const revealInHolder = (row: number | 'header') => {
+    const element = scrollRef.current;
+    if (!element || element.scrollHeight > element.clientHeight + 1) return;
+    const holder = scrollingAncestor(element);
+    if (!holder) return;
+    const [offset, height] = row === 'header' ? [0, headerHeight] : [headerHeight + row * rowHeight, rowHeight];
+    const top = element.getBoundingClientRect().top + offset;
+    const shown = holder.getBoundingClientRect();
+    if (top < shown.top) holder.scrollTop -= shown.top - top;
+    else if (top + height > shown.bottom) holder.scrollTop += top + height - shown.bottom;
+  };
+
   /** Scrolls sideways, just enough, so the cursor's cell is in view: the URL grid is wider than most windows. */
   const revealColumn = (col: number) => {
     const element = scrollRef.current;
@@ -472,6 +497,7 @@ function GridCoreInner<Row>({
     setNav(next);
     if (reveal !== null) {
       model.scrollToIndex(reveal);
+      revealInHolder(reveal);
       if (next.active) revealColumn(next.active.col);
     }
   };
@@ -672,6 +698,7 @@ function GridCoreInner<Row>({
       event.preventDefault();
       setHeaderCursor(active?.col ?? 0);
       model.scrollToIndex(0);
+      revealInHolder('header');
       return;
     }
     if (treeKey(event)) {

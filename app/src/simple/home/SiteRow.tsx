@@ -52,9 +52,13 @@ import {
   type ProblemCounts,
 } from './sites';
 
-/** A row's grid: the site, its score, what to fix, when, and its action. A narrow card folds the middle under the site. */
-const ROW_GRID =
-  'grid grid-cols-(--site-row-columns) items-center gap-x-4 px-5 @max-sites/sites:grid-cols-(--site-row-columns-narrow) @max-sites/sites:gap-y-2';
+/**
+ * A row's grid: the site, its score, what to fix, when, and its action, in the list’s columns (`--site-row-columns`), shared
+ * through each level as a subgrid. A narrow card folds the middle under the site.
+ */
+const ROW_GRID = 'col-span-full grid grid-cols-subgrid items-center px-5 @max-sites/sites:gap-y-2';
+/** A list or item between the list's columns and a row: it passes the columns on. */
+const SUBGRID = 'col-span-full grid grid-cols-subgrid';
 /** The cells a narrow card puts on the line under the site. */
 const FOLDS = '@max-sites/sites:col-start-1';
 
@@ -122,7 +126,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
     ) : null;
 
   return (
-    <li className={clsx(nested && 'bg-surface-sunken')}>
+    <li className={clsx(SUBGRID, nested && 'bg-surface-sunken')}>
       <div
         className={clsx(
           ROW_GRID,
@@ -223,7 +227,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
         </div>
       </div>
       {earlier.length > 0 && open ? (
-        <ul id={earlierId} aria-label={`Earlier checks of ${name}`}>
+        <ul id={earlierId} aria-label={`Earlier checks of ${name}`} className={SUBGRID}>
           {earlier.map((check) => (
             <SiteRow key={check.id} item={check} nested />
           ))}

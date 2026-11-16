@@ -375,6 +375,11 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   holding it tells the data layer the rows are being scrubbed.
 - **Fixed-height virtualiser** (`rowWindow.ts`, `rowRange.ts`): the range is one division; nothing is stored per row.
   Overscan 6. Row heights come from `--row-height` (28, 32 or 40 px by density).
+- **A grid drawn whole** (gallery 6): a grid as tall as its rows doesn't scroll itself, so a key that moves the cursor
+  also brings its row (or the header) into view in the nearest element round it that scrolls (`revealInHolder`). A
+  check's affected URLs are drawn whole up to 100 rows (`issues/evidenceFrame.ts`), so they scroll with the pane, one
+  scroll bar; past that the grid keeps its own, up to `--evidence-max-height`. The grid's focus ring is drawn by its
+  frame (`.si-grid-frame::after`, above the sticky header, the rows and the scroll bar), so it's whole.
 - **Paging** (`usePagedRows.ts`): pages of 200 rows as queries. The pages in view are asked for first, then the ones
   ahead in the direction of travel (further the faster), then one behind. A page fetch nobody waits for and that's
   beyond prefetch reach is cancelled, so its request aborts; one a copy waits for never is. While the thumb is held,

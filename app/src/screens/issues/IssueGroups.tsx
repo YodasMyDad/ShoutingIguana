@@ -64,6 +64,7 @@ import {
   whereRowText,
   type WhereRow,
 } from './whereFound';
+import { evidenceFrameClass } from './evidenceFrame';
 
 /**
  * A row of the tree: a group, one of the open group's first pages or URLs, a row under the one expanded to show where
@@ -639,7 +640,7 @@ export function IssueGroups({
       {rowsFailed ? (
         <ErrorState error={firstRows.error} title={words.unread} onRetry={() => void firstRows.refetch()} compact />
       ) : null}
-      <div ref={measureFrame} className="flex max-h-(--evidence-max-height) min-h-0 flex-col" style={{ height }}>
+      <div ref={measureFrame} className={evidenceFrameClass(shown)} style={{ height }}>
         <GridCore<TreeRow>
           key={queryKey.join('|')}
           label={`${check.title}: ${words.named}, grouped by ${grouping === 'relatedUrl' ? 'related URL' : 'detail'}`}

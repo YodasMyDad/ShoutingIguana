@@ -42,8 +42,10 @@ the switch in the shell, the Report route and screen, a Simple line in the flows
     with; opening it there lasts while the window stays narrow, and leaves the wider window's choice alone.
   - Home first.
   - The open crawl, as a switcher: a button with its favicon, site and date that opens the library's recent crawls
-    (the open one ticked; each opens on the section you're on) and a way Home to them all. Then its sections, with
-    live counts; the current one a neutral fill, never the accent (the owner: the accent rule "looks AI made").
+    (the open one ticked; each opens on the section you're on) and a way Home to them all. Each crawl is named as Home
+    names its site, with a port of its own ("127.0.0.1:62801"), and says its state when it isn't simply finished
+    ("Paused", "Running", "Stopped"; in Simple's words "Checking", "Stopped early"), so two crawls of a site are told
+    apart (gallery 6). Then its sections, with live counts; the current one a neutral fill, never the accent (the owner: the accent rule "looks AI made").
   - At the bottom: crawls running in the background, each a link with its progress, and app Settings. When the
     window is too short for them all (several crawls and exports, 200% zoom), what's between the name and Settings
     scrolls inside the sidebar; Settings stays whole below it.

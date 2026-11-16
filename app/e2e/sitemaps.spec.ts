@@ -79,12 +79,13 @@ test('the list: an index with its sitemaps under it, what became of each, and th
   await expect(row(page, index).getByText('–')).toHaveCount(5);
   await expect(row(page, index).getByRole('link')).toHaveCount(0);
   await expect(row(page, index)).toContainText(`Read, ${read} of its ${under.length} sitemaps`);
-  // Its badge counts its sitemaps where the window leaves room for the count beside the address.
-  await expect(row(page, index).getByText('Index', { exact: true })).toBeVisible();
-  await page.setViewportSize({ width: 1600, height: 900 });
+  // Its badge counts its sitemaps where the window leaves room for the count beside the address: a 1280 px window
+  // does, the counts' columns being only as wide as their words and figures need (gallery 6); a 1024 px one doesn't.
   await expect(row(page, index).getByText(`Index of ${under.length}`, { exact: true })).toBeVisible();
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize({ width: 1024, height: 800 });
   await expect(row(page, index).getByText('Index', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(row(page, index).getByText(`Index of ${under.length}`, { exact: true })).toBeVisible();
   // A sitemap that was read has all five as numbers: the engine counts, for the list, what robots.txt refused, so
   // "Crawled" is what the crawl requested (`fetched` less those) and never `fetched` under that name. The synthetic
   // site lists one URL its robots.txt disallows (/private/listed): that sitemap says 1 blocked.
