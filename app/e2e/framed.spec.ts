@@ -3,7 +3,7 @@
 // to the library's recent crawls. What's current is a neutral fill, never the accent. Capped screens grow with a wide
 // window to --content-max, and only centre past it. Against the real sidecar.
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { crawlTestSite, expectNoViolations, removeCrawl, seededCrawl, site, type SeededCrawl } from './support';
+import { crawlTestSite, expectNoViolations, removeCrawl, seededCrawl, siteRow, type SeededCrawl } from './support';
 
 const style = (locator: Locator, ...properties: string[]) =>
   locator.evaluate(
@@ -176,7 +176,8 @@ test.describe('the crawl switcher', () => {
   }) => {
     await openIn(page, 'advanced', `/crawls/${seeded.id}/issues`);
     const button = switcher(page);
-    await expect(button).toHaveAccessibleName(new RegExp(`^Switch crawl:\\s*${escape(site())}\\s*,`));
+    // The site as Home names it, with a port of its own: two test sites on one host are two names (gallery 6).
+    await expect(button).toHaveAccessibleName(new RegExp(`^Switch crawl:\\s*${escape(siteRow())}\\s*,`));
     await expect(button).toHaveAttribute('aria-haspopup', 'menu');
     await button.focus();
     await page.keyboard.press('Enter');
