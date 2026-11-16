@@ -181,51 +181,53 @@ needed.
 The branches' own checks, and the review shots both agents made (in the session scratchpad's `framed/` and
 `found-on/`), are in their commits (`42b6938`, `88f4c4b`).
 
-**PAUSED 2026-11-15 (late) for the owner's usage.** Done since the merge:
+**Merged 2026-11-16: gallery 6's fixes** (`b6b6e65` merges `ui/gallery6-fixes`; local only). Gallery 6 (published
+2026-11-15) showed four faults. Each fix has a test seen failing first:
 
-- **The owner's installed copy is upgraded** to this build (setup `/S`, in place in `%LOCALAPPDATA%\Shouting Iguana`).
-- **Gallery version 6 is published** at <https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>, 2026-11-15:
-  - 45 views x 2 themes in the framed look, 12.2 MB, including three new views: 23 the switcher, 25 a found-on list
-    opened, and 29 the open button;
-  - the site is in `.claude/worktrees/_gallery/site/`, and the v5 backup is in the session scratchpad's
-    `gallery6/site-backup/`.
+- **The switcher** (view 23) names each site as Home does, with its own port, and says the state of a crawl that didn't
+  simply finish, in the mode's words ("Interrupted", "Stopped"), so two crawls of a site in the same minute differ
+  (`24d47c2`).
+- **Sitemap names** (view 32) show whole. Each count's column is as wide as its name on two lines and its widest count,
+  not a count in the millions (`eeb6f6c`).
+- **Simple Home** (view 02): Your sites shares its columns as a subgrid, so the site's name takes the room its row has
+  (`cb010b8`).
+- **A check's affected URLs** (view 25), up to 100 rows, are drawn whole and scroll with the pane: one scroll bar. A
+  grid's focus ring is drawn by its frame, over the rows and the scroll bar, so it shows whole (`0b7eba5`).
+- **Found by the re-shoot:** a sitemap's Status ("Couldn't be read: 404 Not Found") was cut at every width, version 6
+  included. It now grows into the room the address leaves past 300 px. It is whole from about 1,440 px, and at 1,280 px
+  the names come first (`4ed2f5a`).
+- Three older e2e tests asserted the old behaviour and were updated (`64280cf`).
 
-The shots found four defects:
+**Checks on the merged `b6b6e65`: all green.** Only `app/src/` and `app/e2e/` changed: no engine or `app/src-tauri/`
+change, so neither `verify-engine.sh` nor the Linux check was needed.
 
-1. Sitemaps (view 32): sitemap names are cut to `/si….xml` despite the spare width.
-2. Simple Home (view 02): "gardenfurnituresets.co…" is cut despite the spare width.
-3. The switcher (view 23):
-   - it labels test-site crawls "127.0.0.1" without the port, where Home shows the port;
-   - two crawls of a site can look identical;
-   - it shows no Paused or Running state.
-4. Issues with a found-on list opened (view 25): the focus ring is clipped to stubs, and two scroll bars sit side by
-   side.
+| Check | Result |
+| --- | --- |
+| `verify-app.sh` | Every step exit 0 but two one-offs, both clean when rerun on a quiet machine (below). Stories 531 x 2 themes clean plain, forced and reduced. |
+| Unit | 3,880 passed. The verify run had one timeout (Simple Home not drawn within 1 s while the gallery's images were being optimised); the file passed 5 runs of 5 and the whole suite on the rerun. |
+| e2e | 255 passed and 2 skipped. One test met the preview server refusing a connection; its spec then passed 15 of 15 (`--repeat-each 3`). |
+| `e2e:filled` | 31 passed. |
+| Release build | Sidecar and NSIS installer built (`Shouting Iguana_2.0.0-alpha.1_x64-setup.exe`, 46.0 MB, unsigned). |
+| Shell smoke | `smoke:tauri`, `check:orphans` and `smoke:shell` passed (19 + 9). |
 
-The fix branch is `ui/gallery6-fixes` (worktree `.claude/worktrees/gallery6-fixes`, from `9ce9529`), worked by one agent.
-Each fix needs a test seen failing first, then `verify-app.sh` (ports 62900, Storybook 7690), `e2e:filled`, the release
-build with `smoke:shell`, and the four views re-shot. Scratch and checkpoint: the session scratchpad's `gallery6-fixes/`.
-Its state at the pause is in the entry below, or in that branch's own copy of this section.
+Also done on 2026-11-16:
+
+- **The owner's installed copy is upgraded** to `b6b6e65`: setup `/S`, in place in `%LOCALAPPDATA%\Shouting Iguana`,
+  while the app was closed. The installed sidecar's hash matches the build's.
+- **Gallery version 6.1 is published** at the same link, <https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>:
+  - views 02, 23, 25 and 32 are re-shot on the fix branch's release build, from the gallery's own run folder;
+  - their captions and "Seen in these shots" are updated;
+  - the site is in `.claude/worktrees/_gallery/site/`, and the v6 backup is in the session scratchpad's
+    `gallery6-fixes/site-backup-v6/`.
+- **A gotcha:** run the app's unit tests from a `C:/` path. From the lowercase `c:\` working directory the editor gives
+  a shell, every file fails with "Vitest failed to find the runner", because Vitest loads twice. `verify-app.sh` is
+  safe, as it changes to the folder it is given.
 
 **Left, in order:**
 
-1. Finish `ui/gallery6-fixes`:
-   1. Read its checkpoint, `git log ui/step-3..ui/gallery6-fixes`, and its status entry.
-   2. Finish whatever of the four fixes and their checks is not done.
-   3. Look at the re-shot views 02, 23, 25 and 32.
-2. Merge `ui/gallery6-fixes` into `ui/step-3` (`--no-ff`, local) and rerun `verify-app.sh`.
-3. Rebuild the installer (`npm run build:sidecar -- --target x86_64-pc-windows-msvc`, then
-   `npm run tauri build -- --bundles nsis`), and rerun `smoke:tauri`, `check:orphans` and `smoke:shell`.
-4. Update the owner's install:
-   1. The owner closes the app.
-   2. Run the new setup with `/S`. NSIS upgrades it in place.
-
-   `smoke-installer.ps1` refuses to run beside a real install by design.
-5. Put the four re-shot views into `_gallery/site/`:
-   1. Optimise them losslessly with `zop2.py`, as the gallery agent did.
-   2. Rebuild with `build.cjs`, taking the notes on the four defects out of the page's "Seen in these shots".
-   3. Publish to the same artifact, with the HTML and the changed shots.
-6. Step 3b: the check audit on the three real sites above.
-7. The release step (signing, licences, updater secrets, CI on all three OSes), at the owner's word. Merging to
+1. Step 3b: the check audit on the three real sites above, at the owner's word. It crawls real sites, which the agents'
+   rules otherwise forbid.
+2. The release step (signing, licences, updater secrets, CI on all three OSes), at the owner's word. Merging to
    `master` or releasing still needs an explicit yes.
 
 Still for the owner's eye: at 1280x720 with an export running, the sidebar scrolls and the export's row sits half below
