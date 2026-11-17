@@ -232,6 +232,14 @@ internal static class ColumnWords
         return VALUES["outcome"].GetValueOrDefault(value) ?? FromId(value);
     }
 
+    /// <summary>Where on a page a link sits, as the position column's cells say it: "Footer", "Navigation".</summary>
+    public static string PositionTitle(Parsing.Models.LinkPosition position)
+    {
+        var name = position.ToString();
+        var value = char.ToLowerInvariant(name[0]) + name[1..];
+        return VALUES["position"].GetValueOrDefault(value) ?? FromId(value);
+    }
+
     /// <summary>An enum's values in words, each value that has none standing for itself.</summary>
     private static Dictionary<string, string> Values(string column, IReadOnlyList<string> values)
     {

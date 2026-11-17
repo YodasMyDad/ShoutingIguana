@@ -155,6 +155,7 @@ export function groupsAsGridPage(page: LinkGroupsPage): LinkGroupsGridPage {
     unavailable: [],
     links: page.links,
     pages: page.pages,
+    ...(page.pixelSizes === undefined ? {} : { pixelSizes: page.pixelSizes }),
   };
 }
 

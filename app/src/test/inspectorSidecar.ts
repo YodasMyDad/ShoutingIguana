@@ -286,6 +286,7 @@ export function inspectorRoutes(options: InspectorSidecarOptions = {}): FakeRout
             total: rows.length,
             links: rows.reduce((sum, row) => sum + row.links, 0),
             rows: rows.slice(0, limit),
+            pixelSizes: rows.length === 0 || rows.some((row) => typeof row.target.pixelWidth === 'number'),
           } satisfies PageImages),
         );
       },

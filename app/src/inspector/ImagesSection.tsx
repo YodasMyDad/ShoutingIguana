@@ -14,6 +14,7 @@ import { formatBytes, formatCount, formatCountOf } from '../lib/format';
 import { imagesOfPage } from '../screens/links/presets';
 import { EmptyState } from '../ui/EmptyState';
 import { ImageThumb } from '../ui/ImageThumb';
+import { isBrokenImage } from '../ui/imageFacts';
 import { LiveBadge } from '../ui/LiveBadge';
 import { SeverityMark } from '../ui/SeverityMark';
 import { TextLink } from '../ui/TextLink';
@@ -28,7 +29,7 @@ const SIZE_WIDTH = 96;
 const PIXELS_WIDTH = 112;
 const ALT_WIDTH = 192;
 const SHOWN_WIDTH = 160;
-const MIN_URL_WIDTH = 176;
+const MIN_URL_WIDTH = 260;
 const FRAME_SLACK = 24;
 
 /**
@@ -44,9 +45,11 @@ export function ImagesSection() {
   const limit = useQuery(urlDetailQuery(crawlId, urlId)).data?.limits.largeImageBytes;
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
+  // A crawl made before images' pixel sizes were read has none: no column of dashes, one line that says so.
+  const unmeasured = images.data?.pixelSizes === false;
   const urlWidth = Math.max(
     MIN_URL_WIDTH,
-    (width ?? 0) - SIZE_WIDTH - PIXELS_WIDTH - ALT_WIDTH - SHOWN_WIDTH - FRAME_SLACK,
+    (width ?? 0) - SIZE_WIDTH - (unmeasured ? 0 : PIXELS_WIDTH) - ALT_WIDTH - SHOWN_WIDTH - FRAME_SLACK,
   );
   const columns = useMemo<GridColumn<PageImage>[]>(
     () => [
@@ -56,12 +59,13 @@ export function ImagesSection() {
         width: urlWidth,
         cell: (row) => (
           <span className="flex min-w-0 items-center gap-2">
-            <ImageThumb url={row.url} broken={(row.target.statusCode ?? 0) >= 400} />
+            <ImageThumb url={row.url} broken={isBrokenImage(row.target)} />
             <Url
               url={row.url}
               siteOrigin={siteOrigin}
               tabbable={false}
               onGo={() => walk(row.id)}
+              label="file"
               className="min-w-0 flex-1"
             />
           </span>
@@ -121,7 +125,11 @@ export function ImagesSection() {
     ],
     [urlWidth, siteOrigin, walk, limit],
   );
-  const laid = useColumnLayout('inspector.images', columns);
+  const visible = useMemo(
+    () => (unmeasured ? columns.filter((column) => column.id !== 'pixels') : columns),
+    [columns, unmeasured],
+  );
+  const laid = useColumnLayout('inspector.images', visible);
 
   if (images.isError && !images.data) {
     return <SectionError error={images.error} onRetry={() => void images.refetch()} what="The images" />;
@@ -146,6 +154,9 @@ export function ImagesSection() {
               : imagesSummaryWords(page, limit)}
           {page.total > page.rows.length ? `, the largest ${formatCount(page.rows.length)} listed` : ''}
         </p>
+        {page.pixelSizes === false && page.total > 0 ? (
+          <p className="text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
+        ) : null}
         {crawling ? <LiveBadge /> : null}
         {page.total > 0 ? (
           // The same images in the Links grid, one row an image link, the largest first: to filter, sort and copy.

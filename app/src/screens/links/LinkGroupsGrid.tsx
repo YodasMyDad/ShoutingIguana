@@ -18,10 +18,11 @@ import { openInBrowser } from '../../shell/os';
 import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
 import { ImageThumb } from '../../ui/ImageThumb';
+import { isBrokenImage } from '../../ui/imageFacts';
 import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
-import { urlDisplay } from '../../ui/urlText';
+import { isResourceType, urlDisplay } from '../../ui/urlText';
 import { treeLayout, type OpenGroup } from '../issues/groupTree';
 import { linkFollowWords } from './linkColumns';
 import {
@@ -99,6 +100,11 @@ export interface LinkGroupsGridProps {
   crawling: boolean;
   /** Opens the inspector on a link's end. */
   onInspect: (urlId: number, end: 'from' | 'to') => void;
+  /**
+   * While the inspector is open, the end it follows the cursor down (as the flat list's does): a target's row is its
+   * target; one of its links is that link's page with `from`, else the target again. Left out while it's closed.
+   */
+  following?: 'from' | 'to' | undefined;
   /** The view one row a link, of one target's links. */
   onShowLinks: (filters: GridFilter[]) => void;
   /**
@@ -131,6 +137,7 @@ export function LinkGroupsGrid({
   images,
   crawling,
   onInspect,
+  following,
   onShowLinks,
   onCounted,
   onCopy,
@@ -269,9 +276,19 @@ export function LinkGroupsGrid({
   );
 
   const [measure, width] = useElementWidth();
+  // A crawl made before images' pixel sizes were read has none: no column of dashes, one line that says so.
+  const unmeasured = images && first?.pixelSizes === false;
   const shownColumns = useMemo(
-    () => ['target', 'status', ...(images ? ['size', 'pixels'] : []), 'pages', 'links', 'text', 'where'],
-    [images],
+    () => [
+      'target',
+      'status',
+      ...(images ? ['size', ...(unmeasured ? [] : ['pixels'])] : []),
+      'pages',
+      'links',
+      'text',
+      'where',
+    ],
+    [images, unmeasured],
   );
   const widths = images ? IMAGE_WIDTHS : WIDTHS;
   const targetWidth = Math.max(
@@ -310,12 +327,14 @@ export function LinkGroupsGrid({
               <span data-tree-toggle aria-hidden="true" className="si-tree-toggle">
                 <Icon icon={ChevronRight} size="sm" />
               </span>
-              {images ? <ImageThumb url={value.url} broken={(value.target.statusCode ?? 0) >= 400} /> : null}
+              {images ? <ImageThumb url={value.url} broken={isBrokenImage(value.target)} /> : null}
               <Url
                 url={value.url}
                 siteOrigin={siteOrigin}
                 tabbable={false}
                 onGo={() => onInspect(value.id, 'to')}
+                // An image, a stylesheet, a script: named by its file, never cut in the middle of its name.
+                label={images || isResourceType(value.target.contentType) ? 'file' : 'address'}
                 className="min-w-0 flex-1"
               />
             </span>
@@ -474,6 +493,9 @@ export function LinkGroupsGrid({
   if (failed) return <>{errorState(groups.error, groups.refetch)}</>;
   return (
     <div ref={measure} className="flex min-h-0 flex-1 flex-col">
+      {unmeasured ? (
+        <p className="mb-2 text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
+      ) : null}
       <GridCore<GroupTreeRow>
         key={view}
         label={images ? 'Images, one row an image' : 'Links grouped by target'}
@@ -492,6 +514,14 @@ export function LinkGroupsGrid({
         tree={tree}
         spanRow={spanRow}
         onSort={(column) => onSortChange(nextGroupSort(order, GROUP_COLUMN_SORTS[column] ?? column))}
+        // While it's open, the inspector follows the cursor, in place: the target of the row the cursor is on.
+        onActiveRowChange={(index) => {
+          const row = following && index !== null ? getRow(index) : undefined;
+          if (!row) return;
+          const page = row.kind === 'link' ? row.link['from.id'] : undefined;
+          if (following === 'from' && typeof page === 'number') onInspect(page, 'from');
+          else onInspect(row.group.id, 'to');
+        }}
         onActivate={(_index, row) => {
           if (row?.kind === 'link' && typeof row.link['from.id'] === 'number') onInspect(row.link['from.id'], 'from');
           else if (row?.kind === 'more') showAll(row.group);

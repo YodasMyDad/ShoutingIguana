@@ -70,6 +70,9 @@ describe('the inspector’s Images', () => {
     expect(await within(panel).findByText('2 images, 1 over 200 KB')).toBeVisible();
     const grid = within(panel).getByRole('grid', { name: 'Images' });
     const [hero, icon] = within(grid).getAllByRole('row').slice(1);
+    // Named by its file, its folder after it; the whole URL is its name.
+    expect(hero!.querySelector('.si-url__file')).toHaveTextContent('harpswell-hero.jpg');
+    expect(hero!.querySelector('.si-url__rest')).toHaveTextContent('/wp-content/uploads/');
     expect(hero).toHaveTextContent('2.1 MB');
     expect(hero).toHaveTextContent('4000×3000 px');
     expect(hero).toHaveTextContent('Harpswell metal patio set on a lawn');
@@ -111,5 +114,20 @@ describe('the inspector’s Images', () => {
     const panel = await screen.findByRole('tabpanel', { name: /^Images/ });
     expect(await within(panel).findByText('No images')).toBeVisible();
     expect(within(inspector).getByRole('tab', { name: /^Images/ })).toHaveTextContent(/^Images$/);
+  });
+
+  it('leaves out the pixel size, and says so, for a crawl that didn’t measure it', async () => {
+    const unmeasured = [testPageImage({}, { pixelWidth: null, pixelHeight: null })];
+    setTransport(
+      fakeSidecar([
+        ...inspectorRoutes({ urls: { 2: testUrlDetail() }, images: { 2: unmeasured } }),
+        ...standardRoutes(),
+      ]),
+    );
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Images/ }));
+    const panel = await screen.findByRole('tabpanel', { name: /^Images/ });
+    expect(await within(panel).findByText('Image dimensions weren’t measured in this crawl.')).toBeVisible();
+    expect(within(panel).queryByRole('columnheader', { name: /Pixel size/ })).toBeNull();
   });
 });

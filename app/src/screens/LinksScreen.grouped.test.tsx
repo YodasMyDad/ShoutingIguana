@@ -8,6 +8,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { inspectorRoutes, testUrlDetail } from '../test/inspectorSidecar';
 import { LINKS_URLS, linksRoutes, testLinkRows } from '../test/linksSidecar';
 import { LINKS_FACTS } from '../test/linksSidecar';
 import { wholeText } from '../test/text';
@@ -17,7 +18,14 @@ const LINKS = `/crawls/${TEST_CRAWL_ID}/links`;
 
 function sidecar(options: Parameters<typeof linksRoutes>[0] = {}) {
   const { routes, state } = linksRoutes(options);
-  const transport = fakeSidecar(routes);
+  // The inspector on any of the crawl's URLs.
+  const inspector = inspectorRoutes({
+    urls: (urlId) => {
+      const address = LINKS_URLS.find((candidate) => candidate.id === urlId)?.url;
+      return address ? testUrlDetail({ id: urlId, url: address }) : undefined;
+    },
+  });
+  const transport = fakeSidecar([...inspector, ...routes]);
   setTransport(transport);
   return { transport, state };
 }
@@ -116,6 +124,47 @@ describe('the Links grid grouped by target', () => {
     await counted('2 of 13 links');
   });
 
+  it('has the inspector follow the cursor, on the target of the row it’s on', async () => {
+    sidecar();
+    const { router } = await open(`${LINKS}?by=target&inspect=2`);
+    const grid = await groupsGrid();
+    await within(grid).findByRole('row', { name: /\/gone/ });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'Home' });
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(1));
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(4));
+    // Opened, the target's links: the page each is on, when the inspector is on the links' pages.
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    await waitFor(() => expect(level2(grid)[0]).toHaveTextContent('“Gone”'));
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(4));
+  });
+
+  it('leaves the inspector where it is while it’s closed', async () => {
+    sidecar();
+    const { router } = await open(`${LINKS}?by=target`);
+    const grid = await groupsGrid();
+    await within(grid).findByRole('row', { name: /\/gone/ });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect((router.state.location.search as { inspect?: number }).inspect).toBeUndefined();
+  });
+
+  it('exports what’s shown, one row a target, while grouped', async () => {
+    sidecar();
+    const { user } = await open(`${LINKS}?by=target`);
+    await counted('8 targets · 13 links on 3 pages');
+    await user.click(screen.getByRole('button', { name: 'Export' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Export links by target' });
+    expect(within(dialog).getByText(/8 targets, one row a target: the most linked from pages first/)).toBeVisible();
+    // The dialog is the app's: closed, so the tests after this one start without it.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('sorts the targets by a header, and back to the most linked from pages first', async () => {
     const { transport } = sidecar();
     const { router, user } = await open(`${LINKS}?by=target`);
@@ -160,6 +209,8 @@ describe('the Images preset', () => {
     for (const row of [first, second]) {
       expect(row).toHaveTextContent('1.8 MB');
       expect(row).toHaveTextContent('4000×3000 px');
+      // Named by its file, its folder after it.
+      expect(row?.querySelector('.si-url__file')).toHaveTextContent('logo.png');
     }
     expect(within(grid).getByText('Logo')).toBeVisible();
     // Another preset after it puts the default columns back.
@@ -174,9 +225,29 @@ describe('the Images preset', () => {
     const grid = await screen.findByRole('treegrid', { name: 'Images, one row an image' });
     expect(within(grid).getByRole('columnheader', { name: /Used on/ })).toBeVisible();
     const logo = within(grid).getAllByRole('row')[1]!;
-    expect(logo).toHaveTextContent('/img/logo.png');
+    expect(logo.querySelector('.si-url__file')).toHaveTextContent('logo.png');
+    expect(logo.querySelector('.si-url__rest')).toHaveTextContent('/img/');
     expect(logo).toHaveTextContent('1.8 MB');
     expect(logo).toHaveTextContent('4000×3000 px');
     expect(logo).toHaveTextContent('Logo');
+  });
+
+  it('leaves out the pixel size, and says so once, for a crawl that didn’t measure it', async () => {
+    // The crawl's image has no pixel size: the crawl was made before they were read.
+    sidecar();
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Images' }));
+    await counted('2 of 13 links');
+    const grid = await screen.findByRole('grid', { name: 'Links' });
+    await waitFor(() => expect(within(grid).getAllByRole('row')).toHaveLength(3));
+    expect(within(grid).queryByRole('columnheader', { name: /Pixel size/ })).toBeNull();
+    expect(screen.getByText('Image dimensions weren’t measured in this crawl.')).toBeVisible();
+    // Grouped, the same.
+    await user.click(screen.getByRole('button', { name: 'Group by target' }));
+    const tree = await screen.findByRole('treegrid', { name: 'Images, one row an image' });
+    await within(tree).findByRole('row', { name: /logo\.png/ });
+    expect(within(tree).queryByRole('columnheader', { name: /Pixel size/ })).toBeNull();
+    expect(screen.getByText('Image dimensions weren’t measured in this crawl.')).toBeVisible();
   });
 });

@@ -1635,7 +1635,8 @@ file once, **the largest first**: the inspector's Images.
   (`limits.largeImageBytes` of `/urls/inspect`). In order of size, largest first, those of no known size last, then
   in the order the page shows them.
 - **`total`** is the image files the page shows, each once, and **`links`** its image links; **`limit`** (1 to 500,
-  default 100) caps the rows.
+  default 100) caps the rows. **`pixelSizes`** says whether the crawl measured images' pixel sizes, as
+  `/links/groups`' does.
 - **What it costs**: the page's own image links, on the links' index by source (at most the parser's 10,000 links a
   page), and each file's facts. No URL summary is needed.
 - Errors: `url-not-found` for a URL the crawl doesn't have, `invalid-query` without a `urlId` or with a `limit` out of
@@ -2060,6 +2061,10 @@ links that lead to it are: a broken footer link is one row, however many pages c
   `/links/ends` for the pages is; every read after it, another page or another order, is a few milliseconds. A
   filter that names one URL (`to.id`) takes the pass too. Not measured at 1M URLs: the pass grows with the links.
 - **While a crawl runs** an answer is of one moment of it, as the links grid's are.
+- **`pixelSizes`** (round 2) is whether the crawl measured images' pixel sizes: false for a crawl made before they were
+  read, and not continued since, whose `pixelWidth` and `pixelHeight` are all null. `/links` and `/urls/images` say it
+  too. The app then leaves out its pixel size columns and says the dimensions weren't measured.
+- **Export**: the export kind `linkGroups` writes the grouped view one row a target ([Export](#export-e5)).
 - Errors: `invalid-query` on `filters[…]`, `search`, `sort`, `sort.column`, `sort[i].column`, `offset` and `limit`;
   `needs-analysis` for a filter or sort that needs the URL summary, without one; `bad-request` for a field it doesn't
   take (`end`, `columns`).
@@ -2451,6 +2456,7 @@ An export only reads the crawl.
   | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |
   | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
   | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
+  | `linkGroups` (step 3b) | The links grouped by target, as [`/links/groups`](#links-grouped-by-target-step-3b) lists them: one row a target | `csv`, `xlsx` | `filters`, `search`, `sort` (one key: `pages`, `links` or a column of the target) and `hiddenChecks`, as the grouped view takes them; no `columns` |
 
 - **`hiddenChecks`** (round 5, `report`, `workbook` and `check`): the ids of the checks the user hid, at most 500. They are
   left out of the lists, the counts and the sheets (discovery decision 2: "the analysis still runs it, and exports
@@ -2510,6 +2516,12 @@ was found" and "Other address". The two lists (E7) write their screens' columns,
   "Missing: nothing refused", "Missing when last asked", "Couldn’t be read: URLs refused", "Couldn’t be read: ignored",
   "No answer: crawled anyway", "No answer when last asked", "No answer: ignored", "None kept"), "Status", "Error",
   "Blocked URLs", "Read" (a date, in the computer's own time) and "Size (bytes)", in the list's order.
+- `linkGroups` (step 3b): "Target", "Status" (its code), "Outcome" (what became of the request, in the URL grid's words),
+  "Linking pages", "Links", "Text" (the text most of its links have), "Other texts", "Positions" ("Footer, Navigation"),
+  "Likely template" (Yes or No), "Content type", "Size (bytes)", "Pixel width", "Pixel height" (after any redirects)
+  and "Redirects to" (where its redirects end), one row a target in the grouped view's order, on a sheet called
+  "Links by target". Read from one snapshot of the file, a page of targets at a time: a running crawl's are of one
+  moment of it. It costs the grouped view's pass over the links, then each target's row as the view reads it.
 
 #### The files
 

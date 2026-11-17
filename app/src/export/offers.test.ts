@@ -5,6 +5,7 @@ import {
   crawlFileChoices,
   issuesOffer,
   linkExportColumns,
+  linkGroupsOffer,
   linksOffer,
   robotsBlockedOffer,
   robotsOriginsOffer,
@@ -132,6 +133,48 @@ describe('a grid’s export is the grid’s own read', () => {
       line: 4,
     });
     expect(blocked.choices[0]?.fileView).toBe('blocked by example.com robots.txt line 4');
+  });
+});
+
+describe('Links grouped by target', () => {
+  it('writes what’s shown: one row a target, with the view’s filters, search and order, and no columns to choose', () => {
+    const offer = linkGroupsOffer({
+      item,
+      crawling: false,
+      filters: [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }],
+      sort: { column: 'pages', desc: true },
+      search: 'rattan',
+      targets: 9,
+      viewName: 'Broken links',
+    });
+    expect(offer.title).toBe('Export links by target');
+    const [choice] = offer.choices;
+    expect(choice?.description).toBe(
+      '9 targets, one row a target: this filter, this search, the most linked from pages first',
+    );
+    expect(choice?.fileView).toBe('Broken links by target');
+    expect(choice?.formats).toEqual(['csv', 'xlsx']);
+    expect(choice?.build(as({ format: 'csv' }))).toEqual({
+      kind: 'linkGroups',
+      format: 'csv',
+      path: 'C:\\x\\a.xlsx',
+      filters: [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }],
+      search: 'rattan',
+      sort: [{ column: 'pages', desc: true }],
+    });
+    // Images, by size: named for them; no view name, the links.
+    const images = linkGroupsOffer({
+      item,
+      crawling: false,
+      filters: [{ column: 'kind', op: 'in', values: ['image'] }],
+      sort: { column: 'to.sizeBytes', desc: true },
+      search: undefined,
+      targets: 1,
+      viewName: null,
+      images: true,
+    });
+    expect(images.choices[0]?.description).toBe('1 image, one row an image: this filter, by this sort');
+    expect(images.choices[0]?.fileView).toBe('images');
   });
 });
 

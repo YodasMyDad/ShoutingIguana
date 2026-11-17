@@ -15,12 +15,15 @@ public static class ExportFields
 
     private static readonly ExportKind[] BLOCKED = [ExportKind.RobotsBlocked];
 
+    /// <summary>The links grouped by target: the links grid's filters, search, sort and hidden checks, with no columns of its own to choose.</summary>
+    private static readonly ExportKind[] GROUPED = [ExportKind.LinkGroups];
+
     private static readonly Dictionary<string, ExportKind[]> OWNERS = new(StringComparer.Ordinal)
     {
         ["columns"] = GRIDS,
-        ["filters"] = GRIDS,
-        ["search"] = [.. GRIDS, ExportKind.RobotsOrigins],
-        ["sort"] = GRIDS,
+        ["filters"] = [.. GRIDS, .. GROUPED],
+        ["search"] = [.. GRIDS, ExportKind.RobotsOrigins, .. GROUPED],
+        ["sort"] = [.. GRIDS, .. GROUPED],
         ["linkEnds"] = [ExportKind.Urls],
         ["blocked"] = [ExportKind.RobotsOrigins],
         ["group"] = [ExportKind.IssueRows],
@@ -35,7 +38,7 @@ public static class ExportFields
         ["lookExamples"] = REPORT,
         // The report and the workbook leave the hidden checks out; a check's file leaves them out and is numbered as the
         // workbook is; a grid leaves them out of its issue counts.
-        ["hiddenChecks"] = [ExportKind.Report, ExportKind.Workbook, ExportKind.Check, .. GRIDS],
+        ["hiddenChecks"] = [ExportKind.Report, ExportKind.Workbook, ExportKind.Check, .. GRIDS, .. GROUPED],
         ["checks"] = [ExportKind.Workbook]
     };
 

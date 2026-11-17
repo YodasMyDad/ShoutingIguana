@@ -42,6 +42,7 @@ import { Callout } from '../../ui/Callout';
 import { FilterChip } from '../../ui/FilterChip';
 import { Icon } from '../../ui/Icon';
 import { ImageThumb } from '../../ui/ImageThumb';
+import { isBrokenImage } from '../../ui/imageFacts';
 import { ShareBar } from '../../ui/ShareBar';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
@@ -200,9 +201,7 @@ function groupsAreImages(check: Check): boolean {
 /** A group's image's thumbnail, not asked for where the image is known not to answer. */
 function GroupThumb({ group }: { group: IssueGroup }) {
   if (!group.relatedUrl) return null;
-  const status = group.related?.statusCode;
-  const broken = typeof status === 'number' ? status >= 400 : Boolean(group.related?.outcome);
-  return <ImageThumb url={group.relatedUrl} broken={broken} className="me-2" />;
+  return <ImageThumb url={group.relatedUrl} broken={isBrokenImage(group.related ?? {})} className="me-2" />;
 }
 
 /** A group's "Shown at" cell: the largest size its first pages show its image at, and how much wider the file is. */
@@ -626,6 +625,8 @@ export function IssueGroups({
             siteOrigin={siteOrigin}
             copyable={false}
             tabbable={false}
+            // An image is named by its file: its name leads, never cut in the middle.
+            label={images ? 'file' : 'address'}
             className={(facts || status) && !images ? 'max-w-3/5 min-w-0 shrink-0' : 'min-w-0 flex-1'}
           />
           {status ? (

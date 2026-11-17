@@ -45,7 +45,7 @@ import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
 import { ExportButton } from '../export/ExportButton';
 import { useExportCommand } from '../export/useExportCommand';
-import { linkExportColumns, linksOffer } from '../export/offers';
+import { linkExportColumns, linkGroupsOffer, linksOffer } from '../export/offers';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatCountOf, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
@@ -76,8 +76,23 @@ import {
   linkExportShown,
 } from './links/linkColumns';
 import { LinkGroupsGrid } from './links/LinkGroupsGrid';
-import { GROUP_KEY_HINTS, groupedReadWords, groupedTotalsWords, isImageView, sortForMode } from './links/linkGroups';
-import { FOLLOW_COLUMN, endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
+import {
+  GROUP_KEY_HINTS,
+  groupSortOf,
+  groupedReadWords,
+  groupedTotalsWords,
+  isImageView,
+  sortForMode,
+} from './links/linkGroups';
+import {
+  FOLLOW_COLUMN,
+  PIXELS_COLUMN,
+  endColumn,
+  linkColumnName,
+  linkFilterWords,
+  namesCheck,
+  urlIdsNamed,
+} from './links/linkWords';
 import { LINK_PRESETS, activePreset, presetSearch, sortShown } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './links/states';
@@ -127,7 +142,7 @@ export function LinksScreen() {
   const catalogue = useQuery(linkColumnsQuery());
   const shown = useMemo(() => shownLinkColumns(search.cols, catalogue.data), [search.cols, catalogue.data]);
   // In one order whatever the columns' order: a column moved asks for nothing again.
-  const queryColumns = useMemo(() => [...linkQueryColumns(shown)].sort(), [shown]);
+  const queryColumns = useMemo(() => [...linkQueryColumns(shown, images)].sort(), [shown, images]);
 
   const view = useMemo(
     () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '' })}`,
@@ -279,15 +294,19 @@ export function LinksScreen() {
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();
   const layoutWidths = useStoredColumnLayout('links').widths;
-  const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
+  // A crawl made before images' pixel sizes were read has none to show: the column is left out, and the screen says
+  // so once, rather than a column of dashes.
+  const unmeasured = !grouped && first?.pixelSizes === false && shown.includes(PIXELS_COLUMN);
+  const drawn = useMemo(() => (unmeasured ? shown.filter((id) => id !== PIXELS_COLUMN) : shown), [shown, unmeasured]);
+  const urlWidth = sharedUrlWidth(drawn, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
   const columns = useMemo(
-    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling, images }),
-    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling, images],
+    () => linkGridColumns(drawn, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling, images }),
+    [drawn, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling, images],
   );
   // The columns as the user laid them out: widths and pins kept with the preferences, the order the route's. Put
   // back, a set that's the default's in another order takes the default's order again.
   const laid = useColumnLayout('links', columns, {
-    order: { ids: shown, onChange: setColumns },
+    order: { ids: drawn, onChange: setColumns },
     onReset: () => {
       const set = new Set(shown);
       if (set.size === DEFAULT_LINK_COLUMNS.length && DEFAULT_LINK_COLUMNS.every((id) => set.has(id))) {
@@ -576,25 +595,48 @@ export function LinksScreen() {
     [hasRows, showEnds],
   );
 
-  // Export (Ctrl+E): the view as it is when it's pressed, its columns, filters, search and sort.
+  // Export (Ctrl+E): the view as it is when it's pressed, its columns, filters, search and sort; grouped, what's
+  // shown, one row a target.
   useExportCommand(
     () =>
-      item
-        ? linksOffer({
-            item,
-            crawling,
-            columns: linkExportColumns(linkExportShown(shown), FOLLOW_COLUMN, FOLLOW_PARTS),
-            filters,
-            // Grouped, the file is still one row a link (an export of the targets isn't one the engine writes): in
-            // the order of the view's sort where the links grid has it, else in crawl order.
-            sort: grouped ? (sortForMode(sort, false) ?? []) : sort,
-            search: q,
-            rows: rowCount,
-            catalogue: catalogue.data,
-            viewName: preset && preset.id !== 'all' ? preset.title : null,
-          })
-        : null,
-    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, preset, grouped],
+      !item
+        ? null
+        : grouped
+          ? linkGroupsOffer({
+              item,
+              crawling,
+              filters,
+              sort: groupSortOf(sort),
+              search: q,
+              targets: groupsCounted?.targets ?? null,
+              viewName: preset && preset.id !== 'all' ? preset.title : null,
+              images,
+            })
+          : linksOffer({
+              item,
+              crawling,
+              columns: linkExportColumns(linkExportShown(drawn), FOLLOW_COLUMN, FOLLOW_PARTS),
+              filters,
+              sort,
+              search: q,
+              rows: rowCount,
+              catalogue: catalogue.data,
+              viewName: preset && preset.id !== 'all' ? preset.title : null,
+            }),
+    [
+      item,
+      crawling,
+      drawn,
+      filters,
+      sort,
+      q,
+      rowCount,
+      catalogue.data,
+      preset,
+      grouped,
+      groupsCounted?.targets,
+      images,
+    ],
     { group: 'Links' },
   );
 
@@ -839,6 +881,10 @@ export function LinksScreen() {
           ) : null}
         </>
       ) : null}
+      {/* A crawl that didn't measure images' pixel sizes: said once, where their column would be. */}
+      {unmeasured ? (
+        <p className="mx-6 mb-2 text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
+      ) : null}
       {failed ? (
         isProblem(rows.error, 'needs-analysis') ? (
           <NeedsAnalysis error={rows.error} action={analyse} onClear={clearView} />
@@ -894,6 +940,7 @@ export function LinksScreen() {
             images={images}
             crawling={crawling}
             onInspect={openEnd}
+            following={inspecting ? inspectedEnd : undefined}
             onShowLinks={(next) =>
               void navigate({ search: (previous) => ({ ...previous, by: undefined, filter: next, sort: undefined }) })
             }

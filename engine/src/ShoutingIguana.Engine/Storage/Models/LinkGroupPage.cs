@@ -23,4 +23,10 @@ public sealed record LinkGroupPage(long Total, long Links, long Pages, int Offse
 
     /// <summary>The most of a target's links read for their text: <see cref="LinkGroupRow.Text"/> is the most common among them.</summary>
     public const int TEXT_SAMPLE = 200;
+
+    /// <summary>
+    /// Whether the crawl measured images' pixel sizes (<see cref="CrawlSchema.PIXEL_COLUMNS"/>): false for a crawl made before
+    /// they were read, and not continued since, whose images' widths and heights are all unknown.
+    /// </summary>
+    public bool PixelSizes { get; init; } = true;
 }

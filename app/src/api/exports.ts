@@ -15,7 +15,9 @@ export type ExportKind =
   | 'workbook'
   | 'report'
   | 'sitemaps'
-  | 'robotsOrigins';
+  | 'robotsOrigins'
+  /** Step 3b: the links grouped by target, one row a target. */
+  | 'linkGroups';
 
 /** The grids write `csv` or `xlsx`; `check` either; `workbook` is `xlsx` and `report` is `html`. */
 export type ExportFormat = 'csv' | 'xlsx' | 'html';
@@ -90,7 +92,19 @@ export type ExportRequest =
   /** E7: every sitemap the crawl looked for, as `GET /sitemaps` lists them, in the list's words. */
   | ({ kind: 'sitemaps'; format: 'csv' | 'xlsx' } & ExportTarget)
   /** E7: the origins' robots.txt, as `POST /robots` lists them, with its `search` and `blocked` filter. */
-  | ({ kind: 'robotsOrigins'; format: 'csv' | 'xlsx'; search?: string; blocked?: boolean } & ExportTarget);
+  | ({ kind: 'robotsOrigins'; format: 'csv' | 'xlsx'; search?: string; blocked?: boolean } & ExportTarget)
+  /**
+   * Step 3b: the links grouped by target, as `/links/groups` lists them: one row a target. The links grid's filters,
+   * search and one sort key (`pages`, `links` or a column of the target); no columns to choose.
+   */
+  | ({
+      kind: 'linkGroups';
+      format: 'csv' | 'xlsx';
+      filters?: GridFilter[];
+      search?: string;
+      sort?: GridSort[];
+      hiddenChecks?: string[];
+    } & ExportTarget);
 
 /** What a finished export wrote. */
 export interface ExportResult {
@@ -152,6 +166,7 @@ const EXPORT_KINDS: readonly ExportKind[] = [
   'report',
   'sitemaps',
   'robotsOrigins',
+  'linkGroups',
 ];
 const EXPORT_FORMATS: readonly ExportFormat[] = ['csv', 'xlsx', 'html'];
 const EXPORT_STATUSES: readonly ExportStatus[] = ['running', 'done', 'cancelled', 'failed'];

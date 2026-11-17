@@ -103,6 +103,8 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"robotsOrigins","format":"csv"}""", "origins.csv")]
     [InlineData("""{"kind":"robotsOrigins","format":"xlsx","search":"127","blocked":false}""", "origins.xlsx")]
     [InlineData("""{"kind":"urls","format":"csv","linkEnds":{"end":"to","filters":[{"column":"kind","op":"in","values":["hyperlink"]}]}}""", "targets.csv")]
+    [InlineData("""{"kind":"linkGroups","format":"csv","filters":[{"column":"kind","op":"in","values":["hyperlink"]}],"sort":[{"column":"pages","desc":true}]}""", "groups.csv")]
+    [InlineData("""{"kind":"linkGroups","format":"xlsx","search":"about","hiddenChecks":["title-too-long"]}""", "groups.xlsx")]
     public async Task EveryKindIsWrittenToItsFile(string body, string name)
     {
         var path = Path.Combine(_folder, name);
@@ -309,6 +311,7 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"sitemaps","format":"csv","search":"x"}""", "search")]
     [InlineData("""{"kind":"sitemaps","format":"html"}""", "format")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","columns":["origin"]}""", "columns")]
+    [InlineData("""{"kind":"linkGroups","format":"csv","columns":["to.url"]}""", "columns")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","origin":"https://a.example"}""", "origin")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","hiddenChecks":["title-missing"]}""", "hiddenChecks")]
     [InlineData("""{"kind":"report","format":"html","checks":["title-missing"]}""", "checks")]

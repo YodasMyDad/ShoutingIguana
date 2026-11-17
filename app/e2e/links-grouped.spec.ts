@@ -3,6 +3,10 @@
 // and axe holds at zero violations in both themes. Nothing here waits for a time: every figure is polled for.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { readCsv } from './files';
 import { colourTweensEnd } from './colourTweens';
 import { chooseTab, siteRow } from './support';
 
@@ -204,4 +208,56 @@ test('the inspector lists a page’s images, each file once, the largest first, 
       .getByRole('grid', { name: 'Links' })
       .getByRole('columnheader', { name: /^Image/ }),
   ).toBeVisible();
+});
+
+test('exports the grouped view as it shows it: one row a target, in its order, with its counts', async ({ page }) => {
+  const folder = mkdtempSync(path.join(os.tmpdir(), 'si-groups-export-'));
+  try {
+    await openLinks(page);
+    await main(page).getByRole('button', { name: 'Broken links', exact: true }).click();
+    await main(page).getByRole('button', { name: 'Group by target' }).click();
+    const grouped = await groups(BROKEN, { limit: 200 });
+    await expectShown(page, grouped.total);
+    await page.keyboard.press('Control+e');
+    const box = page.getByRole('dialog', { name: 'Export links by target' });
+    await expect(box).toBeVisible();
+    await expect(box).toContainText(`${count(grouped.total)} target`);
+    await box.getByRole('radio', { name: 'CSV' }).check();
+    const file = path.join(folder, 'broken by target.csv');
+    await box.getByRole('textbox', { name: 'Save as' }).fill(file);
+    await box.getByRole('button', { name: 'Export', exact: true }).click();
+    await expect(box).toBeHidden();
+    await expect(
+      page
+        .getByRole('region', { name: /Notifications/ })
+        .locator('.si-export-toast')
+        .filter({ hasText: path.basename(file) })
+        .getByText('Saved', { exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+    const rows = readCsv(file);
+    expect(rows[0]?.slice(0, 5)).toEqual(['Target', 'Status', 'Outcome', 'Linking pages', 'Links']);
+    expect(rows.length - 1).toBe(grouped.total);
+    for (const [index, group] of grouped.rows.slice(0, 5).entries()) {
+      expect(rows[index + 1]?.[0]).toBe(group.url);
+      expect(rows[index + 1]?.[3]).toBe(String(group.pages));
+      expect(rows[index + 1]?.[4]).toBe(String(group.links));
+    }
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('the inspector follows the cursor down the grouped view', async ({ page }) => {
+  const grouped = await groups(BROKEN, { limit: 3 });
+  test.skip(grouped.rows.length < 2, 'The crawl has one broken target.');
+  await page.goto(
+    `/crawls/${crawl}/links?filter=${encodeURIComponent(JSON.stringify(BROKEN))}&by=target&inspect=${grouped.rows[0]!.id}`,
+  );
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await expect(inspector.getByRole('heading', { level: 2 })).toContainText(new URL(grouped.rows[0]!.url).pathname);
+  const grid = main(page).getByRole('treegrid', { name: 'Links grouped by target' });
+  await grid.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(inspector.getByRole('heading', { level: 2 })).toContainText(new URL(grouped.rows[1]!.url).pathname);
+  await expect(page).toHaveURL(new RegExp(`inspect=${grouped.rows[1]!.id}(&|$)`));
 });
