@@ -365,8 +365,8 @@ public sealed class GridReadTests(GridCrawl crawl)
             """, ("$id", id), ("$title", title));
         Change(path, """
             INSERT INTO url_summary (url_id, is_internal, source, depth, resource_type, status_code, indexable, indexability_reason, final_url_id,
-                                     inlinks, followed_inlinks, nofollow_inlinks, linking_pages, issues, errors, warnings, notices)
-            VALUES ($id, 1, 1, 2, 0, 200, 1, 0, $id, 0, 0, 0, 0, 0, 0, 0, 0)
+                                     inlinks, followed_inlinks, nofollow_inlinks, linking_pages, issues, errors, warnings, notices, used_on)
+            VALUES ($id, 1, 1, 2, 0, 200, 1, 0, $id, 0, 0, 0, 0, 0, 0, 0, 0, 0)
             """, ("$id", id));
     }
 

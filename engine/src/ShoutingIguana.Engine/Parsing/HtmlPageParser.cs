@@ -14,7 +14,12 @@ namespace ShoutingIguana.Engine.Parsing;
 /// </summary>
 public static class HtmlPageParser
 {
-    private static readonly ThreadLocal<HtmlParser> PARSER = new(() => new HtmlParser(new HtmlParserOptions { IsScripting = true }));
+    /// <summary>A parser a thread, with what notes where its documents' bodies begin (<see cref="HeadEndRecorder"/>).</summary>
+    private static readonly ThreadLocal<(HtmlParser Parser, HeadEndRecorder HeadEnd)> PARSER = new(() =>
+    {
+        var headEnd = new HeadEndRecorder();
+        return (new HtmlParser(new HtmlParserOptions { IsScripting = true, OnCreated = headEnd.Created }), headEnd);
+    });
 
     /// <param name="byteOrderMark">
     /// The encoding a byte-order mark at the start of the response's bytes declared (<see cref="PageFacts.ByteOrderMark"/>),
@@ -22,7 +27,9 @@ public static class HtmlPageParser
     /// </param>
     public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark = null)
     {
-        using var document = PARSER.Value!.ParseDocument(html);
+        var (parser, headEnd) = PARSER.Value;
+        headEnd.Reset();
+        using var document = parser.ParseDocument(html);
 
         // Browsers use the first base with an href anywhere in the document, even one a stray element pushed into the body.
         var baseHref = document.QuerySelector("base[href]")?.GetAttribute("href");
@@ -57,6 +64,9 @@ public static class HtmlPageParser
             DeclaredCharset = walker.DeclaredCharset,
             ByteOrderMark = byteOrderMark,
             BaseHref = baseHref,
+            HeadEnd = walker.Canonicals.Any(canonical => !canonical.InHead) || walker.Hreflangs.Any(hreflang => !hreflang.InHead)
+                ? headEnd.HeadEnd(document)
+                : null,
             WordCount = fingerprint.WordCount,
             ContentHash = fingerprint.ContentHash,
             SimHash = fingerprint.SimHash,

@@ -54,7 +54,13 @@ public sealed partial class SyntheticSite
     };
 
     private static readonly string FILLER_STYLES = BuildFillerStyles();
-    private static readonly byte[] IMAGE_BYTES = BuildImage(2_048);
+    private static readonly byte[] IMAGE_BYTES = BuildImage(2_048, IMAGE_WIDTH, IMAGE_HEIGHT);
+
+    /// <summary>The size in pixels every image of the site's says it is, in its frame header.</summary>
+    public const int IMAGE_WIDTH = 640;
+
+    /// <inheritdoc cref="IMAGE_WIDTH"/>
+    public const int IMAGE_HEIGHT = 480;
 
     /// <summary>A 32 px PNG: a green disc on a pale square. Served as /favicon.ico under an icon file's media type, as sites do.</summary>
     private static readonly byte[] FAVICON_BYTES = Convert.FromBase64String(
@@ -843,10 +849,18 @@ public sealed partial class SyntheticSite
         return css.ToString();
     }
 
-    private static byte[] BuildImage(int size)
+    /// <summary>
+    /// A JPEG of <paramref name="size"/> bytes whose frame header says it is <paramref name="width"/> by
+    /// <paramref name="height"/> pixels: its start, a JFIF segment, a baseline frame header, then nothing up to its end.
+    /// </summary>
+    private static byte[] BuildImage(int size, int width, int height)
     {
         var bytes = new byte[size];
-        byte[] header = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, (byte)'J', (byte)'F', (byte)'I', (byte)'F', 0x00];
+        byte[] header =
+        [
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, (byte)'J', (byte)'F', (byte)'I', (byte)'F', 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+            0xFF, 0xC0, 0x00, 0x11, 0x08, (byte)(height >> 8), (byte)height, (byte)(width >> 8), (byte)width, 0x03
+        ];
         header.CopyTo(bytes, 0);
         bytes[^2] = 0xFF;
         bytes[^1] = 0xD9;

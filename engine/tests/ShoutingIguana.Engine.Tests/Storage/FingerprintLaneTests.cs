@@ -9,6 +9,7 @@ using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
@@ -84,6 +85,35 @@ public sealed class FingerprintLaneTests : IAsyncLifetime
         Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE {CrawlSchema.PAGE} AND r.simhash_1 IS NULL"));
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         Assert.Equal(2, IssueReader.ReadAll(path, IssueCatalog.NEAR_DUPLICATE_CONTENT.Id).Count());
+    }
+
+    /// <summary>
+    /// An image's size in pixels is read from its file as it's fetched (step 3b). A file from before has no columns for it:
+    /// it opens, its grid reads the sizes as unknown rather than failing, and continuing it adds the columns, its images
+    /// fetched from then on having their sizes. The crawl's schema version stays as it was, so every crawl made opens.
+    /// </summary>
+    [Fact]
+    public async Task AFileFromBeforeImageSizesReadsThemAsUnknownAndGetsThemWhenContinued()
+    {
+        var path = _files.NewPath();
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(Options(), path)).Status);
+        var images = TestCrawls.Count(path, "SELECT COUNT(*) FROM responses WHERE content_type = 'image/jpeg' AND outcome = 0");
+        Assert.True(images > 0);
+        Assert.Equal(images, TestCrawls.Count(path, "SELECT COUNT(*) FROM responses WHERE content_type = 'image/jpeg' AND outcome = 0 AND pixel_width > 0 AND pixel_height > 0"));
+        Assert.Equal(1, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE pixel_width = {SyntheticSite.LARGE_IMAGE_WIDTH} AND pixel_height = {SyntheticSite.LARGE_IMAGE_HEIGHT}"));
+
+        Execute(path, string.Concat(CrawlSchema.PIXEL_COLUMNS.Select(column => $"ALTER TABLE responses DROP COLUMN {column.Name};")));
+        Assert.Equal(CrawlSchema.VERSION, TestCrawls.Count(path, "PRAGMA user_version"));
+        var page = UrlGridReader.Query(path, new UrlQuery { Columns = ["contentType", "pixelWidth", "pixelHeight"], Limit = 1_000 });
+        Assert.Contains(page.Rows, row => row.Values[1] as string == "image/jpeg");
+        Assert.All(page.Rows, row => Assert.Equal([null, null], row.Values.Skip(2)));
+
+        // Continued, it has the columns again: the images already fetched keep none, as an earlier engine's pages keep no lanes.
+        Execute(path, "UPDATE urls SET state = 0 WHERE id IN (SELECT url_id FROM responses WHERE content_type = 'image/jpeg' LIMIT 2); " +
+                      "DELETE FROM responses WHERE url_id IN (SELECT id FROM urls WHERE state = 0)");
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(Options(), path, resume: true)).Status);
+        Assert.Equal(2, TestCrawls.Count(path, "SELECT COUNT(*) FROM pragma_table_info('responses') WHERE name LIKE 'pixel_%'"));
+        Assert.Equal(2, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE pixel_width = {SyntheticSite.IMAGE_WIDTH}"));
     }
 
     /// <summary>

@@ -96,6 +96,7 @@ internal sealed class HttpFetcher : IDisposable
             long? bodyBytes = null;
             long? transferBytes = null;
             var truncated = false;
+            (int Width, int Height)? pixels = null;
             if (readLimit > 0)
             {
                 using var buffer = await ReadBodyAsync(response, readLimit, timeout.Token).ConfigureAwait(false);
@@ -105,12 +106,18 @@ internal sealed class HttpFetcher : IDisposable
                 transferBytes = buffer.TransferBytes;
                 truncated = buffer.Truncated;
             }
-            else if (isSuccess && contentLength is null && contentType?.StartsWith("image/", StringComparison.Ordinal) == true)
+            else if (isSuccess && contentType?.StartsWith("image/", StringComparison.Ordinal) == true)
             {
-                // Image CDNs often send chunked responses without a length; counting the bytes is the only way to
-                // know the image's size, which the large-image check needs. Its body is the image as sent.
-                transferBytes = await MeasureBodyAsync(response, timeout.Token, cancellationToken).ConfigureAwait(false);
-                bodyBytes = transferBytes;
+                // Its first bytes say the image's size in pixels. Image CDNs often send chunked responses without a length;
+                // then counting the bytes is the only way to know its size in bytes, which the large-image check needs, so
+                // it's read to the end. Its body is the image as sent.
+                var measure = contentLength is null;
+                (var measured, pixels) = await ReadImageAsync(response, measure, timeout.Token, cancellationToken).ConfigureAwait(false);
+                if (measure)
+                {
+                    transferBytes = measured;
+                    bodyBytes = transferBytes;
+                }
             }
 
             var blockReason = BlockDetector.Detect(statusCode, headers, isSuccess ? null : text);
@@ -125,6 +132,8 @@ internal sealed class HttpFetcher : IDisposable
                 ContentLength = contentLength,
                 TransferBytes = transferBytes,
                 BodyBytes = bodyBytes,
+                PixelWidth = pixels?.Width,
+                PixelHeight = pixels?.Height,
                 Body = isSuccess && blockReason is null ? text : null,
                 ByteOrderMark = isSuccess && blockReason is null ? byteOrderMark : null,
                 BodyTruncated = truncated,
@@ -238,19 +247,50 @@ internal sealed class HttpFetcher : IDisposable
     }
 
     /// <summary>
-    /// Counts a body's bytes off the wire without keeping them, up to <see cref="MAX_MEASURED_IMAGE_BYTES"/>. Returns
-    /// null when the transfer fails part-way: a partial count would understate the size, and the response itself is fine.
+    /// Reads an image's size in pixels from the first bytes of its body as sent (<see cref="ImageHeader"/>), at most
+    /// <see cref="ImageHeader.MAX_JPEG_BYTES"/> of them, and stops there unless asked to <paramref name="measure"/>: then it
+    /// counts the body's bytes off the wire to the end without keeping them, up to <see cref="MAX_MEASURED_IMAGE_BYTES"/>.
+    /// The count is null when the transfer fails part-way (a partial count would understate the size, and the response
+    /// itself is fine); the pixels are what the bytes read gave, if anything.
     /// </summary>
-    private static async Task<long?> MeasureBodyAsync(HttpResponseMessage response, CancellationToken timeoutToken, CancellationToken cancellationToken)
+    private static async Task<(long? Measured, (int Width, int Height)? Pixels)> ReadImageAsync(HttpResponseMessage response, bool measure,
+        CancellationToken timeoutToken, CancellationToken cancellationToken)
     {
-        var buffer = ArrayPool<byte>.Shared.Rent(MEASURE_BUFFER_BYTES);
+        var head = ArrayPool<byte>.Shared.Rent(ImageHeader.MAX_JPEG_BYTES);
+        var scratch = measure ? ArrayPool<byte>.Shared.Rent(MEASURE_BUFFER_BYTES) : null;
+        (int Width, int Height)? pixels = null;
         try
         {
             await using var raw = await response.Content.ReadAsStreamAsync(timeoutToken).ConfigureAwait(false);
             long total = 0;
+            var filled = 0;
+            var reading = true;
             while (total < MAX_MEASURED_IMAGE_BYTES)
             {
-                var read = await raw.ReadAsync(buffer, timeoutToken).ConfigureAwait(false);
+                int read;
+                if (reading)
+                {
+                    var most = filled < 2 ? ImageHeader.MAX_OTHER_BYTES : ImageHeader.MostToRead(head.AsSpan(0, filled));
+                    read = await raw.ReadAsync(head.AsMemory(filled, Math.Min(most - filled, MEASURE_BUFFER_BYTES)), timeoutToken).ConfigureAwait(false);
+                    filled += read;
+                    int width = 0, height = 0;
+                    var result = read == 0 ? ImageHeader.Result.Unknown : ImageHeader.TryRead(head.AsSpan(0, filled), out width, out height);
+                    if (result == ImageHeader.Result.Found)
+                    {
+                        pixels = (width, height);
+                    }
+
+                    reading = result == ImageHeader.Result.NeedMore && filled < ImageHeader.MostToRead(head.AsSpan(0, filled));
+                }
+                else if (measure)
+                {
+                    read = await raw.ReadAsync(scratch, timeoutToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    return (null, pixels);
+                }
+
                 if (read == 0)
                 {
                     break;
@@ -259,16 +299,20 @@ internal sealed class HttpFetcher : IDisposable
                 total += read;
             }
 
-            return Math.Min(total, MAX_MEASURED_IMAGE_BYTES);
+            return (measure ? Math.Min(total, MAX_MEASURED_IMAGE_BYTES) : null, pixels);
         }
         catch (Exception exception) when (exception is IOException or HttpRequestException ||
                                           (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            return null;
+            return (null, pixels);
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            ArrayPool<byte>.Shared.Return(head);
+            if (scratch is not null)
+            {
+                ArrayPool<byte>.Shared.Return(scratch);
+            }
         }
     }
 
