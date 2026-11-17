@@ -33,8 +33,28 @@ internal static class GridRequests
         }
 
         var filters = Filters(request.Filters, errors);
+        var sort = Sorts(request.Sort, errors);
+        var ends = LinkEnds(request.LinkEnds, errors);
+        ThrowIfAny(errors);
+        return new UrlQuery
+        {
+            Columns = request.Columns ?? [],
+            Filters = filters,
+            Search = request.Search,
+            LinkEnds = ends,
+            Sort = sort,
+            Offset = request.Offset ?? 0,
+            Limit = request.Limit ?? UrlGridReader.DEFAULT_LIMIT,
+            After = request.After,
+            HiddenChecks = request.HiddenChecks ?? []
+        };
+    }
+
+    /// <summary>A grid's sort keys, in order; a key without a column is a field error under <c>sort[i]</c>.</summary>
+    public static List<UrlSort> Sorts(IReadOnlyList<UrlSortDto?>? keys, Dictionary<string, List<string>> errors)
+    {
         List<UrlSort> sort = [];
-        foreach (var (key, index) in (request.Sort ?? []).Select((key, index) => (key, index)))
+        foreach (var (key, index) in (keys ?? []).Select((key, index) => (key, index)))
         {
             if (key is null)
             {
@@ -50,20 +70,7 @@ internal static class GridRequests
             }
         }
 
-        var ends = LinkEnds(request.LinkEnds, errors);
-        ThrowIfAny(errors);
-        return new UrlQuery
-        {
-            Columns = request.Columns ?? [],
-            Filters = filters,
-            Search = request.Search,
-            LinkEnds = ends,
-            Sort = sort,
-            Offset = request.Offset ?? 0,
-            Limit = request.Limit ?? UrlGridReader.DEFAULT_LIMIT,
-            After = request.After,
-            HiddenChecks = request.HiddenChecks ?? []
-        };
+        return sort;
     }
 
     public static List<UrlFilter> Filters(IReadOnlyList<UrlFilterDto>? filters, Dictionary<string, List<string>> errors)
@@ -260,7 +267,7 @@ internal static class GridRequests
 
     private static string Camel(string name) => char.ToLowerInvariant(name[0]) + name[1..];
 
-    private static void Add(Dictionary<string, List<string>> errors, string field, string message)
+    internal static void Add(Dictionary<string, List<string>> errors, string field, string message)
     {
         if (!errors.TryGetValue(field, out var messages))
         {

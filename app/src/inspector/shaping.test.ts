@@ -599,6 +599,7 @@ describe('sections', () => {
       'issues',
       'inlinks',
       'outlinks',
+      'images',
       'redirects',
       'headers',
       'structuredData',

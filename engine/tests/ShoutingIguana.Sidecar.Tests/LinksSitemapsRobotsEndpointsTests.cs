@@ -201,6 +201,93 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         Assert.Equal("""["to.inlinks"]""", needs["columns"]!.ToJsonString());
     }
 
+    /// <summary>
+    /// A view of the links grouped by target (step 3b): each target once, with its links, the pages they're on, their text
+    /// and positions, whether that's the template, and what the target is; the most linked from pages first, or in the order
+    /// asked for; and the problems for a call that can't be answered.
+    /// </summary>
+    [Fact]
+    public async Task AViewOfTheLinksGroupsByTarget()
+    {
+        var view = JsonNode.Parse("""{"filters":[{"column":"kind","op":"in","values":["hyperlink"]}]}""")!;
+        var links = (long)(await PostOkAsync($"api/crawls/{grid.Id}/links", view))["matching"]!;
+        var ends = await PostOkAsync($"api/crawls/{grid.Id}/links/ends", With(view, "end", "to"));
+        var sources = await PostOkAsync($"api/crawls/{grid.Id}/links/ends", With(view, "end", "from"));
+
+        var first = await PostOkAsync($"api/crawls/{grid.Id}/links/groups", view);
+        Assert.Equal(["total", "links", "pages", "offset", "sort", "rows", "summary"], first.AsObject().Select(property => property.Key));
+        Assert.Equal(["id", "url", "links", "pages", "text", "texts", "positions", "likelyTemplate", "target"], first["rows"]![0]!.AsObject().Select(property => property.Key));
+        Assert.Equal(["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical"],
+            first["rows"]![0]!["target"]!.AsObject().Select(property => property.Key));
+        Assert.Equal(((long)ends["total"]!, links, (long)sources["total"]!, 0, """{"column":"pages","desc":true}""", """{"available":true,"reason":null}"""),
+            ((long)first["total"]!, (long)first["links"]!, (long)first["pages"]!, (int)first["offset"]!, first["sort"]!.ToJsonString(), first["summary"]!.ToJsonString()));
+
+        // The menu's links: one row a target, on every page, in the template; positions and the text by name.
+        var top = first["rows"]![0]!;
+        Assert.True((bool)top["likelyTemplate"]!);
+        Assert.Contains((string?)top["positions"]![0], new[] { "content", "navigation", "header", "footer", "sidebar", "head" });
+        var pages = first["rows"]!.AsArray().Select(row => (long)row!["pages"]!).ToList();
+        Assert.Equal(pages.OrderDescending(), pages);
+
+        // Paged to its end, every target once, their links the view's; and in another order on asking.
+        List<JsonNode> rows = [];
+        for (var offset = 0; rows.Count == offset; offset += 50)
+        {
+            var page = await PostOkAsync($"api/crawls/{grid.Id}/links/groups", new JsonObject { ["filters"] = view["filters"]!.DeepClone(), ["offset"] = offset, ["limit"] = 50 });
+            rows.AddRange(page["rows"]!.AsArray().Select(row => row!));
+        }
+
+        Assert.Equal((long)first["total"]!, rows.Count);
+        Assert.Equal(links, rows.Sum(row => (long)row["links"]!));
+        var byUrl = await PostOkAsync($"api/crawls/{grid.Id}/links/groups", JsonNode.Parse("""
+            {"filters":[{"column":"kind","op":"in","values":["hyperlink"]}],"sort":[{"column":"to.url","desc":true}],"limit":200}
+            """));
+        Assert.Equal("""{"column":"to.url","desc":true}""", byUrl["sort"]!.ToJsonString());
+        var urls = byUrl["rows"]!.AsArray().Select(row => (string?)row!["url"]).ToList();
+        Assert.Equal(urls.OrderDescending(StringComparer.Ordinal), urls);
+
+        // What can't be answered says why, by field.
+        async Task<IEnumerable<string>> RefusedAsync(string body) =>
+            TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/links/groups", JsonNode.Parse(body)), HttpStatusCode.UnprocessableEntity, "invalid-query")["errors"]!
+                .AsObject().Select(error => error.Key);
+
+        Assert.Equal(["sort.column"], await RefusedAsync("""{"sort":[{"column":"kind"}]}"""));
+        Assert.Equal(["sort"], await RefusedAsync("""{"sort":[{"column":"pages"},{"column":"links"}]}"""));
+        Assert.Equal(["sort[0].column"], await RefusedAsync("""{"sort":[{"desc":true}]}"""));
+        Assert.Equal(["limit"], await RefusedAsync("""{"limit":201}"""));
+        Assert.Equal(["filters[0].column"], await RefusedAsync("""{"filters":[{"column":"anchor","op":"contains","value":"a"}]}"""));
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/links/groups", JsonNode.Parse("""{"end":"to"}""")), HttpStatusCode.BadRequest, "bad-request");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync("api/crawls/0000000000000000/links/groups", JsonNode.Parse("{}")), HttpStatusCode.NotFound, "crawl-not-found");
+
+        // A crawl never analysed groups its links from the links themselves.
+        var fresh = await PostOkAsync($"api/crawls/{grid.FreshId}/links/groups", JsonNode.Parse("""{"limit":3}"""));
+        Assert.Equal((3, """{"available":false,"reason":"notAnalyzed"}"""), (fresh["rows"]!.AsArray().Count, fresh["summary"]!.ToJsonString()));
+    }
+
+    /// <summary>The images a page shows (step 3b, the inspector's Images): each file once, the largest first, with what it is.</summary>
+    [Fact]
+    public async Task APagesImagesAreListedEachOnce()
+    {
+        var link = (await PostOkAsync($"api/crawls/{grid.Id}/links", JsonNode.Parse("""{"columns":["from.id"],"filters":[{"column":"kind","op":"in","values":["image"]}],"limit":1}""")))["rows"]![0]!;
+        var page = (long)link["from.id"]!;
+        var images = await PostOkAsync($"api/crawls/{grid.Id}/urls/images", new JsonObject { ["urlId"] = page });
+        Assert.Equal(["urlId", "total", "links", "rows"], images.AsObject().Select(property => property.Key));
+        Assert.Equal(["id", "url", "links", "text", "positions", "target"], images["rows"]![0]!.AsObject().Select(property => property.Key));
+        Assert.Equal(page, (long)images["urlId"]!);
+        Assert.Equal((long)images["total"]!, images["rows"]!.AsArray().Count);
+        Assert.True((long)images["links"]! >= (long)images["total"]!);
+        var sizes = images["rows"]!.AsArray().Select(row => (long?)row!["target"]!["sizeBytes"]).ToList();
+        Assert.Equal(sizes.Where(size => size is not null).OrderDescending(), sizes.Where(size => size is not null));
+        Assert.Single((await PostOkAsync($"api/crawls/{grid.Id}/urls/images", new JsonObject { ["urlId"] = page, ["limit"] = 1 }))["rows"]!.AsArray());
+
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/images", JsonNode.Parse("""{"urlId":999999999}""")), HttpStatusCode.NotFound, "url-not-found");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/images", JsonNode.Parse("{}")), HttpStatusCode.UnprocessableEntity, "invalid-query");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/images", new JsonObject { ["urlId"] = page, ["limit"] = 501 }), HttpStatusCode.UnprocessableEntity,
+            "invalid-query");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/images", new JsonObject { ["urlId"] = page, ["kinds"] = new JsonArray() }), HttpStatusCode.BadRequest,
+            "bad-request");
+    }
+
     [Fact]
     public async Task TheSitemapsAreListedAndOneOpensItsUrls()
     {

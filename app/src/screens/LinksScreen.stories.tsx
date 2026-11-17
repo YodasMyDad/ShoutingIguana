@@ -20,6 +20,7 @@ import {
   type LinksSidecarOptions,
   type LinksSidecarState,
 } from '../test/linksSidecar';
+import { IMAGE_COLUMNS, IMAGE_SORT } from './links/presets';
 
 const meta = { title: 'Screens/Links' } satisfies Meta;
 export default meta;
@@ -466,3 +467,81 @@ export const FiveMillionLinks: Story = {
   ],
   render: () => <LinksApp path={withFilters(LINKS, [{ column: 'kind', op: 'in', values: ['hyperlink'] }])} />,
 };
+
+// ---------------------------------------------------------------------------------------- Step 3b: grouped, images
+
+/** Every link of the garden crawl one row a target, the most linked from pages first: the template's links on top. */
+export const GardenGroupedByTarget: Story = {
+  loaders: [fresh],
+  render: () => <LinksApp path={`${GARDEN}?by=target`} />,
+};
+
+/** The broken links one row a target: a broken link in every page's footer is one row, not one a page. */
+export const GardenBrokenLinksGrouped: Story = {
+  loaders: [fresh],
+  render: () => (
+    <LinksApp
+      path={withFilters(GARDEN, [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }], '&by=target')}
+    />
+  ),
+};
+
+/** The Images preset: each image link, the largest file first, with its picture, size, pixels, alt text and page. */
+export const GardenImages: Story = {
+  loaders: [fresh],
+  render: () => (
+    <LinksApp
+      path={withFilters(
+        GARDEN,
+        [{ column: 'kind', op: 'in', values: ['image'] }],
+        `&cols=${encodeURIComponent(JSON.stringify(IMAGE_COLUMNS))}&sort=${encodeURIComponent(JSON.stringify(IMAGE_SORT))}`,
+      )}
+    />
+  ),
+};
+
+/** The Images preset one row an image: each file once, the largest first, with the pages it's used on. */
+export const GardenImagesGrouped: Story = {
+  loaders: [fresh],
+  render: () => (
+    <LinksApp
+      path={withFilters(
+        GARDEN,
+        [{ column: 'kind', op: 'in', values: ['image'] }],
+        `&by=target&sort=${encodeURIComponent(JSON.stringify(IMAGE_SORT))}`,
+      )}
+    />
+  ),
+};
+
+/** A target opened to its first links: the page each is on, what it says, where it sits, and the row for all of them. */
+export const GroupedTargetOpen: Story = {
+  loaders: [() => own()],
+  render: () => <LinksApp path={`${LINKS}?by=target`} />,
+  play: async ({ canvasElement }) => {
+    const document = canvasElement.ownerDocument;
+    const grid = await waitForCell(() => document.querySelector<HTMLElement>('[role="treegrid"]'));
+    await waitForCell(() => grid.querySelector<HTMLElement>('[role="row"][aria-rowindex="4"]'));
+    // The cursor onto /gone (the third target), then Right opens it, as a user does; again until the grid has taken it.
+    for (let tries = 0; tries < 20; tries++) {
+      const row = grid.querySelector<HTMLElement>('[role="row"][aria-rowindex="4"]');
+      if (row?.getAttribute('aria-expanded') === 'true') return;
+      grid.focus();
+      for (const key of ['Home', 'ArrowDown', 'ArrowDown', 'ArrowRight']) {
+        grid.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+    }
+  },
+};
+
+/** Polls for a cell the screen draws once its reads land. */
+async function waitForCell(find: () => HTMLElement | null, timeout = 5_000): Promise<HTMLElement> {
+  const started = Date.now();
+  for (;;) {
+    const found = find();
+    if (found) return found;
+    if (Date.now() - started > timeout) throw new Error('The cell never came.');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}

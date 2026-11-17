@@ -44,6 +44,10 @@ internal static class GridEndpoints
             TypedResults.Json(await data.LinksAsync(id, LinkDirection.Outlinks, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.LinksRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.LinkPageDto));
 
+        api.MapPost("/api/crawls/{id}/urls/images", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.ImagesAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlImagesRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.PageImages));
+
         api.MapPost("/api/crawls/{id}/urls/found-on", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.FoundOnAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.FoundOnRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.FoundOnDto));
@@ -72,6 +76,10 @@ internal static class GridEndpoints
         api.MapPost("/api/crawls/{id}/links/ends", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.LinkEndsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.LinkEndsRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.LinkEndPage));
+
+        api.MapPost("/api/crawls/{id}/links/groups", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.LinkGroupsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.LinkGroupsRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.LinkGroupPageDto));
 
         api.MapGet("/api/crawls/{id}/sitemaps", async (string id, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.SitemapsAsync(id, cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.SitemapList));

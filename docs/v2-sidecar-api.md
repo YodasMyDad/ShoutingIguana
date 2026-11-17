@@ -1092,6 +1092,7 @@ the checks or thresholds changed keeps its summary, shown behind the out-of-date
 - `/search` (E6);
 - `/links/ends`, and `linkEnds` on the URL grids (E6);
 - `/favicon` (E6);
+- `/links/groups` and `/urls/images` (step 3b);
 - `/export` (E5).
 
 The GET issues endpoint above stays as it is, for scripts and the design fixtures; the Issues screen uses `/rows`.
@@ -1546,6 +1547,32 @@ as every answer is (`<` as `<`), so its bytes hold no markup. HTML over 16 MB un
 character's boundary, and `truncated` says so; `bytes` is its size unpacked, before any cut, or null for a page over
 512 MB, which isn't unpacked that far. A page whose stored HTML is damaged is `file-error`.
 
+#### A page's images (step 3b)
+
+`POST /api/crawls/{id}/urls/images` with `{ "urlId": 119, "limit": 100 }` lists the images the page shows, each image
+file once, **the largest first**: the inspector's Images.
+
+```json
+{"urlId":119,"total":14,"links":17,
+ "rows":[{"id":2210,"url":"https://www.example.com/img/hero.jpg","links":1,"text":"A teak bench","positions":["content"],
+          "target":{"statusCode":200,"outcome":"success","contentType":"image/jpeg","sizeBytes":2202009,
+                    "pixelWidth":4000,"pixelHeight":3000,"final":null,"indexability":null,"canonical":null}}]}
+```
+
+- **`rows`** are the page's image links (`img`, `srcset` candidates, and the rest the links grid calls `image`) to
+  other URLs, grouped by file: **`links`**, how many times the page shows it; **`text`**, the alt text of the first
+  of them that has one (null when none has); **`positions`**, where on the page they sit; **`target`**, what the file
+  is, as a check group's `related` reads: its size and pixels **after any redirects**, which is what
+  `image-too-large` judges it by. The inspector flags one over the analysis settings' `largeImageBytes`
+  (`limits.largeImageBytes` of `/urls/inspect`). In order of size, largest first, those of no known size last, then
+  in the order the page shows them.
+- **`total`** is the image files the page shows, each once, and **`links`** its image links; **`limit`** (1 to 500,
+  default 100) caps the rows.
+- **What it costs**: the page's own image links, on the links' index by source (at most the parser's 10,000 links a
+  page), and each file's facts. No URL summary is needed.
+- Errors: `url-not-found` for a URL the crawl doesn't have, `invalid-query` without a `urlId` or with a `limit` out of
+  range, `bad-request` for a field it doesn't take.
+
 ### Issue groups (E3a)
 
 A check's issues grouped by their cause, so a template fault is one row, not 265. How a check's issues group is the
@@ -1902,6 +1929,70 @@ for a view of more than a page of links, and what [`linkEnds`](#urls-e3a) narrow
   are of the links the crawl had then, and the URL grid narrowed within the same 2 s counts the same URLs.
 - Errors: `invalid-query` on `end`, `filters[…]`, `search`, `offset` and `limit`; `needs-analysis` for a filter that
   needs the URL summary, without one.
+
+#### Links grouped by target (step 3b)
+
+`POST /api/crawls/{id}/links/groups` lists the targets of the links a view matches, one row a target, with what the
+links that lead to it are: a broken footer link is one row, however many pages carry it. It is the Links screen's
+"Group by target", for any filter or preset the grid has.
+
+```json
+{"filters":[{"column":"to.statusClass","op":"in","values":["4xx","5xx"]}],"sort":[{"column":"pages","desc":true}],
+ "offset":0,"limit":100}
+```
+
+```json
+{"total":9,"links":312,"pages":265,"offset":0,"sort":{"column":"pages","desc":true},
+ "rows":[{"id":4410,"url":"https://www.example.com/old-range/","links":265,"pages":265,"text":"Old range","texts":1,
+          "positions":["footer"],"likelyTemplate":true,
+          "target":{"statusCode":404,"outcome":"clientError","contentType":"text/html","sizeBytes":5120,
+                    "pixelWidth":null,"pixelHeight":null,"final":null,"indexability":"clientError","canonical":null}}],
+ "summary":{"available":true,"reason":null}}
+```
+
+- **`filters`** and **`search`** are the links grid's; none of either is every link. **`offset`** and **`limit`**
+  (1 to 200, default 100) page the list; there is no cursor, and a page past the end has no rows.
+- **`sort`** is one key at most: `pages` (the default, descending: the target the most pages link to first),
+  `links`, or a column of the target that the links grid sorts by (`to.url`, `to.statusCode`, `to.sizeBytes`...), in
+  the order that grid's own sort puts the targets (unknown values last, ties by the target's id in the key's
+  direction). By `pages`, ties go by `links` and then by the target's id; by `links`, by `pages` and then the id. A
+  column the links grid doesn't sort by, or more than one key, is a field error (`sort.column`, `sort`); a sort by a
+  target column that needs the URL summary, without one, is `needs-analysis`, as the links grid's is. The answer's
+  `sort` is the order used.
+- **Each row** is a target: `id` and `url`; **`links`**, the view's links to it; **`pages`**, the pages those links
+  are on, each once; **`text`**, the text most of them have (the anchor, an image's alt text), among its first 200
+  matching links in crawl order, the first found on a tie, and null when none of those has any; **`texts`**, how many
+  texts those 200 have between them (none counted as one); **`positions`**, where on their pages its links sit, in
+  the positions' order; **`likelyTemplate`**, linked from at least 10 pages and at least half the pages the view's
+  links are on, as a check's group is called one; and **`target`**, what it is, as a check group's `related` reads
+  (its status, and its type, size and pixels after any redirects, where those end, why it isn't indexable).
+- **`total`** is how many targets there are (`/links/ends`' `total` for the same links), top-level **`links`** the
+  links the view matches (the links grid's `matching`, which the rows' `links` add up to), and **`pages`** the pages
+  the view's links are on, each once (`/links/ends`' `total` with `end` `from`).
+- **What it costs.** A page's links are stored together, one after another, so a target's links from one page come
+  one after another in crawl order: the pages are counted in **one pass over every link in crawl order**, a number
+  a target, never a set of pages, kept per filter set as the view's other counts are, and split over connections as
+  any pass is (the page that straddles two parts is counted once). It never reads the links on an index, which
+  gives a target's links in another order. Then each page of the list reads its rows only: each target's text, on
+  the links' index by target, and its facts. Measured on the 100k crawl's 5 million links (112,609 targets), the
+  first page, half way down and just past it, p95 over ten runs each, on a 32-core desktop other lanes were loading:
+
+  | The view | One connection | Split (eight) | The pass kept |
+  | --- | --- | --- | --- |
+  | Every link, by pages | 822 to 1,039 ms | 249 to 255 | 9 to 16 |
+  | The hyperlinks to 4xx URLs (4,572 targets) | 497 to 539 | 121 to 128 | 4 to 5 |
+  | The images, the largest first (103 targets) | 264 to 277 | 90 to 101 | 10 to 17 |
+  | The links whose text contains a common word | 574 to 926 | 168 to 186 | 11 to 21 |
+  | Every link, by target URL | 836 to 971 | 209 to 227 | 4 to 9 |
+
+  So a grouped view's first read is **inside the 300 ms budget where the sidecar has read slots free, and over it on
+  one connection** (a two-core machine, every slot taken, a running crawl, whose pass is never split), as
+  `/links/ends` for the pages is; every read after it, another page or another order, is a few milliseconds. A
+  filter that names one URL (`to.id`) takes the pass too. Not measured at 1M URLs: the pass grows with the links.
+- **While a crawl runs** an answer is of one moment of it, as the links grid's are.
+- Errors: `invalid-query` on `filters[…]`, `search`, `sort`, `sort.column`, `sort[i].column`, `offset` and `limit`;
+  `needs-analysis` for a filter or sort that needs the URL summary, without one; `bad-request` for a field it doesn't
+  take (`end`, `columns`).
 
 #### How the links are read
 

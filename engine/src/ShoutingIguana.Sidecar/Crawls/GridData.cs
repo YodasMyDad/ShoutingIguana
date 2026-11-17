@@ -122,6 +122,31 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         return await ReadAsync(token => LinkGridReader.Ends(path, query, cache, token), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// A page of the links a links view matches, grouped by target: each target once, with its links, the pages they're on,
+    /// their text and positions, and what it is; the most linked from pages first unless the request asks otherwise.
+    /// </summary>
+    public async Task<LinkGroupPageDto> LinkGroupsAsync(string id, LinkGroupsRequest? request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        var filters = GridRequests.Filters(request?.Filters, errors);
+        var sort = GridRequests.Sorts(request?.Sort, errors);
+        if (sort.Count > 1)
+        {
+            GridRequests.Add(errors, "sort", "The links grouped by target sort by one key.");
+        }
+
+        GridRequests.ThrowIfAny(errors);
+        var query = new LinkGroupQuery
+        {
+            Filters = filters, Search = request?.Search, Sort = sort.FirstOrDefault(), Offset = request?.Offset ?? 0, Limit = request?.Limit ?? LinkGroupPage.DEFAULT_LIMIT,
+            HiddenChecks = request?.HiddenChecks ?? []
+        };
+        var page = await ReadAsync(token => LinkGridReader.Groups(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+        return new LinkGroupPageDto(page.Total, page.Links, page.Pages, page.Offset, new LinkGroupSortDto(page.Sort.Column, page.Sort.Descending), page.Rows, page.Summary);
+    }
+
     public async Task<FacetsDto> LinkFacetsAsync(string id, FacetsRequest? request, CancellationToken cancellationToken)
     {
         RefuseLinkEnds(request?.LinkEnds);
@@ -205,6 +230,18 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
                        : null)
                    ?? throw Problems.UrlNotFound();
         return new LinkPageDto([.. page.Rows.Select(LinkRowDto.From)], page.Offset, page.Total, page.Next);
+    }
+
+    /// <summary>The images a page shows, each file once, the largest first: the inspector's Images.</summary>
+    public async Task<PageImages> ImagesAsync(string id, UrlImagesRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var urlId = GridRequests.UrlId(request.UrlId);
+        var limit = request.Limit ?? PageImagesReader.DEFAULT_LIMIT;
+        return (urlId is { } known
+                   ? await ReadAsync(token => PageImagesReader.Read(path, known, limit, cache, token), cancellationToken).ConfigureAwait(false)
+                   : null)
+               ?? throw Problems.UrlNotFound();
     }
 
     /// <summary>Where each of a page of URLs is found: the links to it, the pages they're on, the sitemaps listing it.</summary>

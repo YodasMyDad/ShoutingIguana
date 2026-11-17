@@ -320,6 +320,8 @@ function linkColumnName(value: unknown): string | undefined {
  */
 export interface LinksSearch extends GridSearch {
   end?: 'from' | undefined;
+  /** Step 3b: one row a target, the view's links grouped by where they lead; left out for one row a link. */
+  by?: 'target' | undefined;
 }
 
 /**
@@ -338,6 +340,7 @@ export function validateLinksSearch(search: Record<string, unknown>): LinksSearc
     inspect,
     // Only with a URL inspected, and only the end that isn't the default: a target needs no word in the address.
     end: inspect !== undefined && search.end === 'from' ? 'from' : undefined,
+    by: search.by === 'target' ? 'target' : undefined,
   });
 }
 

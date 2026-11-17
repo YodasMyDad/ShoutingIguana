@@ -195,6 +195,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
 
         LinksGrid();
         LinkEnds();
+        LinkGroups();
         SitemapsAndRobots();
         WithoutSummary();
         Stats();
@@ -292,6 +293,48 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Ends($"Link ends: the pages of {name} (every link read)", "link-pass", LinkEnd.From, filters);
             Ends($"Link ends: the pages of {name} (every link read, on several connections)", "link-pass-split", LinkEnd.From, filters, HELPERS);
         }
+    }
+
+    /// <summary>
+    /// A view of the links grouped by target (step 3b): its first page and the page half way down. Every grouped view takes
+    /// one pass over every link in crawl order, which counts the pages a target's links are on: cold on one connection
+    /// (<c>link-pass</c>) and split over those a host lends (<c>link-pass-split</c>). Then, the pass kept, the same pages
+    /// again and in other orders, which read only their rows (<c>link-grid</c>): each target's links' text, on the links'
+    /// index by target, and its facts.
+    /// </summary>
+    private void LinkGroups()
+    {
+        (string Name, UrlFilter[] Filters, UrlSort? Sort)[] views =
+        [
+            ("every link, the most linked from pages first", [], null),
+            ("the hyperlinks to 4xx URLs", [In("kind", "hyperlink"), In("to.statusClass", "4xx")], null),
+            ("the images, the largest first", [In("kind", "image")], new UrlSort("to.sizeBytes", true)),
+            ("the links whose text contains a common word", [Text("text", FilterOperator.Contains, "product")], null),
+            ("every link, by target URL", [], new UrlSort("to.url"))
+        ];
+        foreach (var (name, filters, sort) in views)
+        {
+            Groups($"Link groups: {name} (every link read)", "link-pass", filters, sort, null);
+            Groups($"Link groups: {name} (every link read, on several connections)", "link-pass-split", filters, sort, () => new ReadCache { Helpers = HELPERS });
+            if (Wanted($"Link groups: {name} (counted)"))
+            {
+                ReadCache kept = new();
+                LinkGridReader.Groups(path, new LinkGroupQuery { Filters = filters, Sort = sort, Limit = 1 }, kept);
+                Groups($"Link groups: {name} (counted)", "link-grid", filters, sort, () => kept);
+            }
+        }
+    }
+
+    /// <summary>A grouped view's first page and the page half way down, each read with the cache given, or none.</summary>
+    private void Groups(string name, string readClass, UrlFilter[] filters, UrlSort? sort, Func<ReadCache>? cache)
+    {
+        if (!Wanted(name))
+        {
+            return;
+        }
+
+        var total = LinkGridReader.Groups(path, new LinkGroupQuery { Filters = filters, Sort = sort, Limit = 1 }).Total;
+        Paged(name, "link-groups", readClass, total, offset => LinkGridReader.Groups(path, new LinkGroupQuery { Filters = filters, Sort = sort, Offset = offset }, cache?.Invoke()));
     }
 
     /// <summary>One end of a view's links: the list's first page and the page half way down, then the URL grid narrowed to them.</summary>

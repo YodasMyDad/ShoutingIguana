@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, ExternalLink, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
+import { Copy, ExternalLink, Layers, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
 import { openInBrowser } from '../shell/os';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
@@ -73,9 +73,12 @@ import {
   sharedUrlWidth,
   shownLinkColumns,
   isLinkColumn,
+  linkExportShown,
 } from './links/linkColumns';
+import { LinkGroupsGrid } from './links/LinkGroupsGrid';
+import { GROUP_KEY_HINTS, groupedReadWords, groupedTotalsWords, isImageView, sortForMode } from './links/linkGroups';
 import { FOLLOW_COLUMN, endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
-import { LINK_PRESETS, activePreset, sortShown } from './links/presets';
+import { LINK_PRESETS, activePreset, presetSearch, sortShown } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './links/states';
 import { copiedPartOfEnds, copiesPart, copyColumnTitle, copyEndsTitle } from './links/copyWords';
@@ -108,6 +111,9 @@ export function LinksScreen() {
   const sort = useMemo(() => search.sort ?? [], [search.sort]);
   const filters = useMemo(() => search.filter ?? [], [search.filter]);
   const q = search.q;
+  // One row a target (step 3b): the view's links grouped by where they lead, the engine's `/links/groups`.
+  const grouped = search.by === 'target';
+  const images = isImageView(filters);
 
   const item = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
@@ -143,6 +149,7 @@ export function LinksScreen() {
     // Without the list (it couldn't be read), the route's columns are asked for as they are: the engine checks them.
     // A sort by a column that isn't shown is on its way out of the route: nothing is read by it.
     enabled:
+      !grouped &&
       (search.cols === undefined || catalogue.data !== undefined || catalogue.isError) &&
       sort.every((key) => shown.includes(key.column)),
   });
@@ -165,8 +172,21 @@ export function LinksScreen() {
     setCounted(latest);
   }
   const kept = counted?.view === view ? counted : null;
-  const rowCount = rows.rowCount ?? kept?.matching ?? null;
-  const total = rows.unfilteredTotal ?? kept?.total ?? null;
+  // Grouped, the grid's own read counts the targets, the links and the pages they're on, and says so here.
+  const [groupCount, setGroupCount] = useState<{
+    view: string;
+    counted: { targets: number; links: number; pages: number } | null;
+    failed: boolean;
+  } | null>(null);
+  const groupsCounted = grouped && groupCount?.view === view ? groupCount.counted : null;
+  const groupsFailed = grouped && groupCount?.view === view && groupCount.failed;
+  const onGroupsCounted = useCallback(
+    (next: { targets: number; links: number; pages: number } | null, failedRead: boolean) =>
+      setGroupCount({ view, counted: next, failed: failedRead }),
+    [view],
+  );
+  const rowCount = grouped ? (groupsCounted?.links ?? null) : (rows.rowCount ?? kept?.matching ?? null);
+  const total = grouped ? null : (rows.unfilteredTotal ?? kept?.total ?? null);
 
   // The facets are counted while one of their menus is open, and never before: a count is a pass over the view's
   // links (about 200 ms a million on a running crawl, every second it runs), and nothing on the screen but an open
@@ -209,11 +229,29 @@ export function LinksScreen() {
     },
     [navigate],
   );
+  /**
+   * One row a link, or one a target: the same filters and search; a sort by a column of the target stays, one the other
+   * mode doesn't have gives way to that mode's own order.
+   */
+  const setGrouped = useCallback(
+    (next: boolean) =>
+      void navigate({
+        search: (previous) => ({
+          ...previous,
+          by: next ? 'target' : undefined,
+          sort: sortForMode(previous.sort, next),
+        }),
+      }),
+    [navigate],
+  );
   /** All links again, in crawl order, with the columns as they are. */
-  const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
+  const clearView = useCallback(
+    () => void navigate({ search: (previous) => ({ cols: previous.cols, by: previous.by }) }),
+    [navigate],
+  );
   /** The filters and the search gone: the sort and the columns stay, as "Clear the filters" says. */
   const clearFilters = useCallback(
-    () => void navigate({ search: (previous) => ({ cols: previous.cols, sort: previous.sort }) }),
+    () => void navigate({ search: (previous) => ({ cols: previous.cols, sort: previous.sort, by: previous.by }) }),
     [navigate],
   );
   const setColumns = (next: readonly string[]) => {
@@ -231,7 +269,7 @@ export function LinksScreen() {
   };
   // The same of a view that arrives sorted by a column it doesn't show (a link made by hand, or by a version with
   // other columns): the sort is dropped from the route, in place, and never read for.
-  const hiddenSort = (sortShown(sort, shown)?.length ?? 0) !== sort.length;
+  const hiddenSort = !grouped && (sortShown(sort, shown)?.length ?? 0) !== sort.length;
   useEffect(() => {
     if (hiddenSort) {
       void navigate({ search: (previous) => ({ ...previous, sort: sortShown(previous.sort, shown) }), replace: true });
@@ -243,8 +281,8 @@ export function LinksScreen() {
   const layoutWidths = useStoredColumnLayout('links').widths;
   const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
   const columns = useMemo(
-    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling }),
-    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling],
+    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, crawling, images }),
+    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth, crawling, images],
   );
   // The columns as the user laid them out: widths and pins kept with the preferences, the order the route's. Put
   // back, a set that's the default's in another order takes the default's order again.
@@ -281,17 +319,26 @@ export function LinksScreen() {
   useAnnounceResults(
     crawlId,
     useMemo(() => JSON.stringify({ filters, q: q ?? '' }), [filters, q]),
-    rowCount === null || total === null ? null : formatShownOf(rowCount, total, 'link'),
+    grouped
+      ? groupsCounted
+        ? `${formatCountOf(groupsCounted.targets, 'target')}, ${groupedTotalsWords(groupsCounted.links, groupsCounted.pages)}`
+        : null
+      : rowCount === null || total === null
+        ? null
+        : formatShownOf(rowCount, total, 'link'),
   );
 
   // A read still on its way after 150 ms says what it's doing, over the grid's skeleton: a view that looks at every
   // link takes about a second on a big crawl. Changing the view gives the read up: its request is aborted.
-  const failed = rows.error !== null && rows.error !== undefined && rowCount === null;
-  const waiting = useDelayedLoading(rowCount === null && !failed);
-  const slowWords = slowReadWords(
-    passReason({ filters, search: q, sort }, { crawling, summaryReason: counted?.reason }),
-    counted?.total ?? null,
-  );
+  const failed = !grouped && rows.error !== null && rows.error !== undefined && rowCount === null;
+  const waiting = useDelayedLoading(grouped ? groupsCounted === null && !groupsFailed : rowCount === null && !failed);
+  // A grouped view's first read reads every link, whatever its filters: it counts the pages each target's are on.
+  const slowWords = grouped
+    ? groupedReadWords(counted?.total ?? null)
+    : slowReadWords(
+        passReason({ filters, search: q, sort }, { crawling, summaryReason: counted?.reason }),
+        counted?.total ?? null,
+      );
   const saidWaiting = useRef('');
   useEffect(() => {
     if (!waiting) saidWaiting.current = '';
@@ -375,7 +422,7 @@ export function LinksScreen() {
     setCopying(false);
   };
 
-  const hasRows = rowCount !== null && rowCount > 0;
+  const hasRows = grouped ? (groupsCounted?.targets ?? 0) > 0 : rowCount !== null && rowCount > 0;
   const preset = activePreset(filters, q);
   // A copy reads the view's first 10,000 links: on a bigger view each copy's name says which links it is of.
   const copyPart = copiesPart(rowCount);
@@ -414,6 +461,13 @@ export function LinksScreen() {
         },
       },
       {
+        id: 'links.groupByTarget',
+        title: grouped ? 'Show the links one a row' : 'Group the links by target',
+        group: 'Links',
+        keywords: ['group', 'target', 'targets', 'one row a target', 'broken'],
+        run: () => setGrouped(!grouped),
+      },
+      {
         id: 'links.clear',
         title: 'Clear the links’ filters, search and sort',
         group: 'Links',
@@ -426,7 +480,7 @@ export function LinksScreen() {
         title: `Show ${candidate.title.charAt(0).toLowerCase()}${candidate.title.slice(1)}`,
         group: 'Links',
         keywords: [candidate.hint],
-        run: () => void navigate({ search: (previous) => ({ cols: previous.cols, filter: [...candidate.filters] }) }),
+        run: () => void navigate({ search: (previous) => presetSearch(candidate, previous) }),
       })),
       {
         id: 'links.copyTargets',
@@ -450,11 +504,24 @@ export function LinksScreen() {
         title: copyOneColumnTitle,
         group: 'Links',
         keywords: ['copy', 'column', 'clipboard'],
-        enabled: () => hasRows && !copying,
+        enabled: () => hasRows && !copying && !grouped,
         run: () => void copyOneColumn(),
       },
     ],
-    [view, columns, editor, chooserGroups, hasRows, copying, copyPart, copyOneColumnTitle, clearView, navigate],
+    [
+      view,
+      columns,
+      editor,
+      chooserGroups,
+      hasRows,
+      copying,
+      copyPart,
+      copyOneColumnTitle,
+      clearView,
+      navigate,
+      grouped,
+      setGrouped,
+    ],
   );
 
   // "Show these pages in URLs" (E6's link ends): the URL grid narrowed to the view's targets, or the pages its links
@@ -516,16 +583,18 @@ export function LinksScreen() {
         ? linksOffer({
             item,
             crawling,
-            columns: linkExportColumns(shown, FOLLOW_COLUMN, FOLLOW_PARTS),
+            columns: linkExportColumns(linkExportShown(shown), FOLLOW_COLUMN, FOLLOW_PARTS),
             filters,
-            sort,
+            // Grouped, the file is still one row a link (an export of the targets isn't one the engine writes): in
+            // the order of the view's sort where the links grid has it, else in crawl order.
+            sort: grouped ? (sortForMode(sort, false) ?? []) : sort,
             search: q,
             rows: rowCount,
             catalogue: catalogue.data,
             viewName: preset && preset.id !== 'all' ? preset.title : null,
           })
         : null,
-    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, preset],
+    [item, crawling, shown, filters, sort, q, rowCount, catalogue.data, preset, grouped],
     { group: 'Links' },
   );
 
@@ -579,7 +648,20 @@ export function LinksScreen() {
     <GridScreen ref={frame}>
       <GridHeader
         title="Links"
-        count={rowCount !== null && total !== null ? <ResultCount shown={rowCount} total={total} noun="link" /> : null}
+        count={
+          grouped ? (
+            groupsCounted ? (
+              <span className="flex items-baseline gap-1.5">
+                <ResultCount shown={groupsCounted.targets} noun={images ? 'image' : 'target'} />{' '}
+                <span className="text-text-muted">
+                  · {groupedTotalsWords(groupsCounted.links, groupsCounted.pages)}
+                </span>
+              </span>
+            ) : null
+          ) : rowCount !== null && total !== null ? (
+            <ResultCount shown={rowCount} total={total} noun="link" />
+          ) : null
+        }
         badge={crawling ? <LiveBadge /> : null}
         className="px-6 pt-2 pb-1"
         actions={
@@ -631,14 +713,7 @@ export function LinksScreen() {
                     variant="ghost"
                     size="sm"
                     pressed={preset?.id === candidate.id}
-                    onClick={() =>
-                      void navigate({
-                        search: (previous) => ({
-                          cols: previous.cols,
-                          filter: candidate.filters.length > 0 ? [...candidate.filters] : undefined,
-                        }),
-                      })
-                    }
+                    onClick={() => void navigate({ search: (previous) => presetSearch(candidate, previous) })}
                   >
                     {candidate.title}
                   </Button>
@@ -646,6 +721,25 @@ export function LinksScreen() {
               ))}
             </div>
             <div className="ml-auto flex items-center gap-1">
+              <Tooltip
+                content={
+                  grouped
+                    ? 'Showing one row a target. Press for one row a link.'
+                    : 'One row a target: how many pages link to it, what they say and where'
+                }
+                triggerName="Group by target"
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={Layers}
+                  pressed={grouped}
+                  command="links.groupByTarget"
+                  onClick={() => setGrouped(!grouped)}
+                >
+                  Group by target
+                </Button>
+              </Tooltip>
               <ColumnChooser
                 groups={chooserGroups}
                 shown={shown}
@@ -654,7 +748,8 @@ export function LinksScreen() {
                 open={choosing}
                 onOpenChange={setChoosing}
                 command="links.columns"
-                disabled={chooserGroups.length === 0}
+                // Grouped, the columns are the targets' own: the chooser is for one row a link.
+                disabled={chooserGroups.length === 0 || grouped}
               />
               <DropdownMenu
                 align="end"
@@ -782,6 +877,58 @@ export function LinksScreen() {
         ) : (
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
+      ) : grouped ? (
+        <GridScreenBody className="mx-6 pb-4">
+          <LinkGroupsGrid
+            crawlId={crawlId}
+            filters={filters}
+            search={q}
+            sort={sort}
+            onSortChange={(next) =>
+              void navigate({
+                search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
+                replace: true,
+              })
+            }
+            siteOrigin={siteOrigin}
+            images={images}
+            crawling={crawling}
+            onInspect={openEnd}
+            onShowLinks={(next) =>
+              void navigate({ search: (previous) => ({ ...previous, by: undefined, filter: next, sort: undefined }) })
+            }
+            onCounted={onGroupsCounted}
+            onCopy={onCopy}
+            minRows={GRID_SCREEN_MIN_ROWS}
+            keyHints={short ? undefined : GROUP_KEY_HINTS}
+            loadingNote={waiting ? slowWords : undefined}
+            errorState={(error, retry) =>
+              isProblem(error, 'needs-analysis') ? (
+                <NeedsAnalysis error={error} action={analyse} onClear={clearView} />
+              ) : (
+                <ErrorState error={error} onRetry={retry} />
+              )
+            }
+            emptyState={
+              filters.length === 0 && !q ? (
+                <EmptyState title={noLinks.title} icon={Link2Off} level="none">
+                  {noLinks.why}
+                </EmptyState>
+              ) : (
+                <FilteredEmptyState
+                  title={noMatchWords(q, filters.length > 0)}
+                  level="none"
+                  filters={
+                    filters.length > 0 ? (
+                      <FilterChips filters={filters} onChange={setFilters} words={words} />
+                    ) : undefined
+                  }
+                  onClear={clearFilters}
+                />
+              )
+            }
+          />
+        </GridScreenBody>
       ) : (
         <GridScreenBody ref={measure} className="mx-6 pb-4">
           <GridCore<LinkRow>
