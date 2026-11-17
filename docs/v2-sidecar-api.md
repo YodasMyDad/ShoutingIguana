@@ -2684,7 +2684,7 @@ design, its states and why each rule is as it is: [the fix loop](v2-fix-loop.md#
  "previous":{"id":"41ab…","startedAt":"2026-11-03T09:12:00Z","score":{"value":71,"band":"good","partial":false},
              "comparable":"full","needsAnalysis":false},
  "changes":{"score":14,"partial":false,"fixed":["internal-client-error","no-https"],"new":["sitemap-error"],
-            "fewer":["broken-internal-links","title-too-long"],"more":["image-too-large"],"newCheck":[]},
+            "fewer":["broken-internal-links","title-too-long"],"more":["image-too-large"],"newCheck":[],"notCheckedNow":[]},
  "rechecks":{"count":1,"last":{"id":1,"endedAt":"2026-11-17T14:02:41Z","checkId":"broken-internal-links","judged":5,"fixed":4}}}
 ```
 
@@ -2696,20 +2696,38 @@ design, its states and why each rule is as it is: [the fix loop](v2-fix-loop.md#
   interrupted, missing or unreadable. **One with the same start URL comes first**; only without one is it the newest of
   the site. `comparable` is as on `/changes` (below); `needsAnalysis` is true when the two analyses were made by other
   rules (engine, checks or limits), so the comparison is counts only until the previous one is analysed again.
+  - **As built (S1).** "Started before" is Home's order: the earlier `startedAt`, and of two that started at the same
+    moment the one with the **larger id** (Home lists the smaller first, as the newer). "An analysis that read a page" is
+    `pagesAnalyzed` above 0. A crawl that is removed from the library, or whose file is gone from the data folder, isn't
+    a candidate. `previous` is **null for a crawl never analysed** too: there is nothing to compare. `startedAt` and
+    `score` are the previous crawl's, as its own item has them.
 - **`changes`** is the check-level change, worked out from the two crawls' cached summaries without opening either
   file: `score` (now less then; null when either has no score or they were scored by different versions), and the
   checks by state. Every check is in it, hidden or not: the app leaves out the hidden ones, as it does everywhere.
-  **`partial`** is true when either crawl didn't read all it set out to; then a check now at 0 is listed under `fewer`,
-  never `fixed`, as the rows it flagged may simply not have been read (`/changes` says which). Null with `previous`.
+  **`partial`** is true when either crawl didn't read all it set out to (its score is partial, or it has none and didn't
+  complete): the change is "so far". A check now at 0 is listed under `fewer`, never `fixed`, when **this** crawl may
+  not have read what the other flagged (it stopped early, or read under half the other's pages), the rule `/changes`
+  has without its rows; otherwise it is `fixed`, which `/changes`, with its rows, can make `fewer` where some of them
+  weren't read again. `notCheckedNow` lists the checks that ran then and were skipped now. Null with `previous`, and
+  **while the crawl is live here, interrupted, in use elsewhere or unreadable**: its analysis then doesn't describe it.
+  Worked out by the engine's `CrawlComparability.FromSummaries`, which a test holds to `/changes` on every pair the
+  comparison has a case for.
 - **`rechecks`** is the crawl's rechecks: how many, and the last one in brief. Null for a crawl never rechecked.
 - **Cost.** None to list: the library's summary cache keeps each check's count and a fingerprint of the options a
   comparison looks at, beside what it kept before (its format changes, so each file is read once more after an
-  upgrade).
+  upgrade). As built: `summaries.json` is format 6; a test counts the cache's file reads while listing and getting a
+  crawl, and finds none.
 
 **`GET /api/crawls/{id}/changes?with={otherId}`**, the comparison in full. Without `with`, or with `with=previous`,
 it is with `previous`. `with` names a crawl of the same `siteKey`; another site's, or one that can't be compared,
 is `crawl-not-comparable` (409), and a crawl with no previous answers 200 with `with` null and nothing else, which the
 UI shows as nothing at all (never zeros). `not-analyzed` when this crawl was never analysed.
+
+As built (S1): exactly `{"crawlId":"…","with":null}` for a crawl with no previous one. `with` may name a crawl that
+started later (the comparison reads "until"). `crawl-not-comparable` also for `with` naming the crawl itself, and when
+the other crawl's analysis has gone by the time it is read; `crawl-not-found` for an id no crawl has; `bad-request` for
+`with` given twice or empty. The comparison is the engine's `CrawlComparisonReader.ReadSummary`, served field for field
+(a test holds every field to it), read in a read slot and kept in the read cache under both files' stamps.
 
 ```json
 {"crawlId":"9f2c…",
@@ -2747,7 +2765,10 @@ UI shows as nothing at all (never zeros). `not-analyzed` when this crawl was nev
   | `coverage` | One read fewer than half the pages the other did: `then` and `now` are the two `pagesAnalyzed` | `partial` |
   | `rules` | The analyses were made by other rules, and the previous one can't be analysed again | `countsOnly` |
 
-  A value that isn't stored (a header's value) can't differ here.
+  A value that isn't stored (a header's value) can't differ here. As built: `field` and `side` are left out where a
+  difference has none, and `then` and `now` are given for every option's difference (`null` for none, as a limit's
+  none), and otherwise only where the difference has values (`startOrigin`, `startPath`, `coverage`, a `rules`
+  version), so `{"code":"rules","field":"settings"}` and `{"code":"stoppedEarly","side":"now"}` have none.
 - **`previousNeedsAnalysis`** is the other crawl's `outOfDateReasons` against this crawl's analysis (`engineChanged`,
   `settingsChanged`): the two analyses differ in analysis version, checks fingerprint, score version or limits.
   `POST /api/crawls/{otherId}/analyze` mends it; the comparison is then like for like. Simple's app does it by itself,
@@ -2808,6 +2829,10 @@ the paging); each group and row gains `change`, and the answer gains `compared`:
 - With `comparable` `countsOnly`, every `change` is null. A `compareWith` that can't be compared is
   `crawl-not-comparable`.
 - Cost: at most two index lookups a group or row of the page, in the other file.
+- **As built (S1).** Without `compareWith`, and with `"previous"` for a crawl that has no previous one, the answers are
+  exactly as before: no `compared`, and no `change` on any group or row. With `countsOnly`, a row's `change` is `null`
+  and a group's is **left out** (the engine's `IssueGroup.Change` isn't written when null). `compareWith` on `/urls`,
+  `/links` or `/sitemaps/urls` is `bad-request`; `not-analyzed` when this crawl was never analysed.
 
 **`POST /api/crawls/{id}/issues/{checkId}/fixed`**: what the check flagged in the other crawl and doesn't flag now,
 by URL or by cause.
@@ -2836,6 +2861,11 @@ by URL or by cause.
   `checkSkipped`.
 - Rows come in the other crawl's order by importance ([evidence](#issue-groups-e3a)), then by its URL id; `total` is
   the rows that match. The pass behind it is the check's, kept as `/changes` keeps it.
+- **As built (S1).** The answer has `rows` at level `rows` and `groups` at level `groups`, never both. A crawl with no
+  previous crawl answers `{"checkId":"…","compared":null,"level":"rows","total":null,"offset":0,"rows":[]}`. A level or
+  a state the API doesn't have, and paging out of range, are `invalid-query` (`errors` keyed `level`, `states[0]`,
+  `limit`); an unknown check `check-not-found`; `compareWith` as on `/changes`. The rows and causes are the engine's
+  `CrawlComparisonReader.ReadCleared`, field for field.
 
 **The report and the workbook.** `GET /api/crawls/{id}/report` takes `compareWith` (`previous` by default, `none`, or
 a crawl id): with a comparison, the report gains "Since your last check on 3 November" after its Summary (the score
@@ -2843,6 +2873,28 @@ then and now, each problem fixed, new, fewer and more, and the crawl's rechecks)
 The workbook (`kind: workbook`) takes `compareWith` in its request: its summary sheet gains the count then and the
 change, and a sheet lists the rows `/fixed` lists. A `compareWith` that can't be compared leaves the part out and
 says why in About this check; it never fails the report.
+
+As built (S1), in the engine's `Reporting/` and `Export/` (`ReportOptions.CompareWith`, the other crawl's file, and
+`NotCompared`, the sentence to say instead; the sidecar resolves `compareWith` to them):
+
+- **The report.** "Since your last check on 3 November 2026" comes after the Summary: the score then and now ("The score
+  was 71 on …, and is 85 now: up 14."; "worked out another way" when the versions differ), one caution sentence for a
+  partial or counts-only comparison, then the groups **Fixed**, **New**, **Fewer** and **More** (each check by its plain
+  title, with its count then or now), then **Rechecked** (the crawl's settled rechecks, the latest five: "Rechecked on 17
+  November 2026: 5 pages, 4 fixed"). The summary cut has one note: the score's sentence and the counts ("5 problems
+  fixed, 2 new, 6 on fewer pages, 1 on more"). About this check gains "Compared with: The check of 3 November 2026, 09:12"
+  (or the reason it wasn't: "Not compared: that crawl is of another site.") and "Rechecked: 3 times, last on …". Hidden
+  checks and a view's checks are left out of the lists as everywhere in the report.
+- **`GET /report?compareWith=`** takes `previous` (the default), `none`, or a crawl's id; given twice or empty it is
+  `invalid-export`. A crawl with no previous one has no part and no "Compared with".
+- **The export.** `compareWith` in the request of `kind` `report` or `workbook` (`previous` when left out); any other kind
+  refuses it (`invalid-export`, `errors.compareWith`). It is the sidecar's own field, not the engine's `ExportFields`.
+- **The workbook.** The summary sheet gains a "Compared with" row (and "Rechecked" with the count), and its table two
+  last columns, "Found on 3 Nov" (the count then) and "Change" (`Fixed`, `New`, `Fewer`, `More`, `Same`, "Not looked for
+  then", "Not checked now"). A last sheet, "Fixed since 3 Nov", lists every row the comparison cleared, check by check in
+  the comparison's order and each in the other crawl's order by importance: the problem, the check's id, the address,
+  how it moved ("Fixed", "No longer linked" for a check of what others refer to, "No longer found", "Not checked this
+  time"), why it wasn't checked, what was found then and the other address then. None with a counts-only comparison.
 
 ### Rechecks (fix loop)
 
@@ -2898,6 +2950,20 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
 - **`refused`** is null, or why it can't run now, as the problem `POST /rechecks` would give: `{ type, title }` with
   `type` one of `crawl-busy`, `site-busy`, `recheck-not-latest`, `recheck-unsupported`, `not-analyzed`,
   `not-analysable`. The UI shows `title` beside a disabled button.
+- **As built (S2).**
+  - **The body** takes `checkId`, `urlIds`, or both: with both, the list's URLs are judged by the check (as the
+    engine's `RecheckAsk` has it). Neither, more than 1,000 ids (or none), and a `group` without its `checkId` or with
+    `urlIds`, are `invalid-query`; an unknown check is `check-not-found`; an id the crawl has no URL for is
+    `invalid-query` (`errors.urlIds`, the engine's words); a field the body doesn't have is `bad-request`.
+  - The answer also gives **`countBefore`**, the check's count in the analysis as it stands (null without a check).
+    `secrets` is what a recheck asked for with none would need.
+  - **`refused`** is the first that applies, in this order: the crawl is live here (`crawl-busy`); what the engine finds
+    in the file (`crawl-busy` when another program has it, `not-analysable` when interrupted, `not-analyzed`,
+    `recheck-unsupported`), with the engine's titles ("This check hasn’t been analysed yet.", "Only checking the whole
+    site again can show whether this is fixed."); another run of the site live here (`site-busy`: "A check of this site
+    is running. Its results will show what’s fixed."), which comes before `recheck-not-latest` ("Recheck works on the
+    site’s latest check.") as such a run is usually the newer crawl. The latest crawl is the newest of the site's that
+    the library lists, in Home's order, a missing file apart.
 
 **`POST /api/crawls/{id}/rechecks`** starts one: the plan's body, plus Continue's `extraHeaders`, `proxyUrl` and
 `skipMissingHeaders`. It answers 202 with `{ recheckId, …plan }`, and the crawl's status goes `rechecking` (an
@@ -2918,6 +2984,21 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
 - **One at a time.** A crawl being rechecked is live (`crawl-busy` for continue, analyse, remove, delete, and another
   recheck). Rechecks and crawls of other sites run beside it; a crawl of the same site can't start while it runs, nor it
   while one does (`site-busy`).
+- **As built (S2).**
+  - The 202's `recheckId` is the next number in the file, which the run then takes (nothing else can while it is live
+    here); the plan in it is as it stood when asked, before the analysis first. `secrets` lists the headers skipped.
+    `needs-secrets` says "Rechecking this crawl needs …"; options the secrets make invalid are `invalid-options`.
+  - **The flow**: `analyzing` (when `analysisFirst`) with its `analysis` events, then the plan is made again from
+    today's analysis (a refusal now ends it, with the reason as the crawl event's `error`); `rechecking`; `analyzing`
+    (the analysis that settles it); then the file's status, with a `library` event. A failed run is still analysed,
+    and its end says why.
+  - **Stop**: during the run, the crawl event says `stopping`, the run ends (`recheck` event `stopped`), and the analysis
+    runs and settles it. During the analysis first, it cancels that analysis and no recheck is run (no `recheck`
+    event). During the analysis after, `crawl-busy`, as for any analysis: `/analyze/cancel` cancels it. A sidecar shut
+    down mid-run stops it and doesn't analyse: the next analysis settles it.
+  - **Busy**: a crawl being rechecked is `crawl-busy` also for pause, resume and a plan's `refused`. A new crawl, or the
+    continuing of a crawl, of a site being rechecked here is `site-busy` ("This site is being rechecked. Start the check
+    once that’s done."); a running analysis doesn't make a site busy, as it fetches nothing.
 
 **`GET /api/crawls/{id}/rechecks`**, the crawl's rechecks, newest first, and **`GET /api/crawls/{id}/rechecks/{n}`**,
 one (`recheck-not-found`, 404, for an id the file doesn't have):
@@ -2955,13 +3036,28 @@ one (`recheck-not-found`, 404, for an id the file doesn't have):
   (a `sources` check's phase 2), `new` (fetched one step), `letGo` (no longer linked: let go).
 - **`outcome`** for a judged URL: `fixed`, `still`, `notChecked`, `notRechecked`, or `new` (wasn't flagged, is now);
   null for the other roles. `reason` as on `/fixed`.
+- **As built (S2).** A recheck's fields are the engine's `RecheckRecord`'s, its times in UTC, `group` as
+  `{ detail, relatedUrlId }`. `recheck-not-found` also for a number that isn't one (`/rechecks/first`). The rows come
+  judged first, then in crawl order; `outcomes` and `roles` take the names above (another is `invalid-query`,
+  `errors["outcomes[0]"]`), `limit` 1 to 1,000 (100 when left out), `offset` 0 or more. **`reason` isn't built**: the
+  engine's `RecheckRow` has none, so rows leave it out.
 
 **Events.** The crawl's `crawl` events carry `rechecking` as its status. `progress` events are sent as for any run,
 `phase` `rechecking`. A `recheck` event carries the recheck's own counts (`phase` 1 or 2, `done` of `total` fetches),
 at most every 500 ms, and a last one with `result` once settled, which is the UI's cue to read the check again.
 
+As built (S2): a `progress` event during the run has `status` `rechecking` (`stopping` once stopped) and `phase`
+`rechecking`, and the crawl's own counts; it isn't added to the live history (the chart reads the run from the file once
+it ends). `recheck` events are `{ crawlId, recheckId, status, phase, done, total, result }`: one as the run starts, then
+with the progress at most every 500 ms (`running`), one as the run ends (the file's status: `completed`, `stopped` or
+`failed`, `result` null), and one once settled (`result`), after the analysis's events and before the crawl's last
+event. `phase` is null before the run's first progress. A stream that connects meanwhile gets the latest after its
+`hello` and the crawls' progress, until the crawl is no longer live here.
+
 **The library afterwards.** The item's `rechecks` (above); its counts, score and `changes` are the analysis's after
-the recheck, as for any analysis.
+the recheck, as for any analysis. As built: `rechecks` comes from the summary cache (format 7: the count and the latest
+recheck); `last.fixed` is null until the latest is settled. While the crawl is rechecked here, the item is its summary
+from before, with `status` `rechecking` and `outOfDate` true.
 
 ## Engine changes E1 needs
 
@@ -4383,7 +4479,9 @@ it). Built on `ui/3b-evidence` (775c6a4, 48d6576, 439dbba): the API above is wha
 Step 3b's fix loop ([the design](v2-fix-loop.md), with its table of parts under "Engine and storage"). This is the
 plan the API above is written to. The engine's part (stages E1 to E4) is built on `ui/3b-fixloop-engine`, as below;
 [the design's "As built"](v2-fix-loop.md#12-as-built-the-engine-stages-e1-to-e4) says where it differs, and what was
-measured. The sidecar's part (S1, S2) isn't built yet.
+measured. The sidecar's part (S1, the comparison, and S2, the rechecks) is built on `ui/3b-fixloop-sidecar`, as the
+"(fix loop)" sections above say where it differs; [the design's "S1 and S2 as built"](v2-fix-loop.md#s1-and-s2-as-built-the-sidecar)
+has the rest.
 
 - **Built: what the sidecar calls.**
   - The comparison: `CrawlComparisonReader.ReadSummary(current, other, cache, ct)` (a `CrawlComparison`),
@@ -4405,6 +4503,10 @@ measured. The sidecar's part (S1, S2) isn't built yet.
     camelCase as `recheck`.
   - A new URL grid column, `skipReason` ("Why not read"), an enum of every skip reason, `recheck` ("Found by a recheck,
     not followed") and `noLongerLinked` ("No longer linked (a recheck let it go)") among them: the grids' label for both.
+  - Added for the sidecar (S1): `CrawlFileSummary.CheckCounts` and `OptionsFingerprint` (read by `CrawlSummaryReader`),
+    `CrawlComparability.OptionsFingerprint` and `FromSummaries` (a `SummaryComparison`: the check-level comparison from
+    two summaries alone); `ReportOptions.CompareWith` and `NotCompared`, with the report's part and the workbook's
+    columns and sheet. For S2, `CrawlFileSummary.RecheckCount` and `LastRecheck` (`RecheckReader.ReadLatest`).
 
 - **Comparison, read only.** `Storage/CrawlComparisonReader`: `ReadSummary` (`/changes`), `ReadRowChanges` and
   `ReadGroupChanges` (`compareWith` on `/rows` and `/groups`, through `IssueGroupReader`), `ReadCleared` (`/fixed`).

@@ -63,6 +63,18 @@ public sealed class AppTests : IAsyncLifetime
         Assert.Null((string?)listed.Single(check => (string?)check!["id"] == IssueCatalog.IMAGE_BROKEN.Id)!["learnMore"]);
     }
 
+    /// <summary>What a recheck of each check reads again (the fix loop): the catalog's, and nothing for a check only a full crawl can settle.</summary>
+    [Fact]
+    public async Task ChecksSayWhatARecheckReadsAgain()
+    {
+        var listed = (await _sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
+        Assert.Equal(IssueCatalog.All.Select(check => string.Join(",", check.Recheck.Select(kind => JsonNamingPolicy.CamelCase.ConvertName(kind.ToString())))),
+            listed.Select(check => string.Join(",", check!["recheck"]!.AsArray().Select(kind => (string)kind!))));
+        Assert.Empty(listed.Single(check => (string?)check!["id"] == "orphan-page")!["recheck"]!.AsArray());
+        Assert.Equal("""["urls","sitemaps"]""", listed.Single(check => (string?)check!["id"] == "not-in-sitemap")!["recheck"]!.ToJsonString());
+        Assert.Equal("""["robotsTxt"]""", listed.Single(check => (string?)check!["id"] == "robots-txt-missing")!["recheck"]!.ToJsonString());
+    }
+
     /// <summary>What the score and the wording of a count go by: the faults of the whole site, and the checks reported once.</summary>
     [Fact]
     public async Task ChecksSayWhenTheyAreAFaultOfTheWholeSiteAndWhenTheyAreReportedOnce()

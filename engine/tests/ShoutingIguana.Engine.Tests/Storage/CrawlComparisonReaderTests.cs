@@ -514,6 +514,71 @@ public sealed class CrawlComparisonReaderTests(ComparisonCrawls crawls)
         Assert.Null(rows.Changes);
     }
 
+    /// <summary>
+    /// The library's comparison, from the two crawls' summaries alone (no file opened), agrees with the files' on every pair
+    /// the comparison has a case for: how far they compare, what the other needs, the score's change, every check's counts,
+    /// and every check's state, a check at 0 now being fixed or fewer as the comparison judges it without its rows.
+    /// </summary>
+    [Fact]
+    public async Task TheComparisonFromSummariesAgreesWithTheFiles()
+    {
+        var older = crawls.Copy(crawls.Then);
+        Execute(older, $"UPDATE analysis SET analysis_version = {AnalysisFreshness.VERSION - 1}");
+        var settings = crawls.Copy(crawls.Then);
+        var json = JsonNode.Parse(Scalar(settings, "SELECT settings_json FROM analysis"))!;
+        json["minWordCount"] = new AnalysisSettings().MinWordCount + 1;
+        Execute(settings, "UPDATE analysis SET settings_json = $json", ("$json", json.ToJsonString()));
+        var limited = crawls.Copy(crawls.Now);
+        var options = JsonNode.Parse(Scalar(limited, "SELECT options_json FROM crawl"))!;
+        options["maxUrls"] = 5_000;
+        Execute(limited, "UPDATE crawl SET options_json = $json", ("$json", options.ToJsonString()));
+        var blog = crawls.Copy(crawls.Now);
+        var blogOptions = JsonNode.Parse(Scalar(blog, "SELECT options_json FROM crawl"))!;
+        blogOptions["startUrl"] = Url("/blog/");
+        Execute(blog, "UPDATE crawl SET options_json = $json, start_url = $url", ("$json", blogOptions.ToJsonString()), ("$url", Url("/blog/")));
+        var continued = crawls.Copy(crawls.Then);
+        Execute(continued, "UPDATE crawl SET updated_at = updated_at + 1000");
+        var stoppedNow = await StoppedAsync(crawls.Now, [Url("/p/29"), Url("/plants/title-long")]);
+        var stoppedThen = await StoppedAsync(crawls.Then, [Url("/plants/title-caps")]);
+        var (_, httpsNow) = await crawls.HttpsAsync();
+
+        (string Then, string Now)[] pairs =
+        [
+            (crawls.Then, crawls.Now), (crawls.Now, crawls.Then), (crawls.Then, crawls.Then), (older, crawls.Now), (settings, crawls.Now),
+            (crawls.Then, limited), (crawls.Then, blog), (continued, crawls.Now), (crawls.Then, stoppedNow), (stoppedThen, crawls.Now),
+            (stoppedThen, stoppedNow), (crawls.Then, httpsNow)
+        ];
+        HashSet<Comparability> seen = [];
+        foreach (var (then, now) in pairs)
+        {
+            var files = CrawlComparisonReader.ReadSummary(now, then)!;
+            var summaries = CrawlComparability.FromSummaries(CrawlSummaryReader.Read(then), CrawlSummaryReader.Read(now));
+            var pair = $"{Path.GetFileName(then)} then, {Path.GetFileName(now)} now";
+            Assert.True(summaries is not null, $"{pair}: no comparison from the summaries");
+            seen.Add(files.Comparable);
+            Assert.True(files.Comparable == summaries.Comparable, $"{pair}: {files.Comparable} from the files, {summaries.Comparable} from the summaries");
+            Assert.Equal(files.PreviousNeedsAnalysis, summaries.PreviousNeedsAnalysis);
+            Assert.Equal(files.Score?.Change, summaries.ScoreChange);
+            Assert.Equal(files.Differences.Any(difference => difference.Code == ComparisonDifferenceCode.StoppedEarly), summaries.Partial);
+            Assert.Equal(files.Checks.Select(check => (check.CheckId, check.Then, check.Now)), summaries.Checks.Select(check => (check.CheckId, check.Then, check.Now)));
+
+            var unsure = files.Differences.Any(difference => difference is { Code: ComparisonDifferenceCode.StoppedEarly, Side: ComparisonSide.Now or ComparisonSide.Both } ||
+                                                             difference.Code == ComparisonDifferenceCode.Coverage && (long)difference.Now! < (long)difference.Then!);
+            Assert.All(files.Checks.Zip(summaries.Checks), checks =>
+                Assert.Equal(checks.First is { Then: > 0, Now: 0 } && files.Comparable != Comparability.CountsOnly
+                    ? unsure ? CheckChangeState.Fewer : CheckChangeState.Fixed
+                    : checks.First.State, checks.Second.State));
+        }
+
+        Assert.Equal(Enum.GetValues<Comparability>(), seen.Order());
+
+        // Never analysed on either side: no comparison.
+        var unanalysed = crawls.Copy(crawls.Then);
+        Execute(unanalysed, "DROP TABLE analysis");
+        Assert.Null(CrawlComparability.FromSummaries(CrawlSummaryReader.Read(unanalysed), CrawlSummaryReader.Read(crawls.Now)));
+        Assert.Null(CrawlComparability.FromSummaries(CrawlSummaryReader.Read(crawls.Now), CrawlSummaryReader.Read(unanalysed)));
+    }
+
     private static void AssertNothingUnjudgedIsFixed(string now, string then)
     {
         var summary = CrawlComparisonReader.ReadSummary(now, then)!;

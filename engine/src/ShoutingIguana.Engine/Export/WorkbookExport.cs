@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Export.Models;
@@ -27,14 +28,18 @@ internal static class WorkbookExport
 
     private static readonly string[] CHECK_TITLES = ["Address", "Page title", "What was found", "Other address"];
 
-    private static readonly double[] SUMMARY_WIDTHS = [26, 34, 16, 14, 12, 48, 44, 34, 20, 12, 12, 16, 10, 12, 60];
+    private static readonly double[] SUMMARY_WIDTHS = [26, 34, 16, 14, 12, 48, 44, 34, 20, 12, 12, 16, 10, 12, 60, 12, 16];
+
+    /// <summary>The sheet of what the check flagged then and doesn't now (the fix loop): which check, the URL, how it moved, and what was found then.</summary>
+    private static readonly string[] FIXED_TITLES = ["Problem", "Check ID", "Address", "Now", "Why not checked", "What was found then", "Other address then"];
 
     private static readonly Dictionary<string, UrlColumnInfo> COLUMNS = UrlGridReader.IssueRowColumns.ToDictionary(column => column.Id, StringComparer.Ordinal);
 
     public static void WriteWorkbook(ExportRun run, XlsxTableWriter table)
     {
         var model = ReportReader.Read(run.CrawlPath, _ => 0, run.Settings, cancellationToken: run.Token, listing: run.Request.Report);
-        run.Expect(model.Problems.Sum(problem => problem.Count));
+        var cleared = Cleared(run, model);
+        run.Expect(model.Problems.Sum(problem => problem.Count) + cleared.Sum(check => check.Total));
 
         // The names first: the summary, which is written first, says which sheet each problem is on.
         List<string> names = ["Summary"];
@@ -47,6 +52,11 @@ internal static class WorkbookExport
         foreach (var problem in model.Problems)
         {
             WriteSheet(run, table, names[problem.Number], problem.Check.Id);
+        }
+
+        if (model.Comparison is { } since && cleared.Count > 0)
+        {
+            WriteFixed(run, table, since, cleared, model.TimeZone);
         }
 
         // The sheets are of the analysis the summary was read from only if it's still the last.
@@ -69,6 +79,84 @@ internal static class WorkbookExport
         var title = ReportSources.Words(check, ReportSources.Settings(results)).Title;
         WriteSheet(run, table, number > 0 ? SheetTitle(number, title) : title, check.Id);
     }
+
+    /// <summary>
+    /// The checks whose rows then the workbook lists as no longer flagged (the fix loop): every check of the comparison that
+    /// flagged something then, with how many it no longer flags. None when the crawl isn't compared, or only by its counts.
+    /// </summary>
+    private static List<(ReportChange Change, long Total)> Cleared(ExportRun run, ReportModel model)
+    {
+        if (model.Comparison is not { Comparison.Comparable: not Comparability.CountsOnly } since)
+        {
+            return [];
+        }
+
+        List<(ReportChange Change, long Total)> cleared = [];
+        foreach (var change in since.Checks.Where(change => change.Then > 0))
+        {
+            var total = CrawlComparisonReader.ReadCleared(run.CrawlPath, since.OtherPath, change.Check.Id, new ClearedQuery(Limit: 1), run.Settings.Cache, run.Token)?.Total ?? 0;
+            if (total > 0)
+            {
+                cleared.Add((change, total));
+            }
+        }
+
+        return cleared;
+    }
+
+    /// <summary>The sheet of what each check flagged then and doesn't now, check by check, each in the other crawl's order by importance.</summary>
+    private static void WriteFixed(ExportRun run, ITableWriter table, ReportComparison since, List<(ReportChange Change, long Total)> cleared, TimeZoneInfo zone)
+    {
+        table.Begin($"Fixed since {Short(since.StartedAt, zone)}", FIXED_TITLES);
+        foreach (var (change, _) in cleared)
+        {
+            for (var offset = 0; ; offset += UrlGridReader.MAX_LIMIT)
+            {
+                var page = CrawlComparisonReader.ReadCleared(run.CrawlPath, since.OtherPath, change.Check.Id, new ClearedQuery(Offset: offset, Limit: UrlGridReader.MAX_LIMIT),
+                    run.Settings.Cache, run.Token);
+                if (page is null || page.Rows.Count == 0)
+                {
+                    break;
+                }
+
+                foreach (var row in page.Rows)
+                {
+                    table.WriteRow([change.Words.Title, change.Check.Id, row.Url, Moved(row.State, change.Check), row.Reason?.Text, row.DetailThen, row.RelatedUrlThen]);
+                }
+
+                run.Wrote(page.Rows.Count);
+                if (page.Rows.Count < UrlGridReader.MAX_LIMIT)
+                {
+                    break;
+                }
+            }
+        }
+
+        table.End();
+    }
+
+    /// <summary>How a URL flagged then moved, in the report's words: gone is no longer linked for a check of what others refer to.</summary>
+    private static string Moved(RowChangeState state, IssueDefinition check) => state switch
+    {
+        RowChangeState.Fixed => "Fixed",
+        RowChangeState.Gone => check.References == IssueReferences.Sources ? "No longer linked" : "No longer found",
+        _ => "Not checked this time"
+    };
+
+    /// <summary>A check's change since the other crawl, in a word or two.</summary>
+    private static string Changed(CheckChangeState state) => state switch
+    {
+        CheckChangeState.New => "New",
+        CheckChangeState.Fixed => "Fixed",
+        CheckChangeState.Fewer => "Fewer",
+        CheckChangeState.More => "More",
+        CheckChangeState.Same => "Same",
+        CheckChangeState.NewCheck => "Not looked for then",
+        _ => "Not checked now"
+    };
+
+    /// <summary>"3 Nov": a date as a column's title says it.</summary>
+    private static string Short(DateTimeOffset moment, TimeZoneInfo zone) => TimeZoneInfo.ConvertTime(moment, zone).ToString("d MMM", CultureInfo.InvariantCulture);
 
     /// <summary>A problem's sheet, before it's cut to what a sheet's name holds: its number, then its title.</summary>
     internal static string SheetTitle(int number, string title) => $"{number} {title}";
@@ -101,6 +189,20 @@ internal static class WorkbookExport
         Row(Label("Pages read"), Count(model.Pages));
         Row(Label("Addresses checked"), Count(model.Urls));
         Row(Label("Checks run"), XlsxCell.Text($"{model.ChecksRun} of {model.ChecksInCatalog}"));
+        if (model.Comparison is { } compared)
+        {
+            Row(Label("Compared with"), XlsxCell.Text($"The check of {ReportWords.Date(compared.StartedAt, model.TimeZone)}, {ReportWords.Time(compared.StartedAt, model.TimeZone)}"));
+        }
+        else if (model.NotCompared is { } notCompared)
+        {
+            Row(Label("Compared with"), XlsxCell.Text(notCompared));
+        }
+
+        if (model.Rechecks.Count > 0)
+        {
+            Row(Label("Rechecked"), Count(model.Rechecks.Count), XlsxCell.Text("times: other pages are as the check found them"));
+        }
+
         if (model.Score is { } score)
         {
             Row(Label("Score"), XlsxCell.Number(score.Value), XlsxCell.Text(ReportWords.Band(score.Band) + (score.Partial ? ", so far" : string.Empty)));
@@ -136,14 +238,21 @@ internal static class WorkbookExport
             {
                 "Number", "Sheet", "Result", "Severity", "Called", "Problem", "Check", "Check ID", "Category", "Found on", "Out of", "Of what", "Share", "Points off",
                 "Why it couldn’t run"
-            }.Select(Label)
+            }.Select(Label),
+            .. model.Comparison is { } since ? (XlsxCell[])[Label($"Found on {Short(since.StartedAt, model.TimeZone)}"), Label("Change")] : []
         ]);
+
+        // Each check's count then and how it changed, when the crawl is compared with another (the fix loop).
+        var changes = model.Comparison?.Checks.ToDictionary(change => change.Check.Id, StringComparer.Ordinal);
+        XlsxCell[] Then(string checkId) => changes is null ? []
+            : changes.TryGetValue(checkId, out var change) ? [change.Then is { } then ? Count(then) : XlsxCell.Empty, XlsxCell.Text(Changed(change.State))]
+            : [XlsxCell.Empty, XlsxCell.Empty];
 
         foreach (var problem in model.Problems)
         {
             var line = problem.Line;
             var once = problem.Check.ReportedOnce || line is { Unit: ScoreUnit.Site };
-            Row(
+            Row([
                 XlsxCell.Number(problem.Number),
                 XlsxCell.Text(sheets[problem.Number]),
                 XlsxCell.Text("Found"),
@@ -158,17 +267,20 @@ internal static class WorkbookExport
                 line is null || once ? XlsxCell.Empty : Count(line.Of),
                 XlsxCell.Text(once ? ReportWords.CHECKED_ONCE : line?.Unit switch { ScoreUnit.Pages => "pages", ScoreUnit.Urls => "addresses", _ => null }),
                 line is null || once || line.Of <= 0 ? XlsxCell.Empty : XlsxCell.Number(Math.Min(1d, (double)problem.Count / line.Of), XlsxStyle.Percent),
-                line is null ? XlsxCell.Empty : XlsxCell.Number(line.Points));
+                line is null ? XlsxCell.Empty : XlsxCell.Number(line.Points),
+                .. changes is null ? [] : (XlsxCell[])[XlsxCell.Empty, .. Then(problem.Check.Id)]
+            ]);
         }
 
         foreach (var passed in model.Passed)
         {
-            Row(Rest(passed.Check, passed.Words, "Nothing wrong", Count(0), XlsxCell.Empty));
+            Row([.. Rest(passed.Check, passed.Words, "Nothing wrong", Count(0), XlsxCell.Empty), .. Then(passed.Check.Id)]);
         }
 
         foreach (var skipped in model.Skipped)
         {
-            Row(Rest(skipped.Check, skipped.Words, "Couldn’t run", XlsxCell.Empty, XlsxCell.Text(skipped.Action is null ? skipped.Why : $"{skipped.Why} {skipped.Action}")));
+            Row([.. Rest(skipped.Check, skipped.Words, "Couldn’t run", XlsxCell.Empty, XlsxCell.Text(skipped.Action is null ? skipped.Why : $"{skipped.Why} {skipped.Action}")),
+                .. Then(skipped.Check.Id)]);
         }
 
         workbook.EndSheet();
