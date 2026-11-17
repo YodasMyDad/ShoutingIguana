@@ -1,4 +1,5 @@
 using AngleSharp.Dom;
+using AngleSharp.Html.Dom.Events;
 using AngleSharp.Html.Parser;
 using AngleSharp.Text;
 using ShoutingIguana.Engine.Fetching;
@@ -32,8 +33,17 @@ public static class HtmlPageParser
                 RecordMeta(element, position);
             }
         };
-        return (new HtmlParser(options), headEnd);
+        var parser = new HtmlParser(options);
+        parser.Error += (_, error) => RecordError(error as HtmlErrorEvent);
+        return (parser, headEnd);
     });
+
+    /// <summary>
+    /// The document-structure errors the parser met in the page being parsed on this thread, with where each tag starts in
+    /// the text (from 0). Emptied before each parse.
+    /// </summary>
+    [ThreadStatic]
+    private static List<(HtmlParseError Code, int Start)>? _structureErrors;
 
     /// <summary>
     /// Where each meta element of the page being parsed on this thread starts in its text, as the parser creates them: how
@@ -65,6 +75,8 @@ public static class HtmlPageParser
     {
         var (parser, headEnd) = PARSER.Value;
         headEnd.Reset();
+        var structureErrors = _structureErrors ??= [];
+        structureErrors.Clear();
         using var document = parser.ParseDocument(html);
 
         // Browsers use the first base with an href anywhere in the document, even one a stray element pushed into the body.
@@ -107,9 +119,13 @@ public static class HtmlPageParser
                 : null,
             ByteOrderMark = byteOrderMark,
             BaseHref = baseHref,
-            HeadEnd = walker.Canonicals.Any(canonical => !canonical.InHead) || walker.Hreflangs.Any(hreflang => !hreflang.InHead)
+            HeadEnd = walker.Canonicals.Any(canonical => !canonical.InHead) || walker.Hreflangs.Any(hreflang => !hreflang.InHead) || walker.HeadTagsInBody.Count > 0
                 ? headEnd.HeadEnd(document)
                 : null,
+            HeadTagsInBody = walker.HeadTagsInBody,
+            StructureErrors = StructureErrors(structureErrors, html, headEnd.HeadImplied, headEnd.BodyImplied),
+            CharsetDeclarations = walker.CharsetDeclarations,
+            MobileAlternate = walker.MobileAlternate,
             WordCount = fingerprint.WordCount,
             ContentHash = fingerprint.ContentHash,
             SimHash = fingerprint.SimHash,
@@ -137,6 +153,54 @@ public static class HtmlPageParser
         return refresh.Url is { } url && UrlNormalizer.TryResolve(baseUri, url, out var target)
             ? (refresh, [new ExtractedLink(target, LinkKind.MetaRefresh, LinkFlags.FromHttpHeader, LinkPosition.Head, null)])
             : (refresh, []);
+    }
+
+    /// <summary>
+    /// Notes the errors that say the document's structure is wrong. A &lt;head&gt; tag in the body is reported only as a tag
+    /// that can't start there, so it's told by its text.
+    /// </summary>
+    private static void RecordError(HtmlErrorEvent? error)
+    {
+        if (error is not null && _structureErrors is { } errors && (HtmlParseError)error.Code is HtmlParseError.HeadTagMisplaced or
+                HtmlParseError.BodyTagMisplaced or HtmlParseError.HtmlTagMisplaced or HtmlParseError.TagCannotStartHere)
+        {
+            errors.Add(((HtmlParseError)error.Code, error.Position.Position - 1));
+        }
+    }
+
+    /// <summary>The text at <paramref name="start"/> is a &lt;head&gt; start tag.</summary>
+    private static bool IsHeadTag(string html, int start) =>
+        start >= 0 && start + 5 < html.Length && html.AsSpan(start, 5).Equals("<head", StringComparison.OrdinalIgnoreCase) &&
+        (char.IsWhiteSpace(html[start + 5]) || html[start + 5] is '>' or '/');
+
+    /// <summary>
+    /// The document's structure errors, described: a second &lt;head&gt; (or one after content), a second &lt;body&gt;, an
+    /// &lt;html&gt; after content. A body the parser made up (for a stray element in the head) and then the page's own &lt;body&gt;
+    /// tag are one body, whose stray element the head's checks report.
+    /// </summary>
+    private static List<string> StructureErrors(List<(HtmlParseError Code, int Start)> errors, string html, bool headImplied, bool bodyImplied)
+    {
+        var heads = errors.Count(error => error.Code == HtmlParseError.HeadTagMisplaced ||
+                                          (error.Code == HtmlParseError.TagCannotStartHere && IsHeadTag(html, error.Start)));
+        var bodies = errors.Count(error => error.Code == HtmlParseError.BodyTagMisplaced) - (bodyImplied ? 1 : 0);
+        List<string> faults = [];
+        if (errors.Any(error => error.Code == HtmlParseError.HtmlTagMisplaced))
+        {
+            faults.Add("<html> after content");
+        }
+
+        // A head the parser made up for content before it, then the page's own <head> tag: one head, in the wrong place.
+        if (heads > 0)
+        {
+            faults.Add(headImplied && heads == 1 ? "<head> after content" : $"{heads + (headImplied ? 0 : 1)} <head> tags");
+        }
+
+        if (bodies > 0)
+        {
+            faults.Add($"{bodies + 1} <body> tags");
+        }
+
+        return faults;
     }
 
     /// <summary>The parser reports a new element's position one-based, at its opening '&lt;'.</summary>

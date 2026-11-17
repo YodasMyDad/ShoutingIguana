@@ -10,7 +10,8 @@ public sealed record PageFacts
 {
     /// <summary>
     /// What <see cref="CollectedVersion"/> the parser writes now. 1 is the new checks' (step 3b): the canonical's other
-    /// attributes, the page's next and prev links, a <c>Refresh</c> header, the links search engines can't follow.
+    /// attributes, the page's next and prev links, a <c>Refresh</c> header, the links search engines can't follow, the head's
+    /// tags in the body, the document's structure errors, every charset declaration and a separate mobile URL.
     /// </summary>
     public const int CURRENT_COLLECTION = 1;
 
@@ -32,6 +33,30 @@ public sealed record PageFacts
 
     /// <summary>The page's links search engines can't follow, or null with none, and for a page crawled before they were noted.</summary>
     public UncrawlableLinksFact? UncrawlableLinks { get; init; }
+
+    /// <summary>
+    /// Head-only tags the parser put in the body, in page order, at most 20: <c>title</c>, <c>meta description</c>,
+    /// <c>meta robots</c>, <c>meta viewport</c>, <c>meta refresh</c>, <c>meta content-type</c>, an Open Graph or X tag by its
+    /// property (<c>og:title</c>), <c>link alternate</c>, <c>link amphtml</c>. Canonical and hreflang links aren't listed:
+    /// their own checks report them. Empty for a page crawled before they were noted.
+    /// </summary>
+    public IReadOnlyList<string> HeadTagsInBody { get; init; } = [];
+
+    /// <summary>
+    /// The document's structure errors as the parser met them, each described: <c>2 &lt;head&gt; tags</c>, <c>2 &lt;body&gt;
+    /// tags</c>, <c>&lt;html&gt; after content</c>. A body the parser made up for a stray element in the head, then the page's
+    /// own &lt;body&gt; tag, is one body. Empty with none, and for a page crawled before they were noted.
+    /// </summary>
+    public IReadOnlyList<string> StructureErrors { get; init; } = [];
+
+    /// <summary>
+    /// Every meta charset and http-equiv Content-Type charset the page declares, in page order, at most 5: the first is
+    /// <see cref="DeclaredCharset"/>. Empty for a page crawled before they were noted.
+    /// </summary>
+    public IReadOnlyList<string> CharsetDeclarations { get; init; } = [];
+
+    /// <summary>The first <c>&lt;link rel="alternate" media="…"&gt;</c> without hreflang, resolved: a separate mobile version. Null with none.</summary>
+    public string? MobileAlternate { get; init; }
     public IReadOnlyList<HeadingFact> Headings { get; init; } = [];
     public IReadOnlyList<ImageFact> Images { get; init; } = [];
     public IReadOnlyList<string> JsonLd { get; init; } = [];
@@ -60,8 +85,9 @@ public sealed record PageFacts
     public string? BaseHref { get; init; }
 
     /// <summary>
-    /// What ended the head before a canonical or hreflang link in the page: set only when one is outside the head, which
-    /// is what the checks of either say. Null for every other page, and for a page crawled before the crawler noted it.
+    /// What ended the head before a canonical, an hreflang link or another head-only tag in the page: set only when one is
+    /// outside the head, which is what the checks of these say. Null for every other page, and for a page crawled before the
+    /// crawler noted it.
     /// </summary>
     public HeadEndFact? HeadEnd { get; init; }
     public int WordCount { get; init; }

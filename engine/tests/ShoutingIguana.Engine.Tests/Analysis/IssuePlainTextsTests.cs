@@ -264,7 +264,7 @@ public sealed partial class IssuePlainTextsTests
         Assert.True(reasons.Count == 0, $"Skip reasons with no plain words: {string.Join(", ", reasons)}");
 
         Assert.All(Enum.GetValues<IssueCategory>(), category => Assert.False(string.IsNullOrWhiteSpace(PlainWords.CategoryTitle(category)), category.ToString()));
-        Assert.Equal((113, 18, 17), (IssuePlainTexts.All.Count, PlainWords.SkipReasons.Count, Enum.GetValues<IssueCategory>().Length));
+        Assert.Equal((122, 18, 17), (IssuePlainTexts.All.Count, PlainWords.SkipReasons.Count, Enum.GetValues<IssueCategory>().Length));
     }
 
     /// <summary>

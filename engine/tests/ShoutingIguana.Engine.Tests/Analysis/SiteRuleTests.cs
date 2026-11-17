@@ -517,7 +517,7 @@ public sealed class SiteRuleTests
         var urls = site.Table(instantRefreshes: [(stub.UrlId, target)]);
 
         Assert.Equal(new UrlStatus(Known: true, IsInternal: true, IsHttps: true, Depth: 1, Fetched: true, FetchOutcome.Redirect, 200, IsHtml: true,
-            IsParsed: true, IndexabilityReason.Redirected, target, null, InSitemap: false, IsMetaRefresh: true), urls[stub.UrlId]);
+            IsParsed: true, IndexabilityReason.Redirected, target, null, InSitemap: false, IsMetaRefresh: true, ContentClass: ContentClass.Html), urls[stub.UrlId]);
         Assert.Equal([(stub.UrlId, IndexabilityReason.Redirected)], urls.IndexabilityChanges);
         Assert.True(RuleHarness.AsAnalysed(stub, urls).IsRedirect);
         Assert.False(RuleHarness.AsAnalysed(delayed, urls).IsRedirect);

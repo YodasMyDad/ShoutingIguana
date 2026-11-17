@@ -90,6 +90,7 @@ and is in the group without a related URL.
 | 2 | `internal-server-error` | U/RD/S | `type`, `responseMs` | – | Same ("500 Internal Server Error") | use · pages |
 | 3 | `internal-unreachable` | U/RD/S | `type`, `fetchError`, `responseMs` | – | Same ("Timed out", "Connection failed": the group stays one per kind; the column says which failure) | use · pages |
 | 4 | `internal-blocked` | U/RD/S | `type` | – | Same (the protection). Since the polite crawl a 429 isn't this check's: it's held back, asked again, and stored as not checked if it never gets through | use · pages |
+| 114 | `content-type-mismatch` (new) | U/RD/S | `type`, `contentType` | – | `Used as a script, sent as text/html` (each way it's used; "sent with no Content-Type") | use · pages |
 | 5 | `soft-404` | P/N/– | `title`, `h1`, `wordCount` | – | "The title or H1 says the page wasn't found" → `The title reads as an error: "Page not found – Example" · 120 words, under 300` (or "The H1 reads as an error: …"; the quoted text is the field that matched) | imp · – |
 
 ### Redirects
@@ -100,6 +101,7 @@ and is in the group without a related URL.
 | 7 | `redirect-loop` | U/N/S | `redirectChain` | – | "3 hops" → `3 hops: /a/ (301) → /a (301) → back to /a/` (paths on the URL's own host, full URLs elsewhere) | use · – |
 | 8 | `redirect-broken` | U/RD/S | `redirectChain` | `statusCode` (the URL it ends at) | Same ("Ends at a URL that returns 404 Not Found") | use · pages |
 | 9 | `redirect-temporary` | U/RD/S | `redirectChain` | `statusCode` (the target) | Same ("302 Found") | use · pages |
+| 115 | `redirect-temporary-cached` (new) | U/RD/S | `redirectChain` | – | `302 Found, cached for 30 days` | use · pages |
 | 10 | `redirect-downgrade` | U/RU/S | `redirectChain` | `statusCode`, `final` (the http:// target) | Same (none) | use · pages |
 | 11 | `meta-refresh` | P/PD/– | – | – | Same (`Moves to https://x/ after 5 seconds`) | imp · pages |
 
@@ -270,6 +272,7 @@ and is in the group without a related URL.
 | 81 | `slow-response` | P/N/– | – | – | "1,250 ms (first byte after 900 ms)" → `1,250 ms, over 1,000 ms (first byte after 900 ms)` | imp · – |
 | 82 | `large-page` | P/N/– | – | – | "1.4 MB" → `1.4 MB, over 1 MB` | imp · – |
 | 83 | `html-past-crawl-limit` | P/N/– | – | – | "2.3 MB" → `2.3 MB, past the 2 MB Google reads` | imp · – |
+| 116 | `resource-past-crawl-limit` (new) | U/N/S | `sizeBytes`, `contentType` | – | `2.3 MB, past the 2 MB Google reads` (the size as received: compressed, if the server compressed it) | use · – |
 
 ### HTML
 
@@ -279,6 +282,12 @@ and is in the group without a related URL.
 | 85 | `lang-missing` | P/N/– | – | – | Same (none). Template hint | imp · – |
 | 86 | `charset-missing` | P/N/– | – | – | None → none, but a meta tag past the first 1024 bytes says where it ends (the check audit's): `A meta tag declares it, but ends at byte 1,180, past the first 1,024 bytes browsers read`. Template hint | imp · – |
 | 87 | `open-graph-missing` | P/PD/– | – | – | Same ("Missing og:image; empty og:description") | imp · pages |
+| 117 | `head-tags-in-body` (new) | P/PD/– | – | – | `title, meta description and 3 Open Graph tags are in the body: <div id="promo"> on line 12 ended the head early`, or `… are in the body, after <body> on line 30`; grouped by the cause (`FaultOf`: the element, without its line, or "After <body>") | imp · pages |
+| 118 | `html-structure-errors` (new) | P/PD/– | – | – | `2 <head> tags; 2 <body> tags`, `<html> after content`, `<head> after content` | imp · pages |
+| 119 | `viewport-invalid` (new) | P/PD/– | – | – | `user-scalable=no; maximum-scale=1`, `no width or initial-scale`, `2 viewport tags that differ` | imp · pages |
+| 120 | `charset-invalid` (new) | P/PD/– | – | – | `Declares windows-1252, not UTF-8`, `The header says iso-8859-1; the page says utf-8`, `2 declarations: utf-8, iso-8859-1`, `<meta charset> after the first 1,024 bytes` | imp · pages |
+| 121 | `lang-invalid` (new) | P/PD/– | – | – | The value: `english` (the specification's `language` URL column isn't built: the detail is the value) | imp · pages |
+| 122 | `mobile-alternate` (new) | P/N/– | – | – | `Mobile version: https://m.example.com/x` | imp · – |
 
 **New checks (step 3b, [v2-new-checks.md](v2-new-checks.md)):** rows 88 on, marked "(new)", each in its category's
 table. `canonical-unlinked` is P where the specification said U: it flags only indexable pages, as `orphan-page` does.

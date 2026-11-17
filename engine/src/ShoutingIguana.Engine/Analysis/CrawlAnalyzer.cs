@@ -170,7 +170,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE);
                 Skip(notes, skipped, note: null,
                     SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl.",
-                    IssueCatalog.BROKEN_RESOURCES);
+                    IssueCatalog.BROKEN_RESOURCES, IssueCatalog.CONTENT_TYPE_MISMATCH, IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT);
             }
 
 
@@ -266,7 +266,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
                 new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
                 new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl),
-                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl)
+                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType)
             ];
 
             // Pages parsed before each collection of facts that a check needs (CollectedFacts), counted as they're read.

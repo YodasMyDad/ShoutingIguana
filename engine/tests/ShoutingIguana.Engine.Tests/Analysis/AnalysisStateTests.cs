@@ -57,6 +57,8 @@ public sealed class AnalysisStateTests : IAsyncLifetime
             [IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id] = (SkippedCheckReasons.DEPTH_LIMIT,
                 string.Create(CultureInfo.InvariantCulture, $"The depth limit kept {keptOut:N0} internal URLs out of the crawl, and pages linked only from them would look orphaned.")),
             [IssueCatalog.BROKEN_RESOURCES.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
+            [IssueCatalog.CONTENT_TYPE_MISMATCH.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
+            [IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
             [IssueCatalog.SLOW_EXTERNAL_LINKS.Id] = (SkippedCheckReasons.EXTERNAL_LINKS_OFF, "Links to other sites weren't checked in this crawl."),
             [IssueCatalog.IMAGE_BROKEN.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
             [IssueCatalog.IMAGE_TOO_LARGE.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.")

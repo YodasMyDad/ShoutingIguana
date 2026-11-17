@@ -85,6 +85,20 @@ public static class IssuePlainTexts
             IssueFixer.Developer,
             """No page or file refused the check"""),
 
+        ["content-type-mismatch"] = new(
+            """Files your server labels as the wrong kind""",
+            [
+                """Your pages use these files as code, a style sheet or a picture, but your server says they're something else.""",
+                """Browsers often refuse to use code or a style sheet labelled wrongly, so the page can break for visitors and for Google.""",
+                """A "picture" that turns out to be a web page is usually an error page in disguise."""
+            ],
+            [
+                """Send the list to your developer: it says how each file is used and what the server calls it.""",
+                """Ask them to set the server to label each kind of file correctly, or to fix the address that loads it."""
+            ],
+            IssueFixer.Developer,
+            """Every file is labelled as the right kind"""),
+
         ["soft-404"] = new(
             """Pages that read like an error page""",
             [
@@ -159,6 +173,19 @@ public static class IssuePlainTexts
             ],
             IssueFixer.Developer,
             """No forwarding is marked as temporary"""),
+
+        ["redirect-temporary-cached"] = new(
+            """Temporary forwarding that browsers remember for days""",
+            [
+                """These addresses forward visitors with a temporary move, but tell browsers they may remember it for more than a day.""",
+                """Visitors' browsers may keep sending them to the old place for days after you change it."""
+            ],
+            [
+                """If the move is for good, ask your developer to make it permanent (a "301 redirect").""",
+                """If it's temporary, ask for it to be sent with an instruction not to remember it ("Cache-Control: no-store")."""
+            ],
+            IssueFixer.Developer,
+            """No temporary forwarding is remembered for days"""),
 
         ["redirect-downgrade"] = new(
             """Secure addresses that forward to an insecure one""",
@@ -1778,6 +1805,20 @@ public static class IssuePlainTexts
             IssueFixer.Developer,
             """No page is too big for Google to read in full"""),
 
+        ["resource-past-crawl-limit"] = new(
+            """Code files too big for Google to read in full""",
+            [
+                """These code or style files are bigger than the part of each file Google reads.""",
+                """Google ignores the rest, so it may see your pages without some of their look or how they work.""",
+                """Files that big also make pages slow on phones."""
+            ],
+            [
+                """Send the list to your developer, with the size of each file.""",
+                """Ask them to split each file, or to remove what your pages don't use."""
+            ],
+            IssueFixer.Developer,
+            """No code file is too big for Google to read in full"""),
+
         ["viewport-missing"] = new(
             """Pages not set up for phones""",
             [
@@ -1837,7 +1878,86 @@ public static class IssuePlainTexts
             """Every page has its sharing preview details""")
         {
             OneFix = """That's almost certainly your page design, which leaves the same details out of every page."""
-        }
+        },
+
+        ["head-tags-in-body"] = new(
+            """Page settings that ended up where they're ignored""",
+            [
+                """Some settings these pages give search engines and social sites, such as the title, are where they may be ignored.""",
+                """Usually something placed too early on the page, such as a banner or a tracking code, pushed them out of place.""",
+                """The list says which settings moved, and what moved them."""
+            ],
+            [
+                """Send the list to your developer: it names what moved the settings on each page.""",
+                """Ask them to move that item further down the page, or remove it."""
+            ],
+            IssueFixer.Developer,
+            """Every page setting is where search engines read it""")
+        {
+            OneFix = """That's almost certainly one item in your page design or a plugin, which every page shares."""
+        },
+
+        ["html-structure-errors"] = new(
+            """Pages whose basic HTML structure is broken""",
+            [
+                """The code of these pages has some of its basic parts twice, or out of order.""",
+                """Browsers fix this the same way every time, so visitors rarely notice, but some settings on the second part are lost."""
+            ],
+            [
+                """Send the list to your developer: it says what's wrong on each page.""",
+                """Ask them to fix the page design so each page has its parts once, in order."""
+            ],
+            IssueFixer.Developer,
+            """No page has its basic structure broken"""),
+
+        ["viewport-invalid"] = new(
+            """Pages people can't zoom, or that don't fit phones""",
+            [
+                """These pages stop visitors zooming in on phones, or don't tell phones how wide to show them.""",
+                """People who need larger text can't read them, and a page with no width shows tiny on a phone."""
+            ],
+            [
+                """Ask your developer to set the phone-screen setting to the standard "width=device-width, initial-scale=1", with nothing that limits zoom."""
+            ],
+            IssueFixer.Developer,
+            """Every page lets people zoom and fits phones"""),
+
+        ["charset-invalid"] = new(
+            """Pages that name the wrong text encoding""",
+            [
+                """These pages say they use a text encoding other than the standard one (UTF-8), or say two different things about it.""",
+                """Browsers then have to guess, and a wrong guess turns accents, currency signs and quotes into garbled characters."""
+            ],
+            [
+                """Ask your developer to save and serve every page as UTF-8, and to declare it once, at the top of the page."""
+            ],
+            IssueFixer.Developer,
+            """Every page names its text encoding correctly"""),
+
+        ["lang-invalid"] = new(
+            """Pages that name their language wrongly""",
+            [
+                """These pages give their language as something that isn't a language code, such as "english" or "en_GB".""",
+                """Screen readers then can't tell which voice to use, so the page may be read out in the wrong accent."""
+            ],
+            [
+                """Change the page's language setting to a code such as "en" or "en-GB": a hyphen, not an underscore, with the language first."""
+            ],
+            IssueFixer.Developer,
+            """Every page names its language correctly"""),
+
+        ["mobile-alternate"] = new(
+            """Pages with a separate mobile version""",
+            [
+                """These pages point to a separate version of themselves for phones, at another address.""",
+                """Google still supports that, but a single page that fits every screen is simpler to keep right."""
+            ],
+            [
+                """Check that each mobile page names this page as its main version.""",
+                """If you're redesigning, consider one page that fits every screen instead."""
+            ],
+            IssueFixer.Developer,
+            """No page has a separate mobile version""")
     };
 
     /// <summary>Every check that has plain words, by its id.</summary>

@@ -61,12 +61,16 @@ public sealed class CollectedFactsTests : IAsyncLifetime
                 new SkippedCheck(IssueCatalog.PAGINATION_BROKEN.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.PAGINATION_TO_NON_INDEXABLE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.PAGINATION_SEQUENCE_ERROR.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
-                new SkippedCheck(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT)
+                new SkippedCheck(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.HEAD_TAGS_IN_BODY.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.HTML_STRUCTURE_ERRORS.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.MOBILE_ALTERNATE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT)
             ], analysis.Skipped);
-        Assert.Contains($"6 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
+        Assert.Contains($"9 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.UNCRAWLABLE_LINKS.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.PAGINATION_SEQUENCE_ERROR.Id));
+        Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.HEAD_TAGS_IN_BODY.Id));
         Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.CANONICAL_INVALID_ATTRIBUTE);
 
         // The rest of the canonical checks still ran.

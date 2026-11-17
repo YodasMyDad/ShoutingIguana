@@ -30,6 +30,8 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     private const int MAX_PAGINATION_LINKS = 20;
     private const int MAX_UNCRAWLABLE_EXAMPLES = 3;
     private const int MAX_UNCRAWLABLE_TEXT = 60;
+    private const int MAX_HEAD_TAGS_IN_BODY = 20;
+    private const int MAX_CHARSET_DECLARATIONS = 5;
 
     /// <summary>Raw text read for a heading or link label, before whitespace is collapsed and the result capped.</summary>
     private const int MAX_RAW_LABEL_CHARS = 16 * MAX_HEADING_CHARS;
@@ -76,6 +78,15 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     public List<ExtractedLink> Links { get; } = [];
     public List<IconFact> Icons { get; } = [];
     public List<UncrawlableLinkFact> UncrawlableExamples { get; } = [];
+
+    /// <summary>Head-only tags met in the body (<see cref="PageFacts.HeadTagsInBody"/>).</summary>
+    public List<string> HeadTagsInBody { get; } = [];
+
+    /// <summary>Every charset the page declares, in order (<see cref="PageFacts.CharsetDeclarations"/>).</summary>
+    public List<string> CharsetDeclarations { get; } = [];
+
+    /// <summary>The first separate mobile version the page names (<see cref="PageFacts.MobileAlternate"/>).</summary>
+    public string? MobileAlternate { get; private set; }
 
     /// <summary>Link-like elements with no address search engines follow, all of them; <see cref="UncrawlableExamples"/> holds the first few.</summary>
     public int UncrawlableCount { get; private set; }
@@ -181,9 +192,10 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
                 break;
             case "title":
                 Titles.Add(Clean(element.TextContent, MAX_TITLE_CHARS));
+                InBody(context, "title");
                 return;
             case "meta":
-                AddMeta(element);
+                AddMeta(element, context);
                 return;
             case "link":
                 AddLinkElement(element, context);
@@ -360,7 +372,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         return null;
     }
 
-    /// <summary>The first declaration counts, as in browsers.</summary>
+    /// <summary>The first declaration counts, as in browsers; every one is kept, for a page that declares two.</summary>
     private void DeclareCharset(string charset, IElement element)
     {
         if (DeclaredCharset is null)
@@ -368,9 +380,23 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             DeclaredCharset = charset;
             CharsetElement = element;
         }
+
+        if (CharsetDeclarations.Count < MAX_CHARSET_DECLARATIONS)
+        {
+            CharsetDeclarations.Add(charset);
+        }
     }
 
-    private void AddMeta(IElement element)
+    /// <summary>Notes a head-only tag the parser put in the body, which search engines may ignore there.</summary>
+    private void InBody(WalkContext context, string tag)
+    {
+        if (!context.InHead && HeadTagsInBody.Count < MAX_HEAD_TAGS_IN_BODY)
+        {
+            HeadTagsInBody.Add(tag);
+        }
+    }
+
+    private void AddMeta(IElement element, WalkContext context)
     {
         var content = element.GetAttribute("content");
         if (NullIfBlank(element.GetAttribute("charset")) is { } charset)
@@ -379,6 +405,11 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         var httpEquiv = element.GetAttribute("http-equiv")?.Trim().ToLowerInvariant();
+        if (httpEquiv is "refresh" or "content-type")
+        {
+            InBody(context, $"meta {httpEquiv}");
+        }
+
         if (httpEquiv == "refresh" && content is not null)
         {
             if (MetaRefresh is null)
@@ -407,6 +438,16 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         if ((name is null && property is null) || content is null)
         {
             return;
+        }
+
+        if (name is "description" or "robots" or "googlebot" or "viewport" || (name is not null && RobotsMetaParser.AppliesToMetaName(name, robotsToken)))
+        {
+            InBody(context, $"meta {name}");
+        }
+        else if (new[] { property, name }.FirstOrDefault(tag => tag is not null && (tag.StartsWith("og:", StringComparison.Ordinal) ||
+                                                                                   tag.StartsWith("twitter:", StringComparison.Ordinal))) is { } social)
+        {
+            InBody(context, social);
         }
 
         var cleaned = Clean(content, MAX_META_CHARS);
@@ -463,6 +504,16 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
                 Hreflangs.Add(new HreflangFact(code, href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false));
                 AddLink(href, LinkKind.Hreflang, flags, position, code);
             }
+            else if (token.Equals("alternate", StringComparison.OrdinalIgnoreCase))
+            {
+                // A media query names a separate version for some screens: a mobile site's.
+                if (element.HasAttribute("media"))
+                {
+                    MobileAlternate ??= NormalizeOrNull(href);
+                }
+
+                InBody(context, "link alternate");
+            }
             else if (token.Equals("next", StringComparison.OrdinalIgnoreCase) ||
                      token.Equals("prev", StringComparison.OrdinalIgnoreCase) ||
                      token.Equals("previous", StringComparison.OrdinalIgnoreCase))
@@ -492,6 +543,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             else if (token.Equals("amphtml", StringComparison.OrdinalIgnoreCase))
             {
                 AddLink(href, LinkKind.Hyperlink, LinkFlags.None, position, null);
+                InBody(context, "link amphtml");
             }
         }
     }

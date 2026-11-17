@@ -63,6 +63,19 @@ public static class IssueCatalog
         Evidence = ["type"]
     };
 
+    public static readonly IssueDefinition CONTENT_TYPE_MISMATCH = new("content-type-mismatch", IssueCategory.ResponseCodes, IssueSeverity.Warning,
+        "File served with the wrong content type",
+        """A page uses this internal URL as a script, a stylesheet or an image, but the server sends it with a Content-Type that isn't one (a script not sent as JavaScript, a stylesheet not as text/css, an image not as image/*), or with none or a malformed one. A URL used two ways is judged for each. The detail says how it's used and what it's sent as.""",
+        """Configure the server or CDN to send the right Content-Type for the file's type, such as text/javascript for .js and text/css for .css. If the URL answers with a page instead, such as an error or login page sent with 200, fix or replace the link to the file.""")
+    {
+        Why = """With X-Content-Type-Options: nosniff, as most sites send, browsers refuse to run a script or apply a stylesheet sent as the wrong type, so the page can break for visitors and for Google's rendering. An "image" that answers with a web page is usually an error page in disguise.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["type", "contentType"]
+    };
+
     public static readonly IssueDefinition SOFT_404 = new("soft-404", IssueCategory.ResponseCodes, IssueSeverity.Warning,
         "Soft 404",
         """This indexable page returns 200 OK, but its title or H1 reads like an error message (such as "Page not found" or "no longer available") and it has fewer than 300 words.""",
@@ -144,6 +157,19 @@ public static class IssueCatalog
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["redirectChain"],
         TargetFacts = ["statusCode", "final"]
+    };
+
+    public static readonly IssueDefinition REDIRECT_TEMPORARY_CACHED = new("redirect-temporary-cached", IssueCategory.Redirects, IssueSeverity.Notice,
+        "Temporary redirect cached for long",
+        """This internal URL redirects to another URL on the site with a temporary status code (302, 303 or 307), but its response lets browsers and proxies keep the redirect for more than a day: a Cache-Control max-age or s-maxage over 86,400 seconds, or an Expires more than a day after its Date, without no-store or no-cache. The detail gives how long.""",
+        """If the move is permanent, make it a 301 or 308. If it really is temporary, send the redirect with Cache-Control: no-store, or a max-age of an hour or so, so visitors' browsers ask again once it ends.""")
+    {
+        Why = """A temporary redirect is meant to be checked again each time, but a long cache lifetime lets each visitor's browser keep sending them to the old target for days or weeks after you change or remove it. Search engines treat it as temporary all the same, which is a separate signal to fix if the move is for good.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["redirectChain"]
     };
 
     public static readonly IssueDefinition META_REFRESH = new("meta-refresh", IssueCategory.Redirects, IssueSeverity.Warning,
@@ -1374,6 +1400,19 @@ public static class IssueCatalog
     };
 
 
+    public static readonly IssueDefinition RESOURCE_PAST_CRAWL_LIMIT = new("resource-past-crawl-limit", IssueCategory.Performance, IssueSeverity.Warning,
+        "Script or stylesheet over 2 MB",
+        """A page uses this script or stylesheet, here or on another site, and it's larger than 2 MB, as far as Googlebot reads a file. It's measured as the crawl received it, compressed if the server compressed it, so a compressed file over the limit is larger still once decompressed, and one just under it may be over. The limit is Google's, not an analysis setting.""",
+        """Split the file, or remove what pages don't use (unused code, inlined data, source maps), and compress it on the server; load what isn't needed at first later.""")
+    {
+        Why = """Google fetches each script and stylesheet a page uses separately, with the same 2 MB limit as the page, and ignores the rest of a larger one, so the page as Google renders it can be missing styles or behaviour, or break. A file that size also slows the page down for visitors on mobile.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        Evidence = ["sizeBytes", "contentType"]
+    };
+
     // HTML
     public static readonly IssueDefinition VIEWPORT_MISSING = new("viewport-missing", IssueCategory.Html, IssueSeverity.Warning,
         "Missing viewport",
@@ -1419,10 +1458,76 @@ public static class IssueCatalog
         Grouping = IssueGrouping.PageDetail
     };
 
+    public static readonly IssueDefinition HEAD_TAGS_IN_BODY = new("head-tags-in-body", IssueCategory.Html, IssueSeverity.Warning,
+        "Head tags in the body",
+        """Tags that belong in the <head> are in the <body> as browsers and Google parse the page: the <title>; a meta description, robots, viewport or the like; Open Graph or X tags; or a <link rel="alternate"> without hreflang. Usually an element that can't be in a head, such as a <div>, an <img> or stray text, ended the head early and pushed every tag after it into the body; the detail names what's out and what ended the head. Canonical and hreflang links have their own checks. A crawl made before the crawler noted these isn't checked.""",
+        """Move the element that ended the head early into the body, or remove it; tags written in the body by mistake belong in the <head>. A plugin or tag manager that injects an element high in the head is the usual cause.""")
+    {
+        Why = """Search engines and social sites may ignore page settings that aren't in the head: Google says so of canonicals, and treats the rest as it can. One stray element moves every tag after it, so a whole template's titles, descriptions and robots rules can be out at once.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/valid-page-metadata",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.HeadEndCause
+    };
+
+    public static readonly IssueDefinition HTML_STRUCTURE_ERRORS = new("html-structure-errors", IssueCategory.Html, IssueSeverity.Notice,
+        "HTML document structure errors",
+        """The page's HTML has a second <head> or <body> start tag, an <html> tag after content, or a <head> after the body has begun, which the HTML standard counts as errors. A missing <head> or <body> tag isn't one: both are optional. The detail says which. A crawl made before the crawler noted them isn't checked.""",
+        """Fix the template so the page has one <html>, one <head> and one <body>, in that order, with nothing before the <html>. Content printed before the page starts, such as a server warning, is a common cause.""")
+    {
+        Why = """Browsers recover from these the same way every time, merging or dropping the extra tags, so visitors rarely notice. But the attributes on the second tag are lost, and the same fault can move tags out of the head.""",
+        LearnMore = "https://html.spec.whatwg.org/multipage/parsing.html#parse-errors",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition VIEWPORT_INVALID = new("viewport-invalid", IssueCategory.Html, IssueSeverity.Warning,
+        "Viewport that disables zoom or sets no width",
+        """The page's viewport meta tag stops visitors zooming (user-scalable=no or 0, or a maximum-scale under 2), sets neither width nor initial-scale, or the page has two viewport tags that differ. The detail lists the faults.""",
+        """Use <meta name="viewport" content="width=device-width, initial-scale=1"> and nothing that limits zoom; keep one viewport tag.""")
+    {
+        Why = """Stopping zoom fails people who need larger text, which WCAG requires to work up to 200%, and some browsers ignore it anyway. A viewport with no width lays the page out at desktop width on phones, as a missing one does.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition CHARSET_INVALID = new("charset-invalid", IssueCategory.Html, IssueSeverity.Notice,
+        "Character encoding declared wrongly",
+        """The page's character encoding, as a byte-order mark, the Content-Type header or the meta tag declares it, isn't UTF-8; or the header and the meta tag name different encodings (the header wins); or the page has two meta declarations that differ; or its meta declaration comes after the first 1024 bytes while the header or a byte-order mark declares it too (without them, that's a missing encoding). The detail says which.""",
+        """Save and serve the page as UTF-8: send Content-Type: text/html; charset=utf-8, and put one <meta charset="utf-8"> first in the <head>.""")
+    {
+        Why = """The HTML standard requires UTF-8. A page in another encoding usually shows right, but a declaration that's wrong or contradicts another makes browsers guess, and a wrong guess garbles accented letters, currency symbols and quotes.""",
+        LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition LANG_INVALID = new("lang-invalid", IssueCategory.Html, IssueSeverity.Notice,
+        "Invalid lang attribute",
+        """The page's <html lang> isn't a well-formed language tag: a 2-letter ISO 639-1 language (or a 3-letter one), then optionally a 4-letter script and a 2-letter region or 3-digit area, all separated by hyphens, such as en, en-GB or zh-Hant-TW. en_GB, english and uk-en aren't. The detail gives the value.""",
+        """Set lang to the page's language code, such as en or en-GB, with a hyphen, not an underscore, and the language before the region.""")
+    {
+        Why = """Screen readers use lang to choose the voice and pronunciation, and browsers for hyphenation and spelling; a value they can't read is as good as none. Google detects a page's language from its content, so this is about accessibility, not search.""",
+        LearnMore = "https://www.w3.org/International/questions/qa-choosing-language-tags",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition MOBILE_ALTERNATE = new("mobile-alternate", IssueCategory.Html, IssueSeverity.Notice,
+        "Separate mobile URL",
+        """The page names a separate mobile version with <link rel="alternate" media="…"> (without hreflang). The detail gives its URL. A crawl made before the crawler noted these isn't checked.""",
+        """If the site has a separate mobile site, make sure each mobile page has a rel="canonical" back to its desktop page and the same content; consider moving to one responsive page per URL.""")
+    {
+        Why = """Google indexes the mobile version of pages, and still supports separate mobile URLs if the alternate and canonical links pair them up, but recommends responsive design: one URL is simpler to keep right, and a mobile site that has less content than the desktop one loses it in search.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None
+    };
+
     public static IReadOnlyList<IssueDefinition> All { get; } =
     [
-        INTERNAL_CLIENT_ERROR, INTERNAL_SERVER_ERROR, INTERNAL_UNREACHABLE, INTERNAL_BLOCKED, SOFT_404,
-        REDIRECT_CHAIN, REDIRECT_LOOP, REDIRECT_BROKEN, REDIRECT_TEMPORARY, REDIRECT_DOWNGRADE, META_REFRESH,
+        INTERNAL_CLIENT_ERROR, INTERNAL_SERVER_ERROR, INTERNAL_UNREACHABLE, INTERNAL_BLOCKED, CONTENT_TYPE_MISMATCH, SOFT_404,
+        REDIRECT_CHAIN, REDIRECT_LOOP, REDIRECT_BROKEN, REDIRECT_TEMPORARY, REDIRECT_TEMPORARY_CACHED, REDIRECT_DOWNGRADE, META_REFRESH,
         BROKEN_INTERNAL_LINKS, BROKEN_EXTERNAL_LINKS, LINKS_TO_REDIRECTS, INTERNAL_NOFOLLOW_LINKS, EMPTY_ANCHOR_TEXT,
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
         UNCRAWLABLE_LINKS, BROKEN_RESOURCES, LINKS_TO_LOCALHOST, FEW_INTERNAL_OUTLINKS, GENERIC_ANCHOR_TEXT, NON_INDEXABLE_INLINKS_ONLY,
@@ -1448,8 +1553,9 @@ public static class IssueCatalog
         STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED,
         NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING,
         URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG,
-        SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT,
-        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING
+        SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT, RESOURCE_PAST_CRAWL_LIMIT,
+        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING,
+        HEAD_TAGS_IN_BODY, HTML_STRUCTURE_ERRORS, VIEWPORT_INVALID, CHARSET_INVALID, LANG_INVALID, MOBILE_ALTERNATE
     ];
 
     private static readonly Dictionary<string, IssueDefinition> BY_ID = All.ToDictionary(issue => issue.Id, StringComparer.Ordinal);

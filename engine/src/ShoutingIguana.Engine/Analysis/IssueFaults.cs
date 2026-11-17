@@ -64,6 +64,29 @@ internal static partial class IssueFaults
         : detail.Contains(" URLs", StringComparison.Ordinal) ? "More than one rel=\"next\" or rel=\"prev\""
         : detail;
 
+    /// <summary>
+    /// What put a page's head tags in its body, which a head-tags-in-body detail ends with: "&lt;div id="promo"&gt; ended the
+    /// head early" (the line, which differs from page to page, left out), or "after &lt;body&gt;" for tags written in the body.
+    /// </summary>
+    public static string HeadEndCause(string detail)
+    {
+        var after = detail.LastIndexOf(" in the body, after <body>", StringComparison.Ordinal);
+        var colon = detail.LastIndexOf(" in the body: ", StringComparison.Ordinal);
+        if (after >= 0 && after > colon)
+        {
+            return "After <body>";
+        }
+
+        if (colon < 0)
+        {
+            return detail;
+        }
+
+        var cause = detail[(colon + " in the body: ".Length)..];
+        var line = cause.LastIndexOf(" on line ", StringComparison.Ordinal);
+        return line > 0 ? cause[..line] + " ended the head early" : cause;
+    }
+
     public static string HreflangCodes(string detail) =>
         string.Join(", ", detail.Split("; ").Select(part => (part.IndexOf(": ", StringComparison.Ordinal) is var colon and >= 0 ? part[..colon] : part).TrimEnd('…'))
             .Where(code => code.Length > 0));

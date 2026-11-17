@@ -51,7 +51,7 @@ public sealed class AnalysisProgressTests : IAsyncLifetime
         Assert.Equal(urls, Last(seen, AnalysisPhase.Reading).Total);
         Assert.Equal(summary.PagesAnalyzed, Last(seen, AnalysisPhase.PageRules).Total);
         Assert.Equal(summary.PagesAnalyzed, seen.First(report => report.Phase == AnalysisPhase.PageRules).Total);
-        Assert.Equal(12, Last(seen, AnalysisPhase.SiteRules).Total);
+        Assert.Equal(13, Last(seen, AnalysisPhase.SiteRules).Total);
         Assert.Equal(TestCrawls.Count(path, "SELECT COUNT(*) FROM url_summary"), Last(seen, AnalysisPhase.UrlSummary).Total);
         Assert.Equal(urls, Last(seen, AnalysisPhase.UrlSummary).Total);
         Assert.Equal(new AnalysisProgress(AnalysisPhase.Writing, 1, 1), seen[^1]);

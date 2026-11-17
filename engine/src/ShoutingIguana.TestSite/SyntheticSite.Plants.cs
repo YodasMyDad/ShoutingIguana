@@ -32,6 +32,10 @@ public sealed partial class SyntheticSite
 
     private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024, LARGE_IMAGE_WIDTH, LARGE_IMAGE_HEIGHT);
 
+    /// <summary>A script past the 2 MB Googlebot reads of a file: comment lines, then one statement.</summary>
+    private static readonly byte[] HUGE_SCRIPT_BYTES = Encoding.UTF8.GetBytes(
+        string.Concat(Enumerable.Repeat("// A planted script well past the size Googlebot reads of a file.\n", 34_000)) + "document.title = document.title;\n");
+
     /// <summary>The size in pixels the planted large image says it is.</summary>
     public const int LARGE_IMAGE_WIDTH = 4_000;
 
@@ -546,8 +550,40 @@ public sealed partial class SyntheticSite
         Page("html-past-crawl-limit", "Huge HTML", ["large-page", "html-past-crawl-limit"],
             page => page with { Content = page.Content + $"<!-- {new string('x', 2_200_000)} -->" });
         Page("no-viewport", "Missing viewport", ["viewport-missing"], page => page with { Viewport = false });
+        Page("viewport-no-zoom", "Viewport that stops zoom", ["viewport-invalid"], page => page with
+        {
+            ViewportContent = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+        });
         Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
+        Page("lang-invalid", "Lang that isn't a language code", ["lang-invalid"], page => page with { LangValue = "english" });
+
+        // An element that can't be in a head ends it early, and the head's tags after it are in the body.
+        Page("head-ended-early", "Head ended early", ["head-tags-in-body"], page => page with
+        {
+            ExtraHead = "<div id=\"promo\"></div><meta property=\"og:locale\" content=\"en_GB\">"
+        });
+
+        // A second head after the first, and a second body tag: errors the parser recovers from.
+        Page("structure-errors", "HTML structure errors", ["html-structure-errors"], page => page with
+        {
+            ExtraHead = "</head><head>", Content = "<body class=\"second\">" + page.Content
+        });
+        Page("mobile-alternate", "Separate mobile version", ["mobile-alternate"], page => page with
+        {
+            ExtraHead = $"<link rel=\"alternate\" media=\"only screen and (max-width: 640px)\" href=\"{_external}/m{page.Path}\">"
+        });
+
+        // A script sent as text, and a script past the 2 MB Googlebot reads.
+        Page("script-as-text", "Script sent as text", [], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}not-a-script.js\"></script>" });
+        plants.Add(new Plant(PLANTS_PATH + "not-a-script.js", 200, Linked: false, InSitemap: false, ["content-type-mismatch"],
+            () => new SyntheticResponse(200, "text/plain", "document.title = document.title;", null, null), IsPage: false));
+        Page("huge-script", "Script past the crawl limit", [], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}huge.js\"></script>" });
+        plants.Add(new Plant(PLANTS_PATH + "huge.js", 200, Linked: false, InSitemap: false, ["resource-past-crawl-limit"],
+            () => new SyntheticResponse(200, "text/javascript", null, HUGE_SCRIPT_BYTES, null), IsPage: false));
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
+
+        // The header and the page name different encodings: the header wins.
+        Page("charset-latin1", "Latin-1 header", ["charset-invalid"], contentType: "text/html; charset=iso-8859-1");
 
         // With no charset in the header, a meta tag declares the encoding only within the first 1024 bytes, where browsers
         // look for it: first in the head it does, after the head's inline styles it doesn't.
@@ -560,7 +596,7 @@ public sealed partial class SyntheticSite
         // A byte-order mark at the start of the file declares the encoding, with no meta tag and no charset in the
         // header: neither page is missing its character encoding.
         Page("charset-bom", "Byte-order mark", [], page => page with { Charset = false }, contentType: "text/html", markedAs: Encoding.UTF8);
-        Page("charset-bom-utf16", "UTF-16 byte-order mark", [], page => page with { Charset = false }, contentType: "text/html",
+        Page("charset-bom-utf16", "UTF-16 byte-order mark", ["charset-invalid"], page => page with { Charset = false }, contentType: "text/html",
             markedAs: Encoding.Unicode);
         Page("no-open-graph", "Missing Open Graph", ["open-graph-missing"], page => page with { OpenGraph = false });
 
@@ -612,6 +648,12 @@ public sealed partial class SyntheticSite
         });
         Other("account-login", 302, linked: false, IsHttps ? ["redirect-downgrade"] : [], () => Redirect(302, $"{_external}/ext/account/login"));
         Other("sale", 302, linked: false, ["redirect-temporary"], () => Redirect(302, PLANTS_PATH + "thin"));
+
+        // A temporary redirect browsers may keep for 30 days.
+        Other("cached-302", 302, linked: true, ["redirect-temporary", "redirect-temporary-cached"], () => Redirect(302, PLANTS_PATH + "thin") with
+        {
+            Headers = new Dictionary<string, string> { ["Cache-Control"] = "max-age=2592000" }
+        });
         Other("gone", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone"));
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
         plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));

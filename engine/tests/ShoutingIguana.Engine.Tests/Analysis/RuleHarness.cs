@@ -68,7 +68,8 @@ internal sealed class RuleHarness(string site = "https://example.com")
             SizeBytes = size,
             InSitemap = inSitemap,
             Source = source,
-            ResponseMs = responseMs
+            ResponseMs = responseMs,
+            ContentClass = outcome == FetchOutcome.Success ? ResourceTypes.ClassOf(ContentTypeHeader.MediaTypeOf(contentType)) : ContentClass.None
         };
         return id;
     }

@@ -785,7 +785,7 @@ public sealed partial class SyntheticSite
     private string Render(PageSpec page)
     {
         var html = new StringBuilder(32 * 1024);
-        html.Append("<!DOCTYPE html><html").Append(page.Lang ? " lang=\"en\"" : string.Empty).Append("><head>");
+        html.Append("<!DOCTYPE html><html").Append(page.Lang ? $" lang=\"{page.LangValue}\"" : string.Empty).Append("><head>");
         if (page.Charset)
         {
             html.Append("<meta charset=\"utf-8\">");
@@ -806,7 +806,7 @@ public sealed partial class SyntheticSite
 
         if (page.Viewport)
         {
-            html.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            html.Append("<meta name=\"viewport\" content=\"").Append(page.ViewportContent).Append("\">");
         }
 
         if (page.Canonical is not null)

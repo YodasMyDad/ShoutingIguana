@@ -160,6 +160,7 @@ internal sealed class AnalysisReader : IDisposable
                 Source: (DiscoverySource)reader.GetInt32(4),
                 IsRateLimited: reader.GetBoolean(15),
                 ResponseMs: fetched ? reader.GetInt32(16) : 0,
+                ContentClass: outcome == FetchOutcome.Success && fetched ? ResourceTypes.ClassOf(contentType) : ContentClass.None,
                 IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri));
             read++;
             progress?.Advance(read);
@@ -292,6 +293,15 @@ internal sealed class AnalysisReader : IDisposable
               AND NOT EXISTS (SELECT 1 FROM urls u WHERE u.url >= r.origin || '/' AND u.url < r.origin || '0' AND u.source <> {(int)DiscoverySource.SiteVersion})
             """, reader => origins.Add(reader.GetString(0)));
         return origins;
+    }
+
+    /// <summary>The Content-Type (its media type) a stored URL answered with, or null. One query a URL: the file checks ask only of the URLs at fault.</summary>
+    public string? ReadContentType(int urlId)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT content_type FROM responses WHERE url_id = $id";
+        command.Parameters.AddWithValue("$id", urlId);
+        return command.ExecuteScalar() as string;
     }
 
     /// <summary>The stored facts of one URL, or null when it has none (not HTML, not internal, or not fetched).</summary>

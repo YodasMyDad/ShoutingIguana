@@ -18,6 +18,9 @@ internal static class CollectedFacts
         [IssueCatalog.PAGINATION_NOT_LINKED] = 1,
         [IssueCatalog.PAGINATION_BROKEN] = 1,
         [IssueCatalog.PAGINATION_TO_NON_INDEXABLE] = 1,
-        [IssueCatalog.PAGINATION_SEQUENCE_ERROR] = 1
+        [IssueCatalog.PAGINATION_SEQUENCE_ERROR] = 1,
+        [IssueCatalog.HEAD_TAGS_IN_BODY] = 1,
+        [IssueCatalog.HTML_STRUCTURE_ERRORS] = 1,
+        [IssueCatalog.MOBILE_ALTERNATE] = 1
     };
 }

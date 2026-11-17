@@ -33,7 +33,13 @@ internal sealed record PageSpec
 
     public bool Viewport { get; init; } = true;
 
+    /// <summary>The viewport meta tag's content, when <see cref="Viewport"/> is on.</summary>
+    public string ViewportContent { get; init; } = "width=device-width, initial-scale=1";
+
     public bool Lang { get; init; } = true;
+
+    /// <summary>The html element's lang, when <see cref="Lang"/> is on.</summary>
+    public string LangValue { get; init; } = "en";
 
     public bool Charset { get; init; } = true;
 
