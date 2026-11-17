@@ -19,7 +19,7 @@ internal sealed class CanonicalRules(UrlTable urls, Func<int, string?> readUrl) 
         {
             if (canonicals.Count > 0)
             {
-                yield return new IssueHit(IssueCatalog.CANONICAL_OUTSIDE_HEAD, page.UrlId);
+                yield return new IssueHit(IssueCatalog.CANONICAL_OUTSIDE_HEAD, page.UrlId, RuleText.HeadEnded(page.Facts.HeadEnd));
             }
             else if (page.IsIndexable)
             {
@@ -34,10 +34,12 @@ internal sealed class CanonicalRules(UrlTable urls, Func<int, string?> readUrl) 
             yield return new IssueHit(IssueCatalog.CANONICAL_INVALID, page.UrlId, invalid.Href);
         }
 
-        var distinct = honoured.Where(canonical => canonical.Url is not null).Select(canonical => canonical.Url).Distinct(StringComparer.Ordinal).Count();
-        if (distinct > 1)
+        var distinct = honoured.Where(canonical => canonical.Url is not null).DistinctBy(canonical => canonical.Url, StringComparer.Ordinal).ToList();
+        if (distinct.Count > 1)
         {
-            yield return new IssueHit(IssueCatalog.CANONICAL_MULTIPLE, page.UrlId, RuleText.Count(distinct, "URL", "different URLs"));
+            // Each URL with where it's declared, so the wrong one can be turned off: a tag the template writes, or a header the server sends.
+            yield return new IssueHit(IssueCatalog.CANONICAL_MULTIPLE, page.UrlId, RuleText.Fit(
+                $"{RuleText.Count(distinct.Count, "URL", "URLs")}: {string.Join(" · ", distinct.Select(canonical => $"{canonical.Url} ({(canonical.FromHttpHeader ? "HTTP header" : "head")})"))}"));
         }
 
         if (honoured.FirstOrDefault(canonical => canonical is { FromHttpHeader: false, Url: not null } && !IsAbsolute(canonical.Href)) is { } relative)

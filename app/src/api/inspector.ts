@@ -366,7 +366,12 @@ export interface FoundOnPage {
   urls: UrlFoundOn[];
 }
 
-/** A URL a flagged page's issue names (a broken target, the canonical), with its status and the page's link to it. */
+/**
+ * A URL a flagged page's issue names (a broken target, the canonical), with its status and the page's link to it. The
+ * fields after `position` are the evidence: what the URL is and how the page links to it, so "the image is 1.8 MB,
+ * shown at 400×300" or "it redirects: link to /new/ instead" can be said beside the page. An earlier sidecar leaves
+ * them out; a crawl that didn't record one has it null.
+ */
 export interface IssueTarget {
   id: number;
   url: string;
@@ -377,6 +382,47 @@ export interface IssueTarget {
   kind: LinkKind | null;
   text: string | null;
   position: LinkPosition | null;
+  /** The response it ends at, through its redirects: its content type, bytes and an image's pixels. */
+  contentType?: string | null;
+  sizeBytes?: number | null;
+  pixelWidth?: number | null;
+  pixelHeight?: number | null;
+  /** Where its redirects end; null when it doesn't redirect. */
+  final?: TargetEnd | null;
+  /** As the URL grid's column: `none` for indexable, null when not judged. */
+  indexability?: IndexabilityReason | null;
+  /** The URL it's canonicalised to (a canonical chain's next hop); null when its canonical names no other. */
+  canonical?: UrlTarget | null;
+  /** The link's `#fragment`, as written after the `#`. */
+  fragment?: string | null;
+  /** The link's flags (`noFollow`, `imageLink`, `fromHttpHeader`...). */
+  flags?: LinkFlag[];
+  /** How many links of any kind the page has to it. */
+  links?: number | null;
+  /** The `<img>` as the page writes it, for a target it shows as an image. */
+  img?: ImgFacts | null;
+}
+
+/** Where a target's redirects end: `hops` followed, `loop` when they come back on themselves. */
+export interface TargetEnd extends UrlTarget {
+  hops: number;
+  loop: boolean;
+}
+
+/** An `<img>` as the page writes it: its attributes, not the file's own size. */
+export interface ImgFacts {
+  /** The attributes as written ("400", "100%"); null when missing. */
+  width: string | null;
+  height: string | null;
+  /** Its alt text; null when it has no alt attribute. */
+  alt: string | null;
+  /** The alt attribute is there at all (`alt=""` is, and is fine). */
+  hasAlt: boolean;
+  /** The alt text's length, as `image-alt-too-long` measures it. */
+  altLength: number | null;
+  srcset: boolean;
+  /** Its `loading` attribute ("lazy"), or null. */
+  loading: string | null;
 }
 
 export interface IssueTargetsOfUrl {

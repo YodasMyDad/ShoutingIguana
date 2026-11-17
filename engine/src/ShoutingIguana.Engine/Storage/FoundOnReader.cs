@@ -1,7 +1,9 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -173,14 +175,24 @@ public static class FoundOnReader
         {
             var (status, _, fetched, outcome, join) = UrlInspectorReader.OtherEnd(context);
             var preferred = (int)PreferredKind(checkId);
+
+            // A broken fragment is in a link that has one. A link without text is one with none outside the head, as the
+            // check counts them, and the page's link to itself is one written without a fragment: its skip and #top links
+            // are jumps within it, which the check passes. Any other check's link is the first of its kind.
+            var flagged = checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id
+                ? "CASE WHEN l.fragment IS NULL THEN 1 ELSE 0 END, "
+                : checkId == IssueCatalog.EMPTY_ANCHOR_TEXT.Id
+                    ? $"CASE WHEN COALESCE(TRIM(l.text), '') = '' AND l.position <> {(int)LinkPosition.Head} THEN 0 ELSE 1 END, CASE WHEN l.fragment IS NULL THEN 0 ELSE 1 END, "
+                    : string.Empty;
             using var command = context.Command($"""
                 SELECT o.id, o.url, {status}, {fetched}, {outcome},
                        (SELECT l.rowid FROM links l WHERE l.from_id = $id AND +l.to_id = o.id
-                        ORDER BY CASE WHEN l.kind = {preferred} THEN 0 ELSE 1 END, l.rowid LIMIT 1) AS link
+                        ORDER BY CASE WHEN l.kind = {preferred} THEN 0 ELSE 1 END, {flagged}l.rowid LIMIT 1) AS link,
+                       (SELECT COUNT(*) FROM links l WHERE l.from_id = $id AND +l.to_id = o.id) AS links
                 FROM ({named}) t
                 JOIN urls o ON o.id = t.target
                 {join}
-                ORDER BY o.id
+                ORDER BY {TargetOrder(context, checkId)}
                 LIMIT {listed.ToString(CultureInfo.InvariantCulture)}
                 """, parameters);
             List<(IssueTarget Target, long? Link)> found = [];
@@ -194,29 +206,86 @@ public static class FoundOnReader
                         UrlInspectorReader.Int32OrNull(reader, 2),
                         !reader.IsDBNull(3) && reader.GetBoolean(3),
                         UrlInspectorReader.Known<UrlOutcome>(reader, 4),
-                        null, null, null), reader.IsDBNull(5) ? null : reader.GetInt64(5)));
+                        null, null, null) { Links = (int)Math.Min(reader.GetInt64(6), int.MaxValue) }, reader.IsDBNull(5) ? null : reader.GetInt64(5)));
                 }
             }
 
-            targets.AddRange(found.Select(entry => entry.Link is { } link ? WithLink(context, entry.Target, link) : entry.Target));
+            var facts = UrlFactsReader.Read(context, [.. found.Select(entry => entry.Target.Id)]);
+            var images = new PageImages(context, urlId);
+            var imageCheck = IssueCatalog.Find(checkId)?.Category == IssueCategory.Images;
+            targets.AddRange(found.Select(entry =>
+            {
+                var target = (entry.Link is { } link ? WithLink(context, entry.Target, link) : entry.Target) with { Facts = facts.GetValueOrDefault(entry.Target.Id) };
+                return target.Kind == LinkKind.Image || imageCheck ? target with { Img = images.Of(target.Url) } : target;
+            }));
         }
 
         return new IssueTargetsOfUrl(urlId, total, targets);
     }
 
-    /// <summary>The target with what the page's link to it is: its kind, text and position.</summary>
+    /// <summary>
+    /// The order a page's targets are listed in: by id, the crawl's order of finding them; for <c>image-too-large</c>, the
+    /// largest file first (where its redirects end, with a URL summary to say so), so the worst is the one shown.
+    /// </summary>
+    private static string TargetOrder(GridReadContext context, string checkId)
+    {
+        if (checkId != IssueCatalog.IMAGE_TOO_LARGE.Id)
+        {
+            return "o.id";
+        }
+
+        var end = context.Mode == GridMode.Summary ? "COALESCE((SELECT f.final_url_id FROM url_summary f WHERE f.url_id = o.id), o.id)" : "o.id";
+        return $"(SELECT z.size_bytes FROM responses z WHERE z.url_id = {end}) DESC, o.id";
+    }
+
+    /// <summary>The target with what the page's link to it is: its kind, text, position, fragment and flags.</summary>
     private static IssueTarget WithLink(GridReadContext context, IssueTarget target, long link)
     {
-        using var command = context.Command("SELECT kind, text, position FROM links WHERE rowid = $link", [new("$link", link)]);
+        using var command = context.Command("SELECT kind, text, position, fragment, flags FROM links WHERE rowid = $link", [new("$link", link)]);
         using var reader = command.ExecuteReader();
         return reader.Read()
             ? target with
             {
                 Kind = UrlInspectorReader.Known<LinkKind>(reader, 0),
                 Text = reader.IsDBNull(1) ? null : reader.GetString(1),
-                Position = UrlInspectorReader.Known<LinkPosition>(reader, 2)
+                Position = UrlInspectorReader.Known<LinkPosition>(reader, 2),
+                Fragment = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Flags = (LinkFlags)reader.GetInt64(4)
             }
             : target;
+    }
+
+    /// <summary>A page's images as it writes them, read from its stored details once, however many of its targets ask.</summary>
+    private sealed class PageImages(GridReadContext context, int pageId)
+    {
+        private IReadOnlyList<ImageFact>? _images;
+
+        public ImageOnPage? Of(string url)
+        {
+            _images ??= Read();
+            return _images.FirstOrDefault(image => image.Url == url) is { } image
+                ? new ImageOnPage(image.Width, image.Height, image.Alt, image.HasAlt, image.Alt is { } alt ? RuleText.Length(alt) : null, image.HasSrcset, image.Loading)
+                : null;
+        }
+
+        private IReadOnlyList<ImageFact> Read()
+        {
+            using var command = context.Command("SELECT data FROM response_details WHERE url_id = $id", [new("$id", pageId)]);
+            if (command.ExecuteScalar() is not byte[] data)
+            {
+                return [];
+            }
+
+            try
+            {
+                return BlobCodec.DecodeDetails(data).Page?.Images ?? [];
+            }
+            catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException)
+            {
+                // A damaged blob names no image: the targets are still listed.
+                return [];
+            }
+        }
     }
 
     /// <summary>The kind of link a check is about, where a page can link to its target more than one way.</summary>

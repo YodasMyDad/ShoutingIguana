@@ -215,7 +215,7 @@ public sealed class WorkbookExportTests : IDisposable
         Assert.Empty(Directory.GetFiles(_folder));
     }
 
-    /// <summary>A sheet's rows are the check's rows, as its grid reads them in crawl order.</summary>
+    /// <summary>A sheet's rows are the check's rows, as its grid reads them when no order is asked for: by importance.</summary>
     private void AssertHoldsTheChecksRows(string checkId, List<object?[]> sheet, bool guarded = false)
     {
         List<IReadOnlyList<object?>> rows = [];
@@ -244,13 +244,35 @@ public sealed class WorkbookExportTests : IDisposable
         AssertSaysWhereToFix(checkId, [.. rows.Select(row => Convert.ToInt32(row[0], CultureInfo.InvariantCulture))], sheet);
     }
 
-    /// <summary>A check's file's header: its sheet's, then where to fix each URL where the check's URLs are referred to.</summary>
-    private static object?[] Titles(string checkId) => IssueCatalog.Find(checkId)!.References switch
+    /// <summary>
+    /// A check's file's header: its sheet's, its evidence (but the page's title, already there), then where to fix each URL
+    /// where the check's URLs are referred to, named by what a page's targets are.
+    /// </summary>
+    private static object?[] Titles(string checkId)
     {
-        IssueReferences.Sources => [.. SHEET_TITLES, "Linked from (pages)", "Linked from", "Listed in sitemaps"],
-        IssueReferences.Targets => [.. SHEET_TITLES, "Links to (addresses)", "Links to"],
-        _ => [.. SHEET_TITLES]
-    };
+        var check = IssueCatalog.Find(checkId)!;
+        object?[] where = check.References switch
+        {
+            IssueReferences.Sources => ["Linked from (pages)", "Linked from", "Listed in sitemaps"],
+            IssueReferences.Targets when check.Category == IssueCategory.Canonicals => ["Canonical"],
+            IssueReferences.Targets when check == IssueCatalog.IMAGE_TOO_LARGE => ["Images (addresses)", "Images", "Largest image (bytes)"],
+            IssueReferences.Targets => check.Category switch
+            {
+                IssueCategory.Images => ["Images (addresses)", "Images"],
+                IssueCategory.Hreflang => ["Alternates (addresses)", "Alternates"],
+                IssueCategory.Security => ["HTTP resources (addresses)", "HTTP resources"],
+                _ => ["Links to (addresses)", "Links to"]
+            },
+            _ => []
+        };
+        return [.. SHEET_TITLES, .. EvidenceTitles(check), .. where];
+    }
+
+    /// <summary>The titles of a check's evidence columns on its sheet, its unit in brackets: "Title length", "Response time (ms)".</summary>
+    private static string[] EvidenceTitles(IssueDefinition check) =>
+    [
+        .. check.Evidence.Where(column => column != "title").Select(column => GridExport.Title(UrlGridReader.IssueRowColumns.Single(info => info.Id == column)))
+    ];
 
     /// <summary>
     /// Each row's added cells say where to fix it, as the found-on reader reads it: how many pages link to the URL and the
@@ -258,17 +280,19 @@ public sealed class WorkbookExportTests : IDisposable
     /// </summary>
     private void AssertSaysWhereToFix(string checkId, IReadOnlyList<int> ids, List<object?[]> sheet)
     {
-        var references = IssueCatalog.Find(checkId)!.References;
+        var check = IssueCatalog.Find(checkId)!;
+        var references = check.References;
+        var first = SHEET_TITLES.Length + EvidenceTitles(check).Length;
         if (references == IssueReferences.None)
         {
-            Assert.All(sheet, row => Assert.Equal(SHEET_TITLES.Length, row.Length));
+            Assert.All(sheet, row => Assert.True(row.Length <= first, $"{checkId}: {row.Length} cells"));
             return;
         }
 
         foreach (var (id, index) in ids.Select((id, index) => (id, index)).Take(FoundOnReader.MAX_URLS))
         {
             var row = sheet[index + 1];
-            string? Cell(int column) => row.Length > SHEET_TITLES.Length + column && row[SHEET_TITLES.Length + column] is { } value ? Convert.ToString(value, CultureInfo.InvariantCulture) : null;
+            string? Cell(int column) => row.Length > first + column && row[first + column] is { } value ? Convert.ToString(value, CultureInfo.InvariantCulture) : null;
             if (references == IssueReferences.Sources)
             {
                 var found = FoundOnReader.ReadFoundOn(_crawl.Path, [id], WhereFoundColumns.LISTED).Single();
@@ -282,11 +306,17 @@ public sealed class WorkbookExportTests : IDisposable
             }
             else
             {
+                // A canonical check's one cell is the canonical; any other's, how many, then the first of them with what each is.
                 var named = FoundOnReader.ReadTargets(_crawl.Path, checkId, [id], WhereFoundColumns.LISTED)!.Single();
-                Assert.Equal(named.Total.ToString(CultureInfo.InvariantCulture), Cell(0));
+                var listed = check.Category == IssueCategory.Canonicals ? Cell(0) : Cell(1);
+                if (check.Category != IssueCategory.Canonicals)
+                {
+                    Assert.Equal(named.Total.ToString(CultureInfo.InvariantCulture), Cell(0));
+                }
+
                 if (named.Targets.Count > 0)
                 {
-                    Assert.StartsWith(named.Targets[0].Url, Cell(1)!, StringComparison.Ordinal);
+                    Assert.StartsWith(WhereFoundColumns.Target(check, named.Targets[0]), listed!, StringComparison.Ordinal);
                 }
             }
         }

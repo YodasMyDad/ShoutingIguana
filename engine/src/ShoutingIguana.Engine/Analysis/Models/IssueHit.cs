@@ -17,6 +17,10 @@ internal readonly record struct IssueHit(IssueDefinition Issue, int UrlId, strin
     /// nofollow, large...) targets, the first of which is the related URL, and <see cref="NO_OTHER_URL"/> when the page
     /// itself is one too; or, for a duplicate, the first page of its cluster, which that page names itself, so a cluster
     /// is one group. Null for the related URL alone.
+    /// A link without text to the page itself (<c>empty-anchor-text</c>: a home page's logo) names the page by its id,
+    /// as a duplicate's first page does: it groups with the other pages whose logo links there, and its targets read the
+    /// link's place and flags. Only a missing section of the page itself (<c>broken-fragment-links</c>) is
+    /// <see cref="NO_OTHER_URL"/>, as there's no other page to go to.
     /// </summary>
     public IReadOnlyList<int>? Targets { get; init; }
 

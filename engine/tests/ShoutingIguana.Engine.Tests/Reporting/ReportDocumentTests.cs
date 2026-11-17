@@ -104,9 +104,9 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             var most = check.Severity == IssueSeverity.Notice ? ReportOptions.DEFAULT_LOOK_EXAMPLES : ReportOptions.DEFAULT_EXAMPLES;
             Assert.Equal((int)Math.Min(most, results.Counts[check.Id]), listed);
 
-            // They are the check's first rows, in the order its list has them (crawl order), each linked to its own address.
+            // They are the check's first rows, in the order its list has them (by importance), each linked to its own address.
             Assert.Equal(
-                IssueReader.ReadIssues(crawl.Path, check.Id, most).Select(row => row.Url),
+                FirstRows(check.Id, most).Select(row => (string)row.Values[1]!),
                 problems[index].QuerySelectorAll(".examples tbody tr").Select(row => row.QuerySelector("td .mono a")!.GetAttribute("href")));
             if (results.Counts[check.Id] > most)
             {
@@ -729,7 +729,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         Assert.Equal(["Address", "What was found", "Where to fix it"], broken.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
         var rows = broken.QuerySelectorAll(".examples tbody tr").ToList();
         Assert.NotEmpty(rows);
-        var ids = IssueReader.ReadIssues(crawl.Path, "internal-client-error", rows.Count).Select(row => row.UrlId).ToList();
+        var ids = FirstRows("internal-client-error", rows.Count).Select(row => row.Id).ToList();
         var found = FoundOnReader.ReadFoundOn(crawl.Path, ids, ReportReader.LISTED_SOURCES);
         Assert.Equal(ids, found.Select(url => url.UrlId));
         foreach (var (row, url) in rows.Zip(found))
@@ -743,19 +743,30 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
                 Assert.Contains(url.Sources[0].Url[origin.Length..], text, StringComparison.Ordinal);
                 var shown = url.Sources.Select(source => source.Url).Distinct().Count();
                 Assert.Equal(url.Pages > shown, text.Contains($" and {url.Pages - shown} more", StringComparison.Ordinal));
+
+                // Each page with where on it the link is and its text, so the link can be found on a long page.
+                if (WhereFoundColumns.Place(url.Sources[0]) is { } place)
+                {
+                    Assert.Contains($"({place})", text, StringComparison.Ordinal);
+                }
             }
 
             Assert.Equal(url.Sitemaps.Total > 0, text.Contains("Listed in", StringComparison.Ordinal));
             Assert.False(string.IsNullOrWhiteSpace(text));
         }
 
-        // A check of pages holding the bad links has no such column: the page is where to fix it. One naming several says so.
-        var pages = Problem("broken-internal-links");
-        Assert.Equal(["Page", "What was found"], pages.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
-        var named = FoundOnReader.ReadTargets(crawl.Path, "broken-internal-links", [.. IssueReader.ReadIssues(crawl.Path, "broken-internal-links", 10).Select(row => row.UrlId)], 0)!;
+        // A check of pages holding the bad links says what each page names (evidence): the first few, each with what it is and
+        // how the page links to it, then how many more.
+        var check = IssueCatalog.BROKEN_INTERNAL_LINKS;
+        var pages = Problem(check.Id);
+        Assert.Equal(["Page", "What was found", "Where to fix it"], pages.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+        var named = FoundOnReader.ReadTargets(crawl.Path, check.Id, [.. FirstRows(check.Id, 10).Select(row => row.Id)], ReportReader.LISTED_SOURCES)!;
         foreach (var (row, page) in pages.QuerySelectorAll(".examples tbody tr").Zip(named))
         {
-            Assert.Equal(page.Total > 1, row.TextContent.Contains($" and {page.Total - 1} other", StringComparison.Ordinal));
+            var where = row.QuerySelectorAll("td")[2].TextContent;
+            var more = page.Total - page.Targets.Count;
+            Assert.Equal(more > 0, where.Contains($" and {more} other", StringComparison.Ordinal));
+            Assert.Contains($"({WhereFoundColumns.TargetFacts(check, page.Targets[0])})", where, StringComparison.Ordinal);
         }
     }
 
@@ -880,6 +891,10 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     }
 
     private static AngleSharp.Html.Dom.IHtmlDocument Parse(string html) => new HtmlParser().ParseDocument(html);
+
+    /// <summary>A check's first rows as its list gives them with no order asked for: the most important first.</summary>
+    private IReadOnlyList<UrlRow> FirstRows(string checkId, int count) =>
+        IssueGroupReader.ReadRows(crawl.Path, checkId, new UrlQuery { Columns = ["url"], Limit = count })!.Page!.Rows;
 
     /// <summary>A copy of the crawl as one stopped or failed part-way leaves it, with addresses still to check, analysed as it then stands.</summary>
     private async Task<string> EndedEarlyAsync(CrawlStatus status)

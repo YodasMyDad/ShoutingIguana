@@ -98,9 +98,14 @@ test('a page holding broken links says which URL it links to', async ({ page }) 
   const groups = page.getByRole('treegrid', { name: /Links to broken internal URLs/ });
   await groups.focus();
   await page.keyboard.press('ArrowRight');
-  // The URL's own status: a 4xx, or a 3xx whose redirects end broken (the crawl's planted /plants/redirect-broken).
+  // The group names the broken URL with its own status: a 4xx, or a 3xx whose redirects end broken (the crawl's
+  // planted /plants/redirect-broken). Each page under it says where its link to it is and what it says (evidence), or,
+  // where the page's link isn't among those read, what it links to.
+  await expect(groups.getByRole('row', { expanded: true }).first()).toContainText(
+    /[345]\d\d|Blocked by robots\.txt|No response|Timed out/,
+  );
   await expect(groups.locator('.si-where-line').first()).toHaveText(
-    /^Links to .+ \(([345]\d\d|blocked by robots\.txt|no answer)\)( \+[\d,]+)?$/,
+    /^(in the (content|navigation|header|footer|sidebar|head)( · .+)?|“.+”( · .+)?|Links to .+ \(([345]\d\d|blocked by robots\.txt|no answer)\)( \+[\d,]+)?)$/,
   );
 });
 

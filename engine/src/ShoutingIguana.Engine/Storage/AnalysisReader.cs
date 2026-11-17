@@ -35,6 +35,8 @@ internal sealed class AnalysisReader : IDisposable
     private readonly SqliteParameter _detailsUrlId;
     private readonly SqliteCommand _url;
     private readonly SqliteParameter _urlId;
+    private readonly SqliteCommand _idOf;
+    private readonly SqliteParameter _idOfUrl;
 
     private AnalysisReader(SqliteConnection connection)
     {
@@ -48,6 +50,9 @@ internal sealed class AnalysisReader : IDisposable
         _url = connection.CreateCommand();
         _url.CommandText = "SELECT url FROM urls WHERE id = $id";
         _urlId = _url.Parameters.Add("$id", SqliteType.Integer);
+        _idOf = connection.CreateCommand();
+        _idOf.CommandText = "SELECT id FROM urls WHERE url = $url";
+        _idOfUrl = _idOf.Parameters.Add("$url", SqliteType.Text);
     }
 
     public static AnalysisReader Open(string databasePath) => new(CrawlDatabase.OpenReader(databasePath));
@@ -157,7 +162,7 @@ internal sealed class AnalysisReader : IDisposable
     public IEnumerable<AnalyzedPage> ReadPages(UrlTable urls)
     {
         // Lanes 1 to 3 of the content fingerprint have columns of their own, which a crawl made by an earlier engine lacks.
-        var lanes = HasFingerprintLanes() ? string.Join(", ", CrawlSchema.RESPONSE_COLUMNS.Select(column => $"r.{column.Name}")) : "NULL, NULL, NULL";
+        var lanes = HasFingerprintLanes() ? string.Join(", ", CrawlSchema.FINGERPRINT_LANES.Select(column => $"r.{column.Name}")) : "NULL, NULL, NULL";
         using var command = _connection.CreateCommand();
         command.CommandText = $"""
             SELECT u.id, u.url, u.depth, r.size_bytes, r.body_bytes, r.ttfb_ms, r.response_ms, r.indexability_reason, d.data, {lanes}
@@ -203,9 +208,9 @@ internal sealed class AnalysisReader : IDisposable
         using var command = _connection.CreateCommand();
         command.CommandText = $"""
             SELECT COUNT(*) FROM pragma_table_info('responses')
-            WHERE name IN ({string.Join(", ", CrawlSchema.RESPONSE_COLUMNS.Select(column => $"'{column.Name}'"))})
+            WHERE name IN ({string.Join(", ", CrawlSchema.FINGERPRINT_LANES.Select(column => $"'{column.Name}'"))})
             """;
-        return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == CrawlSchema.RESPONSE_COLUMNS.Length;
+        return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == CrawlSchema.FINGERPRINT_LANES.Length;
     }
 
     /// <summary>Lanes 1 to 3 of a page's content fingerprint, from three columns, or null when any is missing.</summary>
@@ -224,13 +229,14 @@ internal sealed class AnalysisReader : IDisposable
         return _url.ExecuteScalar() as string;
     }
 
-    /// <summary>The id of a stored URL, given normalised, or 0 when the crawl never found it.</summary>
+    /// <summary>
+    /// The id of a stored URL, given normalised, or 0 when the crawl never found it. One statement, compiled once: the image
+    /// checks look up every image they name.
+    /// </summary>
     public int ReadUrlId(string url)
     {
-        using var command = _connection.CreateCommand();
-        command.CommandText = "SELECT id FROM urls WHERE url = $url";
-        command.Parameters.AddWithValue("$url", url);
-        return command.ExecuteScalar() is long id ? (int)id : 0;
+        _idOfUrl.Value = url;
+        return _idOf.ExecuteScalar() is long id ? (int)id : 0;
     }
 
     /// <summary>
@@ -336,6 +342,7 @@ internal sealed class AnalysisReader : IDisposable
         _links.Dispose();
         _details.Dispose();
         _url.Dispose();
+        _idOf.Dispose();
         _connection.Dispose();
     }
 

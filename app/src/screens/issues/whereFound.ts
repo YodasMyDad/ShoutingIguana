@@ -4,6 +4,7 @@
 // so both are unit-tested; the reads are useWhereFound.ts's.
 import type { IssueTarget, IssueTargetsOfUrl, LinkRow, SitemapRef, UrlFoundOn } from '../../api/inspector';
 import type { Check, CheckReferences } from '../../api/types';
+import { FACT_GAP, targetFactParts } from '../../crawl/evidence';
 import { KIND_WORDS, POSITION_WORDS } from '../../inspector/words';
 import { formatCount } from '../../lib/format';
 import { urlDisplay } from '../../ui/urlText';
@@ -35,15 +36,18 @@ export function pagesWords(found: Pick<UrlFoundOn, 'pages' | 'pagesExact'>): str
 }
 
 /**
- * A URL's "Found on" summary, for one line of a grid: "Found on 3 pages · /garden-furniture/ +2", the sitemap that
- * lists one no page links to, the start URL, or that nothing read refers to it.
+ * A URL's "Found on" summary, for one line of a grid: "Found on 3 pages · /garden-furniture/ (Footer · “Old range”)
+ * +2", the first page with where on it the link is and what it says, so the place to fix it is in the row; the sitemap
+ * that lists one no page links to, the start URL, or that nothing read refers to it.
  */
 export function foundOnSummary(found: UrlFoundOn, siteOrigin: string | null): string {
   if (found.pages > 0) {
     const first = sourcePages(found)[0];
     const rest = found.pages - 1;
     const lead = `Found on ${pagesWords(found)}`;
-    return first ? `${lead} · ${shown(first.url, siteOrigin)}${rest > 0 ? ` +${formatCount(rest)}` : ''}` : lead;
+    if (!first) return lead;
+    const place = linkPlaceWords(first);
+    return `${lead} · ${shown(first.url, siteOrigin)}${place ? ` (${place})` : ''}${rest > 0 ? ` +${formatCount(rest)}` : ''}`;
   }
   const sitemap = found.sitemaps.sitemaps[0];
   if (sitemap) {
@@ -54,7 +58,17 @@ export function foundOnSummary(found: UrlFoundOn, siteOrigin: string | null): st
   return 'Not linked from any page crawled';
 }
 
-/** What a page's issue names, for one line: "Links to /old/ (404) +2". */
+/**
+ * A URL a page's issue names that is the page itself, as a home page's logo linking home is (`empty-anchor-text`): said
+ * as "this same page", since its address is the row's own.
+ */
+export const SAME_PAGE = 'this same page';
+
+/** Whether the URL a page's issue names is that page itself. */
+export const isPageItself = (named: Pick<IssueTargetsOfUrl, 'urlId'>, target: Pick<IssueTarget, 'id'>): boolean =>
+  target.id === named.urlId;
+
+/** What a page's issue names, for one line: "Links to /old/ (404) +2", "Links to this same page". */
 export function targetsSummary(
   named: IssueTargetsOfUrl,
   siteOrigin: string | null,
@@ -65,7 +79,36 @@ export function targetsSummary(
   const first = named.targets.find((target) => target.id === first_) ?? named.targets[0];
   if (!first) return named.total === 0 ? '' : `Names ${formatCount(named.total)} URLs`;
   const rest = named.total - 1;
-  return `${targetVerb(check, first)} ${shown(first.url, siteOrigin)}${statusSuffix(first)}${rest > 0 ? ` +${formatCount(rest)}` : ''}`;
+  const what = isPageItself(named, first) ? SAME_PAGE : `${shown(first.url, siteOrigin)}${statusSuffix(first)}`;
+  return `${targetVerb(check, first)} ${what}${rest > 0 ? ` +${formatCount(rest)}` : ''}`;
+}
+
+/** The facts of a target that are the page's link to it, not the URL itself: what a page's row under its group says. */
+const LINK_FACTS: ReadonlySet<string> = new Set(['kind', 'text', 'position', 'fragment', 'flags', 'links', 'img']);
+
+/**
+ * What one page under a group of a `targets` check says of the group's URL: how this page links to it, as the check's
+ * `targetFacts` say it ("Footer · “Old range” · 2 links", "shown at 400×300 · alt “Sofa” · lazy"), then how many other
+ * URLs its issue names. The group's row says what the URL itself is. Null where the page's link to it isn't among
+ * those read, or the check says nothing of it (a sidecar from before the evidence): the summary stands in.
+ */
+export function targetLineWords(
+  named: IssueTargetsOfUrl,
+  first: number | null,
+  check: Pick<Check, 'id' | 'targetFacts'>,
+  siteOrigin: string | null,
+): string | null {
+  const facts = (check.targetFacts ?? []).filter((fact) => LINK_FACTS.has(fact));
+  const target = first === null ? undefined : named.targets.find((candidate) => candidate.id === first);
+  if (!target || facts.length === 0) return null;
+  // Under the group of its own URL, the page's link is to itself: a logo linking the page it's on.
+  const parts = [
+    ...(isPageItself(named, target) ? [`A link to ${SAME_PAGE}`] : []),
+    ...targetFactParts(target, facts, siteOrigin, check.id),
+  ];
+  const rest = named.total - 1;
+  if (rest > 0) parts.push(`+${formatCount(rest)} other ${rest === 1 ? 'URL' : 'URLs'}`);
+  return parts.length > 0 ? parts.join(FACT_GAP) : null;
 }
 
 /** How a page refers to its target, as the check means it: links to it, uses it as its canonical, shows the image. */
@@ -101,7 +144,8 @@ export type WhereRow =
   | { kind: 'source'; link: LinkRow }
   | { kind: 'sitemap'; sitemap: SitemapRef }
   | { kind: 'start' }
-  | { kind: 'target'; target: IssueTarget }
+  /** `facts`: what the URL is and how the page links to it, as the check's `targetFacts` say it (evidence). */
+  | { kind: 'target'; target: IssueTarget; facts?: string }
   | { kind: 'all'; total: number; of: 'links' | 'targets' }
   | { kind: 'nothing'; words: string };
 
@@ -119,10 +163,28 @@ export function foundOnRows(found: UrlFoundOn): WhereRow[] {
   return rows.length > 0 ? rows : [{ kind: 'nothing', words: 'No page crawled links to it, and no sitemap lists it' }];
 }
 
-/** The rows under an expanded page of a `targets` check: each URL its issue names, then the rest, past the first. */
-export function targetRows(named: IssueTargetsOfUrl): WhereRow[] {
+/**
+ * The rows under an expanded page of a `targets` check: each URL its issue names, with what it is and how the page
+ * links to it where the check says (its `targetFacts`), then the rest, past the first.
+ */
+export function targetRows(
+  named: IssueTargetsOfUrl,
+  check?: Pick<Check, 'id' | 'targetFacts'>,
+  siteOrigin: string | null = null,
+): WhereRow[] {
+  const said = (target: IssueTarget): string | undefined => {
+    if (!check?.targetFacts?.length) return undefined;
+    const parts = [
+      ...(isPageItself(named, target) ? [SAME_PAGE] : []),
+      ...targetFactParts(target, check.targetFacts, siteOrigin, check.id),
+    ];
+    return parts.length > 0 ? parts.join(FACT_GAP) : undefined;
+  };
   const rows: WhereRow[] = [
-    ...named.targets.slice(0, SOURCES_SHOWN).map((target): WhereRow => ({ kind: 'target', target })),
+    ...named.targets.slice(0, SOURCES_SHOWN).map((target): WhereRow => {
+      const facts = said(target);
+      return facts === undefined ? { kind: 'target', target } : { kind: 'target', target, facts };
+    }),
     ...(named.total > Math.min(named.targets.length, SOURCES_SHOWN)
       ? [{ kind: 'all', total: named.total, of: 'targets' } as const]
       : []),
@@ -146,35 +208,12 @@ export function whereRowText(row: WhereRow): string {
     case 'start':
       return 'The URL the crawl started from';
     case 'target':
-      return `${row.target.url}${statusSuffix(row.target)}`;
+      return `${row.target.url}${statusSuffix(row.target)}${row.facts ? `${FACT_GAP}${row.facts}` : ''}`;
     case 'all':
       return allWords(row);
     case 'nothing':
       return row.words;
   }
-}
-
-/**
- * Where to fix a broken or redirected URL, in plain words, for Simple's problem page: "Linked from /garden/, /sofas/
- * and 3 more", "Listed in your sitemap", "It's the address you asked to check". Null when nothing crawled refers to it.
- */
-export function linkedFromWords(found: UrlFoundOn, siteOrigin: string | null, few = 3): string | null {
-  const pages = sourcePages(found).slice(0, few);
-  if (found.pages > 0 && pages.length > 0) {
-    const named = pages.map((page) => shown(page.url, siteOrigin));
-    const more = found.pages - pages.length;
-    const list =
-      more > 0
-        ? `${named.join(', ')} and ${formatCount(more)}${found.pagesExact ? '' : '+'} more`
-        : named.length > 1
-          ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
-          : named[0];
-    return `Linked from ${list}`;
-  }
-  if (found.sitemaps.total > 0)
-    return found.sitemaps.total === 1 ? 'Listed in your sitemap' : 'Listed in your sitemaps';
-  if (found.start) return 'It’s the address the check started from';
-  return null;
 }
 
 /**

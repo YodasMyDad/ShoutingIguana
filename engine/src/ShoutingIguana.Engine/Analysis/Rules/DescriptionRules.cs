@@ -22,17 +22,17 @@ internal sealed class DescriptionRules(AnalysisSettings settings) : IPageRule
         if (descriptions.Count > 1)
         {
             yield return new IssueHit(IssueCatalog.DESCRIPTION_MULTIPLE, page.UrlId,
-                RuleText.Count(descriptions.Count, "meta description", "meta descriptions"));
+                RuleText.Listed(descriptions.Count, "meta description", "meta descriptions", descriptions));
         }
 
         var measured = DisplayWidth.Measure(descriptions[0]);
         if (measured.Width > settings.DescriptionMaxLength)
         {
-            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_LONG, page.UrlId, RuleText.Width(measured));
+            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_LONG, page.UrlId, RuleText.Over(RuleText.Width(measured), settings.DescriptionMaxLength));
         }
         else if (measured.Width < settings.DescriptionMinLength)
         {
-            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_SHORT, page.UrlId, RuleText.Width(measured));
+            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_SHORT, page.UrlId, RuleText.Under(RuleText.Width(measured), settings.DescriptionMinLength));
         }
     }
 }

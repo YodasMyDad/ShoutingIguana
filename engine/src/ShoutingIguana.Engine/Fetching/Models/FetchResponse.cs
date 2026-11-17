@@ -20,6 +20,15 @@ internal sealed record FetchResponse
     /// <summary>Decoded body size (for an image that was only measured, its size as sent). Null when the body was not read.</summary>
     public long? BodyBytes { get; init; }
 
+    /// <summary>
+    /// An image's own size in pixels, read from the first bytes of its file (<see cref="ImageHeader"/>); null for anything
+    /// that isn't an image that succeeded, and for an image whose header couldn't be read.
+    /// </summary>
+    public int? PixelWidth { get; init; }
+
+    /// <inheritdoc cref="PixelWidth"/>
+    public int? PixelHeight { get; init; }
+
     /// <summary>The decoded body, when one was requested and the response qualified.</summary>
     public string? Body { get; init; }
 

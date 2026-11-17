@@ -219,6 +219,18 @@ internal static class GridRequests
         _ => JsonSerializer.SerializeToElement(Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture), SidecarJsonContext.Default.Int64)
     };
 
+    /// <summary>A groups request's order (evidence): <c>pages</c> or <c>size</c>, or null for the check's own.</summary>
+    public static IssueGroupSort? GroupSort(string? sort) => sort switch
+    {
+        null => null,
+        "pages" => IssueGroupSort.Pages,
+        "size" => IssueGroupSort.Size,
+        _ => throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["sort"] = ["Order the groups by \"pages\" or \"size\"."]
+        })
+    };
+
     /// <summary>The API's name for how a check's issues group.</summary>
     public static string Grouping(IssueGrouping grouping) => grouping switch
     {

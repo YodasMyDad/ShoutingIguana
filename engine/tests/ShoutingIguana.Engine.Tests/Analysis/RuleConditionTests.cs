@@ -78,7 +78,7 @@ public sealed class RuleConditionTests
         var rules = new PerformanceRules(SETTINGS);
         var slow = site.Page($"{site.Site}/slow", RuleHarness.Html(), responseMs: 5_512) with { TimeToFirstByteMs = 5_505 };
 
-        Assert.Equal([new IssueHit(IssueCatalog.SLOW_RESPONSE, slow.UrlId, "5,512 ms (first byte after 5,505 ms)")], rules.Check(slow));
+        Assert.Equal([new IssueHit(IssueCatalog.SLOW_RESPONSE, slow.UrlId, "5,512 ms, over 1,000 ms (first byte after 5,505 ms)")], rules.Check(slow));
         Assert.Empty(rules.Check(site.Page($"{site.Site}/fast", RuleHarness.Html(), responseMs: SETTINGS.SlowResponseMs)));
     }
 
@@ -222,14 +222,17 @@ public sealed class RuleConditionTests
         PageFacts cappedFacts = new() { AnchorIds = Enumerable.Range(0, PageWalker.MAX_IDS).Select(index => $"id{index}").ToList() };
         Dictionary<int, PageFacts> facts = new() { [target.UrlId] = target.Facts, [capped] = cappedFacts };
         var links = page.Links.Where(link => link.Fragment is not null && link.ToId != page.UrlId).Select(link => (page.UrlId, link.ToId, link.Fragment!)).ToList();
-        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links);
+        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links, site.UrlOf);
 
         rules.Observe(page);
         rules.Observe(target);
 
         // #nowhere here, and #missing on /b (linked twice); a capped id list can't prove an id is missing. The issue names /b,
-        // and the page itself as no other URL.
-        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "3 links", target.UrlId) { Targets = [target.UrlId, IssueHit.NO_OTHER_URL] }],
+        // and the page itself as no other URL; its detail names the sections that are missing, each once.
+        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "3 links to missing sections: #nowhere, /b#missing", target.UrlId)
+            {
+                Targets = [target.UrlId, IssueHit.NO_OTHER_URL]
+            }],
             rules.Finish());
     }
 
@@ -249,13 +252,13 @@ public sealed class RuleConditionTests
         var urls = site.Table();
         Dictionary<int, PageFacts> facts = new() { [other.UrlId] = other.Facts };
         var links = page.Links.Where(link => link.Fragment is not null && link.ToId != page.UrlId).Select(link => (page.UrlId, link.ToId, link.Fragment!)).ToList();
-        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links);
+        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links, site.UrlOf);
 
         rules.Observe(page);
         rules.Observe(other);
 
-        // Only #ない (encoded) has no id to find, on the page itself: no other URL.
-        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link")], rules.Finish());
+        // Only #ない (encoded) has no id to find, on the page itself: no other URL. The detail names it as the link wrote it.
+        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link to missing sections: #%E3%81%AA%E3%81%84")], rules.Finish());
     }
 
     /// <summary>A page that moves on at once with a meta refresh is a redirect, so its links aren't checked, as for a 301.</summary>
@@ -272,7 +275,7 @@ public sealed class RuleConditionTests
         var links = new[] { stub, page }
             .SelectMany(from => from.Links.Where(link => link.Fragment is not null && link.ToId != from.UrlId).Select(link => (from.UrlId, link.ToId, link.Fragment!)))
             .ToList();
-        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links);
+        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links, site.UrlOf);
 
         foreach (var analysed in new[] { stub, page, target })
         {
@@ -280,7 +283,7 @@ public sealed class RuleConditionTests
         }
 
         Assert.True(urls[stub.UrlId].IsMetaRefresh);
-        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link", target.UrlId)], rules.Finish());
+        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link to missing sections: /b#missing", target.UrlId)], rules.Finish());
     }
 
     [Fact]

@@ -26,6 +26,7 @@ internal sealed class UrlTable
     private readonly int[] _inlinks;
     private readonly int[] _nofollowLinks;
     private readonly int[] _linkingPages;
+    private readonly int[] _usedOn;
     private readonly HashSet<int> _pageTargets = [];
     private readonly List<(int UrlId, IndexabilityReason Reason)> _indexabilityChanges = [];
 
@@ -40,6 +41,7 @@ internal sealed class UrlTable
         _inlinks = new int[statuses.Length];
         _nofollowLinks = new int[statuses.Length];
         _linkingPages = new int[statuses.Length];
+        _usedOn = new int[statuses.Length];
         StartId = startId;
 
         // Refreshes first: a canonical can lead back to its page through one.
@@ -160,6 +162,9 @@ internal sealed class UrlTable
     /// <summary>The pages behind <see cref="Inlinks"/>: each page that links to this URL, once.</summary>
     public int LinkingPages(int id) => _linkingPages[id];
 
+    /// <summary>The pages audited that link to this URL by any kind of link, each once, not counting the URL itself.</summary>
+    public int UsedOn(int id) => _usedOn[id];
+
     /// <summary>Adds a page's hyperlinks to the inlink counts: every link, and every page it links to once.</summary>
     public void CountInlinks(AnalyzedPage page)
     {
@@ -202,6 +207,20 @@ internal sealed class UrlTable
         foreach (var target in _pageTargets)
         {
             _linkingPages[target]++;
+        }
+
+        // Then every other kind of link: a URL the page uses (an image, a script, its canonical) counts the page once.
+        foreach (var link in page.Links)
+        {
+            if (link.ToId != page.UrlId)
+            {
+                _pageTargets.Add(link.ToId);
+            }
+        }
+
+        foreach (var target in _pageTargets)
+        {
+            _usedOn[target]++;
         }
     }
 

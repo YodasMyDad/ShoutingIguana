@@ -207,6 +207,26 @@ public static class RobotsReader
         return Why(urlId, url, error, origin, rules, lines);
     }
 
+    /// <summary>
+    /// Why robots.txt refused a URL, with the origin whose file did (<see cref="WhyRefused"/>), or null for a URL it didn't
+    /// refuse: the URL grid's <c>robotsRule</c>.
+    /// </summary>
+    internal static RobotsRefusal? RuleOf(GridReadContext context, int urlId)
+    {
+        using var command = context.Command(
+            $"SELECT u.url, r.error FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.id = $id AND r.outcome = {(int)FetchOutcome.RobotsDisallowed}",
+            [new("$id", urlId)]);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return null;
+        }
+
+        var url = reader.GetString(0);
+        var why = WhyRefused(context, urlId, url, reader.IsDBNull(1) ? null : reader.GetString(1));
+        return new RobotsRefusal(OriginOf(url), why.Reason, why.Line, why.Rule);
+    }
+
     private static void ThrowIfInvalid(int offset, int limit)
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);

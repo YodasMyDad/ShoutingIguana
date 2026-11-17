@@ -69,4 +69,61 @@ internal static class RuleText
     public static string Size(long bytes) => bytes >= 1024 * 1024
         ? string.Create(CultureInfo.InvariantCulture, $"{bytes / 1024d / 1024d:0.0} MB")
         : string.Create(CultureInfo.InvariantCulture, $"{bytes / 1024d:0} KB");
+
+    /// <summary>A limit's size as a setting says it: "1 MB", "200 KB", "1.5 MB".</summary>
+    public static string LimitSize(long bytes) => Size(bytes).Replace(".0 MB", " MB", StringComparison.Ordinal);
+
+    /// <summary>The most characters a detail takes: one line beside a URL.</summary>
+    public const int DETAIL_MAX = 120;
+
+    /// <summary>The most characters one quoted text takes in a detail that quotes several.</summary>
+    public const int QUOTE_MAX = 40;
+
+    /// <summary>Text as a reader counts it, cut to <paramref name="max"/> characters with "…" where it's longer.</summary>
+    public static string Cut(string text, int max)
+    {
+        var info = new StringInfo(text);
+        return info.LengthInTextElements <= max ? text : info.SubstringByTextElements(0, Math.Max(max - 1, 0)) + "…";
+    }
+
+    /// <summary>Text from the page in quotes, its runs of white space as one space, cut to <paramref name="max"/> characters: "Sofas | Example".</summary>
+    public static string Quote(string text, int max = QUOTE_MAX) =>
+        $"\"{Cut(string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)), max)}\"";
+
+    /// <summary>A detail cut to <see cref="DETAIL_MAX"/> characters.</summary>
+    public static string Fit(string detail) => Cut(detail, DETAIL_MAX);
+
+    /// <summary>A count, then what it counts, quoted: "2 titles: "A" · "B"".</summary>
+    public static string Listed(int count, string singular, string plural, IEnumerable<string> texts) =>
+        Fit($"{Count(count, singular, plural)}: {string.Join(" · ", texts.Select(text => Quote(text)))}");
+
+    /// <summary>
+    /// What ended a page's head early, for a link the head should hold: "&lt;img src="/t.gif"&gt; on line 12 ended the head
+    /// early", "It's in the body (after &lt;body&gt; on line 30)". Null for a page crawled before the crawler noted it.
+    /// </summary>
+    public static string? HeadEnded(HeadEndFact? headEnd) => headEnd switch
+    {
+        null => null,
+        { Implicit: false } => headEnd.Line is { } line
+            ? string.Create(CultureInfo.InvariantCulture, $"It's in the body (after <body> on line {line:N0})")
+            : "It's in the body",
+        { Line: { } at } => Fit(string.Create(CultureInfo.InvariantCulture, $"{headEnd.Element} on line {at:N0} ended the head early")),
+        _ => Fit($"{char.ToUpperInvariant(headEnd.Element[0])}{headEnd.Element[1..]} ended the head early")
+    };
+
+    /// <summary>A measurement over its limit: "78 characters, over 60".</summary>
+    public static string Over(string measured, long limit) => string.Create(CultureInfo.InvariantCulture, $"{measured}, over {limit:N0}");
+
+    /// <summary>A measurement under its limit: "12 characters, under 30".</summary>
+    public static string Under(string measured, long limit) => string.Create(CultureInfo.InvariantCulture, $"{measured}, under {limit:N0}");
+
+    /// <summary>
+    /// A URL as a detail shows it beside the page it's about: its path and query when it's on the page's own scheme and
+    /// host, the whole URL otherwise.
+    /// </summary>
+    public static string Near(string url, string pageUrl) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && Uri.TryCreate(pageUrl, UriKind.Absolute, out var page) &&
+        uri.Scheme == page.Scheme && string.Equals(uri.Authority, page.Authority, StringComparison.OrdinalIgnoreCase)
+            ? uri.PathAndQuery
+            : url;
 }

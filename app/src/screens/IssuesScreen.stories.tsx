@@ -12,6 +12,7 @@ import { createAppRouter } from '../app/router';
 import { liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { setDirectConnection } from '../shell/connection';
+import { evidenceRoutes } from '../test/evidenceSidecar';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem, type FakeRoute } from '../test/fakeSidecar';
 import {
   ISSUES_ANALYSIS,
@@ -532,4 +533,61 @@ export const LongTitlesAndDetails: Story = {
       path={`${ISSUES}/internal-client-error?group=${encodeURIComponent(JSON.stringify({ detail: LONG_DETAIL, relatedUrlId: 40 }))}`}
     />
   ),
+};
+
+// ---- Evidence (step 3b, docs/v2-evidence.md): what each check found, in its rows, without opening anything.
+
+/** The evidence catalog's sidecar: a check of each kind, with its evidence columns and target facts. */
+function evidence() {
+  fresh();
+  setTransport(fakeSidecar(evidenceRoutes()));
+  connect();
+}
+
+const evidenceGroup = (relatedUrlId: number | null) =>
+  `?group=${encodeURIComponent(JSON.stringify({ detail: null, relatedUrlId }))}`;
+
+/** A title too long: its rows say the title and its length beside the limit, the most linked page first. */
+export const EvidenceTitleTooLong: Story = {
+  loaders: [evidence],
+  render: () => <IssuesApp path={`${ISSUES}/title-too-long`} />,
+};
+
+/** A fault on 13 of the 14 pages analysed: the check doesn't group, so the engine's hint says it's the template. */
+export const EvidenceTemplateHint: Story = {
+  loaders: [evidence],
+  render: () => <IssuesApp path={`${ISSUES}/viewport-missing`} />,
+};
+
+/**
+ * Images over 200 KB, grouped by image, the largest file first: each group says its file (1.8 MB, JPEG, 4000×3000 px)
+ * and its size; the open group's pages say how each shows it (shown at 400×300, lazy) and where.
+ */
+export const EvidenceImageTooLarge: Story = {
+  loaders: [evidence],
+  render: () => <IssuesApp path={`${ISSUES}/image-too-large${evidenceGroup(812)}`} />,
+};
+
+/** Links to a redirect: the group says it's a 301 and where it ends; each page, where its link is and what it says. */
+export const EvidenceLinksToRedirects: Story = {
+  loaders: [evidence],
+  render: () => <IssuesApp path={`${ISSUES}/links-to-redirects${evidenceGroup(90)}`} />,
+};
+
+/** Duplicate titles: each cluster is named by the title its pages share, not by its first page. */
+export const EvidenceDuplicateTitles: Story = {
+  loaders: [evidence],
+  render: () => <IssuesApp path={`${ISSUES}/title-duplicate${evidenceGroup(50)}`} />,
+};
+
+/** Redirect chains: each URL's chain hop by hop, with the status at each. */
+export const EvidenceRedirectChains: Story = {
+  loaders: [evidence],
+  render: () => <IssuesApp path={`${ISSUES}/redirect-chain${evidenceGroup(70)}`} />,
+};
+
+/** URLs robots.txt refused: each with the rule that refused it and its line. */
+export const EvidenceBlockedByRobots: Story = {
+  loaders: [evidence],
+  render: () => <IssuesApp path={`${ISSUES}/blocked-by-robots${evidenceGroup(null)}`} />,
 };

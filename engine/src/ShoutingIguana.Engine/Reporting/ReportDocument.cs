@@ -5,6 +5,7 @@ using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Reporting.Models;
 using ShoutingIguana.Engine.Storage.Models;
 using static ShoutingIguana.Engine.Reporting.ReportWords;
@@ -586,6 +587,18 @@ internal static class ReportDocument
         }
 
         var ofAddresses = problem.Check.Subject == IssueSubject.Url;
+        if (fix.NearlyEveryPage)
+        {
+            html.Append("<p class=\"onefix\"><b>This is on nearly every page, so it’s probably your site’s template: one fix clears it.</b>");
+            if (problem.Words.OneFix is { } template)
+            {
+                html.Append(' ').AppendText(template);
+            }
+
+            html.Append("</p>");
+            return;
+        }
+
         html.Append("<p class=\"onefix\"><b>One fix clears ").Append(Number(fix.Pages)).Append(" of these ")
             .Append(ofAddresses ? Plural(problem.Count, "address", "addresses") : Plural(problem.Count, "page", "pages")).Append(".</b> ");
         var usually = problem.Words.OneFix;
@@ -625,7 +638,7 @@ internal static class ReportDocument
 
         var caption = more > 0 ? $"The first {rows.Count} of {Number(problem.Count)}" : problem.Count == 1 ? "Where it is" : $"All {problem.Count}";
         var isUrl = problem.Check.Subject == IssueSubject.Url;
-        var whereFound = problem.Check.References == IssueReferences.Sources;
+        var whereFound = problem.Check.References is IssueReferences.Sources or IssueReferences.Targets;
         html.Append(compact ? "<table class=\"examples examples--one\">" : whereFound ? "<table class=\"examples examples--where\">" : "<table class=\"examples\">")
             .Append("\n          <caption>").Append(caption).Append("</caption>\n");
         if (!compact)
@@ -654,6 +667,12 @@ internal static class ReportDocument
                     WhereFound(html, model, foundOn);
                     html.Append("</span>");
                 }
+                else if (row.Named.Count > 0)
+                {
+                    html.Append("<span class=\"found\">");
+                    Named(html, model, problem.Check, row);
+                    html.Append("</span>");
+                }
 
                 html.Append("</td></tr>");
             }
@@ -668,6 +687,10 @@ internal static class ReportDocument
                     {
                         WhereFound(html, model, foundOn);
                     }
+                    else if (row.Named.Count > 0)
+                    {
+                        Named(html, model, problem.Check, row);
+                    }
                 }
 
                 html.Append("</td></tr>");
@@ -681,7 +704,7 @@ internal static class ReportDocument
         }
     }
 
-    /// <summary>What was found on a page, and the other URL it's about.</summary>
+    /// <summary>What was found on a page, the check's evidence for it, and the other URL it's about (where the URLs it names aren't listed beside it).</summary>
     private static void Found(StringBuilder html, ReportModel model, ReportExample row)
     {
         if (row.Detail is { } detail)
@@ -689,7 +712,12 @@ internal static class ReportDocument
             html.AppendText(HtmlText.Cut(detail, SHOWN_DETAIL));
         }
 
-        if (row.RelatedUrl is { } related)
+        for (var index = 0; index < row.Evidence.Count; index++)
+        {
+            html.Append(row.Detail is null && index == 0 ? string.Empty : " · ").AppendText(HtmlText.Cut(row.Evidence[index], SHOWN_DETAIL));
+        }
+
+        if (row.RelatedUrl is { } related && row.Named.Count == 0)
         {
             html.Append(row.Detail is null ? "→ " : " → ");
             Url(html, model, related);
@@ -701,12 +729,38 @@ internal static class ReportDocument
     }
 
     /// <summary>
+    /// What a page's issue names, so a reader knows what to change on it: each of the first few URLs with what it is and how
+    /// the page links to it ("/img/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300; content, alt “Sofa”)"),
+    /// then how many more.
+    /// </summary>
+    private static void Named(StringBuilder html, ReportModel model, IssueDefinition check, ReportExample row)
+    {
+        for (var index = 0; index < row.Named.Count; index++)
+        {
+            var target = row.Named[index];
+            html.Append(index == 0 ? string.Empty : ", ");
+            Url(html, model, WhereFoundColumns.TargetUrl(check, target));
+            if (WhereFoundColumns.TargetFacts(check, target) is { Length: > 0 } facts)
+            {
+                html.Append(" (").AppendText(HtmlText.Cut(facts, SHOWN_DETAIL)).Append(')');
+            }
+        }
+
+        if (row.Targets is { } total && total > row.Named.Count)
+        {
+            var more = total - row.Named.Count;
+            html.Append(" and ").Append(Number(more)).Append(more == 1 ? " other" : " others");
+        }
+    }
+
+    /// <summary>
     /// Where a URL other pages refer to is found, so a reader knows what to change: the pages linking to it (the first few,
-    /// then how many more), the sitemaps listing it, or that it's the address the check started from.
+    /// then how many more, each with where on it the link is and its text), the sitemaps listing it, or that it's the
+    /// address the check started from.
     /// </summary>
     private static void WhereFound(StringBuilder html, ReportModel model, UrlFoundOn foundOn)
     {
-        List<string> pages = [.. foundOn.Sources.Select(source => source.Url).Distinct(StringComparer.Ordinal)];
+        List<LinkRow> pages = [.. foundOn.Sources.DistinctBy(source => source.Url, StringComparer.Ordinal)];
         List<Action> parts = [];
         if (foundOn.Pages > 0)
         {
@@ -716,7 +770,11 @@ internal static class ReportDocument
                 for (var index = 0; index < pages.Count; index++)
                 {
                     html.Append(index == 0 ? string.Empty : ", ");
-                    Url(html, model, pages[index]);
+                    Url(html, model, pages[index].Url);
+                    if (WhereFoundColumns.Place(pages[index]) is { } place)
+                    {
+                        html.Append(" (").AppendText(HtmlText.Cut(place, SHOWN_DETAIL)).Append(')');
+                    }
                 }
 
                 if (foundOn.Pages > pages.Count)

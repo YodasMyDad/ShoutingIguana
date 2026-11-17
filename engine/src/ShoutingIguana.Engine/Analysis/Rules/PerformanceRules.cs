@@ -18,17 +18,17 @@ internal sealed class PerformanceRules(AnalysisSettings settings) : IPageRule
         if (page.ResponseMs > settings.SlowResponseMs)
         {
             yield return new IssueHit(IssueCatalog.SLOW_RESPONSE, page.UrlId,
-                string.Create(CultureInfo.InvariantCulture, $"{page.ResponseMs:N0} ms (first byte after {page.TimeToFirstByteMs:N0} ms)"));
+                string.Create(CultureInfo.InvariantCulture, $"{page.ResponseMs:N0} ms, over {settings.SlowResponseMs:N0} ms (first byte after {page.TimeToFirstByteMs:N0} ms)"));
         }
 
         if (page.BodyBytes > settings.LargePageBytes)
         {
-            yield return new IssueHit(IssueCatalog.LARGE_PAGE, page.UrlId, RuleText.Size(page.BodyBytes.Value));
+            yield return new IssueHit(IssueCatalog.LARGE_PAGE, page.UrlId, $"{RuleText.Size(page.BodyBytes.Value)}, over {RuleText.LimitSize(settings.LargePageBytes)}");
         }
 
         if (page.BodyBytes > GOOGLEBOT_HTML_BYTES)
         {
-            yield return new IssueHit(IssueCatalog.HTML_PAST_CRAWL_LIMIT, page.UrlId, RuleText.Size(page.BodyBytes.Value));
+            yield return new IssueHit(IssueCatalog.HTML_PAST_CRAWL_LIMIT, page.UrlId, $"{RuleText.Size(page.BodyBytes.Value)}, past the {RuleText.LimitSize(GOOGLEBOT_HTML_BYTES)} Google reads");
         }
     }
 }

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { Analysis, CrawlListItem, Score } from '../api/types';
 import { liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
+import { evidenceRoutes } from '../test/evidenceSidecar';
 import { TEST_CRAWL_ID, json, type FakeRoute } from '../test/fakeSidecar';
 import { AT_200_PERCENT, ScreenApp, ownSidecar } from '../test/ScreenStory';
 import {
@@ -368,3 +369,29 @@ export const ProblemAt200Percent: Story = story(
   [],
   AT_200_PERCENT,
 );
+
+// ------------------------------------------------------------------------------- What each problem found (evidence)
+
+/** A problem over the evidence catalog's sidecar (docs/v2-evidence.md): what each cause is, and how each page has it. */
+const evidenceStory = (checkId: string, size?: { width: number; height: number }): Story => ({
+  loaders: [() => ownSidecar(evidenceRoutes())],
+  render: () => <ScreenApp path={`${FIX}/${checkId}`} mode="simple" size={size} />,
+});
+
+/** Oversized images: each file's size and pixels, and the size each page shows it at; the One fix names the file. */
+export const ProblemEvidenceLargeImages: Story = evidenceStory('image-too-large');
+
+/** Links to a forwarding address: where it ends, and where on each page the link is and what it says. */
+export const ProblemEvidenceLinksToForwards: Story = evidenceStory('links-to-redirects');
+
+/** Pages with the same title: each cause is the title they share. */
+export const ProblemEvidenceSharedTitles: Story = evidenceStory('title-duplicate');
+
+/** Addresses the rules file keeps out: the line of the file that does it. */
+export const ProblemEvidenceRulesFile: Story = evidenceStory('blocked-by-robots');
+
+/** A fault on nearly every page: its One fix, though the check lists pages, not causes. */
+export const ProblemEvidenceTemplateHint: Story = evidenceStory('viewport-missing');
+
+/** At 200% zoom: what each cause is still reads whole beside it. */
+export const ProblemEvidenceAt200Percent: Story = evidenceStory('image-too-large', AT_200_PERCENT);

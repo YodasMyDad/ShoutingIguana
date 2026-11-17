@@ -84,7 +84,12 @@ internal static class GridExportReader
                 return (null, GridExportMissing.SitemapNotFound);
             }
 
-            var page = UrlGridReader.Read(context, paged, scope);
+            // A check's rows without an order asked for come as its grid gives them: the URLs that matter most first. Not while
+            // a crawl runs, whose counts move between two pages: then in crawl order.
+            var ordered = checkId is not null && paged.Sort.Count == 0 && context.Summary.Reason != SummaryUnavailableReason.Crawling
+                ? paged with { Sort = IssueGroupReader.ImportanceOrder(IssueCatalog.Find(checkId), context.Summary.Available) }
+                : paged;
+            var page = UrlGridReader.Read(context, ordered, scope);
             return (new GridExportPage(page.Columns, [.. page.Rows.Select(row => new GridExportRow(row.Id, row.Values))], page.Matching, page.Next, moment, page.Unavailable),
                 null);
         }));

@@ -16,7 +16,24 @@ namespace ShoutingIguana.Engine.Parsing;
 /// </summary>
 public static class HtmlPageParser
 {
-    private static readonly ThreadLocal<HtmlParser> PARSER = new(() => new HtmlParser(new HtmlParserOptions { IsScripting = true, OnCreated = RecordMeta }));
+    /// <summary>
+    /// A parser a thread, with what notes where its documents' bodies begin (<see cref="HeadEndRecorder"/>). As it creates
+    /// each element it also notes where each meta element starts (<see cref="RecordMeta"/>).
+    /// </summary>
+    private static readonly ThreadLocal<(HtmlParser Parser, HeadEndRecorder HeadEnd)> PARSER = new(() =>
+    {
+        var headEnd = new HeadEndRecorder();
+        var options = new HtmlParserOptions
+        {
+            IsScripting = true,
+            OnCreated = (element, position) =>
+            {
+                headEnd.Created(element, position);
+                RecordMeta(element, position);
+            }
+        };
+        return (new HtmlParser(options), headEnd);
+    });
 
     /// <summary>
     /// Where each meta element of the page being parsed on this thread starts in its text, as the parser creates them: how
@@ -46,7 +63,9 @@ public static class HtmlPageParser
     private static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark,
         Dictionary<IElement, int> metaStarts)
     {
-        using var document = PARSER.Value!.ParseDocument(html);
+        var (parser, headEnd) = PARSER.Value;
+        headEnd.Reset();
+        using var document = parser.ParseDocument(html);
 
         // Browsers use the first base with an href anywhere in the document, even one a stray element pushed into the body.
         var baseHref = document.QuerySelector("base[href]")?.GetAttribute("href");
@@ -84,6 +103,9 @@ public static class HtmlPageParser
                 : null,
             ByteOrderMark = byteOrderMark,
             BaseHref = baseHref,
+            HeadEnd = walker.Canonicals.Any(canonical => !canonical.InHead) || walker.Hreflangs.Any(hreflang => !hreflang.InHead)
+                ? headEnd.HeadEnd(document)
+                : null,
             WordCount = fingerprint.WordCount,
             ContentHash = fingerprint.ContentHash,
             SimHash = fingerprint.SimHash,

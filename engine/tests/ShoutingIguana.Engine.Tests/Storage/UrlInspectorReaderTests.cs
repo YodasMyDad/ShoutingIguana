@@ -194,7 +194,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         Assert.All(flagged, issue =>
         {
             var url = Read(crawl.Path, issue.Id);
-            Assert.Equal(issue.Detail, $"{url.UrlLength} characters");
+            Assert.Equal(issue.Detail, $"{url.UrlLength} characters, over {url.Limits.MaxUrlLength}");
             Assert.True(url.UrlLength > url.Limits.MaxUrlLength);
         });
 

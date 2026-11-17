@@ -17,9 +17,17 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// </summary>
 /// <param name="readFacts">The stored facts of a URL (<see cref="AnalysisReader.ReadFacts"/>).</param>
 /// <param name="readFragmentLinks">Every link to a #fragment on another page (<see cref="AnalysisReader.ReadFragmentLinks"/>).</param>
-internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFacts, Func<IEnumerable<(int From, int To, string Fragment)>> readFragmentLinks)
+/// <param name="readUrl">The stored URL with an id: a page's detail names the sections it links to that are missing.</param>
+internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFacts, Func<IEnumerable<(int From, int To, string Fragment)>> readFragmentLinks,
+    Func<int, string?> readUrl)
     : ISiteRule
 {
+    /// <summary>The missing sections a page's detail names, before it's cut to length.</summary>
+    private const int NAMED = 4;
+
+    /// <summary>The first few missing sections of each page's links, as (target, fragment as written), for its detail.</summary>
+    private readonly Dictionary<int, List<(int Target, string Fragment)>> _named = [];
+
     /// <summary>
     /// Each page's links that miss, the other pages they miss on (0 for none yet; the first apart, as most have one), and
     /// whether one misses on the page itself.
@@ -51,7 +59,7 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
             {
                 if (page.Facts.AnchorIds.Count < PageWalker.MAX_IDS && !Finds(ownIds ??= HashIds(page.Facts.AnchorIds), Hash(link.Fragment), Hash(fragment)))
                 {
-                    Record(page.UrlId, link.ToId);
+                    Record(page.UrlId, link.ToId, link.Fragment);
                 }
             }
             else if (urls[link.ToId] is { IsInternal: true, IsPage: true })
@@ -82,16 +90,17 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
             {
                 if (!urls[from].IsMetaRefresh && Checkable(raw) is { } fragment && missing.Contains((to, Hash(raw), Hash(fragment))))
                 {
-                    Record(from, to);
+                    Record(from, to, raw);
                 }
             }
         }
 
         foreach (var (pageId, (count, first, others, itself)) in _broken)
         {
+            var detail = Detail(pageId, count);
             yield return first == 0
-                ? new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, pageId, RuleText.Count(count, "link", "links"))
-                : new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, pageId, RuleText.Count(count, "link", "links"), first)
+                ? new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, pageId, detail)
+                : new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, pageId, detail, first)
                 {
                     Targets = itself ? [first, .. others ?? [], IssueHit.NO_OTHER_URL] : [first, .. others ?? []]
                 };
@@ -122,8 +131,23 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
 
     private static ulong Hash(string text) => XxHash3.HashToUInt64(MemoryMarshal.AsBytes(text.AsSpan()));
 
-    private void Record(int pageId, int targetId)
+    /// <summary>"2 links to missing sections: /faq/#specs, #reviews": a section missing on the page itself is its #fragment alone.</summary>
+    private string Detail(int pageId, int count)
     {
+        var pageUrl = readUrl(pageId) ?? string.Empty;
+        var named = _named.GetValueOrDefault(pageId) ?? [];
+        var sections = named.Select(entry => entry.Target == pageId ? $"#{entry.Fragment}" : $"{RuleText.Near(readUrl(entry.Target) ?? string.Empty, pageUrl)}#{entry.Fragment}");
+        return RuleText.Fit($"{RuleText.Count(count, "link", "links")} to missing sections: {string.Join(", ", sections)}");
+    }
+
+    private void Record(int pageId, int targetId, string fragment)
+    {
+        var named = _named.TryGetValue(pageId, out var list) ? list : _named[pageId] = [];
+        if (named.Count < NAMED && !named.Contains((targetId, fragment)))
+        {
+            named.Add((targetId, fragment));
+        }
+
         var (count, first, others, itself) = _broken.GetValueOrDefault(pageId);
         if (targetId == pageId)
         {

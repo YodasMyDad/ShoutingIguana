@@ -493,8 +493,8 @@ public sealed class UrlSearchReaderTests(GridCrawl crawl) : IDisposable
         {
             Change(path, """
                 INSERT INTO url_summary (url_id, is_internal, source, depth, resource_type, status_code, indexable, indexability_reason, final_url_id,
-                                         inlinks, followed_inlinks, nofollow_inlinks, linking_pages, issues, errors, warnings, notices)
-                VALUES ($id, $internal, 1, 2, 0, $status, 1, 0, $id, 0, 0, 0, 0, 0, 0, 0, 0)
+                                         inlinks, followed_inlinks, nofollow_inlinks, linking_pages, issues, errors, warnings, notices, used_on)
+                VALUES ($id, $internal, 1, 2, 0, $status, 1, 0, $id, 0, 0, 0, 0, 0, 0, 0, 0, 0)
                 """, ("$id", id), ("$internal", isInternal ? 1 : 0), ("$status", title is null ? DBNull.Value : 200));
         }
     }

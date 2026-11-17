@@ -2,11 +2,13 @@
 import clsx from 'clsx';
 import type { Check } from '../../api/types';
 import { useWhereFoundOf } from './useWhereFound';
-import { foundOnSummary, targetsSummary } from './whereFound';
+import { foundOnSummary, targetLineWords, targetsSummary } from './whereFound';
 
 /**
- * One line of "where it's found" for a row: "Found on 3 pages · /garden-furniture/ +2", or "Links to /old/ (404) +2"
- * for a page holding the bad links. Muted, cut to its room; nothing for a check that refers to nothing.
+ * One line of "where it's found" for a row: "Found on 3 pages · /garden-furniture/ (Footer · “Old range”) +2", or
+ * "Links to /old/ (404) +2" for a page holding the bad links; under a group of the URL it names, how this page links to
+ * it ("in the footer · “Old range” · 2 links", "shown at 400×300 · lazy"). Muted, cut to its room; nothing for a check
+ * that refers to nothing.
  */
 export function WhereFoundLine({
   crawlId,
@@ -17,7 +19,7 @@ export function WhereFoundLine({
   className,
 }: {
   crawlId: string;
-  check: Pick<Check, 'id' | 'references'>;
+  check: Pick<Check, 'id' | 'references' | 'targetFacts'>;
   urlId: number;
   siteOrigin: string | null;
   /** For a page under a group of one URL it names: that URL, named first. */
@@ -29,7 +31,8 @@ export function WhereFoundLine({
   const words = where.foundOn
     ? foundOnSummary(where.foundOn, siteOrigin)
     : where.targets
-      ? targetsSummary(where.targets, siteOrigin, check, first)
+      ? (targetLineWords(where.targets, first, check, siteOrigin) ??
+        targetsSummary(where.targets, siteOrigin, check, first))
       : where.error
         ? 'Where it’s found couldn’t be read'
         : null;

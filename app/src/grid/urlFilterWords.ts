@@ -47,6 +47,13 @@ const COLUMNS: Record<string, string> = {
   errors: 'Errors',
   warnings: 'Warnings',
   notices: 'Notices',
+  // Evidence (step 3b).
+  usedOn: 'Used on pages',
+  pixelWidth: 'Image width',
+  pixelHeight: 'Image height',
+  fetchError: 'Fetch error',
+  redirectChain: 'Redirect chain',
+  robotsRule: 'robots.txt rule',
 };
 
 const VALUES: Record<string, Record<string, string>> = {

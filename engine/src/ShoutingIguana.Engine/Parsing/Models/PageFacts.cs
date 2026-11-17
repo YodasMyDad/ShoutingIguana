@@ -39,6 +39,12 @@ public sealed record PageFacts
     /// </summary>
     public string? ByteOrderMark { get; init; }
     public string? BaseHref { get; init; }
+
+    /// <summary>
+    /// What ended the head before a canonical or hreflang link in the page: set only when one is outside the head, which
+    /// is what the checks of either say. Null for every other page, and for a page crawled before the crawler noted it.
+    /// </summary>
+    public HeadEndFact? HeadEnd { get; init; }
     public int WordCount { get; init; }
     public ulong ContentHash { get; init; }
     public ulong SimHash { get; init; }

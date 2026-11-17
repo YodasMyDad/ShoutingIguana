@@ -29,14 +29,17 @@ public static class AnalysisFreshness
     /// <c>site-hidden-from-search</c> only when the home page is noindex too, skips <c>blocked-by-robots</c> on a crawl
     /// that ignored robots.txt, names the URL a redirecting canonical ends at in <c>canonical-to-redirect</c>'s detail, and
     /// passes a page that declares its encoding with a byte-order mark (which only a crawl that recorded the mark shows).
-    /// 9 is the real-site check audit's (docs/v2-check-audit.md): a canonical or hreflang alternate that refused the
-    /// crawler, or an alternate another site's robots.txt disallows, isn't non-indexable; links to temporary redirects
-    /// aren't links to redirects, and a temporary redirect to another site isn't flagged; a page's empty links to itself
-    /// count (not ones written as a fragment); orphans are skipped when 1 in 20 of the pages couldn't be read; schema.org
-    /// subtypes need their parent's properties; and a meta charset past the first 1024 bytes declares nothing (which
-    /// only a crawl that recorded where it ends shows).
+    /// 9 was used twice, by two lines of work merged later. One is the real-site check audit's (docs/v2-check-audit.md):
+    /// a canonical or hreflang alternate that refused the crawler, or an alternate another site's robots.txt disallows,
+    /// isn't non-indexable; links to temporary redirects aren't links to redirects, and a temporary redirect to another
+    /// site isn't flagged; a page's empty links to itself count (not ones written as a fragment); orphans are skipped when
+    /// 1 in 20 of the pages couldn't be read; schema.org subtypes need their parent's properties; and a meta charset past
+    /// the first 1024 bytes declares nothing (which only a crawl that recorded where it ends shows). The other names the
+    /// images at fault as the image checks' targets (they group by image), names in a detail what it counts (each title,
+    /// H1, canonical, missing section, a loop's hops) and the limit a measurement is over, and counts the pages that use
+    /// each URL in the URL summary (<c>used_on</c>). 10 is both together, so an analysis either 9 stored is out of date.
     /// </summary>
-    public const int VERSION = 9;
+    public const int VERSION = 10;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

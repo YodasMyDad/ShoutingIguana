@@ -41,6 +41,10 @@ public sealed class AnalysisFreshnessTests
         // ignored robots.txt, and gave a redirecting canonical no final URL: what it stored isn't what this engine would.
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 7 }, CRAWLED, new AnalysisSettings()));
 
+        // Version 9 was written by two lines of work before they were merged: the check audit's and the evidence's. Either
+        // stored what the other judged differently, so both are out of date.
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 9 }, CRAWLED, new AnalysisSettings()));
+
         // A score worked out by another version of the formula, or none at all, isn't the score the crawl would get now.
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = ScoreCalculator.VERSION + 1 }, CRAWLED, new AnalysisSettings()));
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = null }, CRAWLED, new AnalysisSettings()));

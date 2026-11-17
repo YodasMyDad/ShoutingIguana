@@ -3,9 +3,10 @@ import { useId, type ReactNode, type Ref } from 'react';
 import type { CheckGroupRef, GridSort } from '../../api/grids';
 import type { Analysis } from '../../api/types';
 import { affectedCount, affectedWords, checkReach } from '../../crawl/checkSubject';
-import { formatCount } from '../../lib/format';
+import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
+import { Callout } from '../../ui/Callout';
 import { EmptyState, SkippedState } from '../../ui/EmptyState';
 import { IconButton } from '../../ui/IconButton';
 import { DropdownMenu, MenuItem } from '../../ui/Menu';
@@ -16,6 +17,8 @@ import { SeverityBadge } from '../../ui/SeverityBadge';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { Stat, StatLink } from '../../ui/Stat';
 import type { CheckEntry } from './checkList';
+import { namesFileSize } from '../../crawl/evidence';
+import { importanceWords } from './evidenceColumns';
 import { IssueGroups } from './IssueGroups';
 import { IssueRowsGrid } from './IssueRowsGrid';
 
@@ -47,9 +50,10 @@ export interface CheckDetailProps {
   titleRef?: Ref<HTMLHeadingElement>;
 }
 
-/** "groups, by detail", "groups, by related URL": what the third figure counts. */
-function groupedBy(grouping: CheckEntry['check']['grouping']): string {
-  return grouping === 'relatedUrl' ? 'by related URL' : 'by detail';
+/** "groups, by detail", "groups, by related URL", "by image" (the image checks): what the third figure counts. */
+function groupedBy(check: CheckEntry['check']): string {
+  if (check.grouping !== 'relatedUrl') return 'by detail';
+  return check.id.startsWith('image-') ? 'by image' : 'by related URL';
 }
 
 /**
@@ -88,6 +92,9 @@ export function CheckDetail({
   // fault of the whole site is the whole site, as Simple says, never "1 page, <0.1%" (`checkReach`).
   const share = found ? checkReach(check, count, analysis) : null;
   const groups = check.grouping !== 'none';
+  // A check that doesn't group, on nearly every page analysed: probably the site's template (the engine's judgement).
+  const likelyTemplate =
+    !groups && analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;
 
   return (
     <article aria-labelledby={titleId} className="flex flex-col">
@@ -159,7 +166,7 @@ export function CheckDetail({
                 size="md"
                 label="Groups"
                 value={groupCount === null ? '–' : <Num value={groupCount} />}
-                context={groupedBy(check.grouping)}
+                context={groupedBy(check)}
               />
             ) : null}
           </div>
@@ -210,10 +217,16 @@ export function CheckDetail({
               {groups
                 ? groupCount === null
                   ? `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'}`
-                  : `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'} in ${formatCount(groupCount)} ${groupCount === 1 ? 'group' : 'groups'}, ${groupedBy(check.grouping)}`
-                : affectedCount(check, count)}
+                  : `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'} in ${formatCount(groupCount)} ${groupCount === 1 ? 'group' : 'groups'}, ${groupedBy(check)}${namesFileSize(check.targetFacts) ? ', largest file first' : ''}`
+                : `${affectedCount(check, count)}${sort.length === 0 ? `, ${importanceWords(check)}` : ''}`}
             </span>
           </div>
+          {likelyTemplate ? (
+            <Callout tone="insight" title="Likely in the site’s template" className="mb-3">
+              The same issue on {formatCount(count)} of the {formatCountOf(analysis.pagesAnalyzed, 'page')} analysed, so
+              it’s likely in the site’s template: one fix clears them all.
+            </Callout>
+          ) : null}
           {groups ? (
             <IssueGroups
               crawlId={crawlId}

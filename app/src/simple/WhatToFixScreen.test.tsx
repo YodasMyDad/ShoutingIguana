@@ -249,7 +249,11 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     const where = within(main().getByRole('region', { name: 'Where it is' }));
     expect(await where.findByText('2 causes, on 265 pages')).toBeVisible();
     expect(await where.findByText('Your home page')).toBeVisible();
-    expect(await where.findByText(/Page 0, Page 1, Page 2 and 261 more\./)).toBeVisible();
+    // A check that names what its pages link to lists its first pages one by one, each with its own line (where its
+    // link is: ProblemScreen.evidence.test.tsx), then how many more.
+    expect(await where.findByText('Page 0')).toBeVisible();
+    expect(where.getByText('Page 2')).toBeVisible();
+    expect(where.getByText(/And 261 more\./)).toBeVisible();
     fireEvent.click(where.getByRole('button', { name: 'Show them' }));
     expect(await where.findByText('Page 199')).toBeVisible();
     expect(where.getByRole('button', { name: 'See all 264 in Advanced' })).toBeVisible();

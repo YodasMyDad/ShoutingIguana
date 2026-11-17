@@ -47,7 +47,8 @@ describe('the links’ words', () => {
   it('names every column the engine lists, never by its id', () => {
     for (const column of LINK_COLUMNS) {
       const name = linkColumnName(column.id);
-      expect(name, column.id).not.toContain('.');
+      // "robots.txt" is a name, not an id's dot.
+      expect(name.replace('robots.txt', 'robots'), column.id).not.toContain('.');
       expect(name, column.id).not.toMatch(/[a-z][A-Z]/);
       expect(name.charAt(0), column.id).toBe(name.charAt(0).toUpperCase());
     }

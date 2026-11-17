@@ -13,6 +13,12 @@ internal sealed record ResponseRow
     public string? ContentType { get; init; }
     public long? SizeBytes { get; init; }
     public long? BodyBytes { get; init; }
+
+    /// <summary>An image's own size in pixels, from its file's header; null for anything else.</summary>
+    public int? PixelWidth { get; init; }
+
+    /// <inheritdoc cref="PixelWidth"/>
+    public int? PixelHeight { get; init; }
     public int TimeToFirstByteMs { get; init; }
     public int ResponseMs { get; init; }
     public string? HttpVersion { get; init; }

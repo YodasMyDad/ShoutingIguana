@@ -87,6 +87,7 @@ public static class UrlSummaryReader
         ResponseMs = reader.IsDBNull(21) ? null : reader.GetInt32(21),
         WordCount = reader.IsDBNull(22) ? null : reader.GetInt32(22),
         TitleLength = reader.IsDBNull(23) ? null : reader.GetInt32(23),
-        DescriptionLength = reader.IsDBNull(24) ? null : reader.GetInt32(24)
+        DescriptionLength = reader.IsDBNull(24) ? null : reader.GetInt32(24),
+        UsedOn = reader.GetInt32(25)
     };
 }

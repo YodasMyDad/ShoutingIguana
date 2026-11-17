@@ -18,7 +18,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#4xx-client-errors",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["type"]
     };
 
     public static readonly IssueDefinition INTERNAL_SERVER_ERROR = new("internal-server-error", IssueCategory.ResponseCodes, IssueSeverity.Error,
@@ -30,7 +31,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#5xx-server-errors",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["type", "responseMs"]
     };
 
     public static readonly IssueDefinition INTERNAL_UNREACHABLE = new("internal-unreachable", IssueCategory.ResponseCodes, IssueSeverity.Error,
@@ -42,7 +44,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/dns-network-errors",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["type", "fetchError", "responseMs"]
     };
 
     public static readonly IssueDefinition INTERNAL_BLOCKED = new("internal-blocked", IssueCategory.ResponseCodes, IssueSeverity.Warning,
@@ -54,7 +57,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/crawlers-fetchers/verify-google-requests",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["type"]
     };
 
     public static readonly IssueDefinition SOFT_404 = new("soft-404", IssueCategory.ResponseCodes, IssueSeverity.Warning,
@@ -65,7 +69,8 @@ public static class IssueCatalog
         Why = """Google detects pages like this as soft 404s and excludes them from search, but keeps crawling them, which wastes crawling on large sites. Serving an error with 200 also hides real breakage from monitoring that only looks at status codes. If the page is fine and only mentions "not found" in a heading, ignore this.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/troubleshoot-crawling-errors#soft-404-errors",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["title", "h1", "wordCount"]
     };
 
 
@@ -79,7 +84,9 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["redirectChain"],
+        TargetFacts = ["statusCode", "indexability"]
     };
 
     public static readonly IssueDefinition REDIRECT_LOOP = new("redirect-loop", IssueCategory.Redirects, IssueSeverity.Error,
@@ -91,7 +98,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["redirectChain"]
     };
 
     public static readonly IssueDefinition REDIRECT_BROKEN = new("redirect-broken", IssueCategory.Redirects, IssueSeverity.Error,
@@ -103,7 +111,9 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["redirectChain"],
+        TargetFacts = ["statusCode"]
     };
 
     public static readonly IssueDefinition REDIRECT_TEMPORARY = new("redirect-temporary", IssueCategory.Redirects, IssueSeverity.Notice,
@@ -115,7 +125,9 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/301-redirects#overview-of-redirect-types",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["redirectChain"],
+        TargetFacts = ["statusCode"]
     };
 
     public static readonly IssueDefinition REDIRECT_DOWNGRADE = new("redirect-downgrade", IssueCategory.Redirects, IssueSeverity.Error,
@@ -127,7 +139,9 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#prefer-https-over-http-for-canonical-urls",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["redirectChain"],
+        TargetFacts = ["statusCode", "final"]
     };
 
     public static readonly IssueDefinition META_REFRESH = new("meta-refresh", IssueCategory.Redirects, IssueSeverity.Warning,
@@ -152,7 +166,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#4xx-client-errors",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "text", "position", "fragment", "flags", "links"]
     };
 
     public static readonly IssueDefinition BROKEN_EXTERNAL_LINKS = new("broken-external-links", IssueCategory.Links, IssueSeverity.Warning,
@@ -164,7 +179,8 @@ public static class IssueCatalog
         LearnMore = null,
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "text", "position", "fragment", "flags", "links"]
     };
 
     public static readonly IssueDefinition LINKS_TO_REDIRECTS = new("links-to-redirects", IssueCategory.Links, IssueSeverity.Notice,
@@ -176,7 +192,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#best-practices",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "text", "position", "links"]
     };
 
     public static readonly IssueDefinition INTERNAL_NOFOLLOW_LINKS = new("internal-nofollow-links", IssueCategory.Links, IssueSeverity.Warning,
@@ -188,7 +205,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/qualify-outbound-links#nofollow",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "text", "position", "flags", "links"]
     };
 
     public static readonly IssueDefinition EMPTY_ANCHOR_TEXT = new("empty-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
@@ -200,7 +218,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "position", "flags", "links"]
     };
 
     public static readonly IssueDefinition BROKEN_FRAGMENT_LINKS = new("broken-fragment-links", IssueCategory.Links, IssueSeverity.Notice,
@@ -212,7 +231,8 @@ public static class IssueCatalog
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "fragment", "text", "position", "links"]
     };
 
     public static readonly IssueDefinition ORPHAN_PAGE = new("orphan-page", IssueCategory.Links, IssueSeverity.Warning,
@@ -237,7 +257,8 @@ public static class IssueCatalog
         Why = """Google drops a noindex page from its results entirely, even if other sites link to it. That's right for thank-you pages, internal search results, account pages and staging copies. On a page that should rank, a leftover noindex from a launch or a plugin setting is a common reason it vanishes from search.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
     };
 
     public static readonly IssueDefinition NOFOLLOW_PAGE = new("nofollow-page", IssueCategory.Indexability, IssueSeverity.Warning,
@@ -248,7 +269,8 @@ public static class IssueCatalog
         Why = """Search engines that honour it won't use the page's links to discover the pages they point to, so pages linked only from here may go unfound. A page-wide nofollow is rarely intended on a normal page; it's usually left over from a staging setup or set by a plugin.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nofollow",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
     };
 
     public static readonly IssueDefinition BLOCKED_BY_ROBOTS = new("blocked-by-robots", IssueCategory.Indexability, IssueSeverity.Notice,
@@ -260,7 +282,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots/intro",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["robotsRule"]
     };
 
     public static readonly IssueDefinition SNIPPET_BLOCKED = new("snippet-blocked", IssueCategory.Indexability, IssueSeverity.Notice,
@@ -271,7 +294,8 @@ public static class IssueCatalog
         Why = """Google shows the page in results without a text snippet or video preview, and doesn't use its content as direct input for AI Overviews or AI Mode. That can be intended, for example for sensitive content, but a result with no description tells searchers less about the page.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nosnippet",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["metaRobots", "xRobotsTag"]
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE = new("robots-txt-unreachable", IssueCategory.Indexability, IssueSeverity.Error,
@@ -322,7 +346,8 @@ public static class IssueCatalog
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
         SiteWide = true,
-        ReportedOnce = true
+        ReportedOnce = true,
+        Evidence = ["metaRobots", "xRobotsTag"]
     };
 
 
@@ -336,7 +361,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "indexability", "canonical", "flags"]
     };
 
     public static readonly IssueDefinition CANONICAL_MISSING = new("canonical-missing", IssueCategory.Canonicals, IssueSeverity.Notice,
@@ -370,7 +396,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "flags"]
     };
 
     public static readonly IssueDefinition CANONICAL_TO_REDIRECT = new("canonical-to-redirect", IssueCategory.Canonicals, IssueSeverity.Warning,
@@ -382,7 +409,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "flags"]
     };
 
     public static readonly IssueDefinition CANONICAL_TO_NON_INDEXABLE = new("canonical-to-non-indexable", IssueCategory.Canonicals, IssueSeverity.Warning,
@@ -394,7 +422,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "canonical", "final", "flags"]
     };
 
     public static readonly IssueDefinition CANONICAL_OUTSIDE_HEAD = new("canonical-outside-head", IssueCategory.Canonicals, IssueSeverity.Warning,
@@ -439,7 +468,9 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#best-practices",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["metaRobots", "xRobotsTag"],
+        TargetFacts = ["statusCode", "indexability", "flags"]
     };
 
 
@@ -453,7 +484,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#general-guidelines",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["indexability", "finalUrl", "canonicalUrl"]
     };
 
     public static readonly IssueDefinition NOT_IN_SITEMAP = new("not-in-sitemap", IssueCategory.Sitemaps, IssueSeverity.Notice,
@@ -500,7 +532,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#cross-submit",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.ResponseDetail
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["finalUrl"]
     };
 
 
@@ -535,7 +568,8 @@ public static class IssueCatalog
         Why = """Google sets no length limit for titles, but truncates title links to fit the device width, so the end of a long title may not show; 60 characters is a rough guide to what fits, not a rule. Google may also rewrite titles that are long-winded or stuffed with keywords. With the important words first, a cut-off rarely matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["title", "titleLength"]
     };
 
     public static readonly IssueDefinition TITLE_TOO_SHORT = new("title-too-short", IssueCategory.Titles, IssueSeverity.Notice,
@@ -546,7 +580,8 @@ public static class IssueCatalog
         Why = """Short isn't wrong: a brand or product name can be exactly right. But very short titles are often vague, such as "Home", "Products" or "Page 2", which Google's guidance warns against because they don't tell searchers what the page is or set it apart from similar pages.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["title", "titleLength"]
     };
 
     public static readonly IssueDefinition TITLE_DUPLICATE = new("title-duplicate", IssueCategory.Titles, IssueSeverity.Warning,
@@ -557,7 +592,8 @@ public static class IssueCatalog
         Why = """Google asks for distinct titles on every page, because identical ones make it impossible for searchers to tell pages apart, and it may rewrite title links that repeat boilerplate. Duplicate titles often mean duplicate pages, or a template that leaves out the distinguishing detail, such as the product, place or page number.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["title"]
     };
 
 
@@ -592,7 +628,8 @@ public static class IssueCatalog
         Why = """There's no length limit, but Google truncates snippets to fit the device width, so the end of a long description may not show, and it often builds the snippet from page text anyway. With the key point first, the cut rarely matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["description", "descriptionLength"]
     };
 
     public static readonly IssueDefinition DESCRIPTION_TOO_SHORT = new("description-too-short", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
@@ -603,7 +640,8 @@ public static class IssueCatalog
         Why = """There's no minimum, but a very short description rarely summarises the page, and Google uses the meta description only when it describes the page better than the page's own text. A short one is fine if it says everything that matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#use-quality-descriptions",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["description", "descriptionLength"]
     };
 
     public static readonly IssueDefinition DESCRIPTION_DUPLICATE = new("description-duplicate", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
@@ -614,7 +652,8 @@ public static class IssueCatalog
         Why = """Google says identical descriptions aren't helpful when individual pages appear in search, and recommends a unique one per page, with site-level wording only on the home page and other aggregation pages. Repeated descriptions usually come from a template default.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#create-unique-descriptions-for-each-page-on-your-site",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["description"]
     };
 
 
@@ -649,7 +688,8 @@ public static class IssueCatalog
         Why = """Identical main headings make similar pages hard to tell apart for visitors arriving from search, and often signal duplicate pages or a template whose heading lacks the distinguishing detail. Google doesn't document duplicate headings as a problem in themselves, so it's low priority unless the pages are duplicates too.""",
         LearnMore = null,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["h1"]
     };
 
 
@@ -673,7 +713,8 @@ public static class IssueCatalog
         Why = """Some duplication is normal and isn't against Google's spam policies. Google groups duplicates and shows one URL from the group, which may not be the one you'd choose, and crawls the others less often. The usual cause is the same page at several URLs, through parameters, trailing slashes or print versions.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["indexability", "canonicalUrl", "inlinks"]
     };
 
     public static readonly IssueDefinition NEAR_DUPLICATE_CONTENT = new("near-duplicate-content", IssueCategory.Content, IssueSeverity.Notice,
@@ -684,7 +725,8 @@ public static class IssueCatalog
         Why = """Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That's fine for variants you don't need to rank separately. Pages that should rank on their own need differences that are, in Google's words, clear and significant.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/canonicalization-troubleshooting",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["indexability", "canonicalUrl", "inlinks", "wordCount"]
     };
 
     public static readonly IssueDefinition DUPLICATE_SITE_VERSION = new("duplicate-site-version", IssueCategory.Content, IssueSeverity.Warning,
@@ -709,8 +751,10 @@ public static class IssueCatalog
     {
         Why = """Some screen readers read out the image's file name when there's no alt, and WCAG requires a text alternative for every image that conveys something. Google uses alt text, with computer vision and the page's content, to understand images for Google Images, and as the anchor text when an image is a link.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/google-images",
+        References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["img", "position", "links"]
     };
 
     public static readonly IssueDefinition IMAGE_ALT_TOO_LONG = new("image-alt-too-long", IssueCategory.Images, IssueSeverity.Notice,
@@ -720,8 +764,10 @@ public static class IssueCatalog
     {
         Why = """W3C's guidance is that alt text should be the most concise description of the image's purpose, and anything longer than a short phrase or sentence belongs in a caption or the surrounding text. Screen reader users hear alt text in one go and can't skim it, and Google warns that alt text stuffed with keywords can make a site look spammy. 125 characters is a common convention, not a standard.""",
         LearnMore = "https://www.w3.org/WAI/tutorials/images/tips/",
+        References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["img", "position"]
     };
 
     public static readonly IssueDefinition IMAGE_MISSING_DIMENSIONS = new("image-missing-dimensions", IssueCategory.Images, IssueSeverity.Notice,
@@ -731,8 +777,10 @@ public static class IssueCatalog
     {
         Why = """Without both attributes, and unless CSS gives the image box a size or aspect-ratio, the browser can't reserve space before the image loads, so the content below jumps when it arrives. That layout shift annoys readers and counts towards Cumulative Layout Shift, one of Google's Core Web Vitals. If the CSS already reserves the space, nothing needs doing.""",
         LearnMore = "https://web.dev/articles/optimize-cls#images-without-dimensions",
+        References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["img", "pixelWidth", "pixelHeight", "position"]
     };
 
     public static readonly IssueDefinition IMAGE_BROKEN = new("image-broken", IssueCategory.Images, IssueSeverity.Error,
@@ -744,7 +792,8 @@ public static class IssueCatalog
         LearnMore = null,
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "text", "position", "links"]
     };
 
     public static readonly IssueDefinition IMAGE_TOO_LARGE = new("image-too-large", IssueCategory.Images, IssueSeverity.Warning,
@@ -756,7 +805,8 @@ public static class IssueCatalog
         LearnMore = "https://web.dev/articles/optimize-lcp#reduce-size",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["sizeBytes", "contentType", "pixelWidth", "pixelHeight", "img", "statusCode", "final", "position", "links"]
     };
 
 
@@ -792,7 +842,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#common-mistakes",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "text", "indexability"]
     };
 
     public static readonly IssueDefinition HREFLANG_BROKEN_TARGET = new("hreflang-broken-target", IssueCategory.Hreflang, IssueSeverity.Error,
@@ -804,7 +855,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "text"]
     };
 
     public static readonly IssueDefinition HREFLANG_TO_NON_INDEXABLE = new("hreflang-to-non-indexable", IssueCategory.Hreflang, IssueSeverity.Warning,
@@ -816,7 +868,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "final", "canonical", "text"]
     };
 
     public static readonly IssueDefinition HREFLANG_DUPLICATE_CODE = new("hreflang-duplicate-code", IssueCategory.Hreflang, IssueSeverity.Warning,
@@ -827,7 +880,7 @@ public static class IssueCatalog
         Why = """Each language or language-region code should name exactly one URL; when a code names several, search engines can't tell which to show for that audience. It's usually two systems adding hreflang, such as a plugin and the theme, or the HTML and an HTTP header, or a copy-paste mistake in the set.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#html",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.HreflangCodes
     };
 
     public static readonly IssueDefinition HREFLANG_MISSING_X_DEFAULT = new("hreflang-missing-x-default", IssueCategory.Hreflang, IssueSeverity.Notice,
@@ -898,6 +951,7 @@ public static class IssueCatalog
     {
         Why = """Visitors who reach it get an unencrypted page that browsers label "Not secure", and if an HTTPS version also exists, the two are duplicates for Google to sort out. Usually internal links or a sitemap still point at the http:// URL and the server doesn't redirect it.""",
         LearnMore = "https://web.dev/articles/enable-https#redirect-to-https",
+        References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None
     };
@@ -911,7 +965,8 @@ public static class IssueCatalog
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.RelatedUrl
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["kind", "statusCode", "contentType", "position", "links"]
     };
 
     public static readonly IssueDefinition SECURITY_HEADERS_MISSING = new("security-headers-missing", IssueCategory.Security, IssueSeverity.Notice,
@@ -935,6 +990,7 @@ public static class IssueCatalog
     {
         Why = """Google treats URLs as case-sensitive, so /Page and /page are different URLs: if the server serves both, mixed-case links create duplicates, and if it doesn't, links typed in lowercase break. Lowercase URLs avoid both. An established URL that works and is linked consistently is fine to leave, since changing it needs redirects.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure#be-aware-that-urls-are-case-sensitive",
+        References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None
     };
@@ -946,6 +1002,7 @@ public static class IssueCatalog
     {
         Why = """Google recommends hyphens to separate words in URLs, because underscores are commonly read as joining words (as in format_date) rather than separating them, and hyphens help users and search engines identify the words. The effect is small, so don't change established URLs for this alone.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure#use-hyphens-to-separate-words",
+        References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None
     };

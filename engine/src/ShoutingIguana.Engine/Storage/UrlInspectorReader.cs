@@ -464,6 +464,14 @@ public static class UrlInspectorReader
         return Inspected(context, reader.GetInt32(0)) is { } refreshed ? (refreshed, RedirectVia.MetaRefresh) : null;
     }
 
+    /// <summary>A URL the crawl has, with its status and what became of the request for it, as the inspector names one.</summary>
+    internal static UrlTarget? TargetOf(GridReadContext context, int urlId) =>
+        Inspected(context, urlId) is { } url ? new UrlTarget(url.Id, url.Url, url.Status, url.Shown) : null;
+
+    /// <summary>A URL's redirects hop by hop, as the inspector gives them, or null for a URL the crawl has none for (it doesn't redirect).</summary>
+    internal static RedirectChain? RedirectsOf(GridReadContext context, int urlId) =>
+        Inspected(context, urlId) is { } url && Redirects(context, url) is { Hops.Count: > 0 } chain ? chain : null;
+
     /// <summary>
     /// The URL's redirects hop by hop, as the analysis's trace follows them: until a URL doesn't move on, comes back on
     /// itself, or after as many hops as browsers follow.

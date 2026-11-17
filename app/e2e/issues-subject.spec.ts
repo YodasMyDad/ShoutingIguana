@@ -285,7 +285,10 @@ test('every check’s count is called what the check flags, as a share of the AP
       if (check.grouping === 'none') {
         await expect(detail.getByRole('grid')).toHaveAccessibleName(`${check.title}: affected ${words.many}`);
         await expect(listed.locator('xpath=..')).toHaveText(
-          new RegExp(`^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))}$`),
+          // Then the order the engine gives them in (evidence): the most linked first, or the most used.
+          new RegExp(
+            `^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))}(, most (linked|used) first)?$`,
+          ),
         );
       } else {
         const groups = detail.getByRole('treegrid');
@@ -486,7 +489,8 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   await page.goto(`/crawls/${item.id}/issues/${BIG.page}`);
   await expect(figure(page, 'Pages affected')).toHaveText(/^Pages affected\s*654,321\s*Open them in URLs$/);
   await expect(figure(page, 'Share of pages')).toHaveText(/^Share of pages\s*66%\s*of the 987,654 pages analysed$/);
-  await expect(detail.getByText('654,321 pages', { exact: true })).toBeVisible();
+  // The count, then the order the engine gives the pages in (evidence).
+  await expect(detail.getByText('654,321 pages, most linked first', { exact: true })).toBeVisible();
   await expectFiguresFit(page, 'a page check at 1280x720');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-page-check.png') });
 

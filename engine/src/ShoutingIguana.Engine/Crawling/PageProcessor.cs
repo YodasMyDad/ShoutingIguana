@@ -184,6 +184,8 @@ internal sealed class PageProcessor(
             ContentType = response.ContentType,
             SizeBytes = response.TransferBytes ?? response.ContentLength,
             BodyBytes = response.BodyBytes,
+            PixelWidth = response.PixelWidth,
+            PixelHeight = response.PixelHeight,
             TimeToFirstByteMs = response.TimeToFirstByteMs,
             ResponseMs = response.TotalMs,
             HttpVersion = response.HttpVersion,

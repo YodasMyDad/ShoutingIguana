@@ -43,6 +43,22 @@ public sealed record IssueDefinition(
     public IssueReferences References { get; init; }
 
     /// <summary>
+    /// The URL grid's columns (<c>Storage.UrlColumns</c> ids) that show what the check found on each of its rows, in the
+    /// order to show them: a too-long title's title and its length, where a noindex comes from, a redirect's hops. Empty
+    /// for a check whose URL and detail say it all. Only how the check is shown: it isn't stored with an analysis, nor
+    /// part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public IReadOnlyList<string> Evidence { get; init; } = [];
+
+    /// <summary>
+    /// What to say about each URL the check's issues name (a page's targets, a group's related URL), as the names of a
+    /// target's fields (<c>Storage.Models.IssueTarget</c>) in the order to say them: an oversized image's file size and
+    /// pixels, a redirecting link's final URL. Empty for a check that names no URL. Only how the check is shown, as
+    /// <see cref="Evidence"/> is.
+    /// </summary>
+    public IReadOnlyList<string> TargetFacts { get; init; } = [];
+
+    /// <summary>
     /// The check finds one fault of the whole site, not a fault of pages: robots.txt that search engines can't read, a
     /// site not on HTTPS. However many URLs it is reported on (one, or each other version of the site that answers), the
     /// score counts it as the whole site (<see cref="ScoreCalculator"/>). It isn't part of

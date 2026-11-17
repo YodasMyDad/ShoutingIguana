@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 
 namespace ShoutingIguana.Sidecar.Serialization;
@@ -45,6 +46,12 @@ internal sealed class UrlRowsConverter : JsonConverter<UrlRowsDto>
                     break;
                 case double number:
                     writer.WriteNumberValue(number);
+                    break;
+                case RedirectChain chain:
+                    JsonSerializer.Serialize(writer, chain, SidecarJsonContext.Default.RedirectChain);
+                    break;
+                case RobotsRefusal refusal:
+                    JsonSerializer.Serialize(writer, refusal, SidecarJsonContext.Default.RobotsRefusal);
                     break;
                 case var number:
                     writer.WriteNumberValue(Convert.ToInt64(number, CultureInfo.InvariantCulture));

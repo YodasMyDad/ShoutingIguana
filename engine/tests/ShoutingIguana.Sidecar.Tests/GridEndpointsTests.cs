@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
@@ -30,7 +31,15 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal((false, false, false, false), Flags(columns.Single(column => (string?)column["id"] == "metaRobots")));
         Assert.Equal((false, true, true, true), Flags(columns.Single(column => (string?)column["id"] == "detail")));
         Assert.Equal((false, false, true, true), Flags(columns.Single(column => (string?)column["id"] == "relatedUrl")));
-        Assert.All(columns, column => Assert.Contains((string?)column["type"], new[] { "number", "text", "enum", "boolean" }));
+        Assert.All(columns, column => Assert.Contains((string?)column["type"], new[] { "number", "text", "enum", "boolean", "object" }));
+
+        // Evidence: a redirect's hops are a record, shown only; where a file is used needs the analysis; an image's pixels are its own.
+        var chain = columns.Single(column => (string?)column["id"] == "redirectChain");
+        Assert.Equal(("object", "Redirect chain"), ((string?)chain["type"], (string?)chain["title"]));
+        Assert.Equal((false, false, false, false), Flags(chain));
+        Assert.Equal((true, true, true, false), Flags(columns.Single(column => (string?)column["id"] == "usedOn")));
+        var width = columns.Single(column => (string?)column["id"] == "pixelWidth");
+        Assert.Equal(("px", false), ((string?)width["unit"], (bool)width["needsAnalysis"]!));
 
         static (bool, bool, bool, bool) Flags(JsonNode column) =>
             ((bool)column["needsAnalysis"]!, (bool)column["sortable"]!, (bool)column["filterable"]!, (bool)column["issueRowsOnly"]!);
@@ -360,12 +369,14 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         var related = counts.Where(count => count.Value > 0).Select(count => IssueCatalog.Find(count.Key)!)
             .First(check => check.Grouping == IssueGrouping.RelatedUrl).Id;
         var groups = await PostOkAsync($"api/crawls/{grid.Id}/issues/{related}/groups", JsonNode.Parse("""{"limit":1000}"""));
-        Assert.Equal(["checkId", "grouping", "total", "groupCount", "offset", "groups"], groups.AsObject().Select(property => property.Key));
+        Assert.Equal(["checkId", "grouping", "total", "groupCount", "offset", "groups", "sort", "likelyTemplate"], groups.AsObject().Select(property => property.Key));
         Assert.Equal("relatedUrl", (string?)groups["grouping"]);
         Assert.Equal(counts[related], (long?)groups["total"]);
         foreach (var group in groups["groups"]!.AsArray())
         {
-            Assert.Equal(["detail", "relatedUrlId", "relatedUrl", "pages", "share", "likelyTemplate", "urls"], group!.AsObject().Select(property => property.Key));
+            Assert.Equal(["detail", "relatedUrlId", "relatedUrl", "pages", "share", "likelyTemplate", "related", "sharedText", "urls"],
+                group!.AsObject().Select(property => property.Key));
+            Assert.Equal(group["relatedUrlId"] is null, group["related"] is null);
             Assert.Equal((long?)group["pages"], (long?)group["urls"]);
             var key = new JsonObject { ["detail"] = group["detail"]?.DeepClone(), ["relatedUrlId"] = group["relatedUrlId"]?.DeepClone() };
             var rows = await PostOkAsync($"api/crawls/{grid.Id}/issues/{related}/rows", new JsonObject { ["group"] = key, ["limit"] = 1000 });
@@ -455,9 +466,44 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal("broken-internal-links", (string?)named["checkId"]);
         Assert.Equal(ids, named["urls"]!.AsArray().Select(page => (int)page!["urlId"]!));
         var target = named["urls"]![0]!["targets"]![0]!;
-        Assert.Equal(["id", "url", "statusCode", "fetched", "outcome", "kind", "text", "position"], target.AsObject().Select(property => property.Key));
+        Assert.Equal(
+            ["id", "url", "statusCode", "fetched", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical",
+             "kind", "text", "position", "fragment", "flags", "links", "img"],
+            target.AsObject().Select(property => property.Key));
         Assert.True((int?)target["statusCode"] >= 400);
         Assert.Equal("hyperlink", (string?)target["kind"]);
+        Assert.Equal(JsonValueKind.Array, target["flags"]!.GetValueKind());
+        Assert.True((int)target["links"]! >= 1);
+
+        // An oversized image says what it is, the largest first, and how the page shows it (evidence).
+        var large = await PostOkAsync($"api/crawls/{grid.Id}/issues/image-too-large/targets", new JsonObject { ["urlIds"] = new JsonArray(IdOf("/plants/image-large")) });
+        var image = large["urls"]![0]!["targets"]![0]!;
+        Assert.Equal(("image/jpeg", 300 * 1024, 4000, 3000), ((string?)image["contentType"], (int)image["sizeBytes"]!, (int)image["pixelWidth"]!, (int)image["pixelHeight"]!));
+        Assert.Equal("""{"width":"400","height":"300","alt":"A very large photo","hasAlt":true,"altLength":18,"srcset":false,"loading":null}""", image["img"]!.ToJsonString());
+        Assert.Equal("none", (string?)image["indexability"]);
+
+        // What each check shows, and a group's URL and order.
+        var tooLong = checks.Single(check => (string?)check!["id"] == "title-too-long")!;
+        Assert.Equal("""["title","titleLength"]""", tooLong["evidence"]!.ToJsonString());
+        Assert.Equal("[]", tooLong["targetFacts"]!.ToJsonString());
+        var groups = await PostOkAsync($"api/crawls/{grid.Id}/issues/image-too-large/groups");
+        Assert.Equal(("size", false), ((string?)groups["sort"], (bool)groups["likelyTemplate"]!));
+        Assert.Equal(4000, (int)groups["groups"]![0]!["related"]!["pixelWidth"]!);
+        Assert.Equal("pages", (string?)(await PostOkAsync($"api/crawls/{grid.Id}/issues/image-too-large/groups", JsonNode.Parse("""{"sort":"pages"}""")))["sort"]);
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/issues/image-too-large/groups", JsonNode.Parse("""{"sort":"colour"}""")),
+            HttpStatusCode.UnprocessableEntity, "invalid-query");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/issues/internal-client-error/groups", JsonNode.Parse("""{"sort":"size"}""")),
+            HttpStatusCode.UnprocessableEntity, "invalid-query");
+
+        // A redirect's hops and robots.txt's rule are records in a row.
+        var loops = await PostOkAsync($"api/crawls/{grid.Id}/issues/redirect-loop/rows", JsonNode.Parse("""{"columns":["url","redirectChain"]}"""));
+        var chain = loops["rows"]![0]!["redirectChain"]!;
+        Assert.Equal(["hops", "final", "loop", "tooLong"], chain.AsObject().Select(property => property.Key));
+        Assert.True((bool)chain["loop"]!);
+        Assert.Equal(["id", "url", "statusCode", "outcome", "via"], chain["hops"]![0]!.AsObject().Select(property => property.Key));
+        var robots = await PostOkAsync($"api/crawls/{grid.Id}/issues/blocked-by-robots/rows", JsonNode.Parse("""{"columns":["robotsRule"]}"""));
+        Assert.Equal(["origin", "reason", "line", "rule"], robots["rows"]![0]!["robotsRule"]!.AsObject().Select(property => property.Key));
+        Assert.Equal("rule", (string?)robots["rows"]![0]!["robotsRule"]!["reason"]);
 
         // Bounded, and refused where the request can't be read.
         foreach (var body in new[] { "{}", """{"urlIds":[]}""", $$"""{"urlIds":[{{string.Join(",", Enumerable.Range(1, 101))}}]}""", """{"urlIds":[1],"limit":51}""" })

@@ -26,14 +26,14 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         [
             "internal-client-error", "internal-server-error", "internal-unreachable", "internal-blocked", "redirect-chain", "redirect-loop",
             "redirect-broken", "redirect-temporary", "redirect-downgrade", "orphan-page", "blocked-by-robots", "sitemap-non-indexable",
-            "sitemap-url-other-host"
+            "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores"
         ];
         string[] targets =
         [
             "broken-internal-links", "broken-external-links", "links-to-redirects", "internal-nofollow-links", "empty-anchor-text",
             "broken-fragment-links", "canonicalised-page", "canonical-broken", "canonical-to-redirect", "canonical-to-non-indexable",
             "noindex-with-canonical", "image-broken", "image-too-large", "hreflang-missing-return", "hreflang-broken-target",
-            "hreflang-to-non-indexable", "mixed-content"
+            "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
@@ -149,6 +149,25 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         }
     }
 
+    /// <summary>
+    /// A page's logo linking the page itself, with nothing to read, is named as the page itself, and its link is that one:
+    /// not the page's "#" and "#top" links to itself, which are jumps within it that the check passes.
+    /// </summary>
+    [Fact]
+    public void AnEmptyLinkToThePageItselfIsReadAsThatLinkNotAJumpWithinThePage()
+    {
+        var page = Flagged("empty-anchor-text").Single(id => Url(id).EndsWith("/plants/empty-self-link", StringComparison.Ordinal));
+        var named = FoundOnReader.ReadTargets(crawl.Path, "empty-anchor-text", [page])!.Single();
+        var target = Assert.Single(named.Targets);
+        Assert.Equal(page, target.Id);
+        Assert.Equal(LinkKind.Hyperlink, target.Kind);
+        Assert.Null(target.Text);
+        Assert.Null(target.Fragment);
+        Assert.Equal(LinkFlags.ImageLink | LinkFlags.SamePage, target.Flags);
+        Assert.Equal(LinkPosition.Content, target.Position);
+        Assert.True(target.Links >= 3, $"{target.Links} links to itself");
+    }
+
     [Fact]
     public void AskedOnceInOrderUnknownLeftOutAndBounded()
     {
@@ -183,7 +202,7 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
     }
 
     /// <summary>Checks the synthetic site plants only when served over HTTPS (a linked redirect to http, a page loading http resources).</summary>
-    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content";
+    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page";
 
     private List<int> Flagged(string check) =>
     [

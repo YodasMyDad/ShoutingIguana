@@ -18,6 +18,8 @@ export interface ValueFilters {
  * shape the column's type doesn't take). An empty cell is "is empty" and "is not empty".
  */
 export function valueFilters(column: string, type: UrlColumnType, value: unknown): ValueFilters | null {
+  // A redirect chain, a robots.txt rule: shown only, the engine filters by no part of one, nor by its being there.
+  if (type === 'object') return null;
   if (value === null || value === undefined || value === '') {
     return { only: { column, op: 'isEmpty' }, except: { column, op: 'isNotEmpty' } };
   }

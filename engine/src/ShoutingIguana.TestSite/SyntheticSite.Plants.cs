@@ -27,7 +27,13 @@ public sealed partial class SyntheticSite
     /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
     private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
 
-    private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024);
+    private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024, LARGE_IMAGE_WIDTH, LARGE_IMAGE_HEIGHT);
+
+    /// <summary>The size in pixels the planted large image says it is.</summary>
+    public const int LARGE_IMAGE_WIDTH = 4_000;
+
+    /// <inheritdoc cref="LARGE_IMAGE_WIDTH"/>
+    public const int LARGE_IMAGE_HEIGHT = 3_000;
     private static readonly string LONG_ALT = string.Join(' ', Enumerable.Repeat("a very long alt text", 8));
 
     private List<Plant> CreatePlants()
@@ -245,11 +251,12 @@ public sealed partial class SyntheticSite
         });
 
         // A logo linking its own page has nothing to read all the same, as on a home page. Links written as a fragment
-        // (a script's "#", a "back to top" arrow) are jumps within the page, not links to read.
+        // (a script's "#", a "back to top" arrow) are jumps within the page, not links to read. They come first, as a menu
+        // toggle often does, so what reads the page's link to itself must pass them for the logo.
         Page("empty-self-link", "Image link to its own page", ["empty-anchor-text"], page => page with
         {
-            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}empty-self-link\"><img src=\"/img/3.jpg\" alt=\"\" width=\"400\" height=\"300\"></a> " +
-                      "<a href=\"#\" class=\"menu-toggle\"><svg><path d=\"M0 0\"/></svg></a> <a href=\"#top\"><svg><path d=\"M0 0\"/></svg></a></p>"
+            Content = page.Content + "<p><a href=\"#\" class=\"menu-toggle\"><svg><path d=\"M0 0\"/></svg></a> <a href=\"#top\"><svg><path d=\"M0 0\"/></svg></a> " +
+                      $"<a href=\"{PLANTS_PATH}empty-self-link\"><img src=\"/img/3.jpg\" alt=\"\" width=\"400\" height=\"300\"></a></p>"
         });
 
         // Icon links named the ways screen readers name them (a labelled SVG, a title behind an empty aria-label, a label

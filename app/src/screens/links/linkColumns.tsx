@@ -6,6 +6,7 @@ import type { ChooserGroup } from '../../grid/ColumnChooser';
 import type { FilterColumn, FilterGroup } from '../../grid/filterEditing';
 import type { GridColumn } from '../../grid/types';
 import { midPhrase } from '../../grid/urlFilterWords';
+import { objectCellWords } from '../../crawl/evidence';
 import { FLAG_WORDS } from '../../inspector/words';
 import { urlStatusWords } from '../urls/urlColumns';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
@@ -133,7 +134,7 @@ export function endUrls(rows: readonly LinkRow[], end: 'from' | 'to'): { text: s
 /** Columns of an end that hold a URL: drawn in the URL's face. */
 const URL_TEXT: ReadonlySet<string> = new Set(['redirectTarget', 'canonicalUrl', 'finalUrl']);
 
-const WIDTHS: Record<UrlColumnType, number> = { number: 112, boolean: 104, enum: 152, text: 240 };
+const WIDTHS: Record<UrlColumnType, number> = { number: 112, boolean: 104, enum: 152, text: 240, object: 320 };
 const OWN_WIDTHS: Record<string, number> = {
   id: 112,
   kind: 96,
@@ -280,6 +281,16 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
         return linkValueName(id, raw) ?? String(raw);
       };
       return { ...base, cell: (row) => words(row) || muted('–'), text: words };
+    }
+    case 'object': {
+      // An end's redirect chain or robots.txt rule, in one line: whole in its tooltip.
+      const raw = (row: LinkRow) => (row as unknown as Record<string, unknown>)[id];
+      const words = (row: LinkRow) => objectCellWords(id, raw(row), context.siteOrigin);
+      return {
+        ...base,
+        cell: (row) => (words(row) ? <span title={words(row)}>{words(row)}</span> : muted('–')),
+        text: (row) => objectCellWords(id, raw(row), null),
+      };
     }
     case 'text': {
       const words = (row: LinkRow) => {

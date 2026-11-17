@@ -25,12 +25,47 @@ internal static class WhereFoundColumns
     private const string SEPARATOR = "; ";
 
     /// <summary>The columns for a check's file; null for a check that refers to nothing, or one the engine doesn't know.</summary>
-    public static ExportExtraColumns? For(ExportRun run, string? checkId) => (checkId is null ? null : IssueCatalog.Find(checkId))?.References switch
+    public static ExportExtraColumns? For(ExportRun run, string? checkId) => (checkId is null ? null : IssueCatalog.Find(checkId)) switch
     {
-        IssueReferences.Sources => new ExportExtraColumns(["Linked from (pages)", "Linked from", "Listed in sitemaps"], ids => Sources(run, ids)),
-        IssueReferences.Targets => new ExportExtraColumns(["Links to (addresses)", "Links to"], ids => Targets(run, checkId!, ids)),
+        { References: IssueReferences.Sources } => new ExportExtraColumns(["Linked from (pages)", "Linked from", "Listed in sitemaps"], ids => Sources(run, ids)),
+        { References: IssueReferences.Targets } check => TargetColumns(run, check),
         _ => null
     };
+
+    /// <summary>
+    /// A check whose pages hold the bad references: named by what they are ("Images", "Canonical", "Alternates"), how many
+    /// each page's issue names and the first of them, each with what it is and how the page links to it. A canonical check
+    /// has one column, a page having one canonical; <c>image-too-large</c> also the largest image's size, as a number to
+    /// sort the sheet by.
+    /// </summary>
+    private static ExportExtraColumns TargetColumns(ExportRun run, IssueDefinition check)
+    {
+        var noun = check.Category switch
+        {
+            IssueCategory.Images => "Images",
+            IssueCategory.Hreflang => "Alternates",
+            IssueCategory.Security => "HTTP resources",
+            _ => "Links to"
+        };
+
+        if (check.Category == IssueCategory.Canonicals)
+        {
+            return new ExportExtraColumns(["Canonical"], ids => Targets(run, check, ids, page => [Joined([.. page.Targets.Select(target => Target(check, target))], page.Total - page.Targets.Count)]));
+        }
+
+        if (check == IssueCatalog.IMAGE_TOO_LARGE)
+        {
+            return new ExportExtraColumns([$"{noun} (addresses)", noun, "Largest image (bytes)"], ids => Targets(run, check, ids, page =>
+            [
+                page.Total,
+                Joined([.. page.Targets.Select(target => Target(check, target))], page.Total - page.Targets.Count),
+                page.Targets.Select(target => target.Facts?.SizeBytes).Max()
+            ]));
+        }
+
+        return new ExportExtraColumns([$"{noun} (addresses)", noun], ids => Targets(run, check, ids, page =>
+            [page.Total, Joined([.. page.Targets.Select(target => Target(check, target))], page.Total - page.Targets.Count)]));
+    }
 
     private static IReadOnlyDictionary<int, object?[]> Sources(ExportRun run, IReadOnlyList<int> ids) =>
         FoundOnReader.ReadFoundOn(run.CrawlPath, ids, LISTED, run.Settings.Cache, run.Token).ToDictionary(url => url.UrlId, url => new object?[]
@@ -40,17 +75,16 @@ internal static class WhereFoundColumns
             Joined([.. url.Sitemaps.Sitemaps.Select(sitemap => sitemap.Url)], url.Sitemaps.Total - url.Sitemaps.Sitemaps.Count)
         });
 
-    private static IReadOnlyDictionary<int, object?[]> Targets(ExportRun run, string checkId, IReadOnlyList<int> ids) =>
-        (FoundOnReader.ReadTargets(run.CrawlPath, checkId, ids, LISTED, run.Settings.Cache, run.Token) ?? []).ToDictionary(page => page.UrlId, page => new object?[]
-        {
-            page.Total,
-            Joined([.. page.Targets.Select(Target)], page.Total - page.Targets.Count)
-        });
+    private static IReadOnlyDictionary<int, object?[]> Targets(ExportRun run, IssueDefinition check, IReadOnlyList<int> ids, Func<IssueTargetsOfUrl, object?[]> cells) =>
+        (FoundOnReader.ReadTargets(run.CrawlPath, check.Id, ids, LISTED, run.Settings.Cache, run.Token) ?? []).ToDictionary(page => page.UrlId, cells);
 
     /// <summary>Each page linking to the URL once, with where on it its first link is and the link's text.</summary>
     private static IEnumerable<string> Pages(UrlFoundOn url) => url.Sources.GroupBy(source => source.Id).Select(links =>
+        Place(links.First()) is { } place ? $"{links.First().Url} ({place})" : links.First().Url);
+
+    /// <summary>Where on its page a link is, what kind it is when not a hyperlink, and its text: "footer, “Old range”"; null with none of them.</summary>
+    internal static string? Place(LinkRow link)
     {
-        var link = links.First();
         List<string> what = [];
         if (link.Kind is { } kind and not LinkKind.Hyperlink)
         {
@@ -67,14 +101,136 @@ internal static class WhereFoundColumns
             what.Add($"“{OneLine(link.Text)}”");
         }
 
-        return what.Count == 0 ? link.Url : $"{link.Url} ({string.Join(", ", what)})";
-    });
-
-    private static string Target(IssueTarget target)
-    {
-        var status = target.StatusCode is { } code ? code.ToString(CultureInfo.InvariantCulture) : target.Outcome is { } outcome ? OutcomeWord(outcome) : null;
-        return status is null ? target.Url : $"{target.Url} ({status})";
+        return what.Count == 0 ? null : string.Join(", ", what);
     }
+
+    /// <summary>
+    /// A URL a page's issue names, with what it is and how the page links to it, as a cell and the report say it:
+    /// "https://x/old (301 → https://x/new/ 200; content, “Shop”)", "https://x/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px,
+    /// shown at 400×300; content, alt “Sofa”)".
+    /// </summary>
+    internal static string Target(IssueDefinition check, IssueTarget target)
+    {
+        return $"{TargetUrl(check, target)} ({TargetFacts(check, target)})";
+    }
+
+    /// <summary>What a target is and how the page links to it, without its URL: "301 → https://x/new/ 200; content, “Shop”".</summary>
+    internal static string TargetFacts(IssueDefinition check, IssueTarget target)
+    {
+        List<string> parts = [StatusOf(target.StatusCode, target.Outcome) + (target.Facts?.Final is { } final ? $" → {final.Url} {StatusOf(final.StatusCode, final.Outcome)}" : string.Empty)];
+        if (check.Category == IssueCategory.Images)
+        {
+            parts.AddRange(ImageFacts(check, target));
+        }
+        else
+        {
+            if (target.Facts?.Indexability is { } reason and not IndexabilityReason.None and not IndexabilityReason.Redirected)
+            {
+                parts.Add(target.Facts.Canonical is { } canonical ? $"canonicalised to {canonical.Url}" : ReasonWord(reason));
+            }
+
+            List<string> link = [];
+            if (check == IssueCatalog.MIXED_CONTENT && target.Kind is { } kind)
+            {
+                link.Add($"{KindWord(kind)} in the {PositionWord(target.Position ?? LinkPosition.Content)}");
+            }
+            else if (check.Category is IssueCategory.Links && target.Position is { } position)
+            {
+                link.Add(PositionWord(position));
+            }
+
+            if (target.Flags.HasFlag(LinkFlags.ImageLink))
+            {
+                link.Add("image link");
+            }
+
+            if (target.Flags.HasFlag(LinkFlags.FromHttpHeader))
+            {
+                link.Add("from the HTTP header");
+            }
+
+            if (!string.IsNullOrWhiteSpace(target.Text) && check.Category is not IssueCategory.Canonicals)
+            {
+                link.Add($"“{OneLine(target.Text)}”");
+            }
+
+            if (link.Count > 0)
+            {
+                parts.Add(string.Join(", ", link));
+            }
+        }
+
+        return string.Join("; ", parts.Where(part => part.Length > 0));
+    }
+
+    /// <summary>A target's URL as a cell shows it: with the missing #fragment for a broken fragment link.</summary>
+    internal static string TargetUrl(IssueDefinition check, IssueTarget target) =>
+        target.Fragment is { } fragment && check == IssueCatalog.BROKEN_FRAGMENT_LINKS ? $"{target.Url}#{fragment}" : target.Url;
+
+    /// <summary>An image's file and how the page shows it: "1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300", "content, alt “Sofa”", "no alt".</summary>
+    private static IEnumerable<string> ImageFacts(IssueDefinition check, IssueTarget target)
+    {
+        List<string> file = [];
+        if (target.Facts?.SizeBytes is { } size && check == IssueCatalog.IMAGE_TOO_LARGE)
+        {
+            file.Add(Analysis.Rules.RuleText.Size(size));
+        }
+
+        if (target.Facts?.ContentType is { } type && check == IssueCatalog.IMAGE_TOO_LARGE)
+        {
+            file.Add(type);
+        }
+
+        if (target.Facts is { PixelWidth: { } width, PixelHeight: { } height })
+        {
+            file.Add(string.Create(CultureInfo.InvariantCulture, $"{width}×{height} px"));
+        }
+
+        if (target.Img is { Width: { } shownWidth, Height: { } shownHeight })
+        {
+            file.Add($"shown at {shownWidth}×{shownHeight}");
+        }
+        else if (target.Img is { } img && check == IssueCatalog.IMAGE_MISSING_DIMENSIONS)
+        {
+            file.Add(img.Width is null && img.Height is null ? "no width or height" : img.Width is null ? "no width" : "no height");
+        }
+
+        if (file.Count > 0)
+        {
+            yield return string.Join(", ", file);
+        }
+
+        List<string> shown = [];
+        if (target.Position is { } position)
+        {
+            shown.Add(PositionWord(position));
+        }
+
+        shown.Add(target.Img switch
+        {
+            { HasAlt: false } => "no alt",
+            { Alt: { Length: > 0 } alt } => $"alt “{OneLine(alt)}”",
+            null when !string.IsNullOrWhiteSpace(target.Text) => $"alt “{OneLine(target.Text)}”",
+            _ => string.Empty
+        });
+        if (shown.Any(part => part.Length > 0))
+        {
+            yield return string.Join(", ", shown.Where(part => part.Length > 0));
+        }
+    }
+
+    private static string StatusOf(int? statusCode, UrlOutcome? outcome) =>
+        statusCode is { } code ? code.ToString(CultureInfo.InvariantCulture) : outcome is { } known ? OutcomeWord(known) : "not checked";
+
+    private static string ReasonWord(IndexabilityReason reason) => reason switch
+    {
+        IndexabilityReason.Noindex => "noindex",
+        IndexabilityReason.Canonicalised => "canonicalised",
+        IndexabilityReason.BlockedByRobots => "blocked by robots.txt",
+        IndexabilityReason.Blocked => "blocked",
+        IndexabilityReason.Unreachable => "no answer",
+        _ => "not indexable"
+    };
 
     /// <summary>The references as one cell, then how many more there are; nothing where there are none.</summary>
     private static string? Joined(IReadOnlyList<string> items, long more) => items.Count == 0

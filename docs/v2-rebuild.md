@@ -1046,6 +1046,11 @@ Everything below is public in `ShoutingIguana.Engine`.
 - Hreflang script subtags aren't checked against ISO 15924: any four letters pass. Rare enough that it wasn't added.
 - A sitemap URL on a different protocol from the sitemap (an http URL in an https sitemap) isn't reported.
   sitemaps.org drops it; the check only compares hosts. Left on the backlog.
+- The evidence a check shows (step 3b) leaves out what would need new collection or has no clear definition: which
+  image is inside an empty link, a breakdown of a large page's HTML, a near-duplicate cluster's similarity, every
+  failing sitemap with where each is referenced, the JSON-LD block that failed with the code around it, an alternate's
+  own hreflang list, and whether `canonical-invalid` is in the HTML or a Link header ([v2-evidence.md](v2-evidence.md),
+  Left out, and why). `pixelWidth` and `pixelHeight` are shown but don't sort or filter.
 
 ## How to verify
 

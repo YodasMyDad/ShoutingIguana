@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { IssueTargetsOfUrl, LinkRow, UrlFoundOn } from '../../api/inspector';
+import type { TargetFact } from '../../api/types';
 import { childPlace, pageChildren } from './groupTree';
 import {
   foundOnRows,
   foundOnSummary,
   linkPlaceWords,
-  linkedFromWords,
   referencesOf,
   sharedSource,
+  targetLineWords,
   targetRows,
   targetsSummary,
   templateLinkWords,
@@ -44,18 +45,25 @@ const found = (overrides: Partial<UrlFoundOn> = {}): UrlFoundOn => ({
 });
 
 describe('where a URL is found, in words', () => {
-  it('says how many pages link to it and the first, then the sitemap, the start URL, or nothing', () => {
+  it('says how many pages link to it and the first, where on it and what it says, then the sitemap, the start URL, or nothing', () => {
     const three = found({
       links: 4,
       pages: 3,
-      sources: [link(1, '/garden-furniture/'), link(1, '/garden-furniture/'), link(2, '/sofas/')],
+      sources: [
+        link(1, '/garden-furniture/', { position: 'footer', text: 'Old range' }),
+        link(1, '/garden-furniture/'),
+        link(2, '/sofas/'),
+      ],
     });
-    expect(foundOnSummary(three, ORIGIN)).toBe('Found on 3 pages · /garden-furniture/ +2');
+    expect(foundOnSummary(three, ORIGIN)).toBe('Found on 3 pages · /garden-furniture/ (Footer · “Old range”) +2');
     expect(foundOnSummary(found({ links: 1, pages: 1, sources: [link(1, '/a/')] }), ORIGIN)).toBe(
-      'Found on 1 page · /a/',
+      'Found on 1 page · /a/ (Content)',
     );
     expect(
-      foundOnSummary(found({ links: 9_000, pages: 5_000, pagesExact: false, sources: [link(1, '/a/')] }), ORIGIN),
+      foundOnSummary(
+        found({ links: 9_000, pages: 5_000, pagesExact: false, sources: [link(1, '/a/', { position: null })] }),
+        ORIGIN,
+      ),
     ).toBe('Found on 5,000+ pages · /a/ +4,999');
     const listed = found({ sitemaps: { total: 2, sitemaps: [{ id: 1, url: `${ORIGIN}/sitemap.xml` }] } });
     expect(foundOnSummary(listed, ORIGIN)).toBe('In a sitemap · /sitemap.xml +1');
@@ -64,7 +72,7 @@ describe('where a URL is found, in words', () => {
     // Another host shows whole.
     expect(
       foundOnSummary(
-        found({ links: 1, pages: 1, sources: [link(1, '/a/', { url: 'https://other.example/a/' })] }),
+        found({ links: 1, pages: 1, sources: [link(1, '/a/', { url: 'https://other.example/a/', position: null })] }),
         ORIGIN,
       ),
     ).toBe('Found on 1 page · https://other.example/a/');
@@ -154,24 +162,6 @@ describe('where a URL is found, in words', () => {
     expect(many.map(whereRowText)).toEqual([`${ORIGIN}/x/ (404)`, 'All 9 in the inspector']);
   });
 
-  it('says where to fix it in plain words, the first few then how many more', () => {
-    const sources = [link(1, '/garden/'), link(2, '/sofas/'), link(3, '/blog/'), link(4, '/x/')];
-    expect(linkedFromWords(found({ links: 8, pages: 8, sources }), ORIGIN)).toBe(
-      'Linked from /garden/, /sofas/, /blog/ and 5 more',
-    );
-    expect(linkedFromWords(found({ links: 2, pages: 2, sources: sources.slice(0, 2) }), ORIGIN)).toBe(
-      'Linked from /garden/ and /sofas/',
-    );
-    expect(linkedFromWords(found({ links: 1, pages: 1, sources: sources.slice(0, 1) }), ORIGIN)).toBe(
-      'Linked from /garden/',
-    );
-    expect(linkedFromWords(found({ sitemaps: { total: 1, sitemaps: [{ id: 1, url: 'x' }] } }), ORIGIN)).toBe(
-      'Listed in your sitemap',
-    );
-    expect(linkedFromWords(found({ start: true }), ORIGIN)).toBe('It’s the address the check started from');
-    expect(linkedFromWords(found(), ORIGIN)).toBeNull();
-  });
-
   it('finds the one page most of the URLs are linked from, with where on it when they share it', () => {
     const footer = (urlId: number) =>
       found({ urlId, links: 1, pages: 1, sources: [link(1, '/garden-furniture/', { position: 'footer' })] });
@@ -238,5 +228,37 @@ describe('a page under a group of one URL it names', () => {
     const named: IssueTargetsOfUrl = { urlId: 1, total: 2, targets: [target(3, '/a/', 404), target(9, '/b/', 301)] };
     expect(targetsSummary(named, ORIGIN, { id: 'broken-internal-links' }, 9)).toBe('Links to /b/ (301) +1');
     expect(targetsSummary(named, ORIGIN, { id: 'broken-internal-links' }, 77)).toBe('Links to /a/ (404) +1');
+  });
+
+  it('says a link to the page itself is to this same page, not its own address again', () => {
+    // A home page's logo linking home with nothing to read: the issue names the page itself.
+    const logo = {
+      id: 1,
+      url: `${ORIGIN}/`,
+      statusCode: 200,
+      fetched: true,
+      outcome: 'success' as const,
+      kind: 'hyperlink' as const,
+      text: null,
+      position: 'header' as const,
+      flags: ['imageLink' as const, 'samePage' as const],
+      links: 1,
+    };
+    const home: IssueTargetsOfUrl = { urlId: 1, total: 1, targets: [logo] };
+    const check = {
+      id: 'empty-anchor-text',
+      targetFacts: ['statusCode', 'position', 'flags', 'links'] as TargetFact[],
+    };
+    expect(targetsSummary(home, ORIGIN, check)).toBe('Links to this same page');
+    expect(targetsSummary({ ...home, total: 3 }, ORIGIN, check, 1)).toBe('Links to this same page +2');
+    expect(targetLineWords(home, 1, check, ORIGIN)).toBe('A link to this same page · in the header · image link');
+    expect(targetRows(home, check, ORIGIN).map(whereRowText)).toEqual([
+      `${ORIGIN}/ (200) · this same page · in the header · image link`,
+    ]);
+
+    // Another page's link to the home page names it as ever.
+    const page: IssueTargetsOfUrl = { urlId: 5, total: 1, targets: [logo] };
+    expect(targetsSummary(page, ORIGIN, check)).toBe('Links to / (200)');
+    expect(targetLineWords(page, 1, check, ORIGIN)).toBe('in the header · image link');
   });
 });

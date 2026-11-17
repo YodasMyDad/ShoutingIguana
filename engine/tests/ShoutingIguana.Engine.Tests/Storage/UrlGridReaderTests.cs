@@ -22,10 +22,13 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
     /// <summary>The start of every URL of the synthetic site, which runs on the loopback address.</summary>
     private const string LOCAL = "http://127.0.0.1:";
 
-    /// <summary>Every column but the two read from each page's stored details, which a test of their own checks.</summary>
+    /// <summary>
+    /// Every column but the two read from each page's stored details and the two whose value is a record (a redirect's hops,
+    /// robots.txt's rule), which tests of their own check (<see cref="EvidenceReadTests"/>).
+    /// </summary>
     private static readonly string[] COLUMNS =
     [
-        .. UrlGridReader.Columns.Select(column => column.Id).Where(id => id is not ("metaRobots" or "xRobotsTag"))
+        .. UrlGridReader.Columns.Select(column => column.Id).Where(id => id is not ("metaRobots" or "xRobotsTag" or "redirectChain" or "robotsRule"))
     ];
 
     public static TheoryData<string, bool> Sorts()
@@ -270,7 +273,7 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
     {
         var copy = crawl.Copy();
         Stamp(copy);
-        var crawlColumns = UrlGridReader.Columns.Where(column => !column.NeedsAnalysis && column.Id is not ("metaRobots" or "xRobotsTag")).Select(column => column.Id).ToList();
+        var crawlColumns = UrlGridReader.Columns.Where(column => !column.NeedsAnalysis && COLUMNS.Contains(column.Id)).Select(column => column.Id).ToList();
         var page = UrlGridReader.Query(copy, new UrlQuery { Columns = COLUMNS, Limit = 1 });
         Assert.Equal(new SummaryState(false, SummaryUnavailableReason.CrawlChanged), page.Summary);
         Assert.Equal(COLUMNS.Except(crawlColumns).Order(StringComparer.Ordinal), page.Unavailable.Order(StringComparer.Ordinal));

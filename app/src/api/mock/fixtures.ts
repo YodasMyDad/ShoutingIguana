@@ -202,6 +202,13 @@ export function adaptUrlRow(raw: Record<string, unknown>, severities: ReadonlyMa
     errors: count('error'),
     warnings: count('warning'),
     notices: count('notice'),
+    // The design fixtures were captured before the evidence columns: what they'd say isn't known.
+    usedOn: null,
+    pixelWidth: null,
+    pixelHeight: null,
+    fetchError: null,
+    redirectChain: null,
+    robotsRule: null,
   };
 }
 

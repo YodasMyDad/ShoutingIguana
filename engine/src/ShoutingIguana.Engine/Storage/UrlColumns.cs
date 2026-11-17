@@ -127,6 +127,12 @@ internal static class UrlColumns
         {
             Source = ColumnSource.Responses, CrawlSql = $"(SELECT {Status("rs")} FROM responses rs WHERE rs.url_id = r.redirect_url_id)", Sortable = false
         },
+        new("redirectChain", UrlColumnType.Object) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
+        new("fetchError", UrlColumnType.Text)
+        {
+            Source = ColumnSource.Responses, CrawlSql = $"CASE WHEN {FETCHED} AND r.outcome <> {(int)FetchOutcome.Success} THEN r.error END", Sortable = false
+        },
+        new("robotsRule", UrlColumnType.Object) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
         INDEXABLE,
         INDEXABILITY,
         new("noindex", UrlColumnType.Boolean)
@@ -158,6 +164,8 @@ internal static class UrlColumns
             SummarySql = "s.outlinks", CrawlSql = $"CASE WHEN {FETCHED} AND r.word_count IS NOT NULL THEN r.outlink_count END"
         },
         new("sizeBytes", UrlColumnType.Number) { SummarySql = "s.size_bytes", CrawlSql = $"CASE WHEN {FETCHED} THEN r.size_bytes END", Indexed = true },
+        new("pixelWidth", UrlColumnType.Number) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
+        new("pixelHeight", UrlColumnType.Number) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
         new("responseMs", UrlColumnType.Number)
         {
             SummarySql = "s.response_ms", Indexed = true,
@@ -180,6 +188,7 @@ internal static class UrlColumns
         new("followedInlinks", UrlColumnType.Number) { SummarySql = "s.followed_inlinks", Nullable = false },
         new("nofollowInlinks", UrlColumnType.Number) { SummarySql = "s.nofollow_inlinks", Nullable = false },
         new("linkingPages", UrlColumnType.Number) { SummarySql = "s.linking_pages", Indexed = true, Nullable = false },
+        new("usedOn", UrlColumnType.Number) { SummarySql = "s.used_on", Nullable = false },
         new("issues", UrlColumnType.Number) { SummarySql = "s.issues", Indexed = true, Nullable = false },
         new("errors", UrlColumnType.Number) { SummarySql = "s.errors", Nullable = false },
         new("warnings", UrlColumnType.Number) { SummarySql = "s.warnings", Nullable = false },

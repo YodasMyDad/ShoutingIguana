@@ -24,17 +24,17 @@ internal sealed class TitleRules(AnalysisSettings settings) : IPageRule
 
         if (titles.Count > 1)
         {
-            yield return new IssueHit(IssueCatalog.TITLE_MULTIPLE, page.UrlId, RuleText.Count(titles.Count, "title", "titles"));
+            yield return new IssueHit(IssueCatalog.TITLE_MULTIPLE, page.UrlId, RuleText.Listed(titles.Count, "title", "titles", titles));
         }
 
         var measured = DisplayWidth.Measure(titles[0]);
         if (measured.Width > settings.TitleMaxLength)
         {
-            yield return new IssueHit(IssueCatalog.TITLE_TOO_LONG, page.UrlId, RuleText.Width(measured));
+            yield return new IssueHit(IssueCatalog.TITLE_TOO_LONG, page.UrlId, RuleText.Over(RuleText.Width(measured), settings.TitleMaxLength));
         }
         else if (measured.Width < settings.TitleMinLength)
         {
-            yield return new IssueHit(IssueCatalog.TITLE_TOO_SHORT, page.UrlId, RuleText.Width(measured));
+            yield return new IssueHit(IssueCatalog.TITLE_TOO_SHORT, page.UrlId, RuleText.Under(RuleText.Width(measured), settings.TitleMinLength));
         }
     }
 }

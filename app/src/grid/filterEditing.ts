@@ -36,6 +36,8 @@ const OPS: Record<UrlColumnType, readonly DraftOp[]> = {
   text: ['contains', 'notContains', 'startsWith', 'endsWith', 'eq', 'ne', 'regex', 'notRegex', 'isEmpty', 'isNotEmpty'],
   enum: ['in', 'notIn', 'isEmpty', 'isNotEmpty'],
   boolean: ['isYes', 'isNo', 'isNotYes', 'isNotNo', 'isEmpty', 'isNotEmpty'],
+  // A redirect chain, a robots.txt rule: shown only, never filtered by.
+  object: [],
 };
 
 /** The operators a column of this type takes, the commonest first. */
