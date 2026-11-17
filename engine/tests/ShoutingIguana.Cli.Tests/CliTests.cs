@@ -516,7 +516,7 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True((bool?)result["summaryAvailable"]);
         Assert.Equal(2, (int?)result["runs"]);
         Assert.Empty(result["failures"]!.AsArray());
-        Assert.Equal(["facets", "grid", "groups", "inspector", "link-ends", "link-groups", "links", "links-grid", "lookup", "robots", "rows", "search", "sitemaps", "stats"],
+        Assert.Equal(["causes", "facets", "grid", "groups", "inspector", "link-ends", "link-groups", "links", "links-grid", "lookup", "robots", "rows", "search", "sitemaps", "stats"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
 
         // Search as it's typed: a keystroke with the crawl's text kept, held to the palette's budget, and the first one,

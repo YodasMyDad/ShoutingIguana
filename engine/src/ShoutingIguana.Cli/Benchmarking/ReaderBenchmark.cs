@@ -60,6 +60,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// The first search of a crawl reads that text from the file (<c>search-first</c>: 55 to 89 ms at p95 on the
     /// desktop, <b>over the palette's 50 ms</b>, which is why the palette asks an empty search as it opens): held to
     /// 200 ms for the runner, so it can't get slower unseen.</item>
+    /// <item>An analysis's checks as things to change, with what a fix of each clears (<c>causes</c>), pass over the
+    /// issues once, check by check: 19 to 22 ms at 100k on the desktop, cold, and kept after. Held to the formula's 200 ms,
+    /// as a read that grows linearly.</item>
     /// </list>
     /// engine/README.md has the measurements.
     /// </summary>
@@ -87,7 +90,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["link-pass-split"] = 1_500,
         ["search"] = 25,
         ["search-first"] = 200,
-        ["causes"] = 350
+        ["causes"] = 200
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
