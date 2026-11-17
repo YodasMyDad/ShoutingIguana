@@ -948,5 +948,12 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   crawl's. `CrawlPhase` is unchanged: the sidecar says `rechecking`.
 - **The CLI.** `si recheck` takes `--header` and `--proxy` for the secrets a crawl file doesn't keep, as `--resume` does,
   and refuses without them.
+- **Measured** on the branch's last commit, at 100k (32 cores, other lanes building beside it): the plain bench
+  unchanged (every planted issue, nothing else, 38 s, peak 204 MB and flat); `si bench --revisions` exact (33,156 rows
+  compared in 25.8 s); readbench's `compare` class at p95 the summary 117 ms, rows 13, groups 20, the first page of
+  `/fixed` 42 (gate 300); a recheck's plan for 1,000 URLs 103 to 111 ms (`si recheck --plan`, budget 300). On the
+  1,000-page site after revision 1, `si recheck --check internal-client-error` gives "26 of 37 fixed. 11 still have it.",
+  8 new (the moved links' missing URLs, fetched one step), in 75 requests and 2 s: the check's count goes from 37 to 19,
+  and `broken-internal-links` (its referring pages fetched again) from 40 to 22, as a full crawl of revision 1 finds.
 - **Not built here:** the sidecar's refusals that need the library (`site-busy`, `recheck-not-latest`), its flow
   (analyse first, recheck, analyse) and events (S2), and everything the app shows (U1, U2).
