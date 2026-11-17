@@ -29,7 +29,7 @@ export interface SimpleAlert {
 /** What gives a site's alert its kind: a wait and an alert of one kind say the same thing, so it's said once. */
 type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'note';
 
-const SLOW = 'The site is answering slowly, so the check has slowed down to match. It will take longer.';
+const SLOW = 'The site asked the check to slow down, so it has. It will take longer.';
 const DELAY = 'The site asks visitors like this one to go slowly, so the check waits between pages.';
 const ROBOTS =
   'The site’s rules file for search engines isn’t answering, so the check can’t tell where it may go. It’s waiting, and will try again.';

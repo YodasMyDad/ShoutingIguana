@@ -174,7 +174,7 @@ export interface CrawlOptions {
   maxDepth?: number | null;
   concurrency?: number | null;
   externalConcurrency?: number | null;
-  /** 0 is no cap, with the engine's automatic backoff. */
+  /** 0 is no cap: the engine still starts each host slowly and slows down when one asks. */
   maxRequestsPerSecond?: number | null;
   userAgent?: UserAgentPreset | null;
   customUserAgent?: string | null;
@@ -209,7 +209,7 @@ export interface SpeedPreset {
   /** `polite`, `standard` or `fast`. */
   id: string;
   concurrency: number;
-  /** 0 is no cap, with the engine's automatic backoff. */
+  /** 0 is no cap: the engine still starts each host slowly and slows down when one asks. */
   maxRequestsPerSecond: number;
 }
 

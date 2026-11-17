@@ -172,8 +172,8 @@ export const StatusCodes = memo(function StatusCodes({
             {formatCountOf(split.notChecked.count, 'URL')}
           </TextLink>{' '}
           {split.notChecked.count === 1
-            ? 'wasn’t checked because its site had stopped answering.'
-            : 'weren’t checked because their sites had stopped answering.'}
+            ? 'wasn’t checked: its site had stopped answering, asked the crawler to slow down, or is on a private network.'
+            : 'weren’t checked: their sites had stopped answering, asked the crawler to slow down, or are on a private network.'}
         </p>
       ) : null}
       {split.probes ? (

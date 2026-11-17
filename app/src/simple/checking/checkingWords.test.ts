@@ -66,7 +66,7 @@ describe('what’s in the way', () => {
       ],
     });
     expect(entries.map((entry) => [entry.text, entry.actions.length])).toEqual([
-      ['The site is answering slowly, so the check has slowed down to match. It will take longer.', 0],
+      ['The site asked the check to slow down, so it has. It will take longer.', 0],
       ['The site asks visitors like this one to go slowly, so the check waits between pages.', 0],
     ]);
   });

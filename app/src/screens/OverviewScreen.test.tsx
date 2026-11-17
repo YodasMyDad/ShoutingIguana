@@ -354,7 +354,7 @@ describe('the Overview of an analysed crawl', () => {
     expect(rows.getByRole('link', { name: /^No response/ })).toHaveTextContent('13');
     const notChecked = status.getByRole('link', { name: '5 URLs' });
     expect(notChecked.closest('p')).toHaveTextContent(
-      '5 URLs weren’t checked because their sites had stopped answering.',
+      '5 URLs weren’t checked: their sites had stopped answering, asked the crawler to slow down, or are on a private network.',
     );
     expect(filtersOf(notChecked)).toEqual([{ column: 'outcome', op: 'in', values: ['notChecked'] }]);
     // The URLs only found, without those 5.
@@ -831,7 +831,7 @@ describe('the Overview while the crawl runs', () => {
     expect(noResponse).toHaveTextContent('Refused by robots.txt × 10, Network error × 3');
     const notChecked = status.getByRole('link', { name: '5 URLs' });
     expect(notChecked.closest('p')).toHaveTextContent(
-      '5 URLs weren’t checked because their sites had stopped answering.',
+      '5 URLs weren’t checked: their sites had stopped answering, asked the crawler to slow down, or are on a private network.',
     );
     expect(filtersOf(notChecked)).toEqual([{ column: 'outcome', op: 'in', values: ['notChecked'] }]);
     // What was found still adds up: 6,909 + 140 + 5.

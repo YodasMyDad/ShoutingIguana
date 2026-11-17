@@ -320,7 +320,39 @@ describe('fetchState', () => {
     expect(failed('timeout')).toMatchObject({ kind: 'failed', title: 'Timed out' });
     expect(failed('networkError')).toMatchObject({ kind: 'failed', title: 'Couldn’t be reached' });
     expect(failed('processingError')).toMatchObject({ kind: 'failed', title: 'Couldn’t be read' });
-    expect(failed('notChecked')).toMatchObject({ kind: 'notChecked', title: 'Not checked' });
+    expect(failed('notChecked')).toMatchObject({
+      kind: 'notChecked',
+      title: 'Not checked',
+      why: 'Its host had stopped answering, so the crawl didn’t request it.',
+    });
+    const rateLimited = after({
+      ...base,
+      content: null,
+      response: testResponse({
+        outcome: 'notChecked',
+        statusCode: null,
+        fetched: false,
+        error: 'Not checked: the site asked the crawler to slow down (429 Too Many Requests)',
+      }),
+    });
+    expect(rateLimited).toMatchObject({
+      kind: 'notChecked',
+      why: 'The site kept asking the crawler to slow down (429 Too Many Requests), even when it was asked again at the end of the crawl.',
+    });
+    const privateAddress = after({
+      ...base,
+      content: null,
+      response: testResponse({
+        outcome: 'notChecked',
+        statusCode: null,
+        fetched: false,
+        error: 'Not checked: private network address; not checked from a public site',
+      }),
+    });
+    expect(privateAddress).toMatchObject({
+      kind: 'notChecked',
+      why: 'It’s on a private network address (such as localhost), which a crawl of a public site doesn’t request.',
+    });
   });
 
   it('tells a redirect, an error, a status check and a file from a page with no body', () => {

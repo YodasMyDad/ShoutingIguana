@@ -148,18 +148,16 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
         waits: [{ reason: 'backoff', host: 'example.com', durationMs: 500 }],
       }),
     );
-    expect(main().queryByText(/The site is answering slowly/)).toBeNull();
+    expect(main().queryByText(/The site asked the check to slow down/)).toBeNull();
     await heard(progress(8, { fetched: 14, waits: [{ reason: 'backoff', host: 'example.com', durationMs: 500 }] }));
-    expect(await main().findByText(/The site is answering slowly/)).toBeVisible();
+    expect(await main().findByText(/The site asked the check to slow down/)).toBeVisible();
   });
 
   it('says a slowdown from the progress’s waits', async () => {
     await open();
     await heard(progress(100, { waits: [{ reason: 'backoff', host: 'example.com', durationMs: 4000 }] }));
     expect(
-      await main().findByText(
-        'The site is answering slowly, so the check has slowed down to match. It will take longer.',
-      ),
+      await main().findByText('The site asked the check to slow down, so it has. It will take longer.'),
     ).toBeVisible();
   });
 
