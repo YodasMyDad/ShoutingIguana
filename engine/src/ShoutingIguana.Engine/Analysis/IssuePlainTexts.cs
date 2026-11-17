@@ -85,6 +85,20 @@ public static class IssuePlainTexts
             IssueFixer.Developer,
             """No page or file refused the check"""),
 
+        ["content-type-mismatch"] = new(
+            """Files your server labels as the wrong kind""",
+            [
+                """Your pages use these files as code, a style sheet or a picture, but your server says they're something else.""",
+                """Browsers often refuse to use code or a style sheet labelled wrongly, so the page can break for visitors and for Google.""",
+                """A "picture" that turns out to be a web page is usually an error page in disguise."""
+            ],
+            [
+                """Send the list to your developer: it says how each file is used and what the server calls it.""",
+                """Ask them to set the server to label each kind of file correctly, or to fix the address that loads it."""
+            ],
+            IssueFixer.Developer,
+            """Every file is labelled as the right kind"""),
+
         ["soft-404"] = new(
             """Pages that read like an error page""",
             [
@@ -159,6 +173,19 @@ public static class IssuePlainTexts
             ],
             IssueFixer.Developer,
             """No forwarding is marked as temporary"""),
+
+        ["redirect-temporary-cached"] = new(
+            """Temporary forwarding that browsers remember for days""",
+            [
+                """These addresses forward visitors with a temporary move, but tell browsers they may remember it for more than a day.""",
+                """Visitors' browsers may keep sending them to the old place for days after you change it."""
+            ],
+            [
+                """If the move is for good, ask your developer to make it permanent (a "301 redirect").""",
+                """If it's temporary, ask for it to be sent with an instruction not to remember it ("Cache-Control: no-store")."""
+            ],
+            IssueFixer.Developer,
+            """No temporary forwarding is remembered for days"""),
 
         ["redirect-downgrade"] = new(
             """Secure addresses that forward to an insecure one""",
@@ -307,7 +334,7 @@ public static class IssuePlainTexts
         ["orphan-page"] = new(
             """Pages in your sitemap that nothing links to""",
             [
-                """No page on your site links to these pages: they were found only in your sitemap.""",
+                """No page on your site links to these pages, or only with links search engines are told not to follow.""",
                 """Visitors can't reach them by browsing, and Google relies on links to find pages and judge what they're about.""",
                 """They're often old pages left in the sitemap (the file that lists your pages for search engines), or pages reached only through a form."""
             ],
@@ -318,6 +345,187 @@ public static class IssuePlainTexts
             ],
             IssueFixer.You,
             """No page in the sitemap is left with no links to it"""),
+
+        ["uncrawlable-links"] = new(
+            """Links Google can't follow""",
+            [
+                """Some links on these pages work only through code in the browser, so search engines can't follow them.""",
+                """Pages reached only through such links may never be found in search.""",
+                """Menus and "load more" buttons are the usual cause."""
+            ],
+            [
+                """Send the list to your developer: it gives the first few such links on each page, and what's wrong with each.""",
+                """Ask for each one to be a normal link with a real web address, with any code kept on top of it."""
+            ],
+            IssueFixer.Developer,
+            """Every link can be followed by search engines""")
+        {
+            OneFix = """If most pages are listed, it's almost certainly your menu, which every page shares."""
+        },
+
+        ["broken-resources"] = new(
+            """Pages that load files that are missing""",
+            [
+                """These pages load a file, such as code, a style sheet or a video, that is missing or fails.""",
+                """The page can look or work wrong for visitors, and for Google, which loads pages as visitors do.""",
+                """A broken file from another company's service often changes nothing anyone sees."""
+            ],
+            [
+                """Open one of the pages and check that it looks and works as it should.""",
+                """Send the list to your developer: each page names the missing file.""",
+                """Ask them to restore each file, correct its address, or remove what's no longer used."""
+            ],
+            IssueFixer.Developer,
+            """No page loads a file that is missing"""),
+
+        ["links-to-localhost"] = new(
+            """Links to a test copy that only works for whoever built it""",
+            [
+                """These pages link to an address that exists only on someone's own computer or private network, such as "localhost".""",
+                """Everyone else gets a dead link, or a missing picture or file.""",
+                """It's usually left behind when content was copied over from a test copy of the site."""
+            ],
+            [
+                """Open each page and find the link: the list shows the first such address on each.""",
+                """Change it to the address on your live site, or remove it."""
+            ],
+            IssueFixer.You,
+            """No page links to a test copy of the site"""),
+
+        ["few-internal-outlinks"] = new(
+            """Dead-end pages that link to nothing else on your site""",
+            [
+                """These pages have fewer than {limit:minInternalOutlinks} to other pages of your site.""",
+                """Visitors who land on one have nowhere obvious to go next, and search engines find no way onward from it.""",
+                """It's common on pages built without your site's usual menu and footer."""
+            ],
+            [
+                """Add links from each page to related pages and to its section.""",
+                """If a page is missing your site's menu and footer, use your normal page design for it."""
+            ],
+            IssueFixer.You,
+            """Every page links on to other pages of the site"""),
+
+        ["generic-anchor-text"] = new(
+            """Links that say "click here" instead of where they go""",
+            [
+                """Some links on these pages say only "click here", "read more" or the like, not where they lead.""",
+                """People using screen readers often hear a page's links on their own, where those words mean nothing.""",
+                """Google also uses a link's words to understand the page it leads to."""
+            ],
+            [
+                """Change each link's words to say what's at the other end, such as "Read our delivery policy".""",
+                """The list shows the words each page uses."""
+            ],
+            IssueFixer.You,
+            """No link says only "click here" or the like"""),
+
+        ["non-indexable-inlinks-only"] = new(
+            """Pages only linked from pages Google won't show""",
+            [
+                """The only pages that link to these are themselves kept out of search results, or point Google at another page.""",
+                """Search engines can still reach them, but such links count for little.""",
+                """It's often a page linked only from filtered lists or archive pages."""
+            ],
+            [
+                """Link to each page from a page that appears in search, such as its category or a related page."""
+            ],
+            IssueFixer.You,
+            """Every page has a link from a page Google can show"""),
+
+        ["deep-page"] = new(
+            """Pages buried deep in your site""",
+            [
+                """These pages are more than {limit:maxClickDepth} away from your home page.""",
+                """Search engines tend to visit deep pages less often, and visitors rarely click that far.""",
+                """Big shops have some deep pages by design, so look at which pages these are."""
+            ],
+            [
+                """Link to the pages that matter from higher up, such as a category page, the menu or the home page.""",
+                """Add subcategories, so long lists don't push pages further down."""
+            ],
+            IssueFixer.You,
+            """No page is buried deep in the site"""),
+
+        ["too-many-links"] = new(
+            """Pages crowded with links""",
+            [
+                """These pages have more than {limit:maxInternalLinks} to your own pages, or more than {limit:maxExternalLinks} to other websites.""",
+                """So many links are hard for visitors to use, and each one counts for less.""",
+                """It's usually a huge menu or footer."""
+            ],
+            [
+                """Cut the links down to the ones visitors use, starting with the menu and footer.""",
+                """Split very long lists over several pages."""
+            ],
+            IssueFixer.Either,
+            """No page is crowded with links"""),
+
+        ["slow-external-links"] = new(
+            """Links to other websites that take a long time to load""",
+            [
+                """These pages link to pages on other websites that took more than {limit:slowExternalLinkMs} to answer.""",
+                """Visitors who follow the link wait, and may blame your site.""",
+                """Another website being slow once can be a blip, so check before changing anything."""
+            ],
+            [
+                """Open the slowest links to see whether they're slow for you too.""",
+                """Replace a link that stays slow with a better source, or remove it."""
+            ],
+            IssueFixer.You,
+            """No link leads to a slow page on another website"""),
+
+        ["pagination-not-linked"] = new(
+            """Next pages of a list that only hidden links point to""",
+            [
+                """These pages of a list point to the next or previous page only through hidden links in the page's code.""",
+                """Google no longer reads those, and finds the other pages of a list only through ordinary links.""",
+                """Pages reached only that way may never be found."""
+            ],
+            [
+                """Ask your developer to add ordinary "Next" and "Previous" links, or page numbers, between the pages of each list."""
+            ],
+            IssueFixer.Developer,
+            """Every page of a list links to the next with a normal link"""),
+
+        ["pagination-broken"] = new(
+            """Next or previous page links that lead to an error""",
+            [
+                """The hidden links these pages use to name the next or previous page of a list lead to an error, or forward elsewhere.""",
+                """It usually means the list's addresses changed and the page design didn't follow."""
+            ],
+            [
+                """Ask your developer to point the hidden "next" and "prev" links at the right pages, or remove them."""
+            ],
+            IssueFixer.Developer,
+            """No next or previous page link leads to an error"""),
+
+        ["pagination-to-non-indexable"] = new(
+            """Next or previous page links to pages Google won't show""",
+            [
+                """The hidden links these pages use to name the next or previous page of a list lead to a page kept out of search.""",
+                """What's listed only on that page is then found only through a page search engines drop."""
+            ],
+            [
+                """Ask your developer whether the list's pages should appear in search.""",
+                """If they should, have the setting that keeps them out removed; if not, have the links point at pages that do appear."""
+            ],
+            IssueFixer.Developer,
+            """No next or previous page link leads to a hidden page"""),
+
+        ["pagination-sequence-error"] = new(
+            """Next and previous page links that don't match up""",
+            [
+                """The hidden links these pages use to name the next and previous page of a list don't make a sequence.""",
+                """A page names itself as next, names two next pages, or its next page doesn't name it back.""",
+                """Google no longer reads these links, so it's a tidy-up rather than a search problem."""
+            ],
+            [
+                """Send the list to your developer: it says what's wrong on each page.""",
+                """Ask for each page to name one next and one previous page, in order."""
+            ],
+            IssueFixer.Developer,
+            """Every list's next and previous page links match up"""),
 
         ["noindex-page"] = new(
             """Pages told to stay out of search results""",
@@ -461,6 +669,98 @@ public static class IssuePlainTexts
         {
             LooksFor = """A site that hides its home page and most pages from search"""
         },
+
+        ["robots-directives-conflict"] = new(
+            """Pages that tell search engines two different things""",
+            [
+                """These pages tell search engines two opposite things about showing the page in search, or about following its links.""",
+                """One instruction is in the page itself, and the other is sent by the server along with the page.""",
+                """Google follows the stricter of the two, so a page meant to appear in search can be left out."""
+            ],
+            [
+                """Decide which instruction each page should have: the list quotes both.""",
+                """Ask your developer to make the page and the server say the same thing, or to remove the server's (the "X-Robots-Tag")."""
+            ],
+            IssueFixer.Developer,
+            """No page tells search engines two different things""")
+        {
+            OneFix = """The same two settings most likely apply to every page listed: one in your page design, one on the server."""
+        },
+
+        ["noindex-near-home"] = new(
+            """Important pages kept out of Google""",
+            [
+                """These pages are one or two clicks from your home page, yet they tell search engines to keep them out of search results.""",
+                """Pages that close to the home page are usually ones you want found, so the instruction ("noindex") is often a leftover.""",
+                """Basket, account, login and similar pages aren't listed, as they're meant to stay out."""
+            ],
+            [
+                """Look down the list for any page you want people to find in search.""",
+                """Open that page in your site's editor and turn off a setting such as "Hide this page from search engines".""",
+                """If a page is meant to stay out of search, leave it."""
+            ],
+            IssueFixer.Either,
+            """No page near the home page is kept out of Google"""),
+
+        ["unavailable-after-passed"] = new(
+            """Pages set to drop out of Google on a date that has passed""",
+            [
+                """These pages tell Google to stop showing them in search after a date, and that date has passed.""",
+                """Google then drops them from its results, as if they were hidden from search.""",
+                """The setting is meant for events and offers, and is easily forgotten when a page is kept or reused."""
+            ],
+            [
+                """Check each page: the list shows the date it gives.""",
+                """If the page should still appear in search, ask your developer to remove the date setting ("unavailable_after") or move the date on.""",
+                """If the page really has expired, leave it, or forward it to its replacement."""
+            ],
+            IssueFixer.Developer,
+            """No page has passed a date to drop out of Google"""),
+
+        ["media-preview-blocked"] = new(
+            """Pages that keep their pictures or videos out of Google""",
+            [
+                """These pages tell Google not to show their pictures, or a preview of their videos, in search results.""",
+                """Their results then stand out less, and the pictures can't be found in image search.""",
+                """That's often deliberate, for photos you may only use in one place, and then there's nothing to do."""
+            ],
+            [
+                """Decide whether each page's pictures or videos should appear in Google: the list names the setting each page uses.""",
+                """If they should, ask your developer to remove that setting, such as "noimageindex" or "max-image-preview:none"."""
+            ],
+            IssueFixer.Developer,
+            """No page keeps its pictures or videos out of Google""")
+        {
+            OneFix = """These pages most likely get it from one setting, in your page design or SEO plugin."""
+        },
+
+        ["translation-blocked"] = new(
+            """Pages Google won't offer to translate""",
+            [
+                """These pages tell Google not to offer a translation of them to people searching in other languages.""",
+                """Without that setting, Google can show the result in the searcher's language and link to a translated page.""",
+                """It's a choice, not a fault: keep it where a machine translation could mislead, such as on legal text."""
+            ],
+            [
+                """Decide whether people searching in other languages should be offered these pages.""",
+                """If they should, ask your developer to remove the "notranslate" setting from them."""
+            ],
+            IssueFixer.Developer,
+            """No page asks Google not to offer a translation"""),
+
+        ["indexifembedded-without-noindex"] = new(
+            """Pages with a search setting that does nothing on its own""",
+            [
+                """These pages have a search setting ("indexifembedded") that works only alongside another, which they don't have.""",
+                """It lets Google show a page's content where another page shows it inside its own, while the page itself stays out of search.""",
+                """On its own it does nothing, and harms nothing."""
+            ],
+            [
+                """Ask your developer what the setting was meant to do.""",
+                """If the pages should appear in search only inside other pages, add the missing "noindex"; otherwise remove "indexifembedded"."""
+            ],
+            IssueFixer.Developer,
+            """No page has a search setting that does nothing alone"""),
 
         ["canonicalised-page"] = new(
             """Pages that name another page as the main version""",
@@ -631,6 +931,109 @@ public static class IssuePlainTexts
         {
             OneFix = """That's almost certainly one setting in your page design or SEO plugin, which names the same address on every page."""
         },
+
+        ["canonical-to-first-page"] = new(
+            """Later pages of a list that point Google at the first page""",
+            [
+                """These are page 2 onward of a list, such as a category, and each names the list's first page as its main version.""",
+                """Google may then treat them as copies of the first page and visit them less, so what's listed only further on can go unfound.""",
+                """Google's advice is for each page of a list to name itself."""
+            ],
+            [
+                """Ask your developer to make each page of the list name its own address as its main version (its "canonical" link).""",
+                """Keep the ordinary links between the pages, such as "Next" and the page numbers."""
+            ],
+            IssueFixer.Developer,
+            """No later page of a list points Google at the first""")
+        {
+            OneFix = """That's almost certainly one setting in your shop or SEO plugin, which every list shares."""
+        },
+
+        ["canonical-other-domain"] = new(
+            """Pages that tell Google another website has the real copy""",
+            [
+                """These pages name a page on another website as their main version.""",
+                """Google may then show that website's page instead, and drop yours from its results.""",
+                """That's right for an article first published elsewhere, but a mistake when it names an old domain or a test copy of your site."""
+            ],
+            [
+                """Look at the website each page names: the list shows it.""",
+                """If it's your own old address or a test site, ask your developer to point each page's "canonical" link at its own address.""",
+                """If the page really is a copy of another website's article, leave it."""
+            ],
+            IssueFixer.Developer,
+            """No page names another website as its main version"""),
+
+        ["canonical-loop"] = new(
+            """Pages that point Google at each other in a circle""",
+            [
+                """These pages each name another as their main version, and following those leads back round to where it started.""",
+                """The instructions cancel out, so Google picks one of the pages itself, which may not be the one you want."""
+            ],
+            [
+                """Choose which page of each circle should appear in search: the list shows the circle.""",
+                """Ask your developer to make that page name itself as its main version, and the others name it (their "canonical" links)."""
+            ],
+            IssueFixer.Developer,
+            """No pages point Google at each other in a circle"""),
+
+        ["canonical-on-redirect"] = new(
+            """Forwarded addresses that also name a different main address""",
+            [
+                """These addresses forward visitors to another page, and also name a different page as the main version.""",
+                """Search engines follow the forwarding and ignore the rest, so this changes nothing in search.""",
+                """It can only mislead people who check the address with a tool, so it isn't urgent."""
+            ],
+            [
+                """Send the list to your developer when they next work on the site.""",
+                """Ask them to remove the "canonical" link the server sends with these addresses, or make it name where they lead."""
+            ],
+            IssueFixer.Developer,
+            """No forwarded address names a different main address"""),
+
+        ["canonical-fragment"] = new(
+            """Main addresses with a # part that Google ignores""",
+            [
+                """These pages give their main address with a # part at the end, such as #reviews.""",
+                """Google ignores everything from the # on, so the main address usually still works.""",
+                """It's still a mistake, and it can mean the address was copied from the browser rather than set on purpose."""
+            ],
+            [
+                """Send the list to your developer when they next work on the site: it isn't urgent.""",
+                """Ask them to remove the # part from each page's main address (its "canonical" link)."""
+            ],
+            IssueFixer.Developer,
+            """No main address has a # part""")
+        {
+            OneFix = """That's almost certainly how your page design or SEO plugin writes the main address on every page."""
+        },
+
+        ["canonical-invalid-attribute"] = new(
+            """Main addresses written in a way Google may ignore""",
+            [
+                """These pages name their main address with extra details, such as a language or a screen size, that belong on other links.""",
+                """Search engines may then not treat it as the page's main address at all.""",
+                """It's usually a link to a translated or mobile version, written as the main address by mistake."""
+            ],
+            [
+                """Ask your developer to remove the extra details ("hreflang", "lang", "media" or "type") from each page's "canonical" link.""",
+                """If the link was meant to point at another version of the page, ask for it to be written as a separate link."""
+            ],
+            IssueFixer.Developer,
+            """No main address is written in a way Google may ignore"""),
+
+        ["canonical-unlinked"] = new(
+            """Main versions of pages that nothing links to""",
+            [
+                """Other pages name these pages as their main version, but no page on your site links to them.""",
+                """Visitors browsing your site only ever reach the other versions, and Google may choose one of those instead."""
+            ],
+            [
+                """Link to each of these pages wherever its other versions are linked, such as in menus and lists.""",
+                """If a page shouldn't be the main version, ask your developer to point the others' "canonical" links at one that is linked."""
+            ],
+            IssueFixer.Either,
+            """Every main version of a page has links to it"""),
 
         ["sitemap-non-indexable"] = new(
             """Sitemap addresses that can't appear in search""",
@@ -1402,6 +1805,20 @@ public static class IssuePlainTexts
             IssueFixer.Developer,
             """No page is too big for Google to read in full"""),
 
+        ["resource-past-crawl-limit"] = new(
+            """Code files too big for Google to read in full""",
+            [
+                """These code or style files are bigger than the part of each file Google reads.""",
+                """Google ignores the rest, so it may see your pages without some of their look or how they work.""",
+                """Files that big also make pages slow on phones."""
+            ],
+            [
+                """Send the list to your developer, with the size of each file.""",
+                """Ask them to split each file, or to remove what your pages don't use."""
+            ],
+            IssueFixer.Developer,
+            """No code file is too big for Google to read in full"""),
+
         ["viewport-missing"] = new(
             """Pages not set up for phones""",
             [
@@ -1461,7 +1878,86 @@ public static class IssuePlainTexts
             """Every page has its sharing preview details""")
         {
             OneFix = """That's almost certainly your page design, which leaves the same details out of every page."""
-        }
+        },
+
+        ["head-tags-in-body"] = new(
+            """Page settings that ended up where they're ignored""",
+            [
+                """Some settings these pages give search engines and social sites, such as the title, are where they may be ignored.""",
+                """Usually something placed too early on the page, such as a banner or a tracking code, pushed them out of place.""",
+                """The list says which settings moved, and what moved them."""
+            ],
+            [
+                """Send the list to your developer: it names what moved the settings on each page.""",
+                """Ask them to move that item further down the page, or remove it."""
+            ],
+            IssueFixer.Developer,
+            """Every page setting is where search engines read it""")
+        {
+            OneFix = """That's almost certainly one item in your page design or a plugin, which every page shares."""
+        },
+
+        ["html-structure-errors"] = new(
+            """Pages whose basic HTML structure is broken""",
+            [
+                """The code of these pages has some of its basic parts twice, or out of order.""",
+                """Browsers fix this the same way every time, so visitors rarely notice, but some settings on the second part are lost."""
+            ],
+            [
+                """Send the list to your developer: it says what's wrong on each page.""",
+                """Ask them to fix the page design so each page has its parts once, in order."""
+            ],
+            IssueFixer.Developer,
+            """No page has its basic structure broken"""),
+
+        ["viewport-invalid"] = new(
+            """Pages people can't zoom, or that don't fit phones""",
+            [
+                """These pages stop visitors zooming in on phones, or don't tell phones how wide to show them.""",
+                """People who need larger text can't read them, and a page with no width shows tiny on a phone."""
+            ],
+            [
+                """Ask your developer to set the phone-screen setting to the standard "width=device-width, initial-scale=1", with nothing that limits zoom."""
+            ],
+            IssueFixer.Developer,
+            """Every page lets people zoom and fits phones"""),
+
+        ["charset-invalid"] = new(
+            """Pages that name the wrong text encoding""",
+            [
+                """These pages say they use a text encoding other than the standard one (UTF-8), or say two different things about it.""",
+                """Browsers then have to guess, and a wrong guess turns accents, currency signs and quotes into garbled characters."""
+            ],
+            [
+                """Ask your developer to save and serve every page as UTF-8, and to declare it once, at the top of the page."""
+            ],
+            IssueFixer.Developer,
+            """Every page names its text encoding correctly"""),
+
+        ["lang-invalid"] = new(
+            """Pages that name their language wrongly""",
+            [
+                """These pages give their language as something that isn't a language code, such as "english" or "en_GB".""",
+                """Screen readers then can't tell which voice to use, so the page may be read out in the wrong accent."""
+            ],
+            [
+                """Change the page's language setting to a code such as "en" or "en-GB": a hyphen, not an underscore, with the language first."""
+            ],
+            IssueFixer.Developer,
+            """Every page names its language correctly"""),
+
+        ["mobile-alternate"] = new(
+            """Pages with a separate mobile version""",
+            [
+                """These pages point to a separate version of themselves for phones, at another address.""",
+                """Google still supports that, but a single page that fits every screen is simpler to keep right."""
+            ],
+            [
+                """Check that each mobile page names this page as its main version.""",
+                """If you're redesigning, consider one page that fits every screen instead."""
+            ],
+            IssueFixer.Developer,
+            """No page has a separate mobile version""")
     };
 
     /// <summary>Every check that has plain words, by its id.</summary>

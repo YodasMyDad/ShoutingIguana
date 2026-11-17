@@ -127,7 +127,8 @@ internal sealed class AnalysisReader : IDisposable
             SELECT u.id, u.is_internal, substr(u.url, 1, 6) = 'https:', u.depth, u.source,
                    r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
                    r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type,
-                   COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0)
+                   COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0),
+                   COALESCE(r.response_ms, 0)
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -140,6 +141,7 @@ internal sealed class AnalysisReader : IDisposable
 
             var outcome = fetched ? (FetchOutcome)reader.GetInt32(6) : default;
             var contentType = outcome == FetchOutcome.Success && fetched && !reader.IsDBNull(14) ? reader.GetString(14) : null;
+            var url = reader.GetString(13);
             statuses[id] = new UrlStatus(
                 Known: true,
                 IsInternal: reader.GetBoolean(1),
@@ -154,9 +156,12 @@ internal sealed class AnalysisReader : IDisposable
                 RedirectTargetId: reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                 SizeBytes: reader.IsDBNull(11) ? null : reader.GetInt64(11),
                 InSitemap: inSitemap[id],
-                IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType),
+                IsResource: ResourceTypes.IsResource(url, contentType),
                 Source: (DiscoverySource)reader.GetInt32(4),
-                IsRateLimited: reader.GetBoolean(15));
+                IsRateLimited: reader.GetBoolean(15),
+                ResponseMs: fetched ? reader.GetInt32(16) : 0,
+                ContentClass: outcome == FetchOutcome.Success && fetched ? ResourceTypes.ClassOf(contentType) : ContentClass.None,
+                IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri));
             read++;
             progress?.Advance(read);
         });
@@ -175,7 +180,7 @@ internal sealed class AnalysisReader : IDisposable
         var lanes = HasFingerprintLanes() ? string.Join(", ", CrawlSchema.FINGERPRINT_LANES.Select(column => $"r.{column.Name}")) : "NULL, NULL, NULL";
         using var command = _connection.CreateCommand();
         command.CommandText = $"""
-            SELECT u.id, u.url, u.depth, r.size_bytes, r.body_bytes, r.ttfb_ms, r.response_ms, r.indexability_reason, d.data, {lanes}
+            SELECT u.id, u.url, u.depth, r.size_bytes, r.body_bytes, r.ttfb_ms, r.response_ms, r.indexability_reason, d.data, {lanes}, r.fetched_at
             FROM responses r
             JOIN urls u ON u.id = r.url_id
             JOIN response_details d ON d.url_id = r.url_id
@@ -204,11 +209,36 @@ internal sealed class AnalysisReader : IDisposable
                 BodyBytes = reader.IsDBNull(4) ? null : reader.GetInt64(4),
                 TimeToFirstByteMs = reader.GetInt32(5),
                 ResponseMs = reader.GetInt32(6),
+                FetchedAt = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(12)),
                 IndexabilityReason = urls[id].IndexabilityReason,
                 Headers = details.Headers,
                 Facts = ReadLanes(reader, 9) is { } fingerprintLanes ? details.Page with { SimHashLanes = fingerprintLanes } : details.Page,
                 Links = ReadLinks(id)
             };
+        }
+    }
+
+    /// <summary>
+    /// The response headers of each of the site's own URLs that answered with a redirect, streamed in id order: a redirect
+    /// has no page facts, but its headers are stored with its response all the same. The crawler's probes of the site's
+    /// other versions are left out, as theirs are the duplicate-site-version check's to judge.
+    /// </summary>
+    public IEnumerable<(int UrlId, IReadOnlyList<ResponseHeader> Headers)> ReadRedirectHeaders()
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT r.url_id, d.data
+            FROM responses r
+            JOIN urls u ON u.id = r.url_id
+            JOIN response_details d ON d.url_id = r.url_id
+            WHERE u.is_internal = 1 AND r.outcome = {(int)FetchOutcome.Redirect} AND u.source <> {(int)DiscoverySource.SiteVersion}
+            ORDER BY r.url_id
+            """;
+
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            yield return (reader.GetInt32(0), BlobCodec.DecodeDetails((byte[])reader.GetValue(1)).Headers);
         }
     }
 
@@ -263,6 +293,15 @@ internal sealed class AnalysisReader : IDisposable
               AND NOT EXISTS (SELECT 1 FROM urls u WHERE u.url >= r.origin || '/' AND u.url < r.origin || '0' AND u.source <> {(int)DiscoverySource.SiteVersion})
             """, reader => origins.Add(reader.GetString(0)));
         return origins;
+    }
+
+    /// <summary>The Content-Type (its media type) a stored URL answered with, or null. One query a URL: the file checks ask only of the URLs at fault.</summary>
+    public string? ReadContentType(int urlId)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT content_type FROM responses WHERE url_id = $id";
+        command.Parameters.AddWithValue("$id", urlId);
+        return command.ExecuteScalar() as string;
     }
 
     /// <summary>The stored facts of one URL, or null when it has none (not HTML, not internal, or not fetched).</summary>

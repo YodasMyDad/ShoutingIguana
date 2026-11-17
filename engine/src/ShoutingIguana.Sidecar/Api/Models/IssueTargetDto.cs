@@ -20,6 +20,7 @@ internal sealed record IssueTargetDto(
     long? SizeBytes,
     int? PixelWidth,
     int? PixelHeight,
+    int? ResponseMs,
     RedirectEnd? Final,
     IndexabilityReason? Indexability,
     UrlTarget? Canonical,
@@ -33,7 +34,7 @@ internal sealed record IssueTargetDto(
 {
     public static IssueTargetDto From(IssueTarget target) => new(
         target.Id, target.Url, target.StatusCode, target.Fetched, target.Outcome,
-        target.Facts?.ContentType, target.Facts?.SizeBytes, target.Facts?.PixelWidth, target.Facts?.PixelHeight, target.Facts?.Final,
+        target.Facts?.ContentType, target.Facts?.SizeBytes, target.Facts?.PixelWidth, target.Facts?.PixelHeight, target.Facts?.ResponseMs, target.Facts?.Final,
         target.Facts?.Indexability, target.Facts?.Canonical,
         target.Kind, target.Text, target.Position, target.Fragment, FlagNames(target.Flags), target.Links, target.Img);
 

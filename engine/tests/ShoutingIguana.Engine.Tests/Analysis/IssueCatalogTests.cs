@@ -29,7 +29,21 @@ public sealed class IssueCatalogTests
         "no-https", "http-page", "mixed-content", "security-headers-missing", "url-uppercase", "url-underscores", "url-too-long",
         "slow-response", "large-page", "html-past-crawl-limit", "viewport-missing", "lang-missing", "charset-missing", "open-graph-missing",
         "sitemap-url-other-host", "noindex-with-canonical", "robots-txt-unreachable-other-origin", "duplicate-site-version",
-        "site-hidden-from-search"
+        "site-hidden-from-search",
+
+        // The new checks of step 3b (docs/v2-new-checks.md), batch 1.
+        "robots-directives-conflict", "noindex-near-home", "unavailable-after-passed", "media-preview-blocked", "translation-blocked",
+        "indexifembedded-without-noindex", "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "canonical-on-redirect",
+        "canonical-fragment", "canonical-invalid-attribute", "canonical-unlinked",
+
+        // Batch 2.
+        "uncrawlable-links", "broken-resources", "links-to-localhost", "few-internal-outlinks", "generic-anchor-text",
+        "non-indexable-inlinks-only", "deep-page", "too-many-links", "slow-external-links", "pagination-not-linked", "pagination-broken",
+        "pagination-to-non-indexable", "pagination-sequence-error",
+
+        // Batch 3.
+        "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "head-tags-in-body", "html-structure-errors",
+        "viewport-invalid", "charset-invalid", "lang-invalid", "mobile-alternate"
     ];
 
     [Fact]
@@ -182,7 +196,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(87, IssueCatalog.All.Count);
+        Assert.Equal(122, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(

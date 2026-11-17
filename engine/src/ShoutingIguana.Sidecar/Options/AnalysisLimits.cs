@@ -25,6 +25,14 @@ internal static class AnalysisLimits
 
     private const long MAX_WORDS = 1_000_000;
 
+    private const string LINKS = "links";
+
+    /// <summary>The most links a page's limit may be set to: a page's links are read up to 10,000.</summary>
+    private const long MAX_LINKS = 10_000;
+
+    /// <summary>The most clicks a depth may be set to: past any site's real depth.</summary>
+    private const long MAX_CLICKS = 1_000;
+
     /// <summary>The largest a size may be set to: 10 GB.</summary>
     private const long MAX_BYTES = 10L * 1024 * 1024 * 1024;
 
@@ -62,7 +70,18 @@ internal static class AnalysisLimits
         new("slowResponseMs", "ms", 1, 3_600_000, "A page that takes longer than this to answer is flagged as slow.",
             settings => settings.SlowResponseMs, (settings, value) => settings with { SlowResponseMs = (int)value }),
         new("maxUrlLength", CHARACTERS, 1, MAX_CHARACTERS, "A URL longer than this is flagged as too long.",
-            settings => settings.MaxUrlLength, (settings, value) => settings with { MaxUrlLength = (int)value })
+            settings => settings.MaxUrlLength, (settings, value) => settings with { MaxUrlLength = (int)value }),
+        new("minInternalOutlinks", LINKS, 0, MAX_LINKS,
+            "An indexable page linking to fewer other pages of the site than this is flagged as a dead end. 0 turns the check off.",
+            settings => settings.MinInternalOutlinks, (settings, value) => settings with { MinInternalOutlinks = (int)value }),
+        new("maxClickDepth", "clicks", 1, MAX_CLICKS, "An indexable page more clicks than this from where the crawl started is flagged as deep.",
+            settings => settings.MaxClickDepth, (settings, value) => settings with { MaxClickDepth = (int)value }),
+        new("maxInternalLinks", LINKS, 1, MAX_LINKS, "An indexable page with more internal links than this is flagged as having very many.",
+            settings => settings.MaxInternalLinks, (settings, value) => settings with { MaxInternalLinks = (int)value }),
+        new("maxExternalLinks", LINKS, 1, MAX_LINKS, "An indexable page with more links to other sites than this is flagged as having very many.",
+            settings => settings.MaxExternalLinks, (settings, value) => settings with { MaxExternalLinks = (int)value }),
+        new("slowExternalLinkMs", "ms", 1, 3_600_000, "A page on another site that takes longer than this to answer is flagged as a slow link.",
+            settings => settings.SlowExternalLinkMs, (settings, value) => settings with { SlowExternalLinkMs = (int)value })
     ];
 
     /// <summary>A minimum and the maximum that must be more than it, with what they're the widths of.</summary>

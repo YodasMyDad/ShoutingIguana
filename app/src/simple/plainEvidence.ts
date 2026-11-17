@@ -159,6 +159,9 @@ export function plainRelated(
   if (facts.includes('canonical') && related.canonical) {
     lines.push(`Its main address is ${plainAddress(related.canonical.url, origin)}`);
   }
+  if (facts.includes('responseMs') && typeof related.responseMs === 'number') {
+    lines.push(`It took ${(related.responseMs / 1000).toFixed(1)} seconds to open when it was checked`);
+  }
   return lines.length > 0 ? `${lines.join('. ')}.` : null;
 }
 
@@ -313,6 +316,8 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
       return `The page says “${value}”`;
     case 'xRobotsTag':
       return `The server says “${value}”`;
+    case 'language':
+      return `The page gives its language as “${value}”`;
     case 'canonicalUrl':
       return `Main address: ${plainAddress(value, origin)}`;
     case 'finalUrl':

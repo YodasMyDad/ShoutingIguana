@@ -1,6 +1,7 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -29,6 +30,18 @@ public sealed class EvidenceReadTests(GridCrawl crawl)
         Assert.Null(target.Facts.Final);
         Assert.Equal((LinkKind.Image, 1), (target.Kind, target.Links));
         Assert.Equal(new ImageOnPage("400", "300", "A very large photo", HasAlt: true, AltLength: 18, Srcset: false, Loading: null), target.Img);
+    }
+
+    [Fact]
+    public void ASlowExternalLinkSaysHowLongThePageItLeadsToTookToAnswer()
+    {
+        var check = IssueCatalog.SLOW_EXTERNAL_LINKS;
+        var target = FoundOnReader.ReadTargets(crawl.Path, check.Id, [Id("/plants/slow-external")])!.Single().Targets.Single();
+
+        Assert.EndsWith("/ext/slow", target.Url, StringComparison.Ordinal);
+        Assert.InRange(target.Facts!.ResponseMs ?? 0, 3_000, 60_000);
+        Assert.Equal(["statusCode", "responseMs", "text", "position"], check.TargetFacts);
+        Assert.Matches(@"^200; answered in 3\.[0-9] s; ", WhereFoundColumns.TargetFacts(check, target));
     }
 
     [Fact]
@@ -157,6 +170,17 @@ public sealed class EvidenceReadTests(GridCrawl crawl)
         Assert.Equal(long.Parse(pages, CultureInfo.InvariantCulture), row.Values[3]);
         Assert.True((long)row.Values[3]! > 0);
         Assert.Equal(0L, row.Values[4]);
+    }
+
+    [Fact]
+    public void APageWithAnInvalidLangShowsTheValueItWroteInItsOwnColumn()
+    {
+        Assert.Equal(["language"], IssueCatalog.LANG_INVALID.Evidence);
+        var rows = IssueGroupReader.ReadRows(crawl.Path, IssueCatalog.LANG_INVALID.Id, new UrlQuery { Columns = ["language"], Limit = 10 })!.Page!;
+
+        Assert.Equal("english", Assert.Single(rows.Rows).Values[1]);
+        var hub = UrlGridReader.Query(crawl.Path, new UrlQuery { Columns = ["language"], Filters = [GridQueries.Text("url", FilterOperator.Eq, Url(Id("/plants/")))] });
+        Assert.Equal("en", hub.Rows.Single().Values[1]);
     }
 
     [Fact]

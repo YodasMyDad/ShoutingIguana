@@ -74,6 +74,14 @@ describe('what a cause is, in plain words', () => {
     expect(plainRelated(FILE, broken, ORIGIN)).toBeNull();
   });
 
+  it('says how long a page elsewhere took to open', () => {
+    const slow = { id: 'slow-external-links', targetFacts: ['statusCode', 'responseMs', 'text', 'position'] };
+    expect(plainRelated({ ...FILE, responseMs: 7_400 }, slow, ORIGIN)).toBe(
+      'It took 7.4 seconds to open when it was checked.',
+    );
+    expect(plainRelated(FILE, slow, ORIGIN)).toBeNull();
+  });
+
   it('says why a main address can’t appear in search results', () => {
     const canonical = { id: 'canonical-to-non-indexable', targetFacts: ['statusCode', 'indexability', 'canonical'] };
     expect(plainRelated({ ...FILE, indexability: 'noindex' }, canonical, ORIGIN)).toBe(
@@ -198,6 +206,7 @@ describe('a page’s own evidence, in plain words', () => {
     ).toBe('The rules file says “Disallow: /cart/”, on line 12');
     expect(plainEvidence('h1', 'Sofas', ORIGIN)).toBe('Main heading: “Sofas”');
     expect(plainEvidence('metaRobots', 'noindex, follow', ORIGIN)).toBe('The page says “noindex, follow”');
+    expect(plainEvidence('language', 'en_GB', ORIGIN)).toBe('The page gives its language as “en_GB”');
     expect(plainEvidence('indexability', 'canonicalised', ORIGIN)).toBe(
       'It can’t appear in search results: it names another address as its main address',
     );

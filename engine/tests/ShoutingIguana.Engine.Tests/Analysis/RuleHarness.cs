@@ -1,5 +1,6 @@
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -33,7 +34,7 @@ internal sealed class RuleHarness(string site = "https://example.com")
         var uri = new Uri(normalized);
         _statuses.Add(new UrlStatus(Known: true, IsInternal: _scope.IsInternal(uri), IsHttps: uri.Scheme == Uri.UriSchemeHttps, Depth: 1,
             Fetched: false, default, 0, IsHtml: false, IsParsed: false, IndexabilityReason.None, 0, null, InSitemap: false,
-            IsResource: ResourceTypes.IsResource(normalized, null)));
+            IsResource: ResourceTypes.IsResource(normalized, null), IsPrivateHost: PrivateNetworkGuard.IsPrivateLiteral(uri)));
         _ids[normalized] = _statuses.Count - 1;
         return _statuses.Count - 1;
     }
@@ -47,9 +48,10 @@ internal sealed class RuleHarness(string site = "https://example.com")
     /// <summary>Records what the crawl found at a URL.</summary>
     /// <param name="source">How the crawl found it: <see cref="DiscoverySource.SiteVersion"/> for a probe of the site's other versions.</param>
     /// <param name="isParsed">The body was parsed, as for a crawled page; by default every HTML response is.</param>
+    /// <param name="responseMs">How long the whole response took.</param>
     public int Fetched(string url, FetchOutcome outcome, int status, bool isHtml = false, IndexabilityReason reason = IndexabilityReason.None,
         string? redirectTo = null, long? size = null, bool inSitemap = false, string? contentType = null,
-        DiscoverySource source = DiscoverySource.Link, bool? isParsed = null)
+        DiscoverySource source = DiscoverySource.Link, bool? isParsed = null, int responseMs = 0)
     {
         var id = Id(url);
         contentType ??= isHtml ? "text/html; charset=utf-8" : null;
@@ -65,7 +67,9 @@ internal sealed class RuleHarness(string site = "https://example.com")
             RedirectTargetId = redirectTo is null ? 0 : Id(redirectTo),
             SizeBytes = size,
             InSitemap = inSitemap,
-            Source = source
+            Source = source,
+            ResponseMs = responseMs,
+            ContentClass = outcome == FetchOutcome.Success ? ResourceTypes.ClassOf(ContentTypeHeader.MediaTypeOf(contentType)) : ContentClass.None
         };
         return id;
     }

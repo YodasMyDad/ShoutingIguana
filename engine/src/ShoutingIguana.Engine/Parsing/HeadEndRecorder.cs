@@ -15,14 +15,22 @@ internal sealed class HeadEndRecorder
     private const int MAX_TAG_CHARS = 60;
 
     private bool _inBody;
+    private int? _headLine;
     private int _bodyLine;
     private IElement? _firstInBody;
     private int _firstInBodyLine;
+
+    /// <summary>The parser made the body up, for something that can't be in a head, rather than reading a &lt;body&gt; tag.</summary>
+    public bool BodyImplied => _inBody && _bodyLine == 0;
+
+    /// <summary>The parser made the head up, for content before any &lt;head&gt; tag, rather than reading one.</summary>
+    public bool HeadImplied => _headLine == 0;
 
     /// <summary>Starts a new document.</summary>
     public void Reset()
     {
         _inBody = false;
+        _headLine = null;
         _bodyLine = 0;
         _firstInBody = null;
         _firstInBodyLine = 0;
@@ -38,6 +46,10 @@ internal sealed class HeadEndRecorder
                 _firstInBody = element;
                 _firstInBodyLine = position.Line;
             }
+        }
+        else if (element.LocalName == "head")
+        {
+            _headLine ??= position.Line;
         }
         else if (element.LocalName == "body")
         {

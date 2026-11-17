@@ -11,6 +11,9 @@ public sealed partial class SyntheticSite
 {
     private const int PLANT_WORDS = 250;
     private const int SLOW_PAGE_DELAY_MS = 1_200;
+
+    /// <summary>How long the partner's slow page takes: past the analysis's default 3 seconds for a slow external link.</summary>
+    private const int SLOW_EXTERNAL_DELAY_MS = 3_200;
     private const int LONG_CHAIN_HOPS = 22;
 
     private const string SHARED_DESCRIPTION =
@@ -29,6 +32,10 @@ public sealed partial class SyntheticSite
 
     private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024, LARGE_IMAGE_WIDTH, LARGE_IMAGE_HEIGHT);
 
+    /// <summary>A script past the 2 MB Googlebot reads of a file: comment lines, then one statement.</summary>
+    private static readonly byte[] HUGE_SCRIPT_BYTES = Encoding.UTF8.GetBytes(
+        string.Concat(Enumerable.Repeat("// A planted script well past the size Googlebot reads of a file.\n", 34_000)) + "document.title = document.title;\n");
+
     /// <summary>The size in pixels the planted large image says it is.</summary>
     public const int LARGE_IMAGE_WIDTH = 4_000;
 
@@ -40,15 +47,17 @@ public sealed partial class SyntheticSite
     {
         List<Plant> plants = [];
 
-        // With an encoding, the page is sent as bytes in it, after its byte-order mark (the encoding's preamble).
+        // With an encoding, the page is sent as bytes in it, after its byte-order mark (the encoding's preamble). Headers
+        // are sent beside the security headers every page has.
         void Page(string slug, string name, string[] issues, Func<PageSpec, PageSpec>? change = null, bool inSitemap = true,
-            string contentType = HTML, bool linked = true, Encoding? markedAs = null)
+            string contentType = HTML, bool linked = true, Encoding? markedAs = null, Dictionary<string, string>? headers = null)
         {
             var page = PlantPage(slug, name);
             page = change?.Invoke(page) ?? page;
+            var sent = headers is null ? SECURITY_HEADERS : new Dictionary<string, string>(SECURITY_HEADERS.Concat(headers), StringComparer.OrdinalIgnoreCase);
             plants.Add(new Plant(page.Path, 200, linked, inSitemap, issues, () => markedAs is null
-                ? new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)
-                : new SyntheticResponse(200, contentType, null, [.. markedAs.GetPreamble(), .. markedAs.GetBytes(Render(page))], null, SECURITY_HEADERS)));
+                ? new SyntheticResponse(200, contentType, Render(page), null, null, sent)
+                : new SyntheticResponse(200, contentType, null, [.. markedAs.GetPreamble(), .. markedAs.GetBytes(Render(page))], null, sent)));
         }
 
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
@@ -113,13 +122,39 @@ public sealed partial class SyntheticSite
 
         // A line break separates words, so these two headings read the same.
         // The pages of a paginated series share their heading by design; their titles differ, so neither is flagged.
+        // Each page links the other with an <a> as well, as Google needs to find the next one.
         Page("series", "Paginated series, first page", [], page => page with
         {
-            H1 = "Paginated series", ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-2\">"
+            H1 = "Paginated series", ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-2\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}series-2\">Next page</a></p>"
         });
         Page("series-2", "Paginated series, second page", [], page => page with
         {
-            H1 = "Paginated series", ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}series\">"
+            H1 = "Paginated series", ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}series\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}series\">Previous page</a></p>"
+        });
+
+        // Pagination tags that lead nowhere useful: to no <a>-linked page, to a 404, to a noindex page (which doesn't name
+        // this one back), to the page itself.
+        Page("unlinked-series/", "Tag-linked series one", ["pagination-not-linked"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}unlinked-series/page/2/\">"
+        });
+        Page("unlinked-series/page/2/", "Tag-linked series two", ["pagination-not-linked"], page => page with
+        {
+            ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}unlinked-series/\">"
+        });
+        Page("series-broken", "Series with a broken next page", ["pagination-broken"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}gone-redirect\">"
+        });
+        Page("series-noindex", "Series with a noindex next page", ["pagination-to-non-indexable", "pagination-sequence-error"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}noindex\">", Content = page.Content + $"<p><a href=\"{PLANTS_PATH}noindex\">Next page</a></p>"
+        });
+        Page("series-self", "Series naming itself next", ["pagination-sequence-error"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-self\">"
         });
         Page("h1-break-a", "Heading with a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to<br>our planted store" });
         Page("h1-break-b", "Heading without a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to our planted store" });
@@ -217,6 +252,35 @@ public sealed partial class SyntheticSite
         Page("canonical-blocked", "Canonical to a blocked URL", ["canonicalised-page"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}blocked" }, inSitemap: false);
 
+        // Page 2 of a list names page 1 as its canonical: a fault of its own, not just a canonicalised page.
+        Page("paginated-list/", "Paginated list, first page", [], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}paginated-list/page/2/\">Next page</a></p>"
+        });
+        Page("paginated-list/page/2/", "Paginated list, second page", ["canonical-to-first-page"], page => page with
+        {
+            Canonical = $"{_base}{PLANTS_PATH}paginated-list/", ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}paginated-list/\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}paginated-list/\">Previous page</a></p>"
+        }, inSitemap: false, linked: false);
+
+        // A canonical on the partner site, two pages naming each other, and a canonical to a page nothing links to.
+        Page("canonical-elsewhere", "Canonical to another site", ["canonical-other-domain"], page => page with { Canonical = $"{_external}/ext/canonical-target" },
+            inSitemap: false);
+        Page("canonical-loop-a", "Canonical loop A", ["canonicalised-page", "canonical-loop"], page => page with { Canonical = $"{_base}{PLANTS_PATH}canonical-loop-b" },
+            inSitemap: false);
+        Page("canonical-loop-b", "Canonical loop B", ["canonicalised-page", "canonical-loop"], page => page with { Canonical = $"{_base}{PLANTS_PATH}canonical-loop-a" },
+            inSitemap: false);
+        Page("canonical-to-unlinked", "Canonical to an unlinked page", ["canonicalised-page"], page => page with { Canonical = $"{_base}{PLANTS_PATH}unlinked-target" },
+            inSitemap: false);
+        Page("unlinked-target", "Canonical page nothing links to", ["canonical-unlinked", "not-in-sitemap"], inSitemap: false, linked: false);
+
+        // A canonical to the page itself with a fragment, and one with a media query: still the page's own, but written wrong.
+        Page("canonical-fragment", "Canonical with a fragment", ["canonical-fragment"], page => page with { Canonical = $"{_base}{page.Path}#top" });
+        Page("canonical-media", "Canonical with a media query", ["canonical-invalid-attribute"], page => page with
+        {
+            Canonical = null, ExtraHead = $"<link rel=\"canonical\" media=\"only screen and (max-width: 640px)\" href=\"{_base}{page.Path}\">"
+        });
+
         Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);
         Page("noindex-canonical", "Noindex with a canonical elsewhere", ["noindex-page", "noindex-with-canonical"], page => page with
         {
@@ -235,6 +299,17 @@ public sealed partial class SyntheticSite
                       "<a href=\"/img/6.jpg\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/img/6.jpg\" alt=\"Another gallery photo\" width=\"400\" height=\"300\"></a></p>"
         });
         Page("nosnippet", "No snippet", ["snippet-blocked"], page => page with { Robots = "nosnippet" });
+
+        // The HTML says index, the server's header noindex: the stricter wins, and the two disagree.
+        Page("robots-conflict", "Robots rules that disagree", ["noindex-page", "robots-directives-conflict"], page => page with { Robots = "index, follow" },
+            inSitemap: false, headers: new() { ["X-Robots-Tag"] = "noindex" });
+
+        // A date to drop out of search that has passed is flagged; one still to come isn't.
+        Page("unavailable-after", "Date to leave search passed", ["unavailable-after-passed"], page => page with { Robots = "unavailable_after: 2020-01-01" });
+        Page("unavailable-later", "Date to leave search to come", [], page => page with { Robots = "unavailable_after: 2099-01-01" });
+        Page("image-preview-none", "Image previews blocked", ["media-preview-blocked"], page => page with { Robots = "max-image-preview:none" });
+        Page("notranslate", "Translation blocked", ["translation-blocked"], page => page with { Robots = "notranslate" });
+        Page("indexifembedded", "Embedding rule on its own", ["indexifembedded-without-noindex"], page => page with { Robots = "indexifembedded" });
         Page("meta-refresh", "Meta refresh", ["meta-refresh"], page => page with
         {
             ExtraHead = $"<meta http-equiv=\"refresh\" content=\"30; url={PLANTS_PATH}thin\">"
@@ -249,6 +324,9 @@ public sealed partial class SyntheticSite
             ExtraHead = $"<meta http-equiv=\"refresh\" content=\"0; url={PLANTS_PATH}refresh-target\">"
         }, inSitemap: false);
         Page("refresh-target", "Meta refresh target", [], linked: false);
+
+        // A Refresh header works as the meta tag does: an instant one makes the page a redirect.
+        Page("refresh-header", "Refresh header", ["meta-refresh"], inSitemap: false, headers: new() { ["Refresh"] = $"0; url={PLANTS_PATH}thin" });
 
         // A link, a partner-site link and an image that only fail once their redirects are followed are broken, not just
         // redirects. The redirecting image is an internal redirect to a 404 itself.
@@ -270,6 +348,59 @@ public sealed partial class SyntheticSite
         {
             plants.Add(new Plant("/private/listed", Plant.REFUSED, Linked: false, InSitemap: true, ["blocked-by-robots", "sitemap-non-indexable"],
                 () => Html(RenderSimple("Private listed", "robots.txt disallows this area.", "/private/listed")), IsPage: false));
+        }
+
+        // Links search engines can't follow: one that works only through a script, and a javascript: href.
+        Page("uncrawlable-links", "Links search engines can't follow", ["uncrawlable-links"], page => page with
+        {
+            Content = page.Content + $"<p><a onclick=\"location='{PLANTS_PATH}thin'\">Thin page</a> <a href=\"javascript:void(0)\">Open menu</a></p>"
+        });
+
+        // A script that isn't there.
+        Page("broken-script", "Broken script", ["broken-resources"], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}missing.js\"></script>" });
+        Other("missing.js", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "missing.js"));
+
+        // A page without the site's header, menu and footer: a dead end.
+        Page("dead-end", "Dead end", ["few-internal-outlinks"], page => page with { Chrome = false });
+        Page("generic-anchors", "Links with generic text", ["generic-anchor-text"], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">Click here</a> <a href=\"{PLANTS_PATH}thin\">Read more…</a></p>"
+        });
+
+        // A page only a noindex page links to.
+        Page("noindex-hub", "Noindex hub", ["noindex-page"], page => page with
+        {
+            Robots = "noindex", Content = page.Content + $"<p><a href=\"{PLANTS_PATH}only-from-noindex\">Only from a noindex page</a></p>"
+        }, inSitemap: false);
+        Page("only-from-noindex", "Linked only from a noindex page", ["non-indexable-inlinks-only", "not-in-sitemap"], inSitemap: false, linked: false);
+
+        // Three clicks from home, then four, then five: the last is deep.
+        Page("deep-1", "Deep page one", [], page => page with { Content = page.Content + $"<p><a href=\"{PLANTS_PATH}deep-2\">Deeper</a></p>" });
+        Page("deep-2", "Deep page two", [], page => page with { Content = page.Content + $"<p><a href=\"{PLANTS_PATH}deep-3\">Deeper still</a></p>" },
+            linked: false);
+        Page("deep-3", "Deep page three", ["deep-page"], linked: false);
+
+        // More than a thousand links, and a link to a partner page that takes more than 3 seconds.
+        Page("many-links", "Very many links", ["too-many-links"], page => page with
+        {
+            Content = page.Content + $"<p>{string.Concat(Enumerable.Repeat($"<a href=\"{PLANTS_PATH}thin\">Thin page</a> ", 1_001))}</p>"
+        });
+        Page("slow-external", "Link to a slow page elsewhere", ["slow-external-links"], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{_external}/ext/slow\">A slow partner page</a></p>"
+        });
+        plants.Add(new Plant("/ext/slow", 200, Linked: false, InSitemap: false, [],
+            () => Html(RenderSimple("Slow partner page", "It answers slowly.", "/ext/slow")) with { DelayMs = SLOW_EXTERNAL_DELAY_MS },
+            IsPage: false, OnPartnerSite: true));
+
+        // A sitemap page only a nofollow link leads to is all but an orphan. Without sitemaps nothing leads the crawl there.
+        if (_options.Sitemaps)
+        {
+            Page("nofollow-link", "Nofollow link to a listed page", ["internal-nofollow-links"], page => page with
+            {
+                Content = page.Content + $"<p><a href=\"{PLANTS_PATH}nofollow-only\" rel=\"nofollow\">Listed page</a></p>"
+            });
+            Page("nofollow-only", "Only nofollow links lead here", ["orphan-page"], linked: false);
         }
 
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
@@ -419,8 +550,40 @@ public sealed partial class SyntheticSite
         Page("html-past-crawl-limit", "Huge HTML", ["large-page", "html-past-crawl-limit"],
             page => page with { Content = page.Content + $"<!-- {new string('x', 2_200_000)} -->" });
         Page("no-viewport", "Missing viewport", ["viewport-missing"], page => page with { Viewport = false });
+        Page("viewport-no-zoom", "Viewport that stops zoom", ["viewport-invalid"], page => page with
+        {
+            ViewportContent = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+        });
         Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
+        Page("lang-invalid", "Lang that isn't a language code", ["lang-invalid"], page => page with { LangValue = "english" });
+
+        // An element that can't be in a head ends it early, and the head's tags after it are in the body.
+        Page("head-ended-early", "Head ended early", ["head-tags-in-body"], page => page with
+        {
+            ExtraHead = "<div id=\"promo\"></div><meta property=\"og:locale\" content=\"en_GB\">"
+        });
+
+        // A second head after the first, and a second body tag: errors the parser recovers from.
+        Page("structure-errors", "HTML structure errors", ["html-structure-errors"], page => page with
+        {
+            ExtraHead = "</head><head>", Content = "<body class=\"second\">" + page.Content
+        });
+        Page("mobile-alternate", "Separate mobile version", ["mobile-alternate"], page => page with
+        {
+            ExtraHead = $"<link rel=\"alternate\" media=\"only screen and (max-width: 640px)\" href=\"{_external}/m{page.Path}\">"
+        });
+
+        // A script sent as text, and a script past the 2 MB Googlebot reads.
+        Page("script-as-text", "Script sent as text", [], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}not-a-script.js\"></script>" });
+        plants.Add(new Plant(PLANTS_PATH + "not-a-script.js", 200, Linked: false, InSitemap: false, ["content-type-mismatch"],
+            () => new SyntheticResponse(200, "text/plain", "document.title = document.title;", null, null), IsPage: false));
+        Page("huge-script", "Script past the crawl limit", [], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}huge.js\"></script>" });
+        plants.Add(new Plant(PLANTS_PATH + "huge.js", 200, Linked: false, InSitemap: false, ["resource-past-crawl-limit"],
+            () => new SyntheticResponse(200, "text/javascript", null, HUGE_SCRIPT_BYTES, null), IsPage: false));
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
+
+        // The header and the page name different encodings: the header wins.
+        Page("charset-latin1", "Latin-1 header", ["charset-invalid"], contentType: "text/html; charset=iso-8859-1");
 
         // With no charset in the header, a meta tag declares the encoding only within the first 1024 bytes, where browsers
         // look for it: first in the head it does, after the head's inline styles it doesn't.
@@ -433,7 +596,7 @@ public sealed partial class SyntheticSite
         // A byte-order mark at the start of the file declares the encoding, with no meta tag and no charset in the
         // header: neither page is missing its character encoding.
         Page("charset-bom", "Byte-order mark", [], page => page with { Charset = false }, contentType: "text/html", markedAs: Encoding.UTF8);
-        Page("charset-bom-utf16", "UTF-16 byte-order mark", [], page => page with { Charset = false }, contentType: "text/html",
+        Page("charset-bom-utf16", "UTF-16 byte-order mark", ["charset-invalid"], page => page with { Charset = false }, contentType: "text/html",
             markedAs: Encoding.Unicode);
         Page("no-open-graph", "Missing Open Graph", ["open-graph-missing"], page => page with { OpenGraph = false });
 
@@ -469,6 +632,12 @@ public sealed partial class SyntheticSite
         }
         Other("moved", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
 
+        // A redirect whose Link header names another URL as canonical than the one it leads to.
+        Other("redirect-with-canonical", 301, linked: true, ["canonical-on-redirect"], () => Redirect(301, PLANTS_PATH + "thin") with
+        {
+            Headers = new Dictionary<string, string> { ["Link"] = $"<{_base}{PLANTS_PATH}trailing/>; rel=\"canonical\"" }
+        });
+
         // A link to a temporary redirect is right as it is: the linked URL stays the one to use, as with a shop's sign-in
         // link, which sends visitors on to its hosted login with a one-off token. A temporary redirect to another site is
         // such a hand-off, not a move, so only the one within the site is flagged (and, over HTTPS, the hand-off to the
@@ -479,6 +648,12 @@ public sealed partial class SyntheticSite
         });
         Other("account-login", 302, linked: false, IsHttps ? ["redirect-downgrade"] : [], () => Redirect(302, $"{_external}/ext/account/login"));
         Other("sale", 302, linked: false, ["redirect-temporary"], () => Redirect(302, PLANTS_PATH + "thin"));
+
+        // A temporary redirect browsers may keep for 30 days.
+        Other("cached-302", 302, linked: true, ["redirect-temporary", "redirect-temporary-cached"], () => Redirect(302, PLANTS_PATH + "thin") with
+        {
+            Headers = new Dictionary<string, string> { ["Cache-Control"] = "max-age=2592000" }
+        });
         Other("gone", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone"));
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
         plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));

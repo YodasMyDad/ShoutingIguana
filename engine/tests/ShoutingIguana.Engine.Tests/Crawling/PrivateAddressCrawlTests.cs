@@ -56,8 +56,13 @@ public sealed class PrivateAddressCrawlTests : IAsyncLifetime
                 $"SELECT r.error FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{new Uri(url).AbsoluteUri}'"));
         }
 
-        // Unknown, not broken: no check judges them, and the analysis says why.
-        Assert.DoesNotContain(IssueReader.ReadAll(_path), row => privateUrls.Any(url => row.Url == new Uri(url).AbsoluteUri || row.RelatedUrl == new Uri(url).AbsoluteUri));
+        // Unknown, not broken: no check judges them, and the analysis says why. Linking to them at all is a fault of the
+        // page's, which says so.
+        var rows = IssueReader.ReadAll(_path).ToList();
+        Assert.DoesNotContain(rows, row => row.Issue != IssueCatalog.LINKS_TO_LOCALHOST.Id &&
+                                           privateUrls.Any(url => row.Url == new Uri(url).AbsoluteUri || row.RelatedUrl == new Uri(url).AbsoluteUri));
+        Assert.Equal(("http://example.com/", $"4 links, such as {new Uri(privateUrls[0]).AbsoluteUri}"),
+            rows.Where(row => row.Issue == IssueCatalog.LINKS_TO_LOCALHOST.Id).Select(row => (row.Url, row.Detail)).Single());
         Assert.Contains("4 URLs weren't checked because they are on private network addresses (such as localhost or 192.168.x.x), which a crawl of a public site doesn't ask, so links to them aren't judged.",
             analysis.Notes);
         Assert.DoesNotContain(analysis.Notes, note => note.Contains("stopped answering", StringComparison.Ordinal));

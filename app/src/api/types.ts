@@ -392,7 +392,7 @@ export type OutOfDateReason = 'crawlChanged' | 'engineChanged' | 'settingsChange
 
 // ----------------------------------------------------------------------------------------- Analysis settings (E6)
 
-export type AnalysisLimitUnit = 'characters' | 'pixels' | 'words' | 'bits' | 'bytes' | 'ms';
+export type AnalysisLimitUnit = 'characters' | 'pixels' | 'words' | 'bits' | 'bytes' | 'ms' | 'links' | 'clicks';
 
 /** One limit an analysis judges by ("a title wider than this is too long"), with what Settings needs to show it. */
 export interface AnalysisLimit {

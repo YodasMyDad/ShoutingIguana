@@ -57,6 +57,13 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
     /// fail, are refused or redirect, a sitemap listing what isn't there, another version of the site that answers, and a
     /// start URL that is no page, which the checks reported once for the whole site are reported on.
     /// </summary>
+    private static IEnumerable<IssueHit> FilesUsed(UrlTable urls, AnalyzedPage page)
+    {
+        var rule = new ResourceRules(urls, _ => "text/html");
+        rule.Observe(page);
+        return rule.Finish();
+    }
+
     [Fact]
     public void ACheckThatSaysAnyUrlCanFlagWhatIsNotAPage()
     {
@@ -82,6 +89,11 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 410, inSitemap: true);
         site.Fetched("https://partner.example/listed", FetchOutcome.Success, 200, inSitemap: true);
 
+        // A page that loads a script sent as HTML, and a stylesheet past Google's limit: both files, not pages.
+        site.Fetched($"{site.Site}/app.js", FetchOutcome.Success, 200, contentType: "text/html", isParsed: false);
+        site.Fetched($"{site.Site}/huge.css", FetchOutcome.Success, 200, contentType: "text/css", size: 3_000_000);
+        var fileUser = site.Page($"{site.Site}/uses-files", RuleHarness.Html("<script src=\"/app.js\"></script><link rel=\"stylesheet\" href=\"/huge.css\">"));
+
         // The one page the crawl read (a sitemap led to it) is noindex. A site hidden from search is one whose home page
         // is noindex, and this one has no home page, so that check reports nothing here: what it flags is always a page.
         var hidden = site.Page($"{site.Site}/listed", RuleHarness.Html("<meta name=\"robots\" content=\"noindex\">"), IndexabilityReason.Noindex);
@@ -98,6 +110,12 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         [
             .. new ResponseCodeRules(urls, new Dictionary<int, string> { [blocked] = "Cloudflare challenge" }).Finish(),
             .. new RedirectRules(urls, site.UrlOf).Finish(),
+            .. new RedirectHeaderRules(urls, () =>
+                [
+                    (site.Find($"{site.Site}/promo"),
+                        [new ResponseHeader("link", "<https://example.com/elsewhere>; rel=\"canonical\""), new ResponseHeader("cache-control", "max-age=2592000")])
+                ], site.UrlOf).Finish(),
+            .. FilesUsed(urls, fileUser),
             .. new RobotsTxtRules(urls, [new("https://example.com", 503, null, null, 0), new("http://example.com", null, null, "Timed out", 0)], scope,
                 new HashSet<string> { "https://example.com" }).Finish(),
             .. new RobotsTxtRules(urls, [new("https://example.com", 404, null, null, 0)], scope, new HashSet<string> { "https://example.com" }).Finish(),

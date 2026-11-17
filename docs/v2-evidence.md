@@ -66,10 +66,10 @@ and is in the group without a related URL.
   references (– none, S sources, T targets), as they will be. A change from today is in bold.
 - **Evidence columns** are [URL column](v2-sidecar-api.md#urls-e3a) ids. New ones: `redirectChain`, `robotsRule`,
   `usedOn`, `pixelWidth`, `pixelHeight` and `fetchError`; since [pixel widths](v2-pixel-widths.md), `titleWidth`,
-  `descriptionWidth`, `titleInResults` and `descriptionInResults`. "–" is none: the row's URL and detail say it all.
+  `descriptionWidth`, `titleInResults` and `descriptionInResults`; since the [new checks](v2-new-checks.md), `language`. "–" is none: the row's URL and detail say it all.
 - **Target facts** are fields of a target (`/targets`) and of a group's `related` URL: `statusCode` (with `outcome`),
   `final` (where its redirects end), `indexability`, `canonical` (where it's canonicalised to), `sizeBytes`,
-  `contentType`, `pixelWidth`, `pixelHeight` (the file), `img` (the `<img>` as the page writes it: `width`, `height`,
+  `contentType`, `pixelWidth`, `pixelHeight` (the file), `responseMs` (its own answer's time), `img` (the `<img>` as the page writes it: `width`, `height`,
   `alt`, `hasAlt`, `altLength`, `srcset`, `loading`), and the page's link to it: `kind`, `text` (anchor, alt or
   hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it). For a `sources` check
   they describe the group's related URL only (its rows' sources are the found-on read, which already has the linking
@@ -90,6 +90,7 @@ and is in the group without a related URL.
 | 2 | `internal-server-error` | U/RD/S | `type`, `responseMs` | – | Same ("500 Internal Server Error") | use · pages |
 | 3 | `internal-unreachable` | U/RD/S | `type`, `fetchError`, `responseMs` | – | Same ("Timed out", "Connection failed": the group stays one per kind; the column says which failure) | use · pages |
 | 4 | `internal-blocked` | U/RD/S | `type` | – | Same (the protection). Since the polite crawl a 429 isn't this check's: it's held back, asked again, and stored as not checked if it never gets through | use · pages |
+| 114 | `content-type-mismatch` (new) | U/RD/S | `type`, `contentType` | – | `Used as a script, sent as text/html` (each way it's used; "sent with no Content-Type") | use · pages |
 | 5 | `soft-404` | P/N/– | `title`, `h1`, `wordCount` | – | "The title or H1 says the page wasn't found" → `The title reads as an error: "Page not found – Example" · 120 words, under 300` (or "The H1 reads as an error: …"; the quoted text is the field that matched) | imp · – |
 
 ### Redirects
@@ -100,6 +101,7 @@ and is in the group without a related URL.
 | 7 | `redirect-loop` | U/N/S | `redirectChain` | – | "3 hops" → `3 hops: /a/ (301) → /a (301) → back to /a/` (paths on the URL's own host, full URLs elsewhere) | use · – |
 | 8 | `redirect-broken` | U/RD/S | `redirectChain` | `statusCode` (the URL it ends at) | Same ("Ends at a URL that returns 404 Not Found") | use · pages |
 | 9 | `redirect-temporary` | U/RD/S | `redirectChain` | `statusCode` (the target) | Same ("302 Found") | use · pages |
+| 115 | `redirect-temporary-cached` (new) | U/RD/S | `redirectChain` | – | `302 Found, cached for 30 days` | use · pages |
 | 10 | `redirect-downgrade` | U/RU/S | `redirectChain` | `statusCode`, `final` (the http:// target) | Same (none) | use · pages |
 | 11 | `meta-refresh` | P/PD/– | – | – | Same (`Moves to https://x/ after 5 seconds`) | imp · pages |
 
@@ -113,7 +115,20 @@ and is in the group without a related URL.
 | 15 | `internal-nofollow-links` | P/RU/T | – | `statusCode`, `text`, `position`, `flags`, `links` | Same ("Links to 2 URLs") | imp · pages |
 | 16 | `empty-anchor-text` | P/RU/T | – | `statusCode`, `position`, `flags` (`imageLink`: an image link whose image has no alt), `links`. A link to the page itself (a home page's logo, since the check audit) names the page: its target is the page, read as its link without text and without a fragment, and the app says "this same page" | Same ("Links to 2 URLs") | imp · pages |
 | 17 | `broken-fragment-links` | P/RU/T | – | `statusCode`, `fragment`, `text`, `position`, `links` | "2 links" → `2 links to missing sections: /faq/#specs, #top` (a fragment alone is on the page itself) | imp · pages |
-| 18 | `orphan-page` | P/N/S | – | – | Same ("Only found in a sitemap") | imp · – |
+| 18 | `orphan-page` | P/N/S | – | – | Same ("Only found in a sitemap"), or `Only nofollow links lead here` (a sitemap page only nofollow links lead to, since the new checks) | imp · – |
+| 101 | `uncrawlable-links` (new) | P/N/– | – | – | `3 links: "Shop" (javascript:), "Next" (onclick) …` (the first three, what makes each uncrawlable; only links that lead somewhere: script that navigates, a routerLink, a URL on a `<span>`). Template hint | imp · – |
+| 102 | `broken-resources` (new) | P/RU/T | – | `statusCode`, `final`, `kind`, `position`, `links` | `2 broken files (the first returns 404 Not Found)` | imp · pages |
+| 103 | `links-to-localhost` (new) | P/RU/T | – | `statusCode`, `text`, `position` | `2 links, such as http://localhost:3000/shop`; on a crawl started at a private address, that machine's own addresses don't count | imp · pages |
+| 104 | `few-internal-outlinks` (new) | P/N/– | `outlinks` | – | `No links to other pages`, `2 links to other pages, under 3` | imp · – |
+| 105 | `generic-anchor-text` (new) | P/N/T | – | `text`, `position`, `statusCode` | `3 links: "Read more" ×2, "here"` | imp · – |
+| 106 | `non-indexable-inlinks-only` (new) | P/N/S | `inlinks`, `linkingPages` | – | `Linked from 3 pages, none of them indexable` | imp · – |
+| 107 | `deep-page` (new) | P/N/– | `depth`, `inlinks` | – | `6 clicks from the start, over 4` (the crawl's recorded depth) | imp · – |
+| 108 | `too-many-links` (new) | P/N/– | `outlinks` | – | `1,240 internal links, over 1,000` (and/or `140 links to other sites, over 100`) | imp · – |
+| 109 | `slow-external-links` (new) | P/RU/T | – | `statusCode`, `responseMs`, `text`, `position` | `2 slow links, the slowest 7.4 s` | imp · pages |
+| 110 | `pagination-not-linked` (new) | P/RU/T | – | `statusCode`, `indexability` | `rel="next" https://x/list/page/2/ has no link` | imp · pages |
+| 111 | `pagination-broken` (new) | P/RU/T | – | `statusCode`, `final` | `rel="next" returns 404 Not Found`, `rel="prev" redirects (301 Moved Permanently)` | imp · pages |
+| 112 | `pagination-to-non-indexable` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical` | `rel="next" is noindex` | imp · pages |
+| 113 | `pagination-sequence-error` (new) | P/PD/– | – | – | `2 rel="next" URLs`, `rel="next" names the page itself`, `/list/page/2/ doesn't point back`, `rel="next" leads back to /list/`; grouped by its kind | imp · pages |
 
 ### Indexability
 
@@ -127,6 +142,12 @@ and is in the group without a related URL.
 | 24 | `robots-txt-unreachable-other-origin` | U/N/– | – | – | Same | once |
 | 25 | `robots-txt-missing` | U/N/– | – | – | Same | once |
 | 26 | `site-hidden-from-search` | P/N/– | `metaRobots`, `xRobotsTag` (the home page's) | – | Same ("212 of 240 pages are noindex") | once |
+| 88 | `robots-directives-conflict` (new) | P/PD/– | `metaRobots`, `xRobotsTag` | – | `The HTML says "index, follow"; the X-Robots-Tag header says "noindex"` (grouped by it: a template's conflict is one group) | imp · pages |
+| 89 | `noindex-near-home` (new) | P/N/– | `metaRobots`, `xRobotsTag`, `depth`, `inlinks` | – | `2 clicks from the start` | imp · – |
+| 90 | `unavailable-after-passed` (new) | P/N/– | `metaRobots`, `xRobotsTag` | – | `unavailable_after: 2025-06-30, passed` (the date as written) | imp · – |
+| 91 | `media-preview-blocked` (new) | P/PD/– | `metaRobots`, `xRobotsTag` | – | The rules found: `noimageindex, max-video-preview:0` | imp · pages |
+| 92 | `translation-blocked` (new) | P/N/– | `metaRobots`, `xRobotsTag` | – | None | imp · – |
+| 93 | `indexifembedded-without-noindex` (new) | P/N/– | `metaRobots`, `xRobotsTag` | – | None | imp · – |
 
 ### Canonicals
 
@@ -142,6 +163,13 @@ and is in the group without a related URL.
 | 34 | `canonical-relative` | P/PD/– | – | – | Same (the href; grouped by its form) | imp · pages |
 | 35 | `canonical-invalid` | P/PD/– | – | – | Same (the href; grouped by what's wrong) | imp · pages |
 | 36 | `noindex-with-canonical` | P/RU/T | `metaRobots`, `xRobotsTag` | `statusCode`, `indexability`, `flags` | Same (none) | imp · pages |
+| 94 | `canonical-to-first-page` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical`, `flags` | `Page 2 names page 1 as its canonical` (or "A later page …" when only its rel="prev" says so); grouped by the first page, so a series is one group | imp · pages |
+| 95 | `canonical-other-domain` (new) | P/RU/T | – | `statusCode`, `final`, `indexability`, `canonical` | `On another host: staging.example.com` | imp · pages |
+| 96 | `canonical-loop` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical` | `A loop of 2: /a/ → /b/ → back to /a/` (paths on the page's own host) | imp · pages |
+| 97 | `canonical-on-redirect` (new) | U/N/S | `redirectChain` | – | `Redirects to https://x/c/; its canonical header names https://x/b/` | use · – |
+| 98 | `canonical-fragment` (new) | P/PD/– | – | – | The fragment: `#reviews` | imp · pages |
+| 99 | `canonical-invalid-attribute` (new) | P/PD/– | – | – | The attributes: `media`, `hreflang, type` | imp · pages |
+| 100 | `canonical-unlinked` (new) | P/N/S | `inlinks`, `linkingPages` | – | `Only canonicals lead here`; its found-on lists the pages whose canonical names it | imp · – |
 
 ### Sitemaps
 
@@ -244,6 +272,7 @@ and is in the group without a related URL.
 | 81 | `slow-response` | P/N/– | – | – | "1,250 ms (first byte after 900 ms)" → `1,250 ms, over 1,000 ms (first byte after 900 ms)` | imp · – |
 | 82 | `large-page` | P/N/– | – | – | "1.4 MB" → `1.4 MB, over 1 MB` | imp · – |
 | 83 | `html-past-crawl-limit` | P/N/– | – | – | "2.3 MB" → `2.3 MB, past the 2 MB Google reads` | imp · – |
+| 116 | `resource-past-crawl-limit` (new) | U/N/S | `sizeBytes`, `contentType` | – | `2.3 MB, past the 2 MB Google reads` (the size as received: compressed, if the server compressed it) | use · – |
 
 ### HTML
 
@@ -253,6 +282,18 @@ and is in the group without a related URL.
 | 85 | `lang-missing` | P/N/– | – | – | Same (none). Template hint | imp · – |
 | 86 | `charset-missing` | P/N/– | – | – | None → none, but a meta tag past the first 1024 bytes says where it ends (the check audit's): `A meta tag declares it, but ends at byte 1,180, past the first 1,024 bytes browsers read`. Template hint | imp · – |
 | 87 | `open-graph-missing` | P/PD/– | – | – | Same ("Missing og:image; empty og:description") | imp · pages |
+| 117 | `head-tags-in-body` (new) | P/PD/– | – | – | `title, meta description and 3 Open Graph tags are in the body: <div id="promo"> on line 12 ended the head early`, or `… are in the body, after <body> on line 30`; grouped by the cause (`FaultOf`: the element, without its line, or "After <body>") | imp · pages |
+| 118 | `html-structure-errors` (new) | P/PD/– | – | – | `2 <head> tags; 2 <body> tags`, `<html> after content`, `<head> after content` | imp · pages |
+| 119 | `viewport-invalid` (new) | P/PD/– | – | – | `user-scalable=no; maximum-scale=1`, `no width or initial-scale`, `2 viewport tags that differ` | imp · pages |
+| 120 | `charset-invalid` (new) | P/PD/– | – | – | `Declares windows-1252, not UTF-8`, `The header says iso-8859-1; the page says utf-8`, `2 declarations: utf-8, iso-8859-1` (a late `<meta charset>` with the header declaring isn't flagged: the real-site audit found it on every page of two of three sites, to no effect) | imp · pages |
+| 121 | `lang-invalid` (new) | P/PD/– | `language` | – | The value: `english` | imp · pages |
+| 122 | `mobile-alternate` (new) | P/N/– | – | – | `Mobile version: https://m.example.com/x` | imp · – |
+
+**New checks (step 3b, [v2-new-checks.md](v2-new-checks.md)):** rows 88 on, marked "(new)", each in its category's
+table. `canonical-unlinked` is P where the specification said U: it flags only indexable pages, as `orphan-page` does.
+`canonicalised-page` (27) no longer flags a page `canonical-to-first-page` or `canonical-other-domain` flags, and
+`canonical-to-non-indexable` (32) no page of a canonical loop. `meta-refresh` (11) also reads a `Refresh` response header:
+`The Refresh header moves to https://x/ after 5 seconds`.
 
 **In all:** 27 checks get evidence columns; 24 get target facts (the 20 `targets` checks, and the related URL of 4
 `sources` checks' groups: 6, 8, 9 and 10); 21 details change (22 with `charset-missing`'s, which the check audit added); 6 checks change how they're shown (3 image checks become

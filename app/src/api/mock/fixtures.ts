@@ -183,6 +183,7 @@ export function adaptUrlRow(raw: Record<string, unknown>, severities: ReadonlyMa
     description: value('metaDescription'),
     h1: value('h1'),
     h1Count: value('h1Count'),
+    language: value('language'),
     wordCount: value('wordCount'),
     outlinks: value('outlinks'),
     sizeBytes: value('sizeBytes'),

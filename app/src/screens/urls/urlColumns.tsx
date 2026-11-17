@@ -231,6 +231,7 @@ const GROUP_OF: Record<string, UrlColumnGroup> = {
   descriptionInResults: 'content',
   h1: 'content',
   h1Count: 'content',
+  language: 'content',
   wordCount: 'content',
   inlinks: 'links',
   followedInlinks: 'links',
@@ -288,6 +289,7 @@ const HINTS: Record<string, string> = {
   fetchError:
     'What went wrong, as the crawl recorded it, for a URL that didn’t succeed: a timeout, a connection that failed, robots.txt that couldn’t be read',
   redirectChain: 'Each redirect from it, with the status there, to where they end',
+  language: 'The language the page gives in <html lang>, as it writes it',
   robotsRule: 'The robots.txt line that refused it, and where it is in the file',
   titleLength: 'The title’s characters, as a reader counts them: an emoji or an accented letter once',
   descriptionLength: 'The meta description’s characters, as a reader counts them: an emoji or an accented letter once',
@@ -431,6 +433,7 @@ const WIDTHS: Record<string, number> = {
   description: 320,
   h1: 240,
   h1Count: 64,
+  language: 96,
   wordCount: 104,
   titleLength: 112,
   descriptionLength: 160,

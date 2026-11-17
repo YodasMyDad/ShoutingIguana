@@ -49,7 +49,9 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
 
         IssueDefinition[] notRun =
         [
-            IssueCatalog.BROKEN_EXTERNAL_LINKS, IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.ORPHAN_PAGE,
+            IssueCatalog.BROKEN_EXTERNAL_LINKS, IssueCatalog.SLOW_EXTERNAL_LINKS, IssueCatalog.BROKEN_RESOURCES, IssueCatalog.CONTENT_TYPE_MISMATCH,
+            IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT, IssueCatalog.IMAGE_BROKEN,
+            IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.ORPHAN_PAGE,
             IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_ERROR, IssueCatalog.SITEMAP_MISSING, IssueCatalog.SITEMAP_NON_INDEXABLE,
             IssueCatalog.SITEMAP_URL_OTHER_HOST
         ];
@@ -140,7 +142,12 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         var reason = $"{refused} of the {refused + others + 2} pages the crawl tried to read refused it or didn't answer, and pages linked only from them would look orphaned.";
         if (skipped)
         {
-            Assert.Equal([new SkippedCheck(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.PAGES_UNREAD, reason)], analysis.Skipped);
+            Assert.Equal(
+                [
+                    new SkippedCheck(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
+                    new SkippedCheck(IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
+                    new SkippedCheck(IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason)
+                ], analysis.Skipped);
             Assert.Contains($"Orphan pages weren't checked: {reason}", analysis.Notes);
             Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id));
         }

@@ -163,6 +163,24 @@ internal sealed class IssueWriter : IDisposable
     }
 
     /// <summary>Stores indexability the analysis judged differently from the crawl, for the stats and the UI.</summary>
+    /// <summary>
+    /// Takes back every issue already stored for these checks, with their other URLs and faults: the analysis skipped them
+    /// after the pages they were found on had been read, as when a page's facts turn out older than a check needs.
+    /// </summary>
+    public void Discard(IReadOnlyList<IssueDefinition> checks)
+    {
+        foreach (var table in new[] { "issues", "issue_targets", "issue_faults" })
+        {
+            using var delete = Command($"DELETE FROM {table} WHERE issue = $issue");
+            var issue = delete.Parameters.Add("$issue", SqliteType.Text);
+            foreach (var check in checks)
+            {
+                issue.Value = check.Id;
+                delete.ExecuteNonQuery();
+            }
+        }
+    }
+
     public void AddIndexability(IReadOnlyList<(int UrlId, IndexabilityReason Reason)> changes)
     {
         using var insert = Command("INSERT OR REPLACE INTO effective_indexability (url_id, indexability_reason) VALUES ($urlId, $reason)");

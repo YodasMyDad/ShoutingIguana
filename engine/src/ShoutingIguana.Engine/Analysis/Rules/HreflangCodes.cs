@@ -40,6 +40,12 @@ internal static class HreflangCodes
         "za", "zm", "zw"
     };
 
+    /// <summary>An ISO 639-1 language code, any case.</summary>
+    public static bool IsLanguage(string code) => LANGUAGES.Contains(code);
+
+    /// <summary>An ISO 3166-1 alpha-2 region code, any case.</summary>
+    public static bool IsRegion(string code) => REGIONS.Contains(code);
+
     public static bool IsValid(string code)
     {
         if (code.Equals("x-default", StringComparison.OrdinalIgnoreCase))
