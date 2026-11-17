@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -101,26 +102,6 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// One whose limit lets one product page through every two seconds and renews its penalty with every other, like the
-    /// real shop's (about one a minute): the crawl's single last try lost pages to it, as on the real site; three, each
-    /// after the pause the site asked for, get them all.
-    /// </summary>
-    [Fact]
-    public async Task ASiteThatLetsOnePageThroughAtATimeIsCrawledWhole()
-    {
-        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
-        {
-            PageCount = 6,
-            RateLimit = new SyntheticRateLimit(MaxRequests: 1, Window: TimeSpan.FromSeconds(2), Penalty: TimeSpan.FromSeconds(2))
-        });
-
-        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
-
-        Assert.True(server.RateLimited > 0, "The crawl should have tripped the rate limit.");
-        Assert.Equal(0, Count(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"));
-    }
-
-    /// <summary>
     /// One that never lets the crawler through: its product pages are asked for once, then three more times at the end of
     /// the crawl, and stored as not checked because the site asked the crawler to slow down. That is no fault of the site's pages, so
     /// no check flags them, the analysis says why they weren't judged, and a notice says what to do.
@@ -128,18 +109,20 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     [Fact]
     public async Task ASiteThatNeverStopsAskingToSlowDownLeavesItsUrlsNotCheckedAndSaysSo()
     {
+        // Two product pages, asked again and again, ever further apart, until the twenty minutes after the rest of the
+        // crawl run out: on the fake clock, moved on a second at a time.
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
         {
-            // Two product pages, each asked four times at the pace a site that keeps asking teaches: one every five seconds.
             PageCount = 3,
             RateLimit = new SyntheticRateLimit(MaxRequests: 1, Window: TimeSpan.FromSeconds(1), Penalty: TimeSpan.FromSeconds(1), NeverRelents: true)
         });
         var path = NewDatabasePath();
-        var observer = new RecordingObserver();
+        var time = new FakeTimeProvider();
+        var observer = new RecordingObserver(time);
         CrawlSummary summary;
-        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(Options(server), path), observer))
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(Options(server), path), observer))
         {
-            summary = await job.Completion.WaitAsync(CRAWL_TIMEOUT);
+            summary = await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromSeconds(1), realLimit: TimeSpan.FromMinutes(2));
         }
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
@@ -147,11 +130,14 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var products = Count(path, $"SELECT COUNT(*) {PRODUCTS}");
         Assert.True(products >= 2, $"{products} product URLs");
         Assert.Equal(products, Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests)'"));
-        Assert.Equal(4 * products, server.RateLimited);
+        Assert.True(server.RateLimited > 4 * products, $"{server.RateLimited} 429s");
         Assert.Equal(products, CrawlStatsReader.Read(path).NotCheckedCount);
 
-        var slowDown = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited");
-        Assert.Contains("asked the crawler to slow down (429 Too Many Requests). It waits 1 second as asked", slowDown.Message, StringComparison.Ordinal);
+        // The limit is the product pages', not the site's: said of the section, and the rest went on.
+        var section = Assert.Single(observer.Notices, notice => notice.Code == "section-rate-limited");
+        Assert.Contains("limits its /p/ pages (429 Too Many Requests), not the rest of the site", section.Message, StringComparison.Ordinal);
+        Assert.Equal("/p/", section.Data!.Url);
+        Assert.Equal(0, observer.Count("rate-limited"));
         var left = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited-unchecked");
         Assert.Equal(products, left.Data!.Count);
         Assert.StartsWith($"{products} URLs weren't checked because ", left.Message, StringComparison.Ordinal);
@@ -166,6 +152,39 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         string[] failures = ["internal-blocked", "internal-client-error", "internal-server-error", "internal-unreachable", "broken-internal-links"];
         Assert.DoesNotContain(IssueReader.ReadAll(path), row => failures.Contains(row.Issue) && (row.Url.Contains("/p/", StringComparison.Ordinal) ||
             row.RelatedUrl?.Contains("/p/", StringComparison.Ordinal) == true));
+    }
+
+    /// <summary>
+    /// The real shop's limit: one section (its product pages, here /p/) lets a page through about once a second and renews
+    /// its penalty with every other, while the rest of the site has none. The section's pages wait their turn at the
+    /// section's pace; the rest of the site isn't slowed by them; and every page is checked, none left unchecked.
+    /// </summary>
+    [Fact]
+    public async Task ASiteThatLimitsOneSectionIsCrawledWholeWithoutSlowingTheRest()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
+        {
+            PageCount = 21,
+            RateLimit = new SyntheticRateLimit(MaxRequests: 1, Window: TimeSpan.FromSeconds(1), Penalty: TimeSpan.FromSeconds(1))
+        });
+
+        var observer = new RecordingObserver();
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server), observer);
+
+        Assert.True(server.RateLimited > 0, "The crawl should have tripped the section's limit.");
+        Assert.Equal(0, Count(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"));
+
+        // The rest of the site isn't slowed by the product pages' limit: the host's pace was never halved, and the hundred
+        // or so URLs the home page and the categories lead to were read in the first ten seconds, while 20 product pages
+        // took a second or more each.
+        Assert.DoesNotContain(observer.Notices, notice => notice.Code == "rate-limited");
+        Assert.Single(observer.Notices, notice => notice is { Code: "section-rate-limited", Data.Url: "/p/" });
+        const string INTERNAL = "FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1";
+        var start = Count(path, $"SELECT MIN(r.fetched_at) {INTERNAL}");
+        var restEarly = Count(path, $"SELECT COUNT(*) {INTERNAL} AND u.url NOT LIKE '%/p/%' AND r.fetched_at - {start} < 10000");
+        var productsDone = Count(path, $"SELECT MAX(r.fetched_at) {INTERNAL} AND u.url LIKE '%/p/%'");
+        Assert.True(restEarly >= 80, $"{restEarly} of the rest of the site's URLs were read in the first ten seconds.");
+        Assert.True(productsDone - start > 15_000, $"The product pages took {productsDone - start} ms.");
     }
 
     [Fact]
@@ -229,10 +248,10 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     /// <summary>Crawls the site and checks the crawl and every issue against what the site planted; returns the crawl file.</summary>
-    private async Task<string> AssertFindsExactlyThePlantsAsync(SyntheticSiteServer server, CrawlOptions options)
+    private async Task<string> AssertFindsExactlyThePlantsAsync(SyntheticSiteServer server, CrawlOptions options, ICrawlObserver? observer = null)
     {
         var path = NewDatabasePath();
-        var summary = await CrawlAsync(options, path);
+        var summary = await CrawlAsync(options, path, observer: observer);
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         AssertDownloadedIsWhatWasRead(summary, path);
         ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
@@ -701,9 +720,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
     private static CrawlOptions Options(SyntheticSiteServer server) => new() { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 };
 
-    private static async Task<CrawlSummary> CrawlAsync(CrawlOptions options, string path, bool resume = false)
+    private static async Task<CrawlSummary> CrawlAsync(CrawlOptions options, string path, bool resume = false, ICrawlObserver? observer = null)
     {
-        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path, resume));
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path, resume), observer);
         return await job.Completion.WaitAsync(CRAWL_TIMEOUT);
     }
 

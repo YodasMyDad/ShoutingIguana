@@ -42,6 +42,11 @@ internal sealed class SitemapDiscoverer(
     internal const int MAX_SITEMAPS = 1_000;
     internal const int MAX_NESTING = 3;
     private const int MAX_REDIRECTS = 5;
+
+    /// <summary>Times a sitemap answered 429 is asked, each after the wait its host or section asked for, as a page is.</summary>
+    private const int MAX_TRIES = 4;
+
+    private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromMinutes(2);
     private const int BATCH_SIZE = 1_000;
 
     public async Task RunAsync(Uri startUri, CancellationToken cancellationToken)
@@ -155,13 +160,11 @@ internal sealed class SitemapDiscoverer(
             using var deadline = new CancellationTokenSource(Timeout.InfiniteTimeSpan, timeProvider);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
-            var (response, lease, location) = await SendFollowingRedirectsAsync(uri, cancellationToken, timeout.Token,
-                () => deadline.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)))).ConfigureAwait(false);
+            var (response, lease, location) = await SendAskingAgainAfter429Async(uri, deadline, timeout.Token, cancellationToken).ConfigureAwait(false);
             using var heldLease = lease;
             using var disposeResponse = response;
             uri = location;
             statusCode = (int)response.StatusCode;
-            lease.ReportStatus(statusCode.Value, fetcher.GetRetryAfter(response));
             if (statusCode is < 200 or >= 300)
             {
                 // The status by its name, as an issue's detail names it: "404 Not Found" ("HTTP 520" for one with none).
@@ -221,6 +224,51 @@ internal sealed class SitemapDiscoverer(
         await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null), cancellationToken)
             .ConfigureAwait(false);
         return (children, urlCount);
+    }
+
+    /// <summary>
+    /// Sends for a sitemap, and asks again if its host answers 429, up to <see cref="MAX_TRIES"/> times in all, as a page
+    /// would be: after the pause the host asked for (the gate keeps it), or at the section's turn when the host limits
+    /// the section apart. The deadline restarts with each try's turn at the gate.
+    /// </summary>
+    private async Task<(HttpResponseMessage Response, HostGateLease Lease, Uri Location)> SendAskingAgainAfter429Async(Uri uri,
+        CancellationTokenSource deadline, CancellationToken sending, CancellationToken cancellationToken)
+    {
+        for (var tries = 1; ; tries++)
+        {
+            var (response, lease, location) = await SendFollowingRedirectsAsync(uri, cancellationToken, sending,
+                () => deadline.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)))).ConfigureAwait(false);
+            var retryAfter = fetcher.GetRetryAfter(response);
+            lease.ReportStatus((int)response.StatusCode, retryAfter, location);
+            if ((int)response.StatusCode != 429 || tries == MAX_TRIES)
+            {
+                return (response, lease, location);
+            }
+
+            response.Dispose();
+            lease.Dispose();
+            logger.LogInformation("Sitemap {Url} answered 429; asking again", location);
+            await WaitAfter429Async(location, retryAfter, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Until the section's turn when its host limits it apart; otherwise for the Retry-After, or ten seconds.</summary>
+    private async Task WaitAfter429Async(Uri location, TimeSpan? retryAfter, CancellationToken cancellationToken)
+    {
+        if (gates.For(location).LimitedSectionOf(location) is { } section)
+        {
+            while (!section.TryStart(timeProvider.GetUtcNow()))
+            {
+                var wait = section.NextDue - timeProvider.GetUtcNow();
+                await Task.Delay(wait < TimeSpan.FromSeconds(1) && wait > TimeSpan.Zero ? wait : TimeSpan.FromSeconds(1), timeProvider, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        var asked = retryAfter is { } given && given > TimeSpan.Zero ? given : SectionPace.DEFAULT_INTERVAL;
+        await Task.Delay(asked < MAX_RETRY_WAIT ? asked : MAX_RETRY_WAIT, timeProvider, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

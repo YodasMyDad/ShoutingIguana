@@ -69,6 +69,7 @@ internal sealed class CrawlSession
     private readonly RobotsCache _robots;
     private readonly SitemapDiscoverer _sitemaps;
     private readonly FaviconFetcher _favicon;
+    private readonly SectionTrickle _trickle;
     private readonly HostGateRegistry _gates;
     private readonly CrawlScope _scope;
     private readonly Channel<FrontierItem> _internalQueue;
@@ -126,6 +127,7 @@ internal sealed class CrawlSession
         _links = new OutLinkFactory(scope);
         _favicon = new FaviconFetcher(_options, _fetcher, _gates, _robots, _writer, scope, _pause, timeProvider, loggerFactory.CreateLogger<FaviconFetcher>(), _stop.Token);
         _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, _favicon, timeProvider);
+        _trickle = new SectionTrickle(_gates, _processor, scope, _observer, _pause, timeProvider, loggerFactory.CreateLogger<SectionTrickle>());
         _sitemaps = new SitemapDiscoverer(_options, _fetcher, _gates, _robots, _writer, _links, _observer, _pause, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
@@ -291,6 +293,7 @@ internal sealed class CrawlSession
             waits.Add(coolDown);
         }
 
+        waits.AddRange(_trickle.Waits());
         return waits;
     }
 
@@ -325,6 +328,7 @@ internal sealed class CrawlSession
         }
 
         using var progressStop = new CancellationTokenSource();
+        using var trickleStop = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
         var progress = ReportProgressAsync(progressStop.Token);
         var sitemaps = Task.CompletedTask;
         Task[] workers = [];
@@ -338,7 +342,8 @@ internal sealed class CrawlSession
             workers =
             [
                 .. StartWorkers(_internalQueue.Reader, _options.Concurrency),
-                .. StartWorkers(_externalQueue.Reader, _options.ExternalConcurrency)
+                .. StartWorkers(_externalQueue.Reader, _options.ExternalConcurrency),
+                Task.Run(() => TrickleAsync(trickleStop.Token))
             ];
 
             var exhausted = await DispatchAsync(sitemaps, _stop.Token).ConfigureAwait(false);
@@ -364,6 +369,7 @@ internal sealed class CrawlSession
 
             _internalQueue.Writer.TryComplete();
             _externalQueue.Writer.TryComplete();
+            await trickleStop.CancelAsync().ConfigureAwait(false);
             await WhenAllQuietlyAsync([.. workers, sitemaps]).ConfigureAwait(false);
             SayWhatTheRateLimitLeftUnchecked();
 
@@ -549,16 +555,26 @@ internal sealed class CrawlSession
                 // Read after claiming: workers only ever add to the held-back URLs, so if everything in flight at the
                 // claim is held back now, nothing else is still being fetched.
                 var deferred = _deferred.Count;
-                if (claim.InFlight == deferred && !producersDone && _phase == CrawlPhase.Crawling)
+                var held = _trickle.Held;
+                if (claim.InFlight == deferred + held && !producersDone && _phase == CrawlPhase.Crawling)
                 {
                     _phase = CrawlPhase.ReadingSitemaps;
                 }
 
-                if (claim.InFlight == deferred && producersDone && !retrying)
+                if (claim.InFlight == deferred + held && producersDone && !retrying)
                 {
-                    if (deferred == 0)
+                    if (deferred + held == 0)
                     {
                         return true;
+                    }
+
+                    if (deferred == 0)
+                    {
+                        // Only sections the site limits are left: they go on at their pace, for a while yet.
+                        _phase = CrawlPhase.Retrying;
+                        _trickle.RestIsOver(_timeProvider.GetUtcNow());
+                        await Task.Delay(IDLE_DELAY, _timeProvider, cancellationToken).ConfigureAwait(false);
+                        continue;
                     }
 
                     // The held-back URLs' one more try, after robots.txt's cool-down if it's due, until the last is over, at
@@ -692,6 +708,14 @@ internal sealed class CrawlSession
 
                 PageRecord record;
                 var isRetry = _retried.TryGetValue(item.Id, out var heldBack);
+
+                // In a section its host limits apart from the rest: asked at that section's pace, never tying a worker up.
+                if (_trickle.TryHold(item, heldBack))
+                {
+                    _retried.TryRemove(item.Id, out _);
+                    continue;
+                }
+
                 try
                 {
                     record = await _processor.ProcessAsync(item, cancellationToken, isRetry).ConfigureAwait(false);
@@ -705,6 +729,13 @@ internal sealed class CrawlSession
                         FetchOutcome.ProcessingError, exception.Message);
                 }
 
+                // A 429 that limited its section: the URL waits its turn there.
+                if (IsRateLimited(record.Response) && _trickle.TryHold(item, record))
+                {
+                    _retried.TryRemove(item.Id, out _);
+                    continue;
+                }
+
                 var deferred = Defer(record);
                 if (isRetry)
                 {
@@ -715,12 +746,7 @@ internal sealed class CrawlSession
 
                 if (!deferred)
                 {
-                    if (item.IsInternal && IsRateLimited(record.Response) && Interlocked.Increment(ref _rateLimited) == 1)
-                    {
-                        Volatile.Write(ref _rateLimitedHost, _scope.HostName(UrlNormalizer.GetHost(new Uri(item.Url))));
-                    }
-
-                    await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+                    await RecordAsync(record, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -731,6 +757,35 @@ internal sealed class CrawlSession
         catch (ChannelClosedException)
         {
             // The writer failed. Stop everything; the session reports the writer's error.
+            await _stop.CancelAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Stores a URL's record, counting the site's own left unchecked by a 429 for the end's notice.</summary>
+    private async Task RecordAsync(PageRecord record, CancellationToken cancellationToken)
+    {
+        var item = record.Item;
+        if (item.IsInternal && IsRateLimited(record.Response) && Interlocked.Increment(ref _rateLimited) == 1)
+        {
+            Volatile.Write(ref _rateLimitedHost, _scope.HostName(UrlNormalizer.GetHost(new Uri(item.Url))));
+        }
+
+        await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The held-back sections' URLs, at their pace, until the crawl ends or stops.</summary>
+    private async Task TrickleAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _trickle.RunAsync(RecordAsync, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The crawl is over, or stopping: anything still held back is re-queued when it resumes.
+        }
+        catch (ChannelClosedException)
+        {
             await _stop.CancelAsync().ConfigureAwait(false);
         }
     }

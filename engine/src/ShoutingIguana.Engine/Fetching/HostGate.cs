@@ -14,6 +14,14 @@ internal sealed class HostGate
     /// <summary>URLs in a row, each after its retries, that got no response before an origin counts as unreachable.</summary>
     public const int UNREACHABLE_AFTER_URLS = 3;
 
+    /// <summary>
+    /// Sections answered 429 within <see cref="SPREAD_WINDOW"/> that make the limit the host's own rather than a section's:
+    /// the whole host then slows down.
+    /// </summary>
+    public const int SPREAD_SECTIONS = 3;
+
+    private static readonly TimeSpan SPREAD_WINDOW = TimeSpan.FromMinutes(10);
+
     private readonly SemaphoreSlim _slots;
     private readonly Lock _sync = new();
     private readonly TimeProvider _timeProvider;
@@ -28,6 +36,10 @@ internal sealed class HostGate
     // which are kept rather than handed on.
     private int _window;
     private int _withheld;
+
+    // Sections the host limits apart from the rest, by the folder that names them, and when each section last sent a 429.
+    private readonly Dictionary<string, SectionPace> _sections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _throttledSections = new(StringComparer.Ordinal);
 
     /// <param name="maxConcurrency">The most requests at once: the crawl's setting.</param>
     /// <param name="minimumInterval">The least time between request starts: the crawl's rate, or zero for none.</param>
@@ -138,13 +150,62 @@ internal sealed class HostGate
         }
     }
 
+    /// <summary>The sections the host limits apart from the rest, as they stand.</summary>
+    public IReadOnlyList<SectionPace> Sections
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return [.. _sections.Values];
+            }
+        }
+    }
+
+    /// <summary>
+    /// The section the host limits apart from the rest that <paramref name="uri"/> is in, or null: one named by any folder of
+    /// its path (/collections/belts/products/belt is in /products/), or the root's for a URL in no folder.
+    /// </summary>
+    public SectionPace? LimitedSectionOf(Uri uri)
+    {
+        lock (_sync)
+        {
+            return LimitedSectionOfLocked(uri);
+        }
+    }
+
     /// <summary>How the host answered a request; <paramref name="startedAt"/> is when it started, or now when not known.</summary>
     /// <param name="latency">Its time to first byte: a host answering ever slower holds its pace.</param>
-    public void Report(HostSignal signal, TimeSpan? retryAfter = null, DateTimeOffset? startedAt = null, TimeSpan? latency = null)
+    /// <param name="uri">
+    /// What was asked. A 429 for it limits its section alone (<see cref="SectionPace"/>) and leaves the host's pace as it
+    /// is, unless 429s have come from <see cref="SPREAD_SECTIONS"/> sections lately: then the limit is the host's.
+    /// </param>
+    public void Report(HostSignal signal, TimeSpan? retryAfter = null, DateTimeOffset? startedAt = null, TimeSpan? latency = null, Uri? uri = null)
     {
         var now = _timeProvider.GetUtcNow();
         lock (_sync)
         {
+            var section = uri is null ? null : LimitedSectionOfLocked(uri);
+            if (signal == HostSignal.Throttled && uri is not null)
+            {
+                var folder = section?.Folder ?? LastFolder(uri);
+                if (!IsSpread(folder, now))
+                {
+                    if (section is null)
+                    {
+                        section = new SectionPace(folder);
+                        _sections[folder] = section;
+                    }
+
+                    section.Throttled(retryAfter, startedAt ?? now, now);
+                    return;
+                }
+            }
+            else if (signal == HostSignal.Success)
+            {
+                section?.GotThrough();
+            }
+
             var pause = _pace.Answered(signal, retryAfter, startedAt ?? now, now, latency);
             if (pause > TimeSpan.Zero)
             {
@@ -222,6 +283,54 @@ internal sealed class HostGate
                 _withheld++;
             }
         }
+    }
+
+    /// <summary>A section 429'd now; whether, with the others that have lately, the limit is spread over the host.</summary>
+    private bool IsSpread(string folder, DateTimeOffset now)
+    {
+        _throttledSections[folder] = now;
+        foreach (var stale in _throttledSections.Where(section => now - section.Value > SPREAD_WINDOW).Select(section => section.Key).ToList())
+        {
+            _throttledSections.Remove(stale);
+        }
+
+        return _throttledSections.Count >= SPREAD_SECTIONS;
+    }
+
+    private SectionPace? LimitedSectionOfLocked(Uri uri)
+    {
+        if (_sections.Count == 0)
+        {
+            return null;
+        }
+
+        var folders = FoldersOf(uri);
+        if (folders.Count == 0)
+        {
+            return _sections.GetValueOrDefault(string.Empty);
+        }
+
+        for (var index = folders.Count - 1; index >= 0; index--)
+        {
+            if (_sections.TryGetValue(folders[index], out var section))
+            {
+                return section;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The folder a 429 is put down to when no limited section holds its URL: its last ("" in none).</summary>
+    private static string LastFolder(Uri uri) => FoldersOf(uri) is [.., var last] ? last : string.Empty;
+
+    /// <summary>The path's folders: /collections/belts/products/belt has collections, belts and products; /cart has none.</summary>
+    private static List<string> FoldersOf(Uri uri)
+    {
+        var path = uri.AbsolutePath;
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var folders = path.EndsWith('/') ? segments.Length : segments.Length - 1;
+        return [.. segments.Take(Math.Max(0, folders))];
     }
 
     private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right) => left > right ? left : right;

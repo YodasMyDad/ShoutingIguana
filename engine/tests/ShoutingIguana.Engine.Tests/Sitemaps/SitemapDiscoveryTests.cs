@@ -28,6 +28,7 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
     private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _robotsFailures;
     private int _homeThrottles;
+    private int _sitemapThrottles;
     private int _sitemapRequests;
     private LoopbackServer _server = null!;
 
@@ -149,6 +150,27 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Equal(0, Volatile.Read(ref _homeThrottles));
         Assert.All(Sitemaps(path), sitemap => Assert.Null(sitemap.Error));
         Assert.Equal(2, Sitemaps(path).Sum(sitemap => sitemap.UrlCount));
+    }
+
+    /// <summary>A sitemap answered 429 is asked again once the wait its host asked for is over, as a page is: not an error.</summary>
+    [Fact]
+    public async Task ASitemapAnswered429IsAskedAgainAfterTheWait()
+    {
+        _sitemapThrottles = 1;
+        Serve("/robots.txt", "text/plain", "User-agent: *\nDisallow:\nSitemap: /sitemap.xml");
+        Serve("/sitemap.xml", "application/xml", $"{URLSET}{Loc("/a")}{Loc("/b")}</urlset>");
+        var time = new FakeTimeProvider();
+        var path = NewDatabasePath();
+
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(
+            new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 }, path));
+        var summary = await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromMilliseconds(100), realLimit: TimeSpan.FromSeconds(60));
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(0, Volatile.Read(ref _sitemapThrottles));
+        var sitemap = Assert.Single(Sitemaps(path));
+        Assert.Null(sitemap.Error);
+        Assert.Equal(2, sitemap.UrlCount);
     }
 
     /// <summary>A crawl paused as it starts reads no sitemaps until it is resumed.</summary>
@@ -343,6 +365,13 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         if (context.Request.Path == "/robots.txt" && Interlocked.Decrement(ref _robotsFailures) >= 0)
         {
             context.Response.StatusCode = 503;
+            return Task.CompletedTask;
+        }
+
+        if (context.Request.Path == "/sitemap.xml" && Volatile.Read(ref _sitemapThrottles) > 0 && Interlocked.Decrement(ref _sitemapThrottles) >= 0)
+        {
+            context.Response.StatusCode = 429;
+            context.Response.Headers.RetryAfter = "5";
             return Task.CompletedTask;
         }
 

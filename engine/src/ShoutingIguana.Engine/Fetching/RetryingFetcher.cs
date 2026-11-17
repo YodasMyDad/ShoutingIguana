@@ -171,7 +171,7 @@ internal sealed class RetryingFetcher(
     private bool Report(Uri uri, HostGate gate, OriginReachability origin, bool isInternal, FetchResponse response, DateTimeOffset startedAt)
     {
         gate.Report(SignalFor(response), response.RetryAfter, startedAt,
-            response.StatusCode is null ? null : TimeSpan.FromMilliseconds(response.TimeToFirstByteMs));
+            response.StatusCode is null ? null : TimeSpan.FromMilliseconds(response.TimeToFirstByteMs), uri);
         if (response.StatusCode is null)
         {
             return false;

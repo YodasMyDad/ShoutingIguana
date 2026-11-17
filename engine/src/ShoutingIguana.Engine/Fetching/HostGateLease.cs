@@ -12,13 +12,13 @@ internal readonly struct HostGateLease(HostGate gate, DateTimeOffset startedAt) 
     /// How the host answered a request made beside the fetcher (a sitemap, the site's icon), by its status alone: so the
     /// pace it learns comes from every request to the host.
     /// </summary>
-    public void ReportStatus(int statusCode, TimeSpan? retryAfter) => gate.Report(statusCode switch
+    public void ReportStatus(int statusCode, TimeSpan? retryAfter, Uri uri) => gate.Report(statusCode switch
     {
         429 => HostSignal.Throttled,
         503 when retryAfter is not null => HostSignal.Throttled,
         502 or 503 or 504 => HostSignal.Failed,
         _ => HostSignal.Success
-    }, retryAfter, startedAt);
+    }, retryAfter, startedAt, uri: uri);
 
     public void Dispose() => gate.Release();
 }

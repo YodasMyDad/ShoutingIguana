@@ -41,5 +41,12 @@ public enum CrawlWaitReason
     /// Status checks of links to other sites wait for those sites' robots.txt, which comes before a host's first request.
     /// They hold up nothing of the site's own. Urls: how many.
     /// </summary>
-    OtherSitesRobotsTxt
+    OtherSitesRobotsTxt,
+
+    /// <summary>
+    /// The host limits one section apart from the rest (its product pages, say): that section's URLs are read one at a
+    /// time, an interval apart learned from its 429s and what got through, while the rest goes on. Host. Section: the
+    /// section, "/products/". Urls: how many are left. Duration: the time between them now.
+    /// </summary>
+    SectionLimited
 }

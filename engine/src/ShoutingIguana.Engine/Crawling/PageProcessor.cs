@@ -262,7 +262,8 @@ internal sealed class PageProcessor(
     /// </summary>
     private void WatchForBlocking(Uri uri, FetchResponse response)
     {
-        if (response.IsRateLimited)
+        // A 429 that limits one section is said by the section's own notice, as its URLs are held back.
+        if (response.IsRateLimited && gates.For(uri).LimitedSectionOf(uri) is null)
         {
             var host = scope.HostName(UrlNormalizer.GetHost(uri));
             if (_rateLimitedHostsReported.TryAdd(host, true))
@@ -281,7 +282,7 @@ internal sealed class PageProcessor(
                 });
             }
         }
-        else if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason })
+        else if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason } && !response.IsRateLimited)
         {
             // Once per host: the first blocked response raises it, and the file counts the rest when it's read back.
             var host = scope.HostName(UrlNormalizer.GetHost(uri));
