@@ -13,11 +13,15 @@ namespace ShoutingIguana.Sidecar.Options;
 internal static class AnalysisLimits
 {
     private const string CHARACTERS = "characters";
+    private const string PIXELS = "pixels";
     private const string WORDS = "words";
     private const string BYTES = "bytes";
 
     /// <summary>The longest a length in characters may be set to: far past any title, description, alt text or URL worth judging.</summary>
     private const long MAX_CHARACTERS = 10_000;
+
+    /// <summary>The widest a width in pixels may be set to: far past any title or description worth judging.</summary>
+    private const long MAX_PIXELS = 100_000;
 
     private const long MAX_WORDS = 1_000_000;
 
@@ -30,14 +34,18 @@ internal static class AnalysisLimits
     /// <summary>Every limit, in the order Settings lists them.</summary>
     public static IReadOnlyList<AnalysisLimit> All { get; } =
     [
-        new("titleMinLength", CHARACTERS, 0, MAX_CHARACTERS, "A title shorter than this is flagged as too short.",
-            settings => settings.TitleMinLength, (settings, value) => settings with { TitleMinLength = (int)value }),
-        new("titleMaxLength", CHARACTERS, 1, MAX_CHARACTERS, "A title longer than this is flagged as too long: search results cut it short.",
-            settings => settings.TitleMaxLength, (settings, value) => settings with { TitleMaxLength = (int)value }),
-        new("descriptionMinLength", CHARACTERS, 0, MAX_CHARACTERS, "A meta description shorter than this is flagged as too short.",
-            settings => settings.DescriptionMinLength, (settings, value) => settings with { DescriptionMinLength = (int)value }),
-        new("descriptionMaxLength", CHARACTERS, 1, MAX_CHARACTERS, "A meta description longer than this is flagged as too long: search results cut it short.",
-            settings => settings.DescriptionMaxLength, (settings, value) => settings with { DescriptionMaxLength = (int)value }),
+        new("titleMinPixels", PIXELS, 0, MAX_PIXELS, "A title narrower than this is flagged as too short.",
+            settings => settings.TitleMinPixels, (settings, value) => settings with { TitleMinPixels = (int)value }, AnalysisSettings.TYPICAL_TITLE_CHARACTER_PX),
+        new("titleMaxPixels", PIXELS, 1, MAX_PIXELS,
+            "A title wider than this in search results is flagged as too long: Google's desktop results would likely cut it off. Measured in Arial at 20 px, as Google shows titles.",
+            settings => settings.TitleMaxPixels, (settings, value) => settings with { TitleMaxPixels = (int)value }, AnalysisSettings.TYPICAL_TITLE_CHARACTER_PX),
+        new("descriptionMinPixels", PIXELS, 0, MAX_PIXELS, "A meta description narrower than this is flagged as too short.",
+            settings => settings.DescriptionMinPixels, (settings, value) => settings with { DescriptionMinPixels = (int)value },
+            AnalysisSettings.TYPICAL_DESCRIPTION_CHARACTER_PX),
+        new("descriptionMaxPixels", PIXELS, 1, MAX_PIXELS,
+            "A meta description wider than this in search results is flagged as too long: Google's desktop results would likely cut it off. Measured in Arial at 14 px, as Google shows descriptions.",
+            settings => settings.DescriptionMaxPixels, (settings, value) => settings with { DescriptionMaxPixels = (int)value },
+            AnalysisSettings.TYPICAL_DESCRIPTION_CHARACTER_PX),
         new("minWordCount", WORDS, 0, MAX_WORDS, "A page with fewer words of main content than this is flagged as thin.",
             settings => settings.MinWordCount, (settings, value) => settings with { MinWordCount = (int)value }),
         new("duplicateMinWordCount", WORDS, 0, MAX_WORDS, "A page with fewer words of main content than this is left out of the duplicate content checks.",
@@ -57,16 +65,16 @@ internal static class AnalysisLimits
             settings => settings.MaxUrlLength, (settings, value) => settings with { MaxUrlLength = (int)value })
     ];
 
-    /// <summary>A minimum and the maximum that must be more than it, with what they're the lengths of.</summary>
+    /// <summary>A minimum and the maximum that must be more than it, with what they're the widths of.</summary>
     private static readonly (string Min, string Max, string What)[] PAIRS =
     [
-        ("titleMinLength", "titleMaxLength", "title"),
-        ("descriptionMinLength", "descriptionMaxLength", "meta description")
+        ("titleMinPixels", "titleMaxPixels", "title"),
+        ("descriptionMinPixels", "descriptionMaxPixels", "meta description")
     ];
 
     public static AnalysisLimit? Find(string id) => All.FirstOrDefault(limit => limit.Id == id);
 
-    /// <summary>The other limit of a pair (a shortest length and its longest), or null for a limit that stands alone.</summary>
+    /// <summary>The other limit of a pair (a narrowest width and its widest), or null for a limit that stands alone.</summary>
     public static string? PartnerOf(string id) =>
         PAIRS.Where(pair => pair.Min == id || pair.Max == id).Select(pair => pair.Min == id ? pair.Max : pair.Min).FirstOrDefault();
 
@@ -75,7 +83,7 @@ internal static class AnalysisLimits
 
     /// <summary>
     /// The engine's limits with these values in place of its own, and what's wrong with any of them, by the limit: one out of
-    /// its range, a longest length that isn't more than its shortest. A limit not named keeps the engine's value.
+    /// its range, a widest width that isn't more than its narrowest. A limit not named keeps the engine's value.
     /// </summary>
     public static AnalysisSettings Apply(IReadOnlyDictionary<string, long> values, out Dictionary<string, IReadOnlyList<string>> errors)
     {
@@ -103,7 +111,7 @@ internal static class AnalysisLimits
             var shortest = Find(min)!.Get(settings);
             if (!errors.ContainsKey(min) && !errors.ContainsKey(max) && Find(max)!.Get(settings) <= shortest)
             {
-                errors[max] = [string.Create(CultureInfo.InvariantCulture, $"The longest {what} allowed must be more than the shortest ({shortest:N0}).")];
+                errors[max] = [string.Create(CultureInfo.InvariantCulture, $"The widest {what} allowed must be more than the narrowest ({shortest:N0}).")];
             }
         }
 

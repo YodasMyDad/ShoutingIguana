@@ -277,7 +277,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     public async Task ALimitInACheckSWordsIsTheOneTheAnalysisRanWith()
     {
         var copy = crawl.Copy();
-        var thresholds = new AnalysisSettings { TitleMaxLength = 41, TitleMinLength = 17, DescriptionMaxLength = 131, DescriptionMinLength = 59, MinWordCount = 173, MaxUrlLength = 67 };
+        var thresholds = new AnalysisSettings { TitleMaxPixels = 385, TitleMinPixels = 160, DescriptionMaxPixels = 812, DescriptionMinPixels = 366, MinWordCount = 173, MaxUrlLength = 67 };
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy, thresholds);
         var results = IssueReader.ReadResults(copy)!;
         Assert.Equal(thresholds, results.Analysis.Settings);
@@ -292,15 +292,15 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         var html = ReportExport.Build(copy, settings: SETTINGS);
         Assert.DoesNotContain("{limit:", html, StringComparison.Ordinal);
         var text = Parse(html).Body!.TextContent;
-        Assert.Contains("These pages have a title of more than 41 characters.", text, StringComparison.Ordinal);
+        Assert.Contains("These pages have a title too long to show in full in search results, where there's room for about 40 characters.", text, StringComparison.Ordinal);
         foreach (var check in found)
         {
             Assert.Contains(string.Join(' ', PlainLimits.Fill(check.Plain!, thresholds).What), text, StringComparison.Ordinal);
         }
 
         // With the default thresholds the same sentence says the default: the number is the analysis's, not the document's.
-        Assert.Contains($"These pages have a title of more than {new AnalysisSettings().TitleMaxLength} characters.", Parse(ReportExport.Build(crawl.Path, settings: SETTINGS)).Body!.TextContent,
-            StringComparison.Ordinal);
+        Assert.Contains("These pages have a title too long to show in full in search results, where there's room for about 60 characters.",
+            Parse(ReportExport.Build(crawl.Path, settings: SETTINGS)).Body!.TextContent, StringComparison.Ordinal);
 
         // The workbook, whose summary names every check, and one check's sheet as CSV.
         var workbook = Path.Combine(_folder, "limits.xlsx");

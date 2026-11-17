@@ -9,9 +9,9 @@ namespace ShoutingIguana.Engine.Analysis;
 /// <summary>
 /// The limits a plain text names. A text (<see cref="IssuePlainTexts"/>, <see cref="PlainWords"/>) may hold
 /// <c>{limit:name}</c>, where the name is that of a threshold the rules read, as the analysis settings' JSON has it:
-/// <c>{limit:titleMaxLength}</c>, <c>{limit:largeImageBytes}</c>, <c>{limit:slowResponseMs}</c>. Filling the text puts
-/// the setting's value there with its unit, as a sentence says it: "60 characters", "200 KB", "1 second". So the words
-/// follow the thresholds: given the settings a crawl's analysis ran with (<see cref="Storage.Models.AnalysisInfo.Settings"/>),
+/// <c>{limit:titleMaxPixels}</c>, <c>{limit:largeImageBytes}</c>, <c>{limit:slowResponseMs}</c>. Filling the text puts
+/// the setting's value there with its unit, as a sentence says it: "200 words", "200 KB", "1 second", and a width in
+/// pixels as the characters it holds, "about 60 characters". So the words follow the thresholds: given the settings a crawl's analysis ran with (<see cref="Storage.Models.AnalysisInfo.Settings"/>),
 /// they say the limits that crawl was judged by; given the settings an analysis would run with now, today's.
 /// <para>
 /// Every numeric threshold of <see cref="AnalysisSettings"/> has a name here, and a test holds the two together. A name
@@ -27,10 +27,10 @@ public static partial class PlainLimits
 
     private static readonly Dictionary<string, (Func<AnalysisSettings, long> Value, LimitUnit Unit)> LIMITS = new(StringComparer.Ordinal)
     {
-        [Name(nameof(AnalysisSettings.TitleMinLength))] = (settings => settings.TitleMinLength, LimitUnit.Characters),
-        [Name(nameof(AnalysisSettings.TitleMaxLength))] = (settings => settings.TitleMaxLength, LimitUnit.Characters),
-        [Name(nameof(AnalysisSettings.DescriptionMinLength))] = (settings => settings.DescriptionMinLength, LimitUnit.Characters),
-        [Name(nameof(AnalysisSettings.DescriptionMaxLength))] = (settings => settings.DescriptionMaxLength, LimitUnit.Characters),
+        [Name(nameof(AnalysisSettings.TitleMinPixels))] = (settings => settings.TitleMinPixels, LimitUnit.TitlePixels),
+        [Name(nameof(AnalysisSettings.TitleMaxPixels))] = (settings => settings.TitleMaxPixels, LimitUnit.TitlePixels),
+        [Name(nameof(AnalysisSettings.DescriptionMinPixels))] = (settings => settings.DescriptionMinPixels, LimitUnit.DescriptionPixels),
+        [Name(nameof(AnalysisSettings.DescriptionMaxPixels))] = (settings => settings.DescriptionMaxPixels, LimitUnit.DescriptionPixels),
         [Name(nameof(AnalysisSettings.MinWordCount))] = (settings => settings.MinWordCount, LimitUnit.Words),
         [Name(nameof(AnalysisSettings.DuplicateMinWordCount))] = (settings => settings.DuplicateMinWordCount, LimitUnit.Words),
         [Name(nameof(AnalysisSettings.NearDuplicateMaxBits))] = (settings => settings.NearDuplicateMaxBits, LimitUnit.Bits),
@@ -45,6 +45,12 @@ public static partial class PlainLimits
     private enum LimitUnit
     {
         Characters,
+
+        /// <summary>A title's width, which a sentence gives as the ordinary characters it holds, never in pixels.</summary>
+        TitlePixels,
+
+        /// <summary>A description's width, as the ordinary characters it holds.</summary>
+        DescriptionPixels,
         Words,
         Bits,
         Bytes,
@@ -55,8 +61,8 @@ public static partial class PlainLimits
     public static IReadOnlyCollection<string> Names => LIMITS.Keys;
 
     /// <summary>
-    /// The text with every <c>{limit:name}</c> in it replaced by that setting's value and unit: "Titles over
-    /// {limit:titleMaxLength}" reads "Titles over 60 characters". A text with none comes back as it is.
+    /// The text with every <c>{limit:name}</c> in it replaced by that setting's value and unit: "Pages under
+    /// {limit:minWordCount}" reads "Pages under 200 words". A text with none comes back as it is.
     /// </summary>
     /// <param name="settings">The thresholds to say: a crawl's analysis's own, or the ones an analysis would run with now.</param>
     /// <exception cref="ArgumentException">The text names a limit that isn't one of <see cref="Names"/>.</exception>
@@ -83,21 +89,42 @@ public static partial class PlainLimits
         reason is null ? null : new SkipReasonPlainText(Fill(reason.Text, settings), Fill(reason.Action, settings));
 
     /// <summary>
-    /// One limit as a sentence says it, with its unit: "60 characters", "200 words", "200 KB", "1 MB", "1 second",
+    /// One limit as a sentence says it, with its unit: "about 60 characters", "200 words", "200 KB", "1 MB", "1 second",
     /// "1.5 seconds". Whole numbers are grouped in thousands, and nothing depends on the machine's culture.
     /// </summary>
-    /// <param name="name">One of <see cref="Names"/>, such as <c>titleMaxLength</c>.</param>
+    /// <param name="name">One of <see cref="Names"/>, such as <c>titleMaxPixels</c>.</param>
     /// <exception cref="ArgumentException">No analysis setting has that name.</exception>
     public static string Describe(string name, AnalysisSettings settings) => LIMITS.TryGetValue(name, out var limit)
         ? limit.Unit switch
         {
             LimitUnit.Characters => Count(limit.Value(settings), "character", "characters"),
+            LimitUnit.TitlePixels => AboutCharacters(limit.Value(settings), AnalysisSettings.TYPICAL_TITLE_CHARACTER_PX),
+            LimitUnit.DescriptionPixels => AboutCharacters(limit.Value(settings), AnalysisSettings.TYPICAL_DESCRIPTION_CHARACTER_PX),
             LimitUnit.Words => Count(limit.Value(settings), "word", "words"),
             LimitUnit.Bits => Count(limit.Value(settings), "bit", "bits"),
             LimitUnit.Bytes => Size(limit.Value(settings)),
             _ => Seconds(limit.Value(settings))
         }
         : throw new ArgumentException($"No analysis setting is named '{name}'. A plain text can hold {{limit:name}} for: {string.Join(", ", LIMITS.Keys)}.", nameof(name));
+
+    /// <summary>
+    /// A width in pixels as the ordinary characters it holds: "about 60 characters" for 580 px of title. To the nearest 5
+    /// from 20 on, to the nearest whole below (<see cref="ApproximateCharacters"/>).
+    /// </summary>
+    private static string AboutCharacters(long pixels, double pixelsPerCharacter) =>
+        $"about {Count(ApproximateCharacters(pixels, pixelsPerCharacter), "character", "characters")}";
+
+    /// <summary>
+    /// About how many ordinary characters fit in a width: 580 px of title is about 60, 200 about 20, 985 px of description
+    /// about 160 and 400 about 65. The app's characters hint rounds the same way.
+    /// </summary>
+    public static long ApproximateCharacters(long pixels, double pixelsPerCharacter)
+    {
+        var characters = pixels / pixelsPerCharacter;
+        return characters >= 20
+            ? (long)Math.Round(characters / 5, MidpointRounding.AwayFromZero) * 5
+            : (long)Math.Round(characters, MidpointRounding.AwayFromZero);
+    }
 
     private static string Count(long value, string one, string many) =>
         string.Create(CultureInfo.InvariantCulture, $"{value:N0} {(value == 1 ? one : many)}");

@@ -88,12 +88,12 @@ public sealed record UrlSummary
     public int? WordCount { get; init; }
 
     /// <summary>
-    /// The room the first title takes in search results, as the title checks measure it: full-width characters and emoji
-    /// count two. Null without a title.
+    /// The first title's characters, as a reader counts them: user-perceived characters, after runs of white space become
+    /// one space. Null without a title.
     /// </summary>
     public int? TitleLength { get; init; }
 
-    /// <summary>The room the first meta description takes, measured the same way. Null without one.</summary>
+    /// <summary>The first meta description's characters, counted the same way. Null without one.</summary>
     public int? DescriptionLength { get; init; }
 
     /// <summary>
@@ -102,4 +102,13 @@ public sealed record UrlSummary
     /// <see cref="Inlinks"/> (hyperlinks only) doesn't say.
     /// </summary>
     public required int UsedOn { get; init; }
+
+    /// <summary>
+    /// How wide the first title is in Google's desktop results, in pixels, as the title checks measure it
+    /// (<see cref="Analysis.Rules.SearchResultWidth"/>). Null without a title.
+    /// </summary>
+    public int? TitleWidth { get; init; }
+
+    /// <summary>How wide the first meta description is, in pixels, as the description checks measure it. Null without one.</summary>
+    public int? DescriptionWidth { get; init; }
 }

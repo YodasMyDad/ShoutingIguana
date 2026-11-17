@@ -751,7 +751,7 @@ public static class IssuePlainTexts
         ["title-too-long"] = new(
             """Titles that may be cut off in search results""",
             [
-                """These pages have a title of more than {limit:titleMaxLength}.""",
+                """These pages have a title too long to show in full in search results, where there's room for {limit:titleMaxPixels}.""",
                 """Search results cut a long title off to fit the screen, so the last words may not show.""",
                 """That's harmless when the important words come first, and then there's nothing to do."""
             ],
@@ -766,7 +766,7 @@ public static class IssuePlainTexts
         ["title-too-short"] = new(
             """Very short titles""",
             [
-                """These pages have a title of fewer than {limit:titleMinLength}.""",
+                """These pages have a title shorter than {limit:titleMinPixels}.""",
                 """Titles like "Login" or "Products" don't tell a searcher what the page is, or whose.""",
                 """A short title can be exactly right, such as a product name, and then there's nothing to do."""
             ],
@@ -826,14 +826,14 @@ public static class IssuePlainTexts
         ["description-too-long"] = new(
             """Search descriptions that may be cut off""",
             [
-                """These pages have a search description, the text under their title in search results, of more than {limit:descriptionMaxLength}.""",
-                """Search results cut off the end of a long description (a "meta description").""",
+                """These pages have a search description, the text under their title in search results, too long to show in full.""",
+                """Search results have room for {limit:descriptionMaxPixels}, and cut off the end of a longer description (a "meta description").""",
                 """That's harmless when the important words come first, so only pages where the cut loses the point need changing."""
             ],
             [
                 """Open the page in your site's editor and find its description, often under "SEO".""",
                 """Put what matters in the first sentence.""",
-                """Trim the rest to about {limit:descriptionMaxLength}, or leave it if the opening already works."""
+                """Trim the rest to {limit:descriptionMaxPixels}, or leave it if the opening already works."""
             ],
             IssueFixer.You,
             """No search description is likely to be cut off"""),
@@ -841,7 +841,7 @@ public static class IssuePlainTexts
         ["description-too-short"] = new(
             """Very short search descriptions""",
             [
-                """These pages have a search description, the text under their title in search results, of fewer than {limit:descriptionMinLength}.""",
+                """These pages have a search description, the text under their title in search results, shorter than {limit:descriptionMinPixels}.""",
                 """One that short (a "meta description") rarely says enough, so Google often shows text from the page instead.""",
                 """A short one that says everything that matters is fine, and then there's nothing to do."""
             ],

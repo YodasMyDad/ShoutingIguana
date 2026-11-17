@@ -178,6 +178,10 @@ internal static class UrlColumns
         },
         new("titleLength", UrlColumnType.Number) { SummarySql = "s.title_length" },
         new("descriptionLength", UrlColumnType.Number) { SummarySql = "s.description_length" },
+        new("titleWidth", UrlColumnType.Number) { SummarySql = "s.title_width" },
+        new("descriptionWidth", UrlColumnType.Number) { SummarySql = "s.description_width" },
+        new(UrlComputedColumns.TITLE_IN_RESULTS, UrlColumnType.Text) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
+        new(UrlComputedColumns.DESCRIPTION_IN_RESULTS, UrlColumnType.Text) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
         new("finalUrl", UrlColumnType.Text)
         {
             SummarySql = "(SELECT f.url FROM urls f WHERE f.id = s.final_url_id)", UrlIdSql = "s.final_url_id", Nullable = false, Sortable = false

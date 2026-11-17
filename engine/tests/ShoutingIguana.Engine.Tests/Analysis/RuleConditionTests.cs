@@ -27,10 +27,11 @@ public sealed class RuleConditionTests
         Assert.Equal([IssueCatalog.DESCRIPTION_MISSING], Issues(rules, site.Page($"{site.Site}/b", RuleHarness.Html())));
         Assert.Equal([IssueCatalog.DESCRIPTION_MISSING], Issues(rules, site.Page($"{site.Site}/c", RuleHarness.Html(Meta(" ")))));
         Assert.Equal([IssueCatalog.DESCRIPTION_MULTIPLE], Issues(rules, site.Page($"{site.Site}/d", RuleHarness.Html(Meta(good) + Meta(good)))));
-        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_LONG], Issues(rules, site.Page($"{site.Site}/e", RuleHarness.Html(Meta(new string('d', 156))))));
-        Assert.Empty(Issues(rules, site.Page($"{site.Site}/f", RuleHarness.Html(Meta(new string('d', 155))))));
-        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_SHORT], Issues(rules, site.Page($"{site.Site}/g", RuleHarness.Html(Meta(new string('d', 69))))));
-        Assert.Empty(Issues(rules, site.Page($"{site.Site}/h", RuleHarness.Html(Meta(new string('d', 70))))));
+        // A d is 1,139 units, 7.79 px at 14 px: 127 of them are 989 px, over 985, and 126 are 981; 51 are 397 px, under 400, and 52 are 405.
+        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_LONG], Issues(rules, site.Page($"{site.Site}/e", RuleHarness.Html(Meta(new string('d', 127))))));
+        Assert.Empty(Issues(rules, site.Page($"{site.Site}/f", RuleHarness.Html(Meta(new string('d', 126))))));
+        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_SHORT], Issues(rules, site.Page($"{site.Site}/g", RuleHarness.Html(Meta(new string('d', 51))))));
+        Assert.Empty(Issues(rules, site.Page($"{site.Site}/h", RuleHarness.Html(Meta(new string('d', 52))))));
         Assert.Empty(Issues(rules, site.Page($"{site.Site}/i", RuleHarness.Html(), IndexabilityReason.Noindex)));
     }
 

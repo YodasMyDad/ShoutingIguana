@@ -108,6 +108,16 @@ public sealed class IssueCatalogTests
             // Only links to the site's own URLs are tested, and social media icons link elsewhere.
             () => Assert.DoesNotContain("social", IssueCatalog.EMPTY_ANCHOR_TEXT.Why, StringComparison.OrdinalIgnoreCase),
 
+            // Titles and descriptions are measured in pixels, as Google's desktop results show them, with the cut as evidence.
+            () => Assert.Contains("wider than 580 pixels (the default", IssueCatalog.TITLE_TOO_LONG.Description),
+            () => Assert.Contains("narrower than 200 pixels (the default", IssueCatalog.TITLE_TOO_SHORT.Description),
+            () => Assert.Contains("wider than 985 pixels (the default", IssueCatalog.DESCRIPTION_TOO_LONG.Description),
+            () => Assert.Contains("narrower than 400 pixels (the default", IssueCatalog.DESCRIPTION_TOO_SHORT.Description),
+            () => Assert.Equal(["title", "titleInResults", "titleWidth", "titleLength"], IssueCatalog.TITLE_TOO_LONG.Evidence),
+            () => Assert.Equal(["title", "titleWidth", "titleLength"], IssueCatalog.TITLE_TOO_SHORT.Evidence),
+            () => Assert.Equal(["description", "descriptionInResults", "descriptionWidth", "descriptionLength"], IssueCatalog.DESCRIPTION_TOO_LONG.Evidence),
+            () => Assert.Equal(["description", "descriptionWidth", "descriptionLength"], IssueCatalog.DESCRIPTION_TOO_SHORT.Evidence),
+
             // One threshold, named as the default once.
             () => Assert.Single(Regex.Matches(IssueCatalog.NEAR_DUPLICATE_CONTENT.Description, "default")),
             () => Assert.Contains("roughly 96% or more alike (the default", IssueCatalog.NEAR_DUPLICATE_CONTENT.Description),
@@ -215,7 +225,7 @@ public sealed class IssueCatalogTests
     public void DefaultSettingsAreValidAndBadOnesAreRejected()
     {
         Assert.Empty(new AnalysisSettings().Validate());
-        Assert.NotEmpty(new AnalysisSettings { TitleMinLength = 70, TitleMaxLength = 60 }.Validate());
+        Assert.NotEmpty(new AnalysisSettings { TitleMinPixels = 700, TitleMaxPixels = 600 }.Validate());
         Assert.NotEmpty(new AnalysisSettings { NearDuplicateMaxBits = 33 }.Validate());
         Assert.Empty(new AnalysisSettings { NearDuplicateMaxBits = 0 }.Validate());
         Assert.NotEmpty(new AnalysisSettings { LargeImageBytes = 0 }.Validate());

@@ -521,7 +521,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         // Stricter thresholds flag more, from the same stored crawl, and the defaults again flag what they did at first:
         // the stricter run's extra rows are gone, not kept alongside.
-        var strict = await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 });
+        var strict = await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMinPixels = 94, TitleMaxPixels = 188 });
         Assert.True(strict.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count >
                     second.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count);
         await analyzer.AnalyzeAsync(path);
@@ -608,7 +608,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var path = NewDatabasePath();
         await CrawlAsync(Options(), path);
         var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
-        var strict = new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 };
+        var strict = new AnalysisSettings { TitleMinPixels = 94, TitleMaxPixels = 188 };
         await analyzer.AnalyzeAsync(path);
         var previous = IssueReader.ReadAll(path).ToList();
         Assert.NotEqual(previous.Count, (await analyzer.AnalyzeAsync(path, strict)).Issues.Sum(issue => issue.Count));
@@ -667,7 +667,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         // Stricter titles, so a run that stored anything would show.
         using var cancel = new CancellationTokenSource();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CrawlAnalyzer(new CancelOnLoggedFailure(cancel))
-            .AnalyzeAsync(path, new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 }, cancel.Token));
+            .AnalyzeAsync(path, new AnalysisSettings { TitleMinPixels = 94, TitleMaxPixels = 188 }, cancel.Token));
 
         Assert.True(cancel.IsCancellationRequested);
         Assert.Equal(previous, IssueReader.ReadAll(path).ToList());

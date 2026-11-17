@@ -1,4 +1,6 @@
 using System.Globalization;
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Storage.Models;
 
@@ -6,9 +8,9 @@ namespace ShoutingIguana.Engine.Storage;
 
 /// <summary>
 /// The URL grid's columns worked out for the rows of the page read rather than by its SQL (<see cref="ColumnSource.Computed"/>):
-/// a URL's redirects hop by hop, the robots.txt rule that refused it, and an image's own size in pixels, which a crawl
-/// made before the crawler read them has no column for. Each costs what the inspector's same read does, for each row,
-/// and only when the column is asked for.
+/// a URL's redirects hop by hop, the robots.txt rule that refused it, an image's own size in pixels, which a crawl
+/// made before the crawler read them has no column for, and how much of a page's title and description Google's results
+/// will likely show. Each costs what the inspector's same read does, for each row, and only when the column is asked for.
 /// </summary>
 internal static class UrlComputedColumns
 {
@@ -16,6 +18,11 @@ internal static class UrlComputedColumns
     public const string PIXEL_HEIGHT = "pixelHeight";
     public const string REDIRECT_CHAIN = "redirectChain";
     public const string ROBOTS_RULE = "robotsRule";
+    public const string TITLE_IN_RESULTS = "titleInResults";
+    public const string DESCRIPTION_IN_RESULTS = "descriptionInResults";
+
+    /// <summary>What Google adds where it cuts a title or description: this shows it as one character.</summary>
+    public const string CUT_MARK = "\u2026";
 
     /// <summary>Fills the computed columns of <paramref name="values"/>, rows by URL id, in place.</summary>
     public static void Fill(GridReadContext context, IReadOnlyList<UrlColumnDefinition> columns, Dictionary<long, object?[]> values)
@@ -42,6 +49,30 @@ internal static class UrlComputedColumns
             }
         }
 
+        var titleShown = Index(columns, TITLE_IN_RESULTS);
+        var descriptionShown = Index(columns, DESCRIPTION_IN_RESULTS);
+        if ((titleShown >= 0 || descriptionShown >= 0) && values.Count > 0)
+        {
+            // The limits the analysis judged by, so the cut agrees with what the checks flagged; the engine's before the first.
+            var settings = context.Analysis?.Settings ?? new AnalysisSettings();
+            using var command = context.Command(
+                $"SELECT url_id, title, meta_description FROM responses WHERE url_id IN ({string.Join(",", values.Keys.Select(id => id.ToString(CultureInfo.InvariantCulture)))})", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var row = values[reader.GetInt64(0)];
+                if (titleShown >= 0)
+                {
+                    row[titleShown] = reader.IsDBNull(1) ? null : InResults(reader.GetString(1), SearchResultText.Title, settings.TitleMaxPixels);
+                }
+
+                if (descriptionShown >= 0)
+                {
+                    row[descriptionShown] = reader.IsDBNull(2) ? null : InResults(reader.GetString(2), SearchResultText.Description, settings.DescriptionMaxPixels);
+                }
+            }
+        }
+
         if (Index(columns, REDIRECT_CHAIN) is var chain and >= 0)
         {
             foreach (var (id, row) in values)
@@ -58,6 +89,14 @@ internal static class UrlComputedColumns
             }
         }
     }
+
+    /// <summary>
+    /// A title or description as Google's desktop results will likely show it: up to where it's cut, with "…", or all of it
+    /// when it fits (<see cref="SearchResultWidth.Cut"/>). Null for none.
+    /// </summary>
+    internal static string? InResults(string text, SearchResultText kind, int limitPixels) => text.Length == 0
+        ? null
+        : SearchResultWidth.Cut(text, kind, limitPixels) is { } shown ? shown + CUT_MARK : text;
 
     private static int Index(IReadOnlyList<UrlColumnDefinition> columns, string id)
     {

@@ -30,10 +30,10 @@ public sealed class PlainLimitsTests
 
     /// <summary>Each threshold at its default, with its unit, as a sentence gives it.</summary>
     [Theory]
-    [InlineData("titleMinLength", "30 characters")]
-    [InlineData("titleMaxLength", "60 characters")]
-    [InlineData("descriptionMinLength", "70 characters")]
-    [InlineData("descriptionMaxLength", "155 characters")]
+    [InlineData("titleMinPixels", "about 20 characters")]
+    [InlineData("titleMaxPixels", "about 60 characters")]
+    [InlineData("descriptionMinPixels", "about 65 characters")]
+    [InlineData("descriptionMaxPixels", "about 160 characters")]
     [InlineData("minWordCount", "200 words")]
     [InlineData("duplicateMinWordCount", "50 words")]
     [InlineData("nearDuplicateMaxBits", "24 bits")]
@@ -48,7 +48,14 @@ public sealed class PlainLimitsTests
     [Fact]
     public void TheValueFollowsTheSettings()
     {
-        Assert.Equal("1 character", PlainLimits.Describe("titleMinLength", DEFAULTS with { TitleMinLength = 1 }));
+        Assert.Equal("1 character", PlainLimits.Describe("imageAltMaxLength", DEFAULTS with { ImageAltMaxLength = 1 }));
+
+        // A width in pixels says the ordinary characters it holds, never pixels: to the nearest 5 from 20 on, to the nearest whole below.
+        Assert.Equal("about 70 characters", PlainLimits.Describe("titleMaxPixels", DEFAULTS with { TitleMaxPixels = 658 }));
+        Assert.Equal("about 65 characters", PlainLimits.Describe("titleMaxPixels", DEFAULTS with { TitleMaxPixels = 612 }));
+        Assert.Equal("about 19 characters", PlainLimits.Describe("titleMinPixels", DEFAULTS with { TitleMinPixels = 183 }));
+        Assert.Equal("about 1 character", PlainLimits.Describe("titleMinPixels", DEFAULTS with { TitleMinPixels = 9 }));
+        Assert.Equal("about 100 characters", PlainLimits.Describe("descriptionMaxPixels", DEFAULTS with { DescriptionMaxPixels = 620 }));
         Assert.Equal("1,200 characters", PlainLimits.Describe("maxUrlLength", DEFAULTS with { MaxUrlLength = 1_200 }));
         Assert.Equal("1 word", PlainLimits.Describe("minWordCount", DEFAULTS with { MinWordCount = 1 }));
         Assert.Equal("0 words", PlainLimits.Describe("duplicateMinWordCount", DEFAULTS with { DuplicateMinWordCount = 0 }));
@@ -74,11 +81,11 @@ public sealed class PlainLimitsTests
     [Fact]
     public void ATextIsFilledWhereverItNamesALimit()
     {
-        const string TEXT = "These pages have a title of more than {limit:titleMaxLength}, or took over {limit:slowResponseMs} to arrive.";
+        const string TEXT = "These pages have a title wider than {limit:titleMaxPixels}, or took over {limit:slowResponseMs} to arrive.";
 
-        Assert.Equal("These pages have a title of more than 60 characters, or took over 1 second to arrive.", PlainLimits.Fill(TEXT, DEFAULTS));
-        Assert.Equal("These pages have a title of more than 70 characters, or took over 2.5 seconds to arrive.",
-            PlainLimits.Fill(TEXT, DEFAULTS with { TitleMaxLength = 70, SlowResponseMs = 2_500 }));
+        Assert.Equal("These pages have a title wider than about 60 characters, or took over 1 second to arrive.", PlainLimits.Fill(TEXT, DEFAULTS));
+        Assert.Equal("These pages have a title wider than about 70 characters, or took over 2.5 seconds to arrive.",
+            PlainLimits.Fill(TEXT, DEFAULTS with { TitleMaxPixels = 658, SlowResponseMs = 2_500 }));
 
         // A text that names none is the same text, and other braces are left alone.
         const string PLAIN = "Every page has a title";
@@ -89,7 +96,8 @@ public sealed class PlainLimitsTests
     /// <summary>A limit no setting has is an error that names it, never a text left with its token or filled with a guess.</summary>
     [Theory]
     [InlineData("{limit:titleLength}", "titleLength")]
-    [InlineData("{limit:TitleMaxLength}", "TitleMaxLength")]
+    [InlineData("{limit:TitleMaxPixels}", "TitleMaxPixels")]
+    [InlineData("{limit:titleMaxLength}", "titleMaxLength")]
     [InlineData("{limit:}", "''")]
     [InlineData("Over {limit: titleMaxLength}.", "' titleMaxLength'")]
     public void ALimitNoSettingHasIsAnError(string text, string named)
@@ -97,7 +105,7 @@ public sealed class PlainLimitsTests
         var error = Assert.Throws<ArgumentException>(() => PlainLimits.Fill(text, DEFAULTS));
 
         Assert.Contains(named, error.Message, StringComparison.Ordinal);
-        Assert.Contains("titleMaxLength", error.Message, StringComparison.Ordinal);
+        Assert.Contains("titleMaxPixels", error.Message, StringComparison.Ordinal);
         Assert.Throws<ArgumentException>(() => PlainLimits.Describe("noSuchLimit", DEFAULTS));
     }
 
@@ -105,19 +113,20 @@ public sealed class PlainLimitsTests
     [Fact]
     public void EveryPartOfACheckAndOfASkipReasonIsFilled()
     {
-        var written = new IssuePlainText("Titles over {limit:titleMaxLength}",
-            ["These pages have a title of more than {limit:titleMaxLength}.", "Search results cut it off."],
-            ["Trim it to {limit:titleMaxLength}."], IssueFixer.You, "No title is over {limit:titleMaxLength}")
+        var written = new IssuePlainText("Titles over {limit:titleMaxPixels}",
+            ["These pages have a title wider than {limit:titleMaxPixels}.", "Search results cut it off."],
+            ["Trim it to {limit:titleMaxPixels}."], IssueFixer.You, "No title is over {limit:titleMaxPixels}")
         {
-            OneFix = "That's usually a slogan of over {limit:titleMinLength}.", LooksFor = "Titles over {limit:titleMaxLength}"
+            OneFix = "That's usually a slogan of over {limit:titleMinPixels}.", LooksFor = "Titles over {limit:titleMaxPixels}"
         };
 
-        var filled = PlainLimits.Fill(written, DEFAULTS with { TitleMaxLength = 65 });
+        var filled = PlainLimits.Fill(written, DEFAULTS with { TitleMaxPixels = 612 });
 
-        Assert.Equal(("Titles over 65 characters", "No title is over 65 characters", "That's usually a slogan of over 30 characters.", "Titles over 65 characters", IssueFixer.You),
+        Assert.Equal(("Titles over about 65 characters", "No title is over about 65 characters", "That's usually a slogan of over about 20 characters.",
+                "Titles over about 65 characters", IssueFixer.You),
             (filled.Title, filled.Passed, filled.OneFix, filled.LooksFor, filled.Fixer));
-        Assert.Equal(["These pages have a title of more than 65 characters.", "Search results cut it off."], filled.What);
-        Assert.Equal(["Trim it to 65 characters."], filled.Fix);
+        Assert.Equal(["These pages have a title wider than about 65 characters.", "Search results cut it off."], filled.What);
+        Assert.Equal(["Trim it to about 65 characters."], filled.Fix);
 
         // The optional parts stay absent, and a check or reason with no plain words stays without.
         var bare = PlainLimits.Fill(written with { OneFix = null, LooksFor = null }, DEFAULTS);

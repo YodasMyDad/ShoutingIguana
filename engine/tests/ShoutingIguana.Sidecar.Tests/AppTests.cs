@@ -162,29 +162,31 @@ public sealed class AppTests : IAsyncLifetime
     {
         await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
         var analysed = await TestCrawlFiles.CrawlAsync(site, Path.Combine(_sidecar.DataDirectory, "longer-titles.sicrawl"));
-        await TestCrawlFiles.AnalyseWithAsync(analysed, new AnalysisSettings { TitleMaxLength = 70, SlowResponseMs = 2_500 });
+        await TestCrawlFiles.AnalyseWithAsync(analysed, new AnalysisSettings { TitleMaxPixels = 658, SlowResponseMs = 2_500 });
         var never = await TestCrawlFiles.CrawlAsync(site, Path.Combine(_sidecar.DataDirectory, "never-analysed.sicrawl"));
         var data = _sidecar.Host.Services.GetRequiredService<CrawlData>();
         static QueryCollection Query(params string[] crawls) => new(new Dictionary<string, StringValues> { ["crawl"] = crawls });
 
         // Whose settings: the crawl's analysis's own, or the current ones.
         Assert.Equal(new AnalysisSettings(), data.LimitsFor(new QueryCollection()));
-        Assert.Equal(new AnalysisSettings { TitleMaxLength = 70, SlowResponseMs = 2_500 }, data.LimitsFor(Query(CrawlIds.For(analysed))));
+        Assert.Equal(new AnalysisSettings { TitleMaxPixels = 658, SlowResponseMs = 2_500 }, data.LimitsFor(Query(CrawlIds.For(analysed))));
         Assert.Equal(new AnalysisSettings(), data.LimitsFor(Query(CrawlIds.For(never))));
 
         // And the catalog is served for either: the same checks, every plain text filled from those settings.
         var current = await _sidecar.GetJsonAsync("api/checks");
         var forCrawl = await _sidecar.GetJsonAsync($"api/checks?crawl={CrawlIds.For(analysed)}");
         Assert.Equal(current["checks"]!.AsArray().Select(check => (string)check!["id"]!), forCrawl["checks"]!.AsArray().Select(check => (string)check!["id"]!));
-        var settings = new AnalysisSettings { TitleMaxLength = 70, SlowResponseMs = 2_500 };
+        var settings = new AnalysisSettings { TitleMaxPixels = 658, SlowResponseMs = 2_500 };
         Assert.All(forCrawl["checks"]!.AsArray(), check => Assert.Equal(
             PlainLimits.Fill(IssueCatalog.Find((string)check!["id"]!)!.Plain, settings)?.What, check["plainWhat"]?.AsArray().Select(sentence => (string)sentence!)));
 
-        // What a reader gets differs, sentence for sentence: this crawl's analysis took titles to 70 characters and gave
-        // pages 2.5 seconds to answer, so its checks say so, while the current settings' say 60 and 1 second.
+        // What a reader gets differs, sentence for sentence: this crawl's analysis took titles to 658 px (about 70 characters)
+        // and gave pages 2.5 seconds to answer, so its checks say so, while the current settings' say about 60 and 1 second.
         static string FirstSentence(JsonNode checks, string id) => (string)checks["checks"]!.AsArray().Single(check => (string)check!["id"]! == id)!["plainWhat"]![0]!;
-        Assert.Equal("These pages have a title of more than 60 characters.", FirstSentence(current, "title-too-long"));
-        Assert.Equal("These pages have a title of more than 70 characters.", FirstSentence(forCrawl, "title-too-long"));
+        Assert.Equal("These pages have a title too long to show in full in search results, where there's room for about 60 characters.",
+            FirstSentence(current, "title-too-long"));
+        Assert.Equal("These pages have a title too long to show in full in search results, where there's room for about 70 characters.",
+            FirstSentence(forCrawl, "title-too-long"));
         Assert.Equal("These pages took more than 1 second to arrive when the check asked for them.", FirstSentence(current, "slow-response"));
         Assert.Equal("These pages took more than 2.5 seconds to arrive when the check asked for them.", FirstSentence(forCrawl, "slow-response"));
 

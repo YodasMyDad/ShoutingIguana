@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Sidecar.Errors;
 using ShoutingIguana.Sidecar.Models;
@@ -146,6 +148,34 @@ internal sealed class AnalysisSettingsStore
         return settings;
     }
 
+    /// <summary>
+    /// The saved limits with those a version before pixels saved in characters converted (<see cref="LegacyAnalysisSettings"/>):
+    /// "titleMaxLength": 70 is "titleMaxPixels": 658, unless the file has the new name too. The next save writes only the new names.
+    /// </summary>
+    private Dictionary<string, JsonElement> Upgrade(Dictionary<string, JsonElement> saved)
+    {
+        List<string> converted = [];
+        foreach (var name in saved.Keys.Where(LegacyAnalysisSettings.Names.Contains).ToList())
+        {
+            var value = saved[name];
+            saved.Remove(name);
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var characters) &&
+                LegacyAnalysisSettings.TryConvert(name, characters, out var pixelsName, out var pixels) && !saved.ContainsKey(pixelsName))
+            {
+                using var number = JsonDocument.Parse(pixels.ToString(CultureInfo.InvariantCulture));
+                saved[pixelsName] = number.RootElement.Clone();
+                converted.Add(string.Create(CultureInfo.InvariantCulture, $"{name} {characters:N0} as {pixelsName} {pixels:N0}"));
+            }
+        }
+
+        if (converted.Count > 0)
+        {
+            _logger.LogInformation("Converted limits saved in characters in {SettingsFile} to pixels: {Limits}", _file, string.Join(", ", converted));
+        }
+
+        return saved;
+    }
+
     /// <summary>The saved limits over the engine's. A file that can't be read, or a value in it that couldn't be saved today, is passed over.</summary>
     private AnalysisSettings Load()
     {
@@ -156,7 +186,7 @@ internal sealed class AnalysisSettingsStore
 
         try
         {
-            var saved = JsonSerializer.Deserialize(File.ReadAllText(_file), SidecarJsonContext.Default.DictionaryStringJsonElement) ?? [];
+            var saved = Upgrade(JsonSerializer.Deserialize(File.ReadAllText(_file), SidecarJsonContext.Default.DictionaryStringJsonElement) ?? []);
             Dictionary<string, JsonElement> known = saved.Where(value => AnalysisLimits.Find(value.Key) is not null).ToDictionary(StringComparer.Ordinal);
             var settings = Parse(known, out var errors);
             if (errors.Count == 0)
@@ -164,11 +194,13 @@ internal sealed class AnalysisSettingsStore
                 return settings;
             }
 
-            // Edited by hand, or saved by a version with other ranges: the values that still stand are kept.
+            // Edited by hand, or saved by a version with other ranges: the values that still stand are kept. A broken pair (a
+            // widest under its narrowest) goes back together, as a reset of one of them does.
             _logger.LogWarning("Some limits in {SettingsFile} can't be used, and take the engine's values: {Limits}", _file, string.Join(", ", errors.Keys));
             foreach (var field in errors.Keys)
             {
                 known.Remove(field);
+                known.Remove(AnalysisLimits.PartnerOf(field) ?? field);
             }
 
             settings = Parse(known, out var still);

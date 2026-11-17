@@ -22,7 +22,8 @@ internal static class UrlSummaryBuilder
     [
         "url_id", "is_internal", "source", "depth", "resource_type", "status_code", "indexable", "indexability_reason", "final_url_id",
         "final_status_code", "in_sitemap", "inlinks", "followed_inlinks", "nofollow_inlinks", "linking_pages", "outlinks", "issues",
-        "errors", "warnings", "notices", "size_bytes", "response_ms", "word_count", "title_length", "description_length", "used_on"
+        "errors", "warnings", "notices", "size_bytes", "response_ms", "word_count", "title_length", "description_length", "used_on",
+        "title_width", "description_width"
     ];
 
     /// <summary>The URL's own facts that the table in memory doesn't hold, and its address for its type.</summary>
@@ -109,6 +110,8 @@ internal static class UrlSummaryBuilder
         ref readonly var end = ref urls[final];
         var inlinks = urls.Inlinks(id);
         var nofollow = urls.NofollowLinks(id);
+        SearchResultMeasure? title = fetched && !row.IsDBNull(7) ? SearchResultWidth.Measure(row.GetString(7), SearchResultText.Title) : null;
+        SearchResultMeasure? description = fetched && !row.IsDBNull(8) ? SearchResultWidth.Measure(row.GetString(8), SearchResultText.Description) : null;
         return new UrlSummary
         {
             UrlId = id,
@@ -137,10 +140,12 @@ internal static class UrlSummaryBuilder
             ResponseMs = fetched && status.Outcome != FetchOutcome.RobotsDisallowed && !row.IsDBNull(3) ? row.GetInt32(3) : null,
             WordCount = fetched && !row.IsDBNull(4) ? row.GetInt32(4) : null,
 
-            // Measured as the title and description checks measure them, so a sort by length agrees with what they flag.
-            TitleLength = fetched && !row.IsDBNull(7) ? DisplayWidth.Measure(row.GetString(7)).Width : null,
-            DescriptionLength = fetched && !row.IsDBNull(8) ? DisplayWidth.Measure(row.GetString(8)).Width : null,
-            UsedOn = urls.UsedOn(id)
+            // Measured as the title and description checks measure them, so a sort by width agrees with what they flag.
+            TitleLength = title?.Characters,
+            DescriptionLength = description?.Characters,
+            UsedOn = urls.UsedOn(id),
+            TitleWidth = title?.Pixels,
+            DescriptionWidth = description?.Pixels
         };
     }
 
@@ -152,7 +157,7 @@ internal static class UrlSummaryBuilder
             (int?)summary.IndexabilityReason, summary.FinalUrlId, summary.FinalStatusCode, summary.InSitemap, summary.Inlinks,
             summary.FollowedInlinks, summary.NofollowInlinks, summary.LinkingPages, summary.Outlinks, summary.Issues, summary.Errors,
             summary.Warnings, summary.Notices, summary.SizeBytes, summary.ResponseMs, summary.WordCount, summary.TitleLength,
-            summary.DescriptionLength, summary.UsedOn
+            summary.DescriptionLength, summary.UsedOn, summary.TitleWidth, summary.DescriptionWidth
         ];
 
         for (var index = 0; index < parameters.Length; index++)

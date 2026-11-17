@@ -31,6 +31,18 @@ public sealed class AnalysisFreshnessTests
         Assert.DoesNotContain(OutOfDateReason.CrawlChanged, AnalysisFreshness.Check(old, old.AnalyzedAt, new AnalysisSettings()));
     }
 
+    /// <summary>
+    /// Version 12 measures titles and descriptions in pixels: an analysis 11 stored judged them in characters, so its
+    /// counts, details and URL summary are out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisThatCountedCharactersIsOutOfDate()
+    {
+        Assert.Equal(12, AnalysisFreshness.VERSION);
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 11 }, CRAWLED, new AnalysisSettings()));
+        Assert.False((Current() with { AnalysisVersion = 11 }).HasUrlSummary);
+    }
+
     [Fact]
     public void AnotherAnalysisVersionOrOtherChecksMeanTheEngineChanged()
     {
@@ -61,9 +73,9 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void OtherThresholdsMeanTheSettingsChanged()
     {
-        var analysis = Current() with { Settings = new AnalysisSettings { TitleMaxLength = 70 } };
+        var analysis = Current() with { Settings = new AnalysisSettings { TitleMaxPixels = 658 } };
         Assert.Equal([OutOfDateReason.SettingsChanged], AnalysisFreshness.Check(analysis, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(analysis, CRAWLED, new AnalysisSettings { TitleMaxLength = 70 }));
+        Assert.Empty(AnalysisFreshness.Check(analysis, CRAWLED, new AnalysisSettings { TitleMaxPixels = 658 }));
 
         // Settings that couldn't be read back are no settings: they match none.
         Assert.Equal([OutOfDateReason.SettingsChanged], AnalysisFreshness.Check(Current() with { Settings = null }, CRAWLED, new AnalysisSettings()));

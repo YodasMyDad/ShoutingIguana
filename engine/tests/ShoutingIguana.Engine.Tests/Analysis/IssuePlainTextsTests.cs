@@ -38,7 +38,7 @@ public sealed partial class IssuePlainTextsTests
 
     /// <summary>
     /// Every check's plain words as a reader gets them: each limit a text names filled in, at the default thresholds. The
-    /// template's limits and the banned words are judged on these, as "{limit:titleMaxLength}" reads "60 characters".
+    /// template's limits and the banned words are judged on these, as "{limit:titleMaxPixels}" reads "about 60 characters".
     /// </summary>
     private static readonly IReadOnlyDictionary<string, IssuePlainText> FILLED =
         IssuePlainTexts.All.ToDictionary(entry => entry.Key, entry => PlainLimits.Fill(entry.Value, new AnalysisSettings()), StringComparer.Ordinal);
@@ -152,7 +152,7 @@ public sealed partial class IssuePlainTextsTests
     [Fact]
     public void EveryLimitAPlainTextNamesIsAThresholdTheSettingsHave()
     {
-        var settings = new AnalysisSettings { TitleMaxLength = 70, LargeImageBytes = 300 * 1024, SlowResponseMs = 1_500 };
+        var settings = new AnalysisSettings { TitleMaxPixels = 658, LargeImageBytes = 300 * 1024, SlowResponseMs = 1_500 };
         List<string> filled = [];
         foreach (var plain in IssuePlainTexts.All.Values.Select(plain => PlainLimits.Fill(plain, settings)))
         {

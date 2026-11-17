@@ -13,7 +13,7 @@ public sealed class PageRuleTests
     private static readonly AnalysisSettings SETTINGS = new();
 
     [Fact]
-    public void TitleLengthsAreMeasuredInCharactersAndOnlyOnIndexablePages()
+    public void TitleWidthsAreMeasuredInPixelsAndOnlyOnIndexablePages()
     {
         var site = new RuleHarness();
         var rules = new TitleRules(SETTINGS);
@@ -26,42 +26,60 @@ public sealed class PageRuleTests
             Issues(rules, site.Page($"{site.Site}/d", RuleHarness.Html("<title>A perfectly sized page title here</title><title>Second one</title>"))));
         Assert.Empty(Issues(rules, site.Page($"{site.Site}/e", RuleHarness.Html(), IndexabilityReason.Noindex)));
 
-        // 55 characters but 65 UTF-16 units: each é is an e and a combining accent.
-        var accented = string.Concat(Enumerable.Repeat("é", 10)) + new string('x', 45);
-        Assert.True(accented.Length > SETTINGS.TitleMaxLength);
+        // 55 characters in 65 UTF-16 units, each é an e and a combining accent, which takes no room: 561 px.
+        var accented = string.Concat(Enumerable.Repeat("e\u0301", 10)) + new string('x', 45);
         Assert.Empty(Issues(rules, site.Page($"{site.Site}/f", RuleHarness.Html($"<title>{accented}</title>"))));
     }
 
+    /// <summary>Width depends on the letters: 31 capital Ws are wider than 580 px, 100 is are narrower.</summary>
     [Fact]
-    public void FullWidthCharactersAndEmojiTakeTwiceTheRoomInTitles()
+    public void WideLettersFlagTitlesThatCharactersWouldPass()
     {
         var site = new RuleHarness();
         var rules = new TitleRules(SETTINGS);
         List<IssueHit> Hits(string path, string title) => rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<title>{title}</title>"))).ToList();
 
-        // 21 Japanese characters are a normal title; 48 run past what results show.
-        Assert.Empty(Hits("a", "合成ストアの全角タイトル付き試験ページです"));
-        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_LONG, site.Id($"{site.Site}/b"), "48 characters (96 counting full-width characters as two), over 60")],
-            Hits("b", string.Concat(Enumerable.Repeat("日本語の題名", 8))));
-
-        // An emoji with a skin tone is one character (4 UTF-16 units) taking two widths.
-        Assert.Equal("31 characters (62 counting full-width characters as two), over 60",
-            Hits("c", string.Concat(Enumerable.Repeat("\U0001F44D\U0001F3FD", 31))).Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_LONG).Detail);
-        Assert.Equal("14 characters, under 30", Hits("d", "Hello, Mädchen").Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_SHORT).Detail);
+        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_LONG, site.Id($"{site.Site}/a"), "585 px, over 580 (31 characters)")], Hits("a", new string('W', 31)));
+        Assert.Empty(Hits("b", new string('i', 100)));
+        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_SHORT, site.Id($"{site.Site}/c"), "178 px, under 200 (40 characters)")], Hits("c", new string('i', 40)));
     }
 
     [Fact]
-    public void DescriptionLengthsCountFullWidthCharactersAsTwo()
+    public void FullWidthCharactersAndEmojiTakeAnEmInTitles()
+    {
+        var site = new RuleHarness();
+        var rules = new TitleRules(SETTINGS);
+        List<IssueHit> Hits(string path, string title) => rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<title>{title}</title>"))).ToList();
+
+        // 21 Japanese characters are a normal title, 420 px; 48 run past what results show.
+        Assert.Empty(Hits("a", "合成ストアの全角タイトル付き試験ページです"));
+        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_LONG, site.Id($"{site.Site}/b"), "960 px, over 580 (48 characters)")],
+            Hits("b", string.Concat(Enumerable.Repeat("日本語の題名", 8))));
+
+        // An emoji with a skin tone is one character (4 UTF-16 units), one em wide.
+        Assert.Equal("620 px, over 580 (31 characters)",
+            Hits("c", string.Concat(Enumerable.Repeat("\U0001F44D\U0001F3FD", 31))).Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_LONG).Detail);
+        Assert.Equal("139 px, under 200 (14 characters)", Hits("d", "Hello, Mädchen").Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_SHORT).Detail);
+    }
+
+    [Fact]
+    public void DescriptionWidthsAreMeasuredInPixels()
     {
         var site = new RuleHarness();
         var rules = new DescriptionRules(SETTINGS);
-        List<IssueDefinition> Issues(string path, string description) =>
-            rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<meta name=\"description\" content=\"{description}\">"))).Select(hit => hit.Issue).ToList();
+        List<IssueHit> Hits(string path, string description) =>
+            rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<meta name=\"description\" content=\"{description}\">"))).ToList();
+        List<IssueDefinition> Issues(string path, string description) => Hits(path, description).Select(hit => hit.Issue).ToList();
 
-        // 40 full-width characters fill as much of a result as 80 Latin ones.
+        // 40 full-width characters at 14 px are 560 px: as wide as 80 Latin ones.
         Assert.Empty(Issues("a", string.Concat(Enumerable.Repeat("全角文字の説明", 6))[..40]));
         Assert.Equal([IssueCatalog.DESCRIPTION_TOO_SHORT], Issues("b", new string('x', 40)));
         Assert.Equal([IssueCatalog.DESCRIPTION_TOO_LONG], Issues("c", string.Concat(Enumerable.Repeat("説明", 40))));
+
+        // Characters and pixels disagree: 140 capital Ws are 1,850 px, 160 is 498, 100 is 311.
+        Assert.Equal("1,850 px, over 985 (140 characters)", Hits("d", new string('W', 140)).Single().Detail);
+        Assert.Empty(Issues("e", new string('i', 160)));
+        Assert.Equal("311 px, under 400 (100 characters)", Hits("f", new string('i', 100)).Single().Detail);
     }
 
     [Theory]

@@ -40,8 +40,8 @@ public sealed class EvidenceDetailTests
             bodyBytes: 3 * 1024 * 1024);
         var shortTitle = site.Page($"{site.Site}/b", RuleHarness.Html("<title>Short page</title>", "<p>A few words.</p>"));
 
-        Assert.Equal("78 characters, over 60", Detail(new TitleRules(SETTINGS), longTitle, IssueCatalog.TITLE_TOO_LONG));
-        Assert.Equal("10 characters, under 30", Detail(new TitleRules(SETTINGS), shortTitle, IssueCatalog.TITLE_TOO_SHORT));
+        Assert.Equal("780 px, over 580 (78 characters)", Detail(new TitleRules(SETTINGS), longTitle, IssueCatalog.TITLE_TOO_LONG));
+        Assert.Equal("98 px, under 200 (10 characters)", Detail(new TitleRules(SETTINGS), shortTitle, IssueCatalog.TITLE_TOO_SHORT));
         Assert.Matches(@"^\d+ words, under 200$", Detail(new ContentRules(SETTINGS), shortTitle, IssueCatalog.LOW_WORD_COUNT));
         Assert.Equal("140 characters, over 115", Detail(new UrlRules(SETTINGS), longTitle, IssueCatalog.URL_TOO_LONG));
         Assert.StartsWith("1,250 ms, over 1,000 ms (first byte after ", Detail(new PerformanceRules(SETTINGS), longTitle, IssueCatalog.SLOW_RESPONSE));
@@ -49,7 +49,7 @@ public sealed class EvidenceDetailTests
         Assert.Equal("3.0 MB, past the 2 MB Google reads", Detail(new PerformanceRules(SETTINGS), longTitle, IssueCatalog.HTML_PAST_CRAWL_LIMIT));
 
         // The limit is the analysis's, not the default.
-        Assert.Equal("78 characters, over 70", Detail(new TitleRules(SETTINGS with { TitleMaxLength = 70 }), longTitle, IssueCatalog.TITLE_TOO_LONG));
+        Assert.Equal("780 px, over 700 (78 characters)", Detail(new TitleRules(SETTINGS with { TitleMaxPixels = 700 }), longTitle, IssueCatalog.TITLE_TOO_LONG));
     }
 
     [Fact]

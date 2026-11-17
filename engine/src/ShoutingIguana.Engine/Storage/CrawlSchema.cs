@@ -511,13 +511,17 @@ internal static class CrawlSchema
             size_bytes INTEGER,
             response_ms INTEGER,
             word_count INTEGER,
-            -- The room the first title and meta description take in search results, as the checks measure it (full-width
-            -- characters and emoji count two); null without one.
+            -- The first title's and meta description's characters, as a reader counts them (user-perceived, white space
+            -- collapsed); null without one.
             title_length INTEGER,
             description_length INTEGER,
             -- The pages audited that link to the URL by any kind (hyperlink, image, script, canonical...), each once, not
             -- counting a page's links to itself: where a file is used.
-            used_on INTEGER NOT NULL
+            used_on INTEGER NOT NULL,
+            -- How wide the first title and meta description are in Google's desktop results, in pixels, as the checks
+            -- measure them (Arial at 20 px and 14 px); null without one.
+            title_width INTEGER,
+            description_width INTEGER
         );
         """;
 

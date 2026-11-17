@@ -31,23 +31,6 @@ internal static class DisplayWidth
         (0x20000, 0x3FFFD) // CJK extensions B onwards
     ];
 
-    /// <summary>Characters and width of text after trimming, e.g. (21, 42) for a 21-character Japanese title.</summary>
-    public static (int Characters, int Width) Measure(string text)
-    {
-        int characters = 0, width = 0;
-        var rest = text.AsSpan().Trim();
-        while (!rest.IsEmpty)
-        {
-            var length = System.Globalization.StringInfo.GetNextTextElementLength(rest);
-            var element = rest[..length];
-            characters++;
-            width += IsWide(element) ? 2 : 1;
-            rest = rest[length..];
-        }
-
-        return (characters, width);
-    }
-
     /// <summary>
     /// Whether a user-perceived character takes a whole em: its first code point is wide, or it asks for emoji presentation
     /// (U+FE0F). A ZWJ emoji sequence and a flag start with a wide code point.

@@ -164,7 +164,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.Equal(CrawlSummaryReader.Read(path).UpdatedAt, IssueReader.ReadAnalysis(path)!.CrawlUpdatedAt);
 
         // Other thresholds.
-        var longer = new AnalysisSettings { TitleMaxLength = 70 };
+        var longer = new AnalysisSettings { TitleMaxPixels = 658 };
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path, longer);
         Assert.Equal([OutOfDateReason.SettingsChanged], CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
         Assert.Empty(CrawlSummaryReader.Read(path).OutOfDate(longer with { }));
@@ -302,14 +302,14 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         {
             Assert.True(reading.MoveNext());
             var timer = Stopwatch.StartNew();
-            var busy = await Assert.ThrowsAsync<CrawlFileInUseException>(() => analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMaxLength = 70 }));
+            var busy = await Assert.ThrowsAsync<CrawlFileInUseException>(() => analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMaxPixels = 658 }));
             Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"The analysis waited {timer.Elapsed} for the reader");
             Assert.Contains("being read", busy.Message, StringComparison.Ordinal);
         }
 
         Assert.Equal(analysed, IssueReader.ReadAnalysis(path));
-        await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMaxLength = 70 });
-        Assert.Equal(70, IssueReader.ReadAnalysis(path)!.Settings!.TitleMaxLength);
+        await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMaxPixels = 658 });
+        Assert.Equal(658, IssueReader.ReadAnalysis(path)!.Settings!.TitleMaxPixels);
     }
 
     private async Task<string> CrawlAsync(CrawlOptions options)

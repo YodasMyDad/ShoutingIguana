@@ -52,6 +52,10 @@ internal static class ColumnWords
         ["ttfbMs"] = "Time to first byte",
         ["titleLength"] = "Title length",
         ["descriptionLength"] = "Description length",
+        ["titleWidth"] = "Title width",
+        ["descriptionWidth"] = "Description width",
+        ["titleInResults"] = "Title in results",
+        ["descriptionInResults"] = "Description in results",
         ["finalUrl"] = "Final URL",
         ["finalStatusCode"] = "Final status",
         ["inSitemap"] = "In a sitemap",
@@ -96,7 +100,9 @@ internal static class ColumnWords
         ["responseMs"] = "ms",
         ["ttfbMs"] = "ms",
         ["pixelWidth"] = "px",
-        ["pixelHeight"] = "px"
+        ["pixelHeight"] = "px",
+        ["titleWidth"] = "px",
+        ["descriptionWidth"] = "px"
     };
 
     private static readonly Dictionary<string, Dictionary<string, string>> VALUES = new(StringComparer.Ordinal)
