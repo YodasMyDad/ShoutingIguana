@@ -8,6 +8,8 @@ public sealed class HostPaceTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 11, 17, 12, 0, 0, TimeSpan.Zero);
 
+    private DateTimeOffset _clock = T0;
+
     [Fact]
     public void StartsWithOneRequestAtATimeAtOneASecond()
     {
@@ -28,23 +30,63 @@ public sealed class HostPaceTests
     }
 
     [Fact]
-    public void EachHealthyAnswerDoublesTheRateAndAllowsOneMoreAtOnceUntilThereIsNoLimit()
+    public void EachSecondOfHealthyAnswersDoublesTheRateAndTheRequestsAtOnceUntilThereIsNoLimit()
     {
         var pace = new HostPace(maxConcurrency: 8, maxRate: null);
 
-        var answers = 0;
+        var seconds = 0;
         while (pace.Rate is not null)
         {
-            Assert.Equal(Math.Pow(2, answers), pace.Rate);
-            pace.Answered(HostSignal.Success, null, T0, T0);
-            answers++;
+            Assert.Equal(Math.Pow(2, seconds), pace.Rate);
+            pace.Answered(HostSignal.Success, null, T0, T0 + TimeSpan.FromSeconds(seconds));
+            seconds++;
         }
 
-        // Past 256 a second it is no limit at all: a healthy site is at full speed after nine answers.
-        Assert.Equal(9, answers);
+        // Past 256 a second it is no limit at all: nine seconds of healthy answers, on a host that answers as slowly as most.
+        Assert.Equal(9, seconds);
         Assert.Equal(8, pace.Window);
         Assert.Equal(TimeSpan.Zero, pace.Interval);
         Assert.Null(pace.SlowedTo);
+    }
+
+    /// <summary>The real shop got about 13 requests a second three seconds in: now it gets 1, 2, 4 a second.</summary>
+    [Fact]
+    public void ARemoteSiteSeesAFewRequestsASecondInItsFirstSeconds()
+    {
+        var pace = new HostPace(maxConcurrency: 5, maxRate: null);
+        pace.Started(T0);
+
+        List<double?> rates = [];
+        for (var answer = 1; answer <= 30; answer++)
+        {
+            // Answers every 100 ms, each in 200 ms: the first three seconds.
+            var at = T0 + TimeSpan.FromMilliseconds(100 * answer);
+            pace.Answered(HostSignal.Success, null, at - TimeSpan.FromMilliseconds(200), at, TimeSpan.FromMilliseconds(200));
+            if (answer % 10 == 0)
+            {
+                rates.Add(pace.Rate);
+            }
+        }
+
+        Assert.Equal([2.0, 4.0, 8.0], rates);
+        Assert.Equal(5, pace.Window);
+    }
+
+    /// <summary>The 100k benchmark's site answers in about a millisecond: its ramp doubles every 100 ms.</summary>
+    [Fact]
+    public void ALocalHostIsAtFullSpeedWithinAboutASecond()
+    {
+        var pace = new HostPace(maxConcurrency: 16, maxRate: null);
+        pace.Started(T0);
+
+        var at = T0;
+        while (pace.Rate is not null || pace.Window < 16)
+        {
+            at += TimeSpan.FromMilliseconds(10);
+            pace.Answered(HostSignal.Success, null, at, at, TimeSpan.FromMilliseconds(1));
+        }
+
+        Assert.InRange(at - T0, TimeSpan.FromMilliseconds(800), TimeSpan.FromMilliseconds(1_000));
     }
 
     [Fact]
@@ -52,7 +94,10 @@ public sealed class HostPaceTests
     {
         var pace = new HostPace(maxConcurrency: 2, maxRate: 5);
 
-        AnswerHealthy(pace, 10, T0);
+        for (var second = 0; second < 10; second++)
+        {
+            pace.Answered(HostSignal.Success, null, T0, T0 + TimeSpan.FromSeconds(second));
+        }
 
         Assert.Equal(5, pace.Rate);
         Assert.Equal(2, pace.Window);
@@ -334,17 +379,23 @@ public sealed class HostPaceTests
     private static HostPace AtFullSpeed(int maxConcurrency, double? maxRate)
     {
         var pace = new HostPace(maxConcurrency, maxRate);
-        AnswerHealthy(pace, 12, T0);
+        for (var second = 12; second > 0; second--)
+        {
+            pace.Answered(HostSignal.Success, null, T0 - TimeSpan.FromSeconds(second), T0 - TimeSpan.FromSeconds(second));
+        }
+
         Assert.Equal(maxRate, pace.Rate);
         Assert.Equal(maxConcurrency, pace.Window);
         return pace;
     }
 
-    private static void AnswerIn(HostPace pace, int answers, TimeSpan latency)
+    /// <summary>Answers a second apart, each in <paramref name="latency"/>: the slow start may double at each.</summary>
+    private void AnswerIn(HostPace pace, int answers, TimeSpan latency)
     {
         for (var answer = 0; answer < answers; answer++)
         {
-            pace.Answered(HostSignal.Success, null, T0, T0, latency);
+            _clock += TimeSpan.FromSeconds(1);
+            pace.Answered(HostSignal.Success, null, _clock, _clock, latency);
         }
     }
 

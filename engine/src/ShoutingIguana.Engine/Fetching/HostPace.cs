@@ -7,8 +7,10 @@ namespace ShoutingIguana.Engine.Fetching;
 /// The pace one host is asked at, learned from how it answers; <see cref="HostGate"/> keeps to it. The crawl's settings
 /// are the ceiling, never the starting pace.
 /// <list type="bullet">
-/// <item>Slow start: one request at a time, at <see cref="START_RATE"/> a second. Each healthy answer doubles the rate and
-/// allows one more request at once, up to the ceiling, so a healthy site is at full speed within about a second. Answers
+/// <item>Slow start: one request at a time, at <see cref="START_RATE"/> a second. While answers stay healthy, the rate and
+/// the requests allowed at once double, up to the ceiling, at most once a second, so a site sees 1, 2, 4 requests a
+/// second in its first seconds; on a host that answers within 100 ms (a local or nearby server), once every ten of its
+/// round trips, but no more than every 100 ms, so the local benchmark is at full speed within about two and a half seconds. Answers
 /// that come back much slower than the host's first ones hold the pace where it is, for a few answers.</item>
 /// <item>A host that asks to slow down (429, or 503 with Retry-After) is paused for its Retry-After (or
 /// <see cref="DEFAULT_PAUSE"/>, doubling while it keeps asking, up to <see cref="MAX_PAUSE"/>), then resumes one request at
@@ -77,6 +79,9 @@ internal sealed class HostPace
     private int _tripsInARow;
     private int _baselineAnswers;
     private double _baselineMs;
+
+    // When the slow start last doubled the pace; at first, when the first request started.
+    private DateTimeOffset _lastDoubling = DateTimeOffset.MinValue;
     private double _smoothedMs;
     private int _slowAnswers;
 
@@ -137,7 +142,15 @@ internal sealed class HostPace
     }
 
     /// <summary>A request starts now: the pace that trips a host is measured from these.</summary>
-    public void Started(DateTimeOffset now) => _starts[_startCount++ % STARTS_MEASURED] = now;
+    public void Started(DateTimeOffset now)
+    {
+        if (_startCount == 0)
+        {
+            _lastDoubling = now;
+        }
+
+        _starts[_startCount++ % STARTS_MEASURED] = now;
+    }
 
     /// <summary>
     /// How the host answered a request that started at <paramref name="startedAt"/>. Returns how long to pause the whole
@@ -224,7 +237,13 @@ internal sealed class HostPace
     {
         if (_slowStart)
         {
-            Window = Math.Min(_maxConcurrency, Window + 1);
+            if (now - _lastDoubling < DoublingPeriod())
+            {
+                return;
+            }
+
+            _lastDoubling = now;
+            Window = Math.Min(_maxConcurrency, Window * 2);
             _rate = Capped(_rate is { } rate ? rate * 2 : null);
             return;
         }
@@ -244,6 +263,22 @@ internal sealed class HostPace
         }
 
         _rate = Capped(faster);
+    }
+
+    /// <summary>
+    /// How often the slow start may double: once a second, or once every ten round trips of a host that answers within
+    /// 100 ms, but no more than every 100 ms.
+    /// </summary>
+    private TimeSpan DoublingPeriod()
+    {
+        if (_baselineAnswers == 0)
+        {
+            return TimeSpan.FromSeconds(1);
+        }
+
+        var tenRoundTrips = TimeSpan.FromMilliseconds(10 * _baselineMs);
+        return tenRoundTrips < TimeSpan.FromMilliseconds(100) ? TimeSpan.FromMilliseconds(100)
+            : tenRoundTrips > TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : tenRoundTrips;
     }
 
     /// <summary>A pace held to the crawl's own rate; with none, past <see cref="UNCAPPED_ABOVE"/> it is no limit.</summary>

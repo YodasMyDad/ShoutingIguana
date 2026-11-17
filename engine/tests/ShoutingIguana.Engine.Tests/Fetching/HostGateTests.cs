@@ -30,9 +30,12 @@ public sealed class HostGateTests
         await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromSeconds(1));
     }
 
-    /// <summary>The 100k benchmark's site answers in about a millisecond: the slow start must cost it about a second at most.</summary>
+    /// <summary>
+    /// The 100k benchmark's site answers in about a millisecond: its first second goes at one request, then the slow start
+    /// doubles at most every 100 ms, so it costs the benchmark a second or two.
+    /// </summary>
     [Fact]
-    public async Task AHealthyHostIsAtFullSpeedWithinASecond()
+    public async Task AHealthyLocalHostIsAtFullSpeedWithinThreeSeconds()
     {
         var time = new FakeTimeProvider();
         var gate = new HostGate(maxConcurrency: 16, TimeSpan.Zero, time);
@@ -43,8 +46,8 @@ public sealed class HostGateTests
             await AnswerAsync(gate, time, HostSignal.Success);
         }
 
-        // About a second of waits (half, a quarter, an eighth...), and the clock's 5 ms steps.
-        Assert.InRange(time.GetUtcNow() - started, TimeSpan.Zero, TimeSpan.FromSeconds(1.25));
+        // A second at one a second, then nine doublings, each at the first answer 100 ms or more after the last.
+        Assert.InRange(time.GetUtcNow() - started, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(2.75));
         var leases = Enumerable.Range(0, 16).Select(_ => AcquiredAtOnce(gate)).ToList();
         leases.ForEach(lease => lease.Dispose());
     }
@@ -306,15 +309,19 @@ public sealed class HostGateTests
 
         var lease = await acquire.WaitAsync(GRACE);
         lease.Dispose();
-        gate.Report(signal, startedAt: lease.StartedAt);
+
+        // Answered in a millisecond, as a local host does: the slow start doubles every 100 ms.
+        gate.Report(signal, startedAt: lease.StartedAt, latency: TimeSpan.FromMilliseconds(1));
     }
 
-    /// <summary>Healthy answers through the slow start, to the crawl's own settings.</summary>
+    /// <summary>Healthy answers through the slow start, to the crawl's own settings: three seconds of them.</summary>
     private static async Task RampAsync(HostGate gate, FakeTimeProvider time)
     {
-        for (var answer = 0; answer < 12; answer++)
+        var started = time.GetUtcNow();
+        while (time.GetUtcNow() - started < TimeSpan.FromSeconds(3))
         {
             await AnswerAsync(gate, time, HostSignal.Success);
+            time.Advance(TimeSpan.FromMilliseconds(10));
         }
     }
 
