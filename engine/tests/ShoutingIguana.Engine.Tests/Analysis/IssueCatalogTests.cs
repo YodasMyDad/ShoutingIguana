@@ -45,7 +45,8 @@ public sealed class IssueCatalogTests
         "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "head-tags-in-body", "html-structure-errors",
         "viewport-invalid", "charset-invalid", "lang-invalid", "mobile-alternate",
         "robots-txt-no-sitemap", "sitemap-over-limit", "sitemap-near-limit", "sitemap-empty", "sitemap-url-repeated", "sitemap-lastmod-invalid",
-        "structured-data-schema-errors", "structured-data-missing-recommended", "structured-data-on-noindex"
+        "structured-data-schema-errors", "structured-data-missing-recommended", "structured-data-on-noindex",
+        "image-missing-src", "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "image-inline-large"
     ];
 
     [Fact]
@@ -198,7 +199,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(131, IssueCatalog.All.Count);
+        Assert.Equal(137, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(

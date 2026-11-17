@@ -121,7 +121,7 @@ public sealed class PageRuleTests
         site.Fetched($"{site.Site}/huge.jpg", FetchOutcome.Success, 200, size: 900_000);
         site.Fetched($"{site.Site}/small.jpg", FetchOutcome.Success, 200, size: 20_000);
         var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
-            "<img src=\"/gone.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/huge.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/small.jpg\" alt=\"x\" width=\"1\" height=\"2\">"));
+            "<img src=\"/gone.jpg\" alt=\"A photo\" width=\"1\" height=\"2\"><img src=\"/huge.jpg\" alt=\"A photo\" width=\"1\" height=\"2\"><img src=\"/small.jpg\" alt=\"A photo\" width=\"1\" height=\"2\">"));
 
         var issues = Issues(new ImageRules(SETTINGS, site.Table(), site.Find), page);
 

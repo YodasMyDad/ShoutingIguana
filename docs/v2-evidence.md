@@ -234,7 +234,13 @@ and is in the group without a related URL.
 | 60 | `image-alt-too-long` | P/**RU**/**T** | – | `img` (`alt`, `altLength`), `position` | Same ("2 images") | imp · pages |
 | 61 | `image-missing-dimensions` | P/**RU**/**T** | – | `img` (`width`, `height`: which is missing), `pixelWidth`, `pixelHeight` (what to write), `position` | Same ("5 images") | imp · pages |
 | 62 | `image-broken` | P/RU/T | – | `statusCode`, `final`, `text`, `position`, `links` | Same ("1 image") | imp · pages |
-| 63 | `image-too-large` | P/RU/T | – | `sizeBytes`, `contentType`, `pixelWidth`, `pixelHeight`, `img` (the size it's shown at, `srcset`, `loading`), `statusCode`, `final`, `position`, `links` | "2 images over 200 KB" → `2 images over 200 KB, the largest 1.8 MB` | imp · **size** |
+| 63 | `image-too-large` | P/RU/T | – | `sizeBytes`, `contentType`, `pixelWidth`, `pixelHeight`, `img` (the size it's shown at, `srcset`, `loading`), `statusCode`, `final`, `position`, `links` | "2 images over 200 KB" → `2 images over 200 KB, the largest 1.8 MB` | imp · **size** |
+| 132 | `image-missing-src` (new) | P/N/– | – | – | `2 images` | imp · – |
+| 133 | `image-no-srcset` (new) | P/RU/T | – | `img` (`srcset`, `width`), `pixelWidth`, `pixelHeight`, `sizeBytes` | `1 image, 2,400 px wide`, `2 images, the widest 2,400 px` | imp · pages |
+| 134 | `image-legacy-format` (new) | P/RU/T | – | `contentType`, `sizeBytes`, `pixelWidth`, `pixelHeight` | `1 image: 312 KB`, `2 images, the largest 312 KB` | imp · pages |
+| 135 | `image-alt-unhelpful` (new) | P/RU/T | – | `img` (`alt`, `altLength`), `position` | `2 images` | imp · pages |
+| 136 | `image-hotlinked` (new) | P/RU/T | – | `statusCode`, `img`, `position` | `3 images from 2 sites` | imp · pages |
+| 137 | `image-inline-large` (new) | P/N/– | – | – | `1 inline image: 12 KB`, `2 inline images, the largest 48 KB` | imp · – |
 
 ### Hreflang
 

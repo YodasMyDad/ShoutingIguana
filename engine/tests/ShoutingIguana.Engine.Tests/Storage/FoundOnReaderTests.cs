@@ -36,7 +36,8 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "noindex-with-canonical", "image-broken", "image-too-large", "hreflang-missing-return", "hreflang-broken-target",
             "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions",
             "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "broken-resources", "links-to-localhost", "generic-anchor-text",
-            "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable"
+            "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable",
+            "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
@@ -209,7 +210,7 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
     /// Checks the synthetic site can't plant: the HTTPS ones (it's served over HTTP here), and links to private addresses, as
     /// the site and its partner are both on 127.0.0.1, one machine's addresses.
     /// </summary>
-    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page" or "links-to-localhost";
+    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page" or "links-to-localhost" or "image-hotlinked";
 
     private List<int> Flagged(string check) =>
     [

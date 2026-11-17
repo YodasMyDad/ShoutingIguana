@@ -1555,6 +1555,85 @@ public static class IssuePlainTexts
             IssueFixer.You,
             """No image is too big to load quickly"""),
 
+        ["image-missing-src"] = new(
+            """Images with no picture file named""",
+            [
+                """These pages have image spaces that don't say which picture to show.""",
+                """Nothing appears there, for visitors or in Google's image search.""",
+                """It's usually an empty slot in a page design, or code that fills pictures in a way that isn't standard."""
+            ],
+            [
+                """Open each page and find the empty picture space.""",
+                """Choose a picture for it in your site's editor, or remove the empty space.""",
+                """Ask your developer to check how pictures are loaded, if every page has the problem."""
+            ],
+            IssueFixer.Either,
+            """Every image names its picture file"""),
+
+        ["image-no-srcset"] = new(
+            """Big images sent to phones at full size""",
+            [
+                """These pages show pictures at least {limit:responsiveImageMinWidth} wide, with no smaller versions for small screens.""",
+                """Phones then download the whole picture, which makes the page slower and uses visitors' data."""
+            ],
+            [
+                """Upload these pictures through your site's media library, which usually makes smaller versions for phones.""",
+                """Ask your developer to offer smaller versions of each picture, if your site doesn't."""
+            ],
+            IssueFixer.Either,
+            """Big images come in smaller versions for phones"""),
+
+        ["image-legacy-format"] = new(
+            """Images that could be smaller in a newer format""",
+            [
+                """These pages show pictures of {limit:legacyImageMinBytes} or more saved in an older format, such as JPEG or PNG.""",
+                """Newer formats (WebP or AVIF) usually make the same picture a quarter to a half smaller, so pages load faster."""
+            ],
+            [
+                """Look for an image optimisation setting or plugin that converts pictures to WebP.""",
+                """Or save the pictures as WebP before you upload them."""
+            ],
+            IssueFixer.Either,
+            """No large image is in an older format"""),
+
+        ["image-alt-unhelpful"] = new(
+            """Image descriptions that don't describe anything""",
+            [
+                """These pages have pictures whose descriptions are a file name, a camera's number such as "IMG_1234", or a stray letter.""",
+                """People using screen readers hear that instead of what the picture shows, and Google learns nothing from it."""
+            ],
+            [
+                """Edit each picture in your site's media library and describe what it shows in a few words.""",
+                """Leave the description empty for a picture that's only decoration."""
+            ],
+            IssueFixer.You,
+            """Every image description says something"""),
+
+        ["image-hotlinked"] = new(
+            """Images shown straight from other websites""",
+            [
+                """These pages show pictures that are stored on other websites, not on yours.""",
+                """They can disappear or change whenever the other site moves them, and use that site's resources."""
+            ],
+            [
+                """Check you're allowed to use each picture.""",
+                """Download the ones you may use and upload them to your own site, then show them from there."""
+            ],
+            IssueFixer.You,
+            """Every image is shown from your own site"""),
+
+        ["image-inline-large"] = new(
+            """Pictures built into the page that slow it down""",
+            [
+                """These pages have pictures of more than {limit:inlineImageMaxBytes} written into the page itself, not kept as separate files.""",
+                """They come with the page on every visit and can't be saved by the browser, so every view is slower."""
+            ],
+            [
+                """Ask your developer to save these pictures as ordinary image files and link to them instead."""
+            ],
+            IssueFixer.Developer,
+            """No large picture is built into a page"""),
+
         ["hreflang-invalid-code"] = new(
             """Language versions labelled with an invalid code""",
             [

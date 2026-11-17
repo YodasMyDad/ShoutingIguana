@@ -1324,6 +1324,86 @@ public static class IssueCatalog
         TargetFacts = ["sizeBytes", "contentType", "pixelWidth", "pixelHeight", "img", "statusCode", "final", "position", "links"]
     };
 
+    public static readonly IssueDefinition IMAGE_MISSING_SRC = new("image-missing-src", IssueCategory.Images, IssueSeverity.Warning,
+        "Image without a source",
+        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them. A crawl made before the crawler told data: images apart isn't checked.""",
+        """Give each image its file in src. If a lazy-loading script fills it in, check that it uses a standard attribute such as data-src or loading="lazy", and that the image shows without the script.""")
+    {
+        Why = """An image with no source never shows, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/google-images#use-html-image-elements",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition IMAGE_NO_SRCSET = new("image-no-srcset", IssueCategory.Images, IssueSeverity.Notice,
+        "Large image without srcset",
+        """The page shows image files at least 800 pixels wide (the default, which can be changed in the analysis settings) with no srcset and not in a <picture> with other sources, so phones download the whole file. It needs the files' pixel sizes, read when the crawl fetched them, so it isn't checked when images weren't fetched. The detail counts them and gives the widest.""",
+        """Offer smaller versions with srcset and sizes, such as 480, 800 and 1200 pixels wide, or a <picture> with sources; most CMSs do this for images uploaded through them.""")
+    {
+        Why = """A phone shows a 2,000-pixel image at a few hundred pixels: without other sizes to choose from, it downloads all of it, which costs visitors time and data and slows the page's largest paint. Google Images reads srcset and <picture> too.""",
+        LearnMore = "https://web.dev/learn/design/responsive-images",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["img", "pixelWidth", "pixelHeight", "sizeBytes"]
+    };
+
+    public static readonly IssueDefinition IMAGE_LEGACY_FORMAT = new("image-legacy-format", IssueCategory.Images, IssueSeverity.Notice,
+        "Image in an older format",
+        """The page shows JPEG, PNG, GIF or BMP files of 50 KB or more (the default, which can be changed in the analysis settings), as transferred. WebP or AVIF would usually make them smaller. It isn't checked when images weren't fetched. The detail counts them and gives the largest.""",
+        """Serve these images as WebP or AVIF: most CMSs and image CDNs can convert them, keeping the old format as a fallback in a <picture> if you need it.""")
+    {
+        Why = """WebP and AVIF usually make photos a quarter to a half smaller at the same quality, and every browser in use shows them, as Google Images does. Smaller images load sooner, above all on phones. 50 KB is about where the newer formats save a noticeable amount.""",
+        LearnMore = "https://developer.chrome.com/docs/lighthouse/performance/uses-webp-images",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["contentType", "sizeBytes", "pixelWidth", "pixelHeight"]
+    };
+
+    public static readonly IssueDefinition IMAGE_ALT_UNHELPFUL = new("image-alt-unhelpful", IssueCategory.Images, IssueSeverity.Notice,
+        "Alt text that's a file name or too short",
+        """The page has images whose alt text describes nothing: one or two characters (in an alphabet; in Chinese or Japanese that can be a word), no letter or digit at all, an image file name such as photo.jpg, a camera's or upload's name such as IMG_1234 or image-3, or the image file's own name. An empty alt is right for a decorative image and isn't counted. The detail counts them.""",
+        """Write alt text that says what the image shows or does, in a few words, as you'd describe it to someone who can't see it. Leave alt empty for an image that's only decoration.""")
+    {
+        Why = """Screen readers read the alt text aloud, and a file name or a stray character tells their users nothing. Google Images uses alt text to understand an image, so a file name is a chance missed.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/google-images#use-descriptive-alt-text",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["img", "position"]
+    };
+
+    public static readonly IssueDefinition IMAGE_HOTLINKED = new("image-hotlinked", IssueCategory.Images, IssueSeverity.Notice,
+        "Image loaded from another website",
+        """The page shows images straight from another website: not the site's own host or domain, nor an image CDN sites serve their own images from (Shopify's, CloudFront, Cloudinary, imgix, WordPress's i0.wp.com and others). On a crawl started at a private address, other private addresses aren't counted. The detail counts the images and the sites.""",
+        """Copy the images you have the right to use onto your own site, or a CDN of yours, and show them from there.""")
+    {
+        Why = """An image shown from someone else's server can vanish or change whenever they move or block it, and it uses their bandwidth, which many sites refuse. Google Images credits the image to the site it's on, not to yours.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/google-images",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "img", "position"]
+    };
+
+    public static readonly IssueDefinition IMAGE_INLINE_LARGE = new("image-inline-large", IssueCategory.Images, IssueSeverity.Notice,
+        "Large inline (data:) image",
+        """The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest.""",
+        """Save each as an image file and show it with an ordinary src, so browsers can cache it and download it alongside the page.""")
+    {
+        Why = """An inline image comes with the page every time, can't be cached on its own, and in base64 is a third bigger than the file. A small icon is fine; a photo makes every view of the page slower.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
 
     // Hreflang
     public static readonly IssueDefinition HREFLANG_INVALID_CODE = new("hreflang-invalid-code", IssueCategory.Hreflang, IssueSeverity.Error,
@@ -1787,6 +1867,7 @@ public static class IssueCatalog
         H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,
         LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT, DUPLICATE_SITE_VERSION,
         IMAGE_MISSING_ALT, IMAGE_ALT_TOO_LONG, IMAGE_MISSING_DIMENSIONS, IMAGE_BROKEN, IMAGE_TOO_LARGE,
+        IMAGE_MISSING_SRC, IMAGE_NO_SRCSET, IMAGE_LEGACY_FORMAT, IMAGE_ALT_UNHELPFUL, IMAGE_HOTLINKED, IMAGE_INLINE_LARGE,
         HREFLANG_INVALID_CODE, HREFLANG_MISSING_SELF, HREFLANG_MISSING_RETURN, HREFLANG_BROKEN_TARGET,
         HREFLANG_TO_NON_INDEXABLE, HREFLANG_DUPLICATE_CODE, HREFLANG_MISSING_X_DEFAULT, HREFLANG_OUTSIDE_HEAD,
         STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED, STRUCTURED_DATA_SCHEMA_ERRORS, STRUCTURED_DATA_MISSING_RECOMMENDED,

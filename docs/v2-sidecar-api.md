@@ -1002,7 +1002,8 @@ what each analysis stores in its crawl file.
 
 - **`settings`** is each limit's value by name: the body `PUT` and `validate` take. **`limits`** lists every limit in
   the order Settings shows them, each with its `value` (the same number), the engine's `default`, its `unit`
-  (`characters`, `pixels`, `words`, `bits`, `bytes` or `ms`), the `min` and `max` it may be set within, and a
+  (`characters`, `pixels` for text, `px` for an image's width, `words`, `bits`, `bytes`, `ms`, `links` or `clicks`), the
+  `min` and `max` it may be set within, and a
   `description`: one sentence saying what it does, to show as it is. A width in `pixels` also has
   **`pixelsPerCharacter`** (9.4 for a title, 6.2 for a description; no other limit has the field): an ordinary
   character's width, so the value over it is the characters it holds, rounded to the nearest 5 from 20 on and to the

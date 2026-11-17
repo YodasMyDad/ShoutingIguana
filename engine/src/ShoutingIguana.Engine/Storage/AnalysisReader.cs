@@ -121,6 +121,7 @@ internal sealed class AnalysisReader : IDisposable
         var statuses = new UrlStatus[maxId + 1];
         var startId = 0;
         long read = 0;
+        var pixelWidth = HasColumn("responses", "pixel_width") ? "r.pixel_width" : "NULL";
         // A URL failed without a request, because its host had stopped answering, was never checked: links to it can't
         // be judged, so it counts as unfetched.
         Rows($"""
@@ -128,7 +129,7 @@ internal sealed class AnalysisReader : IDisposable
                    r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
                    r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type,
                    COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0),
-                   COALESCE(r.response_ms, 0)
+                   COALESCE(r.response_ms, 0), {pixelWidth}
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -161,7 +162,9 @@ internal sealed class AnalysisReader : IDisposable
                 IsRateLimited: reader.GetBoolean(15),
                 ResponseMs: fetched ? reader.GetInt32(16) : 0,
                 ContentClass: outcome == FetchOutcome.Success && fetched ? ResourceTypes.ClassOf(contentType) : ContentClass.None,
-                IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri));
+                IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri),
+                PixelWidth: fetched && !reader.IsDBNull(17) ? reader.GetInt32(17) : null,
+                IsLegacyImage: ContentTypeHeader.MediaTypeOf(contentType) is "image/jpeg" or "image/png" or "image/gif" or "image/bmp" or "image/x-ms-bmp");
             read++;
             progress?.Advance(read);
         });

@@ -1471,6 +1471,85 @@
       "fixer": "you",
       "plainPassed": "No image is too big to load quickly"
     },
+    "image-missing-src": {
+      "plainTitle": "Images with no picture file named",
+      "plainWhat": [
+        "These pages have image spaces that don't say which picture to show.",
+        "Nothing appears there, for visitors or in Google's image search.",
+        "It's usually an empty slot in a page design, or code that fills pictures in a way that isn't standard."
+      ],
+      "plainFix": [
+        "Open each page and find the empty picture space.",
+        "Choose a picture for it in your site's editor, or remove the empty space.",
+        "Ask your developer to check how pictures are loaded, if every page has the problem."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every image names its picture file"
+    },
+    "image-no-srcset": {
+      "plainTitle": "Big images sent to phones at full size",
+      "plainWhat": [
+        "These pages show pictures at least {limit:responsiveImageMinWidth} wide, with no smaller versions for small screens.",
+        "Phones then download the whole picture, which makes the page slower and uses visitors' data."
+      ],
+      "plainFix": [
+        "Upload these pictures through your site's media library, which usually makes smaller versions for phones.",
+        "Ask your developer to offer smaller versions of each picture, if your site doesn't."
+      ],
+      "fixer": "either",
+      "plainPassed": "Big images come in smaller versions for phones"
+    },
+    "image-legacy-format": {
+      "plainTitle": "Images that could be smaller in a newer format",
+      "plainWhat": [
+        "These pages show pictures of {limit:legacyImageMinBytes} or more saved in an older format, such as JPEG or PNG.",
+        "Newer formats (WebP or AVIF) usually make the same picture a quarter to a half smaller, so pages load faster."
+      ],
+      "plainFix": [
+        "Look for an image optimisation setting or plugin that converts pictures to WebP.",
+        "Or save the pictures as WebP before you upload them."
+      ],
+      "fixer": "either",
+      "plainPassed": "No large image is in an older format"
+    },
+    "image-alt-unhelpful": {
+      "plainTitle": "Image descriptions that don't describe anything",
+      "plainWhat": [
+        "These pages have pictures whose descriptions are a file name, a camera's number such as \"IMG_1234\", or a stray letter.",
+        "People using screen readers hear that instead of what the picture shows, and Google learns nothing from it."
+      ],
+      "plainFix": [
+        "Edit each picture in your site's media library and describe what it shows in a few words.",
+        "Leave the description empty for a picture that's only decoration."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every image description says something"
+    },
+    "image-hotlinked": {
+      "plainTitle": "Images shown straight from other websites",
+      "plainWhat": [
+        "These pages show pictures that are stored on other websites, not on yours.",
+        "They can disappear or change whenever the other site moves them, and use that site's resources."
+      ],
+      "plainFix": [
+        "Check you're allowed to use each picture.",
+        "Download the ones you may use and upload them to your own site, then show them from there."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every image is shown from your own site"
+    },
+    "image-inline-large": {
+      "plainTitle": "Pictures built into the page that slow it down",
+      "plainWhat": [
+        "These pages have pictures of more than {limit:inlineImageMaxBytes} written into the page itself, not kept as separate files.",
+        "They come with the page on every visit and can't be saved by the browser, so every view is slower."
+      ],
+      "plainFix": [
+        "Ask your developer to save these pictures as ordinary image files and link to them instead."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No large picture is built into a page"
+    },
     "hreflang-invalid-code": {
       "plainTitle": "Language versions labelled with an invalid code",
       "plainWhat": [

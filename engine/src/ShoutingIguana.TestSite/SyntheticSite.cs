@@ -1105,6 +1105,20 @@ public sealed partial class SyntheticSite
     /// A JPEG of <paramref name="size"/> bytes whose frame header says it is <paramref name="width"/> by
     /// <paramref name="height"/> pixels: its start, a JFIF segment, a baseline frame header, then nothing up to its end.
     /// </summary>
+    /// <summary>A PNG of the given size whose header gives its width and height, as the crawler reads image sizes.</summary>
+    private static byte[] BuildPng(int size, int width, int height)
+    {
+        var bytes = new byte[size];
+        byte[] header =
+        [
+            0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, (byte)'I', (byte)'H', (byte)'D', (byte)'R',
+            (byte)(width >> 24), (byte)(width >> 16), (byte)(width >> 8), (byte)width, (byte)(height >> 24), (byte)(height >> 16), (byte)(height >> 8), (byte)height,
+            0x08, 0x02, 0x00, 0x00, 0x00
+        ];
+        header.CopyTo(bytes, 0);
+        return bytes;
+    }
+
     private static byte[] BuildImage(int size, int width, int height)
     {
         var bytes = new byte[size];

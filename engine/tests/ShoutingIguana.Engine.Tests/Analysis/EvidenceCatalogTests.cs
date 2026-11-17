@@ -31,7 +31,7 @@ public sealed class EvidenceCatalogTests
         }
 
         Assert.Equal(44, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
-        Assert.Equal(34, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
+        Assert.Equal(38, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
         Assert.All(IssueCatalog.All.Where(check => check.References == IssueReferences.Targets), check => Assert.NotEmpty(check.TargetFacts));
     }
 

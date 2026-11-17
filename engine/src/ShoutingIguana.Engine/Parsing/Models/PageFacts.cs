@@ -11,9 +11,11 @@ public sealed record PageFacts
     /// <summary>
     /// What <see cref="CollectedVersion"/> the parser writes now. 1 is the new checks' (step 3b): the canonical's other
     /// attributes, the page's next and prev links, a <c>Refresh</c> header, the links search engines can't follow, the head's
-    /// tags in the body, the document's structure errors, every charset declaration and a separate mobile URL.
+    /// tags in the body, the document's structure errors, every charset declaration and a separate mobile URL. 2 is batch
+    /// 6's: whether an image is a data: URI and its size, and whether it's in a picture with other sources (and the page's
+    /// Microdata, batch 5's, which only adds what an earlier page lacks).
     /// </summary>
-    public const int CURRENT_COLLECTION = 1;
+    public const int CURRENT_COLLECTION = 2;
 
     /// <summary>
     /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed

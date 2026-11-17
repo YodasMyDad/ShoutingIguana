@@ -32,6 +32,15 @@ public sealed partial class SyntheticSite
 
     private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024, LARGE_IMAGE_WIDTH, LARGE_IMAGE_HEIGHT);
 
+    /// <summary>A 1,200 × 800 PNG of 4 KB, shown without srcset: image-no-srcset.</summary>
+    private static readonly byte[] WIDE_PNG = BuildPng(4 * 1024, 1_200, 800);
+
+    /// <summary>A 640 × 480 PNG of 100 KB: image-legacy-format, and narrower than image-no-srcset's 800 pixels.</summary>
+    private static readonly byte[] LEGACY_PNG = BuildPng(100 * 1024, 640, 480);
+
+    /// <summary>12 KB of a PNG's bytes, in base64: image-inline-large's data: image, over its 10 KB.</summary>
+    private static readonly string INLINE_PNG = Convert.ToBase64String(BuildPng(12 * 1024, 120, 80));
+
     /// <summary>A script past the 2 MB Googlebot reads of a file: comment lines, then one statement.</summary>
     private static readonly byte[] HUGE_SCRIPT_BYTES = Encoding.UTF8.GetBytes(
         string.Concat(Enumerable.Repeat("// A planted script well past the size Googlebot reads of a file.\n", 34_000)) + "document.title = document.title;\n");
@@ -62,6 +71,33 @@ public sealed partial class SyntheticSite
 
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
             plants.Add(new Plant(PLANTS_PATH + slug, status, linked, InSitemap: false, issues, respond));
+
+        // An image with no file; a wide PNG without srcset; a 100 KB PNG; alt text that's a camera's file name; a 12 KB data:
+        // image built into the page.
+        Page("image-no-src", "Image without a source", ["image-missing-src"], page => page with
+        {
+            Content = page.Content + "<img alt=\"A photo with no address\" width=\"400\" height=\"300\">"
+        });
+        Page("image-wide", "Wide image without srcset", ["image-no-srcset"], page => page with
+        {
+            Content = page.Content + $"<img src=\"{PLANTS_PATH}wide.png\" alt=\"A wide photo\" width=\"600\" height=\"400\">"
+        });
+        plants.Add(new Plant(PLANTS_PATH + "wide.png", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "image/png", null, WIDE_PNG, null), IsPage: false));
+        Page("image-legacy", "Image in an older format", ["image-legacy-format"], page => page with
+        {
+            Content = page.Content + $"<img src=\"{PLANTS_PATH}legacy.png\" alt=\"A photo in an older format\" width=\"640\" height=\"480\">"
+        });
+        plants.Add(new Plant(PLANTS_PATH + "legacy.png", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "image/png", null, LEGACY_PNG, null), IsPage: false));
+        Page("image-alt-file-name", "Alt text that's a file name", ["image-alt-unhelpful"], page => page with
+        {
+            Content = page.Content + "<img src=\"/img/3.jpg\" alt=\"IMG_0423.jpg\" width=\"400\" height=\"300\">"
+        });
+        Page("image-inline", "Large inline image", ["image-inline-large"], page => page with
+        {
+            Content = page.Content + $"<img src=\"data:image/png;base64,{INLINE_PNG}\" alt=\"A picture built into the page\" width=\"120\" height=\"80\">"
+        });
 
         var revised = Revision >= 1;
         Page("title-missing", "Missing title", ["title-missing"], page => page with { Title = null });
@@ -240,7 +276,7 @@ public sealed partial class SyntheticSite
             Content = page.Content + "<img src=\"/img/missing.jpg\" alt=\"A photo that is missing\" width=\"400\" height=\"300\">"
         });
         // Revision 1 serves a photo of a normal size at the large one's address.
-        Page("image-large", "Large image", revised ? [] : ["image-too-large"], page => page with
+        Page("image-large", "Large image", revised ? [] : ["image-too-large", "image-no-srcset", "image-legacy-format"], page => page with
         {
             Content = page.Content + "<img src=\"/img/large.jpg\" alt=\"A very large photo\" width=\"400\" height=\"300\">"
         });
