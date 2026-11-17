@@ -53,7 +53,8 @@ camelCase as the sidecar serves it. A missing file, one never analysed, or an un
 `si recheck <crawl> --check <id>` is the fix loop's "Recheck these N pages": it fetches the check's URLs again into the
 same crawl file (`--group-url <url>` or `--group-detail <detail>` for one of its groups, `--urls <file>` for a list of
 URLs instead), analyses the crawl, and says what it found: "4 of 5 fixed. 1 still has it.", with the URLs it couldn't
-check, those past its limit of 1,000, and those that have the problem now and didn't. The crawl's analysis is brought
+check, those past its limit of 1,000, and those that have the problem now and didn't (`--plan` only says what it would
+do, how long it should take, and how long working that out took, fetching nothing). The crawl's analysis is brought
 up to date first when it's out of date, so the "before" it records is today's. A crawl that sent header values, which a
 crawl file doesn't keep, needs them again with `--header`, as `--resume` does (and `--proxy` for a proxy's password). A
 check a recheck can't settle (`orphan-page`, `no-https`), a crawl that was interrupted or never analysed, and one open

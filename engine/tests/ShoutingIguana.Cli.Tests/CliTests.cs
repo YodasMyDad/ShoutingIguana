@@ -47,6 +47,13 @@ public sealed class CliTests : IAsyncLifetime
         var crawl = await CrawlAsync();
         _server.Revision = 1;
 
+        // --plan says what it would do, and fetches nothing.
+        var planned = await RunAsync("recheck", crawl, "--check", "title-too-long", "--plan");
+        Assert.True(planned.ExitCode == 0, planned.Error);
+        Assert.Contains("Rechecking 3 URLs. 3 judged, 0 past the limit of 1,000", planned.Output);
+        Assert.Contains("Rechecking the sitemaps. 1 judged", (await RunAsync("recheck", crawl, "--check", "sitemap-error", "--plan")).Output);
+        Assert.Empty(RecheckReader.ReadAll(crawl));
+
         var recheck = await RunAsync("recheck", crawl, "--check", "title-too-long");
 
         Assert.True(recheck.ExitCode == 0, recheck.Error);

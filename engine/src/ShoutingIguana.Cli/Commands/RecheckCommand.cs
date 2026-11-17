@@ -25,10 +25,11 @@ internal static class RecheckCommand
         var urls = new Option<string?>("--urls") { Description = "A file of URLs to recheck, one a line (up to 1,000), instead of the check's." };
         var headers = new Option<string[]>("--header") { Description = "A request header the crawl sent, given again: crawl files don't keep their values. Repeatable." };
         var proxy = new Option<string?>("--proxy") { Description = "The crawl's proxy, given again when it had a user name and password." };
+        var planOnly = new Option<bool>("--plan") { Description = "Only say what the recheck would do (and how long it took to work out), fetching nothing." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
         var command = new Command("recheck", "Fetch a problem's URLs again into the same crawl, analyse it, and say how many are fixed.")
         {
-            database, check, groupUrl, groupDetail, urls, headers, proxy, verbose
+            database, check, groupUrl, groupDetail, urls, headers, proxy, planOnly, verbose
         };
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
@@ -98,7 +99,21 @@ internal static class RecheckCommand
             using var loggerFactory = Logging.Create(parse.GetValue(verbose));
             var settings = new AnalysisSettings();
             var ask = new RecheckAsk(checkId, group, ids);
+            var planning = System.Diagnostics.Stopwatch.StartNew();
             var plan = RecheckPlanReader.Plan(path, ask, settings);
+            if (parse.GetValue(planOnly))
+            {
+                Console.WriteLine($"{Planned(plan)} {plan.Judged:N0} judged, {plan.NotRechecked:N0} past the limit of {plan.Limit:N0}; " +
+                                  $"about {Format.Duration(TimeSpan.FromMilliseconds(plan.EstimateMs))}{(plan.AnalysisFirst ? ", the analysis brought up to date first" : string.Empty)}" +
+                                  $"{(plan.SuggestFullCheck ? "; checking the whole site again would take about as long" : string.Empty)}. Planned in {planning.ElapsedMilliseconds:N0} ms.");
+                if (plan.Refused is { } refusal)
+                {
+                    Console.WriteLine($"It can't run: {refusal.Title}");
+                }
+
+                return 0;
+            }
+
             if (plan.Refused is { } refused)
             {
                 return Fail(refused.Title);
@@ -112,7 +127,7 @@ internal static class RecheckCommand
                 plan = RecheckPlanReader.Plan(path, ask, settings);
             }
 
-            Console.WriteLine($"Rechecking {Format.Count(plan.Phase1, "URL", "URLs")}{(plan.Phase2Max > 0 ? $", then up to {Format.Count(plan.Phase2Max, "page", "pages")} linking to those still failing" : string.Empty)}.");
+            Console.WriteLine(Planned(plan));
             if (plan.Capped)
             {
                 Console.WriteLine($"  The {plan.Judged - plan.NotRechecked:N0} most important of {plan.Judged:N0}; the other {plan.NotRechecked:N0} stay as the crawl found them.");
@@ -132,6 +147,25 @@ internal static class RecheckCommand
         }));
 
         return command;
+    }
+
+    /// <summary>What the recheck will read: its URLs, then the pages linking to those still failing, and whatever else its check needs read again.</summary>
+    internal static string Planned(RecheckPlan plan)
+    {
+        List<string> parts = [];
+        if (plan.Kinds.Contains(RecheckKind.Urls))
+        {
+            parts.Add(Format.Count(plan.Phase1, "URL", "URLs") +
+                      (plan.Phase2Max > 0 ? $", then up to {Format.Count(plan.Phase2Max, "page", "pages")} linking to those still failing" : string.Empty));
+        }
+
+        parts.AddRange(plan.Kinds.Where(kind => kind != RecheckKind.Urls).Select(kind => kind switch
+        {
+            RecheckKind.Sitemaps => "the sitemaps",
+            RecheckKind.RobotsTxt => "robots.txt",
+            _ => "the site's other versions"
+        }));
+        return $"Rechecking {string.Join(", and ", parts)}.";
     }
 
     /// <summary>The recheck's result in a line or two: "4 of 5 fixed. 1 still has it."</summary>
