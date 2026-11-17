@@ -62,9 +62,25 @@ public sealed partial class SyntheticSite
         });
         Page("title-short", "Short title", ["title-too-short"], page => page with { Title = "Short page" });
 
-        // Full-width characters take twice the room in results: 21 of them make a normal title, 48 a long one.
+        // Full-width characters are one em wide in results: 21 of them make a normal title (420 px), 48 a long one (960 px).
         Page("title-wide", "Full-width title", [], page => page with { Title = "合成ストアの全角タイトル付き試験ページです" });
         Page("title-wide-long", "Long full-width title", ["title-too-long"], page => page with { Title = string.Concat(Enumerable.Repeat("日本語の題名", 8)) });
+
+        // Titles are judged by their width in pixels, not their characters: capitals are wide and il1t narrow.
+        // 59 characters, 736 px: too long.
+        Page("title-caps", "Title in capitals", ["title-too-long"], page => page with { Title = "WHOLESALE PATIO HEATERS: MODERN LANTERNS AND OUTDOOR LIGHTS" });
+
+        // 80 characters, 561 px: fits.
+        Page("title-narrow", "Title of narrow letters", [], page => page with
+        {
+            Title = "little lilies, fritillaries and tulips: a field list of all the lilies in flower"
+        });
+
+        // 33 characters, 184 px: too short.
+        Page("title-narrow-short", "Short title of narrow letters", ["title-too-short"], page => page with { Title = "lilies tilt; little jill fills it" });
+
+        // 19 characters, 258 px: long enough.
+        Page("title-caps-short", "Short title in capitals", [], page => page with { Title = "WOODEN GARDEN SHEDS" });
 
         Page("description-multiple", "Two descriptions", ["description-multiple"], page => page with
         {
@@ -76,6 +92,17 @@ public sealed partial class SyntheticSite
                           "adding clause after clause about nothing in particular until it is far too long to show."
         });
         Page("description-short", "Short description", ["description-too-short"], page => page with { Description = "Too short." });
+
+        // Descriptions too: 132 characters in capitals are 1,054 px, too long; 172 of narrow letters are 826 px, and fit.
+        Page("description-caps", "Description in capitals", ["description-too-long"], page => page with
+        {
+            Description = "PLANTED PAGE WITH A DESCRIPTION IN CAPITALS: EVERY LETTER IS WIDE, SO IT WILL BE CUT OFF IN SEARCH RESULTS LONG BEFORE ITS LAST WORD"
+        });
+        Page("description-narrow", "Description of narrow letters", [], page => page with
+        {
+            Description = "this little list of tiny lilies, frilly tulips, fritillaries and lilacs is still just right: " +
+                          "it fills a full line, but its thin letters fit in the little space left for it."
+        });
         Page("description-copy-a", "Shared description A", ["description-duplicate"], page => page with { Description = SHARED_DESCRIPTION });
         Page("description-copy-b", "Shared description B", ["description-duplicate"], page => page with { Description = SHARED_DESCRIPTION });
 
