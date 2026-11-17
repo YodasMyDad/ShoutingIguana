@@ -219,8 +219,9 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         var first = await PostOkAsync($"api/crawls/{grid.Id}/links/groups", view);
         Assert.Equal(["total", "links", "pages", "offset", "sort", "rows", "summary", "pixelSizes"], first.AsObject().Select(property => property.Key));
         Assert.Equal(["id", "url", "links", "pages", "text", "texts", "positions", "likelyTemplate", "target"], first["rows"]![0]!.AsObject().Select(property => property.Key));
-        // A target says what any URL's facts say, its response time among them since slow-external-links (new checks).
-        Assert.Equal(["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical", "responseMs"],
+        // A target says what any URL's facts say: its response time since slow-external-links, and the kind of redirect it is
+        // since batch 4 (new checks).
+        Assert.Equal(["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical", "responseMs", "redirectKind"],
             first["rows"]![0]!["target"]!.AsObject().Select(property => property.Key));
         Assert.Equal(((long)ends["total"]!, links, (long)sources["total"]!, 0, """{"column":"pages","desc":true}""", """{"available":true,"reason":null}"""),
             ((long)first["total"]!, (long)first["links"]!, (long)first["pages"]!, (int)first["offset"]!, first["sort"]!.ToJsonString(), first["summary"]!.ToJsonString()));
@@ -304,8 +305,8 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
 
         // The index says how many sitemaps its file lists, beside how many of them the crawl has; a sitemap of URLs lists
         // none, and one that couldn't be read doesn't say.
-        Assert.Equal([3, 0, 0, null], sitemaps.Select(sitemap => (int?)sitemap!["listedSitemaps"]));
-        Assert.Equal((grid.Url("/sitemap.xml"), "robotsTxt", "read", true, 3), ((string?)index["url"], (string?)index["foundVia"], (string?)index["state"], (bool)index["isIndex"]!, (int)index["sitemaps"]!));
+        Assert.Equal([4, 0, 0, 0, null], sitemaps.Select(sitemap => (int?)sitemap!["listedSitemaps"]));
+        Assert.Equal((grid.Url("/sitemap.xml"), "robotsTxt", "read", true, 4), ((string?)index["url"], (string?)index["foundVia"], (string?)index["state"], (bool)index["isIndex"]!, (int)index["sitemaps"]!));
         Assert.Null(index["parentId"]);
         Assert.Equal(["listed", "fetched", "indexable", "nonIndexable", "robotsDisallowed", "redirectingOrBroken"], index["urls"]!.AsObject().Select(property => property.Key));
         Assert.Equal((1, 2), ((long)index["urls"]!["robotsDisallowed"]!, (long)index["urls"]!["redirectingOrBroken"]!));

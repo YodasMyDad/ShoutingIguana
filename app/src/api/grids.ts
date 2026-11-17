@@ -192,6 +192,8 @@ export interface UrlRow {
   outcome?: UrlOutcome | null;
   redirectTarget?: string | null;
   redirectTargetStatusCode?: number | null;
+  /** What the redirect changes, its kinds comma separated (`httpToHttps,addsWww`); null when it doesn't redirect. */
+  redirectKind?: string | null;
   indexable?: boolean | null;
   indexability?: IndexabilityReason | null;
   noindex?: boolean | null;
@@ -402,6 +404,8 @@ export interface RelatedFacts {
   pixelHeight: number | null;
   /** How long its own answer took; left out by a sidecar from before it. */
   responseMs?: number | null;
+  /** What its own redirect changes; left out by a sidecar from before it. */
+  redirectKind?: string | null;
   /** Where its redirects end; null when it doesn't redirect. */
   final: TargetEnd | null;
   indexability: IndexabilityReason | null;

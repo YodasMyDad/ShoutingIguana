@@ -21,6 +21,7 @@ const COLUMNS: Record<string, string> = {
   statusCode: 'Status',
   redirectTarget: 'Redirects to',
   redirectTargetStatusCode: 'Redirect’s status',
+  redirectKind: 'Redirect kind',
   noindex: 'Noindex',
   nofollow: 'Nofollow',
   metaRobots: 'Meta robots',

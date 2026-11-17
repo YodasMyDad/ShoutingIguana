@@ -31,4 +31,7 @@ internal sealed record GridQueryRequest
     /// <c>notices</c>) leave their issues out wherever they're read, sorted or filtered, at either end of a link too.
     /// </summary>
     public IReadOnlyList<string>? HiddenChecks { get; init; }
+
+    /// <summary>For a check's rows (the fix loop): <c>previous</c> or a crawl's id, to give each row its change since that crawl.</summary>
+    public string? CompareWith { get; init; }
 }

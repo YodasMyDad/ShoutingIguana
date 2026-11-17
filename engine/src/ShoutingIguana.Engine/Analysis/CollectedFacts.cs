@@ -21,6 +21,9 @@ internal static class CollectedFacts
         [IssueCatalog.PAGINATION_SEQUENCE_ERROR] = 1,
         [IssueCatalog.HEAD_TAGS_IN_BODY] = 1,
         [IssueCatalog.HTML_STRUCTURE_ERRORS] = 1,
-        [IssueCatalog.MOBILE_ALTERNATE] = 1
+        [IssueCatalog.MOBILE_ALTERNATE] = 1,
+        [IssueCatalog.IMAGE_MISSING_SRC] = 2,
+        [IssueCatalog.IMAGE_NO_SRCSET] = 2,
+        [IssueCatalog.IMAGE_INLINE_LARGE] = 2
     };
 }

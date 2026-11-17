@@ -3,6 +3,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Storage;
 
@@ -17,6 +18,7 @@ internal static class UrlComputedColumns
     public const string PIXEL_WIDTH = "pixelWidth";
     public const string PIXEL_HEIGHT = "pixelHeight";
     public const string REDIRECT_CHAIN = "redirectChain";
+    public const string REDIRECT_KIND = "redirectKind";
     public const string ROBOTS_RULE = "robotsRule";
     public const string TITLE_IN_RESULTS = "titleInResults";
     public const string DESCRIPTION_IN_RESULTS = "descriptionInResults";
@@ -70,6 +72,20 @@ internal static class UrlComputedColumns
                 {
                     row[descriptionShown] = reader.IsDBNull(2) ? null : InResults(reader.GetString(2), SearchResultText.Description, settings.DescriptionMaxPixels);
                 }
+            }
+        }
+
+        // What a redirect changes, from its URL and where it leads (RedirectKinds); null for a URL that doesn't redirect.
+        if (Index(columns, REDIRECT_KIND) is var kind and >= 0 && values.Count > 0)
+        {
+            using var command = context.Command($"""
+                SELECT r.url_id, u.url, t.url FROM responses r JOIN urls u ON u.id = r.url_id JOIN urls t ON t.id = r.redirect_url_id
+                WHERE r.url_id IN ({string.Join(",", values.Keys.Select(id => id.ToString(CultureInfo.InvariantCulture)))})
+                """, []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                values[reader.GetInt64(0)][kind] = RedirectKinds.Of(reader.GetString(1), reader.GetString(2));
             }
         }
 

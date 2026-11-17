@@ -130,15 +130,15 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     expect(
       main().getByText(
-        /6 problems to fix and 14 things worth a look on gardenfurnituresets\.co\.uk, from 109 checks on 265 pages\./,
+        /6 problems to fix and 15 things worth a look on gardenfurnituresets\.co\.uk, from 120 checks on 265 pages\./,
       ),
     ).toBeVisible();
     for (const [name, count] of [
       ['Serious', '2'],
       ['Worth fixing', '4'],
-      ['Worth a look', '14'],
-      ['Couldn’t check', '13'],
-      ['Nothing wrong', '89'],
+      ['Worth a look', '15'],
+      ['Couldn’t check', '17'],
+      ['Nothing wrong', '99'],
     ]) {
       expect(main().getByRole('heading', { level: 2, name: `${name} ${count}` })).toBeVisible();
     }
@@ -152,29 +152,29 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
   it('shows three things worth a look while anything needs fixing, then all of them; Nothing wrong is folded', async () => {
     await open(FIX);
     await whatToFix();
-    const looks = () => within(main().getByRole('region', { name: 'Worth a look 14' }));
+    const looks = () => within(main().getByRole('region', { name: 'Worth a look 15' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
     expect(await looks().findByText('One fix')).toBeVisible();
-    fireEvent.click(looks().getByRole('button', { name: 'Show all 14 things worth a look' }));
-    expect(looks().getAllByRole('link')).toHaveLength(14);
-    const passed = within(main().getByRole('region', { name: 'Nothing wrong 89' }));
+    fireEvent.click(looks().getByRole('button', { name: 'Show all 15 things worth a look' }));
+    expect(looks().getAllByRole('link')).toHaveLength(15);
+    const passed = within(main().getByRole('region', { name: 'Nothing wrong 99' }));
     expect(passed.queryAllByRole('link')).toHaveLength(0);
-    fireEvent.click(passed.getByRole('button', { name: 'Show the 89 checks that found nothing wrong' }));
-    expect(passed.getAllByRole('link')).toHaveLength(89);
+    fireEvent.click(passed.getByRole('button', { name: 'Show the 99 checks that found nothing wrong' }));
+    expect(passed.getAllByRole('link')).toHaveLength(99);
   });
 
-  it('opens the part a count lands on: all 14 worth a look, and the 89 that found nothing wrong', async () => {
+  it('opens the part a count lands on: all 15 worth a look, and the 99 that found nothing wrong', async () => {
     await open(`${FIX}#worth-a-look`);
     await whatToFix();
-    expect(within(main().getByRole('region', { name: 'Worth a look 14' })).getAllByRole('link')).toHaveLength(14);
-    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 14' })).toHaveFocus());
+    expect(within(main().getByRole('region', { name: 'Worth a look 15' })).getAllByRole('link')).toHaveLength(15);
+    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 15' })).toHaveFocus());
   });
 
   it('lists every check that couldn’t run, with its plain reason, and leaves hidden checks out with a line to show them', async () => {
     await open(FIX, GARDEN_ANALYSIS, ['image-too-large']);
     await whatToFix();
-    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 13' }));
-    expect(skipped.getAllByText('Not checked')).toHaveLength(13);
+    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 17' }));
+    expect(skipped.getAllByText('Not checked')).toHaveLength(17);
     expect(main().getByRole('heading', { name: 'Worth fixing 3' })).toBeVisible();
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));

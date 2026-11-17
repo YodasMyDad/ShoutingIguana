@@ -36,6 +36,9 @@ public static partial class PlainLimits
         [Name(nameof(AnalysisSettings.NearDuplicateMaxBits))] = (settings => settings.NearDuplicateMaxBits, LimitUnit.Bits),
         [Name(nameof(AnalysisSettings.ImageAltMaxLength))] = (settings => settings.ImageAltMaxLength, LimitUnit.Characters),
         [Name(nameof(AnalysisSettings.LargeImageBytes))] = (settings => settings.LargeImageBytes, LimitUnit.Bytes),
+        [Name(nameof(AnalysisSettings.ResponsiveImageMinWidth))] = (settings => settings.ResponsiveImageMinWidth, LimitUnit.Pixels),
+        [Name(nameof(AnalysisSettings.LegacyImageMinBytes))] = (settings => settings.LegacyImageMinBytes, LimitUnit.Bytes),
+        [Name(nameof(AnalysisSettings.InlineImageMaxBytes))] = (settings => settings.InlineImageMaxBytes, LimitUnit.Bytes),
         [Name(nameof(AnalysisSettings.LargePageBytes))] = (settings => settings.LargePageBytes, LimitUnit.Bytes),
         [Name(nameof(AnalysisSettings.SlowResponseMs))] = (settings => settings.SlowResponseMs, LimitUnit.Milliseconds),
         [Name(nameof(AnalysisSettings.MaxUrlLength))] = (settings => settings.MaxUrlLength, LimitUnit.Characters),
@@ -61,7 +64,10 @@ public static partial class PlainLimits
         Bytes,
         Milliseconds,
         Links,
-        Clicks
+        Clicks,
+
+        /// <summary>An image's width, given in pixels: a picture's size has no plainer measure.</summary>
+        Pixels
     }
 
     /// <summary>The names a plain text can hold in <c>{limit:name}</c>: every numeric threshold of the analysis settings, as their JSON names it.</summary>
@@ -112,6 +118,7 @@ public static partial class PlainLimits
             LimitUnit.Bytes => Size(limit.Value(settings)),
             LimitUnit.Links => Count(limit.Value(settings), "link", "links"),
             LimitUnit.Clicks => Count(limit.Value(settings), "click", "clicks"),
+            LimitUnit.Pixels => Count(limit.Value(settings), "pixel", "pixels"),
             _ => Seconds(limit.Value(settings))
         }
         : throw new ArgumentException($"No analysis setting is named '{name}'. A plain text can hold {{limit:name}} for: {string.Join(", ", LIMITS.Keys)}.", nameof(name));

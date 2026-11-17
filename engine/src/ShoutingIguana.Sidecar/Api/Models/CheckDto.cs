@@ -35,6 +35,10 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// The checks a fix of this one also clears, by id (related checks): this check flags URLs others refer to, each of those
 /// the pages that refer to them. What a fix clears on a crawl is its analysis's <c>counts[].clears</c>.
 /// </param>
+/// <param name="Recheck">
+/// What a recheck of the check reads again (the fix loop): <c>urls</c>, <c>sitemaps</c>, <c>robotsTxt</c>,
+/// <c>siteVersions</c>. Empty for a check only a full crawl can settle (<c>orphan-page</c>, <c>no-https</c>).
+/// </param>
 internal sealed record CheckDto(
     string Id,
     IssueCategory Category,
@@ -58,7 +62,8 @@ internal sealed record CheckDto(
     string? PlainLooksFor,
     IReadOnlyList<string> Evidence,
     IReadOnlyList<string> TargetFacts,
-    IReadOnlyList<string> Clears)
+    IReadOnlyList<string> Clears,
+    IReadOnlyList<RecheckKind> Recheck)
 {
     /// <param name="settings">The thresholds the plain words' limits are filled from.</param>
     public static CheckDto From(IssueDefinition check, AnalysisSettings settings)
@@ -66,6 +71,6 @@ internal sealed record CheckDto(
         var plain = PlainLimits.Fill(check.Plain, settings);
         return new CheckDto(check.Id, check.Category, check.Severity, check.Title, check.Description, check.Fix, check.Why, check.LearnMore,
             GridRequests.Grouping(check.Grouping), check.Subject, check.References, check.SiteWide, check.ReportedOnce,
-            plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts, check.Clears);
+            plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts, check.Clears, check.Recheck);
     }
 }

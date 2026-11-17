@@ -68,4 +68,10 @@ internal sealed record ExportRequestDto
 
     /// <summary>For <c>workbook</c>: only these checks, the ones the Issues view listed.</summary>
     public IReadOnlyList<string>? Checks { get; init; }
+
+    /// <summary>
+    /// For <c>report</c> and <c>workbook</c> (the fix loop): <c>previous</c> (when left out), <c>none</c>, or a crawl's id
+    /// to compare with. One that can't be compared leaves the comparison out and says why; it never fails the export.
+    /// </summary>
+    public string? CompareWith { get; init; }
 }

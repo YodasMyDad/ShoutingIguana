@@ -5,6 +5,12 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- The schema.org vocabulary and ISO 4217 codes structured-data-schema-errors checks against (Analysis/Vocabulary/generate.mjs). -->
+        <EmbeddedResource Include="Analysis\Vocabulary\schema-org.json" LogicalName="schema-org.json" />
+        <None Remove="Analysis\Vocabulary\generate.mjs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="AngleSharp" />
         <PackageReference Include="Microsoft.Data.Sqlite" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

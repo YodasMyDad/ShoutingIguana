@@ -49,8 +49,19 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(13, AnalysisFreshness.VERSION);
+        Assert.Equal(14, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 14 is the new sitemap checks' (batch 4): a sitemap entry on another scheme than its sitemap is reported on
+    /// another host. An analysis 13 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeTheSitemapChecksIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 13 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 14 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

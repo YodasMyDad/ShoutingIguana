@@ -1,6 +1,10 @@
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 using SQLitePCL;
 
@@ -41,8 +45,10 @@ public static class CrawlSummaryReader
             var analysis = IssueReader.ReadAnalysis(connection, transaction: null);
             cancellationToken.ThrowIfCancellationRequested();
             var flagged = analysis is null ? null : FlaggedChecks(connection);
+            var checks = analysis is null ? null : IssueReader.ReadCounts(connection, transaction: null);
             cancellationToken.ThrowIfCancellationRequested();
             var (fetched, crawled, pages) = withCounts ? Counts(connection) : (null, null, null);
+            var (rechecks, lastRecheck) = RecheckReader.ReadLatest(connection);
             return summary with
             {
                 HasFavicon = FaviconReader.Has(connection, transaction: null),
@@ -52,7 +58,11 @@ public static class CrawlSummaryReader
                 PageCount = pages,
                 AnalyzedAt = analysis?.AnalyzedAt,
                 Analysis = analysis,
-                FlaggedChecks = flagged
+                FlaggedChecks = flagged,
+                CheckCounts = checks,
+                OptionsFingerprint = CrawlComparability.OptionsFingerprint(ReadOptions(connection, summary.StartUrl)),
+                RecheckCount = rechecks,
+                LastRecheck = lastRecheck
             };
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == raw.SQLITE_INTERRUPT && cancellationToken.IsCancellationRequested)
@@ -77,6 +87,25 @@ public static class CrawlSummaryReader
                 EngineVersion = crawl.GetString(5)
             }
             : throw new InvalidOperationException("This file is not a crawl database.");
+    }
+
+    /// <summary>
+    /// The options the crawl was started with, as a comparison reads them (<see cref="GridReadContext"/>): the engine's
+    /// defaults where they can't be read, as the best guess at how it ran.
+    /// </summary>
+    private static CrawlOptions ReadOptions(SqliteConnection connection, string startUrl)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT options_json FROM crawl WHERE id = 1";
+        var defaults = new CrawlOptions { StartUrl = startUrl };
+        try
+        {
+            return command.ExecuteScalar() is string json ? StoredJson.Deserialize(json, EngineJsonContext.Default.CrawlOptions, defaults) ?? defaults : defaults;
+        }
+        catch (JsonException)
+        {
+            return defaults;
+        }
     }
 
     /// <summary>The URLs with an outcome, those of them that were asked (not "not checked"), and the pages, in one pass over the responses.</summary>

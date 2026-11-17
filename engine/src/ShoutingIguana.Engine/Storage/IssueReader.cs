@@ -140,7 +140,7 @@ public static class IssueReader
         }
     }
 
-    private static Dictionary<string, long> ReadCounts(SqliteConnection connection, SqliteTransaction? transaction)
+    internal static Dictionary<string, long> ReadCounts(SqliteConnection connection, SqliteTransaction? transaction)
     {
         Dictionary<string, long> counts = new(StringComparer.Ordinal);
         if (!HasAnalysis(connection, transaction))

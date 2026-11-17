@@ -28,6 +28,7 @@ internal static class ExportEndpoints
         // The document as text: the UI gives it to a sandboxed frame. Like every answer, it carries the API's own headers,
         // so its address is nothing a browser could open as a page.
         api.MapGet("/api/crawls/{id}/report", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
-            TypedResults.Text(await data.ReportAsync(id, ExportRequests.Report(request.Query), cancellationToken).ConfigureAwait(false), "text/html", Encoding.UTF8));
+            TypedResults.Text(await data.ReportAsync(id, ExportRequests.Report(request.Query, out var compareWith), compareWith, cancellationToken).ConfigureAwait(false),
+                "text/html", Encoding.UTF8));
     }
 }

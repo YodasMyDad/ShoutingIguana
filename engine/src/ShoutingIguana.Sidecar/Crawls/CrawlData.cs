@@ -1,7 +1,9 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using System.Text.Json;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors;
 
@@ -117,6 +119,82 @@ internal sealed class CrawlData(CrawlManager crawls, ReadCache cache)
         }
 
         return new IssuesPageDto([.. page.Rows.Select(row => new IssueRowDto(row.Url, row.Detail, row.RelatedUrl))], total);
+    }
+
+    /// <summary>The crawl's rechecks (the fix loop), newest first, as its file keeps them: none for a crawl never rechecked.</summary>
+    public RechecksDto Rechecks(string id)
+    {
+        var path = crawls.PathOf(id);
+        return new RechecksDto([.. EngineErrors.Read(() => RecheckReader.ReadAll(path)).Select(RecheckDto.From)]);
+    }
+
+    /// <summary>One recheck of the crawl, by its number; <c>recheck-not-found</c> for a number the file doesn't have.</summary>
+    public RecheckDto Recheck(string id, string number)
+    {
+        var path = crawls.PathOf(id);
+        return RecheckNumber(number) is { } recheckId && EngineErrors.Read(() => RecheckReader.Read(path, recheckId)) is { } recheck
+            ? RecheckDto.From(recheck)
+            : throw Problems.RecheckNotFound();
+    }
+
+    /// <summary>A page of one recheck's URLs, narrowed by outcome and role, judged first and then in crawl order.</summary>
+    public RecheckRowPage RecheckRows(string id, string number, RecheckRowsRequest? request)
+    {
+        var path = crawls.PathOf(id);
+        Dictionary<string, IReadOnlyList<string>> errors = new(StringComparer.Ordinal);
+        var outcomes = Names(request?.Outcomes, OUTCOMES, "outcomes", errors);
+        var roles = Names(request?.Roles, ROLES, "roles", errors);
+        var (offset, limit) = (request?.Offset ?? 0, request?.Limit ?? DEFAULT_LIMIT);
+        if (offset < 0)
+        {
+            errors["offset"] = ["offset must be 0 or more."];
+        }
+
+        if (limit is < 1 or > RecheckReader.MAX_LIMIT)
+        {
+            errors["limit"] = [$"limit must be from 1 to {RecheckReader.MAX_LIMIT:N0}."];
+        }
+
+        if (errors.Count > 0)
+        {
+            throw Problems.InvalidQuery(errors);
+        }
+
+        return RecheckNumber(number) is { } recheckId && EngineErrors.Read(() => RecheckReader.ReadRows(path, recheckId, outcomes, roles, offset, limit)) is { } page
+            ? page
+            : throw Problems.RecheckNotFound();
+    }
+
+    private static readonly Dictionary<string, RecheckOutcome> OUTCOMES = Enum.GetValues<RecheckOutcome>().ToDictionary(outcome => JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()), StringComparer.Ordinal);
+
+    private static readonly Dictionary<string, RecheckRole> ROLES = Enum.GetValues<RecheckRole>().ToDictionary(role => JsonNamingPolicy.CamelCase.ConvertName(role.ToString()), StringComparer.Ordinal);
+
+    /// <summary>A recheck's number from the path: one no recheck can have is none the file has.</summary>
+    private static int? RecheckNumber(string number) =>
+        int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var recheckId) && recheckId >= 1 ? recheckId : null;
+
+    /// <summary>Values by their API names, each known: what isn't is a field error at its index. Null when none were given.</summary>
+    private static List<T>? Names<T>(IReadOnlyList<string>? names, Dictionary<string, T> known, string field, Dictionary<string, IReadOnlyList<string>> errors)
+    {
+        if (names is null)
+        {
+            return null;
+        }
+
+        List<T> values = [];
+        foreach (var (name, index) in names.Select((name, index) => (name, index)))
+        {
+            if (name is not null && known.TryGetValue(name, out var value))
+            {
+                values.Add(value);
+            }
+            else
+            {
+                errors[$"{field}[{index}]"] = [$"There's no such value: there are {string.Join(", ", known.Keys)}."];
+            }
+        }
+
+        return values;
     }
 
     private static int Number(IQueryCollection query, string name, int fallback, int min, int max, string message)

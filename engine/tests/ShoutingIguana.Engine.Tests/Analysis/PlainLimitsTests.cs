@@ -25,7 +25,7 @@ public sealed class PlainLimitsTests
         var numeric = stored.Where(property => property.Value is JsonValue value && value.GetValueKind() == JsonValueKind.Number).Select(property => property.Key);
 
         Assert.Equal(numeric.Order(StringComparer.Ordinal), PlainLimits.Names.Order(StringComparer.Ordinal));
-        Assert.Equal(17, PlainLimits.Names.Count);
+        Assert.Equal(20, PlainLimits.Names.Count);
     }
 
     /// <summary>Each threshold at its default, with its unit, as a sentence gives it.</summary>
@@ -39,6 +39,9 @@ public sealed class PlainLimitsTests
     [InlineData("nearDuplicateMaxBits", "24 bits")]
     [InlineData("imageAltMaxLength", "125 characters")]
     [InlineData("largeImageBytes", "200 KB")]
+    [InlineData("responsiveImageMinWidth", "800 pixels")]
+    [InlineData("legacyImageMinBytes", "50 KB")]
+    [InlineData("inlineImageMaxBytes", "10 KB")]
     [InlineData("largePageBytes", "1 MB")]
     [InlineData("slowResponseMs", "1 second")]
     [InlineData("maxUrlLength", "115 characters")]

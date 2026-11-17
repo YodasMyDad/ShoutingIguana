@@ -12,6 +12,12 @@ internal sealed record CrawlListItem
     /// <summary>The start URL's host without a leading www., which the UI groups crawls by.</summary>
     public string? Site { get; init; }
 
+    /// <summary>
+    /// The site as the library groups it (the fix loop): <see cref="Site"/>, then <c>:port</c> when the start URL has a port
+    /// of its own. The app groups by it, and the previous crawl is chosen by it. Null for a file with no start URL.
+    /// </summary>
+    public string? SiteKey { get; init; }
+
     public string? StartUrl { get; init; }
     public required CrawlListStatus Status { get; init; }
 
@@ -77,4 +83,20 @@ internal sealed record CrawlListItem
 
     /// <summary>A file opened from elsewhere that isn't there any more.</summary>
     public bool Missing { get; init; }
+
+    /// <summary>
+    /// The crawl this one is compared with by default (the fix loop): the newest earlier crawl of the same site that can be,
+    /// one with the same start URL first. Null for a site's first crawl, and for a crawl never analysed.
+    /// </summary>
+    public PreviousCrawlDto? Previous { get; init; }
+
+    /// <summary>
+    /// What changed since <see cref="Previous"/>, check by check, from the two crawls' cached summaries (the fix loop). Null
+    /// without a previous crawl, and while this crawl is live, interrupted or can't be read: its analysis then doesn't
+    /// describe it.
+    /// </summary>
+    public CrawlChangesDto? Changes { get; init; }
+
+    /// <summary>The crawl's rechecks (the fix loop): how many, and the latest in brief. Null for a crawl never rechecked.</summary>
+    public RechecksBriefDto? Rechecks { get; init; }
 }

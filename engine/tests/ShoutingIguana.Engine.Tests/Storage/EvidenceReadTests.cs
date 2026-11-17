@@ -6,6 +6,7 @@ using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
+using ShoutingIguana.Engine.Urls;
 using ShoutingIguana.TestSite;
 
 namespace ShoutingIguana.Engine.Tests.Storage;
@@ -30,6 +31,27 @@ public sealed class EvidenceReadTests(GridCrawl crawl)
         Assert.Null(target.Facts.Final);
         Assert.Equal((LinkKind.Image, 1), (target.Kind, target.Links));
         Assert.Equal(new ImageOnPage("400", "300", "A very large photo", HasAlt: true, AltLength: 18, Srcset: false, Loading: null), target.Img);
+    }
+
+    [Fact]
+    public void ARedirectSaysWhatItChangesInItsRowAndAsALinksTarget()
+    {
+        // In the grid: a plant's redirect to another page; the hub, which doesn't redirect, has none.
+        var chain = UrlGridReader.Query(crawl.Path, new UrlQuery { Columns = ["redirectKind"], Filters = [GridQueries.Text("url", FilterOperator.Eq, Url(Id("/plants/chain-c")))] });
+        Assert.Equal(RedirectKinds.OTHER, chain.Rows.Single().Values[1]);
+        var hub = UrlGridReader.Query(crawl.Path, new UrlQuery { Columns = ["redirectKind"], Filters = [GridQueries.Text("url", FilterOperator.Eq, Url(Id("/plants/")))] });
+        Assert.Null(hub.Rows.Single().Values[1]);
+        Assert.Contains("redirectKind", IssueCatalog.REDIRECT_TEMPORARY.Evidence);
+
+        // As a link's target: what the URL's own redirect changes, as its row says it.
+        Assert.Equal(["statusCode", "final", "redirectKind", "text", "position", "links"], IssueCatalog.LINKS_TO_REDIRECTS.TargetFacts);
+        var pages = crawl.Reference.Issues.Where(entry => entry.Value.Any(issue => issue.Issue == IssueCatalog.LINKS_TO_REDIRECTS.Id)).Select(entry => entry.Key).Take(20).ToList();
+        var redirects = FoundOnReader.ReadTargets(crawl.Path, IssueCatalog.LINKS_TO_REDIRECTS.Id, pages)!.SelectMany(page => page.Targets)
+            .Where(target => target.StatusCode is >= 300 and <= 399).ToList();
+        Assert.NotEmpty(redirects);
+        Assert.All(redirects, target => Assert.Equal(
+            RedirectKinds.Of(target.Url, Query($"SELECT t.url FROM responses r JOIN urls t ON t.id = r.redirect_url_id WHERE r.url_id = {target.Id}").Single()),
+            target.Facts!.RedirectKind));
     }
 
     [Fact]

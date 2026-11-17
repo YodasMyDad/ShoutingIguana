@@ -121,7 +121,15 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
             .. new RobotsTxtRules(urls, [new("https://example.com", 404, null, null, 0)], scope, new HashSet<string> { "https://example.com" }).Finish(),
             .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 200, false, 2, null), new($"{site.Site}/old.xml", 500, false, 0, "HTTP 500")], options,
                 crawlComplete: true).Finish(),
-            .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)], options, crawlComplete: true).Finish()
+            .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)], options, crawlComplete: true).Finish(),
+            .. new SitemapRules(urls,
+                [
+                    new($"{site.Site}/big.xml", 200, false, 60_000, null), new($"{site.Site}/near.xml", 200, false, 46_000, null),
+                    new($"{site.Site}/empty.xml", 200, false, 0, null) { ListedSitemaps = 0 }
+                ], options, crawlComplete: true,
+                entries: new SitemapEntryFacts { Repeated = new Dictionary<int, int> { [blocked] = 2 }, Lastmods = [new($"{site.Site}/big.xml", 1, 0)] }).Finish(),
+            .. new RobotsTxtRules(urls, [new("https://example.com", 200, string.Empty, null, 0)], scope, new HashSet<string> { "https://example.com" },
+                sitemaps: [new($"{site.Site}/sitemap.xml", 200, false, 2, null, IsProbe: true)]).Finish()
         ];
 
         var onNonPages = hits.Where(hit => !urls[hit.UrlId].IsPage).Select(hit => hit.Issue).Distinct().ToList();
