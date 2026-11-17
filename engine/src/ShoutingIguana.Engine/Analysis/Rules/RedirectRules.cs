@@ -9,7 +9,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// reported once, where visitors and crawlers enter it (a URL that's linked, in a sitemap, or the start URL), not again
 /// at every hop along the way.
 /// </summary>
-internal sealed class RedirectRules(UrlTable urls) : ISiteRule
+/// <param name="readUrl">The stored URL with an id: a loop's detail names its hops.</param>
+internal sealed class RedirectRules(UrlTable urls, Func<int, string?> readUrl) : ISiteRule
 {
     /// <summary>By default, Google's crawlers follow up to 10 redirect hops.</summary>
     private const int GOOGLEBOT_MAX_HOPS = 10;
@@ -60,7 +61,7 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
             var trace = urls.TraceRedirects(id);
             if (trace.IsLoop)
             {
-                yield return new IssueHit(IssueCatalog.REDIRECT_LOOP, id, RuleText.Count(trace.Hops, "hop", "hops"));
+                yield return new IssueHit(IssueCatalog.REDIRECT_LOOP, id, LoopHops(id, trace));
                 continue;
             }
 
@@ -75,6 +76,29 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
                 yield return new IssueHit(IssueCatalog.REDIRECT_BROKEN, id, $"Ends at a URL that {RuleText.Status(final)}", trace.FinalId);
             }
         }
+    }
+
+    /// <summary>
+    /// The loop hop by hop, so the rule that sends it back can be found: "3 hops: /a/ (301) → /a (301) → back to /a/", each
+    /// URL as a path where it's on the looping URL's own host.
+    /// </summary>
+    private string LoopHops(int id, RedirectTrace trace)
+    {
+        var start = readUrl(id) ?? string.Empty;
+        List<string> hops = [];
+        HashSet<int> visited = [];
+        var current = id;
+        while (visited.Add(current) && hops.Count < UrlTable.MAX_REDIRECT_HOPS)
+        {
+            var url = urls[current];
+            var shown = RuleText.Near(readUrl(current) ?? string.Empty, start);
+            hops.Add(url.IsMetaRefresh ? $"{shown} (meta refresh)"
+                : url.StatusCode > 0 ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{shown} ({url.StatusCode})")
+                : shown);
+            current = url.RedirectTargetId;
+        }
+
+        return RuleText.Fit($"{RuleText.Count(trace.Hops, "hop", "hops")}: {string.Join(" → ", hops)} → back to {RuleText.Near(readUrl(current) ?? string.Empty, start)}");
     }
 
     private string ChainLength(RedirectTrace trace)

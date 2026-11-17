@@ -19,6 +19,9 @@ public static class IssueGroupReader
     /// <summary>The fewest URLs a group needs to be called a likely template fault, however large its share.</summary>
     public const int TEMPLATE_MIN_PAGES = 10;
 
+    /// <summary>The part of the pages audited, in tenths, a check that doesn't group must flag to be called a likely template fault.</summary>
+    public const int TEMPLATE_CHECK_TENTHS = 9;
+
     /// <summary>
     /// One page of a check's groups, largest first. Null when the crawl has never been analysed; a check the analysis
     /// skipped has no total, no group count and no groups, and one that isn't grouped has its total and no groups.
@@ -26,19 +29,39 @@ public static class IssueGroupReader
     /// <exception cref="UrlQueryException">The paging is out of range.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
     public static IssueGroupPage? ReadGroups(string databasePath, string checkId, int offset, int limit, ReadCache? cache = null,
+        CancellationToken cancellationToken = default) =>
+        ReadGroups(databasePath, checkId, offset, limit, sort: null, cache, cancellationToken);
+
+    /// <summary>
+    /// One page of a check's groups, in <paramref name="sort"/>'s order: by default the largest first, and for
+    /// <c>image-too-large</c> the largest file first. Each group names what its related URL is, and a duplicate cluster what
+    /// its pages share. Null when the crawl has never been analysed.
+    /// </summary>
+    /// <exception cref="UrlQueryException">The paging is out of range, or the groups can't be in that order.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static IssueGroupPage? ReadGroups(string databasePath, string checkId, int offset, int limit, IssueGroupSort? sort, ReadCache? cache = null,
         CancellationToken cancellationToken = default)
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidatePaging(offset, limit, after: null, errors);
+        if (sort == IssueGroupSort.Size && IssueCatalog.Find(checkId)?.Grouping != IssueGrouping.RelatedUrl)
+        {
+            errors["sort"] = ["This check's groups aren't each a URL, so they have no file size to be ordered by."];
+        }
+
         UrlGridReader.ThrowIfInvalid(errors);
-        return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadGroups(context, checkId, offset, limit));
+        return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadGroups(context, checkId, offset, limit, sort));
     }
 
-    private static IssueGroupPage? ReadGroups(GridReadContext context, string checkId, int offset, int limit)
+    /// <summary>The order a check's groups come in when none is asked for: <c>image-too-large</c>'s largest file first, any other's largest group.</summary>
+    public static IssueGroupSort DefaultSort(string checkId) => checkId == IssueCatalog.IMAGE_TOO_LARGE.Id ? IssueGroupSort.Size : IssueGroupSort.Pages;
+
+    private static IssueGroupPage? ReadGroups(GridReadContext context, string checkId, int offset, int limit, IssueGroupSort? sort)
     {
         // A check from a newer engine than this one, which the file holds but the catalog doesn't know, is listed flat.
         var definition = IssueCatalog.Find(checkId);
         var grouping = definition?.Grouping ?? IssueGrouping.None;
+        var order = sort ?? DefaultSort(checkId);
         if (context.Analysis is null)
         {
             return null;
@@ -47,24 +70,35 @@ public static class IssueGroupReader
         KeyValuePair<string, object>[] check = [new("$check", checkId)];
         if (Flagged(context, checkId) is not { } total)
         {
-            return new IssueGroupPage(checkId, grouping, null, null, offset, []);
+            return new IssueGroupPage(checkId, grouping, null, null, offset, []) { Sort = order };
         }
 
         if (grouping == IssueGrouping.None)
         {
-            return new IssueGroupPage(checkId, grouping, total, 0, offset, []);
+            return new IssueGroupPage(checkId, grouping, total, 0, offset, [])
+            {
+                Sort = order, LikelyTemplate = IsLikelyTemplateCheck(definition, total, context.Analysis.PagesAnalyzed)
+            };
         }
 
         var counted = Counted(context, definition!, grouping);
         var groupCount = context.Count($"groups|{checkId}", () => context.Scalar($"SELECT COUNT(*) FROM ({counted})", check));
 
+        // By size: the file the related URL ends at, through its redirects where a URL summary says where they end.
+        var end = context.Mode == GridMode.Summary ? "COALESCE((SELECT f.final_url_id FROM url_summary f WHERE f.url_id = c.related_url_id), c.related_url_id)" : "c.related_url_id";
+        var (sized, inner, outer) = order == IssueGroupSort.Size
+            ? ($"SELECT c.*, (SELECT z.size_bytes FROM responses z WHERE z.url_id = {end}) AS size FROM ({counted}) c",
+               "size IS NULL, size DESC, size * pages DESC, related_url_id",
+               "g.size IS NULL, g.size DESC, g.size * g.pages DESC, g.related_url_id")
+            : (counted, "pages DESC, detail, related_url_id", "g.pages DESC, g.detail, g.related_url_id");
+
         List<IssueGroup> groups = [];
         using var command = context.Command($"""
             SELECT g.detail, g.related_url_id, u.url, g.pages
-            FROM (SELECT * FROM ({counted}) ORDER BY pages DESC, detail, related_url_id
+            FROM (SELECT * FROM ({sized}) ORDER BY {inner}
                   LIMIT {limit.ToString(CultureInfo.InvariantCulture)} OFFSET {offset.ToString(CultureInfo.InvariantCulture)}) g
             LEFT JOIN urls u ON u.id = g.related_url_id
-            ORDER BY g.pages DESC, g.detail, g.related_url_id
+            ORDER BY {outer}
             """, check);
         using var reader = command.ExecuteReader();
         while (reader.Read())
@@ -84,8 +118,50 @@ public static class IssueGroupReader
                 IsLikelyTemplate(grouping, pages, total, sharesCause)));
         }
 
-        return new IssueGroupPage(checkId, grouping, total, groupCount, offset, groups);
+        reader.Close();
+        return new IssueGroupPage(checkId, grouping, total, groupCount, offset, Described(context, definition!, groups)) { Sort = order };
     }
+
+    /// <summary>The groups with what each related URL is, and for a cluster of duplicate texts, the text.</summary>
+    private static List<IssueGroup> Described(GridReadContext context, IssueDefinition check, List<IssueGroup> groups)
+    {
+        var related = groups.Where(group => group.RelatedUrlId is not null).Select(group => group.RelatedUrlId!.Value).Distinct().ToList();
+        var facts = UrlFactsReader.Read(context, related);
+        var column = check == IssueCatalog.TITLE_DUPLICATE ? "title"
+            : check == IssueCatalog.DESCRIPTION_DUPLICATE ? "meta_description"
+            : check == IssueCatalog.H1_DUPLICATE ? "h1"
+            : null;
+        return
+        [
+            .. groups.Select(group => group.RelatedUrlId is not { } id
+                ? group
+                : group with { Related = facts.GetValueOrDefault(id), SharedText = column is null ? null : SharedText(context, column, id) })
+        ];
+    }
+
+    private static string? SharedText(GridReadContext context, string column, int urlId)
+    {
+        using var command = context.Command($"SELECT {column} FROM responses WHERE url_id = $id", [new("$id", urlId)]);
+        return command.ExecuteScalar() as string;
+    }
+
+    /// <summary>
+    /// A check that doesn't group, whose flagged pages are nearly every page audited (at least <see cref="TEMPLATE_CHECK_TENTHS"/>
+    /// tenths of them, and at least <see cref="TEMPLATE_MIN_PAGES"/>): no viewport, lang or x-default anywhere is the
+    /// site's template, one fix. Only for a check of pages that isn't reported once for the whole site.
+    /// </summary>
+    public static bool IsLikelyTemplateCheck(IssueDefinition? check, long flagged, long pagesAnalyzed) =>
+        check is { Subject: IssueSubject.Page, Grouping: IssueGrouping.None, ReportedOnce: false } &&
+        flagged >= TEMPLATE_MIN_PAGES && flagged * 10 >= pagesAnalyzed * TEMPLATE_CHECK_TENTHS;
+
+    /// <summary>
+    /// The order a check's rows come in when none is asked for: the URLs that matter most to the site first. A check of
+    /// pages by the hyperlinks to each, a check of any URL (a missing image, a redirect) by the pages that use it, then
+    /// by clicks from the start and the URL; without a URL summary, which counts those, by clicks and URL alone.
+    /// </summary>
+    public static IReadOnlyList<UrlSort> ImportanceOrder(IssueDefinition? check, bool summary) => summary
+        ? [new UrlSort(check?.Subject == IssueSubject.Url ? "usedOn" : "inlinks", Descending: true), new UrlSort("depth"), new UrlSort("url")]
+        : [new UrlSort("depth"), new UrlSort("url")];
 
     /// <summary>
     /// The check's groups counted, <c>(detail, related_url_id, pages)</c>, in no order, from where the analysis keeps them:
@@ -173,9 +249,11 @@ public static class IssueGroupReader
                 return null;
             }
 
+            // Without an order asked for, the URLs that matter most first.
+            var ordered = query.Sort.Count > 0 ? query : query with { Sort = ImportanceOrder(IssueCatalog.Find(checkId), context.Summary.Available) };
             return Flagged(context, checkId) is null
                 ? new IssueRowPage(null, context.Summary)
-                : new IssueRowPage(UrlGridReader.Read(context, query, scope), context.Summary);
+                : new IssueRowPage(UrlGridReader.Read(context, ordered, scope), context.Summary);
         }));
     }
 

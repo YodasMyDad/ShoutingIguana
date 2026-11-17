@@ -42,7 +42,7 @@ public sealed class SiteRuleTests
         site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
         var dangling = site.Fetched($"{site.Site}/no-location", FetchOutcome.Redirect, 301);
 
-        var hits = new RedirectRules(site.Table()).Finish().ToList();
+        var hits = new RedirectRules(site.Table(), site.UrlOf).Finish().ToList();
 
         Assert.Contains(new IssueHit(IssueCatalog.REDIRECT_DOWNGRADE, downgrade, null, site.Id("http://example.com/insecure")), hits);
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.REDIRECT_TEMPORARY && hit.UrlId == temporary);
@@ -75,7 +75,7 @@ public sealed class SiteRuleTests
         }
 
         var urls = site.Table();
-        var rules = new RedirectRules(urls);
+        var rules = new RedirectRules(urls, site.UrlOf);
         rules.Observe(home);
         var chains = rules.Finish().Where(hit => hit.Issue == IssueCatalog.REDIRECT_CHAIN).ToList();
 
@@ -101,7 +101,7 @@ public sealed class SiteRuleTests
 
         site.Ok($"{site.Site}/end");
 
-        Assert.Equal(detail, new RedirectRules(site.Table()).Finish().Single(hit => hit.Issue == IssueCatalog.REDIRECT_CHAIN).Detail);
+        Assert.Equal(detail, new RedirectRules(site.Table(), site.UrlOf).Finish().Single(hit => hit.Issue == IssueCatalog.REDIRECT_CHAIN).Detail);
     }
 
     [Fact]
@@ -703,7 +703,7 @@ public sealed class SiteRuleTests
         var hits = new ResponseCodeRules(site.Table(), new Dictionary<int, string>()).Finish().ToList();
 
         Assert.Equal([new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, linked, "503 Service Unavailable")], hits);
-        Assert.Contains(new RedirectRules(site.Table()).Finish(), hit => hit.Issue == IssueCatalog.REDIRECT_BROKEN && hit.UrlId == site.Id("http://example.com/"));
+        Assert.Contains(new RedirectRules(site.Table(), site.UrlOf).Finish(), hit => hit.Issue == IssueCatalog.REDIRECT_BROKEN && hit.UrlId == site.Id("http://example.com/"));
     }
 
     /// <summary>A dead www twin's robots.txt fails on nearly every crawl; it counts only once the site links there.</summary>

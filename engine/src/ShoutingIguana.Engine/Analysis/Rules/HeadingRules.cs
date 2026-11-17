@@ -20,7 +20,7 @@ internal sealed class HeadingRules : IPageRule
 
         if (h1s.Count > 1)
         {
-            yield return new IssueHit(IssueCatalog.H1_MULTIPLE, page.UrlId, RuleText.Count(h1s.Count, "H1", "H1s"));
+            yield return new IssueHit(IssueCatalog.H1_MULTIPLE, page.UrlId, RuleText.Listed(h1s.Count, "H1", "H1s", h1s.Select(heading => heading.Text)));
         }
     }
 }

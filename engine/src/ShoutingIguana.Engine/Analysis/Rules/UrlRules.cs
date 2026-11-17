@@ -29,7 +29,7 @@ internal sealed class UrlRules(AnalysisSettings settings) : IPageRule
         var length = MeasuredLength(page.Uri);
         if (length > settings.MaxUrlLength)
         {
-            yield return new IssueHit(IssueCatalog.URL_TOO_LONG, page.UrlId, RuleText.Characters(length));
+            yield return new IssueHit(IssueCatalog.URL_TOO_LONG, page.UrlId, RuleText.Over(RuleText.Characters(length), settings.MaxUrlLength));
         }
     }
 

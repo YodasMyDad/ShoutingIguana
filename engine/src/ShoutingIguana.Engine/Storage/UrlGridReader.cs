@@ -325,9 +325,12 @@ public static class UrlGridReader
 
         var summary = query.Mode == GridMode.Summary;
         var id = GridPlanner.Id(query);
-        var selects = query.Columns.Select(column => column.Source == ColumnSource.Details
-            ? "d.data"
-            : column.Sql(query.Mode)!.Replace(UrlColumns.REASON, context.Reason, StringComparison.Ordinal)).ToList();
+        var selects = query.Columns.Select(column => column.Source switch
+        {
+            ColumnSource.Details => "d.data",
+            ColumnSource.Computed => "NULL",
+            _ => column.Sql(query.Mode)!.Replace(UrlColumns.REASON, context.Reason, StringComparison.Ordinal)
+        }).ToList();
         bool Uses(ColumnSource source) => query.Columns.Any(column => column.Source == source);
 
         var from = summary ? "url_summary s" : "urls u LEFT JOIN responses r ON r.url_id = u.id";
@@ -370,6 +373,11 @@ public static class UrlGridReader
             }
 
             values[reader.GetInt64(0)] = row;
+        }
+
+        if (Uses(ColumnSource.Computed))
+        {
+            UrlComputedColumns.Fill(context, query.Columns, values);
         }
 
         return values;

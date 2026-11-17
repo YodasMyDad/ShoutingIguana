@@ -29,8 +29,11 @@ public static class AnalysisFreshness
     /// <c>site-hidden-from-search</c> only when the home page is noindex too, skips <c>blocked-by-robots</c> on a crawl
     /// that ignored robots.txt, names the URL a redirecting canonical ends at in <c>canonical-to-redirect</c>'s detail, and
     /// passes a page that declares its encoding with a byte-order mark (which only a crawl that recorded the mark shows).
+    /// 9 names the images at fault as the image checks' targets (they group by image), names in a detail what it counts
+    /// (each title, H1, canonical, missing section, a loop's hops) and the limit a measurement is over, and counts the
+    /// pages that use each URL in the URL summary (<c>used_on</c>).
     /// </summary>
-    public const int VERSION = 8;
+    public const int VERSION = 9;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

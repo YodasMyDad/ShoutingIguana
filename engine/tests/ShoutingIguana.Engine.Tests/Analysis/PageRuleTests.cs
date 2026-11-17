@@ -41,13 +41,13 @@ public sealed class PageRuleTests
 
         // 21 Japanese characters are a normal title; 48 run past what results show.
         Assert.Empty(Hits("a", "合成ストアの全角タイトル付き試験ページです"));
-        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_LONG, site.Id($"{site.Site}/b"), "48 characters (96 counting full-width characters as two)")],
+        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_LONG, site.Id($"{site.Site}/b"), "48 characters (96 counting full-width characters as two), over 60")],
             Hits("b", string.Concat(Enumerable.Repeat("日本語の題名", 8))));
 
         // An emoji with a skin tone is one character (4 UTF-16 units) taking two widths.
-        Assert.Equal("31 characters (62 counting full-width characters as two)",
+        Assert.Equal("31 characters (62 counting full-width characters as two), over 60",
             Hits("c", string.Concat(Enumerable.Repeat("\U0001F44D\U0001F3FD", 31))).Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_LONG).Detail);
-        Assert.Equal("14 characters", Hits("d", "Hello, Mädchen").Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_SHORT).Detail);
+        Assert.Equal("14 characters, under 30", Hits("d", "Hello, Mädchen").Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_SHORT).Detail);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class PageRuleTests
             "<img src=\"/pixel.gif\" width=\"1\" height=\"1\">" +
             "<img src=\"/no-size.jpg\" alt=\"A photo\">"));
 
-        var hits = new ImageRules(SETTINGS, site.Table()).Check(page).ToList();
+        var hits = new ImageRules(SETTINGS, site.Table(), site.Find).Check(page).ToList();
 
         Assert.Equal("1 image", hits.Single(hit => hit.Issue == IssueCatalog.IMAGE_MISSING_ALT).Detail);
         Assert.Equal("1 image", hits.Single(hit => hit.Issue == IssueCatalog.IMAGE_MISSING_DIMENSIONS).Detail);
@@ -105,7 +105,7 @@ public sealed class PageRuleTests
         var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
             "<img src=\"/gone.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/huge.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/small.jpg\" alt=\"x\" width=\"1\" height=\"2\">"));
 
-        var issues = Issues(new ImageRules(SETTINGS, site.Table()), page);
+        var issues = Issues(new ImageRules(SETTINGS, site.Table(), site.Find), page);
 
         Assert.Equal([IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE], issues);
     }
@@ -156,7 +156,7 @@ public sealed class PageRuleTests
         var urls = site.Table();
 
         var links = new LinkRules(urls).Check(page).ToList();
-        var images = new ImageRules(SETTINGS, urls).Check(page).ToList();
+        var images = new ImageRules(SETTINGS, urls, site.Find).Check(page).ToList();
 
         Assert.Equal(new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId, "2 broken URLs (the first redirects to a URL that returns 404 Not Found)",
             site.Id($"{site.Site}/old")) { Targets = [site.Id($"{site.Site}/old"), site.Id($"{site.Site}/loop-a")] },
@@ -207,7 +207,7 @@ public sealed class PageRuleTests
             """));
         var urls = site.Table();
         int Id(string path) => site.Id(path.StartsWith("http", StringComparison.Ordinal) ? path : $"{site.Site}{path}");
-        var hits = new LinkRules(urls).Check(page).Concat(new ImageRules(SETTINGS, urls).Check(page)).Concat(new SecurityRules(urls).Check(page))
+        var hits = new LinkRules(urls).Check(page).Concat(new ImageRules(SETTINGS, urls, site.Find).Check(page)).Concat(new SecurityRules(urls).Check(page))
             .ToDictionary(hit => hit.Issue);
 
         (IssueDefinition Check, string[] Targets)[] expected =
@@ -516,7 +516,7 @@ public sealed class PageRuleTests
         var hit = new UrlRules(SETTINGS).Check(page).Single();
 
         Assert.Equal(IssueCatalog.URL_TOO_LONG, hit.Issue);
-        Assert.Equal(RuleText.Characters($"{site.Site}/{new string('a', 120)}".Length), hit.Detail);
+        Assert.Equal($"{RuleText.Characters($"{site.Site}/{new string('a', 120)}".Length)}, over {SETTINGS.MaxUrlLength}", hit.Detail);
     }
 
     [Fact]

@@ -219,14 +219,24 @@ internal static class CrawlSchema
     /// </summary>
     public static readonly string[] NOTICE_COLUMNS = ["id", "at", "level", "code", "message", "data"];
 
+    /// <summary>Of <see cref="RESPONSE_COLUMNS"/>, lanes 1 to 3 of the content fingerprint.</summary>
+    public static readonly (string Name, string Type)[] FINGERPRINT_LANES = [("simhash_1", "INTEGER"), ("simhash_2", "INTEGER"), ("simhash_3", "INTEGER")];
+
+    /// <summary>
+    /// Of <see cref="RESPONSE_COLUMNS"/>, an image's own width and height in pixels, read from its file's header
+    /// (<c>Fetching.ImageHeader</c>): null for anything else, and for every URL a crawl fetched before they were read.
+    /// </summary>
+    public static readonly (string Name, string Type)[] PIXEL_COLUMNS = [("pixel_width", "INTEGER"), ("pixel_height", "INTEGER")];
+
     /// <summary>
     /// The <c>responses</c> columns added since the table was first created: lanes 1 to 3 of a page's 256-bit content
-    /// fingerprint (<c>simhash</c> is lane 0), stored bit for bit as signed integers. The writer adds what's missing
+    /// fingerprint (<c>simhash</c> is lane 0), stored bit for bit as signed integers, and an image's size in pixels. The writer adds what's missing
     /// whenever it opens a file, so an earlier engine's crawl gets them when it is continued, and its pages so far keep
     /// null; so do the pages an earlier engine fetches when it continues a crawl this one started, its inserts naming only
     /// the columns it knows. The crawl's schema version doesn't change, so either engine can read and continue either file.
     /// </summary>
-    public static readonly (string Name, string Type)[] RESPONSE_COLUMNS = [("simhash_1", "INTEGER"), ("simhash_2", "INTEGER"), ("simhash_3", "INTEGER")];
+    /// <remarks>Declared after the two lists it joins: static fields are set in the order they're written.</remarks>
+    public static readonly (string Name, string Type)[] RESPONSE_COLUMNS = [.. FINGERPRINT_LANES, .. PIXEL_COLUMNS];
 
     /// <summary>
     /// The <c>sitemaps</c> columns added since the table was first created, which the writer adds whenever it opens a file,
@@ -504,7 +514,10 @@ internal static class CrawlSchema
             -- The room the first title and meta description take in search results, as the checks measure it (full-width
             -- characters and emoji count two); null without one.
             title_length INTEGER,
-            description_length INTEGER
+            description_length INTEGER,
+            -- The pages audited that link to the URL by any kind (hyperlink, image, script, canonical...), each once, not
+            -- counting a page's links to itself: where a file is used.
+            used_on INTEGER NOT NULL
         );
         """;
 

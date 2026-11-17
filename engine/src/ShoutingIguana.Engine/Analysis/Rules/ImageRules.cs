@@ -3,47 +3,59 @@ using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
-/// <summary>Alt text, dimensions, broken and oversized images, on every analysed page.</summary>
-internal sealed class ImageRules(AnalysisSettings settings, UrlTable urls) : IPageRule
+/// <summary>
+/// Alt text, dimensions, broken and oversized images, on every analysed page. Each issue names the images at fault as its
+/// targets, so an image on every page (a logo without alt text) is one group of them.
+/// </summary>
+/// <param name="readUrlId">
+/// The id of a stored URL, given normalised, or 0 when the crawl has none: an image's URL is stored normalised as the link
+/// to it was (<c>OutLinkFactory</c>), so the image is the URL the page's image link leads to. One past the page's link cap,
+/// which has no link, is found where another page linked to it, or not at all.
+/// </param>
+internal sealed class ImageRules(AnalysisSettings settings, UrlTable urls, Func<string, int> readUrlId) : IPageRule
 {
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
-        int missingAlt = 0, longAlt = 0, missingSize = 0;
+        ImageCount missingAlt = new(), longAlt = new(), missingSize = new();
+        Dictionary<string, int>? ids = null;
         foreach (var image in page.Facts.Images)
         {
-            if (image.Url is null || IsTrackingPixel(image))
+            if (image.Url is not { } url || IsTrackingPixel(image))
             {
                 continue;
             }
 
+            // Only an image at fault is looked up, once a page however often it's shown.
+            int Id() => (ids ??= new Dictionary<string, int>(StringComparer.Ordinal)).TryGetValue(url, out var known) ? known : ids[url] = readUrlId(url);
+
             if (!image.HasAlt)
             {
-                missingAlt++;
+                missingAlt.Add(Id());
             }
             else if (image.Alt is { } alt && RuleText.Length(alt) > settings.ImageAltMaxLength)
             {
-                longAlt++;
+                longAlt.Add(Id());
             }
 
             if (string.IsNullOrWhiteSpace(image.Width) || string.IsNullOrWhiteSpace(image.Height))
             {
-                missingSize++;
+                missingSize.Add(Id());
             }
         }
 
-        if (missingAlt > 0)
+        if (missingAlt.Hit(IssueCatalog.IMAGE_MISSING_ALT, page.UrlId) is { } withoutAlt)
         {
-            yield return new IssueHit(IssueCatalog.IMAGE_MISSING_ALT, page.UrlId, RuleText.Count(missingAlt, "image", "images"));
+            yield return withoutAlt;
         }
 
-        if (longAlt > 0)
+        if (longAlt.Hit(IssueCatalog.IMAGE_ALT_TOO_LONG, page.UrlId) is { } tooLong)
         {
-            yield return new IssueHit(IssueCatalog.IMAGE_ALT_TOO_LONG, page.UrlId, RuleText.Count(longAlt, "image", "images"));
+            yield return tooLong;
         }
 
-        if (missingSize > 0)
+        if (missingSize.Hit(IssueCatalog.IMAGE_MISSING_DIMENSIONS, page.UrlId) is { } withoutSize)
         {
-            yield return new IssueHit(IssueCatalog.IMAGE_MISSING_DIMENSIONS, page.UrlId, RuleText.Count(missingSize, "image", "images"));
+            yield return withoutSize;
         }
 
         TargetSet broken = new(), large = new();
@@ -72,9 +84,42 @@ internal sealed class ImageRules(AnalysisSettings settings, UrlTable urls) : IPa
 
         if (large.Count > 0)
         {
+            var largest = large.Ids.Max(id => urls[urls.TraceRedirects(id).FinalId].SizeBytes ?? 0);
+            var over = $"{RuleText.Count(large.Count, "image", "images")} over {RuleText.LimitSize(settings.LargeImageBytes)}";
             yield return new IssueHit(IssueCatalog.IMAGE_TOO_LARGE, page.UrlId,
-                $"{RuleText.Count(large.Count, "image", "images")} over {RuleText.Size(settings.LargeImageBytes)}", large.First) { Targets = large.Ids };
+                large.Count == 1 ? $"{over}: {RuleText.Size(largest)}" : $"{over}, the largest {RuleText.Size(largest)}", large.First) { Targets = large.Ids };
         }
+    }
+
+    /// <summary>
+    /// The images of a page at fault with one check: each counted, as the detail says, and each the crawl has a URL for named
+    /// once; one it has none for puts the page in the group of issues naming no image.
+    /// </summary>
+    private sealed class ImageCount
+    {
+        private readonly TargetSet _named = new();
+        private int _count;
+        private bool _unnamed;
+
+        public void Add(int id)
+        {
+            _count++;
+            if (id > 0)
+            {
+                _named.Add(id);
+            }
+            else
+            {
+                _unnamed = true;
+            }
+        }
+
+        public IssueHit? Hit(IssueDefinition check, int pageId) => _count == 0
+            ? null
+            : new IssueHit(check, pageId, RuleText.Count(_count, "image", "images"), _named.First)
+            {
+                Targets = _unnamed ? [.. _named.Ids, IssueHit.NO_OTHER_URL] : _named.Ids
+            };
     }
 
     /// <summary>1x1 analytics beacons aren't content, so they need neither alt text nor layout space.</summary>

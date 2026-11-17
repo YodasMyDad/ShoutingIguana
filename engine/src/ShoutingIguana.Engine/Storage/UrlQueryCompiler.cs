@@ -277,7 +277,7 @@ internal static class UrlQueryCompiler
                 continue;
             }
 
-            if (column.Source == ColumnSource.Details || column.Sql(mode) is not null)
+            if (column.Source is ColumnSource.Details or ColumnSource.Computed || column.Sql(mode) is not null)
             {
                 columns.Add(column);
             }

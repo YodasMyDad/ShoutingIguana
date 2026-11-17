@@ -215,7 +215,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl), indexability, hreflang,
+                new ImageRules(settings, urls, reader.ReadUrlId), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl), indexability, hreflang,
                 new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings),
                 new HtmlRules()
             ];
@@ -225,8 +225,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var duplicates = new DuplicateRules(settings);
             ISiteRule[] siteRules =
             [
-                new InlinkRules(urls, linksComplete), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
-                new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
+                new InlinkRules(urls, linksComplete), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks, reader.ReadUrl), hreflang,
+                new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls, reader.ReadUrl),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
                 new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
                 new SiteVisibilityRules(urls)

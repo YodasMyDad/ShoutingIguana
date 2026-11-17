@@ -95,4 +95,11 @@ public sealed record UrlSummary
 
     /// <summary>The room the first meta description takes, measured the same way. Null without one.</summary>
     public int? DescriptionLength { get; init; }
+
+    /// <summary>
+    /// The pages audited that refer to the URL by any kind of link (hyperlink, image, script, stylesheet, canonical,
+    /// hreflang…), each once, a page's links to itself left out: where an image or a script is used, which
+    /// <see cref="Inlinks"/> (hyperlinks only) doesn't say.
+    /// </summary>
+    public required int UsedOn { get; init; }
 }

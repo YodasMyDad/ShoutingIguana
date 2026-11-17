@@ -291,11 +291,11 @@ public sealed class GridExportTests : IDisposable
             }
         }
 
-        // With no columns asked for, a check's rows are its URL, detail and other URL, then where to fix it where its URLs
-        // are referred to (this check's are: a 404 is linked from pages).
+        // With no columns asked for, a check's rows are its URL, detail, its evidence (what kind of URL a 404 is) and other URL,
+        // then where to fix it where its URLs are referred to (this check's are: a 404 is linked from pages).
         var (_, plain) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, CheckId = check.Id }, check.Title);
         Assert.Equal(IssueReferences.Sources, check.References);
-        Assert.Equal(["URL", "Detail", "Related URL", "Linked from (pages)", "Linked from", "Listed in sitemaps"], plain[0]);
+        Assert.Equal(["URL", "Detail", "Type", "Related URL", "Linked from (pages)", "Linked from", "Listed in sitemaps"], plain[0]);
         Assert.Equal(counts[check.Id], plain.Count - 1);
     }
 

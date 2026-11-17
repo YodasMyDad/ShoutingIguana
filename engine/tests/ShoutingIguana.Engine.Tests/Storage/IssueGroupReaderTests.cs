@@ -17,6 +17,9 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
 {
     private const int PAGE = 5;
 
+    /// <summary>A check's rows in crawl order, asked for: without an order they come by importance (<see cref="EvidenceReadTests"/>).</summary>
+    private static readonly IReadOnlyList<UrlSort> CRAWL_ORDER = [new UrlSort("id")];
+
     [Fact]
     public void EveryCheckGroupsAsTheCatalogSays()
     {
@@ -26,7 +29,8 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
         {
             var grouping = IssueCatalog.Find(check)!.Grouping;
             var total = Flagged(check).Count;
-            var page = IssueGroupReader.ReadGroups(crawl.Path, check, 0, 1_000)!;
+            // Largest first, as asked (image-too-large's own is by size); what each group's URL is, EvidenceReadTests checks.
+            var page = IssueGroupReader.ReadGroups(crawl.Path, check, 0, 1_000, IssueGroupSort.Pages)!;
             Assert.Equal(check, page.CheckId);
             Assert.Equal(grouping, page.Grouping);
             Assert.Equal(total, page.Total);
@@ -38,7 +42,7 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
             }
 
             var expected = ExpectedGroups(check, grouping);
-            Assert.Equal(expected, page.Groups);
+            Assert.Equal(expected, page.Groups.Select(Bare));
             Assert.Equal(expected.Count, page.GroupCount);
 
             // A page is in a group for each URL its issue names, so a check grouped by the other URL can count it more than once.
@@ -50,10 +54,10 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
             List<IssueGroup> paged = [];
             for (var offset = 0; offset < expected.Count; offset += 2)
             {
-                var part = IssueGroupReader.ReadGroups(crawl.Path, check, offset, 2)!;
+                var part = IssueGroupReader.ReadGroups(crawl.Path, check, offset, 2, IssueGroupSort.Pages)!;
                 Assert.Equal(offset, part.Offset);
                 Assert.Equal(expected.Count, part.GroupCount);
-                paged.AddRange(part.Groups);
+                paged.AddRange(part.Groups.Select(Bare));
             }
 
             Assert.Equal(expected, paged);
@@ -132,7 +136,7 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                     })
                     .OrderByDescending(group => group.Pages).ThenBy(group => group.Detail, StringComparer.Ordinal).ThenBy(group => group.RelatedUrlId)
             ];
-            Assert.Equal(expected, IssueGroupReader.ReadGroups(copy, check, 0, 1_000)!.Groups);
+            Assert.Equal(expected, IssueGroupReader.ReadGroups(copy, check, 0, 1_000, IssueGroupSort.Pages)!.Groups.Select(Bare));
         }
 
         // Nor is a URL named by a later analysis's other URLs.
@@ -305,7 +309,8 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                     issue.Related is { } related ? crawl.Reference.Rows[related]["url"] : null,
                     issue.Related is { } target ? crawl.Reference.Rows[target]["statusCode"] : null
                 }).ToList();
-            var page = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Columns = columns, Limit = 1_000 })!;
+            // In crawl order, asked for: without an order, a check's rows come by importance (EvidenceReadTests).
+            var page = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Columns = columns, Sort = CRAWL_ORDER, Limit = 1_000 })!;
             Assert.Equal(SummaryState.Present, page.Summary);
             Assert.Equal(["id", .. columns], page.Page!.Columns);
             Assert.Equal((long)expected.Count, page.Page.Total);
@@ -329,7 +334,7 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                 var expected = Flagged(check).Where(issue => InGroup(check, grouping, issue, group)).Select(issue => issue.Url).Order().ToList();
                 Assert.Equal(group.Pages, expected.Count);
                 var key = new IssueGroupKey(group.Detail, group.RelatedUrlId);
-                var rows = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Limit = 1_000 }, key)!.Page!;
+                var rows = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Sort = CRAWL_ORDER, Limit = 1_000 }, key)!.Page!;
                 Assert.Equal(expected, rows.Rows.Select(row => row.Id));
                 Assert.Equal(group.Pages, rows.Total);
 
@@ -359,13 +364,13 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
 
         // The issue's own columns filter, alone and with the URL grid's.
         var detail = flagged.First(issue => issue.Detail is not null).Detail!;
-        var byDetail = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Filters = [Text("detail", FilterOperator.Eq, detail)], Limit = 1_000 })!.Page!;
+        var byDetail = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Filters = [Text("detail", FilterOperator.Eq, detail)], Sort = CRAWL_ORDER, Limit = 1_000 })!.Page!;
         Assert.Equal(flagged.Where(issue => issue.Detail == detail).Select(issue => issue.Url).Order(), byDetail.Rows.Select(row => row.Id));
         Assert.Equal(flagged.Count, byDetail.Total);
 
         var related = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery
         {
-            Filters = [new UrlFilter("relatedStatusCode", FilterOperator.IsNotEmpty), Boolean("isInternal", true)], Limit = 1_000
+            Filters = [new UrlFilter("relatedStatusCode", FilterOperator.IsNotEmpty), Boolean("isInternal", true)], Sort = CRAWL_ORDER, Limit = 1_000
         })!.Page!;
         Assert.Equal(flagged.Where(issue => issue.Related is { } id && crawl.Reference.Rows[id]["statusCode"] is not null && (bool)crawl.Reference.Rows[issue.Url]["isInternal"]!)
             .Select(issue => issue.Url).Order(), related.Rows.Select(row => row.Id));
@@ -378,7 +383,8 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
         Stamp(copy);
         foreach (var check in Checks())
         {
-            var query = new UrlQuery { Columns = ["url", "statusCode", "detail", "relatedUrlId", "relatedUrl", "relatedStatusCode", "inlinks"], Limit = 1_000 };
+            // The same order in both: by importance needs the summary's counts (without one it's by clicks and URL).
+            var query = new UrlQuery { Columns = ["url", "statusCode", "detail", "relatedUrlId", "relatedUrl", "relatedStatusCode", "inlinks"], Sort = CRAWL_ORDER, Limit = 1_000 };
             var withSummary = IssueGroupReader.ReadRows(crawl.Path, check, query)!.Page!;
             var without = IssueGroupReader.ReadRows(copy, check, query)!;
             Assert.Equal(new SummaryState(false, SummaryUnavailableReason.CrawlChanged), without.Summary);
@@ -463,6 +469,8 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     /// its own), for a check grouped by the other URL; by the fault, for one with a fault; otherwise by detail and other URL.
     /// Largest first, then by detail and other URL, unknown first.
     /// </summary>
+    private static IssueGroup Bare(IssueGroup group) => group with { Related = null, SharedText = null };
+
     private List<IssueGroup> ExpectedGroups(string check, IssueGrouping grouping)
     {
         var issues = Flagged(check);

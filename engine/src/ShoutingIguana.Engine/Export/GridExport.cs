@@ -25,7 +25,9 @@ internal static class GridExport
     /// <summary>What a grid's file writes when no columns are asked for: the grid's own.</summary>
     private static readonly string[] DEFAULT_URL_COLUMNS = ["url"];
 
-    private static readonly string[] DEFAULT_ISSUE_COLUMNS = ["url", "detail", "relatedUrl"];
+    /// <summary>A check's rows without columns asked for: the URL, what was found, the check's evidence, then the other URL.</summary>
+    private static string[] IssueColumns(string checkId) =>
+        ["url", "detail", .. IssueCatalog.Find(checkId)?.Evidence.Where(column => column is not ("url" or "detail" or "relatedUrl")) ?? [], "relatedUrl"];
 
     private static readonly string[] DEFAULT_LINK_COLUMNS = ["from.url", "to.url", "kind", "text"];
 
@@ -41,7 +43,7 @@ internal static class GridExport
                 WriteGrid(run, table, "Sitemap URLs", Columns(request.Query.Columns, DEFAULT_URL_COLUMNS, URL_COLUMNS), links: false, checkId: null, request.SitemapId);
                 break;
             case ExportKind.IssueRows:
-                WriteGrid(run, table, IssueCatalog.Find(request.CheckId!)!.Title, Columns(request.Query.Columns, DEFAULT_ISSUE_COLUMNS, URL_COLUMNS), links: false,
+                WriteGrid(run, table, IssueCatalog.Find(request.CheckId!)!.Title, Columns(request.Query.Columns, IssueColumns(request.CheckId!), URL_COLUMNS), links: false,
                     request.CheckId, sitemapId: null, extra: WhereFoundColumns.For(run, request.CheckId));
                 break;
             case ExportKind.Links:
@@ -164,6 +166,7 @@ internal static class GridExport
         bool flag => flag ? ColumnWords.YES : ColumnWords.NO,
         string text when column.Type == UrlColumnType.Enum => column.ValueTitles.GetValueOrDefault(text, text),
         int whole => (long)whole,
+        RedirectChain or RobotsRefusal => UrlComputedColumns.Text(value),
         _ => value
     };
 

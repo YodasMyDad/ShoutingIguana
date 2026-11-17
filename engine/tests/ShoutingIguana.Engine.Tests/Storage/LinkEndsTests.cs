@@ -144,7 +144,7 @@ public sealed class LinkEndsTests(GridCrawl crawl) : IDisposable
 
         var check = IssueReader.ReadCounts(crawl.Path).Where(count => count.Value > 5).Select(count => count.Key).First(id => crawl.Reference.Issues.Any(url => targets.Contains(url.Key) && url.Value.Any(issue => issue.Issue == id)));
         var flagged = crawl.Reference.Issues.Where(url => url.Value.Any(issue => issue.Issue == check)).Select(url => url.Key).ToList();
-        var rows = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { LinkEnds = toProducts, Limit = 1_000 })!.Page!;
+        var rows = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { LinkEnds = toProducts, Sort = [new UrlSort("id")], Limit = 1_000 })!.Page!;
         Assert.Equal(flagged.Where(targets.Contains).Order(), rows.Rows.Select(row => row.Id));
         Assert.Equal((rows.Rows.Count, flagged.Count), (rows.Matching, rows.Total));
 

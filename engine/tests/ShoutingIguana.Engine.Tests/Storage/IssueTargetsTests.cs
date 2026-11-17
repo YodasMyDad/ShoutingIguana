@@ -135,7 +135,7 @@ public sealed class IssueTargetsTests : IAsyncLifetime
 
         // A page's issue names the other page first, and no row names the page itself.
         var c = UrlInspectorReader.Read(_path, _ids["/c"])!.Issues!.Single(issue => issue.CheckId == "broken-fragment-links");
-        Assert.Equal(("2 links", _ids["/d"]), (c.Detail, c.Related!.Id));
+        Assert.Equal(("2 links to missing sections: #main, /d#nowhere", _ids["/d"]), (c.Detail, c.Related!.Id));
         Assert.Null(UrlInspectorReader.Read(_path, _ids["/d"])!.Issues!.Single(issue => issue.CheckId == "broken-fragment-links").Related);
         Assert.DoesNotContain(NamedBy("/c"), check => check.CheckId == "broken-fragment-links");
     }

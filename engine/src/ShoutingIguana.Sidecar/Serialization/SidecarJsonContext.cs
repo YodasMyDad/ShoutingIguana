@@ -127,6 +127,8 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(FoundOnRequest))]
 [JsonSerializable(typeof(FoundOnDto))]
 [JsonSerializable(typeof(IssueTargetsDto))]
+[JsonSerializable(typeof(RedirectChain))]
+[JsonSerializable(typeof(RobotsRefusal))]
 [JsonSerializable(typeof(HtmlSourceDto))]
 [JsonSerializable(typeof(GroupsRequest))]
 [JsonSerializable(typeof(IssueGroupPageDto))]
