@@ -100,8 +100,9 @@ export const URL_COLUMNS: readonly UrlColumn[] = [
   column('notices', 'number', analysed),
   // Evidence (step 3b): where a file is used, an image's own pixels, why a URL gave no answer, and two shown only.
   column('usedOn', 'number', analysed),
-  column('pixelWidth', 'number'),
-  column('pixelHeight', 'number'),
+  // Read for the rows of a page, as a redirect chain is: shown only (a crawl from before them has no column).
+  column('pixelWidth', 'number', { sortable: false, filterable: false }),
+  column('pixelHeight', 'number', { sortable: false, filterable: false }),
   column('fetchError', 'text'),
   column('redirectChain', 'object', { sortable: false, filterable: false }),
   column('robotsRule', 'object', { sortable: false, filterable: false }),

@@ -221,10 +221,16 @@ export interface UrlRow {
    * once: where a file is used, which `inlinks` (hyperlinks only) reads as 0. Needs the URL summary.
    */
   usedOn?: number | null;
-  /** Evidence: an image's own size in pixels, read from its file's header. Null for anything else, an SVG included. */
+  /**
+   * Evidence: an image's own size in pixels, read from its file's header. Null for anything else, an SVG included.
+   * Shown only: neither sorts nor filters (they're read for the rows of a page, as `redirectChain` is).
+   */
   pixelWidth?: number | null;
   pixelHeight?: number | null;
-  /** Evidence: what went wrong when the URL gave no HTTP answer ("No response within 20 seconds"). */
+  /**
+   * Evidence: the error the crawl recorded for any outcome other than success (a timeout, a connection that failed,
+   * robots.txt that couldn't be read); null for a success. Filters, doesn't sort.
+   */
   fetchError?: string | null;
   /** Evidence: the URL's redirects hop by hop, as the inspector's `redirects`. Null for a URL that doesn't redirect. */
   redirectChain?: RedirectChain | null;

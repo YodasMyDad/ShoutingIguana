@@ -268,9 +268,10 @@ const HINTS: Record<string, string> = {
   usedOn:
     'The pages that use it, by any kind of link: an image, a script, a stylesheet, a canonical. Inlinks count hyperlinks only',
   inlinks: 'Hyperlinks to it on the pages audited, each counted, a page’s links to itself left out',
-  pixelWidth: 'The image file’s own width in pixels, read from the file: not the size a page shows it at',
-  pixelHeight: 'The image file’s own height in pixels, read from the file: not the size a page shows it at',
-  fetchError: 'What went wrong when it gave no HTTP answer, as the crawl recorded it',
+  pixelWidth: 'The image file’s own width in pixels, read from the file: not the size a page shows it at. Shown only',
+  pixelHeight: 'The image file’s own height in pixels, read from the file: not the size a page shows it at. Shown only',
+  fetchError:
+    'What went wrong, as the crawl recorded it, for a URL that didn’t succeed: a timeout, a connection that failed, robots.txt that couldn’t be read',
   redirectChain: 'Each redirect from it, with the status there, to where they end',
   robotsRule: 'The robots.txt line that refused it, and where it is in the file',
   titleLength: 'The room the title takes in search results: full-width characters and emoji count two',

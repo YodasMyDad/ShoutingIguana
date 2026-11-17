@@ -317,7 +317,7 @@ const chainTo = (...hops: [string, number][]): RedirectChain => {
 const HERO_PAGES = Array.from({ length: 12 }, (_, index) =>
   page(20 + index, `/product-${index + 1}/`, {
     title: `Product ${index + 1}`,
-    detail: index === 0 ? '2 images over 200 KB, the largest 1.8 MB' : '1 image over 200 KB, the largest 1.8 MB',
+    detail: index === 0 ? '2 images over 200 KB, the largest 1.8 MB' : '1 image over 200 KB: 1.8 MB',
     relatedUrl: `${SITE}/img/hero.jpg`,
     group: 812,
   }),
@@ -326,7 +326,7 @@ const HERO_PAGES = Array.from({ length: 12 }, (_, index) =>
 export const EVIDENCE_ROWS: Record<string, (IssueRow & { group?: number })[]> = {
   'image-too-large': [
     ...HERO_PAGES,
-    page(40, '/sofas/', { title: 'Sofas', detail: '1 image over 200 KB, the largest 402.3 KB', group: 813 }),
+    page(40, '/sofas/', { title: 'Sofas', detail: '1 image over 200 KB: 402.3 KB', group: 813 }),
     page(20, '/product-1/', {
       title: 'Product 1',
       detail: '2 images over 200 KB, the largest 1.8 MB',

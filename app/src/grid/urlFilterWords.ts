@@ -48,7 +48,7 @@ const COLUMNS: Record<string, string> = {
   warnings: 'Warnings',
   notices: 'Notices',
   // Evidence (step 3b).
-  usedOn: 'Used on',
+  usedOn: 'Used on pages',
   pixelWidth: 'Image width',
   pixelHeight: 'Image height',
   fetchError: 'Fetch error',
