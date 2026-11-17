@@ -457,6 +457,40 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
+    /// A title or description too long or too short is said in the report as Simple says it: where Google will likely cut
+    /// it, or how many characters it has. Never in pixels, which plain words don't use.
+    /// </summary>
+    [Fact]
+    public void TitleAndDescriptionExamplesSayWhereGoogleWillLikelyCutThem()
+    {
+        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { LookExamples = 50 }, SETTINGS));
+        var order = ReportSources.FixFirst(IssueReader.ReadResults(crawl.Path)!).ToList();
+        string Examples(string id) => document.QuerySelectorAll("article.problem")[order.IndexOf(id)].QuerySelector(".examples")!.TextContent;
+
+        var titles = Examples("title-too-long");
+        Assert.Contains("Google will likely cut this title off after “…runs on far past what search”", titles, StringComparison.Ordinal);
+        Assert.Contains("Google will likely cut this title off after “…HEATERS: MODERN LANTERNS AND”", titles, StringComparison.Ordinal);
+        Assert.Contains("Only 10 characters long", Examples("title-too-short"), StringComparison.Ordinal);
+        Assert.Contains("Google will likely cut this description off after “…", Examples("description-too-long"), StringComparison.Ordinal);
+        Assert.Contains("Only 10 characters long", Examples("description-too-short"), StringComparison.Ordinal);
+        foreach (var id in new[] { "title-too-long", "title-too-short", "description-too-long", "description-too-short" })
+        {
+            Assert.DoesNotContain(" px", Examples(id), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>The quote is the last whole words shown, up to 30 characters, with "…" only when more comes before them.</summary>
+    [Theory]
+    [InlineData("title", "Garden Sofa Set…", "Google will likely cut this title off after “Garden Sofa Set”")]
+    [InlineData("title", "Brisbane Wooden Garden Storage Tool Shed With Sloped…", "Google will likely cut this title off after “…Storage Tool Shed With Sloped”")]
+    [InlineData("description", "Supercalifragilisticexpialidocious-and-then-some-more…",
+        "Google will likely cut this description off after “…ialidocious-and-then-some-more”")]
+    [InlineData("title", "Garden Sofa Set", null)]
+    [InlineData("title", null, null)]
+    public void WhereGoogleWillLikelyCutIsQuotedByItsLastWords(string what, string? inResults, string? said) =>
+        Assert.Equal(said, ReportWords.CutOff(what, inResults));
+
+    /// <summary>
     /// A crawl stopped or failed part-way, analysed as it stands: the report says so, its score is "so far" and says why,
     /// and the checks that need the whole site are listed as not run, each with why and what would let it, in plain words.
     /// </summary>

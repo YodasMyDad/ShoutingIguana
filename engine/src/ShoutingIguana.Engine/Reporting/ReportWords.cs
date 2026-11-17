@@ -1,6 +1,7 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Reporting.Models;
+using ShoutingIguana.Engine.Storage;
 
 namespace ShoutingIguana.Engine.Reporting;
 
@@ -87,6 +88,49 @@ internal static class ReportWords
     public static string Number(long number) => number.ToString("N0", NUMBERS);
 
     /// <summary>"1 page", "265 pages".</summary>
+    /// <summary>The most characters of a title or description Simple quotes before where Google will likely cut it.</summary>
+    public const int CUT_QUOTE_MAX = 30;
+
+    /// <summary>
+    /// Where Google will likely cut a page's title or description, as Simple says it (the app's plainEvidence words it the
+    /// same): "Google will likely cut this title off after “…Garden Sofa”". The quote is the last whole words that show, up
+    /// to <see cref="CUT_QUOTE_MAX"/> characters, opening with "…" when more comes before them; a single word longer than
+    /// that is quoted by its end. Null when nothing is cut.
+    /// </summary>
+    /// <param name="what">"title" or "description".</param>
+    /// <param name="inResults">The text as results show it: the <c>titleInResults</c> column, ending "…" where it's cut.</param>
+    public static string? CutOff(string what, string? inResults)
+    {
+        if (inResults is null || !inResults.EndsWith(UrlComputedColumns.CUT_MARK, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var shown = inResults[..^UrlComputedColumns.CUT_MARK.Length].TrimEnd();
+        var tail = shown;
+        if (new StringInfo(shown).LengthInTextElements > CUT_QUOTE_MAX)
+        {
+            var words = shown.Split(' ');
+            tail = words[^1];
+            for (var index = words.Length - 2; index >= 0 && new StringInfo($"{words[index]} {tail}").LengthInTextElements <= CUT_QUOTE_MAX; index--)
+            {
+                tail = $"{words[index]} {tail}";
+            }
+
+            var characters = new StringInfo(tail);
+            if (characters.LengthInTextElements > CUT_QUOTE_MAX)
+            {
+                tail = characters.SubstringByTextElements(characters.LengthInTextElements - CUT_QUOTE_MAX);
+            }
+        }
+
+        var more = tail.Length < shown.Length ? UrlComputedColumns.CUT_MARK : string.Empty;
+        return $"Google will likely cut this {what} off after “{more}{tail}”";
+    }
+
+    /// <summary>A title or description too short, as Simple says it: "Only 5 characters long".</summary>
+    public static string OnlyCharacters(long characters) => $"Only {Plural(characters, "character", "characters")} long";
+
     public static string Plural(long count, string one, string many) => $"{Number(count)} {(count == 1 ? one : many)}";
 
     /// <summary>"31 October 2026".</summary>
