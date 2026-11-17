@@ -10,7 +10,9 @@ crawl then replaces the site's row and the list starts over, so nothing shows wh
 still there. Confirming one footer link means crawling the whole site again: 37 minutes for the garden site's 4,521
 URLs.
 
-This is the design (stage A). Nothing here is built. The API it adds is in
+This is the design (stage A). The engine's stages E1 to E4 are built (branch `ui/3b-fixloop-engine`): where the build
+differs from this, [As built: the engine](#12-as-built-the-engine-stages-e1-to-e4) says so. The sidecar and the app
+(S1, S2, U1, U2) aren't built yet. The API it adds is in
 [the sidecar API](v2-sidecar-api.md), marked "(fix loop)", and what the engine changes is under
 [Engine changes the fix loop makes](v2-sidecar-api.md#engine-changes-the-fix-loop-makes). It supersedes "crawl
 comparison: later" in [the rebuild plan](v2-rebuild.md) (step 3b now), in [the IA](v2-ui-ia.md#room-for-what-comes-later)
@@ -879,3 +881,72 @@ catalog, where E3 adds `Recheck`.
 - **Header values** aren't stored, so a crawl compared with one that sent other values can't tell.
 - **Two orphans linking only to each other** aren't orphans to a recheck either: it can't confirm `orphan-page`, by
   design.
+
+## 12. As built: the engine (stages E1 to E4)
+
+Built on `ui/3b-fixloop-engine`, off `ui/3b-pixels`; E2 by a sub-agent on `ui/3b-fixloop-compare`, merged. What
+differs from the sections above, and what they left open:
+
+**E1, the synthetic site's revisions** (`SyntheticSite.Revisions.cs`).
+
+- Revision 1 plants every state of section 9's table, with these changes: the long title shortened is the `title-long`
+  plant (no product has a long title in revision 0, which must stay as it is); the check-level `new` is
+  `security-headers-missing` (the home page drops `Referrer-Policy`), since every page check already has a plant, and
+  `h1-multiple` is `same` with its rows moved (the second H1 moves to another page); the page that is now an error
+  answers 500, not 503, which isn't retried; the duplicate cluster matched by its pages is products 184 to 186 (184
+  renamed, 186 taking the old title), and a third of the other pairs are fixed outright; the broken links come in
+  quarters (restored, unlinked, moved to another missing URL `/broken/{n}-relinked`, left).
+- Also mended in revision 1, for E4: the sitemap index's missing file dropped (`sitemap-error`), the first category
+  listed (`not-in-sitemap`), and over HTTPS the plain-HTTP robots.txt answering and the plain-HTTP home page redirecting
+  (`robots-txt-unreachable-other-origin`, `duplicate-site-version`).
+- `GetChanges(from, to, judging)` takes what each check needs of a URL to judge it (`SyntheticJudging`, which the tests
+  build from the catalog apart from the engine), as the test site doesn't reference the engine. `Fate(url)` is what a
+  correct crawl of a revision makes of a URL, `FetchFate(url)` what fetching it gives whether or not anything leads to it
+  (what a recheck finds).
+- The control route's token is the READY line's third field; `si testsite --revision` picks the first revision.
+
+**The line between fixed and not checked** (`Analysis/CheckJudging`), shared by the comparison and the recheck: a
+response-code check (`internal-client-error`, `-server-error`, `-unreachable`, `-blocked`) judges a URL by any answer,
+or none; another check of a URL (a redirect, a sitemap entry, robots.txt's rule) by any status, not a failure or a
+block; a check of a page only by the page read again. A URL let go reads as not found.
+
+**E2, the comparison** (as the sub-agent built it): a check is listed only if it ran in either crawl; a check at 0 now
+in a counts-only comparison is fixed unless this crawl stopped early or read far fewer pages, then fewer;
+`previousNeedsAnalysis` also gives `crawlChanged` when the other crawl was continued after its analysis; the `rules`
+difference is given once per field that differs; a cluster's tie goes to the cluster then named by the lowest URL id;
+header names compare lowercased; `/fixed` by cause lists every cleared cause, its states narrowing the counts.
+`IssueRowPage` gains `Compared` and `Changes` (aligned with its rows), `IssueGroupPage` `Compared`, `IssueGroup` `Change`
+(left out of JSON when null). Measured at 100k (readbench, 20 runs, p50/p95): the summary 75/121 ms, rows with
+`compareWith` 12/19, groups 18/21, the first page of `/fixed` 38/55, against 300; `si bench --pages 100000 --revisions`
+exact (33,156 rows compared in 24.8 s), memory flat.
+
+**E3 and E4, the recheck.**
+
+- **The record.** `rechecks` gains `url_list` and `kinds` beside the columns of section 3's sketch. Only the judged URLs
+  within the cap are stored as rows (with the named, referring, new and let-go ones): the snapshot stays at most 1,000
+  rows. `not_rechecked` adds the judged URLs past the cap to those not reached. A list of URLs without a check gives no
+  outcomes, only what was fetched.
+- **What is fetched.** Only URLs the crawl fetched: one it never read (a nofollow link's, say) stays as it is, even in
+  the scope. A check's pages and their named URLs are phase 1; for a sources check, phase 2 is the referring pages of the
+  judged URLs that still fail after phase 1: for a response-code check, one that still doesn't answer with a success or
+  a redirect; for another check of a URL, anything but a success; for a check of a page's own address
+  (`url-uppercase`, `url-underscores`, `http-page`), always, as the referring links decide it.
+- **One step.** A redirect is followed into each URL it leads to once, at the step of the URL redirecting; a URL the
+  crawl didn't have, linked from the scope, is fetched; one linked from those is recorded as `SkipReason.Recheck`. A URL
+  the recheck found and didn't reach before a stop is recorded as skipped the same way, so the crawl's queue is as it was.
+- **Let go** (`RecheckLetGo`) never lets go a URL still queued (a stopped crawl's frontier is untouched), and roots
+  include the probes of the site's versions.
+- **The kinds.** `sitemaps` replaces each sitemap's entries as it's read again and drops, once every sitemap is read,
+  the files nothing lists any more; a URL a sitemap newly lists is recorded as `SkipReason.Recheck`. `robotsTxt` reads
+  again the origins whose robots.txt the crawl couldn't read or found missing, and the start URL's. `siteVersions` asks
+  every probe again (the plan adds them as named). A check read only by these kinds has its judged URLs settled as
+  rechecked when the recheck completed.
+- **Labels.** The URL grid gains a `skipReason` column ("Why not read"): every skip reason, with "Found by a recheck,
+  not followed" and "No longer linked (a recheck let it go)". The stats leave a URL let go out of the URLs found; the
+  report names the URLs a recheck found and didn't follow.
+- **Progress.** `CrawlProgress.Recheck` (`phase`, `done`, `total`) and `CrawlSummary.RecheckId`; the other counts are the
+  crawl's. `CrawlPhase` is unchanged: the sidecar says `rechecking`.
+- **The CLI.** `si recheck` takes `--header` and `--proxy` for the secrets a crawl file doesn't keep, as `--resume` does,
+  and refuses without them.
+- **Not built here:** the sidecar's refusals that need the library (`site-busy`, `recheck-not-latest`), its flow
+  (analyse first, recheck, analyse) and events (S2), and everything the app shows (U1, U2).

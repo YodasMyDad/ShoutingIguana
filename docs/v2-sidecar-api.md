@@ -4378,7 +4378,30 @@ it). Built on `ui/3b-evidence` (775c6a4, 48d6576, 439dbba): the API above is wha
 ## Engine changes the fix loop makes
 
 Step 3b's fix loop ([the design](v2-fix-loop.md), with its table of parts under "Engine and storage"). This is the
-plan the API above is written to; what was built and measured is added here when it's done.
+plan the API above is written to. The engine's part (stages E1 to E4) is built on `ui/3b-fixloop-engine`, as below;
+[the design's "As built"](v2-fix-loop.md#12-as-built-the-engine-stages-e1-to-e4) says where it differs, and what was
+measured. The sidecar's part (S1, S2) isn't built yet.
+
+- **Built: what the sidecar calls.**
+  - The comparison: `CrawlComparisonReader.ReadSummary(current, other, cache, ct)` (a `CrawlComparison`),
+    `ReadCleared(...)` (a `ClearedPage` of rows or causes), and `IssueGroupReader.ReadGroups` / `ReadRows` overloads
+    taking the other crawl's path (`IssueGroupPage.Compared`, `IssueGroup.Change`; `IssueRowPage.Compared` and
+    `Changes`, aligned with the rows). `CrawlComparability` gives the differences and `comparable`.
+  - The plan: `RecheckPlanReader.Plan(path, RecheckAsk(checkId, group, urlIds), settings, limit = 1000)`, a
+    `RecheckPlan` with the fields `/rechecks/plan` serves (`judged`, `phase1`, `phase2Max`, `limit`, `capped`,
+    `notRechecked`, `estimateMs`, `suggestFullCheck`, `analysisFirst`) and `Refused` (`RecheckRefusal`: `CrawlBusy`,
+    `NotAnalyzed`, `NotAnalysable`, `Unsupported`). The secrets are `CrawlOptions.PlanResume`'s, as Continue's; the
+    sidecar adds `site-busy` and `recheck-not-latest` from its library.
+  - The run: `CrawlEngine.Recheck(RecheckRequest(path, plan, options))`, a `CrawlJob` stopped as a crawl's is. Its
+    `CrawlProgress.Recheck` is `{ phase, done, total }`; its `CrawlSummary.RecheckId` the recheck's number. The crawl
+    must be analysed after it (`CrawlAnalyzer`), which settles the recheck.
+  - The record: `RecheckReader.ReadAll(path)` (newest first), `Read(path, id)` and `ReadRows(path, id, outcomes, roles,
+    offset, limit)`, as `/rechecks`, `/rechecks/{n}` and `/rechecks/{n}/rows` serve them. `CrawlRun.IsRecheck` marks a
+    recheck's run in the history.
+  - The catalog's `IssueDefinition.Recheck` (`RecheckKind`: `Urls`, `Sitemaps`, `RobotsTxt`, `SiteVersions`), served
+    camelCase as `recheck`.
+  - A new URL grid column, `skipReason` ("Why not read"), an enum of every skip reason, `recheck` ("Found by a recheck,
+    not followed") and `noLongerLinked` ("No longer linked (a recheck let it go)") among them: the grids' label for both.
 
 - **Comparison, read only.** `Storage/CrawlComparisonReader`: `ReadSummary` (`/changes`), `ReadRowChanges` and
   `ReadGroupChanges` (`compareWith` on `/rows` and `/groups`, through `IssueGroupReader`), `ReadCleared` (`/fixed`).
