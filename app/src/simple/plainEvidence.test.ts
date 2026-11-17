@@ -6,7 +6,9 @@ import {
   plainEvidence,
   plainFinal,
   plainImageFile,
+  plainImageInsight,
   plainLinkedFrom,
+  plainOthers,
   plainRelated,
   plainShownAt,
   plainStatus,
@@ -195,5 +197,28 @@ describe('a page’s own evidence, in plain words', () => {
     expect(plainEvidence('title', 'Sofas', ORIGIN)).toBeNull();
     expect(plainEvidence('titleLength', 78, ORIGIN)).toBeNull();
     expect(plainEvidence('fetchError', null, ORIGIN)).toBeNull();
+  });
+});
+
+describe('an image bigger than its pages show it, in plain words', () => {
+  const shown = { width: 400, height: 300, pages: 12, sampled: 12, varies: false };
+
+  it('says how much bigger the file is than it needs to be', () => {
+    expect(plainImageInsight(FILE, shown)).toBe(
+      'The image file is 1.8 MB, 4000×3000 pixels, but the pages show it at 400×300, so it’s about 10 times bigger than it needs to be.',
+    );
+    expect(plainImageInsight(FILE, { ...shown, sampled: 1, pages: 1, width: 800, height: 600, varies: true })).toBe(
+      'The image file is 1.8 MB, 4000×3000 pixels, but the page shows it at up to 800×600, so it’s about 5 times bigger than it needs to be.',
+    );
+    expect(plainImageInsight(FILE, { ...shown, width: 3600, height: 2700 })).toBe(
+      'The image file is 1.8 MB, 4000×3000 pixels, and the pages show it at 3600×2700, about its full size, so it needs saving at a smaller file size rather than shrinking.',
+    );
+    expect(plainImageInsight(FILE, null)).toBe('The image file is 1.8 MB, 4000×3000 pixels.');
+  });
+
+  it('names the page’s other problems of the same kind', () => {
+    expect(plainOthers({ id: 'image-too-large' }, 1)).toBe('and 1 other large image on this page');
+    expect(plainOthers({ id: 'broken-internal-links' }, 3)).toBe('and 3 other broken links on this page');
+    expect(plainOthers({ id: 'something-new' }, 2)).toBe('and 2 other problems like it on this page');
   });
 });

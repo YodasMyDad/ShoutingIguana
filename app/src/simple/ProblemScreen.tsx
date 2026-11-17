@@ -4,7 +4,8 @@ import { ArrowLeft, ArrowUpRight, FileText, Gauge, RefreshCw, UserRound } from '
 import { useMemo, useRef, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
 import type { IssueGroup } from '../api/grids';
-import type { LinkPosition } from '../api/inspector';
+import type { IssueTarget, LinkPosition } from '../api/inspector';
+import type { ShownAt } from '../crawl/evidence';
 import { isCrawling, type Analysis, type Check, type CrawlListItem, type SkipReason } from '../api/types';
 import { crawlName, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
@@ -33,12 +34,13 @@ import {
   wholesOf,
   type ShareWords,
 } from './plainWords';
-import { plainRelated } from './plainEvidence';
+import { flatOneFixSentences, oneFixSentences } from './oneFixWords';
+import { plainImageInsight, plainRelated } from './plainEvidence';
+import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
 import { useSharedSource } from './useSharedSource';
 import { pathOrigin } from './whereWords';
 import { useTemplateLink } from '../screens/issues/useWhereFound';
-import { templateLinkWords } from '../screens/issues/whereFound';
 import { firstGroupQuery } from './useOneFix';
 
 const FIX = '/crawls/$crawl/issues/{-$check}';
@@ -260,7 +262,9 @@ function FoundProblem({
     analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;
   // Where the one fix is: the link every page shares (a check of pages holding it), or the one page linking to most
   // of the broken addresses (a check of the addresses).
-  const templateLink = templateLinkWords(useTemplateLink(crawlId, check, template));
+  const templateTarget = useTemplateLink(crawlId, check, template);
+  // An oversized image: the size its pages show it at, against the file's.
+  const templateShownAt = useGroupShownAt(crawlId, check, template);
   const shared = useSharedSource(crawlId, check);
   const context = {
     crawlId,
@@ -347,21 +351,21 @@ function FoundProblem({
           className="mt-4"
           title={`One fix clears ${(template.urls ?? template.pages).toLocaleString('en-GB')} of these ${count.toLocaleString('en-GB')} ${noun}`}
         >
-          {check.plainOneFix ??
-            'They share one cause, in the part of the site every page shares, so one change there clears them.'}
-          {templateLink && template.relatedUrl ? (
-            <>
-              {' '}
-              {templateLink}, to <span className="font-mono text-14">{pathOf(template.relatedUrl, item)}</span>.
-            </>
-          ) : null}
-          {template.relatedUrl ? <TemplateFacts check={check} item={item} group={template} /> : null}
+          <OneFixWords
+            check={check}
+            item={item}
+            group={template}
+            count={count}
+            noun={noun}
+            link={templateTarget}
+            shownAt={templateShownAt}
+          />
         </Callout>
       ) : flatTemplate ? (
         <Callout className="mt-4" title={`One fix clears all ${count.toLocaleString('en-GB')} of these ${noun}`}>
-          {check.plainOneFix ??
-            'They share one cause, in the part of the site every page shares, so one change there clears them.'}{' '}
-          It’s on {count.toLocaleString('en-GB')} of the {analysis.pagesAnalyzed.toLocaleString('en-GB')} pages checked.
+          {flatOneFixSentences(count, analysis.pagesAnalyzed).lead}{' '}
+          {check.plainOneFix ?? 'That’s almost certainly in the part of the site every page shares.'}{' '}
+          {flatOneFixSentences(count, analysis.pagesAnalyzed).fix}
         </Callout>
       ) : shared ? (
         <Callout
@@ -392,18 +396,65 @@ function FoundProblem({
   );
 }
 
-/** What the one fix's address is, in plain words: "The image file is 1.8 MB, 4000×3000 pixels." */
-function TemplateFacts({
+/**
+ * The One fix callout's words: what the pages share and on how many ("The same image, /img/hero.jpg, is on 12 of
+ * these 14 pages."), where such a thing usually is (the engine's sentence), the one change that fixes them all, then
+ * what the cause is ("The image file is 1.8 MB, 4000×3000 pixels, but the pages show it at 400×300, …").
+ */
+function OneFixWords({
   check,
   item,
   group,
+  count,
+  noun,
+  link,
+  shownAt,
 }: {
   check: Check;
   item: CrawlListItem;
-  group: Pick<IssueGroup, 'related' | 'relatedUrl'>;
+  group: IssueGroup;
+  count: number;
+  noun: 'pages' | 'addresses';
+  link: Pick<IssueTarget, 'kind' | 'position'> | null;
+  shownAt: ShownAt | null | undefined;
 }) {
-  const about = plainRelated(group.related, check, group.relatedUrl ? pathOrigin(group.relatedUrl, item) : null);
-  return about ? <> {about}</> : null;
+  const origin = group.relatedUrl ? pathOrigin(group.relatedUrl, item) : null;
+  // The home page by name: "to your home page" reads, "to /" doesn't.
+  const address = group.relatedUrl ? pathOf(group.relatedUrl, item) : null;
+  const path = address === '/' ? 'your home page' : address;
+  const { lead, fix } = oneFixSentences({
+    check,
+    on: group.urls ?? group.pages,
+    of: count,
+    noun,
+    path,
+    sharedText: group.sharedText ?? null,
+    link,
+    finalPath: group.related?.final ? pathOf(group.related.final.url, item) : null,
+  });
+  const about =
+    saysShownAt(check) && group.related
+      ? plainImageInsight(group.related, shownAt)
+      : plainRelated(group.related, check, origin);
+  // The path in the address's face, the rest as words.
+  const withPath = (sentence: string) => {
+    if (!path || path !== address || !sentence.includes(path)) return sentence;
+    const at = sentence.indexOf(path);
+    return (
+      <>
+        {sentence.slice(0, at)}
+        <span className="font-mono text-14">{path}</span>
+        {sentence.slice(at + path.length)}
+      </>
+    );
+  };
+  return (
+    <>
+      {withPath(lead)} {check.plainOneFix ? `${check.plainOneFix} ` : null}
+      {withPath(fix)}
+      {about ? <span className="mt-1 block">{about}</span> : null}
+    </>
+  );
 }
 
 /** "/garden-furniture/ links to most of them, from its footer. Fix or remove the links there first." */

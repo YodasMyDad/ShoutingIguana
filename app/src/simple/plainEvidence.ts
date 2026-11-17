@@ -5,6 +5,7 @@
 import type { IndexabilityReason, RelatedFacts, RobotsRule, UrlOutcome } from '../api/grids';
 import type { ImgFacts, IssueTarget, LinkPosition, RedirectChain, TargetEnd, UrlFoundOn } from '../api/inspector';
 import type { Check } from '../api/types';
+import type { ShownAt } from '../crawl/evidence';
 import { reasonPhrase } from '../inspector/words';
 import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { sourcePages } from '../screens/issues/whereFound';
@@ -305,4 +306,54 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
     default:
       return value;
   }
+}
+
+// ------------------------------------------------------------------------------- An image bigger than it's shown
+
+/**
+ * An oversized image in a sentence: its file, and the size its pages show it at against its own, so the fix is plain:
+ * "The image file is 1.8 MB, 4000×3000 pixels, but the page shows it at 400×300, so it’s about 10 times bigger than it
+ * needs to be." Where the pages show it at its full size, it needs saving smaller, not shrinking. Without a size from
+ * the pages, the file alone. Null when nothing is known of the file.
+ */
+export function plainImageInsight(
+  file: Pick<RelatedFacts, 'sizeBytes' | 'pixelWidth' | 'pixelHeight'>,
+  shownAt: ShownAt | null | undefined,
+): string | null {
+  const plain = plainImageFile(file);
+  if (!plain) return null;
+  if (!shownAt || typeof file.pixelWidth !== 'number' || typeof file.pixelHeight !== 'number') return `${plain}.`;
+  const shows = shownAt.sampled > 1 ? 'the pages show it' : 'the page shows it';
+  const size = `${shownAt.varies ? 'up to ' : ''}${shownAt.width}×${shownAt.height}`;
+  const ratio = file.pixelWidth / shownAt.width;
+  if (ratio < 1.5) {
+    return `${plain}, and ${shows} at ${size}, about its full size, so it needs saving at a smaller file size rather than shrinking.`;
+  }
+  const times = ratio >= 10 ? Math.round(ratio) : Math.round(ratio * 10) / 10;
+  return `${plain}, but ${shows} at ${size}, so it’s about ${formatCount(times)} times bigger than it needs to be.`;
+}
+
+/** What a page's other targets are, by the check: "large image", "broken link". */
+const OTHER_NOUNS: Record<string, [string, string]> = {
+  'image-too-large': ['large image', 'large images'],
+  'image-missing-alt': ['image without alt text', 'images without alt text'],
+  'image-alt-too-long': ['image with long alt text', 'images with long alt text'],
+  'image-missing-dimensions': ['image without a size', 'images without a size'],
+  'image-broken': ['broken image', 'broken images'],
+  'broken-internal-links': ['broken link', 'broken links'],
+  'broken-external-links': ['broken link', 'broken links'],
+  'links-to-redirects': ['link to an old address', 'links to old addresses'],
+  'empty-anchor-text': ['link with no text', 'links with no text'],
+  'internal-nofollow-links': [
+    'link search engines are told not to follow',
+    'links search engines are told not to follow',
+  ],
+  'broken-fragment-links': ['link to a missing section', 'links to missing sections'],
+  'mixed-content': ['file loaded without https', 'files loaded without https'],
+};
+
+/** "and 1 other large image on this page", "and 3 other broken links on this page". */
+export function plainOthers(check: Pick<Check, 'id'>, count: number): string {
+  const [one, many] = OTHER_NOUNS[check.id] ?? ['problem like it', 'problems like it'];
+  return `and ${formatCount(count)} other ${count === 1 ? one : many} on this page`;
 }

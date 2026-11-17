@@ -87,7 +87,8 @@ export const EVIDENCE_CHECKS: Checks = {
         title: 'Images that are slow to load',
         what: 'Some images are big files, so pages take longer to load.',
         fix: 'Save the image smaller, at the size the page shows it.',
-        oneFix: 'One image on every page is too big: make it smaller once.',
+        oneFix:
+          'That’s almost certainly an image in your page design, such as a logo or icon, which every page shares.',
       },
     ),
     check(
@@ -163,7 +164,7 @@ export const EVIDENCE_CHECKS: Checks = {
       title: 'Pages that don’t fit phones',
       what: 'Pages without a viewport tag show tiny on phones.',
       fix: 'Add the viewport tag to the page’s head.',
-      oneFix: 'It belongs in the part of the site every page shares.',
+      oneFix: 'That’s almost certainly your page design, which leaves the same details out of every page.',
     }),
   ],
 };

@@ -15,7 +15,9 @@ import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { OneFixTag } from '../ui/PlainCheckRow';
 import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
-import { plainEvidence, plainRelated } from './plainEvidence';
+import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
+import { ImageThumb } from '../ui/ImageThumb';
+import { plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
 import { pathOrigin, shownWords } from './whereWords';
 
@@ -279,8 +281,22 @@ function GroupRow({
     references === 'sources' ||
     (references === 'targets' && (check.targetFacts ?? []).length > 0) ||
     evidenceOf(check).some((column) => column !== 'title');
-  // What the cause is, in plain words: the image's file, where a forwarding address ends, how it answered.
-  const about = plainRelated(group.related, check, origin);
+  // What the cause is, in plain words: the image's file, where a forwarding address ends, how it answered. An
+  // oversized image says the size its pages show it at, against the file's: how much smaller to make it.
+  const shownAt = useShownAt(
+    crawlId,
+    check,
+    group.relatedUrlId,
+    rows.map((row) => row.id),
+  );
+  const about =
+    saysShownAt(check) && group.related
+      ? plainImageInsight(group.related, shownAt)
+      : plainRelated(group.related, check, origin);
+  // An image is known by sight before by its address.
+  const image = check.grouping === 'relatedUrl' && check.id.startsWith('image-') && group.relatedUrl !== null;
+  const broken =
+    typeof group.related?.statusCode === 'number' ? group.related.statusCode >= 400 : Boolean(group.related?.outcome);
   // Each page's own facts in plain words: the engine's detail is Advanced's words, so these lines say it instead.
   const pageLines = (row: IssueRow) => (
     <>
@@ -299,19 +315,22 @@ function GroupRow({
             “{group.sharedText}”
           </span>
         ) : group.relatedUrl ? (
-          <>
-            {origin && (group.relatedUrl === origin || group.relatedUrl === `${origin}/`) ? (
-              <span className="block font-medium">Your home page</span>
-            ) : null}
-            <Address url={group.relatedUrl} origin={origin} small={group.relatedUrl === `${origin ?? ''}/`} />
-            {about ? (
-              <span className="si-cause-facts mt-1 block text-13 text-text-secondary">{about}</span>
-            ) : status !== null && status >= 400 ? (
-              <span className="mt-1 block text-12 text-text-muted">
-                {status} {reasonPhrase(status) ?? ''}
-              </span>
-            ) : null}
-          </>
+          <span className={image ? 'flex items-start gap-3' : 'block'}>
+            {image ? <ImageThumb url={group.relatedUrl} size="lg" broken={broken} /> : null}
+            <span className="block min-w-0">
+              {origin && (group.relatedUrl === origin || group.relatedUrl === `${origin}/`) ? (
+                <span className="block font-medium">Your home page</span>
+              ) : null}
+              <Address url={group.relatedUrl} origin={origin} small={group.relatedUrl === `${origin ?? ''}/`} />
+              {about ? (
+                <span className="si-cause-facts mt-1 block text-13 text-text-secondary">{about}</span>
+              ) : status !== null && status >= 400 ? (
+                <span className="mt-1 block text-12 text-text-muted">
+                  {status} {reasonPhrase(status) ?? ''}
+                </span>
+              ) : null}
+            </span>
+          </span>
         ) : (
           <span>{group.detail ?? ''}</span>
         )}

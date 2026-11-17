@@ -3,7 +3,7 @@
 // with the other pages shown; the words are plainEvidence.ts's.
 import type { Check } from '../api/types';
 import { useWhereFoundOf } from '../screens/issues/useWhereFound';
-import { plainTargetLine } from './plainEvidence';
+import { plainOthers, plainTargetLine } from './plainEvidence';
 
 export function TargetWords({
   crawlId,
@@ -27,12 +27,7 @@ export function TargetWords({
   return (
     <span className="si-target-words mt-0.5 block text-13 text-text-secondary">
       {words}
-      {others > 0 ? (
-        <span className="text-text-muted">
-          {' '}
-          · and {others === 1 ? '1 other' : `${others.toLocaleString('en-GB')} others`}
-        </span>
-      ) : null}
+      {others > 0 ? <span className="text-text-muted"> · {plainOthers(check, others)}</span> : null}
     </span>
   );
 }
