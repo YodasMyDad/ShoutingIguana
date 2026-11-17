@@ -150,7 +150,7 @@ public sealed partial class SyntheticSite
 
         if (path == "/robots.txt")
         {
-            var sitemap = _options.Sitemaps ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
+            var sitemap = _options is { Sitemaps: true, SitemapInRobots: true } ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
             return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\nDisallow: /private/\n{sitemap}", null, null);
         }
 
@@ -167,6 +167,12 @@ public sealed partial class SyntheticSite
         if (_options.Sitemaps && path == "/sitemaps/extra.xml")
         {
             return Xml(RenderExtraSitemap());
+        }
+
+        // A sitemap the index lists that lists nothing: sitemap-empty.
+        if (_options.Sitemaps && path == "/sitemaps/empty.xml")
+        {
+            return Xml("<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"></urlset>");
         }
 
         if (_options.Sitemaps && TryNumber(path, "/sitemaps/pages-", ".xml", out var chunk) && chunk < ChunkCount)
@@ -417,8 +423,17 @@ public sealed partial class SyntheticSite
 
         if (_options.Sitemaps)
         {
-            // The sitemap index lists a file that doesn't exist, and the orphans are only in the extra sitemap.
+            // The sitemap index lists a file that doesn't exist and one that lists nothing, the orphans are only in the extra
+            // sitemap, and the thin plant is in two sitemaps, one giving it a lastmod in the year 3000.
             Flag("sitemap-error", "/");
+            Flag("sitemap-empty", "/");
+            Flag("sitemap-lastmod-invalid", "/");
+            Flag("sitemap-url-repeated", PLANTS_PATH + "thin");
+            if (!_options.SitemapInRobots)
+            {
+                Flag("robots-txt-no-sitemap", "/");
+            }
+
             for (var orphan = 0; orphan < OrphanCount; orphan++)
             {
                 Flag("orphan-page", $"/orphan/{orphan}");
@@ -877,8 +892,9 @@ public sealed partial class SyntheticSite
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/pages-").Append(chunk).Append(".xml</loc></sitemap>");
         }
 
-        // The last entry doesn't exist: a planted sitemap error.
+        // The last entry doesn't exist: a planted sitemap error. The one before it lists nothing.
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/extra.xml</loc></sitemap>");
+        xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/empty.xml</loc></sitemap>");
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap></sitemapindex>");
         return xml.ToString();
     }
@@ -890,6 +906,13 @@ public sealed partial class SyntheticSite
         for (var page = chunk * SITEMAP_CHUNK_SIZE; page < end; page++)
         {
             xml.Append("<url><loc>").Append(_base).Append(page == 0 ? "/" : $"/p/{page}").Append("</loc></url>");
+        }
+
+        // The thin plant is in the extra sitemap too (sitemap-url-repeated), listed here with a lastmod that hasn't happened
+        // yet (sitemap-lastmod-invalid).
+        if (chunk == 0)
+        {
+            xml.Append("<url><loc>").Append(_base).Append(PLANTS_PATH).Append("thin</loc><lastmod>3000-01-01</lastmod></url>");
         }
 
         return xml.Append("</urlset>").ToString();

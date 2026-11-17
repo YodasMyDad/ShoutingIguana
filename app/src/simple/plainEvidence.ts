@@ -119,6 +119,24 @@ const POSITIONS: Record<LinkPosition, string> = {
   head: 'in the page’s code',
 };
 
+const PLAIN_REDIRECT_KINDS: Readonly<Record<string, string>> = {
+  httpToHttps: 'from http to https',
+  httpsToHttp: 'from https to http',
+  addsWww: 'adds “www”',
+  removesWww: 'drops “www”',
+  otherHost: 'to another website',
+  addsSlash: 'adds a slash at the end',
+  removesSlash: 'drops the slash at the end',
+  changesCase: 'changes capital letters',
+  other: 'to another page',
+};
+
+/** What a forwarding address changes: "It forwards from http to https, and adds “www”", "It forwards to another page". */
+export function plainRedirectKind(kinds: string): string {
+  const said = kinds.split(',').map((kind) => PLAIN_REDIRECT_KINDS[kind] ?? kind);
+  return `It forwards ${said.length > 1 ? `${said.slice(0, -1).join(', ')}, and ${said[said.length - 1]}` : said[0]}`;
+}
+
 export function plainPosition(position: LinkPosition | null | undefined): string | null {
   return position ? POSITIONS[position] : null;
 }
@@ -318,6 +336,8 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
       return `The server says “${value}”`;
     case 'language':
       return `The page gives its language as “${value}”`;
+    case 'redirectKind':
+      return plainRedirectKind(value);
     case 'canonicalUrl':
       return `Main address: ${plainAddress(value, origin)}`;
     case 'finalUrl':

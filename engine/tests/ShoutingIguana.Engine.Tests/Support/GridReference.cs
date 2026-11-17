@@ -8,6 +8,7 @@ using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Tests.Support;
 
@@ -115,6 +116,7 @@ internal sealed class GridReference
                     ["pixelWidth"] = Number(23),
                     ["pixelHeight"] = Number(24),
                     ["fetchError"] = fetched && outcome != FetchOutcome.Success ? Text(6) : null,
+                    ["redirectKind"] = reader.IsDBNull(20) ? null : RedirectKinds.Of(reader.GetString(1), urls[reader.GetInt32(20)]),
                     ["responseMs"] = requested ? Number(16) : null,
                     ["ttfbMs"] = requested ? Number(17) : null,
                     ["titleLength"] = fetched && Text(10) is { } title ? (long)SearchResultWidth.Measure(title, SearchResultText.Title).Characters : null,

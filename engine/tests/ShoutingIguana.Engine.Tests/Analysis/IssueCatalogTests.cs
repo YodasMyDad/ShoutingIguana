@@ -43,7 +43,8 @@ public sealed class IssueCatalogTests
 
         // Batch 3.
         "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "head-tags-in-body", "html-structure-errors",
-        "viewport-invalid", "charset-invalid", "lang-invalid", "mobile-alternate"
+        "viewport-invalid", "charset-invalid", "lang-invalid", "mobile-alternate",
+        "robots-txt-no-sitemap", "sitemap-over-limit", "sitemap-near-limit", "sitemap-empty", "sitemap-url-repeated", "sitemap-lastmod-invalid"
     ];
 
     [Fact]
@@ -196,7 +197,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(122, IssueCatalog.All.Count);
+        Assert.Equal(128, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(

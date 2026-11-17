@@ -10,6 +10,7 @@ import {
   objectCellWords,
   pixelsWords,
   redirectChainWords,
+  redirectKindWords,
   relatedFactParts,
   robotsRuleWords,
   shownAtCellWords,
@@ -154,6 +155,27 @@ describe('what a URL a page names is', () => {
       'in the footer',
       '“Shop”',
       '2 links',
+    ]);
+  });
+
+  it('says what a redirect changes, in its row and as a link’s target', () => {
+    expect(redirectKindWords('httpToHttps,addsWww')).toBe('HTTP to HTTPS, adds www');
+    expect(redirectKindWords('addsSlash')).toBe('adds a trailing slash');
+    expect(redirectKindWords('other')).toBe('moves elsewhere');
+    expect(evidenceValueWords('redirectKind', 'removesSlash,changesCase', null)).toBe(
+      'removes the trailing slash, changes case',
+    );
+    const old = target({
+      url: `${SITE}/old`,
+      statusCode: 301,
+      outcome: 'redirect',
+      kind: 'hyperlink',
+      text: 'Shop',
+      redirectKind: 'addsSlash',
+    });
+    expect(targetFactParts(old, ['statusCode', 'redirectKind', 'text'], SITE)).toEqual([
+      'adds a trailing slash',
+      '“Shop”',
     ]);
   });
 

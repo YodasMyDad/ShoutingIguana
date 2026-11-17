@@ -246,9 +246,19 @@ internal static class CrawlSchema
     /// and entries that aren't URLs included), so an index says how many it names beside how many of them the crawl has;
     /// 0 for a sitemap that lists only URLs. Null when the file's body was never read (it failed first, or was left
     /// unread), and for every sitemap an engine from before the column read.</item>
+    /// <item><c>size_bytes</c> is the file's size as read, uncompressed (the protocol's 50 MB limit is on that), to its end
+    /// or to where reading it stopped. Null as <c>listed_sitemaps</c> is.</item>
     /// </list>
     /// </summary>
-    public static readonly (string Name, string Type)[] SITEMAP_COLUMNS = [("listed_sitemaps", "INTEGER")];
+    public static readonly (string Name, string Type)[] SITEMAP_COLUMNS = [("listed_sitemaps", "INTEGER"), ("size_bytes", "INTEGER")];
+
+    /// <summary>
+    /// The <c>sitemap_urls</c> columns added since the table was first created, added as <see cref="SITEMAP_COLUMNS"/> are:
+    /// <c>lastmod</c>, the entry's <c>&lt;lastmod&gt;</c> as Unix seconds (<see cref="Sitemaps.SitemapLastmod"/>), -1 when it
+    /// isn't a date, null when the entry has none or an engine from before the column read it. A URL a file lists twice
+    /// keeps its first entry's.
+    /// </summary>
+    public static readonly (string Name, string Type)[] SITEMAP_URL_COLUMNS = [("lastmod", "INTEGER")];
 
     /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and

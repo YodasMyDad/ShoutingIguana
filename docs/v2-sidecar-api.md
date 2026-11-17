@@ -1300,6 +1300,7 @@ inspector chains do.
 | `pixelWidth`, `pixelHeight` (evidence) | number | | An image's own size in pixels, read from the first bytes of its file as the crawl fetched it: PNG, GIF, JPEG, WebP, and AVIF where its header says. Null for anything else (an SVG included), an image whose header couldn't be read, and every URL of a crawl made before the crawler read them. Shown only: they neither sort nor filter, as a crawl made before them has no column to read |
 | `fetchError` (evidence) | text | | What went wrong when the request didn't succeed, as the crawl recorded it ("No response within 20 seconds", "Name not resolved", "robots.txt couldn't be read"). Null for a URL that answered with success, and for an error the crawl recorded no words for. Filters; doesn't sort |
 | `redirectChain` (evidence) | object | | The URL's redirects hop by hop, to where they end, come back on themselves, or stop: exactly the inspector's `redirects`, `{ hops: [{ id, url, statusCode, outcome, via }], final: { id, url, statusCode, outcome }, loop, tooLong }`. Null for a URL that doesn't redirect |
+| `redirectKind` (evidence) | text | | What the URL's redirect changes, from the URL and where it leads: its kinds, comma separated in this order, of `httpToHttps`, `httpsToHttp`, `addsWww`, `removesWww`, `otherHost` (then nothing more is said), `addsSlash`, `removesSlash`, `changesCase`; `other` when the path or query changes some other way (after a scheme or www change, if any). Null for a URL that doesn't redirect. Shown only: it neither sorts nor filters |
 | `robotsRule` (evidence) | object | | For a URL robots.txt refused, why, as the inspector's `robotsTxt` test says it: `{ origin, reason, line, rule }`, `reason` being `rule` (with the stored file's `line` and its text as `rule`), `unreachable` or `unknown`. Null for a URL robots.txt didn't refuse |
 
 - **Sorting.** `url` sorts, and every number, enum and boolean column but those read from each response (`outcome`,
@@ -1757,6 +1758,8 @@ the page without opening anything:
     as the URL grid's columns of those names have them;
   - `responseMs` is how long the URL's own answer took (not its redirects' end's: a slow redirect is slow), as the URL
     grid's column; null when it wasn't fetched. `slow-external-links` names it;
+  - `redirectKind` is what the URL's own redirect changes, as the URL grid's column; null when it doesn't redirect.
+    `links-to-redirects` names it;
   - `final` is where its redirects end, `{ id, url, statusCode, outcome, hops, loop }`, null when it doesn't
     redirect: `hops` the redirects followed, `loop` true when they come back on themselves (then `final` is the URL
     the loop returns to). Meta refreshes count, as the analysis counts them;

@@ -100,7 +100,7 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.RelatedUrl,
-        Evidence = ["redirectChain"],
+        Evidence = ["redirectChain", "redirectKind"],
         TargetFacts = ["statusCode", "indexability"]
     };
 
@@ -127,7 +127,7 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["redirectChain"],
+        Evidence = ["redirectChain", "redirectKind"],
         TargetFacts = ["statusCode"]
     };
 
@@ -141,7 +141,7 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["redirectChain"],
+        Evidence = ["redirectChain", "redirectKind"],
         TargetFacts = ["statusCode"]
     };
 
@@ -169,7 +169,7 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["redirectChain"]
+        Evidence = ["redirectChain", "redirectKind"]
     };
 
     public static readonly IssueDefinition META_REFRESH = new("meta-refresh", IssueCategory.Redirects, IssueSeverity.Warning,
@@ -221,7 +221,7 @@ public static class IssueCatalog
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.RelatedUrl,
-        TargetFacts = ["statusCode", "final", "text", "position", "links"]
+        TargetFacts = ["statusCode", "final", "redirectKind", "text", "position", "links"]
     };
 
     public static readonly IssueDefinition INTERNAL_NOFOLLOW_LINKS = new("internal-nofollow-links", IssueCategory.Links, IssueSeverity.Warning,
@@ -871,7 +871,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SITEMAP_URL_OTHER_HOST = new("sitemap-url-other-host", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Sitemap lists a URL on another host",
-        """A sitemap lists this URL, but it's on a different host from the sitemap: another site, or another of this site's hosts, such as www in a sitemap on the bare domain. The detail says how the URL answered.""",
+        """A sitemap lists this URL, but it's on a different host from the sitemap: another site, or another of this site's hosts, such as www in a sitemap on the bare domain; or on another scheme, such as an http:// URL in an https:// sitemap. The detail says how the URL answered, or which schemes differ.""",
         """List the URL as it is on the sitemap's own host now (usually where it redirects), or remove the entry. For a sitemap that deliberately covers several hosts, set up cross-submission through Search Console or robots.txt.""")
     {
         Why = """The sitemaps protocol only accepts URLs on the sitemap's own host and drops the rest, so the page it was meant for isn't submitted. Google makes an exception for cross-submission: when every site involved is verified in Search Console and the sitemap is submitted there, or the other host's robots.txt references the sitemap. It's common after a move to or from www.""",
@@ -880,6 +880,78 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["finalUrl"]
+    };
+
+    public static readonly IssueDefinition ROBOTS_TXT_NO_SITEMAP = new("robots-txt-no-sitemap", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "robots.txt doesn't name the sitemap",
+        """The site's robots.txt has no Sitemap: line, though the crawl found a sitemap anyway: at /sitemap.xml, where crawlers look by convention, or in the crawl settings. Reported once, on the home page, when sitemaps were read and robots.txt answered. The detail names the robots.txt and where the sitemap was found.""",
+        """Add a line such as Sitemap: https://www.example.com/sitemap.xml to robots.txt, with the sitemap's full URL. It can go anywhere in the file, and there can be one for each sitemap.""")
+    {
+        Why = """Search engines read robots.txt before anything else, and its Sitemap: line is how all of them learn where the sitemap is, not only the ones it was submitted to. A sitemap at /sitemap.xml is usually found without it; one anywhere else may not be.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#addsitemap",
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_OVER_LIMIT = new("sitemap-over-limit", IssueCategory.Sitemaps, IssueSeverity.Warning,
+        "Sitemap over 50,000 URLs or 50 MB",
+        """A sitemap lists more than 50,000 URLs, a sitemap index lists more than 50,000 sitemaps, or a sitemap file is bigger than 50 MB uncompressed: the limits Google and the sitemaps protocol set for one file. Reported once, on the home page; the detail lists up to three, with what each is over.""",
+        """Split the file into sitemaps of at most 50,000 URLs and 50 MB each, and list them in a sitemap index; an index over 50,000 sitemaps needs splitting into several indexes. Most CMS sitemap plugins can be set to fewer URLs per file.""")
+    {
+        Why = """Search engines don't read past a sitemap's limits, and Search Console reports such a file as an error, so the URLs past the limit, or all of the file's, may not reach them through the sitemap.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#sitemap-best-practices",
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_NEAR_LIMIT = new("sitemap-near-limit", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "Sitemap near the 50,000-URL or 50 MB limit",
+        """A sitemap lists 45,000 to 50,000 URLs, a sitemap index 45,000 to 50,000 sitemaps, or a file is between 45 and 50 MB uncompressed: within a tenth of what one file can hold. Reported once, on the home page; the detail lists up to three.""",
+        """Split the file before it grows past the limit: several sitemaps, listed in a sitemap index. Most CMS sitemap plugins can be set to fewer URLs per file.""")
+    {
+        Why = """Nothing is lost yet, but a site that keeps adding pages will pass the limit, and the URLs past it may then not reach search engines through the sitemap.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#sitemap-best-practices",
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_EMPTY = new("sitemap-empty", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "Empty sitemap",
+        """A sitemap that loaded without an error lists no URLs and no sitemaps. Reported once, on the home page; the detail lists up to three.""",
+        """Find out why it's empty: a sitemap plugin set to include nothing, a section with no pages yet, or a file left behind. If it isn't needed, remove it and its reference in robots.txt or the sitemap index.""")
+    {
+        Why = """An empty sitemap does no harm by itself, but it usually means a sitemap that should list pages doesn't, or one left over that search engines keep fetching for nothing.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_URL_REPEATED = new("sitemap-url-repeated", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "URL listed in more than one sitemap",
+        """More than one of the site's sitemap files lists this URL. The detail says how many; where it's found lists them.""",
+        """Keep each URL in one sitemap, usually the one for its kind of page. Repeats often come from two sitemap plugins at once, or a page listed under two sections.""")
+    {
+        Why = """The sitemaps protocol allows it and search engines cope, so this is housekeeping: repeated entries make sitemaps bigger and harder to keep right, and can give one URL two different lastmod dates.""",
+        LearnMore = "https://www.sitemaps.org/protocol.html",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition SITEMAP_LASTMOD_INVALID = new("sitemap-lastmod-invalid", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "Sitemap lastmod invalid or in the future",
+        """Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind and names the sitemaps. A crawl made before the crawler read lastmod isn't checked.""",
+        """Have the sitemap give each URL's real last change in W3C Datetime, as most CMS sitemap plugins do when left to themselves. Don't set every entry to today's date, or any to a date in the future.""")
+    {
+        Why = """Google uses lastmod only when it's consistently and verifiably accurate. Dates it can't read, or that haven't happened yet, show it they aren't, so it may ignore the sitemap's dates and find changed pages later.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#additional-notes-about-xml-sitemaps",
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
     };
 
 
@@ -1544,6 +1616,7 @@ public static class IssueCatalog
         CANONICAL_TO_FIRST_PAGE, CANONICAL_OTHER_DOMAIN, CANONICAL_LOOP, CANONICAL_ON_REDIRECT, CANONICAL_FRAGMENT,
         CANONICAL_INVALID_ATTRIBUTE, CANONICAL_UNLINKED,
         SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
+        ROBOTS_TXT_NO_SITEMAP, SITEMAP_OVER_LIMIT, SITEMAP_NEAR_LIMIT, SITEMAP_EMPTY, SITEMAP_URL_REPEATED, SITEMAP_LASTMOD_INVALID,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
         H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,

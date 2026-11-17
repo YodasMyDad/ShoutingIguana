@@ -69,13 +69,14 @@ public sealed class AppTests : IAsyncLifetime
     {
         var listed = (await _sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
 
-        Assert.Equal(122, listed.Count);
+        Assert.Equal(128, listed.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             listed.Where(check => (bool)check!["siteWide"]!).Select(check => (string)check!["id"]!).Order(StringComparer.Ordinal));
         Assert.Equal(
         [
-            "duplicate-site-version", "no-https", "robots-txt-missing", "robots-txt-unreachable", "robots-txt-unreachable-other-origin",
-            "security-headers-missing", "site-hidden-from-search", "sitemap-error", "sitemap-missing"
+            "duplicate-site-version", "no-https", "robots-txt-missing", "robots-txt-no-sitemap", "robots-txt-unreachable",
+            "robots-txt-unreachable-other-origin", "security-headers-missing", "site-hidden-from-search", "sitemap-empty", "sitemap-error",
+            "sitemap-lastmod-invalid", "sitemap-missing", "sitemap-near-limit", "sitemap-over-limit"
         ], listed.Where(check => (bool)check!["reportedOnce"]!).Select(check => (string)check!["id"]!).Order(StringComparer.Ordinal));
 
         // The new check, with the texts the catalog gives it. What it flags is a page: the home page, noindex itself.
@@ -117,10 +118,10 @@ public sealed class AppTests : IAsyncLifetime
             Assert.All(check["plainWhat"]!.AsArray().Concat(check["plainFix"]!.AsArray()), text => Assert.DoesNotContain("{", (string)text!));
         });
 
-        // Every one of the 122 has its words.
+        // Every one of the 128 has its words.
         var withWords = listed.Where(check => check!["plainTitle"] is not null).Select(check => (string)check!["id"]!).ToList();
         Assert.Equal(IssuePlainTexts.All.Keys.Order(StringComparer.Ordinal), withWords.Order(StringComparer.Ordinal));
-        Assert.Equal(122, withWords.Count);
+        Assert.Equal(128, withWords.Count);
         var broken = listed.Single(check => (string?)check!["id"] == "broken-internal-links")!;
         Assert.Equal(("Links that lead to broken pages", "you", "Every link between your pages leads to a working page", 3, 3),
             ((string)broken["plainTitle"]!, (string)broken["fixer"]!, (string)broken["plainPassed"]!, broken["plainWhat"]!.AsArray().Count, broken["plainFix"]!.AsArray().Count));

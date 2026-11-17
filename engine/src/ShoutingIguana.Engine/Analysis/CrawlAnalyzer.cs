@@ -113,6 +113,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 Skip(notes, skipped, note: null, SkippedCheckReasons.CRAWL_UNFINISHED, "The crawl didn't finish.", LinkingPageChecks);
             }
             incomplete = WhyIncomplete(status, limitSkips);
+            if (options.DiscoverSitemaps && !reader.HasSitemapLastmods())
+            {
+                Skip(notes, skipped,
+                    $"{IssueCatalog.SITEMAP_LASTMOD_INVALID.Title} wasn't checked: this crawl was made by an earlier version, which didn't record what the check needs. Crawl again to check it.",
+                    SkippedCheckReasons.EARLIER_VERSION, "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
+                    IssueCatalog.SITEMAP_LASTMOD_INVALID);
+            }
             if (!options.DiscoverSitemaps)
             {
                 Skip(notes, skipped, "Sitemaps weren't read in this crawl, so orphan pages and the sitemap checks weren't run.",
@@ -263,8 +270,17 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             [
                 new InlinkRules(urls, linksComplete, everyLinkingPage), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks, reader.ReadUrl), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls, reader.ReadUrl),
-                new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
-                new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
+                new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList()),
+                    new SitemapEntryFacts
+                    {
+                        Repeated = reader.ReadRepeatedSitemapEntries(),
+                        // Not one on the site's own scheme: a sitemap declared on http:// that redirects to https:// lists
+                        // https:// URLs, which is right.
+                        OtherScheme = reader.ReadOtherSchemeSitemapEntries().Where(entry => mainUrls.All(uri => uri.Scheme != entry.Value.Url))
+                            .ToDictionary(),
+                        Lastmods = reader.ReadSitemapLastmodFaults(LatestLastmod(reader))
+                    }),
+                new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins(), sitemaps), siteVersions,
                 new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl),
                 new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType)
             ];
@@ -422,6 +438,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     /// </summary>
     /// <param name="collections">Each collection a check needs, in order.</param>
     /// <param name="parsedBefore">For each, how many of the pages read were parsed before it.</param>
+    /// <summary>
+    /// The latest a sitemap's lastmod may be, in Unix seconds: a day after the crawl last ran, so a time zone or a clock a
+    /// little ahead isn't "the future".
+    /// </summary>
+    private static long LatestLastmod(AnalysisReader reader) =>
+        (reader.ReadCrawlUpdatedAt() ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) / 1000 + 86_400;
+
     private void SkipChecksNeedingNewerFacts(IssueWriter writer, List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, int[] collections,
         long[] parsedBefore, long pages)
     {

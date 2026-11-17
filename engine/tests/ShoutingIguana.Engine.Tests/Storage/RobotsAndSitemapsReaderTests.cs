@@ -35,13 +35,15 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // robots.txt declares /sitemap.xml, an index of the pages' sitemap, one of the pages only sitemaps list, and one that
         // doesn't exist.
         var index = list.Sitemaps[0];
-        Assert.Equal(($"{Site}/sitemap.xml", null, SitemapSource.RobotsTxt, SitemapState.Read, 200, true, 0, 3, null),
+        Assert.Equal(($"{Site}/sitemap.xml", null, SitemapSource.RobotsTxt, SitemapState.Read, 200, true, 0, 4, null),
             (index.Url, index.ParentId, index.FoundVia, index.State, index.StatusCode, index.IsIndex, index.Entries, index.Sitemaps, index.Error));
-        Assert.Equal([$"{Site}/sitemaps/pages-0.xml", $"{Site}/sitemaps/extra.xml", $"{Site}/sitemaps/missing.xml"], list.Sitemaps.Skip(1).Select(sitemap => sitemap.Url));
+        Assert.Equal([$"{Site}/sitemaps/pages-0.xml", $"{Site}/sitemaps/extra.xml", $"{Site}/sitemaps/empty.xml", $"{Site}/sitemaps/missing.xml"],
+            list.Sitemaps.Skip(1).Select(sitemap => sitemap.Url));
         Assert.All(list.Sitemaps.Skip(1), sitemap => Assert.Equal((index.Id, SitemapSource.Index, 0, false), (sitemap.ParentId, sitemap.FoundVia, sitemap.Sitemaps, sitemap.IsIndex)));
-        var (pages, extra, missing) = (list.Sitemaps[1], list.Sitemaps[2], list.Sitemaps[3]);
+        var (pages, extra, missing) = (list.Sitemaps[1], list.Sitemaps[2], list.Sitemaps[4]);
         Assert.Equal((SitemapState.Failed, 404, "404 Not Found", new SitemapUrlCounts(0, 0, 0, 0)), (missing.State, missing.StatusCode, missing.Error, missing.Urls));
-        Assert.Equal((SitemapState.Read, 200, null, GridCrawl.PAGES), (pages.State, pages.StatusCode, pages.Error, pages.Entries));
+        // Every page, and the thin plant again (with a lastmod in the year 3000).
+        Assert.Equal((SitemapState.Read, 200, null, GridCrawl.PAGES + 1), (pages.State, pages.StatusCode, pages.Error, pages.Entries));
         Assert.Equal((SitemapState.Read, TestCrawls.Count(crawl.Path, $"SELECT url_count FROM sitemaps WHERE id = {extra.Id}")), (extra.State, extra.Entries));
         Assert.True(extra.Entries >= Planted.GetExpectations().Orphans + 3);
 
@@ -59,7 +61,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         Assert.Equal((1, 2, 0, 0), (extra.Urls.RobotsDisallowed, extra.Urls.RedirectingOrBroken, pages.Urls.RobotsDisallowed, pages.Urls.RedirectingOrBroken));
         Assert.Equal((1, 2), (index.Urls.RobotsDisallowed, index.Urls.RedirectingOrBroken));
 
-        Assert.Equal(pages.Urls.Listed + extra.Urls.Listed, index.Urls.Listed);
+        // The thin plant is in both, and the index counts it once.
+        Assert.Equal(pages.Urls.Listed + extra.Urls.Listed - 1, index.Urls.Listed);
         Assert.True(pages.Urls.NonIndexable > 0 && pages.Urls.Indexable > pages.Urls.NonIndexable && extra.Urls.Fetched == extra.Urls.Listed);
 
         // Every count opens its URLs in the sitemap's grid, with or without a URL summary.
@@ -137,8 +140,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // A URL two sitemaps list counts once under their index: here the URL robots.txt refused and the two that redirect
         // or are gone, listed by the pages' sitemap too, and seven of its pages by the extra one.
         var twice = After("""
-            INSERT INTO sitemap_urls SELECT 3, url_id FROM sitemap_urls WHERE sitemap_id = 2 ORDER BY url_id LIMIT 7;
-            INSERT INTO sitemap_urls SELECT 2, m.url_id FROM sitemap_urls m JOIN responses r ON r.url_id = m.url_id WHERE m.sitemap_id = 3 AND r.outcome <> 0
+            INSERT INTO sitemap_urls (sitemap_id, url_id) SELECT 3, url_id FROM sitemap_urls WHERE sitemap_id = 2 ORDER BY url_id LIMIT 7;
+            INSERT INTO sitemap_urls (sitemap_id, url_id) SELECT 2, m.url_id FROM sitemap_urls m JOIN responses r ON r.url_id = m.url_id WHERE m.sitemap_id = 3 AND r.outcome <> 0
             """);
         Assert.Equal(index.Urls, twice.Sitemaps[0].Urls);
         Assert.Equal((1, 2), (twice.Sitemaps[1].Urls.RobotsDisallowed, twice.Sitemaps[1].Urls.RedirectingOrBroken));
@@ -160,7 +163,7 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
             UPDATE sitemaps SET status_code = NULL, error = 'Not read: the crawler reads at most 1,000 sitemaps' WHERE id = 3;
             UPDATE sitemaps SET status_code = 200, error = 'Unexpected end of file' WHERE id = 4;
             """);
-        Assert.Equal([SitemapState.Read, SitemapState.Pending, SitemapState.NotRead, SitemapState.Failed], states.Sitemaps.Select(sitemap => sitemap.State));
+        Assert.Equal([SitemapState.Read, SitemapState.Pending, SitemapState.NotRead, SitemapState.Failed, SitemapState.Failed], states.Sitemaps.Select(sitemap => sitemap.State));
 
         // How far the crawl got with them.
         Assert.Equal(SitemapDiscovery.Unfinished, After("UPDATE crawl SET sitemaps_done = 0").Discovery);
@@ -612,16 +615,16 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
     public void AnIndexSaysHowManySitemapsItsFileLists()
     {
         var list = SitemapListReader.Read(crawl.Path).Sitemaps;
-        var (index, pages, extra, missing) = (list[0], list[1], list[2], list[3]);
-        Assert.Equal((3, 3), (index.ListedSitemaps, index.Sitemaps));
-        Assert.Equal((0, 0, null), (pages.ListedSitemaps, extra.ListedSitemaps, missing.ListedSitemaps));
+        var (index, pages, extra, empty, missing) = (list[0], list[1], list[2], list[3], list[4]);
+        Assert.Equal((4, 4), (index.ListedSitemaps, index.Sitemaps));
+        Assert.Equal((0, 0, 0, null), (pages.ListedSitemaps, extra.ListedSitemaps, empty.ListedSitemaps, missing.ListedSitemaps));
         Assert.Equal(SitemapState.Failed, missing.State);
 
         // The crawl has fewer than the file lists where it didn't go on to read them all.
         var fewer = crawl.Copy();
         Change(fewer, "UPDATE sitemaps SET listed_sitemaps = 5000 WHERE id = $id", ("$id", index.Id));
         var over = SitemapListReader.Read(fewer).Sitemaps[0];
-        Assert.Equal((5_000, 3), (over.ListedSitemaps, over.Sitemaps));
+        Assert.Equal((5_000, 4), (over.ListedSitemaps, over.Sitemaps));
 
         // A file from before the count was kept has no column for it: nothing is said, and nothing fails.
         var earlier = crawl.Copy();

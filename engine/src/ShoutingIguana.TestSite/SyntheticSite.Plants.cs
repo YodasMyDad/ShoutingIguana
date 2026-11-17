@@ -673,7 +673,8 @@ public sealed partial class SyntheticSite
             var insecure = PlantPage("http-page", "Plain HTTP page");
             var insecureUrl = "http" + _base["https".Length..] + insecure.Path;
             var insecureHtml = Render(insecure with { Canonical = insecureUrl, ExtraHead = $"<base href=\"{_base}/\">" });
-            plants.Add(new Plant(insecure.Path, 200, Linked: true, InSitemap: true, ["http-page"],
+            // Listed by its http:// URL in the https:// sitemap, which sitemaps.org drops.
+            plants.Add(new Plant(insecure.Path, 200, Linked: true, InSitemap: true, ["http-page", "sitemap-url-other-host"],
                 () => new SyntheticResponse(200, HTML, insecureHtml, null, null, SECURITY_HEADERS), Url: insecureUrl));
 
             Page("mixed-content", "Mixed content", ["mixed-content"], page => page with

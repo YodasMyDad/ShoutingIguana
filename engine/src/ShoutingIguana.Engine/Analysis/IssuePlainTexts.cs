@@ -1121,6 +1121,91 @@ public static class IssuePlainTexts
             IssueFixer.Either,
             """No sitemap lists an address outside its own website"""),
 
+        ["robots-txt-no-sitemap"] = new(
+            """Your rules file doesn't say where your sitemap is""",
+            [
+                """Your site's rules file for search engines (its "robots.txt") doesn't give your sitemap's address.""",
+                """The check found the sitemap anyway, where search engines look first, so most will find it too.""",
+                """Naming it in the rules file makes sure every search engine does, wherever the sitemap is."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for an option to add the sitemap to the "robots.txt" file.""",
+                """Ask your developer to add a line to the "robots.txt" file that names your sitemap's full address, if there's no such option."""
+            ],
+            IssueFixer.Either,
+            """Your rules file for search engines names your sitemap"""),
+
+        ["sitemap-over-limit"] = new(
+            """A sitemap too big for Google to read""",
+            [
+                """A sitemap on your site lists more than 50,000 addresses, or is bigger than 50 MB.""",
+                """That's more than one sitemap file may hold, and search engines may not read the addresses past the limit.""",
+                """Those pages then aren't put forward to search engines by the sitemap."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.""",
+                """Ask your developer to split the sitemap into several smaller ones, listed in one sitemap of sitemaps, if there's no such setting."""
+            ],
+            IssueFixer.Either,
+            """No sitemap is too big for search engines to read"""),
+
+        ["sitemap-near-limit"] = new(
+            """A sitemap close to the size Google can read""",
+            [
+                """A sitemap on your site lists between 45,000 and 50,000 addresses, or is nearly 50 MB.""",
+                """That's close to what one sitemap file may hold, and nothing is lost yet.""",
+                """As you add pages it will pass the limit, and search engines may then not read the addresses past it."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.""",
+                """Ask your developer to split the sitemap into several smaller ones before it grows, if there's no such setting."""
+            ],
+            IssueFixer.Either,
+            """No sitemap is close to the size search engines can read"""),
+
+        ["sitemap-empty"] = new(
+            """A sitemap with nothing in it""",
+            [
+                """A sitemap on your site loads without an error but lists no pages.""",
+                """That does no harm by itself, but it usually means a sitemap that should list pages doesn't.""",
+                """Or it's an old one left behind, which search engines keep fetching for nothing."""
+            ],
+            [
+                """Open the sitemap's address from the list in your browser, to see what's in it.""",
+                """Check your site's SEO settings or plugin, in case that part of the sitemap is switched off.""",
+                """If the sitemap isn't needed, ask your developer to remove it and the line that names it."""
+            ],
+            IssueFixer.Either,
+            """No sitemap is empty"""),
+
+        ["sitemap-url-repeated"] = new(
+            """Addresses listed in more than one sitemap""",
+            [
+                """These pages are listed in more than one of your sitemaps.""",
+                """Search engines cope with that, so this is tidying rather than a problem.""",
+                """Repeats make sitemaps bigger, and the copies can disagree about when a page last changed."""
+            ],
+            [
+                """Look for two SEO plugins or settings that both make a sitemap, and switch one off.""",
+                """Otherwise keep each page in the one sitemap for its kind of page."""
+            ],
+            IssueFixer.Either,
+            """No page is listed in more than one sitemap"""),
+
+        ["sitemap-lastmod-invalid"] = new(
+            """Sitemap dates that are wrong""",
+            [
+                """Your sitemap gives some pages a last-changed date that isn't a date, or that hasn't happened yet.""",
+                """Google uses these dates only when they're accurate, so it may ignore them all.""",
+                """Pages you change may then show up changed in search later."""
+            ],
+            [
+                """Check your site's SEO settings or plugin: most fill in each page's real last-changed date when left to themselves.""",
+                """Ask your developer to correct the dates, if your sitemap is made some other way."""
+            ],
+            IssueFixer.Either,
+            """Every sitemap date is a real date in the past"""),
+
         ["title-missing"] = new(
             """Pages with no title""",
             [
