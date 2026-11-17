@@ -20,22 +20,29 @@ public sealed class LinkCheckTests
     [Fact]
     public void TheParserCountsLinksSearchEnginesCantFollowAndKeepsTheFirstThree()
     {
+        // Only a link that leads somewhere counts: script that navigates, a routerLink's path, a URL on an element that can't
+        // take one. A toggle, javascript:void(0), an empty href (the page itself) and a widget's <span href="javascript:…">
+        // lead nowhere a search engine could go, so they don't (the real-site audit's review widget and "Read more").
         var parsed = HtmlPageParser.Parse(RuleHarness.Html(body:
-            "<a onclick=\"go()\">Shop</a><a href=\"javascript:void(0)\">Open menu</a><a href=\"\">Empty</a><a href=\" # \" onclick=\"next()\">Next</a>" +
-            "<a routerLink=\"/basket\">Basket</a><span href=\"/sale\">Sale</span>" +
+            "<a onclick=\"location.href='/shop'\">Shop</a><a href=\"javascript:void(0)\">Open menu</a><a href=\"javascript:goTo('/products')\">Products</a>" +
+            "<a href=\"\">Empty</a><a href=\" # \" onclick=\"next()\">Toggle next</a><a href=\"#\" onclick=\"window.location = '/next'\">Next</a>" +
+            "<a routerLink=\"/basket\">Basket</a><span href=\"/sale\">Sale</span><span href=\"javascript:void(0)\">4.8 stars</span><div href=\"#reviews\">Reviews</div>" +
+            "<a onclick=\"toggleMenu()\">Menu</a><a href=\"javascript:;\">Nothing</a>" +
             "<a name=\"top\">Named anchor</a><a href=\"#\">Toggle</a><a href=\"/fine\">Fine</a><svg><a href=\"/in-svg\">In an SVG</a></svg>"),
             new Uri("https://example.com/"), [], TOKEN);
 
-        Assert.Equal(6, parsed.Facts.UncrawlableLinks!.Count);
-        Assert.Equal([new UncrawlableLinkFact("Shop", "onclick"), new UncrawlableLinkFact("Open menu", "javascript:"), new UncrawlableLinkFact("Empty", "empty href")],
+        Assert.Equal(5, parsed.Facts.UncrawlableLinks!.Count);
+        Assert.Equal([new UncrawlableLinkFact("Shop", "onclick"), new UncrawlableLinkFact("Products", "javascript:"), new UncrawlableLinkFact("Next", "onclick")],
             parsed.Facts.UncrawlableLinks.Examples);
-        Assert.Null(HtmlPageParser.Parse(RuleHarness.Html(body: "<a href=\"/a\">A</a><a name=\"b\"></a>"), new Uri("https://example.com/"), [], TOKEN).Facts.UncrawlableLinks);
+        Assert.Null(HtmlPageParser.Parse(RuleHarness.Html(body: "<a href=\"/a\">A</a><a name=\"b\"></a><a href=\"\">Read more</a><span href=\"javascript:void(0)\">Stars</span>"),
+            new Uri("https://example.com/"), [], TOKEN).Facts.UncrawlableLinks);
 
         var site = new RuleHarness();
         var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
-            "<a onclick=\"go()\">Shop</a><span href=\"/sale\"></span><a href=\"javascript:void(0)\">Open menu</a><a routerLink=\"/x\">Basket</a>"));
+            "<a onclick=\"location='/shop'\">Shop</a><span href=\"/sale\"></span><a href=\"javascript:void(0)\">Open menu</a><a routerLink=\"/x\">Basket</a>" +
+            "<a href=\"javascript:window.open('https://example.com/terms')\">Terms</a>"));
         var hit = new LinkStructureRules(SETTINGS, site.Table(), site.UrlOf).Check(page).Single(hit => hit.Issue == IssueCatalog.UNCRAWLABLE_LINKS);
-        Assert.Equal("4 links: \"Shop\" (onclick), no text (<span href>), \"Open menu\" (javascript:) …", hit.Detail);
+        Assert.Equal("4 links: \"Shop\" (onclick), no text (<span href>), \"Basket\" (routerLink) …", hit.Detail);
     }
 
     [Fact]

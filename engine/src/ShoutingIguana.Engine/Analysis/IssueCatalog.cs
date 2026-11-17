@@ -278,7 +278,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition UNCRAWLABLE_LINKS = new("uncrawlable-links", IssueCategory.Links, IssueSeverity.Warning,
         "Links search engines can't follow",
-        """The page has link-like elements with no address a search engine can follow: an <a> whose href is a javascript: URL or empty, an <a> that works only through onclick or a routerLink, or another element, such as a <span> or <div>, given an href. An <a> with neither href nor onclick is a named anchor and doesn't count. The detail gives up to three, with what makes each one uncrawlable. A crawl made before the crawler noted them isn't checked.""",
+        """The page has links that lead to another page in a way a search engine can't follow: an <a> whose href is a javascript: URL that navigates, an <a> that navigates only through onclick or a routerLink, or another element, such as a <span> or <div>, given an href with a URL. Script that leads nowhere, such as a menu toggle or javascript:void(0), an empty href (the page itself) and a named anchor don't count. The detail gives up to three, with what makes each one uncrawlable. A crawl made before the crawler noted them isn't checked.""",
         """Make each one an <a> element with a real URL in its href, and keep any script on top of it, so search engines, and browsers without the script, can follow it. A control that only opens something on the page belongs in a <button>.""")
     {
         Why = """Google follows only <a> elements with an href it can resolve, so a page reached only through such links isn't found by crawling and gets no credit from them. Menus, "load more" controls and single-page-app routers are the usual cause.""",

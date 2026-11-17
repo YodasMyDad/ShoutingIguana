@@ -364,7 +364,11 @@ Links · **Warning**: what's reached only through them is invisible to search en
 - **Rule:** a page with any link-like element that has no crawlable URL: an `<a>` whose href is a `javascript:` URL or
   empty (`href=""`); an `<a>` with `onclick` and no href or a bare `#`; an `<a>` with `routerlink` and no href; any other
   element with an `href` attribute (`<span href>`, `<div href>`). An `<a>` with neither href nor onclick is a named
-  anchor and doesn't count. Detail: `3 links: “Shop” (javascript:), “Next” (onclick) …`.
+  anchor and doesn't count. Detail: `3 links: “Shop” (javascript:), “Next” (onclick) …`. *Changed by the real-site
+  audit:* only links that lead somewhere count: a `javascript:` href or onclick whose script navigates (sets the location
+  or an href, opens a window, calls navigate or goto, or quotes a path or URL), a routerLink, an href with a URL on another
+  element. A review widget's `<span href="javascript:void(0)">` and a theme's `<a href="">Read more</a>` were flagged, and
+  lead nowhere a search engine could go (an empty href is the page itself).
 - **Standard:** Google, "Make your links crawlable": Google "can only crawl your link if it's an `<a>` HTML element with an
   href attribute"; `<a onclick>`, `<span href>`, `<a routerLink>` and `javascript:` hrefs are "not recommended".
 - **Data:** `PageFacts.UncrawlableLinks` (new).

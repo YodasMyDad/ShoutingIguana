@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Urls;
@@ -12,7 +13,7 @@ namespace ShoutingIguana.Engine.Parsing;
 /// </summary>
 /// <param name="pageUri">The page's own URL, for telling links to the same page from links to the base URL.</param>
 /// <param name="baseUri">What relative URLs resolve against: the first base href, or the page URL.</param>
-internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, TextAccumulator text)
+internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, TextAccumulator text)
 {
     private const int MAX_DEPTH = 512;
     private const int MAX_LABEL_CHARS = 200;
@@ -172,8 +173,9 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
 
         var name = element.LocalName;
 
-        // Only <a>, <area>, <link> and <base> take an href: on a <span> or <div> it's a link search engines can't follow.
-        if (name is not ("a" or "area" or "link" or "base") && element.HasAttribute("href"))
+        // Only <a>, <area>, <link> and <base> take an href: on a <span> or <div>, one that leads somewhere is a link search
+        // engines can't follow (a widget's href="javascript:void(0)" or "#reviews" leads nowhere they could go).
+        if (name is not ("a" or "area" or "link" or "base") && LeadsSomewhere(element.GetAttribute("href")))
         {
             AddUncrawlable(element, $"<{name} href>");
         }
@@ -624,24 +626,42 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     }
 
     /// <summary>
-    /// What keeps search engines from following an <c>&lt;a&gt;</c>, as Google's "Make your links crawlable" lists them: a
-    /// <c>javascript:</c> or empty href; no href, or a bare <c>#</c>, and an onclick; no href and a routerLink. Null for one
-    /// it can follow, and for an <c>&lt;a&gt;</c> with neither href nor onclick, which is a named anchor.
+    /// What keeps search engines from following an <c>&lt;a&gt;</c> that leads somewhere, as Google's "Make your links
+    /// crawlable" lists them: a <c>javascript:</c> href whose script navigates; no href, an empty one or a bare <c>#</c>, and
+    /// an onclick that navigates; no href and a routerLink. Null for one it can follow, for a named anchor, and for script
+    /// that goes nowhere (a menu toggle, <c>javascript:void(0)</c>): there's no page behind it to miss. An empty href
+    /// alone is a link to the page itself.
     /// </summary>
     private static string? UncrawlableBy(IElement anchor, string? href)
     {
         var written = href?.Trim();
+        var onclickNavigates = Navigates(anchor.GetAttribute("onclick"));
         return written switch
         {
-            null when anchor.HasAttribute("onclick") => "onclick",
+            null or "" or "#" when onclickNavigates => "onclick",
             null when anchor.HasAttribute("routerlink") => "routerLink",
             null => null,
-            "" => "empty href",
-            "#" when anchor.HasAttribute("onclick") => "onclick",
-            _ when written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) => "javascript:",
+            _ when written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) && Navigates(written["javascript:".Length..]) => "javascript:",
             _ => null
         };
     }
+
+    /// <summary>
+    /// An href on an element that can't take one (a <c>&lt;span&gt;</c>, a <c>&lt;div&gt;</c>) leads somewhere: a URL, or
+    /// script that navigates. Not an empty one, a fragment, or script that goes nowhere.
+    /// </summary>
+    private static bool LeadsSomewhere(string? href) => href?.Trim() is { Length: > 0 } written && written[0] != '#' &&
+        (!written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) || Navigates(written["javascript:".Length..]));
+
+    /// <summary>
+    /// Script that takes the visitor to another page, as far as its text shows: it sets the location or an href, opens a
+    /// window, calls something named navigate or goto, or quotes a path or URL. A toggle, <c>void(0)</c> or <c>next()</c> doesn't.
+    /// </summary>
+    private static bool Navigates(string? script) => script is not null && NavigatingScript().IsMatch(script);
+
+    [GeneratedRegex("""\blocation\b|\.href\b|\bwindow\.open\b|\bnavigate\w*|\bgo_?to\b|['"](?:/|https?://|\.\.?/)""",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex NavigatingScript();
 
     private void AddUncrawlable(IElement element, string why)
     {
