@@ -40,7 +40,7 @@ internal static class StatsCommand
             Print("Not fetched", stats.SkipReasons.OrderByDescending(pair => pair.Value).Select(pair => (pair.Key.ToString(), pair.Value)));
             if (stats.NotCheckedCount > 0)
             {
-                Console.WriteLine($"  Not checked   {Format.Count(stats.NotCheckedCount, "URL", "URLs")}: their site had stopped answering");
+                Console.WriteLine($"  Not checked   {Format.Count(stats.NotCheckedCount, "URL", "URLs")}: their site had stopped answering, or kept asking the crawler to slow down");
             }
             if (stats.UnlinkedPageCount > 0)
             {

@@ -12,6 +12,9 @@ namespace ShoutingIguana.Engine.Fetching;
 /// </summary>
 internal static class BlockDetector
 {
+    /// <summary>Starts the reason of a 429 that no firewall's challenge came with: the host asked the crawler to slow down.</summary>
+    public const string RATE_LIMITED = "Rate limited";
+
     public static string? Detect(int statusCode, IReadOnlyList<ResponseHeader> headers, string? body)
     {
         if (GetHeader(headers, "cf-mitigated")?.Contains("challenge", StringComparison.OrdinalIgnoreCase) == true)
@@ -32,7 +35,7 @@ internal static class BlockDetector
 
         if (statusCode == 429)
         {
-            return $"Rate limited ({HttpStatusNames.Describe(429)})";
+            return $"{RATE_LIMITED} ({HttpStatusNames.Describe(429)})";
         }
 
         if (statusCode is not (401 or 403 or 405 or 503))

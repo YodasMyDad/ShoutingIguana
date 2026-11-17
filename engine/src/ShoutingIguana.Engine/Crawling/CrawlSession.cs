@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -20,8 +21,9 @@ namespace ShoutingIguana.Engine.Crawling;
 /// <summary>
 /// One run of a crawl. A dispatcher claims batches of queued URLs from the writer and hands them to two
 /// worker pools: one for the site itself, one for status checks on other sites. Workers fetch and parse,
-/// then send records back to the writer. The site's URLs that got no response (or met an unreadable
-/// robots.txt) are held back and tried once more when nothing else can be claimed. That comes before the URLs only
+/// then send records back to the writer. The site's URLs that got no response, were asked to slow down (429, 503) or
+/// met an unreadable robots.txt are held back and tried once more when nothing else can be claimed, at the pace the
+/// host has taught and after any pause it asked for. That comes before the URLs only
 /// sitemaps list: the writer hands those out once no linked URL is in flight, and a held-back URL still is. The crawl
 /// is complete when a claim finds nothing queued and nothing in flight after sitemap discovery has finished. Stopping
 /// leaves the database resumable; held-back URLs are claimed but unrecorded, so a resume fetches them again.
@@ -62,6 +64,7 @@ internal sealed class CrawlSession
     private readonly SitemapDiscoverer _sitemaps;
     private readonly FaviconFetcher _favicon;
     private readonly HostGateRegistry _gates;
+    private readonly CrawlScope _scope;
     private readonly Channel<FrontierItem> _internalQueue;
     private readonly Channel<FrontierItem> _externalQueue;
 
@@ -81,6 +84,10 @@ internal sealed class CrawlSession
     // Held back since the last retry pass began because robots.txt couldn't be read.
     private int _refusedByRobots;
 
+    // The site's URLs stored as not checked because it kept asking the crawler to slow down, and the host of the first.
+    private int _rateLimited;
+    private string? _rateLimitedHost;
+
     private CrawlSession(CrawlRequest request, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider)
     {
         _request = request;
@@ -92,6 +99,7 @@ internal sealed class CrawlSession
         UrlNormalizer.TryNormalize(_options.StartUrl, out var startUrl);
         _startUri = new Uri(startUrl);
         var scope = new CrawlScope(_startUri, _options.IncludeSubdomains, _options.StayInStartFolder);
+        _scope = scope;
         var userAgent = UserAgents.Resolve(_options.UserAgent, _options.CustomUserAgent);
         var interval = _options.MaxRequestsPerSecond > 0 ? TimeSpan.FromSeconds(1 / _options.MaxRequestsPerSecond) : TimeSpan.Zero;
         _gates = new HostGateRegistry(scope, isInternal => isInternal
@@ -348,6 +356,7 @@ internal sealed class CrawlSession
             _internalQueue.Writer.TryComplete();
             _externalQueue.Writer.TryComplete();
             await WhenAllQuietlyAsync([.. workers, sitemaps]).ConfigureAwait(false);
+            SayWhatTheRateLimitLeftUnchecked();
 
             // The site's icon, if it is still on its way: a crawl that completed gives it a moment, any other none.
             await _favicon.FinishAsync(_status == CrawlStatus.Completed).ConfigureAwait(false);
@@ -373,6 +382,27 @@ internal sealed class CrawlSession
         _observer.OnProgress(final);
         _logger.LogInformation("Crawl {Status}: {Fetched} URLs fetched in {Elapsed}", _status, final.Fetched, final.Elapsed);
         return new CrawlSummary(_status, final, _request.DatabasePath, error);
+    }
+
+    /// <summary>
+    /// The site kept asking the crawler to slow down even at the end, so some of its URLs were stored as not checked: said
+    /// once, with what to do, only when there are some.
+    /// </summary>
+    private void SayWhatTheRateLimitLeftUnchecked()
+    {
+        var count = Volatile.Read(ref _rateLimited);
+        if (count == 0 || _writer.Completion.IsCompleted)
+        {
+            return;
+        }
+
+        var host = Volatile.Read(ref _rateLimitedHost) ?? _scope.HostName(UrlNormalizer.GetHost(_startUri));
+        var urls = count == 1 ? "1 URL wasn't" : $"{count:N0} URLs weren't";
+        _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "rate-limited-unchecked",
+            $"{urls} checked because {host} kept asking the crawler to slow down ({HttpStatusNames.Describe(429)}), even when they were asked for again at the end. Check the site again later, or at the Polite speed.")
+        {
+            Data = new CrawlNoticeData(Host: host, Reason: HttpStatusNames.Describe(429), Count: count)
+        });
     }
 
     /// <summary>
@@ -587,10 +617,11 @@ internal sealed class CrawlSession
     private bool IsRobotsTxtCoolingDown() => Volatile.Read(ref _refusedByRobots) > 0 && _robots.CoolDownEndsAt() is not null;
 
     /// <summary>
-    /// The site's own URLs that got no response, or were refused because robots.txt couldn't be read, are held back
-    /// (unrecorded) for one more try at the end of the crawl, when a site that was briefly down is usually back. URLs
-    /// failed without a request ("Not checked") aren't: their origin is gone, and one more try would fail the same way.
-    /// Nor are probes of the site's other versions, which never hold up a crawl: one that got no answer is dead.
+    /// The site's own URLs that got no response, were asked to slow down (429, or 503), or were refused because robots.txt
+    /// couldn't be read, are held back (unrecorded) for one more try at the end of the crawl, when a site that was briefly
+    /// down is usually back, and one that asked for less has had its pause. URLs failed without a request ("Not checked")
+    /// aren't: their origin is gone, and one more try would fail the same way. Nor are probes of the site's other
+    /// versions, which never hold up a crawl: one that got no answer is dead.
     /// </summary>
     private bool Defer(PageRecord record)
     {
@@ -600,7 +631,8 @@ internal sealed class CrawlSession
                               response.Error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true;
         var gotNoResponse = response.Outcome is FetchOutcome.Timeout or FetchOutcome.NetworkError &&
                             response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) != true;
-        if (!item.IsInternal || item.Source == DiscoverySource.SiteVersion || !(gotNoResponse || refusedByRobots) ||
+        var throttled = IsRateLimited(response) || response is { Outcome: FetchOutcome.ServerError, StatusCode: 503 };
+        if (!item.IsInternal || item.Source == DiscoverySource.SiteVersion || !(gotNoResponse || refusedByRobots || throttled) ||
             _retried.ContainsKey(item.Id) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
         {
             return false;
@@ -618,10 +650,17 @@ internal sealed class CrawlSession
 
     /// <summary>
     /// A held-back URL whose origin was written off before its one more try comes back "Not checked". It was asked for,
-    /// though, so it keeps how it ended then: its real error is what makes a link to it broken.
+    /// though, so it keeps how it ended then: its real error is what makes a link to it broken. One the site asked the
+    /// crawler to slow down for, once more, is what it is: not checked.
     /// </summary>
     private static PageRecord KeepTheRealError(PageRecord retried, PageRecord heldBack) =>
-        retried.Response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) == true ? heldBack : retried;
+        retried.Response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) == true && !IsRateLimited(retried.Response)
+            ? heldBack
+            : retried;
+
+    /// <summary>Stored as not checked because the site answered 429 Too Many Requests.</summary>
+    private static bool IsRateLimited(ResponseRow response) =>
+        response.Error?.StartsWith(RetryingFetcher.RATE_LIMITED_ERROR, StringComparison.Ordinal) == true;
 
     private Task[] StartWorkers(ChannelReader<FrontierItem> queue, int count) =>
         Enumerable.Range(0, count).Select(_ => Task.Run(() => WorkAsync(queue, _stop.Token))).ToArray();
@@ -659,6 +698,11 @@ internal sealed class CrawlSession
 
                 if (!deferred)
                 {
+                    if (item.IsInternal && IsRateLimited(record.Response) && Interlocked.Increment(ref _rateLimited) == 1)
+                    {
+                        Volatile.Write(ref _rateLimitedHost, _scope.HostName(UrlNormalizer.GetHost(new Uri(item.Url))));
+                    }
+
                     await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
                 }
             }

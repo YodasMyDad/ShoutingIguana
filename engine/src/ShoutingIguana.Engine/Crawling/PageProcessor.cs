@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Favicons;
@@ -41,6 +42,7 @@ internal sealed class PageProcessor(
     private const long OTHERS_WAITING_FOR_ROBOTS_TXT = 1L << (2 * WORK_BITS);
 
     private readonly ConcurrentDictionary<string, bool> _blockedHostsReported = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, bool> _rateLimitedHostsReported = new(StringComparer.Ordinal);
     private int _internalFetches;
     private int _internalForbidden;
     private int _forbiddenReported;
@@ -111,7 +113,9 @@ internal sealed class PageProcessor(
         Interlocked.Add(ref _work, FETCHING);
         try
         {
-            response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry || isProbe).ConfigureAwait(false);
+            // The site's own URLs asked to slow down are held back by the session for its end, not retried here.
+            response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry || isProbe, holdBackThrottled: item.IsInternal)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -123,7 +127,10 @@ internal sealed class PageProcessor(
             WatchForBlocking(uri, response);
         }
 
-        return Build(item, uri, response, fetchedAt);
+        // A 429 says nothing about the URL: it is stored as not checked, and the site's own get one more try at the end.
+        return response.IsRateLimited
+            ? Failed(item, fetchedAt, FetchOutcome.NetworkError, $"{RetryingFetcher.RATE_LIMITED_ERROR} ({HttpStatusNames.Describe(429)})")
+            : Build(item, uri, response, fetchedAt);
     }
 
     /// <summary>A record for a URL that produced no usable response.</summary>
@@ -249,10 +256,32 @@ internal sealed class PageProcessor(
         }
     }
 
-    /// <summary>The site's hosts are named as progress names them: the start URL's host for it and its www twin.</summary>
+    /// <summary>
+    /// The site's hosts are named as progress names them: the start URL's host for it and its www twin. A 429 is the
+    /// site asking the crawler to slow down, which it does by itself, not a block: it is said once per host, with the pace.
+    /// </summary>
     private void WatchForBlocking(Uri uri, FetchResponse response)
     {
-        if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason })
+        if (response.IsRateLimited)
+        {
+            var host = scope.HostName(UrlNormalizer.GetHost(uri));
+            if (_rateLimitedHostsReported.TryAdd(host, true))
+            {
+                var state = gates.For(uri).ReadState();
+                var pace = state.SlowedTo is { } interval ? $"at about {HostPace.DescribePace(interval)}" : "more slowly";
+                var goesOn = state.HeldFor > TimeSpan.Zero
+                    ? $"It waits {HostPace.DescribeWait(state.HeldFor)} as asked, then goes on {pace}"
+                    : $"It goes on {pace}";
+                observer.OnNotice(new CrawlNotice(
+                    CrawlNoticeLevel.Info,
+                    "rate-limited",
+                    $"{host} asked the crawler to slow down ({HttpStatusNames.Describe(429)}). {goesOn}, speeding up slowly while the site answers well, and asks again for the URLs it was refused at the end of the crawl.")
+                {
+                    Data = new CrawlNoticeData(Host: host, Reason: HttpStatusNames.Describe(429), Duration: state.HeldFor > TimeSpan.Zero ? state.HeldFor : null)
+                });
+            }
+        }
+        else if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason })
         {
             // Once per host: the first blocked response raises it, and the file counts the rest when it's read back.
             var host = scope.HostName(UrlNormalizer.GetHost(uri));

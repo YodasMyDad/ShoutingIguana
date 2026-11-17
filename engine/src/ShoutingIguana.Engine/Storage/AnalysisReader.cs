@@ -91,9 +91,17 @@ internal sealed class AnalysisReader : IDisposable
         return ids;
     }
 
-    /// <summary>URLs that were never requested because their host had stopped answering.</summary>
+    /// <summary>
+    /// URLs that were never checked: their host had stopped answering, or it kept asking the crawler to slow down
+    /// (<see cref="CountNotCheckedFor"/> tells them apart).
+    /// </summary>
     public int CountNotChecked() =>
         Convert.ToInt32(CrawlDatabase.Scalar(_connection, $"SELECT COUNT(*) FROM responses r WHERE {NOT_CHECKED}"), CultureInfo.InvariantCulture);
+
+    /// <summary>URLs never checked whose error starts with <paramref name="error"/>, one of the engine's own (no quotes in it).</summary>
+    public int CountNotCheckedFor(string error) => Convert.ToInt32(CrawlDatabase.Scalar(_connection,
+        $"SELECT COUNT(*) FROM responses r WHERE substr(r.error, 1, {error.Length}) = '{error}'"),
+        CultureInfo.InvariantCulture);
 
     /// <summary>The URLs <see cref="ReadUrls"/> will read: ids run from 1 with none missing, so the highest is the count.</summary>
     public int CountUrls() => Convert.ToInt32(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM urls"), CultureInfo.InvariantCulture);

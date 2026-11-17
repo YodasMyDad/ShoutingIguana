@@ -8,8 +8,9 @@ namespace ShoutingIguana.Engine.Fetching;
 /// <summary>
 /// The polite way to fetch, shared by pages and robots.txt: through the host's gate, telling the gate how the host
 /// answered so it learns the host's pace, and retrying transient failures (no response, 429, 502, 503, 504) after an
-/// exponential backoff or the server's Retry-After, capped at a minute. When <see cref="HostGate.UNREACHABLE_AFTER_URLS"/>
-/// URLs in a row on one
+/// exponential backoff or the server's Retry-After, capped at a minute. The site's own URLs that are asked to slow down
+/// (429, 503) aren't retried here at all: the crawl holds them back and asks again at its end, at the pace the host has
+/// taught, rather than renew a rate limit's penalty. When <see cref="HostGate.UNREACHABLE_AFTER_URLS"/> URLs in a row on one
 /// origin get no answer, another site's remaining URLs there fail at once instead of each costing several timeouts. On
 /// the site being crawled, the origin's robots.txt is asked first (headers only): an answer means the URLs failed for
 /// reasons of their own. An origin that has never answered, while the origin of the site that answered last still does,
@@ -28,6 +29,12 @@ internal sealed class RetryingFetcher(
 {
     /// <summary>Starts the error of a URL failed without a request, so the analysis can tell it from one that failed.</summary>
     internal const string NOT_CHECKED_ERROR = "Not checked";
+
+    /// <summary>
+    /// Starts the error of a URL the site answered only with 429 Too Many Requests, however long the crawl waited: not
+    /// checked, and no fault of the URL's. The analysis counts it as never fetched, as it does every "Not checked".
+    /// </summary>
+    internal const string RATE_LIMITED_ERROR = NOT_CHECKED_ERROR + ": the site asked the crawler to slow down";
 
     private const int MAX_JITTER_MS = 250;
     private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromSeconds(60);
@@ -48,7 +55,9 @@ internal sealed class RetryingFetcher(
     private Uri _lastAnswered = scope.StartOrigin;
 
     /// <param name="singleAttempt">No retries: the URL already had them, and this is its one more try at the end of the crawl.</param>
-    public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null, bool singleAttempt = false)
+    /// <param name="holdBackThrottled">A 429 or 503 comes back at once, unretried: the caller asks again later.</param>
+    public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null, bool singleAttempt = false,
+        bool holdBackThrottled = false)
     {
         var gate = gates.For(uri);
         var origin = gates.OriginOf(uri);
@@ -75,7 +84,7 @@ internal sealed class RetryingFetcher(
                 gate.Pause(UNREACHABLE_PAUSE);
             }
 
-            if (attempt >= retries || !IsRetryable(response))
+            if (attempt >= retries || !IsRetryable(response) || holdBackThrottled && response.IsThrottled)
             {
                 if (origin.ReportUrl(answered))
                 {
