@@ -48,6 +48,13 @@ Built in stages:
 - **The catalog's fixes** change no shape: one check's rule, what three checks do, two new skip reasons
   (`robots-txt-ignored`, `start-not-root`), one check's `subject`, what the inspector's `charset` holds, and texts.
   [Engine changes the catalog's fixes made](#engine-changes-the-catalogs-fixes-made) has them.
+- **Evidence** (step 3b) is marked below, each addition a new field, a new column or a new default, nothing taken away
+  but the order rows come in when none is asked for: what each check needs to show so a site owner can fix what it
+  found from its own views ([the per-check table](v2-evidence.md)). Each check's evidence columns and target facts;
+  five new URL columns (`redirectChain`, `robotsRule`, `usedOn`, `pixelWidth` and `pixelHeight`, `fetchError`);
+  targets and groups that say what each URL is; the image checks naming their images; details that name what they
+  count; a template hint for a check that doesn't group; rows by importance; and exports that carry it all.
+  [Engine changes evidence makes](#engine-changes-evidence-makes) has the engine's side.
 
 ## Process (E1)
 
@@ -230,7 +237,8 @@ Built in stages:
 - `categories: [{ id, title, plainTitle }]`, where the title is a plain name such as "Meta descriptions", and
   `plainTitle` (the score) is the category in Simple's words, such as "Search descriptions";
 - `checks: [{ id, category, severity, title, description, fix, why, learnMore, grouping, subject, siteWide,
-  reportedOnce, plainTitle, plainWhat, plainFix, fixer, plainPassed, plainOneFix, plainLooksFor }]`, in catalog order.
+  reportedOnce, plainTitle, plainWhat, plainFix, fixer, plainPassed, plainOneFix, plainLooksFor, evidence,
+  targetFacts }]`, in catalog order.
   `description` is what is wrong, `why` is why it matters and `fix` is what to do. `learnMore` is an absolute URL, or
   null when no authoritative page exists. `grouping` (E3a) is how
   the check's issues group: see [Issue groups](#issue-groups-e3a).
@@ -240,6 +248,24 @@ Built in stages:
   references: read what its issue names with [`/issues/{checkId}/targets`](#where-a-url-is-found-found-on)) or
   `none`. 13 checks are `sources`, 17 `targets` ([the list](v2-ui-ia.md#where-its-found-uifound-on)). Only how a
   check is shown: not stored with an analysis, nor in the checks' fingerprint.
+  **(evidence)** 16 are `sources` and 20 `targets`: `http-page`, `url-uppercase` and `url-underscores` become
+  `sources` (the links to update), and `image-missing-alt`, `image-alt-too-long` and `image-missing-dimensions`
+  become `targets` (the images at fault: see [Issue groups](#issue-groups-e3a)).
+- **`evidence`** (evidence) is the URL columns that show what the check found, in the order to show them, beside each
+  row's `url` and `detail`: `["title", "titleLength"]` for `title-too-long`, `["metaRobots", "xRobotsTag"]` for
+  `noindex-page` (where the noindex comes from), `["redirectChain"]` for the redirect checks, `["robotsRule"]` for
+  `blocked-by-robots`. Each is a column of [`/rows`](#issue-groups-e3a) and of [the URL grid](#urls-e3a), so a view
+  asks `/rows` for `url`, `detail` and these. Empty for a check whose URL and detail say it all (27 checks have some);
+  [the per-check table](v2-evidence.md#the-checks) has every one. A column that needs the URL summary has no values
+  without one, and is listed in `/rows`' `unavailable`, as any is.
+- **`targetFacts`** (evidence) is what to say about each URL the check's issues name, in the order to say it: the
+  fields of a target on [`/issues/{checkId}/targets`](#where-a-url-is-found-found-on), and of a group's `related` URL
+  on [`/groups`](#issue-groups-e3a). `image-too-large` has `["sizeBytes", "contentType", "pixelWidth", "pixelHeight",
+  "img", "statusCode", "final", "position", "links"]`; `links-to-redirects` `["statusCode", "final", "text",
+  "position", "links"]`, `final` being the URL to link to instead. Empty for a check that names no URL. A field
+  that's null on a target (no `final` for a URL that doesn't redirect) is left unsaid.
+- `evidence` and `targetFacts` are the catalog's, as `grouping` is: not stored with an analysis, nor in the checks'
+  fingerprint.
 - **`subject`** (E3b) is what the check's flagged URLs are, so the UI can say "pages affected, of the N pages crawled"
   only where that's true:
   - `page`: every URL it flags is a page, as the analysis counts them (`pagesAnalyzed`): an internal URL that answered
@@ -798,7 +824,7 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 
 ```json
 {"analyzedAt":"…","engineVersion":"…","pagesAnalyzed":265,"durationMs":7012,"isPartial":true,"outOfDate":false,
- "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12}],
+ "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12,"likelyTemplate":false}],
  "skipped":[{"checkId":"orphan-page","reason":{"code":"no-sitemap","text":"No sitemap could be read.",
    "plainText":"No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
    "plainAction":"Add a sitemap, or fix the one that can't be read, then check the site again."}}],
@@ -811,6 +837,11 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
  "noScoreReason":null}
 ```
 
+- **`counts[].likelyTemplate`** (evidence) is true for a check that doesn't group (`grouping` `none`), whose
+  `subject` is `page` and which isn't `reportedOnce`, when it flagged at least 90% of `pagesAnalyzed` and at least 10
+  pages: every page lacks a viewport, or x-default. It is probably the site's template, so one fix: the UI says so. False
+  otherwise, and for every other check, whose groups say it instead (`likelyTemplate` on each group). Worked out from
+  the counts whenever the analysis is read, so an analysis by any engine has it.
 - **`isPartial`** (E2) is true when a check was skipped or a rule failed on some pages; the notes say which.
 - **`skipped`** is every catalog check missing from the counts. Its `reason` (E2) has a stable `code` to key on, and
   a `text` to show beside the check ("No sitemap could be read."). A check skipped for several reasons gets the
@@ -1174,6 +1205,33 @@ lists an enum's values and `issueRowsOnly` marks a check's own columns, which on
 value (`{"clientError":"Client error"}`; empty for other types). They are the engine's, and an [export](#export-e5)
 writes them, so a grid that shows them and the file exported from it can't name a column or a value two ways.
 
+**Columns whose value is an object** (evidence): `type` `object` is a new type, for a value that is a list or a
+record rather than one value: `redirectChain` and `robotsRule`. Such a column is shown only (`sortable` and
+`filterable` false, so a filter or sort on one is `invalid-query`, as on any column that doesn't take it); its value
+in a row is the JSON object below, or null; its titles are "Redirect chain" and "robots.txt rule". An
+[export](#export-e5) writes it as one line of text: `301 → https://www.example.com/b/ (301) →
+https://www.example.com/c/ (200)` (the URL's own status, then each hop's URL and status; `(meta refresh)` before a
+hop reached by one; `, a loop` or `, more than 20 hops` at the end), and `Disallow: /cart/ (line 12 of
+https://www.example.com/robots.txt)`, `robots.txt couldn’t be read` or `No rule kept`. A new **`unit`**, `px`, is
+`pixelWidth`'s and `pixelHeight`'s ("Image width (px)").
+
+```json
+{"id":31,"url":"https://www.example.com/a/","statusCode":301,
+ "redirectChain":{"hops":[{"id":44,"url":"https://www.example.com/a","statusCode":301,"outcome":"redirect","via":"http"},
+                          {"id":31,"url":"https://www.example.com/a/","statusCode":301,"outcome":"redirect","via":"http"}],
+                  "final":{"id":31,"url":"https://www.example.com/a/","statusCode":301,"outcome":"redirect"},"loop":true,"tooLong":false},
+ "robotsRule":null}
+```
+
+```json
+{"id":905,"url":"https://www.example.com/cart/","statusCode":null,"redirectChain":null,
+ "robotsRule":{"origin":"https://www.example.com","reason":"rule","line":12,"rule":"Disallow: /cart/"}}
+```
+
+Each is worked out for the rows of the page asked for, a row at a time (a chain at most 20 lookups, a robots.txt
+parsed once per origin per read), and only when the column is asked for: a page of 100 rows costs what 100
+inspector chains do.
+
 | Column | Type | Needs analysis | Is |
 | --- | --- | --- | --- |
 | `id` | number | | The URL's id: the order the crawl found URLs in |
@@ -1204,6 +1262,11 @@ writes them, so a grid that shows them and the file exported from it can't name 
 | `inSitemap` | boolean | Yes | Listed in a sitemap. False only when every sitemap was read |
 | `inlinks`, `followedInlinks`, `nofollowInlinks`, `linkingPages` | number | Yes | Hyperlinks to the URL on the pages audited, each counted, a page's links to itself left out: all, those followed, the nofollow ones, and the pages they're on |
 | `issues`, `errors`, `warnings`, `notices` | number | Yes | Checks that flagged the URL, in all and by severity |
+| `usedOn` (evidence) | number | Yes | The pages audited that refer to the URL by any kind of link (hyperlink, image, script, stylesheet, iframe, canonical, hreflang…), each page once, a page's links to itself left out: where an image, a script or a stylesheet is used, which `inlinks` (hyperlinks only) reads as 0 |
+| `pixelWidth`, `pixelHeight` (evidence) | number | | An image's own size in pixels, read from the first bytes of its file as the crawl fetched it: PNG, GIF, JPEG, WebP, and AVIF where its header says. Null for anything else (an SVG included), an image whose header couldn't be read, and every URL of a crawl made before the crawler read them |
+| `fetchError` (evidence) | text | | What went wrong when the URL gave no HTTP answer, as the crawl recorded it ("No response within 20 seconds", "Name not resolved"). Null for a URL that answered |
+| `redirectChain` (evidence) | object | | The URL's redirects hop by hop, to where they end, come back on themselves, or stop: exactly the inspector's `redirects`, `{ hops: [{ id, url, statusCode, outcome, via }], final: { id, url, statusCode, outcome }, loop, tooLong }`. Null for a URL that doesn't redirect |
+| `robotsRule` (evidence) | object | | For a URL robots.txt refused, why, as the inspector's `robotsTxt` test says it: `{ origin, reason, line, rule }`, `reason` being `rule` (with the stored file's `line` and its text as `rule`), `unreachable` or `unknown`. Null for a URL robots.txt didn't refuse |
 
 - **Sorting.** `url` sorts, and every number, enum and boolean column but those read from each response (`outcome`,
   `noindex`, `nofollow`, `h1Count`, `ttfbMs`, and `redirectTargetStatusCode`, which is looked up per row): they filter
@@ -1503,6 +1566,49 @@ The UI lists a `none` check's URLs flat (`/rows` below), with the detail as a co
 - A crawl analysed by an engine from before these groups is grouped as that engine grouped it, by each issue's own
   detail and first other URL, until it's analysed again (it's out of date: `engineChanged`).
 
+**What a group is about** (evidence). Each group says what its cause is, so the group's row can be read without opening
+it:
+
+```json
+{"checkId":"image-too-large","grouping":"relatedUrl","sort":"size","total":212,"groupCount":3,"offset":0,"likelyTemplate":false,
+ "groups":[{"detail":null,"relatedUrlId":812,"relatedUrl":"https://www.example.com/img/hero.jpg","sharedText":null,
+            "related":{"statusCode":200,"outcome":"success","contentType":"image/jpeg","sizeBytes":1887436,"pixelWidth":4000,"pixelHeight":3000,
+                       "final":null,"indexability":"none","canonical":null},
+            "pages":205,"share":0.967,"likelyTemplate":true,"urls":205}]}
+```
+
+```json
+{"checkId":"title-duplicate","grouping":"relatedUrl","sort":"pages","total":14,"groupCount":5,"offset":0,"likelyTemplate":false,
+ "groups":[{"detail":null,"relatedUrlId":31,"relatedUrl":"https://www.example.com/sofas/","sharedText":"Sofas | Example",
+            "related":{"statusCode":200,"outcome":"success","contentType":"text/html; charset=utf-8","sizeBytes":18011,
+                       "pixelWidth":null,"pixelHeight":null,"final":null,"indexability":"none","canonical":null},
+            "pages":4,"share":0.2857,"likelyTemplate":false,"urls":4}]}
+```
+
+- **`related`** is what the group's related URL is, for every group that has one (a `relatedUrl` check's, and a
+  `detail` check's that names one: `redirect-temporary`'s target, `redirect-broken`'s end): its `statusCode` and
+  `outcome`, `contentType`, `sizeBytes`, `pixelWidth` and `pixelHeight`, `final` (where its redirects end, below),
+  `indexability` (as the URL grid's column, null when not judged) and `canonical` (the URL it's canonicalised to, or
+  null). The fields are a target's ([found-on](#where-a-url-is-found-found-on)) less the page's link to it, which is
+  each page's own; the check's `targetFacts` say which to show. Null for a group without a related URL.
+- **`sharedText`** names a duplicate cluster by what its pages share: the title for `title-duplicate`, the meta
+  description for `description-duplicate`, the H1 for `h1-duplicate`, as the cluster's first page writes it (the
+  check compares them with case and spacing set aside). Null for every other group: content clusters are named by
+  their first page, as before.
+- **`sort`** orders the groups: `pages` (the most URLs first, as before) or `size` (the largest file first: the related
+  URL's `sizeBytes` where its redirects end, then that size times the group's pages, then the related URL's id; a
+  group without a size last). The body takes it, `{ "offset": 0, "limit": 100, "sort": "size" }`; without it,
+  `image-too-large` is `size` and every other check `pages`. The answer says which it used. `size` on a check whose
+  groups aren't by a URL is `invalid-query` on `sort`.
+- **The image checks are grouped by image.** `image-missing-alt`, `image-alt-too-long` and
+  `image-missing-dimensions` are `relatedUrl` checks now, as `image-broken` and `image-too-large` are: a page is in
+  the group of each image at fault on it, so a logo without alt text on every page is one group, `likelyTemplate`
+  true. An image without a usable URL (no `src` to resolve, or past the 10,000 links a page's links are kept to) is
+  counted in the page's detail and puts the page in the group without a `relatedUrlId`.
+- **`likelyTemplate`** on the answer itself is the check's `counts[].likelyTemplate` on [`/analysis`](#analysis-e1):
+  for a check that doesn't group, whether it flagged nearly every page audited. False for a grouped check, whose groups
+  carry their own.
+
 `POST /api/crawls/{id}/issues/{checkId}/rows` is the URL grid for one check: a row per URL the check flagged (an issue
 is one check on one URL, so a page linking to three broken URLs is one row, "3 broken URLs", naming the first). It
 takes the URL grid's query (`columns`, `filters`, `search`, `sort`, `offset`, `limit`, `after`) and answers as it does,
@@ -1515,6 +1621,14 @@ with `matching` the rows the filters match and `total` the check's flagged URLs,
   null matches null. A `relatedUrl` check's group is its `relatedUrlId` alone: the pages whose issue names it among its
   URLs. A fault's group is its `detail`, the fault. `total` is then the group's. A `none` check has no groups to narrow
   to.
+- **Rows by importance** (evidence). Without `sort` (left out, or empty), the rows come by how much each URL matters
+  to the site, not in crawl order: for a check whose `subject` is `page`, `inlinks` descending, then `depth`, then
+  `url`; for one whose `subject` is `url`, `usedOn` descending (the pages referring to it by any link: a broken image
+  on 200 pages first), then `depth`, then `url`. Without a URL summary, which `inlinks` and `usedOn` need, it is
+  `depth`, then `url`. So a group's pages, a check's export and the report's examples come in the same order. Crawl
+  order is still there to ask for: `[{ "column": "id" }]`. A cursor is of the order its page was read in, as always.
+- **A check's evidence** is asked for as any columns are: `"columns": ["url", "detail", "title", "titleLength"]` for
+  `title-too-long`, the check's `evidence` from [`/checks`](#checks-e1).
 
 ```json
 {"group":{"detail":null,"relatedUrlId":1},"columns":["url","inlinks","detail"],"sort":[{"column":"inlinks","desc":true}],"limit":100}
@@ -1577,6 +1691,52 @@ the check didn't flag is left out.
   them), each with its status and outcome, and the page's first link to it (its kind, text and position; a canonical
   check's canonical, a hreflang check's hreflang, an image check's image first), null where the page has no stored
   link to it.
+
+**What each target is** (evidence). A target says what the URL is and how the page links to it, so "the image is
+1.8 MB, 4000×3000 px, shown at 400×300" or "this link redirects; link to https://…/new/ instead" can be said beside
+the page without opening anything:
+
+```json
+{"checkId":"image-too-large","urls":[{"urlId":31,"total":2,
+  "targets":[{"id":812,"url":"https://www.example.com/img/hero.jpg","statusCode":200,"fetched":true,"outcome":"success",
+              "contentType":"image/jpeg","sizeBytes":1887436,"pixelWidth":4000,"pixelHeight":3000,
+              "final":null,"indexability":"none","canonical":null,
+              "kind":"image","text":"Garden sofa","position":"content","fragment":null,"flags":[],"links":1,
+              "img":{"width":"400","height":"300","alt":"Garden sofa","hasAlt":true,"altLength":11,"srcset":true,"loading":"lazy"}}]}]}
+```
+
+```json
+{"checkId":"links-to-redirects","urls":[{"urlId":31,"total":1,
+  "targets":[{"id":90,"url":"https://www.example.com/old","statusCode":301,"fetched":true,"outcome":"redirect",
+              "contentType":"text/html; charset=utf-8","sizeBytes":18011,"pixelWidth":null,"pixelHeight":null,
+              "final":{"id":91,"url":"https://www.example.com/new/","statusCode":200,"outcome":"success","hops":1,"loop":false},
+              "indexability":"redirected","canonical":null,
+              "kind":"hyperlink","text":"Shop","position":"content","fragment":null,"flags":[],"links":2,"img":null}]}]}
+```
+
+- **What the URL is**:
+  - `contentType`, `sizeBytes`, `pixelWidth` and `pixelHeight` are the response the URL ends at, through its redirects
+    if it has any (what a browser gets: an image that redirects is judged by its end, as `image-too-large` judges it),
+    as the URL grid's columns of those names have them;
+  - `final` is where its redirects end, `{ id, url, statusCode, outcome, hops, loop }`, null when it doesn't
+    redirect: `hops` the redirects followed, `loop` true when they come back on themselves (then `final` is the URL
+    the loop returns to). Meta refreshes count, as the analysis counts them;
+  - `indexability` is as the URL grid's column (`none` for indexable; null when not judged);
+  - `canonical` is the URL it's canonicalised to, `{ id, url, statusCode, outcome }`, when its canonical names
+    another URL; null otherwise. For a canonical chain, this is the chain's next hop.
+- **How the page links to it**: `kind`, `text` and `position` as before, of the page's first link to it of the
+  check's kind; `fragment` that link's `#fragment`, as written after the `#` (for `broken-fragment-links`, the first
+  link to it that has one); `flags` its flags, as a link's (`noFollow`, `imageLink`, `fromHttpHeader`, …); and
+  `links`, how many links of any kind the page has to it (a nav link and a footer link to the same 404 are 2). All
+  null, and `flags` empty, where the page has no stored link to it.
+- **`img`** is the `<img>` as the page writes it, for a target the page shows as an image: `width` and `height` the
+  attributes as written (`"400"`, `"100%"`, null when missing), `alt` its alt text (null when it has none), `hasAlt`
+  whether the attribute is there at all (`alt=""` is there, and fine), `altLength` its length as `image-alt-too-long`
+  measures it, `srcset` whether it has one, and `loading` its `loading` attribute. The first `<img>` of the page with
+  that URL; null for a target that isn't an image, or one the page names only another way (a CSS background, a link).
+- **Order**: by id, as before, except `image-too-large`, whose largest file comes first.
+- An earlier engine's analysis, or a crawl made before the crawler read images' sizes, has these fields null where
+  the crawl didn't record them, never an error.
 
 ### Links (E3b)
 
@@ -2073,6 +2233,9 @@ An export only reads the crawl.
   `url`, `detail` and `relatedUrl`; for `links`, `from.url`, `to.url`, `kind` and `text`). The id is a column only
   when asked for (`id`: "Crawl order"). A column that needs the URL summary, on a crawl that has none, is in the file
   with no values, and the result names it in `unavailableColumns`, as the grid lists it in `unavailable`.
+  **(evidence)** `issueRows` without columns has `url`, `detail`, the check's `evidence`, then `relatedUrl`; and
+  without `sort`, its rows come by importance, as `/rows` gives them. A column whose value is an object
+  (`redirectChain`, `robotsRule`) is written as its line of text ([URLs](#urls-e3a)).
 - **`path`** is the file to write: a full path on this computer, whose name ends in the format's extension (`.csv`,
   `.xlsx`, `.html` or `.htm`), so an export can't be made to write a program or a script. A name holding a character
   no file's name may have is refused (`invalid-export` on `path`): on Windows `\ / : * ? " < > |`, so `d.txt:x.csv`,
@@ -2142,6 +2305,22 @@ was found" and "Other address". The two lists (E7) write their screens' columns,
   - *A check's sheet* is named by the check's number in the report and the start of its title, in the 31 characters a
     sheet's name holds ("3 Large images that slow pages…"), and holds every URL the check flagged, in crawl order: the
     address, the page's title, what was found, and the other address involved.
+    **(evidence)** By importance, not crawl order (as `/rows` without `sort`). After "Other address" come the check's
+    evidence columns, each under its title ("Title", "Title length", "Meta robots", "Redirect chain"; "Page title"
+    already being there, `title` isn't repeated), then where to fix it. A `sources` check's where-columns are as they
+    were. A `targets` check's are named by what its targets are, each target written with what it is and how the page
+    links to it:
+
+    | Checks | Columns | One target in the cell |
+    | --- | --- | --- |
+    | The links checks | "Links to (addresses)", "Links to" | `https://x/old/ (404; footer, “Old range”)`; one that redirects `https://x/old (301 → https://x/new/ 200; content, “Shop”)`; with a fragment `https://x/faq/#specs (200; content, “Specs”)`; an image link `https://x/ (200; header, image link)` |
+    | The canonical checks | "Canonical" (one column: a page has one canonical) | `https://x/a (301 → https://x/b/ 200)`, `https://x/a/ (200; noindex)`, `… ; from the HTTP header` |
+    | The image checks | "Images (addresses)", "Images"; and for `image-too-large` "Largest image (bytes)", a number, so the sheet sorts by it | `https://x/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300; content, alt “Sofa”)`; without alt `… ; no alt`; without a height `… ; no height; the file is 1200×800 px` |
+    | The hreflang checks | "Alternates (addresses)", "Alternates" | `https://x/de/ (404; “de”)`, `https://x/de/ (200; noindex; “de”)` |
+    | `mixed-content` | "HTTP resources (addresses)", "HTTP resources" | `http://x/a.js (200; script in the head)` |
+
+    Up to 10 a cell, then "and N more", as before. [The per-check table](v2-evidence.md#what-the-exports-carry) has
+    which check is which.
   - `check` writes one of those sheets as a file of its own (a check that found nothing: its header alone).
 
 #### The job
@@ -2219,7 +2398,7 @@ path (`kind` `report`), and `si report` writes it from the command line.
   section ("under the same number in “What to fix”"), never by a page: which page that starts on depends on the paper
   and on how long the score's table is (page 4 for the 100k crawl's 45 lines). The summary is the full report's own
   opening, so the two can't differ.
-- **`examples`** and **`lookExamples`** are how many of its first pages, in crawl order, each problem to fix and each
+- **`examples`** and **`lookExamples`** are how many of its first pages (by importance: see below) each problem to fix and each
   thing worth a look lists: 5 and 3 by default, 0 to 50. The rest are in the workbook, on the sheet with the problem's
   number. A value out of range, another `cut` or another parameter is `invalid-export`, by field.
 - **Its outline** is the design's: the head; the summary (the score as a ring, its word, what it covers, the five
@@ -2228,6 +2407,17 @@ path (`kind` `report`), and `si report` writes it from the command line.
   with its technical title and severity beside it, its count and share, its points, who usually fixes it, what's wrong,
   how to fix it, a "One fix" line where one cause is behind most of its pages, and its first pages); "What couldn't be
   checked", with why; "What was checked and found nothing wrong"; and "About this check".
+- **A problem's pages** (evidence) are its most important first, as `/rows` without `sort` gives them (`examples`
+  counts them from there, not in crawl order). Each says, beside the page:
+  - *What was found*: the detail, then the check's evidence, a value each, in the check's order: "78 characters, over
+    60 · “Garden sofas and chairs for every garden and every…”", "noindex (meta robots)", `301 → https://x/b/ (301) → https://x/c/ (200)`;
+  - *Where to fix it*: for a `sources` check, the pages linking to it with where on each the link is and its text
+    ("/garden/ (footer, “Old range”), /sofas/ (content, “Sale”) and 3 more"), the sitemaps listing it, the start
+    address; for a `targets` check (new: these said only "and N others"), what the page names, each with what it is,
+    in the workbook cell's words (`Image https://x/img/hero.jpg (1.8 MB, 4000×3000 px, shown at 400×300) and 1 other`).
+- **"One fix"** (evidence) is said too for a check that doesn't group, when its `likelyTemplate` is true ("This is on
+  nearly every page, so it's probably your site's template: one fix clears it."); and for the image checks, now grouped
+  by image, when one image is behind most of their pages.
 - **Its length follows the checks that found something, never the site's size**: what it reads is counts, and a few
   rows a check.
 - **Every state is the document's own to say.**
@@ -3751,3 +3941,77 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   check's sheet's header and its cells against the reader), `GridExportTests`,
   `ReportDocumentTests.AnAddressOtherPagesReferToSaysWhereItIsFound`,
   `GridEndpointsTests.FlaggedUrlsSayWhereTheyAreFoundAndPagesWhatTheyName`.
+
+## Engine changes evidence makes
+
+Step 3b's evidence work ([the per-check table](v2-evidence.md)). This is the plan the API above is written to; what
+was built and measured is added here when it's done.
+
+- **The catalog.** `IssueDefinition.Evidence` (URL column ids) and `IssueDefinition.TargetFacts` (target field
+  names), served as `evidence` and `targetFacts` on `GET /api/checks` (`CheckDto`). Neither is stored with an
+  analysis nor in `ChecksFingerprint`, as `Grouping` and `References` aren't. A test holds that every evidence id is a
+  URL column `/rows` serves and every target fact a field of a target. `References`: `http-page`, `url-uppercase`,
+  `url-underscores` become `Sources`; `image-missing-alt`, `image-alt-too-long`, `image-missing-dimensions` become
+  `Targets` with `Grouping = RelatedUrl`. No id changes, no text of What, Why or Fix changes.
+- **The rules.** `ImageRules` names the images at fault as its issues' targets (each `ImageFact` with a URL to the id
+  of the page's image link to it: one link an `<img>`, written in the same order, so the n-th image link is the n-th
+  image with a URL); `FragmentRules` keeps the first missing fragments of each page; `HreflangRules` and
+  `CanonicalRules` name what they count (and the element that ended the head); the measurement rules give the limit.
+  `HREFLANG_DUPLICATE_CODE` gets a `FaultOf` (the codes before each ": "), so its groups stay what they were. Shared
+  wording in `RuleText`: a quote cut with "…", a detail fitted to 120 characters, "over" or "under" a limit.
+- **`AnalysisFreshness.VERSION` 8 → 9**: what the analysis stores changes (three checks' grouping and targets, 21
+  checks' details, `url_summary.used_on`). Every crawl analysed before reads out of date (`engineChanged`) until it's
+  analysed again, and reads as it was stored meanwhile. Counts don't change, so the score's version doesn't.
+- **The crawl file: two columns, no new schema version.** `responses.pixel_width` and `pixel_height` join
+  `CrawlSchema.RESPONSE_COLUMNS`, which the writer adds whenever it opens a file, as it added the content
+  fingerprint's lanes. `CrawlSchema.VERSION` stays 2 on purpose: `CrawlDatabase.CheckSchema` refuses a file of any
+  other version ("Crawl the site again with this version"), so a new version would make every crawl already made
+  unreadable. As with the lanes, either engine reads and continues either file: a crawl made before has the columns
+  once it's continued, its URLs so far null; a reader checks the columns are there (`pragma_table_info`, once per read)
+  and reads null without them. `AnalysisReader.HasFingerprintLanes` checks its own three columns, not the list's length.
+- **Fetching.** For an image response that succeeded, `HttpFetcher` reads the first bytes of the body and
+  `Fetching/ImageHeader` reads the size from them: PNG (IHDR), GIF (the logical screen), JPEG (the first SOF0-3, 5-7,
+  9-11 or 13-15, walking segments by their lengths), WebP (VP8, VP8L, VP8X), AVIF (`ispe`, best effort); none for SVG
+  or anything else. At most 256 KB is read for a JPEG (its EXIF and colour profile come first) and 64 KB for the rest,
+  4 KB at a time, never buffered past that, and reading stops as soon as the size is known. An image sent without a
+  length, which the crawler already reads whole to measure, is read for its size as it's counted. Stored through the
+  page record with the response.
+- **Parsing.** `PageFacts.HeadEnd` (`HeadEndFact(Element, Line, Implicit)`): what made the parser leave the head (the
+  first node of a body the parser had to start, shown as its start tag cut to 60 characters, or text; or the `<body>`
+  tag itself) and its line. `PageWalker` sets it only when a canonical or an hreflang link ends up outside the head, so
+  every other page's facts are as they were. The line comes from AngleSharp (the parser's element callback or its
+  source references, whichever the bench shows cheaper). A page crawled before has none, and its detail says less.
+- **The URL summary.** `url_summary.used_on`, counted by `UrlTable` in the analysis's pass over each page's links:
+  every page audited that links to the URL by any kind, once. The link summary is left as it is
+  (`LINK_SUMMARY_VERSION` stays 1): it counts links by kind, position and flags, not the pages they're on, so it can't
+  give a count of pages without a new table per target and page; the analysis already reads every link once.
+- **The readers.**
+  - `UrlColumns`: `usedOn`, `pixelWidth`, `pixelHeight`, `fetchError`, `redirectChain`, `robotsRule`;
+    `UrlColumnType.Object`, a column computed for the rows of the page read (`UrlGridReader.Values`): the chain by
+    `UrlInspectorReader`'s own walk, the rule by `RobotsReader.WhyRefused` with each origin's file parsed once a read.
+    `ColumnWords` titles them, with the unit `px`.
+  - `IssueGroupReader.ReadRows`: the order by importance when no sort is given (page or URL checks), and without a URL
+    summary depth and URL. `ReadGroups`: `related`, `sharedText` (the first page's `responses.title`,
+    `meta_description` or `h1`), `sort` (`pages`, `size`), and `likelyTemplate` for a check that doesn't group, by one
+    function that `/analysis`' counts use too.
+  - `FoundOnReader.ReadTargets`: `IssueTarget` gains the URL's facts (its end's response, `final`, `indexability`,
+    `canonical`), the link's (`fragment`, `flags`, `links`) and `img` (the page's details read once per page, not per
+    target).
+  - Exports and the report read a check's rows through `ReadRows` (so in its order, with its evidence);
+    `WhereFoundColumns` writes a target with its facts under the headers above; `ReportReader` and `ReportDocument`
+    give the evidence and both kinds of "Where to fix it".
+- **The sidecar.** `CheckDto` (`evidence`, `targetFacts`), the analysis counts (`likelyTemplate`), the groups request
+  (`sort`) and answer (`sort`, `likelyTemplate`, each group's `related` and `sharedText`), the targets answer, and
+  the new columns on `/api/url-columns`. The app's TypeScript types are written by hand (`app/src/api`), so they're
+  the app's to follow.
+- **Tests.** Each change is seen failing first: the catalog's lists against the columns and the target fields; each
+  rule's new detail, and the image checks' targets and groups (the synthetic site's expected issues tables updated
+  case by case, never loosened); the image header reader on real PNG, GIF, JPEG (with a large EXIF block), WebP and
+  AVIF bytes, cut short and malformed; the head's end on pages with an early `<img>`, stray text and a canonical in
+  the body; `usedOn` against a count from the links; the new columns in `/urls`, `/rows`, CSV and Excel; targets and
+  groups against the inspector's own reads; the default order with and without a URL summary; a crawl file from
+  before these columns opened, read and continued. The synthetic site serves real image bytes of known sizes for
+  the planted images.
+- **The bench.** `verify-engine.sh`: build, tests, `si bench --pages 100000` (every planted page and issue, nothing
+  else, memory flat) and the readbench gate, with a new case "Rows of the biggest check, by importance" in the
+  `check` class (75 ms at p95).
