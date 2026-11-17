@@ -107,11 +107,23 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
    on http and https alike, so they share one: sites serve one host and redirect the other.
    - The gate keeps to the pace the host's answers teach (`Fetching/HostPace`); the crawl's concurrency and rate are
      its ceiling, never its starting pace. Every request to the host goes through it: pages, assets, robots.txt,
-     sitemaps and the icon.
-   - Slow start: one request at a time at one a second. Each healthy answer doubles the rate and allows one more at
-     once, so a healthy site is at full speed within about a second (the 100k bench barely notices). Answers that come
-     back much slower than the host's first ones hold the pace where it is, for eight answers at most.
-   - A host that asks to slow down (429, or 503 with Retry-After) is paused, all of it, for its Retry-After (or 10 s,
+     sitemaps and the icon. A sitemap answered 429 is asked again like a page, up to four times, after the wait its host
+     or section asked for, and its deadline starts with each try's turn at the gate.
+   - Slow start: one request at a time at one a second. While answers stay healthy, the rate and the requests at once
+     double at most once a second, so a site sees 1, 2, 4 requests a second in its first seconds; on a host that answers
+     within 100 ms (a local or nearby server), once every ten of its round trips but no more than every 100 ms, so the
+     100k bench is at full speed in about two and a half seconds. Answers that come back much slower than the host's
+     first ones hold the pace where it is, for eight answers at most.
+   - A limit on one section (`Fetching/SectionPace`): a 429 is put down to a folder of its URL, a section already
+     limited if the URL is in one, else its last folder (so /products/belt and /collections/belts/products/belt are both
+     in /products/; a URL in no folder is in the root's). That section alone is limited: its URLs are held back from the
+     workers and asked one at a time (`Crawling/SectionTrickle`), during the crawl and after it, an interval apart that
+     starts at the first Retry-After, doubles at each 429 of a page the section let go (never sooner than the
+     Retry-After), and shortens by a tenth each time a page gets through. The rest of the host keeps its pace. Only 429s
+     from three sections within ten minutes are the host's own limit and slow the whole host, as below. Nothing is given
+     up while pages get through: a section is given up on after three 429s in a row at its slowest (one page every five
+     minutes), and every section 20 minutes after the rest of the crawl is over; what is left is not checked.
+   - A host that asks to slow down as a whole (429s from three sections, or 503 with Retry-After) is paused, all of it, for its Retry-After (or 10 s,
      doubling while it keeps asking, up to two minutes), then resumes one request at a time at half the pace that
      tripped it (never below one every five seconds), so nothing queued bursts out after the pause. 429s to requests sent before that slowdown don't slow
      it again. Two failures in a row (502, 504, a 503 without Retry-After) slow it the same way without a pause, at

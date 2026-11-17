@@ -411,6 +411,7 @@ const WAIT_REASONS: readonly CrawlWaitReason[] = [
   'heldBack',
   'siteDown',
   'robotsTxtCoolDown',
+  'sectionLimited',
 ];
 /** Shared, so a progress event without waits (most of them) keeps the same value from one event to the next. */
 const NO_WAITS: readonly CrawlWait[] = [];
@@ -449,6 +450,7 @@ function waitsOf(value: unknown): readonly CrawlWait[] {
       ...(typeof entry.host === 'string' ? { host: entry.host } : {}),
       ...(isCount(entry.urls) ? { urls: entry.urls } : {}),
       ...(isCount(entry.durationMs) ? { durationMs: entry.durationMs } : {}),
+      ...(typeof entry.section === 'string' ? { section: entry.section } : {}),
     });
   }
   return waits.length > 0 ? waits : NO_WAITS;

@@ -30,6 +30,8 @@ export interface SimpleAlert {
 type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'note';
 
 const SLOW = 'The site asked the check to slow down, so it has. It will take longer.';
+const SECTION_SLOW =
+  'The site only lets some of its pages be read slowly, so the check reads those one at a time. The rest isn’t held up.';
 const DELAY = 'The site asks visitors like this one to go slowly, so the check waits between pages.';
 const ROBOTS =
   'The site’s rules file for search engines isn’t answering, so the check can’t tell where it may go. It’s waiting, and will try again.';
@@ -137,6 +139,8 @@ function waitWords(wait: CrawlWait): { kind: Kind; text: string; actions: Simple
     case 'backoff':
     case 'heldBack':
       return { kind: 'slow', text: SLOW, actions: [] };
+    case 'sectionLimited':
+      return { kind: 'slow', text: SECTION_SLOW, actions: [] };
     case 'crawlDelay':
       return { kind: 'delay', text: DELAY, actions: [] };
     case 'siteDown':

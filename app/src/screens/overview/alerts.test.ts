@@ -181,6 +181,18 @@ describe('waits', () => {
     expect(detail(10_000)).toMatch(/gets about one request every 10 s\./);
   });
 
+  it('say how a section the site limits is read, and how long it has left', () => {
+    const { entries } = waitEntries([
+      { reason: 'sectionLimited', host: 'jitsunami.com', section: '/products/', urls: 6, durationMs: 60_000 },
+    ]);
+    expect(entries.map((entry) => [entry.title, entry.detail])).toEqual([
+      [
+        'Reading some pages slowly',
+        'jitsunami.com limits its /products/ pages: 6 URLs left, one every 1 min, about 6 min more. The rest of the site isn’t held up.',
+      ],
+    ]);
+  });
+
   it('has nothing to say when nothing waits', () => {
     expect(waitEntries([], {})).toEqual({ entries: [], more: null });
   });
