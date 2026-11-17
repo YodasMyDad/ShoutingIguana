@@ -552,9 +552,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
     /// The report's document (E5), read as a grid is: in one of the read slots, and stopped when its request is given up.
     /// A crawl never analysed has none (<c>not-analyzed</c>).
     /// </summary>
-    public async Task<string> ReportAsync(string id, ReportOptions report, CancellationToken cancellationToken)
+    /// <param name="compareWith">The fix loop: <c>previous</c> (null), <c>none</c> or a crawl's id, which the report says it couldn't be compared with when it can't.</param>
+    public async Task<string> ReportAsync(string id, ReportOptions report, string? compareWith, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
+        report = crawls.WithComparison(id, report, compareWith);
         return await ReadAsync(token =>
         {
             try

@@ -88,6 +88,7 @@ internal static class ReportReader
             throw new ExportException(ExportFailure.CrawlChanged, GridExport.CRAWL_CHANGED);
         }
 
+        var (comparison, notCompared) = Compare(crawlPath, listing, settings, Lists, export, cancellationToken);
         var now = export.Clock.GetUtcNow();
         return new ReportModel
         {
@@ -128,6 +129,10 @@ internal static class ReportReader
             ],
             HiddenProblems = listing is null ? 0 : fixFirst.Count(id => listing.HiddenChecks.Contains(id, StringComparer.Ordinal)),
             Narrowed = listing?.Checks is not null,
+            Comparison = comparison,
+            NotCompared = notCompared,
+            Rechecks = RecheckReader.ReadAll(crawlPath),
+            Settings = settings,
             Score = score,
             NoScore = results.NoScoreReason,
             MadeAt = now,
@@ -159,6 +164,47 @@ internal static class ReportReader
             _ => (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, Storage.Models.IssueTargetsOfUrl>())
         };
     }
+
+    /// <summary>
+    /// The crawl compared with the one <see cref="ReportOptions.CompareWith"/> names, or why it isn't: the report is never
+    /// refused for a comparison that can't be made.
+    /// </summary>
+    private static (ReportComparison? Comparison, string? NotCompared) Compare(string crawlPath, ReportOptions? listing, AnalysisSettings settings, Func<string, bool> lists,
+        ExportSettings export, CancellationToken cancellationToken)
+    {
+        if (listing?.CompareWith is not { } other)
+        {
+            return (null, listing?.NotCompared);
+        }
+
+        try
+        {
+            if (CrawlComparisonReader.ReadSummary(crawlPath, other, export.Cache, cancellationToken) is not { } comparison)
+            {
+                return (null, NOT_COMPARED_UNANALYSED);
+            }
+
+            List<ReportChange> checks =
+            [
+                .. comparison.Checks.Where(check => lists(check.CheckId) && IssueCatalog.Find(check.CheckId) is not null).Select(check =>
+                {
+                    var definition = IssueCatalog.Find(check.CheckId)!;
+                    return new ReportChange(definition, ReportSources.Words(definition, settings), check.State, check.Then, check.Now);
+                })
+            ];
+            return (new ReportComparison(other, CrawlSummaryReader.ReadWithoutCounts(other, cancellationToken).StartedAt, comparison, checks), null);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
+        {
+            return (null, NOT_COMPARED_UNREADABLE);
+        }
+    }
+
+    /// <summary>What the report says when the crawl it was to be compared with has no results.</summary>
+    internal const string NOT_COMPARED_UNANALYSED = "Not compared: the other check’s results haven’t been worked out.";
+
+    /// <summary>What the report says when the crawl it was to be compared with can't be read.</summary>
+    internal const string NOT_COMPARED_UNREADABLE = "Not compared: the other check’s file couldn’t be read.";
 
     /// <summary>The pages linking to each listed URL that the report names, before "and N more".</summary>
     internal const int LISTED_SOURCES = 3;

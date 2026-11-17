@@ -361,6 +361,67 @@ public sealed class FixLoopChangesTests(FixLoopCrawls crawls) : IClassFixture<Fi
         static string JsonRow(JsonNode? row) => $"{(string?)row!["url"]} {(int?)row["urlId"]} {(int)row["thenUrlId"]!} {(string?)row["state"]} {(string?)row["reason"]?["code"]} {(string?)row["reason"]?["text"]} {(string?)row["detailThen"]} {(string?)row["relatedUrlThen"]}";
     }
 
+    /// <summary>
+    /// The report compares with the crawl's previous crawl by default, with nothing on <c>none</c>, and with a crawl named;
+    /// one that can't be compared is said under About this check, never refused. The workbook's export takes it too, and
+    /// no other export does.
+    /// </summary>
+    [Fact]
+    public async Task TheReportAndTheWorkbookCompareWithThePreviousCrawlByDefault()
+    {
+        var then = Id(FixLoopCrawls.AddTo(_sidecar, crawls.Then, "then"));
+        var now = Id(FixLoopCrawls.AddTo(_sidecar, crawls.Now, "now", 10));
+        var other = Id(FixLoopCrawls.AddTo(_sidecar, crawls.Then, "other", 5, path => TestCrawlFiles.SetStartUrl(path, crawls.Url("/").Replace("127.0.0.1", "localhost"))));
+        const string SINCE = "<h2>Since your last check on ";
+        const string COMPARED = "<dt>Compared with</dt>";
+
+        Assert.Contains(SINCE, await ReportAsync(now));
+        Assert.Contains(SINCE, await ReportAsync(now, "?compareWith=previous"));
+        Assert.Contains(SINCE, await ReportAsync(now, $"?compareWith={then}"));
+        var none = await ReportAsync(now, "?compareWith=none");
+        Assert.DoesNotContain(SINCE, none);
+        Assert.DoesNotContain(COMPARED, none);
+        var first = await ReportAsync(then);
+        Assert.DoesNotContain(SINCE, first);
+        Assert.DoesNotContain(COMPARED, first);
+        var otherSite = await ReportAsync(now, $"?compareWith={other}");
+        Assert.DoesNotContain(SINCE, otherSite);
+        Assert.Contains($"{COMPARED}<dd>Not compared: that crawl is of another site.</dd>", otherSite);
+        Assert.Contains($"{COMPARED}<dd>Not compared: no crawl has this id.</dd>", await ReportAsync(now, "?compareWith=0123456789abcdef"));
+        TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{now}/report?compareWith=none&compareWith=previous"), HttpStatusCode.UnprocessableEntity,
+            "invalid-export");
+
+        var refused = TestSidecar.AssertProblem(await _sidecar.PostAsync($"api/crawls/{now}/export",
+            new JsonObject { ["kind"] = "urls", ["format"] = "csv", ["path"] = Path.Combine(_sidecar.DataDirectory, "urls.csv"), ["compareWith"] = "previous" }),
+            HttpStatusCode.UnprocessableEntity, "invalid-export");
+        Assert.NotNull(refused["errors"]!["compareWith"]);
+        foreach (var compareWith in new[] { "previous", "none", other })
+        {
+            var started = await _sidecar.PostAsync($"api/crawls/{now}/export", new JsonObject
+            {
+                ["kind"] = "workbook", ["format"] = "xlsx", ["path"] = Path.Combine(_sidecar.DataDirectory, $"workbook-{compareWith}.xlsx"), ["compareWith"] = compareWith
+            });
+            Assert.True(started.Status == HttpStatusCode.Created, started.Body?.ToJsonString());
+            var deadline = DateTime.UtcNow + EventStreamReader.TIMEOUT;
+            JsonNode export;
+            while ((string?)(export = await _sidecar.GetJsonAsync($"api/exports/{(string)started.Body!["exportId"]!}"))["status"] == "running")
+            {
+                Assert.True(DateTime.UtcNow < deadline, "The export didn't end.");
+                await Task.Delay(50);
+            }
+
+            Assert.True((string?)export["status"] == "done", export.ToJsonString());
+        }
+    }
+
+    private async Task<string> ReportAsync(string id, string query = "")
+    {
+        using var response = await _sidecar.Client.GetAsync($"api/crawls/{id}/report{query}");
+        var text = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, text);
+        return text;
+    }
+
     private static string? Camel(Enum? value) => value is null ? null : JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
 
     private async Task AnalyseAsync(string id)

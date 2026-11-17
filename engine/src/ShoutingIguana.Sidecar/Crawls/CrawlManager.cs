@@ -5,6 +5,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Reporting.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api;
@@ -44,6 +45,9 @@ internal sealed class CrawlManager(
 
     /// <summary>What <c>with</c> and <c>compareWith</c> say for a crawl's previous crawl.</summary>
     public const string PREVIOUS = "previous";
+
+    /// <summary>What a report's <c>compareWith</c> says to compare with nothing.</summary>
+    public const string NONE = "none";
 
     private readonly Lock _sync = new();
     private readonly Dictionary<string, LiveCrawl> _crawls = new(StringComparer.Ordinal);
@@ -134,6 +138,34 @@ internal sealed class CrawlManager(
             }),
             _ => new ComparedPair(entry, other, Picked: true)
         };
+    }
+
+    /// <summary>
+    /// A report's or a workbook's options with what it is compared with (the fix loop): <c>none</c>, nothing; <c>previous</c>
+    /// or none given, the previous crawl when there is one; a crawl's id, that crawl, or the reason it can't be, which the
+    /// report says: a report is never refused for its comparison.
+    /// </summary>
+    public ReportOptions WithComparison(string id, ReportOptions report, string? compareWith)
+    {
+        if (compareWith == NONE)
+        {
+            return report;
+        }
+
+        try
+        {
+            return report with { CompareWith = ComparedWith(id, compareWith).Other?.Item.Path };
+        }
+        catch (ProblemException problem) when (problem.Problem.Type is "crawl-not-comparable" or "crawl-not-found")
+        {
+            var title = problem.Problem.Title;
+            return report with { NotCompared = $"Not compared: {char.ToLowerInvariant(title[0])}{title[1..]}" };
+        }
+        catch (ProblemException problem) when (problem.Problem.Type is "not-analyzed")
+        {
+            // The report says there is none of a crawl never analysed.
+            return report;
+        }
     }
 
     /// <summary>A crawl's entry, and those of every crawl the library lists, which it may not be among (removed, say).</summary>

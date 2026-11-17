@@ -971,3 +971,35 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   and `broken-internal-links` (its referring pages fetched again) from 40 to 22, as a full crawl of revision 1 finds.
 - **Not built here:** the sidecar's refusals that need the library (`site-busy`, `recheck-not-latest`), its flow
   (analyse first, recheck, analyse) and events (S2), and everything the app shows (U1, U2).
+
+### S1 and S2 as built: the sidecar
+
+Built on `ui/3b-fixloop-sidecar`, off the engine's lane. [The sidecar API](v2-sidecar-api.md)'s "(fix loop)" sections
+say each call as built; what follows is what the design left open, and where the build differs from it.
+
+**S1, the comparison.**
+
+- **The previous crawl** (`Library/PreviousCrawls`): of the crawls the library lists, the same `siteKey`, started before
+  in Home's order (two that started at the same moment: the one with the larger id is the earlier, as Home lists the
+  smaller first), with an analysis that read a page (`pagesAnalyzed` above 0), and not live, in use, interrupted,
+  missing or unreadable; the same start URL first. A crawl never analysed has no previous crawl: there is nothing to
+  compare.
+- **From the cached summaries alone.** The engine's summary gains each check's count and an options fingerprint (the
+  scope, limits and fetching options as the comparison reads them, hashed), and `CrawlComparability.FromSummaries`
+  compares two summaries at the check level. An engine test holds it to `ReadSummary` on every pair the comparison has
+  a case for (full, partial, counts only; an older analysis, other settings, a continued crawl, a limit, another path,
+  stopped on either side, another origin): the same comparability, needs, score change and counts, and the same states
+  but for a check at 0 now, which is fewer when this crawl stopped early or read under half the pages and fixed
+  otherwise, the rule the comparison has without its rows. `partial` is either crawl not reading all it set out to (the
+  "so far"). The item's `changes` is null while the crawl is live, interrupted, in use or unreadable. `summaries.json`
+  is format 6, and a sidecar test counts the cache's file reads while listing: none.
+- **Reads.** `/changes`, `compareWith` on `/groups` and `/rows`, and `/fixed` serve the engine's readers field for
+  field, in the grids' read slots and cache. Without `compareWith`, or with no previous crawl, the grids answer exactly
+  as before.
+- **The report and the workbook** (engine `Reporting/` and `Export/`): `ReportOptions.CompareWith` (the other file) and
+  `NotCompared` (what to say instead), which the sidecar resolves from `compareWith` (`previous` by default, `none`, or
+  an id); one that can't be compared is said under About this check, never refused. The report's part 2a lists Fixed,
+  New, Fewer and More by each check's plain title, then the crawl's settled rechecks; the summary cut has one note line.
+  The workbook's summary gains "Compared with", and its table "Found on 3 Nov" and "Change" as its last columns, so no
+  column moves; a last sheet "Fixed since 3 Nov" lists every row cleared. `compareWith` on an export is the sidecar's
+  own field (report and workbook only), not the engine's `ExportFields`, as only the library can resolve it.

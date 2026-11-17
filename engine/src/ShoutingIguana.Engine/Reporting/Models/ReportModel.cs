@@ -104,6 +104,18 @@ internal sealed record ReportModel
     /// <summary>Checks that found something and are left out because the user hid them (<see cref="ReportOptions.HiddenChecks"/>).</summary>
     public int HiddenProblems { get; init; }
 
+    /// <summary>The fix loop: this crawl compared with another of the site; null when it isn't (none asked for, or it couldn't be).</summary>
+    public ReportComparison? Comparison { get; init; }
+
+    /// <summary>Why a comparison asked for wasn't made, in a sentence; null when there is nothing to say.</summary>
+    public string? NotCompared { get; init; }
+
+    /// <summary>The thresholds the analysis ran with, which the checks' words are filled from.</summary>
+    public AnalysisSettings Settings { get; init; } = new();
+
+    /// <summary>The crawl's rechecks (the fix loop), newest first: none for a crawl never rechecked.</summary>
+    public IReadOnlyList<RecheckRecord> Rechecks { get; init; } = [];
+
     /// <summary>The lists are a view's checks only (<see cref="ReportOptions.Checks"/>): what they leave out isn't hidden, only not in the view.</summary>
     public bool Narrowed { get; init; }
 
