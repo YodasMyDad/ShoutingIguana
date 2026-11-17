@@ -11,8 +11,8 @@ still there. Confirming one footer link means crawling the whole site again: 37 
 URLs.
 
 This is the design (stage A). The engine's stages E1 to E4 are built (branch `ui/3b-fixloop-engine`): where the build
-differs from this, [As built: the engine](#12-as-built-the-engine-stages-e1-to-e4) says so. The sidecar and the app
-(S1, S2, U1, U2) aren't built yet. The API it adds is in
+differs from this, [As built: the engine](#12-as-built-the-engine-stages-e1-to-e4) says so, and so does its part on the
+sidecar (S1, S2), built too. The app (U1, U2) isn't built yet. The API it adds is in
 [the sidecar API](v2-sidecar-api.md), marked "(fix loop)", and what the engine changes is under
 [Engine changes the fix loop makes](v2-sidecar-api.md#engine-changes-the-fix-loop-makes). It supersedes "crawl
 comparison: later" in [the rebuild plan](v2-rebuild.md) (step 3b now), in [the IA](v2-ui-ia.md#room-for-what-comes-later)
@@ -969,8 +969,9 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   1,000-page site after revision 1, `si recheck --check internal-client-error` gives "26 of 37 fixed. 11 still have it.",
   8 new (the moved links' missing URLs, fetched one step), in 75 requests and 2 s: the check's count goes from 37 to 19,
   and `broken-internal-links` (its referring pages fetched again) from 40 to 22, as a full crawl of revision 1 finds.
-- **Not built here:** the sidecar's refusals that need the library (`site-busy`, `recheck-not-latest`), its flow
-  (analyse first, recheck, analyse) and events (S2), and everything the app shows (U1, U2).
+- **Not built in E1 to E4:** the sidecar's refusals that need the library (`site-busy`, `recheck-not-latest`), its flow
+  (analyse first, recheck, analyse) and events, built in S2 (below); and everything the app shows (U1, U2), not built
+  yet.
 
 ### S1 and S2 as built: the sidecar
 
