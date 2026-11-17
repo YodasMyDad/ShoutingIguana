@@ -188,6 +188,37 @@ export const FileNoRuleKept: Story = {
   render: () => <ScreenApp path={at(SITE, '?reason=unknown')} />,
 };
 
+/**
+ * Step 3b: the blocked URLs the site asks for (a sitemap lists them, a menu links to them), listed alone from the link
+ * over the list: each flagged, with the pages linking to it and its sitemap.
+ */
+export const FileConflicts: Story = {
+  loaders: [() => own(EVERY_STATE)],
+  render: () => <ScreenApp path={at(SITE, '?conflict=true')} />,
+};
+
+/** Step 3b: a crawl changed since its analysis: what blocking each URL costs isn't known, and says when it will be. */
+export const FileCostsUnknown: Story = {
+  loaders: [
+    () =>
+      own({
+        ...EVERY_STATE,
+        blocked: {
+          [SITE]: TEST_BLOCKED.map((row) => ({
+            ...row,
+            linkingPages: null,
+            inSitemap: null,
+            sitemaps: null,
+            sitemap: null,
+            inMenu: null,
+            conflict: null,
+          })),
+        },
+      }),
+  ],
+  render: () => <ScreenApp path={at(SITE)} />,
+};
+
 /** A line that blocked nothing: filtered to nothing, with the way back. */
 export const FileLineBlockedNothing: Story = {
   loaders: [() => own(EVERY_STATE)],
@@ -336,13 +367,25 @@ function bigFile(): { file: RobotsFile; blocked: RobotsBlockedUrl[] } {
     const path = rule === 12 ? `/${'a-very-long-path-segment/'.repeat(24)}*?sessionid=` : `/catalogue/${rule}/private/`;
     const number = add(`Disallow: ${path}`, 'disallow', true, count);
     for (let url = 0; url < Math.min(count, 3); url++) {
+      // What blocking each costs: some linked from thousands of pages, some from a menu, some in many sitemaps.
+      const id = blocked.length + 1;
+      const inSitemap = id % 5 === 0;
+      const inMenu = id % 7 === 0;
       blocked.push({
-        id: blocked.length + 1,
+        id,
         url: `${SITE}${path.replace('*', 'x')}${url === 0 ? `${'deep/'.repeat(30)}page.html?ref=${'z'.repeat(80)}` : `item-${url}`}`,
         reason: 'rule',
         line: number,
         rule: `Disallow: ${path}`,
         error: null,
+        linkingPages: (id * 7_919) % 48_000,
+        inSitemap,
+        sitemaps: inSitemap ? 1 + (id % 140) : null,
+        sitemap: inSitemap
+          ? { id: 1, url: `${SITE}/sitemaps/catalogue-${'very-long-name-'.repeat(4)}${id}.xml` }
+          : null,
+        inMenu,
+        conflict: inSitemap || inMenu,
       });
     }
   }

@@ -186,6 +186,67 @@ test('the file shows the line that blocked a planted URL, and choosing the line 
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
 });
 
+interface BlockedRow {
+  id: number;
+  url: string;
+  linkingPages: number | null;
+  inSitemap: boolean | null;
+  sitemap: { id: number; url: string } | null;
+  conflict: boolean | null;
+}
+
+test('each blocked URL says what blocking it costs, and the ones the site asks for are flagged and listed alone', async ({
+  page,
+}) => {
+  const { crawl, own, at } = await planted();
+  const all = await read<{ rows: BlockedRow[]; conflicts: number | null }>(`/api/crawls/${crawl}/robots/blocked`, {
+    origin: own.origin,
+    limit: 1_000,
+  });
+  // The test site's sitemap lists one URL its robots.txt disallows, which nothing links to; products link the others.
+  const listed = all.rows.find((row) => row.url.endsWith('/private/listed'));
+  const linked = all.rows.filter((row) => (row.linkingPages ?? 0) > 0).sort((a, b) => a.id - b.id)[0];
+  if (!listed?.sitemap || !linked)
+    throw new Error('The test site plants a blocked URL in its sitemap, and links others');
+  const conflicts = all.rows.filter((row) => row.conflict === true).length;
+  expect(all.conflicts).toBe(conflicts);
+
+  await page.goto(at);
+  await expect(shown(page)).toHaveText(String(own.blocked));
+  // A row by its URL cell's path: "/private/1" is no other row's, though the row's text runs on into its next cell.
+  const rowOf = (path: string) =>
+    blocked(page)
+      .getByRole('row')
+      .filter({
+        has: page.locator('[aria-colindex="1"]', { hasText: new RegExp(`${path.replace(/[.?]/g, '\\$&')}$`) }),
+      });
+  const sitemapName = listed.sitemap.url.slice(listed.sitemap.url.lastIndexOf('/') + 1);
+  await expect(rowOf('/private/listed')).toContainText('In your sitemap but blocked');
+  await expect(rowOf('/private/listed')).toContainText('No pages');
+  await expect(rowOf('/private/listed')).toContainText(`Yes: ${sitemapName}`);
+  const path = new URL(linked.url).pathname;
+  const pages = `${linked.linkingPages} ${linked.linkingPages === 1 ? 'page' : 'pages'}`;
+  await expect(rowOf(path)).toContainText(pages);
+
+  // The conflicts, from the link over the list: listed alone, and kept in the route.
+  await main(page)
+    .getByRole('link', { name: `${conflicts} ${conflicts === 1 ? 'URL' : 'URLs'} in your sitemap or menu but blocked` })
+    .click();
+  await expect(page).toHaveURL(/conflict=true/);
+  await expect(shown(page)).toHaveText(String(conflicts));
+  await expect(main(page).locator('.si-chip')).toHaveText('Conflict is in your sitemap or menu but blocked');
+  await expect(rowOf('/private/listed')).toBeVisible();
+  await expectNoViolations(page);
+
+  // A count of linking pages leads to the links to that URL in Links.
+  await page.goto(at);
+  await rowOf(path)
+    .getByRole('link', { name: `Linked from ${pages}: show the links in Links` })
+    .click();
+  await expect(page).toHaveURL(/\/links\?filter=/);
+  await expect(main(page).getByRole('grid', { name: 'Links' }).getByRole('row').nth(1)).toContainText(path);
+});
+
 test('choosing a URL shows its line, and Enter opens the inspector, which leads back to this file', async ({
   page,
 }) => {

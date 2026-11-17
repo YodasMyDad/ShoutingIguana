@@ -197,6 +197,35 @@ it('names an origin’s blocked URLs narrowed by their reason (the review’s fi
   ).toBe('Blocked with no rule kept');
 });
 
+it('names an origin’s blocked URLs narrowed to the conflicts, and every file says what blocking each costs', () => {
+  const offer = robotsBlockedOffer({
+    item,
+    crawling: false,
+    origin: 'https://example.com',
+    conflict: true,
+    rows: null,
+  });
+  const choice = offer.choices[0];
+  expect(choice?.title).toBe('In your sitemap or menu but blocked');
+  expect(choice?.description).toBe(
+    'example.com’s robots.txt: every URL it blocked that your sitemap or menu asks for, with the pages linking to each and its sitemap',
+  );
+  expect(choice?.fileView).toBe('blocked by example.com robots.txt in sitemap or menu');
+  expect(choice?.build(as())).toEqual({
+    kind: 'robotsBlocked',
+    format: 'xlsx',
+    path: 'C:\\x\\a.xlsx',
+    origin: 'https://example.com',
+    conflict: true,
+  });
+  // Not narrowed to them: no conflict field, and the costs are in the file all the same.
+  const all = robotsBlockedOffer({ item, crawling: false, origin: 'https://example.com', conflict: false, rows: 4 });
+  expect(all.choices[0]?.build(as())).not.toHaveProperty('conflict');
+  expect(all.choices[0]?.description).toBe(
+    '4 URLs: every URL it blocked, with the line that decided each, the pages linking to it and its sitemap',
+  );
+});
+
 describe('Issues and Overview', () => {
   it('offer the check, the open group, the report and every check', () => {
     const offer = issuesOffer({
