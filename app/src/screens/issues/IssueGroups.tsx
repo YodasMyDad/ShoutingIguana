@@ -50,6 +50,7 @@ import { followWords } from '../../inspector/links';
 import { OUTCOME_WORDS } from '../../inspector/words';
 import { StatusCode } from '../../ui/StatusCode';
 import { linksOfUrl } from '../links/linkPlaces';
+import { imagesOfPage } from '../links/presets';
 import {
   FIRST_GROUP_ROWS,
   childPlace,
@@ -968,6 +969,7 @@ export function IssueGroups({
         foundIn={
           menuRow?.kind === 'page' && references === 'sources' ? linksOfUrl('inlinks', menuRow.row.id, 'all') : null
         }
+        imagesIn={menuRow?.kind === 'page' && check.category === 'images' ? imagesOfPage(menuRow.row.id) : null}
         group={
           menuRow && (menuRow.kind === 'group' || menuRow.kind === 'more')
             ? {
