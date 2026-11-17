@@ -127,7 +127,8 @@ internal sealed class AnalysisReader : IDisposable
             SELECT u.id, u.is_internal, substr(u.url, 1, 6) = 'https:', u.depth, u.source,
                    r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
                    r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type,
-                   COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0)
+                   COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0),
+                   COALESCE(r.response_ms, 0)
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -140,6 +141,7 @@ internal sealed class AnalysisReader : IDisposable
 
             var outcome = fetched ? (FetchOutcome)reader.GetInt32(6) : default;
             var contentType = outcome == FetchOutcome.Success && fetched && !reader.IsDBNull(14) ? reader.GetString(14) : null;
+            var url = reader.GetString(13);
             statuses[id] = new UrlStatus(
                 Known: true,
                 IsInternal: reader.GetBoolean(1),
@@ -154,9 +156,11 @@ internal sealed class AnalysisReader : IDisposable
                 RedirectTargetId: reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                 SizeBytes: reader.IsDBNull(11) ? null : reader.GetInt64(11),
                 InSitemap: inSitemap[id],
-                IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType),
+                IsResource: ResourceTypes.IsResource(url, contentType),
                 Source: (DiscoverySource)reader.GetInt32(4),
-                IsRateLimited: reader.GetBoolean(15));
+                IsRateLimited: reader.GetBoolean(15),
+                ResponseMs: fetched ? reader.GetInt32(16) : 0,
+                IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri));
             read++;
             progress?.Advance(read);
         });

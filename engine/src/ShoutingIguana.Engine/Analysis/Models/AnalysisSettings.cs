@@ -61,6 +61,21 @@ public sealed record AnalysisSettings
 
     public int MaxUrlLength { get; init; } = 115;
 
+    /// <summary>An indexable page linking to fewer other URLs of the site than this is a dead end. 0 turns the check off.</summary>
+    public int MinInternalOutlinks { get; init; } = 3;
+
+    /// <summary>An indexable page more clicks than this from the start is deep.</summary>
+    public int MaxClickDepth { get; init; } = 4;
+
+    /// <summary>An indexable page with more internal links than this has very many.</summary>
+    public int MaxInternalLinks { get; init; } = 1_000;
+
+    /// <summary>An indexable page with more links to other sites than this has very many.</summary>
+    public int MaxExternalLinks { get; init; } = 100;
+
+    /// <summary>A page on another site that took longer than this to answer is slow.</summary>
+    public int SlowExternalLinkMs { get; init; } = 3_000;
+
     public IReadOnlyList<string> Validate()
     {
         List<string> errors = [];
@@ -85,6 +100,11 @@ public sealed record AnalysisSettings
             LargePageBytes < 1 || SlowResponseMs < 1 || MaxUrlLength < 1)
         {
             errors.Add("Word counts must not be negative, and size, time and length limits must be positive.");
+        }
+
+        if (MinInternalOutlinks < 0 || MaxClickDepth < 1 || MaxInternalLinks < 1 || MaxExternalLinks < 1 || SlowExternalLinkMs < 1)
+        {
+            errors.Add("The fewest links must not be negative, and the most clicks, links and the slowest link must be positive.");
         }
 
         return errors;

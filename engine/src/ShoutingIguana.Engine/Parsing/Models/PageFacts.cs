@@ -10,7 +10,7 @@ public sealed record PageFacts
 {
     /// <summary>
     /// What <see cref="CollectedVersion"/> the parser writes now. 1 is the new checks' (step 3b): the canonical's other
-    /// attributes, the page's next and prev links, a <c>Refresh</c> header.
+    /// attributes, the page's next and prev links, a <c>Refresh</c> header, the links search engines can't follow.
     /// </summary>
     public const int CURRENT_COLLECTION = 1;
 
@@ -29,6 +29,9 @@ public sealed record PageFacts
 
     /// <summary>The page's <c>rel="next"</c> and <c>rel="prev"</c> links, in page order. Empty for a page crawled before they were noted.</summary>
     public IReadOnlyList<PaginationFact> Pagination { get; init; } = [];
+
+    /// <summary>The page's links search engines can't follow, or null with none, and for a page crawled before they were noted.</summary>
+    public UncrawlableLinksFact? UncrawlableLinks { get; init; }
     public IReadOnlyList<HeadingFact> Headings { get; init; } = [];
     public IReadOnlyList<ImageFact> Images { get; init; } = [];
     public IReadOnlyList<string> JsonLd { get; init; } = [];

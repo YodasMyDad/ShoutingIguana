@@ -38,4 +38,7 @@ internal sealed record PageSpec
     public bool Charset { get; init; } = true;
 
     public bool OpenGraph { get; init; } = true;
+
+    /// <summary>The site's header, menu and footer around the content; false leaves the page with only its own links.</summary>
+    public bool Chrome { get; init; } = true;
 }

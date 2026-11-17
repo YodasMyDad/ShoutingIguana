@@ -11,6 +11,9 @@ public sealed partial class SyntheticSite
 {
     private const int PLANT_WORDS = 250;
     private const int SLOW_PAGE_DELAY_MS = 1_200;
+
+    /// <summary>How long the partner's slow page takes: past the analysis's default 3 seconds for a slow external link.</summary>
+    private const int SLOW_EXTERNAL_DELAY_MS = 3_200;
     private const int LONG_CHAIN_HOPS = 22;
 
     private const string SHARED_DESCRIPTION =
@@ -115,13 +118,39 @@ public sealed partial class SyntheticSite
 
         // A line break separates words, so these two headings read the same.
         // The pages of a paginated series share their heading by design; their titles differ, so neither is flagged.
+        // Each page links the other with an <a> as well, as Google needs to find the next one.
         Page("series", "Paginated series, first page", [], page => page with
         {
-            H1 = "Paginated series", ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-2\">"
+            H1 = "Paginated series", ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-2\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}series-2\">Next page</a></p>"
         });
         Page("series-2", "Paginated series, second page", [], page => page with
         {
-            H1 = "Paginated series", ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}series\">"
+            H1 = "Paginated series", ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}series\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}series\">Previous page</a></p>"
+        });
+
+        // Pagination tags that lead nowhere useful: to no <a>-linked page, to a 404, to a noindex page (which doesn't name
+        // this one back), to the page itself.
+        Page("unlinked-series/", "Tag-linked series one", ["pagination-not-linked"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}unlinked-series/page/2/\">"
+        });
+        Page("unlinked-series/page/2/", "Tag-linked series two", ["pagination-not-linked"], page => page with
+        {
+            ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}unlinked-series/\">"
+        });
+        Page("series-broken", "Series with a broken next page", ["pagination-broken"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}gone-redirect\">"
+        });
+        Page("series-noindex", "Series with a noindex next page", ["pagination-to-non-indexable", "pagination-sequence-error"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}noindex\">", Content = page.Content + $"<p><a href=\"{PLANTS_PATH}noindex\">Next page</a></p>"
+        });
+        Page("series-self", "Series naming itself next", ["pagination-sequence-error"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-self\">"
         });
         Page("h1-break-a", "Heading with a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to<br>our planted store" });
         Page("h1-break-b", "Heading without a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to our planted store" });
@@ -222,7 +251,6 @@ public sealed partial class SyntheticSite
         // Page 2 of a list names page 1 as its canonical: a fault of its own, not just a canonicalised page.
         Page("paginated-list/", "Paginated list, first page", [], page => page with
         {
-            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}paginated-list/page/2/\">",
             Content = page.Content + $"<p><a href=\"{PLANTS_PATH}paginated-list/page/2/\">Next page</a></p>"
         });
         Page("paginated-list/page/2/", "Paginated list, second page", ["canonical-to-first-page"], page => page with
@@ -316,6 +344,59 @@ public sealed partial class SyntheticSite
         {
             plants.Add(new Plant("/private/listed", Plant.REFUSED, Linked: false, InSitemap: true, ["blocked-by-robots", "sitemap-non-indexable"],
                 () => Html(RenderSimple("Private listed", "robots.txt disallows this area.", "/private/listed")), IsPage: false));
+        }
+
+        // Links search engines can't follow: one that works only through a script, and a javascript: href.
+        Page("uncrawlable-links", "Links search engines can't follow", ["uncrawlable-links"], page => page with
+        {
+            Content = page.Content + $"<p><a onclick=\"location='{PLANTS_PATH}thin'\">Thin page</a> <a href=\"javascript:void(0)\">Open menu</a></p>"
+        });
+
+        // A script that isn't there.
+        Page("broken-script", "Broken script", ["broken-resources"], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}missing.js\"></script>" });
+        Other("missing.js", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "missing.js"));
+
+        // A page without the site's header, menu and footer: a dead end.
+        Page("dead-end", "Dead end", ["few-internal-outlinks"], page => page with { Chrome = false });
+        Page("generic-anchors", "Links with generic text", ["generic-anchor-text"], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">Click here</a> <a href=\"{PLANTS_PATH}thin\">Read more…</a></p>"
+        });
+
+        // A page only a noindex page links to.
+        Page("noindex-hub", "Noindex hub", ["noindex-page"], page => page with
+        {
+            Robots = "noindex", Content = page.Content + $"<p><a href=\"{PLANTS_PATH}only-from-noindex\">Only from a noindex page</a></p>"
+        }, inSitemap: false);
+        Page("only-from-noindex", "Linked only from a noindex page", ["non-indexable-inlinks-only", "not-in-sitemap"], inSitemap: false, linked: false);
+
+        // Three clicks from home, then four, then five: the last is deep.
+        Page("deep-1", "Deep page one", [], page => page with { Content = page.Content + $"<p><a href=\"{PLANTS_PATH}deep-2\">Deeper</a></p>" });
+        Page("deep-2", "Deep page two", [], page => page with { Content = page.Content + $"<p><a href=\"{PLANTS_PATH}deep-3\">Deeper still</a></p>" },
+            linked: false);
+        Page("deep-3", "Deep page three", ["deep-page"], linked: false);
+
+        // More than a thousand links, and a link to a partner page that takes more than 3 seconds.
+        Page("many-links", "Very many links", ["too-many-links"], page => page with
+        {
+            Content = page.Content + $"<p>{string.Concat(Enumerable.Repeat($"<a href=\"{PLANTS_PATH}thin\">Thin page</a> ", 1_001))}</p>"
+        });
+        Page("slow-external", "Link to a slow page elsewhere", ["slow-external-links"], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{_external}/ext/slow\">A slow partner page</a></p>"
+        });
+        plants.Add(new Plant("/ext/slow", 200, Linked: false, InSitemap: false, [],
+            () => Html(RenderSimple("Slow partner page", "It answers slowly.", "/ext/slow")) with { DelayMs = SLOW_EXTERNAL_DELAY_MS },
+            IsPage: false, OnPartnerSite: true));
+
+        // A sitemap page only a nofollow link leads to is all but an orphan. Without sitemaps nothing leads the crawl there.
+        if (_options.Sitemaps)
+        {
+            Page("nofollow-link", "Nofollow link to a listed page", ["internal-nofollow-links"], page => page with
+            {
+                Content = page.Content + $"<p><a href=\"{PLANTS_PATH}nofollow-only\" rel=\"nofollow\">Listed page</a></p>"
+            });
+            Page("nofollow-only", "Only nofollow links lead here", ["orphan-page"], linked: false);
         }
 
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with

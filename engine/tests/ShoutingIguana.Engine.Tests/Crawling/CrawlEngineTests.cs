@@ -447,7 +447,8 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.SITE_HIDDEN_FROM_SEARCH);
         Assert.Equal(
             [
-                (IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.START_FOLDER), (IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, SkippedCheckReasons.START_NOT_ROOT),
+                (IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.START_FOLDER), (IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id, SkippedCheckReasons.START_FOLDER),
+                (IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Id, SkippedCheckReasons.START_NOT_ROOT),
                 (IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.START_FOLDER)
             ],
             analysis.Skipped.Select(skip => (skip.CheckId, skip.Reason)));

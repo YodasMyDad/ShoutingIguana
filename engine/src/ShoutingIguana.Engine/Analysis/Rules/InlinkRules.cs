@@ -4,10 +4,10 @@ using ShoutingIguana.Engine.Parsing.Models;
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
-/// Counts the internal links into every URL, then reports indexable pages that only a sitemap leads to, and canonical
-/// pages that only other pages' canonicals lead to. Links that reach a page through a redirect count for it. A partial
-/// crawl can't tell an unlinked page from one whose linking pages weren't fetched yet, so the checks only run on complete
-/// crawls.
+/// Counts the internal links into every URL, then reports indexable pages that only a sitemap (or only nofollow links)
+/// leads to, canonical pages that only other pages' canonicals lead to, and pages linked only from pages that can't be
+/// indexed. Links that reach a page through a redirect count for it. A partial crawl can't tell an unlinked page from one
+/// whose linking pages weren't fetched yet, so the checks only run on complete crawls.
 /// </summary>
 /// <param name="crawlComplete">The crawl read every page that could link to a sitemap page, and every sitemap: orphans can be judged.</param>
 /// <param name="everyLinkingPage">
@@ -19,7 +19,7 @@ internal sealed class InlinkRules(UrlTable urls, bool crawlComplete, bool? every
     // The pages other pages' canonicals name, each once.
     private readonly HashSet<int> _canonicalTargets = [];
 
-    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.ORPHAN_PAGE, IssueCatalog.CANONICAL_UNLINKED];
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.ORPHAN_PAGE, IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY];
 
     public void Observe(AnalyzedPage page)
     {
@@ -45,11 +45,13 @@ internal sealed class InlinkRules(UrlTable urls, bool crawlComplete, bool? every
         urls.CreditRedirectTargets();
         if (crawlComplete)
         {
+            // Google takes nofollow as a hint, so a page that only nofollow links lead to is all but unlinked.
             for (var id = 1; id < urls.Length; id++)
             {
-                if (urls[id] is { IsInternal: true, IsIndexablePage: true, InSitemap: true } && IsUnlinked(id))
+                if (urls[id] is { IsInternal: true, IsIndexablePage: true, InSitemap: true } && id != urls.StartId && id != urls.HomeId &&
+                    urls.FollowedInlinks(id) == 0)
                 {
-                    yield return new IssueHit(IssueCatalog.ORPHAN_PAGE, id, "Only found in a sitemap");
+                    yield return new IssueHit(IssueCatalog.ORPHAN_PAGE, id, urls.NofollowInlinks(id) == 0 ? "Only found in a sitemap" : "Only nofollow links lead here");
                 }
             }
         }
@@ -60,6 +62,16 @@ internal sealed class InlinkRules(UrlTable urls, bool crawlComplete, bool? every
             if (urls[id] is { IsInternal: true, IsIndexablePage: true } target && (!target.InSitemap || !crawlComplete) && IsUnlinked(id))
             {
                 yield return new IssueHit(IssueCatalog.CANONICAL_UNLINKED, id, "Only canonicals lead here");
+            }
+        }
+
+        for (var id = 1; id < urls.Length; id++)
+        {
+            if (urls[id] is { IsInternal: true, IsIndexablePage: true } && id != urls.StartId && id != urls.HomeId &&
+                urls.FollowedInlinks(id) is > 0 and var linking && urls.IndexableInlinks(id) == 0)
+            {
+                yield return new IssueHit(IssueCatalog.NON_INDEXABLE_INLINKS_ONLY, id,
+                    linking == 1 ? "Linked from 1 page, which isn't indexable" : $"Linked from {RuleText.Count(linking, "page", "pages")}, none of them indexable");
             }
         }
     }

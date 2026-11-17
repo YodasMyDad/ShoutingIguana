@@ -307,7 +307,7 @@ public static class IssuePlainTexts
         ["orphan-page"] = new(
             """Pages in your sitemap that nothing links to""",
             [
-                """No page on your site links to these pages: they were found only in your sitemap.""",
+                """No page on your site links to these pages, or only with links search engines are told not to follow.""",
                 """Visitors can't reach them by browsing, and Google relies on links to find pages and judge what they're about.""",
                 """They're often old pages left in the sitemap (the file that lists your pages for search engines), or pages reached only through a form."""
             ],
@@ -318,6 +318,187 @@ public static class IssuePlainTexts
             ],
             IssueFixer.You,
             """No page in the sitemap is left with no links to it"""),
+
+        ["uncrawlable-links"] = new(
+            """Links Google can't follow""",
+            [
+                """Some links on these pages work only through code in the browser, so search engines can't follow them.""",
+                """Pages reached only through such links may never be found in search.""",
+                """Menus and "load more" buttons are the usual cause."""
+            ],
+            [
+                """Send the list to your developer: it gives the first few such links on each page, and what's wrong with each.""",
+                """Ask for each one to be a normal link with a real web address, with any code kept on top of it."""
+            ],
+            IssueFixer.Developer,
+            """Every link can be followed by search engines""")
+        {
+            OneFix = """If most pages are listed, it's almost certainly your menu, which every page shares."""
+        },
+
+        ["broken-resources"] = new(
+            """Pages that load files that are missing""",
+            [
+                """These pages load a file, such as code, a style sheet or a video, that is missing or fails.""",
+                """The page can look or work wrong for visitors, and for Google, which loads pages as visitors do.""",
+                """A broken file from another company's service often changes nothing anyone sees."""
+            ],
+            [
+                """Open one of the pages and check that it looks and works as it should.""",
+                """Send the list to your developer: each page names the missing file.""",
+                """Ask them to restore each file, correct its address, or remove what's no longer used."""
+            ],
+            IssueFixer.Developer,
+            """No page loads a file that is missing"""),
+
+        ["links-to-localhost"] = new(
+            """Links to a test copy that only works for whoever built it""",
+            [
+                """These pages link to an address that exists only on someone's own computer or private network, such as "localhost".""",
+                """Everyone else gets a dead link, or a missing picture or file.""",
+                """It's usually left behind when content was copied over from a test copy of the site."""
+            ],
+            [
+                """Open each page and find the link: the list shows the first such address on each.""",
+                """Change it to the address on your live site, or remove it."""
+            ],
+            IssueFixer.You,
+            """No page links to a test copy of the site"""),
+
+        ["few-internal-outlinks"] = new(
+            """Dead-end pages that link to nothing else on your site""",
+            [
+                """These pages have fewer than {limit:minInternalOutlinks} to other pages of your site.""",
+                """Visitors who land on one have nowhere obvious to go next, and search engines find no way onward from it.""",
+                """It's common on pages built without your site's usual menu and footer."""
+            ],
+            [
+                """Add links from each page to related pages and to its section.""",
+                """If a page is missing your site's menu and footer, use your normal page design for it."""
+            ],
+            IssueFixer.You,
+            """Every page links on to other pages of the site"""),
+
+        ["generic-anchor-text"] = new(
+            """Links that say "click here" instead of where they go""",
+            [
+                """Some links on these pages say only "click here", "read more" or the like, not where they lead.""",
+                """People using screen readers often hear a page's links on their own, where those words mean nothing.""",
+                """Google also uses a link's words to understand the page it leads to."""
+            ],
+            [
+                """Change each link's words to say what's at the other end, such as "Read our delivery policy".""",
+                """The list shows the words each page uses."""
+            ],
+            IssueFixer.You,
+            """No link says only "click here" or the like"""),
+
+        ["non-indexable-inlinks-only"] = new(
+            """Pages only linked from pages Google won't show""",
+            [
+                """The only pages that link to these are themselves kept out of search results, or point Google at another page.""",
+                """Search engines can still reach them, but such links count for little.""",
+                """It's often a page linked only from filtered lists or archive pages."""
+            ],
+            [
+                """Link to each page from a page that appears in search, such as its category or a related page."""
+            ],
+            IssueFixer.You,
+            """Every page has a link from a page Google can show"""),
+
+        ["deep-page"] = new(
+            """Pages buried deep in your site""",
+            [
+                """These pages are more than {limit:maxClickDepth} away from your home page.""",
+                """Search engines tend to visit deep pages less often, and visitors rarely click that far.""",
+                """Big shops have some deep pages by design, so look at which pages these are."""
+            ],
+            [
+                """Link to the pages that matter from higher up, such as a category page, the menu or the home page.""",
+                """Add subcategories, so long lists don't push pages further down."""
+            ],
+            IssueFixer.You,
+            """No page is buried deep in the site"""),
+
+        ["too-many-links"] = new(
+            """Pages crowded with links""",
+            [
+                """These pages have more than {limit:maxInternalLinks} to your own pages, or more than {limit:maxExternalLinks} to other websites.""",
+                """So many links are hard for visitors to use, and each one counts for less.""",
+                """It's usually a huge menu or footer."""
+            ],
+            [
+                """Cut the links down to the ones visitors use, starting with the menu and footer.""",
+                """Split very long lists over several pages."""
+            ],
+            IssueFixer.Either,
+            """No page is crowded with links"""),
+
+        ["slow-external-links"] = new(
+            """Links to other websites that take a long time to load""",
+            [
+                """These pages link to pages on other websites that took more than {limit:slowExternalLinkMs} to answer.""",
+                """Visitors who follow the link wait, and may blame your site.""",
+                """Another website being slow once can be a blip, so check before changing anything."""
+            ],
+            [
+                """Open the slowest links to see whether they're slow for you too.""",
+                """Replace a link that stays slow with a better source, or remove it."""
+            ],
+            IssueFixer.You,
+            """No link leads to a slow page on another website"""),
+
+        ["pagination-not-linked"] = new(
+            """Next pages of a list that only hidden links point to""",
+            [
+                """These pages of a list point to the next or previous page only through hidden links in the page's code.""",
+                """Google no longer reads those, and finds the other pages of a list only through ordinary links.""",
+                """Pages reached only that way may never be found."""
+            ],
+            [
+                """Ask your developer to add ordinary "Next" and "Previous" links, or page numbers, between the pages of each list."""
+            ],
+            IssueFixer.Developer,
+            """Every page of a list links to the next with a normal link"""),
+
+        ["pagination-broken"] = new(
+            """Next or previous page links that lead to an error""",
+            [
+                """The hidden links these pages use to name the next or previous page of a list lead to an error, or forward elsewhere.""",
+                """It usually means the list's addresses changed and the page design didn't follow."""
+            ],
+            [
+                """Ask your developer to point the hidden "next" and "prev" links at the right pages, or remove them."""
+            ],
+            IssueFixer.Developer,
+            """No next or previous page link leads to an error"""),
+
+        ["pagination-to-non-indexable"] = new(
+            """Next or previous page links to pages Google won't show""",
+            [
+                """The hidden links these pages use to name the next or previous page of a list lead to a page kept out of search.""",
+                """What's listed only on that page is then found only through a page search engines drop."""
+            ],
+            [
+                """Ask your developer whether the list's pages should appear in search.""",
+                """If they should, have the setting that keeps them out removed; if not, have the links point at pages that do appear."""
+            ],
+            IssueFixer.Developer,
+            """No next or previous page link leads to a hidden page"""),
+
+        ["pagination-sequence-error"] = new(
+            """Next and previous page links that don't match up""",
+            [
+                """The hidden links these pages use to name the next and previous page of a list don't make a sequence.""",
+                """A page names itself as next, names two next pages, or its next page doesn't name it back.""",
+                """Google no longer reads these links, so it's a tidy-up rather than a search problem."""
+            ],
+            [
+                """Send the list to your developer: it says what's wrong on each page.""",
+                """Ask for each page to name one next and one previous page, in order."""
+            ],
+            IssueFixer.Developer,
+            """Every list's next and previous page links match up"""),
 
         ["noindex-page"] = new(
             """Pages told to stay out of search results""",

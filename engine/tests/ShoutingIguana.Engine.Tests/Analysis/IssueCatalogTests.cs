@@ -34,7 +34,12 @@ public sealed class IssueCatalogTests
         // The new checks of step 3b (docs/v2-new-checks.md), batch 1.
         "robots-directives-conflict", "noindex-near-home", "unavailable-after-passed", "media-preview-blocked", "translation-blocked",
         "indexifembedded-without-noindex", "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "canonical-on-redirect",
-        "canonical-fragment", "canonical-invalid-attribute", "canonical-unlinked"
+        "canonical-fragment", "canonical-invalid-attribute", "canonical-unlinked",
+
+        // Batch 2.
+        "uncrawlable-links", "broken-resources", "links-to-localhost", "few-internal-outlinks", "generic-anchor-text",
+        "non-indexable-inlinks-only", "deep-page", "too-many-links", "slow-external-links", "pagination-not-linked", "pagination-broken",
+        "pagination-to-non-indexable", "pagination-sequence-error"
     ];
 
     [Fact]
@@ -187,7 +192,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(100, IssueCatalog.All.Count);
+        Assert.Equal(113, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(

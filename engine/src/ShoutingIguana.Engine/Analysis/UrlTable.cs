@@ -25,6 +25,7 @@ internal sealed class UrlTable
 
     private readonly UrlStatus[] _statuses;
     private readonly int[] _followedInlinks;
+    private readonly int[] _indexableInlinks;
     private readonly int[] _nofollowInlinks;
     private readonly int[] _inlinks;
     private readonly int[] _nofollowLinks;
@@ -44,6 +45,7 @@ internal sealed class UrlTable
     {
         _statuses = statuses;
         _followedInlinks = new int[statuses.Length];
+        _indexableInlinks = new int[statuses.Length];
         _nofollowInlinks = new int[statuses.Length];
         _inlinks = new int[statuses.Length];
         _nofollowLinks = new int[statuses.Length];
@@ -169,6 +171,9 @@ internal sealed class UrlTable
     /// <summary>Pages with a followed link to this URL, not counting the URL itself.</summary>
     public int FollowedInlinks(int id) => _followedInlinks[id];
 
+    /// <summary>Of <see cref="FollowedInlinks"/>, the pages that can be indexed themselves.</summary>
+    public int IndexableInlinks(int id) => _indexableInlinks[id];
+
     /// <summary>Pages whose only links to this URL are nofollow.</summary>
     public int NofollowInlinks(int id) => _nofollowInlinks[id];
 
@@ -217,6 +222,10 @@ internal sealed class UrlTable
         foreach (var target in _pageTargets)
         {
             _followedInlinks[target]++;
+            if (page.IsIndexable)
+            {
+                _indexableInlinks[target]++;
+            }
         }
 
         foreach (var link in page.Links)
@@ -266,6 +275,7 @@ internal sealed class UrlTable
             if (final != id)
             {
                 _followedInlinks[final] += _followedInlinks[id];
+                _indexableInlinks[final] += _indexableInlinks[id];
                 _nofollowInlinks[final] += _nofollowInlinks[id];
             }
         }

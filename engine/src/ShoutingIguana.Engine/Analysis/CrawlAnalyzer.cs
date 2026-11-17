@@ -29,6 +29,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
     private const string RULE_FAILED_TEXT = "The check failed during the analysis, so it has no results. The log says why.";
 
+    /// <summary>Checks besides the orphans' that need every page that could link to a page, sitemaps aside: skipped as orphans are when the crawl didn't read them all.</summary>
+    private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY];
+
     /// <summary>The orphan check is skipped once 1 in this many of the pages the crawl tried to read couldn't be read (<see cref="SkippedCheckReasons.PAGES_UNREAD"/>).</summary>
     private const int UNREAD_PAGES_ONE_IN = 20;
 
@@ -107,7 +110,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var linksComplete = crawlComplete && everyLinkingPage;
             if (!finished)
             {
-                Skip(notes, skipped, note: null, SkippedCheckReasons.CRAWL_UNFINISHED, "The crawl didn't finish.", IssueCatalog.CANONICAL_UNLINKED);
+                Skip(notes, skipped, note: null, SkippedCheckReasons.CRAWL_UNFINISHED, "The crawl didn't finish.", LinkingPageChecks);
             }
             incomplete = WhyIncomplete(status, limitSkips);
             if (!options.DiscoverSitemaps)
@@ -157,7 +160,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             {
                 Skip(notes, skipped, "Links to other sites weren't checked in this crawl, so broken external links weren't looked for.",
                     SkippedCheckReasons.EXTERNAL_LINKS_OFF, "Links to other sites weren't checked in this crawl.",
-                    IssueCatalog.BROKEN_EXTERNAL_LINKS);
+                    IssueCatalog.BROKEN_EXTERNAL_LINKS, IssueCatalog.SLOW_EXTERNAL_LINKS);
             }
 
             if (!options.CheckResources)
@@ -165,7 +168,11 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 Skip(notes, skipped, "Images weren't fetched in this crawl, so broken and oversized images weren't looked for.",
                     SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.",
                     IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE);
+                Skip(notes, skipped, note: null,
+                    SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl.",
+                    IssueCatalog.BROKEN_RESOURCES);
             }
+
 
             // The crawler probes the site's other versions first thing, but a crawl stopped before then, or one from before
             // it did, doesn't know how they answer; nor is there a main version without a home page.
@@ -245,8 +252,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
                 new ImageRules(settings, urls, reader.ReadUrlId), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
-                new DirectiveRules(urls, robotsToken), hreflang, new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings),
-                new PerformanceRules(settings), new HtmlRules()
+                new DirectiveRules(urls, robotsToken), new LinkStructureRules(settings, urls, reader.ReadUrl, new Uri(startUrl)), hreflang, new StructuredDataRules(),
+                new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings), new HtmlRules()
             ];
 
             // An instant meta refresh makes the page a redirect: nobody sees it, so only the refresh itself is reported.
@@ -258,7 +265,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls, reader.ReadUrl),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
                 new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
-                new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl)
+                new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl),
+                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl)
             ];
 
             // Pages parsed before each collection of facts that a check needs (CollectedFacts), counted as they're read.
@@ -473,7 +481,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         Dictionary<IssueDefinition, SkippedCheck> skipped, bool orphansJudged)
     {
         var complete = true;
-        IssueDefinition[] checks = orphansJudged ? [IssueCatalog.ORPHAN_PAGE, IssueCatalog.CANONICAL_UNLINKED] : [IssueCatalog.CANONICAL_UNLINKED];
+        IssueDefinition[] checks = orphansJudged ? [IssueCatalog.ORPHAN_PAGE, .. LinkingPageChecks] : LinkingPageChecks;
         string? Note(string note) => orphansJudged ? note : null;
         foreach (var (reason, limit, code) in new[]
                  {

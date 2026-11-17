@@ -28,6 +28,8 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
     private const int MAX_PAGINATION_LINKS = 20;
+    private const int MAX_UNCRAWLABLE_EXAMPLES = 3;
+    private const int MAX_UNCRAWLABLE_TEXT = 60;
 
     /// <summary>Raw text read for a heading or link label, before whitespace is collapsed and the result capped.</summary>
     private const int MAX_RAW_LABEL_CHARS = 16 * MAX_HEADING_CHARS;
@@ -73,6 +75,11 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     public List<string> AnchorIds { get; } = [];
     public List<ExtractedLink> Links { get; } = [];
     public List<IconFact> Icons { get; } = [];
+    public List<UncrawlableLinkFact> UncrawlableExamples { get; } = [];
+
+    /// <summary>Link-like elements with no address search engines follow, all of them; <see cref="UncrawlableExamples"/> holds the first few.</summary>
+    public int UncrawlableCount { get; private set; }
+
     public MetaRefreshFact? MetaRefresh { get; private set; }
     public string? Language { get; private set; }
     public string? DeclaredCharset { get; private set; }
@@ -153,6 +160,13 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         var name = element.LocalName;
+
+        // Only <a>, <area>, <link> and <base> take an href: on a <span> or <div> it's a link search engines can't follow.
+        if (name is not ("a" or "area" or "link" or "base") && element.HasAttribute("href"))
+        {
+            AddUncrawlable(element, $"<{name} href>");
+        }
+
         var childContext = context;
         switch (name)
         {
@@ -518,6 +532,11 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         var href = element.GetAttribute("href");
+        if (element.LocalName == "a" && UncrawlableBy(element, href) is { } why)
+        {
+            AddUncrawlable(element, why);
+        }
+
         if (href is null)
         {
             return;
@@ -550,6 +569,36 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         AddLink(target, LinkKind.Hyperlink, flags, context.Position, label.Length == 0 ? null : label);
+    }
+
+    /// <summary>
+    /// What keeps search engines from following an <c>&lt;a&gt;</c>, as Google's "Make your links crawlable" lists them: a
+    /// <c>javascript:</c> or empty href; no href, or a bare <c>#</c>, and an onclick; no href and a routerLink. Null for one
+    /// it can follow, and for an <c>&lt;a&gt;</c> with neither href nor onclick, which is a named anchor.
+    /// </summary>
+    private static string? UncrawlableBy(IElement anchor, string? href)
+    {
+        var written = href?.Trim();
+        return written switch
+        {
+            null when anchor.HasAttribute("onclick") => "onclick",
+            null when anchor.HasAttribute("routerlink") => "routerLink",
+            null => null,
+            "" => "empty href",
+            "#" when anchor.HasAttribute("onclick") => "onclick",
+            _ when written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) => "javascript:",
+            _ => null
+        };
+    }
+
+    private void AddUncrawlable(IElement element, string why)
+    {
+        UncrawlableCount++;
+        if (UncrawlableExamples.Count < MAX_UNCRAWLABLE_EXAMPLES)
+        {
+            var text = ReadableText(element, MAX_UNCRAWLABLE_TEXT);
+            UncrawlableExamples.Add(new UncrawlableLinkFact(text.Length > 0 ? text : NameWithoutText(element), why));
+        }
     }
 
     private void AddImage(IElement element, WalkContext context)

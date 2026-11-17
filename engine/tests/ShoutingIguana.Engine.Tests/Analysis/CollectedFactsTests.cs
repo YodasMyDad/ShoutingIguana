@@ -53,11 +53,20 @@ public sealed class CollectedFactsTests : IAsyncLifetime
 
         const string WHY = "1 page in this crawl was fetched by an earlier version";
         Assert.True(analysis.IsPartial);
-        Assert.Equal(new SkippedCheck(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id, SkippedCheckReasons.EARLIER_VERSION,
-            $"{WHY}, which didn't record what this check needs. Crawl again to check it."), Assert.Single(analysis.Skipped));
-        Assert.Contains($"{IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Title} wasn't checked: {WHY}, which didn't record what the check needs. Crawl again to check it.",
-            analysis.Notes);
+        const string TEXT = $"{WHY}, which didn't record what this check needs. Crawl again to check it.";
+        Assert.Equal(
+            [
+                new SkippedCheck(IssueCatalog.UNCRAWLABLE_LINKS.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.PAGINATION_NOT_LINKED.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.PAGINATION_BROKEN.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.PAGINATION_TO_NON_INDEXABLE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.PAGINATION_SEQUENCE_ERROR.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT)
+            ], analysis.Skipped);
+        Assert.Contains($"6 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id));
+        Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.UNCRAWLABLE_LINKS.Id));
+        Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.PAGINATION_SEQUENCE_ERROR.Id));
         Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.CANONICAL_INVALID_ATTRIBUTE);
 
         // The rest of the canonical checks still ran.

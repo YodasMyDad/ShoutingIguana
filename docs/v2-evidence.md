@@ -113,7 +113,20 @@ and is in the group without a related URL.
 | 15 | `internal-nofollow-links` | P/RU/T | – | `statusCode`, `text`, `position`, `flags`, `links` | Same ("Links to 2 URLs") | imp · pages |
 | 16 | `empty-anchor-text` | P/RU/T | – | `statusCode`, `position`, `flags` (`imageLink`: an image link whose image has no alt), `links`. A link to the page itself (a home page's logo, since the check audit) names the page: its target is the page, read as its link without text and without a fragment, and the app says "this same page" | Same ("Links to 2 URLs") | imp · pages |
 | 17 | `broken-fragment-links` | P/RU/T | – | `statusCode`, `fragment`, `text`, `position`, `links` | "2 links" → `2 links to missing sections: /faq/#specs, #top` (a fragment alone is on the page itself) | imp · pages |
-| 18 | `orphan-page` | P/N/S | – | – | Same ("Only found in a sitemap") | imp · – |
+| 18 | `orphan-page` | P/N/S | – | – | Same ("Only found in a sitemap"), or `Only nofollow links lead here` (a sitemap page only nofollow links lead to, since the new checks) | imp · – |
+| 101 | `uncrawlable-links` (new) | P/N/– | – | – | `3 links: "Shop" (javascript:), "Next" (onclick) …` (the first three, what makes each uncrawlable). Template hint | imp · – |
+| 102 | `broken-resources` (new) | P/RU/T | – | `statusCode`, `final`, `kind`, `position`, `links` | `2 broken files (the first returns 404 Not Found)` | imp · pages |
+| 103 | `links-to-localhost` (new) | P/RU/T | – | `statusCode`, `text`, `position` | `2 links, such as http://localhost:3000/shop`; on a crawl started at a private address, that machine's own addresses don't count | imp · pages |
+| 104 | `few-internal-outlinks` (new) | P/N/– | `outlinks` | – | `No links to other pages`, `2 links to other pages, under 3` | imp · – |
+| 105 | `generic-anchor-text` (new) | P/N/T | – | `text`, `position`, `statusCode` | `3 links: "Read more" ×2, "here"` | imp · – |
+| 106 | `non-indexable-inlinks-only` (new) | P/N/S | `inlinks`, `linkingPages` | – | `Linked from 3 pages, none of them indexable` | imp · – |
+| 107 | `deep-page` (new) | P/N/– | `depth`, `inlinks` | – | `6 clicks from the start, over 4` (the crawl's recorded depth) | imp · – |
+| 108 | `too-many-links` (new) | P/N/– | `outlinks` | – | `1,240 internal links, over 1,000` (and/or `140 links to other sites, over 100`) | imp · – |
+| 109 | `slow-external-links` (new) | P/RU/T | – | `statusCode`, `text`, `position` (the specification's `responseMs` target fact isn't built: the detail gives the slowest) | `2 slow links, the slowest 7.4 s` | imp · pages |
+| 110 | `pagination-not-linked` (new) | P/RU/T | – | `statusCode`, `indexability` | `rel="next" https://x/list/page/2/ has no link` | imp · pages |
+| 111 | `pagination-broken` (new) | P/RU/T | – | `statusCode`, `final` | `rel="next" returns 404 Not Found`, `rel="prev" redirects (301 Moved Permanently)` | imp · pages |
+| 112 | `pagination-to-non-indexable` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical` | `rel="next" is noindex` | imp · pages |
+| 113 | `pagination-sequence-error` (new) | P/PD/– | – | – | `2 rel="next" URLs`, `rel="next" names the page itself`, `/list/page/2/ doesn't point back`, `rel="next" leads back to /list/`; grouped by its kind | imp · pages |
 
 ### Indexability
 

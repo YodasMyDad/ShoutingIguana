@@ -239,7 +239,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ORPHAN_PAGE = new("orphan-page", IssueCategory.Links, IssueSeverity.Warning,
         "Orphan page in a sitemap",
-        """This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished, and not when 1 in 20 or more of the pages it tried to read refused the crawler or didn't answer, as their links are unknown.""",
+        """This indexable page is listed in a sitemap, but no crawled page links to it with a followed link, even through a redirect. The detail says whether only nofollow links lead to it, or nothing. It's only checked when the crawl finished, and not when 1 in 20 or more of the pages it tried to read refused the crawler or didn't answer, as their links are unknown.""",
         """If the page matters, link to it from relevant pages and from its section's listing. If it doesn't, remove it from the sitemap, then redirect or remove the page.""")
     {
         Why = """Visitors can't reach it by browsing, and search engines only know it from the sitemap. Google uses links to find pages and judge their relevance, and says every page you care about should have a link from at least one other page on your site. Often it's an old page left in the sitemap, or one linked only from places a crawler can't follow, such as forms or scripts.""",
@@ -249,6 +249,165 @@ public static class IssueCatalog
         Grouping = IssueGrouping.None
     };
 
+
+    public static readonly IssueDefinition UNCRAWLABLE_LINKS = new("uncrawlable-links", IssueCategory.Links, IssueSeverity.Warning,
+        "Links search engines can't follow",
+        """The page has link-like elements with no address a search engine can follow: an <a> whose href is a javascript: URL or empty, an <a> that works only through onclick or a routerLink, or another element, such as a <span> or <div>, given an href. An <a> with neither href nor onclick is a named anchor and doesn't count. The detail gives up to three, with what makes each one uncrawlable. A crawl made before the crawler noted them isn't checked.""",
+        """Make each one an <a> element with a real URL in its href, and keep any script on top of it, so search engines, and browsers without the script, can follow it. A control that only opens something on the page belongs in a <button>.""")
+    {
+        Why = """Google follows only <a> elements with an href it can resolve, so a page reached only through such links isn't found by crawling and gets no credit from them. Menus, "load more" controls and single-page-app routers are the usual cause.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition BROKEN_RESOURCES = new("broken-resources", IssueCategory.Links, IssueSeverity.Warning,
+        "Page uses a broken file",
+        """The page loads a script, stylesheet, iframe, video or audio file whose URL returns a 4xx or 5xx error or doesn't respond, directly or at the end of its redirects. Images are the broken image check's. On another site, statuses often sent only to crawlers (401, 403, 429, 503) don't count. The detail gives the count, and where the first goes wrong.""",
+        """Restore each missing file, or correct the URL that loads it in the page or its template; remove references to anything no longer used, such as an old tracking script.""")
+    {
+        Why = """A missing stylesheet or script can leave the page unstyled or broken for visitors, and for Google, which renders pages with their files to see what visitors see. A broken third-party tag often changes nothing anyone sees, which is why this is a warning, not an error like a broken image.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "kind", "position", "links"]
+    };
+
+    public static readonly IssueDefinition LINKS_TO_LOCALHOST = new("links-to-localhost", IssueCategory.Links, IssueSeverity.Warning,
+        "Links to localhost or a private address",
+        """The page links to, or loads something from, localhost, a .localhost name, or a loopback or private network address (127.x, ::1, 10.x, 172.16 to 172.31, 192.168.x, fc00::/7). On a crawl that started at such an address, as a development copy does, that machine's own addresses aren't counted. The detail gives the count and the first.""",
+        """Replace each with the live site's URL, or remove it. They usually come from content or settings copied over from a development or staging copy of the site.""")
+    {
+        Why = """Such an address points at the visitor's own computer or network, so a link to one is dead for everyone, and a file loaded from one is missing. Browsers may also warn about, or block, a public page reaching into a private network.""",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "text", "position"]
+    };
+
+    public static readonly IssueDefinition FEW_INTERNAL_OUTLINKS = new("few-internal-outlinks", IssueCategory.Links, IssueSeverity.Notice,
+        "Page with few or no internal links",
+        """This indexable page links with <a href> to fewer than 3 other URLs on the site (the default, which can be changed in the analysis settings), followed or not. Links to the page itself, and to sections of it, don't count.""",
+        """Link the page to related pages and to its section, or give it the site's usual header, menu and footer if it's missing them.""")
+    {
+        Why = """A page with nowhere else to go is a dead end for visitors, and gives search engines no path onward from it. It's common on landing pages built without the site's template. The page itself is fine; only the links from it are missing.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["outlinks"]
+    };
+
+    public static readonly IssueDefinition GENERIC_ANCHOR_TEXT = new("generic-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
+        "Links with generic text",
+        """The page has internal links whose whole text is generic, such as "click here", "read more", "learn more", "here" or "more", rather than saying where they go. Image links aren't counted. The detail gives each text, and how often.""",
+        """Rewrite each link's text to name what's at the other end, such as "Read the delivery policy" instead of "Read more".""")
+    {
+        Why = """Google uses link text to understand the page linked to, and calls texts like "click here" and "read more" too generic. Screen reader users often list a page's links on their own, where "read more" says nothing; WCAG accepts it only where the text around the link makes its purpose clear.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        TargetFacts = ["text", "position", "statusCode"]
+    };
+
+    public static readonly IssueDefinition NON_INDEXABLE_INLINKS_ONLY = new("non-indexable-inlinks-only", IssueCategory.Links, IssueSeverity.Notice,
+        "Linked only from non-indexable pages",
+        """Every page that links to this indexable page with a followed link is itself not indexable: noindex, canonicalised to another URL, or a redirect by an instant meta refresh. Links reaching it through a redirect count. The start and home pages aren't reported, and it's only checked when the crawl read every page that could link to it.""",
+        """Link to the page from at least one indexable page where it belongs, such as its category or a related page.""")
+    {
+        Why = """Search engines find and value pages largely through links from pages they index. Links only from pages they're told to drop, or to treat as copies, still let them reach this page but count for little, and if those pages go the page is left with no links. It's often a page linked only from tag, filter or paginated pages that are noindex.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["inlinks", "linkingPages"]
+    };
+
+    public static readonly IssueDefinition DEEP_PAGE = new("deep-page", IssueCategory.Links, IssueSeverity.Notice,
+        "Page many clicks from the home page",
+        """This indexable page is more than 4 clicks from where the crawl started by the shortest path of links (the default, which can be changed in the analysis settings), as the crawl recorded it. Pages found only through a sitemap aren't measured: the orphan page check covers them.""",
+        """Link to the page from higher up: its category, a hub page, the home page or the menu; or add levels of navigation, such as subcategories, so lists don't run deep.""")
+    {
+        Why = """The further a page is from the home page, the less often search engines tend to crawl it and the less weight they give it, and visitors rarely click that far. No standard sets a depth; 4 is a common rule of thumb. Large shops have deep pages by design, so look at which pages are deep rather than how many.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["depth", "inlinks"]
+    };
+
+    public static readonly IssueDefinition TOO_MANY_LINKS = new("too-many-links", IssueCategory.Links, IssueSeverity.Notice,
+        "Page with a very high number of links",
+        """This indexable page has more than 1,000 internal links or more than 100 links to other sites (the defaults, which can be changed in the analysis settings), counting every <a href>, repeats included. A page's links are read up to 10,000.""",
+        """Cut the links down to the ones visitors use: trim mega-menus and footers, split long lists into pages, and drop repeated links to the same page.""")
+    {
+        Why = """Each link's share of the page's weight shrinks as links are added, and huge lists of links are hard for visitors to use. Google no longer sets a limit, so treat this as a prompt to look, not a fault in itself.""",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["outlinks"]
+    };
+
+    public static readonly IssueDefinition SLOW_EXTERNAL_LINKS = new("slow-external-links", IssueCategory.Links, IssueSeverity.Notice,
+        "Links to slow external pages",
+        """The page links to pages on other sites that took more than 3 seconds to answer when the crawl checked them (the default, which can be changed in the analysis settings), whether they returned a page or a redirect. It isn't checked when links to other sites weren't. The detail gives the count and the slowest time.""",
+        """Open the slowest links to see whether they're slow for you too; replace a link to a site that stays slow with a better source, or remove it.""")
+    {
+        Why = """Visitors who follow the link wait, and may blame your site for it. The other site's server isn't yours to fix, only the link, and one slow answer during a crawl can be a blip, so check before changing anything.""",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "text", "position"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_NOT_LINKED = new("pagination-not-linked", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination URL not linked with an <a>",
+        """The page has a rel="next" or rel="prev" link to another of the site's pages but no ordinary <a href> link to it. The detail names the first.""",
+        """Link each page of the series to the next and previous ones with ordinary <a href> links, such as "Next" and page numbers, as well as or instead of rel="next" and rel="prev".""")
+    {
+        Why = """Google no longer uses rel="next" and rel="prev", and finds later pages of a series only through ordinary links, so pages reached only through these tags may never be crawled. Other search engines and browsers may still read them, so they do no harm beside real links.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_BROKEN = new("pagination-broken", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination URL broken or redirected",
+        """A rel="next" or rel="prev" link of the page names a URL that returns an error, doesn't respond, or redirects. The detail says which and how.""",
+        """Point rel="next" and rel="prev" at the working, final URLs of the series' pages, or remove the ones that lead nowhere.""")
+    {
+        Why = """Browsers and search engines that read these links expect them to name the series' pages themselves. One that fails or redirects usually means the series' URLs changed and the template didn't follow.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_TO_NON_INDEXABLE = new("pagination-to-non-indexable", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination URL not indexable",
+        """A rel="next" or rel="prev" link of the page names a page that isn't indexable: noindex, or canonicalised to another URL. The detail says which.""",
+        """Make the series' pages indexable, each with a canonical to itself, or point rel="next" and rel="prev" at the pages that are.""")
+    {
+        Why = """The pages of a series list what's on the site; if they're noindex or canonicalised away, what's listed only on them is found only through pages search engines are told to drop. It's right for filtered or sorted copies of a list, not for the list's own pages.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading#use-urls-correctly",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "canonical"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_SEQUENCE_ERROR = new("pagination-sequence-error", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination sequence error",
+        """The page's rel="next" and rel="prev" links don't make a sequence: it has more than one of either, one names the page itself, the page its rel="next" names doesn't name it back with rel="prev", or following rel="next" comes back to a page already passed. The detail says which.""",
+        """Give each page of the series one rel="next" to the page after it and one rel="prev" to the page before it, and none on the last and first pages respectively.""")
+    {
+        Why = """Tools and browsers that read these links follow them as a chain, and a chain that branches, loops or doesn't link back is usually a template bug that also shows in the series' visible links. Google no longer uses them, so this is about tidiness more than search.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.PaginationFault
+    };
 
     // Indexability
     public static readonly IssueDefinition NOINDEX_PAGE = new("noindex-page", IssueCategory.Indexability, IssueSeverity.Notice,
@@ -1266,6 +1425,9 @@ public static class IssueCatalog
         REDIRECT_CHAIN, REDIRECT_LOOP, REDIRECT_BROKEN, REDIRECT_TEMPORARY, REDIRECT_DOWNGRADE, META_REFRESH,
         BROKEN_INTERNAL_LINKS, BROKEN_EXTERNAL_LINKS, LINKS_TO_REDIRECTS, INTERNAL_NOFOLLOW_LINKS, EMPTY_ANCHOR_TEXT,
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
+        UNCRAWLABLE_LINKS, BROKEN_RESOURCES, LINKS_TO_LOCALHOST, FEW_INTERNAL_OUTLINKS, GENERIC_ANCHOR_TEXT, NON_INDEXABLE_INLINKS_ONLY,
+        DEEP_PAGE, TOO_MANY_LINKS, SLOW_EXTERNAL_LINKS, PAGINATION_NOT_LINKED, PAGINATION_BROKEN, PAGINATION_TO_NON_INDEXABLE,
+        PAGINATION_SEQUENCE_ERROR,
         NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE,
         ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, ROBOTS_TXT_MISSING, SITE_HIDDEN_FROM_SEARCH,
         ROBOTS_DIRECTIVES_CONFLICT, NOINDEX_NEAR_HOME, UNAVAILABLE_AFTER_PASSED, MEDIA_PREVIEW_BLOCKED, TRANSLATION_BLOCKED,

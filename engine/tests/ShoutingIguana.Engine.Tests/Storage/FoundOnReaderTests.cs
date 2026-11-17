@@ -26,7 +26,8 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         [
             "internal-client-error", "internal-server-error", "internal-unreachable", "internal-blocked", "redirect-chain", "redirect-loop",
             "redirect-broken", "redirect-temporary", "redirect-downgrade", "orphan-page", "blocked-by-robots", "sitemap-non-indexable",
-            "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores", "canonical-on-redirect", "canonical-unlinked"
+            "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores", "canonical-on-redirect", "canonical-unlinked",
+            "non-indexable-inlinks-only"
         ];
         string[] targets =
         [
@@ -34,7 +35,8 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "broken-fragment-links", "canonicalised-page", "canonical-broken", "canonical-to-redirect", "canonical-to-non-indexable",
             "noindex-with-canonical", "image-broken", "image-too-large", "hreflang-missing-return", "hreflang-broken-target",
             "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions",
-            "canonical-to-first-page", "canonical-other-domain", "canonical-loop"
+            "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "broken-resources", "links-to-localhost", "generic-anchor-text",
+            "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
@@ -203,7 +205,11 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
     }
 
     /// <summary>Checks the synthetic site plants only when served over HTTPS (a linked redirect to http, a page loading http resources).</summary>
-    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page";
+    /// <summary>
+    /// Checks the synthetic site can't plant: the HTTPS ones (it's served over HTTP here), and links to private addresses, as
+    /// the site and its partner are both on 127.0.0.1, one machine's addresses.
+    /// </summary>
+    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page" or "links-to-localhost";
 
     private List<int> Flagged(string check) =>
     [

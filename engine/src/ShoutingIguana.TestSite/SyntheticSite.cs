@@ -21,6 +21,9 @@ public sealed partial class SyntheticSite
     public const int DEAD_TWIN_UNCHECKED = 5;
 
     private const int PRODUCTS_PER_LISTING = 50;
+
+    /// <summary>The analysis's default deepest a page may be, in clicks from the start (AnalysisSettings.MaxClickDepth).</summary>
+    private const int MAX_CLICK_DEPTH = 4;
     private const int PARAGRAPHS = 8;
     private const int WORDS_PER_PARAGRAPH = 60;
     private const int DESCRIPTION_WORDS = 14;
@@ -254,6 +257,7 @@ public sealed partial class SyntheticSite
     {
         HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [];
         var depths = ProductDepths();
+        var linkedBy = ProductInlinks();
         Dictionary<string, HashSet<string>> issues = new(StringComparer.Ordinal);
 
         // Paths are on this site; links to the external site are already absolute.
@@ -345,6 +349,16 @@ public sealed partial class SyntheticSite
                 Flag("canonicalised-page", path);
             }
 
+            if (IsIndexable(product) && depths[product] is > MAX_CLICK_DEPTH and < int.MaxValue)
+            {
+                Flag("deep-page", path);
+            }
+
+            if (IsIndexable(product) && linkedBy[product] is (true, false))
+            {
+                Flag("non-indexable-inlinks-only", path);
+            }
+
             // Every product is in a sitemap, so each non-indexable one is a sitemap issue.
             if (_options.Sitemaps && !IsIndexable(product))
             {
@@ -425,7 +439,7 @@ public sealed partial class SyntheticSite
         // one no page can be missing from them.
         foreach (var plant in _plants)
         {
-            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !(issue.StartsWith("sitemap-", StringComparison.Ordinal) || issue == "not-in-sitemap")))
+            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !(issue.StartsWith("sitemap-", StringComparison.Ordinal) || issue is "not-in-sitemap" or "orphan-page")))
             {
                 Flag(issue, PlantUrl(plant));
             }
@@ -685,6 +699,41 @@ public sealed partial class SyntheticSite
         return depths;
     }
 
+    /// <summary>
+    /// For each product, whether any page links to it with a followed link, and whether an indexable one does, crediting a
+    /// link to a redirect to where it ends, as the analysis counts them: the home page and its categories list products, and
+    /// products link each other, directly and through /r/ and /r2/.
+    /// </summary>
+    private (bool Any, bool Indexable)[] ProductInlinks()
+    {
+        var linked = new (bool Any, bool Indexable)[PageCount];
+        void Link(int product, bool fromIndexable) => linked[product] = (true, linked[product].Indexable || fromIndexable);
+
+        foreach (var product in HomeProducts())
+        {
+            Link(product, !IsHomeNoindex);
+        }
+
+        foreach (var product in Enumerable.Range(0, CATEGORY_COUNT).SelectMany(CategoryProducts))
+        {
+            Link(product, true);
+        }
+
+        for (var product = 1; product < PageCount; product++)
+        {
+            foreach (var (href, noFollow, _) in ContentLinks(product))
+            {
+                if (!noFollow && (TryNumber(href, "/p/", string.Empty, out var target) || TryNumber(href, "/r/", string.Empty, out target) ||
+                                  TryNumber(href, "/r2/", string.Empty, out target)) && target != product)
+                {
+                    Link(target, IsIndexable(product));
+                }
+            }
+        }
+
+        return linked;
+    }
+
     private string RenderHome()
     {
         var list = new StringBuilder();
@@ -785,26 +834,38 @@ public sealed partial class SyntheticSite
         }
 
         html.Append(page.ExtraHead);
-        html.Append("</head><body><header class=\"site-header\"><a href=\"/\" class=\"logo\">Synthetic Store</a></header>");
-        html.Append("<nav><ul><li><a href=\"/\">Home</a></li>");
-        for (var category = 0; category < CATEGORY_COUNT; category++)
+        html.Append("</head><body>");
+        if (page.Chrome)
         {
-            html.Append("<li><a href=\"/c/").Append(category).Append("\">Category ").Append(category).Append("</a></li>");
+            html.Append("<header class=\"site-header\"><a href=\"/\" class=\"logo\">Synthetic Store</a></header>");
+            html.Append("<nav><ul><li><a href=\"/\">Home</a></li>");
+            for (var category = 0; category < CATEGORY_COUNT; category++)
+            {
+                html.Append("<li><a href=\"/c/").Append(category).Append("\">Category ").Append(category).Append("</a></li>");
+            }
+
+            html.Append("</ul></nav>");
         }
 
-        html.Append("</ul></nav><main>");
+        html.Append("<main>");
         if (page.H1 is not null)
         {
             html.Append("<h1>").Append(page.H1).Append("</h1>");
         }
 
-        html.Append(page.Content).Append("</main><footer><ul>");
-        foreach (var staticPage in STATIC_PAGES)
+        html.Append(page.Content).Append("</main>");
+        if (page.Chrome)
         {
-            html.Append("<li><a href=\"/").Append(staticPage).Append("\">").Append(staticPage).Append("</a></li>");
+            html.Append("<footer><ul>");
+            foreach (var staticPage in STATIC_PAGES)
+            {
+                html.Append("<li><a href=\"/").Append(staticPage).Append("\">").Append(staticPage).Append("</a></li>");
+            }
+
+            html.Append("</ul><p>&copy; Synthetic Store</p></footer>");
         }
 
-        html.Append("</ul><p>&copy; Synthetic Store</p></footer></body></html>");
+        html.Append("</body></html>");
         return html.ToString();
     }
 

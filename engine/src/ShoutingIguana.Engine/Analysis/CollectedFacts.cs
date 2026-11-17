@@ -13,6 +13,11 @@ internal static class CollectedFacts
 {
     public static IReadOnlyDictionary<IssueDefinition, int> Needs { get; } = new Dictionary<IssueDefinition, int>
     {
-        [IssueCatalog.CANONICAL_INVALID_ATTRIBUTE] = 1
+        [IssueCatalog.CANONICAL_INVALID_ATTRIBUTE] = 1,
+        [IssueCatalog.UNCRAWLABLE_LINKS] = 1,
+        [IssueCatalog.PAGINATION_NOT_LINKED] = 1,
+        [IssueCatalog.PAGINATION_BROKEN] = 1,
+        [IssueCatalog.PAGINATION_TO_NON_INDEXABLE] = 1,
+        [IssueCatalog.PAGINATION_SEQUENCE_ERROR] = 1
     };
 }

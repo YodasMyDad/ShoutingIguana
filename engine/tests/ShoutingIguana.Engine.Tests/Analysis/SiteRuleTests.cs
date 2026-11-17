@@ -542,7 +542,7 @@ public sealed class SiteRuleTests
         var home = site.Page($"{site.Site}/", RuleHarness.Html(body:
             "<a href=\"/linked\">Linked</a><a href=\"/only-nofollow\" rel=\"nofollow\">Hidden</a><a href=\"/services\">Services</a>"));
         site.Ok($"{site.Site}/linked", inSitemap: true);
-        site.Ok($"{site.Site}/only-nofollow", inSitemap: true);
+        var onlyNofollow = site.Ok($"{site.Site}/only-nofollow", inSitemap: true);
         site.Fetched($"{site.Site}/services", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/services/");
         site.Ok($"{site.Site}/services/", inSitemap: true);
         var orphan = site.Ok($"{site.Site}/orphan", inSitemap: true);
@@ -552,8 +552,10 @@ public sealed class SiteRuleTests
 
         rules.Observe(home);
 
-        // /services/ is only linked through its redirecting form, which still counts.
-        Assert.Equal([orphan], rules.Finish().Select(hit => hit.UrlId));
+        // /services/ is only linked through its redirecting form, which still counts. A nofollow link is a hint Google may
+        // ignore, so a page only one leads to is as good as unlinked.
+        Assert.Equal([(onlyNofollow, "Only nofollow links lead here"), (orphan, "Only found in a sitemap")],
+            rules.Finish().Where(hit => hit.Issue == IssueCatalog.ORPHAN_PAGE).Select(hit => (hit.UrlId, hit.Detail)));
 
         var partial = new InlinkRules(urls, crawlComplete: false);
         partial.Observe(home);

@@ -53,6 +53,17 @@ internal static partial class IssueFaults
     /// "en-gb, de". A template that lists the same conflicting codes on every page is one group, though each cluster of
     /// pages names its own URLs. A part cut short by the detail's length still gives its code, where it got that far.
     /// </summary>
+    /// <summary>
+    /// A pagination sequence error's kind, which its detail names with the page's own URLs: "2 rel="next" URLs" is "More than
+    /// one rel="next" or rel="prev""; "/list/page/2/ doesn't point back" is "A page doesn't point back"; "rel="next" leads back
+    /// to /list/" is "rel="next" loops back"; the page naming itself stays as it is.
+    /// </summary>
+    public static string PaginationFault(string detail) =>
+        detail.EndsWith(" doesn't point back", StringComparison.Ordinal) ? "The next page doesn't point back"
+        : detail.StartsWith("rel=\"next\" leads back to ", StringComparison.Ordinal) ? "rel=\"next\" leads back to an earlier page"
+        : detail.Contains(" URLs", StringComparison.Ordinal) ? "More than one rel=\"next\" or rel=\"prev\""
+        : detail;
+
     public static string HreflangCodes(string detail) =>
         string.Join(", ", detail.Split("; ").Select(part => (part.IndexOf(": ", StringComparison.Ordinal) is var colon and >= 0 ? part[..colon] : part).TrimEnd('…'))
             .Where(code => code.Length > 0));

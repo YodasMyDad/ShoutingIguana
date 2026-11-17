@@ -92,6 +92,7 @@ public static class HtmlPageParser
             Canonicals = [.. walker.Canonicals, .. signals.Canonicals],
             Hreflangs = [.. walker.Hreflangs, .. signals.Hreflangs],
             Pagination = walker.Pagination,
+            UncrawlableLinks = walker.UncrawlableCount > 0 ? new UncrawlableLinksFact(walker.UncrawlableCount, walker.UncrawlableExamples) : null,
             Headings = walker.Headings,
             Images = walker.Images,
             JsonLd = walker.JsonLd,
