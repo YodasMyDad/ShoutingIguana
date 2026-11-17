@@ -72,6 +72,9 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     public string? Language { get; private set; }
     public string? DeclaredCharset { get; private set; }
 
+    /// <summary>The meta tag that declared <see cref="DeclaredCharset"/>, for the parser to say where it ends.</summary>
+    public IElement? CharsetElement { get; private set; }
+
     public void Walk(IElement root) =>
         VisitElement(root, new WalkContext(LinkPosition.Content, InHead: false, ExcludeText: false, InArticle: false), 0);
 
@@ -338,12 +341,22 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         return null;
     }
 
+    /// <summary>The first declaration counts, as in browsers.</summary>
+    private void DeclareCharset(string charset, IElement element)
+    {
+        if (DeclaredCharset is null)
+        {
+            DeclaredCharset = charset;
+            CharsetElement = element;
+        }
+    }
+
     private void AddMeta(IElement element)
     {
         var content = element.GetAttribute("content");
         if (NullIfBlank(element.GetAttribute("charset")) is { } charset)
         {
-            DeclaredCharset ??= charset.Trim();
+            DeclareCharset(charset.Trim(), element);
         }
 
         var httpEquiv = element.GetAttribute("http-equiv")?.Trim().ToLowerInvariant();
@@ -363,7 +376,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             var charsetAt = content.IndexOf("charset=", StringComparison.OrdinalIgnoreCase);
             if (charsetAt >= 0)
             {
-                DeclaredCharset ??= content[(charsetAt + 8)..].Trim().Trim('"', '\'');
+                DeclareCharset(content[(charsetAt + 8)..].Trim().Trim('"', '\''), element);
             }
 
             return;

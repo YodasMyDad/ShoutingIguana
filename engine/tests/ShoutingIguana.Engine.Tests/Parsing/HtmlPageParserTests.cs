@@ -1,3 +1,4 @@
+using System.Text;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -49,6 +50,27 @@ public sealed class HtmlPageParserTests
 
         Assert.Equal(("utf-8", (string?)null), (marked.ByteOrderMark, marked.DeclaredCharset));
         Assert.Equal(((string?)null, (string?)null), (plain.ByteOrderMark, plain.DeclaredCharset));
+    }
+
+    /// <summary>
+    /// Browsers look for a meta tag declaring the encoding in the first 1024 bytes only, so the facts say where in the bytes
+    /// the declaring tag ends, counted in the encoding it names: "é" is two bytes in UTF-8 and one in windows-1252. The
+    /// first declaration counts, a later one or one in a script's text not at all.
+    /// </summary>
+    [Fact]
+    public void TheFactsSayWhereInTheBytesTheCharsetDeclarationEnds()
+    {
+        const string head = "<!DOCTYPE html><html><head><title>é</title><script>var tag = '<meta charset=\"x\">';</script>";
+        const string tag = "<meta charset=\"utf-8\">";
+
+        var early = Parse($"{head}{tag}<meta charset=\"latin1\"></head><body></body></html>").Facts;
+        var latin = Parse($"{head}<meta http-equiv=\"Content-Type\" content=\"text/html; charset=windows-1252\"></head></html>").Facts;
+        var late = Parse($"{head}<style>{new string('x', 2_000)}</style>{tag}</head><body></body></html>").Facts;
+
+        Assert.Equal(("utf-8", Encoding.UTF8.GetByteCount(head + tag)), (early.DeclaredCharset, early.DeclaredCharsetEnd));
+        Assert.Equal(("windows-1252", head.Length + 74), (latin.DeclaredCharset, latin.DeclaredCharsetEnd));
+        Assert.Equal(Encoding.UTF8.GetByteCount(head) + 2_015 + tag.Length, late.DeclaredCharsetEnd);
+        Assert.Null(Parse("<html><head><title>T</title></head></html>").Facts.DeclaredCharsetEnd);
     }
 
     [Fact]

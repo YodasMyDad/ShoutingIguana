@@ -25,6 +25,13 @@ public sealed record PageFacts
     public string? DeclaredCharset { get; init; }
 
     /// <summary>
+    /// How far into the page's bytes the meta tag that declared <see cref="DeclaredCharset"/> ends, counted in the encoding
+    /// it names. Browsers look for that tag in the first 1024 bytes only (the HTML standard's prescan), so one ending
+    /// further in declares nothing on its own. Null with no such tag, and for a page parsed before the crawler recorded it.
+    /// </summary>
+    public int? DeclaredCharsetEnd { get; init; }
+
+    /// <summary>
     /// The encoding a byte-order mark at the start of the page's bytes declared: <c>utf-8</c>, <c>utf-16be</c> or
     /// <c>utf-16le</c>. It beats every other declaration, so a page with one has declared its encoding. Null with none,
     /// and for a page fetched before the crawler kept it: the stored text has no mark to look for, so such a page reads

@@ -1043,9 +1043,6 @@ Everything below is public in `ShoutingIguana.Engine`.
   not a pixel measurement.
 - A version of the site that answers 200 is flagged `duplicate-site-version` even if its page has a canonical or an
   instant meta refresh pointing to the main site, because probes aren't parsed.
-- `charset-missing` doesn't treat a byte-order mark as a charset declaration. W3C says a BOM wins over every other
-  declaration, but the crawl stores decoded text and `PageFacts` doesn't record that a BOM was there. The check
-  doesn't re-parse the HTML to look for one.
 - Hreflang script subtags aren't checked against ISO 15924: any four letters pass. Rare enough that it wasn't added.
 - A sitemap URL on a different protocol from the sitemap (an http URL in an https sitemap) isn't reported.
   sitemaps.org drops it; the check only compares hosts. Left on the backlog.

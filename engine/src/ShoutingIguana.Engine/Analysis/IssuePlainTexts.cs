@@ -1433,7 +1433,7 @@ public static class IssuePlainTexts
         ["charset-missing"] = new(
             """Pages at risk of showing garbled characters""",
             [
-                """These pages don't tell browsers how their letters and symbols were saved.""",
+                """These pages don't tell browsers how their letters and symbols were saved, or tell them too far down the page.""",
                 """Browsers have to guess, and a wrong guess turns accents, £ signs and curly quotes into nonsense.""",
                 """Pages that look right today can wait, but the one-line fix removes the risk."""
             ],

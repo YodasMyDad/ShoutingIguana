@@ -388,6 +388,14 @@ public sealed partial class SyntheticSite
         Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
 
+        // With no charset in the header, a meta tag declares the encoding only within the first 1024 bytes, where browsers
+        // look for it: first in the head it does, after the head's inline styles it doesn't.
+        Page("charset-meta", "Charset in a meta tag", [], contentType: "text/html");
+        Page("charset-late", "Charset declared too late", ["charset-missing"], page => page with
+        {
+            Charset = false, ExtraHead = "<meta charset=\"utf-8\">"
+        }, contentType: "text/html");
+
         // A byte-order mark at the start of the file declares the encoding, with no meta tag and no charset in the
         // header: neither page is missing its character encoding.
         Page("charset-bom", "Byte-order mark", [], page => page with { Charset = false }, contentType: "text/html", markedAs: Encoding.UTF8);

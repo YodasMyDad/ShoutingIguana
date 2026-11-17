@@ -1,4 +1,6 @@
+using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using AngleSharp.Text;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -14,13 +16,35 @@ namespace ShoutingIguana.Engine.Parsing;
 /// </summary>
 public static class HtmlPageParser
 {
-    private static readonly ThreadLocal<HtmlParser> PARSER = new(() => new HtmlParser(new HtmlParserOptions { IsScripting = true }));
+    private static readonly ThreadLocal<HtmlParser> PARSER = new(() => new HtmlParser(new HtmlParserOptions { IsScripting = true, OnCreated = RecordMeta }));
+
+    /// <summary>
+    /// Where each meta element of the page being parsed on this thread starts in its text, as the parser creates them: how
+    /// far in a charset declaration is, without keeping a source position on every element. Emptied after each parse.
+    /// </summary>
+    [ThreadStatic]
+    private static Dictionary<IElement, int>? _metaStarts;
 
     /// <param name="byteOrderMark">
     /// The encoding a byte-order mark at the start of the response's bytes declared (<see cref="PageFacts.ByteOrderMark"/>),
     /// or null with none. The fetch sees it, and the decoded <paramref name="html"/> no longer has it.
     /// </param>
     public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark = null)
+    {
+        var metaStarts = _metaStarts ??= new Dictionary<IElement, int>(ReferenceEqualityComparer.Instance);
+        try
+        {
+            return Parse(html, pageUri, headers, robotsToken, byteOrderMark, metaStarts);
+        }
+        finally
+        {
+            // The elements hold the whole document, which mustn't outlive the parse.
+            metaStarts.Clear();
+        }
+    }
+
+    private static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark,
+        Dictionary<IElement, int> metaStarts)
     {
         using var document = PARSER.Value!.ParseDocument(html);
 
@@ -55,6 +79,9 @@ public static class HtmlPageParser
             Robots = RobotsMetaParser.Parse(walker.RobotsMetaContents, signals.RobotsTagValues, robotsToken),
             Language = walker.Language,
             DeclaredCharset = walker.DeclaredCharset,
+            DeclaredCharsetEnd = walker.CharsetElement is { } declaration && metaStarts.TryGetValue(declaration, out var start)
+                ? EndOfTag(html, start, walker.DeclaredCharset)
+                : null,
             ByteOrderMark = byteOrderMark,
             BaseHref = baseHref,
             WordCount = fingerprint.WordCount,
@@ -64,6 +91,22 @@ public static class HtmlPageParser
         };
 
         return new ParsedPage(facts, [.. walker.Links, .. signals.Links]);
+    }
+
+    /// <summary>The parser reports a new element's position one-based, at its opening '&lt;'.</summary>
+    private static void RecordMeta(IElement element, TextPosition position)
+    {
+        if (element.LocalName == "meta")
+        {
+            _metaStarts?.TryAdd(element, position.Position - 1);
+        }
+    }
+
+    /// <summary>The byte just past the '&gt;' that closes the tag starting at <paramref name="start"/>, in the encoding the page declares.</summary>
+    private static int EndOfTag(string html, int start, string? charset)
+    {
+        var close = start >= 0 && start < html.Length ? html.IndexOf('>', start) : -1;
+        return CharsetDecoder.ByteCount(html.AsSpan(0, close < 0 ? html.Length : close + 1), charset);
     }
 
     /// <summary>Facts for a non-HTML response: robots directives and canonicals carried in its headers.</summary>

@@ -1022,10 +1022,10 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CHARSET_MISSING = new("charset-missing", IssueCategory.Html, IssueSeverity.Notice,
         "Missing character encoding",
-        """Nothing declares the page's character encoding: no byte-order mark at the start of the file, no meta tag (<meta charset> or http-equiv Content-Type) and no charset in the Content-Type header.""",
+        """Nothing declares the page's character encoding where browsers look for it: no byte-order mark at the start of the file, no charset in the Content-Type header, and no meta tag (<meta charset> or http-equiv Content-Type) within the first 1024 bytes. The detail says where a meta tag further in ends.""",
         """Add <meta charset="utf-8"> as the first element in the <head>, within the first 1024 bytes of the file, or send Content-Type: text/html; charset=utf-8 from the server.""")
     {
-        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again.""",
+        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again. Likewise a crawl made before the crawler recorded where the meta tag ends passes one past the first 1024 bytes.""",
         LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None
