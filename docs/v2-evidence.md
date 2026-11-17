@@ -254,7 +254,10 @@ and is in the group without a related URL.
 | # | Check | S/G/R | Evidence columns | Target facts | Detail before → after | Rows · groups |
 | --- | --- | --- | --- | --- | --- | --- |
 | 72 | `structured-data-invalid` | P/PD/– | – | – | Same (the parser's message; grouped by it) | imp · pages |
-| 73 | `structured-data-missing-required` | P/PD/– | – | – | Same ("Product: needs name; Offer: needs price") | imp · pages |
+| 73 | `structured-data-missing-required` | P/PD/– | – | – | Same ("Product: needs name; Offer: needs price"); since change C5, Microdata items too | imp · pages |
+| 129 | `structured-data-schema-errors` (new) | P/PD/– | – | – | `Organisation isn't a schema.org type; Offer: priceCurrency "Dollars" isn't ISO 4217` (the first three that fit, and how many more) | imp · pages |
+| 130 | `structured-data-missing-recommended` (new) | P/PD/– | – | – | `Article: lacks image, datePublished, author`, `Product: lacks image, offers.availability` | imp · pages |
+| 131 | `structured-data-on-noindex` (new) | P/PD/– | `metaRobots`, `xRobotsTag` | – | The types: `Product, BreadcrumbList` | imp · pages |
 
 ### Security
 

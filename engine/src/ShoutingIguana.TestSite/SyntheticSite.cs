@@ -334,6 +334,11 @@ public sealed partial class SyntheticSite
                 images.Add(ImagePath(product, image));
             }
 
+            if (IsNoindex(product) && HasProductMarkup(product))
+            {
+                Flag("structured-data-on-noindex", path);
+            }
+
             if (IsNoindex(product))
             {
                 Flag("noindex-page", path);
@@ -536,6 +541,9 @@ public sealed partial class SyntheticSite
 
     private bool IsIndexable(int product) => !IsNoindex(product) && !IsCanonicalised(product);
 
+    /// <summary>Every fifth product carries complete Product JSON-LD; a noindex one is structured data on a noindex page.</summary>
+    private static bool HasProductMarkup(int product) => product % 5 == 0;
+
     private static bool MissesAlt(int product) => product % 31 == 0;
 
     private IEnumerable<(string Href, bool NoFollow, string Label)> ContentLinks(int product)
@@ -639,8 +647,8 @@ public sealed partial class SyntheticSite
             Content = content.ToString(),
             Canonical = IsCanonicalised(product) ? $"{_base}/p/{product - 1}" : PageSpec.SELF,
             Robots = IsNoindex(product) ? "noindex" : null,
-            JsonLd = product % 5 == 0
-                ? $$$"""{"@context":"https://schema.org","@type":"Product","name":"Product {{{product}}}","sku":"SKU-{{{product}}}","offers":{"@type":"Offer","price":"19.99","priceCurrency":"GBP"}}"""
+            JsonLd = HasProductMarkup(product)
+                ? $$$"""{"@context":"https://schema.org","@type":"Product","name":"Product {{{product}}}","sku":"SKU-{{{product}}}","image":"{{{_base}}}/img/{{{product}}}.jpg","offers":{"@type":"Offer","price":"19.99","priceCurrency":"GBP","availability":"https://schema.org/InStock"}}"""
                 : null
         });
     }

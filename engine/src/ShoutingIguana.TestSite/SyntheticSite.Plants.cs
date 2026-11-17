@@ -536,7 +536,27 @@ public sealed partial class SyntheticSite
         });
         Page("jsonld-incomplete", "Incomplete Product markup", ["structured-data-missing-required"], page => page with
         {
-            JsonLd = """{"@context":"https://schema.org","@type":"Product","name":"Incomplete product"}"""
+            JsonLd = $$"""{"@context":"https://schema.org","@type":"Product","name":"Incomplete product","image":"{{_base}}/img/1.jpg"}"""
+        });
+
+        // A type schema.org doesn't have (British spelling); an Article with only its headline; a complete Product on a
+        // noindex page; a Product in Microdata without an offer, a review or a rating.
+        Page("jsonld-unknown-type", "Unknown schema.org type", ["structured-data-schema-errors"], page => page with
+        {
+            JsonLd = """{"@context":"https://schema.org","@type":"Organisation","name":"Synthetic Store"}"""
+        });
+        Page("jsonld-article-thin", "Thin Article markup", ["structured-data-missing-recommended"], page => page with
+        {
+            JsonLd = """{"@context":"https://schema.org","@type":"Article","headline":"A thin article"}"""
+        });
+        Page("jsonld-noindex", "Product markup on a noindex page", ["noindex-page", "structured-data-on-noindex"], page => page with
+        {
+            Robots = "noindex",
+            JsonLd = $$$"""{"@context":"https://schema.org","@type":"Product","name":"Hidden product","image":"{{{_base}}}/img/1.jpg","offers":{"@type":"Offer","price":"9.99","priceCurrency":"GBP","availability":"https://schema.org/InStock"}}"""
+        }, inSitemap: false);
+        Page("microdata-incomplete", "Incomplete Product Microdata", ["structured-data-missing-required"], page => page with
+        {
+            Content = page.Content + $"<div itemscope itemtype=\"https://schema.org/Product\"><p itemprop=\"name\">Microdata product</p><meta itemprop=\"image\" content=\"{_base}/img/1.jpg\"></div>"
         });
 
         // A schema.org subtype is held to its parent's requirements: a Restaurant is a LocalBusiness, a MusicEvent an Event.

@@ -1338,13 +1338,47 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition STRUCTURED_DATA_MISSING_REQUIRED = new("structured-data-missing-required", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Structured data missing required properties",
-        """A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.""",
+        """A top-level schema.org item on this indexable page, in JSON-LD or Microdata, lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.""",
         """Add the missing properties with values that match what's visible on the page, then test it with the Rich Results Test.""")
     {
-        Why = """Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties aren't checked, since they don't affect eligibility. FAQPage isn't checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.""",
+        Why = """Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties don't affect eligibility, so they're another check's (Structured data missing recommended properties). FAQPage isn't checked: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#completeness",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition STRUCTURED_DATA_SCHEMA_ERRORS = new("structured-data-schema-errors", IssueCategory.StructuredData, IssueSeverity.Warning,
+        "Structured data that isn't valid schema.org",
+        """A JSON-LD block or Microdata item on the page has no @context or one that isn't schema.org, a @type schema.org doesn't have, a property schema.org doesn't define for that type or the types it descends from, a date property whose value isn't an ISO 8601 date, or a priceCurrency that isn't an ISO 4217 code. Types and properties written in another vocabulary aren't judged. The detail gives the first three faults.""",
+        """Correct each fault the detail names: the type's or property's spelling as schema.org writes it (Organization, not Organisation), dates as 2026-11-17 or 2026-11-17T09:30:00+00:00, and currencies as three-letter codes such as GBP. Then test the page with the Schema Markup Validator.""")
+    {
+        Why = """Search engines read structured data by schema.org's vocabulary: a type or property they don't know, or a date or currency they can't read, is ignored without a word, so the markup may do nothing for the page. Google's Rich Results Test only reports what its own features use, so these faults often go unnoticed.""",
+        LearnMore = "https://validator.schema.org/",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition STRUCTURED_DATA_MISSING_RECOMMENDED = new("structured-data-missing-recommended", IssueCategory.StructuredData, IssueSeverity.Notice,
+        "Structured data missing recommended properties",
+        """A top-level item on this indexable page lacks properties Google recommends for its type: an Article, NewsArticle or BlogPosting its headline, image, datePublished or author; an Organization its url or logo; a Product its image, or its Offer a priceCurrency or availability. The detail names the type and what it lacks.""",
+        """Add the properties the detail names, with values that match what's visible on the page. Most SEO and shop plugins have a setting for each, such as the article's featured image or the product's stock status.""")
+    {
+        Why = """The markup works without them, but Google uses them for richer results: an article's image and date, a product's price and stock in merchant listings, an organization's logo in knowledge panels. A product needs an image to appear in merchant listings at all.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/article#structured-data-type-definitions",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition STRUCTURED_DATA_ON_NOINDEX = new("structured-data-on-noindex", IssueCategory.StructuredData, IssueSeverity.Notice,
+        "Structured data on a noindex page",
+        """The page tells search engines not to index it (noindex, in a meta tag or the X-Robots-Tag header) yet has structured data of a type with rich results, such as a Product, Article, Organization or BreadcrumbList, in JSON-LD or Microdata. The detail names the types.""",
+        """If the page should be in search results, remove the noindex. If it shouldn't, the structured data does nothing there and can stay or go; make sure the indexable page it describes has it instead.""")
+    {
+        Why = """Google can't show a rich result for a page it doesn't index, so the markup can't do anything there. It's harmless, but it often means the noindex is a mistake on a page meant to rank.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#technical-guidelines",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["metaRobots", "xRobotsTag"]
     };
 
 
@@ -1624,7 +1658,8 @@ public static class IssueCatalog
         IMAGE_MISSING_ALT, IMAGE_ALT_TOO_LONG, IMAGE_MISSING_DIMENSIONS, IMAGE_BROKEN, IMAGE_TOO_LARGE,
         HREFLANG_INVALID_CODE, HREFLANG_MISSING_SELF, HREFLANG_MISSING_RETURN, HREFLANG_BROKEN_TARGET,
         HREFLANG_TO_NON_INDEXABLE, HREFLANG_DUPLICATE_CODE, HREFLANG_MISSING_X_DEFAULT, HREFLANG_OUTSIDE_HEAD,
-        STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED,
+        STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED, STRUCTURED_DATA_SCHEMA_ERRORS, STRUCTURED_DATA_MISSING_RECOMMENDED,
+        STRUCTURED_DATA_ON_NOINDEX,
         NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING,
         URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG,
         SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT, RESOURCE_PAST_CRAWL_LIMIT,

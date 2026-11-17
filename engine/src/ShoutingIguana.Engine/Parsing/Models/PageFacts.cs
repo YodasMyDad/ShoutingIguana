@@ -28,6 +28,7 @@ public sealed record PageFacts
     private readonly IReadOnlyList<string>? _headTagsInBody;
     private readonly IReadOnlyList<string>? _structureErrors;
     private readonly IReadOnlyList<string>? _charsetDeclarations;
+    private readonly IReadOnlyList<string>? _microdata;
 
     public IReadOnlyList<string> Titles { get; init; } = [];
     public IReadOnlyList<string> MetaDescriptions { get; init; } = [];
@@ -67,6 +68,12 @@ public sealed record PageFacts
     public IReadOnlyList<HeadingFact> Headings { get; init; } = [];
     public IReadOnlyList<ImageFact> Images { get; init; } = [];
     public IReadOnlyList<string> JsonLd { get; init; } = [];
+
+    /// <summary>
+    /// Each top-level Microdata item, typed, as a JSON-LD-shaped object (<see cref="MicrodataReader"/>), up to 50: the
+    /// structured data checks read them as JSON-LD blocks. Empty for a page an earlier version parsed.
+    /// </summary>
+    public IReadOnlyList<string> Microdata { get => _microdata ?? []; init => _microdata = value; }
 
     /// <summary>Element ids and named anchors, for checking <c>#fragment</c> links.</summary>
     public IReadOnlyList<string> AnchorIds { get; init; } = [];

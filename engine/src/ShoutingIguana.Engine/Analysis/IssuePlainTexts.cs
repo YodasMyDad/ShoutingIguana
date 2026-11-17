@@ -1726,6 +1726,50 @@ public static class IssuePlainTexts
             OneFix = """That's almost certainly your page design, which leaves the same detail out of every page of one kind."""
         },
 
+        ["structured-data-schema-errors"] = new(
+            """Product or business details Google can't use""",
+            [
+                """These pages describe a product, article or business for search engines in words that code doesn't have.""",
+                """Search engines quietly ignore what they can't read, so those details may do nothing for the page.""",
+                """A misspelt name such as "Organisation", or a date or currency written the wrong way, is the usual cause."""
+            ],
+            [
+                """Send the list to your developer: it gives the first few mistakes on each page.""",
+                """If a plugin writes these details, check its settings for dates and currencies, or update it."""
+            ],
+            IssueFixer.Developer,
+            """All product and business details use words Google knows"""),
+
+        ["structured-data-missing-recommended"] = new(
+            """Product or article details that could be fuller""",
+            [
+                """These pages describe a product, an article or your business for search engines, but leave out details Google asks for.""",
+                """Nothing is broken, but Google uses them to show more in search, such as an article's picture or a product's price and stock.""",
+                """A product needs a picture to be shown in Google's shopping results at all."""
+            ],
+            [
+                """Check the list: it says what each page leaves out.""",
+                """Fill in the missing details in your site's SEO or shop settings, such as an article's featured image or a product's stock.""",
+                """Ask your developer to add them, if your site has no such settings."""
+            ],
+            IssueFixer.Either,
+            """Every product and article gives the details Google asks for"""),
+
+        ["structured-data-on-noindex"] = new(
+            """Product or article details on pages hidden from Google""",
+            [
+                """These pages describe a product or an article for search engines, but also ask not to be shown in search.""",
+                """Google can't show those details for a page it leaves out, so they do nothing here.""",
+                """It's harmless, but often a sign that a page meant to be found is hidden by mistake."""
+            ],
+            [
+                """Check whether each page should appear in search results.""",
+                """If it should, switch off "hide from search engines" for it in your site's settings.""",
+                """If it shouldn't, there's nothing to do."""
+            ],
+            IssueFixer.You,
+            """No hidden page carries product or article details"""),
+
         ["no-https"] = new(
             """Your site isn't secure (no HTTPS)""",
             [
