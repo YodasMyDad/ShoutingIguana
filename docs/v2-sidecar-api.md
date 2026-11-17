@@ -319,7 +319,7 @@ The options DTO has every public `CrawlOptions` property. `extraHeaders` is an o
 | Preset | Concurrency | Rate |
 | --- | --- | --- |
 | `polite` | 2 | 2/s |
-| `standard` | 5 | no cap, with automatic backoff (the engine's defaults) |
+| `standard` | 5 | no cap (the engine's defaults) |
 | `fast` | 16 | no cap |
 
 ### Proxy test (round 5)
@@ -532,8 +532,11 @@ on, mid-crawl as at the end.
   genuine 403s.
 - **`noResponse`** is `{ robotsDisallowed, timeout, networkError, notChecked, processingError }`, which add up to
   `statusClasses.noResponse`. `robotsDisallowed` is the same count as the top-level field (refused by a rule, or because
-  robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering: unknown, not
-  broken, so the UI shouldn't call them errors. `networkError` doesn't include them.
+  robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering, or asked and
+  only ever answered 429 Too Many Requests, the site asking the crawler to slow down (their `error` starts "Not
+  checked: the site asked the crawler to slow down"), or on a private network address a public site's crawl doesn't
+  ask ("Not checked: private network address; not checked from a public site"): unknown, not broken, so the UI
+  shouldn't call them errors. `networkError` doesn't include them.
 - **`crawlingMs`** (E3c) is the time spent crawling so far, over every run of the crawl: the earlier runs' time, and
   this run's without its pauses, so it stands still while the crawl is paused, where `elapsedMs` (this run's alone)
   runs on. It ends at the library item's `crawlingMs`, to the millisecond. Null when an earlier run's time wasn't
@@ -599,7 +602,7 @@ on, mid-crawl as at the end.
   | `robotsTxt` | The site's URLs wait for the robots.txt of their host, which comes before its first fetch | `host`: whose robots.txt, `urls`: how many |
   | `otherSitesRobotsTxt` | Status checks of links to other sites wait for those sites' robots.txt. They hold up nothing of the site's own | `urls`: how many |
   | `crawlDelay` | The site's robots.txt asks for a Crawl-delay, which spaces every request to that host. Only with `respectCrawlDelay` on, and when it is longer than the crawl's own rate | `host`, `durationMs`: the delay |
-  | `backoff` | The site answered 429, 503 or a block page, or keeps failing, so requests are spaced further apart. It halves every half second, so it comes and goes | `host`, `durationMs`: the extra spacing now |
+  | `backoff` | The site asked the crawler to slow down (429, or 503 with Retry-After) or kept failing, so the crawler learned a slower pace for it, which rises slowly while it answers well. Listed while that pace is slower than the crawl's settings | `host`, `durationMs`: the time between requests now (1000 / `durationMs` requests a second) |
   | `heldBack` | Requests to the host are held: it sent Retry-After, or it stopped answering and is asked again a minute after each try | `host`, `durationMs`: until they may go again |
   | `siteDown` | An origin of the site has stopped answering and is waited out. The crawl stops after 10 minutes of it, resumable. Only the one down longest is listed | `host`: the origin, its scheme and host, and its port unless it's the scheme's default (`https://example.com`, `http://127.0.0.1:8080`), `durationMs`: how long so far |
   | `robotsTxtCoolDown` | In any phase: robots.txt couldn't be read and is asked again after a two-minute cool-down, which something waits for: URLs it refused, whose one more try comes after it, or the sitemaps it declares, read once it has been asked again (the phase is then `readingSitemaps`, once nothing else is left) | `urls`: the URLs it refused, if any, `durationMs`: until it's asked again (the last, where several couldn't be read) |
@@ -635,8 +638,9 @@ An alert is a `CrawlNotice`, kept in the crawl file as the engine raises it (the
   the shutdown bound) can lose the last few: the next run then gives their ids to new alerts. An alert heard live as
   id 7 and another read back later as id 7 are told apart by `at`.
 - **`level`** is `info`, `warning` or `error`.
-- **`code`** is stable; key UI text and actions on it. Each says once what it's about: `blocked` once per host, and
-  `robots-unreachable` once per origin, in each run, so a crawl continued while it's still blocked says so again.
+- **`code`** is stable; key UI text and actions on it. Each says once what it's about: `blocked` and `rate-limited` once
+  per host, and `robots-unreachable` once per origin, in each run, so a crawl continued while it's still blocked says so
+  again.
 - **`message`** is engine text and may include text from the site.
 - **`data`** is what the alert is about, for the UI to offer its action. Fields that don't apply are left out; it's null
   for an alert without facts.
@@ -645,6 +649,8 @@ An alert is a `CrawlNotice`, kept in the crawl file as the engine raises it (the
   | --- | --- | --- | --- |
   | `blocked` | warning | `host`, `reason` (the firewall or challenge, "Cloudflare challenge"), `count`: the host's responses blocked, 1 on the live event (the one that raised it), and read with `GET /alerts`, the host's blocked responses in the whole crawl so far, every run's. A crawl continued while still blocked has a `blocked` alert for the host in each run, each with that same count, so the UI shows it once, on the latest | Continue more slowly, add headers, another user agent |
   | `mostly-forbidden` | warning | `host`, `count` (the 403s), `sampled` (of the site's first 20 URLs) | As for `blocked` |
+  | `rate-limited` | info | `host`, `reason` (`429 Too Many Requests`), `durationMs`: the pause it asked for, when it did. Once per host in each run: the crawler waits as asked, goes on at a slower pace it learns, and asks again at the end for the URLs it was refused. Not a block | Nothing: it is handled |
+  | `rate-limited-unchecked` | warning | `host` (of the first such URL), `reason` (`429 Too Many Requests`), `count`: the site's URLs stored as not checked (`outcome` `notChecked`) because it still answered 429 at their last try. Said at the end of a run, only when there are some | Crawl again later, or at the Polite speed |
   | `start-redirects-away` | warning | `url`: where the start URL leads | Crawl from there instead |
   | `robots-unreachable` | warning | `origin`, `reason` (`503 Service Unavailable`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
   | `site-unreachable` | warning | `origin`, `reason` (the last error), `durationMs`: the pause between tries | Wait, or stop and continue later |
