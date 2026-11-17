@@ -66,7 +66,7 @@ export const PERFECT_ANALYSIS = analysisWith(
 
 /** Only things worth a look: 100, nothing to fix. */
 export const NOTICES_ANALYSIS = analysisWith(
-  { 'empty-anchor-text': 265, 'image-missing-dimensions': 230, 'description-too-long': 210 },
+  { 'empty-anchor-text': 265, 'image-missing-dimensions': 230, 'description-too-long': 168 },
   { value: 100, band: 'veryGood', lost: 0, beforeCeiling: 100, ifFixed: { checkIds: [], value: 100 } },
 );
 

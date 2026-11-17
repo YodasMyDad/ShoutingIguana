@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEST_LIMITS, testResponse, testUrlDetail } from '../test/inspectorSidecar';
 import {
-  characterCount,
   descriptionMeasure,
   htmlSizeMeasure,
   measuresOf,
@@ -31,45 +30,45 @@ describe('readOnScale', () => {
 });
 
 describe('the measures', () => {
-  it('reads a title one over the limit, naming the check it trips', () => {
-    const measure = titleMeasure(61, TEST_LIMITS);
+  it('reads a title’s width one over the limit, in px with its characters under it, naming the check it trips', () => {
+    const measure = titleMeasure(581, TEST_LIMITS, 61);
     expect(measure).toMatchObject({
-      label: 'Title length',
-      value: 61,
-      min: 30,
-      max: 60,
+      label: 'Title width',
+      value: 581,
+      min: 200,
+      max: 580,
       state: 'over',
       by: 1,
-      valueText: '61 characters',
-      limitText: '30 to 60 characters',
-      note: '1 over the 60 limit',
+      valueText: '581 px',
+      limitText: '200 to 580 px',
+      note: '1 over the 580 limit',
+      aside: '61 characters',
       checkId: 'title-too-long',
     });
   });
 
-  it('reads a short title under the minimum', () => {
-    const measure = titleMeasure(12, TEST_LIMITS);
-    expect(measure.note).toBe('18 under the 30 minimum');
+  it('reads a narrow title under the minimum', () => {
+    const measure = titleMeasure(150, TEST_LIMITS, 16);
+    expect(measure.note).toBe('50 under the 200 minimum');
     expect(measure.checkId).toBe('title-too-short');
   });
 
-  it('calls a length characters only when it is the text’s count of them: wide characters count twice', () => {
-    // 48 Japanese characters: the engine's length is 96, the room they take in a search result.
-    const wide = '日本語のタイトルです'.repeat(5).slice(0, 48);
-    const measure = titleMeasure(96, TEST_LIMITS, wide);
-    expect(measure.valueText).toBe('48 characters (96 counting full-width characters as two)');
-    // The limit and how far past it are in the same measure as the value.
-    expect(measure).toMatchObject({ state: 'over', note: '36 over the 60 limit', checkId: 'title-too-long' });
-    expect(descriptionMeasure(40, TEST_LIMITS, '短い説明文です。'.repeat(3).slice(0, 20)).valueText).toBe(
-      '20 characters (40 counting full-width characters as two)',
-    );
-    // An emoji is one character to a reader, and wide.
-    expect(titleMeasure(8, TEST_LIMITS, 'Sale 🎉!').valueText).toBe(
-      '7 characters (8 counting full-width characters as two)',
-    );
-    // Latin text, accents and all, is its count: "characters" as before. The ends don't count.
-    expect(titleMeasure(4, TEST_LIMITS, ' Café ').valueText).toBe('4 characters');
-    expect(titleMeasure(61, TEST_LIMITS, 'x'.repeat(61)).valueText).toBe('61 characters');
+  it('says the characters under the width as a reader counts them, wide ones taking their room in the width', () => {
+    expect(titleMeasure(612, TEST_LIMITS, 64)).toMatchObject({
+      valueText: '612 px',
+      note: '32 over the 580 limit',
+      aside: '64 characters',
+    });
+    // 48 Japanese characters, each as wide as an em: the width is over, the characters a reader's count.
+    expect(titleMeasure(960, TEST_LIMITS, 48)).toMatchObject({
+      state: 'over',
+      valueText: '960 px',
+      aside: '48 characters',
+      note: '380 over the 580 limit',
+    });
+    expect(titleMeasure(9, TEST_LIMITS, 1).aside).toBe('1 character');
+    // Without a count, nothing under it.
+    expect(titleMeasure(300, TEST_LIMITS).aside).toBeNull();
   });
 
   it('writes a value exactly when it rounds to its limit, so it never reads as on it while it’s over', () => {
@@ -93,23 +92,22 @@ describe('the measures', () => {
   });
 
   it('stays quiet within the range', () => {
-    const measure = titleMeasure(45, TEST_LIMITS);
+    const measure = titleMeasure(450, TEST_LIMITS, 45);
     expect(measure.state).toBe('within');
     expect(measure.note).toBeNull();
     expect(measure.checkId).toBeNull();
   });
 
-  it('says one character in the singular', () => {
-    expect(titleMeasure(1, TEST_LIMITS).valueText).toBe('1 character');
-  });
-
-  it('reads a description against its own range', () => {
-    expect(descriptionMeasure(158, TEST_LIMITS)).toMatchObject({
-      note: '3 over the 155 limit',
+  it('reads a description’s width against its own range', () => {
+    expect(descriptionMeasure(990, TEST_LIMITS, 158)).toMatchObject({
+      label: 'Meta description width',
+      valueText: '990 px',
+      note: '5 over the 985 limit',
+      aside: '158 characters',
       checkId: 'description-too-long',
-      limitText: '70 to 155 characters',
+      limitText: '400 to 985 px',
     });
-    expect(descriptionMeasure(20, TEST_LIMITS).checkId).toBe('description-too-short');
+    expect(descriptionMeasure(200, TEST_LIMITS, 31).checkId).toBe('description-too-short');
   });
 
   it('reads the word count against its minimum only', () => {
@@ -150,19 +148,9 @@ describe('the measures', () => {
   });
 
   it('uses the limits it’s given, never its own', () => {
-    const limits = { ...TEST_LIMITS, titleMin: 10, titleMax: 20, slowResponseMs: 250 };
-    expect(titleMeasure(25, limits).note).toBe('5 over the 20 limit');
+    const limits = { ...TEST_LIMITS, titleMinPixels: 100, titleMaxPixels: 200, slowResponseMs: 250 };
+    expect(titleMeasure(250, limits).note).toBe('50 over the 200 limit');
     expect(responseMeasure(300, limits).note).toBe('50 ms over the 250 ms limit');
-  });
-});
-
-describe('characterCount', () => {
-  it('counts what a reader counts: a letter with its accent, an emoji with its parts, once', () => {
-    expect(characterCount('Garden')).toBe(6);
-    expect(characterCount('  Garden  ')).toBe(6);
-    expect(characterCount('Café')).toBe(4);
-    expect(characterCount('👩‍👩‍👧 family')).toBe(8);
-    expect(characterCount('日本語')).toBe(3);
   });
 });
 
@@ -176,12 +164,15 @@ describe('measuresOf', () => {
       content: {
         ...content,
         titles: [
-          { text: 'One', length: 3 },
-          { text: 'Two', length: 45 },
+          { text: 'One', length: 3, width: 33 },
+          { text: 'Garden furniture sets for every patio', length: 37, width: 349 },
+          // A width the engine didn't give has no meter.
+          { text: 'Two', length: 3, width: null },
         ],
       },
     });
-    expect(measures.titles.map((measure) => measure.state)).toEqual(['under', 'within']);
+    expect(measures.titles.map((measure) => measure?.state ?? null)).toEqual(['under', 'within', null]);
+    expect(measures.titles[1]).toMatchObject({ valueText: '349 px', aside: '37 characters' });
     expect(measures.descriptions).toHaveLength(1);
     expect(measures.words?.value).toBe(701);
     expect(measures.response?.value).toBe(117);

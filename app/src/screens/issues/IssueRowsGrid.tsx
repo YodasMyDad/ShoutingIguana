@@ -58,9 +58,9 @@ export interface IssueRowsGridProps {
 }
 
 /**
- * A check that doesn't group (its detail is a measurement, "78 characters, over 60", or the same on every page): its
- * URLs flat, server-paged and sortable, with the detail as a column (E3a, `/rows`), then the check's evidence (the
- * title and its length, the redirect chain, the robots.txt rule: docs/v2-evidence.md), then the URL's inlinks (or the
+ * A check that doesn't group (its detail is a measurement, "612 px, over 580 (64 characters)", or the same on every
+ * page): its URLs flat, server-paged and sortable, with the detail as a column (E3a, `/rows`), then the check's evidence
+ * (the title and its width, the redirect chain, the robots.txt rule: docs/v2-evidence.md), then the URL's inlinks (or the
  * pages using it), which the engine's order goes by when no sort is chosen: the pages that matter most first.
  */
 export function IssueRowsGrid({

@@ -126,10 +126,10 @@ public sealed partial class PlainWordsDataTests
         Assert.Equal(
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["title-too-long"] = "titleMaxLength",
-                ["title-too-short"] = "titleMinLength",
-                ["description-too-long"] = "descriptionMaxLength descriptionMaxLength",
-                ["description-too-short"] = "descriptionMinLength",
+                ["title-too-long"] = "titleMaxPixels",
+                ["title-too-short"] = "titleMinPixels",
+                ["description-too-long"] = "descriptionMaxPixels descriptionMaxPixels",
+                ["description-too-short"] = "descriptionMinPixels",
                 ["low-word-count"] = "minWordCount",
                 ["image-alt-too-long"] = "imageAltMaxLength",
                 ["image-too-large"] = "largeImageBytes",

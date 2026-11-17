@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
@@ -346,8 +347,9 @@ public static class IssueReader
     }
 
     /// <summary>
-    /// The settings as stored, a threshold the analysing engine didn't have taking its default; settings that can't be
-    /// read (edited by hand, say) are none, so they differ from any.
+    /// The settings as stored, a threshold the analysing engine didn't have taking its default, and the title and
+    /// description limits an older engine stored in characters converted to pixels (<see cref="LegacyAnalysisSettings"/>);
+    /// settings that can't be read (edited by hand, say) are none, so they differ from any.
     /// </summary>
     private static AnalysisSettings? ReadSettings(string? json)
     {
@@ -358,7 +360,8 @@ public static class IssueReader
 
         try
         {
-            return StoredJson.Deserialize(json, EngineJsonContext.Default.AnalysisSettings, new AnalysisSettings());
+            var stored = JsonNode.Parse(json) is JsonObject settings ? LegacyAnalysisSettings.Upgrade(settings).ToJsonString() : json;
+            return StoredJson.Deserialize(stored, EngineJsonContext.Default.AnalysisSettings, new AnalysisSettings());
         }
         catch (JsonException)
         {

@@ -451,7 +451,12 @@ describe('the link grids’ words', () => {
 
 describe('hidden checks', () => {
   const issues = [
-    { checkId: 'title-too-long', severity: 'notice' as const, detail: '61 characters', related: null },
+    {
+      checkId: 'title-too-long',
+      severity: 'notice' as const,
+      detail: '597 px, over 580 (61 characters)',
+      related: null,
+    },
     { checkId: 'internal-client-error', severity: 'error' as const, detail: '404 Not Found', related: null },
     { checkId: 'low-word-count', severity: 'notice' as const, detail: '85 words', related: null },
   ];

@@ -10,26 +10,39 @@ import { createAppRouter } from '../../app/router';
 import { onAnnounce } from '../../feedback/announce';
 import { replaceSettings } from '../../settings/settingsStore';
 import { fakeSidecar, json, problem, standardRoutes } from '../../test/fakeSidecar';
-import { changeOf, draftOf, limitName, rangeWords, sameAsSaved, splitErrors, valueWords } from './analysisLimits';
+import {
+  approximateCharacters,
+  changeOf,
+  charactersHint,
+  draftOf,
+  limitName,
+  rangeWords,
+  sameAsSaved,
+  splitErrors,
+  unitWords,
+  valueWords,
+} from './analysisLimits';
 
 const LIMITS: AnalysisLimit[] = [
   {
-    id: 'titleMinLength',
-    value: 30,
-    default: 30,
-    unit: 'characters',
+    id: 'titleMinPixels',
+    value: 200,
+    default: 200,
+    unit: 'pixels',
     min: 0,
-    max: 10_000,
-    description: 'A title shorter than this is flagged as too short.',
+    max: 100_000,
+    description: 'A title narrower than this is flagged as too short.',
+    pixelsPerCharacter: 9.4,
   },
   {
-    id: 'titleMaxLength',
-    value: 60,
-    default: 60,
-    unit: 'characters',
+    id: 'titleMaxPixels',
+    value: 580,
+    default: 580,
+    unit: 'pixels',
     min: 1,
-    max: 10_000,
-    description: 'A title longer than this is flagged as too long.',
+    max: 100_000,
+    description: 'A title wider than this in search results is flagged as too long.',
+    pixelsPerCharacter: 9.4,
   },
   {
     id: 'largeImageBytes',
@@ -44,11 +57,40 @@ const LIMITS: AnalysisLimit[] = [
 
 describe('the limits’ words', () => {
   it('names each limit, and its range and the engine’s value in its unit', () => {
-    expect(limitName('titleMaxLength')).toBe('Longest title');
+    expect(limitName('titleMaxPixels')).toBe('Widest title');
+    expect(limitName('titleMinPixels')).toBe('Narrowest title');
+    expect(limitName('descriptionMinPixels')).toBe('Narrowest meta description');
+    expect(limitName('descriptionMaxPixels')).toBe('Widest meta description');
     expect(limitName('someNewLimit')).toBe('Some new limit');
-    expect(rangeWords(LIMITS[1]!)).toBe('From 1 to 10,000 characters. The engine’s is 60 characters.');
+    expect(rangeWords(LIMITS[1]!)).toBe('From 1 to 100,000 px. The engine’s is 580 px (about 60 characters).');
+    expect(rangeWords(LIMITS[0]!)).toBe('From 0 to 100,000 px. The engine’s is 200 px (about 20 characters).');
     expect(rangeWords(LIMITS[2]!)).toBe('From 1 to 10,737,418,240 bytes (10 GB). The engine’s is 200 KB.');
     expect(valueWords(1, 'words')).toBe('1 word');
+    expect(valueWords(580, 'pixels')).toBe('580 px');
+    expect(unitWords('pixels')).toBe('px');
+  });
+
+  it('says a width in pixels as the ordinary characters it holds, rounded as the engine’s plain words round it', () => {
+    // To the nearest 5 from 20 on, to the nearest whole below: 580 px of title is about 60, 985 of description 160.
+    expect(approximateCharacters(580, 9.4)).toBe(60);
+    expect(approximateCharacters(200, 9.4)).toBe(20);
+    expect(approximateCharacters(985, 6.2)).toBe(160);
+    expect(approximateCharacters(400, 6.2)).toBe(65);
+    expect(approximateCharacters(185, 9.4)).toBe(20);
+    expect(approximateCharacters(150, 9.4)).toBe(16);
+    expect(approximateCharacters(9, 9.4)).toBe(1);
+    const widest = LIMITS[1]!;
+    expect(charactersHint(widest, '580')).toBe('About 60 characters of ordinary text.');
+    expect(charactersHint(widest, '1,000')).toBe('About 105 characters of ordinary text.');
+    expect(charactersHint(widest, ' 700 ')).toBe('About 75 characters of ordinary text.');
+    expect(charactersHint(widest, '9')).toBe('About 1 character of ordinary text.');
+    // Nothing for an empty or invalid field, or a limit that isn't a width.
+    expect(charactersHint(widest, '')).toBeNull();
+    expect(charactersHint(widest, 'abc')).toBeNull();
+    expect(charactersHint(widest, '7.5')).toBeNull();
+    expect(charactersHint(widest, '0')).toBeNull();
+    expect(charactersHint(widest, '100001')).toBeNull();
+    expect(charactersHint(LIMITS[2]!, '1000')).toBeNull();
   });
 
   it('sends what’s typed as typed, a whole number as a number and an empty field as the engine’s', () => {
@@ -60,15 +102,15 @@ describe('the limits’ words', () => {
       e: 'abc',
     });
     expect(sameAsSaved(draftOf(LIMITS), LIMITS)).toBe(true);
-    expect(sameAsSaved({ ...draftOf(LIMITS), titleMaxLength: '61' }, LIMITS)).toBe(false);
+    expect(sameAsSaved({ ...draftOf(LIMITS), titleMaxPixels: '581' }, LIMITS)).toBe(false);
   });
 
   it('puts a limit’s error beside it, and the whole set’s and a reset’s above the form', () => {
     expect(
-      splitErrors({ titleMaxLength: ['Too short.'], settings: ['Together, no.'], 'limits[0]': ['No such limit.'] }, [
-        'titleMaxLength',
+      splitErrors({ titleMaxPixels: ['Too narrow.'], settings: ['Together, no.'], 'limits[0]': ['No such limit.'] }, [
+        'titleMaxPixels',
       ]),
-    ).toEqual({ byLimit: { titleMaxLength: 'Too short.' }, whole: ['Together, no.', 'No such limit.'] });
+    ).toEqual({ byLimit: { titleMaxPixels: 'Too narrow.' }, whole: ['Together, no.', 'No such limit.'] });
   });
 });
 
@@ -81,14 +123,14 @@ function settingsOf(values: Record<string, number>): AnalysisSettings {
   };
 }
 
-/** The engine's limits, kept as a save leaves them; a longest title not above the shortest is refused. */
+/** The engine's limits, kept as a save leaves them; a widest title not above the narrowest is refused. */
 function sidecar() {
   let saved: Record<string, number> = {};
   const errorsOf = (body: Record<string, unknown>) => {
-    const max = body.titleMaxLength ?? 60;
-    const min = body.titleMinLength ?? 30;
+    const max = body.titleMaxPixels ?? 580;
+    const min = body.titleMinPixels ?? 200;
     return typeof max === 'number' && typeof min === 'number' && max <= min
-      ? { titleMaxLength: [`The longest title allowed must be more than the shortest (${min}).`] }
+      ? { titleMaxPixels: [`The widest title allowed must be more than the narrowest (${min}).`] }
       : {};
   };
   const transport = fakeSidecar([
@@ -141,19 +183,41 @@ describe('Settings, Analysis', () => {
   it('lists every limit with what it does, its unit and its range', async () => {
     sidecar();
     await open();
-    const field = await screen.findByRole('textbox', { name: 'Longest title' });
-    expect(field).toHaveValue('60');
-    expect(field).toHaveAccessibleDescription(/A title longer than this is flagged as too long\. From 1 to 10,000/);
+    const field = await screen.findByRole('textbox', { name: 'Widest title' });
+    expect(field).toHaveValue('580');
+    expect(field).toHaveAccessibleDescription(
+      /A title wider than this in search results is flagged as too long\. From 1 to 100,000 px\. The engine’s is 580 px \(about 60 characters\)\./,
+    );
     expect(screen.getByRole('textbox', { name: 'Largest image' })).toHaveValue('204800');
+    expect(screen.getByRole('textbox', { name: 'Largest image' })).not.toHaveAccessibleDescription(/ordinary text/);
+  });
+
+  it('says a width as the characters it holds, from what’s typed, and nothing while it isn’t a width', async () => {
+    sidecar();
+    await open();
+    const field = await screen.findByRole('textbox', { name: 'Widest title' });
+    expect(field).toHaveAccessibleDescription(/About 60 characters of ordinary text\.$/);
+    // Its unit beside it.
+    expect(screen.getAllByText('px', { exact: true }).length).toBeGreaterThan(0);
+    fireEvent.change(field, { target: { value: '700' } });
+    expect(field).toHaveAccessibleDescription(/About 75 characters of ordinary text\.$/);
+    fireEvent.change(field, { target: { value: 'abc' } });
+    expect(field).not.toHaveAccessibleDescription(/ordinary text/);
+    fireEvent.change(field, { target: { value: '' } });
+    expect(field).not.toHaveAccessibleDescription(/ordinary text/);
   });
 
   it('says what the engine refuses beside the limit, and saves nothing until it’s put right', async () => {
     const transport = sidecar();
     await open();
-    const field = await screen.findByRole('textbox', { name: 'Longest title' });
-    fireEvent.change(field, { target: { value: '20' } });
+    const field = await screen.findByRole('textbox', { name: 'Widest title' });
+    fireEvent.change(field, { target: { value: '150' } });
     expect(
-      await screen.findByText('The longest title allowed must be more than the shortest (30).', {}, { timeout: 2_000 }),
+      await screen.findByText(
+        'The widest title allowed must be more than the narrowest (200).',
+        {},
+        { timeout: 2_000 },
+      ),
     ).toBeVisible();
     expect(field).toHaveAttribute('aria-invalid', 'true');
     await new Promise((resolve) => setTimeout(resolve, 800));
@@ -169,35 +233,35 @@ describe('Settings, Analysis', () => {
       invalidated.push(filters);
       return invalidate(filters, options);
     };
-    const field = await screen.findByRole('textbox', { name: 'Longest title' });
-    fireEvent.change(field, { target: { value: '70' } });
+    const field = await screen.findByRole('textbox', { name: 'Widest title' });
+    fireEvent.change(field, { target: { value: '700' } });
     await waitFor(
       () =>
         expect(transport.requests.find((request) => request.method === 'PUT')?.body).toMatchObject({
-          titleMaxLength: 70,
+          titleMaxPixels: 700,
         }),
       { timeout: 2_000 },
     );
     // No event says so: the library and every crawl's reads are read again, and say "out of date" where they are.
     await waitFor(() => expect(invalidated).toContainEqual({ queryKey: ['library'] }));
     expect(invalidated).toContainEqual({ queryKey: ['crawl'] });
-    expect(await screen.findByRole('button', { name: 'Put back 60 characters' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Put back 580 px' })).toBeVisible();
   });
 
   it('puts one limit back, and every limit back, each with Undo', async () => {
     const transport = sidecar();
     await open();
-    const field = await screen.findByRole('textbox', { name: 'Longest title' });
-    fireEvent.change(field, { target: { value: '70' } });
-    const putBack = await screen.findByRole('button', { name: 'Put back 60 characters' }, { timeout: 2_000 });
+    const field = await screen.findByRole('textbox', { name: 'Widest title' });
+    fireEvent.change(field, { target: { value: '700' } });
+    const putBack = await screen.findByRole('button', { name: 'Put back 580 px' }, { timeout: 2_000 });
     fireEvent.click(putBack);
-    await waitFor(() => expect(field).toHaveValue('60'));
+    await waitFor(() => expect(field).toHaveValue('580'));
     const resets = () => transport.requests.filter((request) => request.path === '/api/analysis-settings/reset');
-    expect(resets().at(-1)?.body).toEqual({ limits: ['titleMaxLength'] });
-    fireEvent.change(field, { target: { value: '80' } });
-    await screen.findByRole('button', { name: 'Put back 60 characters' }, { timeout: 2_000 });
+    expect(resets().at(-1)?.body).toEqual({ limits: ['titleMaxPixels'] });
+    fireEvent.change(field, { target: { value: '800' } });
+    await screen.findByRole('button', { name: 'Put back 580 px' }, { timeout: 2_000 });
     fireEvent.click(screen.getByRole('button', { name: 'Put back every limit' }));
-    await waitFor(() => expect(field).toHaveValue('60'));
+    await waitFor(() => expect(field).toHaveValue('580'));
     expect(resets()).toHaveLength(2);
     expect(resets().at(-1)?.body).toBeUndefined();
   });
@@ -205,15 +269,15 @@ describe('Settings, Analysis', () => {
   it('says why when the engine keys a refusal on a limit the user didn’t touch (the review’s finding 1)', async () => {
     const transport = sidecar();
     await open();
-    const shortest = await screen.findByRole('textbox', { name: 'Shortest title' });
-    // The engine reports a shortest above the longest on the longest.
-    fireEvent.change(shortest, { target: { value: '70' } });
-    const longest = screen.getByRole('textbox', { name: 'Longest title' });
-    await waitFor(() => expect(longest).toHaveAttribute('aria-invalid', 'true'), { timeout: 2_000 });
-    expect(longest).toHaveAccessibleDescription(/must be more than the shortest \(70\)/);
+    const narrowest = await screen.findByRole('textbox', { name: 'Narrowest title' });
+    // The engine reports a narrowest wider than the widest on the widest.
+    fireEvent.change(narrowest, { target: { value: '700' } });
+    const widest = screen.getByRole('textbox', { name: 'Widest title' });
+    await waitFor(() => expect(widest).toHaveAttribute('aria-invalid', 'true'), { timeout: 2_000 });
+    expect(widest).toHaveAccessibleDescription(/must be more than the narrowest \(700\)/);
     // Above the form too, named, as the limit wasn't the one changed.
     expect(screen.getByText('These limits can’t be saved together').closest('[role="alert"]')).toHaveTextContent(
-      'Longest title: The longest title allowed must be more than the shortest (70).',
+      'Widest title: The widest title allowed must be more than the narrowest (700).',
     );
     expect(transport.requests.some((request) => request.method === 'PUT')).toBe(false);
   });
@@ -237,11 +301,11 @@ describe('Settings, Analysis', () => {
     ]);
     setTransport(transport);
     await open();
-    const field = await screen.findByRole('textbox', { name: 'Longest title' });
-    fireEvent.change(field, { target: { value: '70' } });
+    const field = await screen.findByRole('textbox', { name: 'Widest title' });
+    fireEvent.change(field, { target: { value: '700' } });
     await waitFor(() => expect(release).not.toBeNull(), { timeout: 2_000 });
-    // More is typed while the save of 70 is on its way; then the engine answers it.
-    fireEvent.change(field, { target: { value: '75' } });
+    // More is typed while the save of 700 is on its way; then the engine answers it.
+    fireEvent.change(field, { target: { value: '750' } });
     act(() => release?.());
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(said.filter((message) => message.startsWith('Saved'))).toEqual([]);

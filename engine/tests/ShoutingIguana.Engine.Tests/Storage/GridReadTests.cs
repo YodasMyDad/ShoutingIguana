@@ -312,9 +312,9 @@ public sealed class GridReadTests(GridCrawl crawl)
         var cache = new ReadCache();
         var query = new UrlQuery { Filters = [Names("check", FilterOperator.In, "title-too-long")], Limit = 1 };
         var before = UrlGridReader.Query(copy, query, cache).Matching;
-        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy, new AnalysisSettings { TitleMinLength = 5, TitleMaxLength = 10 });
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy, new AnalysisSettings { TitleMinPixels = 47, TitleMaxPixels = 94 });
         var after = UrlGridReader.Query(copy, query, cache).Matching;
-        Assert.True(after > before, $"{after} titles over 10 characters, against {before} over 60");
+        Assert.True(after > before, $"{after} titles over 94 px, against {before} over 580");
         Assert.Equal(after, UrlGridReader.Query(copy, query, new ReadCache()).Matching);
     }
 

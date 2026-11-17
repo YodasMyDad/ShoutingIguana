@@ -1,13 +1,11 @@
-using System.Globalization;
 using System.Text;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
-/// How much room text takes in a search result, in Latin-letter widths. It counts user-perceived characters, so an
-/// emoji or a letter with combining marks is one, and counts wide characters twice: East Asian Wide and Fullwidth
-/// characters (UAX #11: CJK ideographs, kana, Hangul, full-width forms) and emoji, which render about twice as wide as
-/// a Latin letter. A 25-character Japanese title is a normal length, not a short one.
+/// Which characters take a whole em in a search result: East Asian Wide and Fullwidth characters (UAX #11: CJK
+/// ideographs, kana, Hangul, full-width forms) and emoji. <see cref="SearchResultWidth"/> measures them as one em, whatever
+/// Arial's table says, and breaks a line between them.
 /// </summary>
 internal static class DisplayWidth
 {
@@ -33,24 +31,11 @@ internal static class DisplayWidth
         (0x20000, 0x3FFFD) // CJK extensions B onwards
     ];
 
-    /// <summary>Characters and width of text after trimming, e.g. (21, 42) for a 21-character Japanese title.</summary>
-    public static (int Characters, int Width) Measure(string text)
-    {
-        int characters = 0, width = 0;
-        var rest = text.AsSpan().Trim();
-        while (!rest.IsEmpty)
-        {
-            var length = StringInfo.GetNextTextElementLength(rest);
-            var element = rest[..length];
-            characters++;
-            width += IsWide(element) ? 2 : 1;
-            rest = rest[length..];
-        }
-
-        return (characters, width);
-    }
-
-    private static bool IsWide(ReadOnlySpan<char> element)
+    /// <summary>
+    /// Whether a user-perceived character takes a whole em: its first code point is wide, or it asks for emoji presentation
+    /// (U+FE0F). A ZWJ emoji sequence and a flag start with a wide code point.
+    /// </summary>
+    public static bool IsWide(ReadOnlySpan<char> element)
     {
         // A lone surrogate decodes as U+FFFD, which is narrow.
         Rune.DecodeFromUtf16(element, out var first, out _);

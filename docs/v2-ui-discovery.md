@@ -300,7 +300,7 @@ aren't added. The list comes from comparing each old plugin with `IssueCatalog`.
   - a charset other than UTF-8;
   - an invalid `lang`;
   - Twitter Card;
-  - title and description widths in pixels (v2 estimates them from characters).
+  - title and description widths in pixels (built in step 3b: [pixel widths](v2-pixel-widths.md)).
 - **Headings:**
   - an H1 the same as the title;
   - skipped heading levels.

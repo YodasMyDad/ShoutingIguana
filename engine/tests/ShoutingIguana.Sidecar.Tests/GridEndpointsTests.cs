@@ -214,7 +214,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.EndsWith("Z", (string?)product["response"]!["crawledAt"]);
         Assert.Equal("""{"stored":true}""", product["source"]!.ToJsonString());
         Assert.True((bool?)product["limits"]!["fromAnalysis"]);
-        Assert.Equal(60, (int?)product["limits"]!["titleMax"]);
+        Assert.Equal(580, (int?)product["limits"]!["titleMaxPixels"]);
 
         // The checklist: each test with only the facts that go with it.
         var indexability = product["indexability"]!;
@@ -484,7 +484,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
 
         // What each check shows, and a group's URL and order.
         var tooLong = checks.Single(check => (string?)check!["id"] == "title-too-long")!;
-        Assert.Equal("""["title","titleLength"]""", tooLong["evidence"]!.ToJsonString());
+        Assert.Equal("""["title","titleInResults","titleWidth","titleLength"]""", tooLong["evidence"]!.ToJsonString());
         Assert.Equal("[]", tooLong["targetFacts"]!.ToJsonString());
         var groups = await PostOkAsync($"api/crawls/{grid.Id}/issues/image-too-large/groups");
         Assert.Equal(("size", false), ((string?)groups["sort"], (bool)groups["likelyTemplate"]!));

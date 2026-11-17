@@ -171,7 +171,7 @@ public sealed class UrlSummaryTests : IDisposable
         var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
         await analyzer.AnalyzeAsync(path);
         Assert.True(UrlSummaryReader.IsAvailable(path));
-        await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMaxLength = 70 });
+        await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMaxPixels = 658 });
         Assert.Equal([OutOfDateReason.SettingsChanged], CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
         Assert.True(UrlSummaryReader.IsAvailable(path));
         var analysed = IssueReader.ReadAnalysis(path)!.CrawlUpdatedAt!.Value.ToUnixTimeMilliseconds();

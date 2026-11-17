@@ -4,15 +4,15 @@ import { formatCount } from '../lib/format';
 import type { Severity } from './severity';
 
 export interface MeterProps {
-  /** What's measured: "Title length". */
+  /** What's measured: "Title width". */
   label: string;
   value: number;
-  /** The allowed range the analysis used: 30 to 60 characters; a response limit is `max` alone. */
+  /** The allowed range the analysis used: 200 to 580 px; a response limit is `max` alone. */
   min?: number | undefined;
   max?: number | undefined;
   /** Where the scale ends. By default a little past the limit or the value, whichever is further. */
   scaleMax?: number | undefined;
-  /** The value as read: "72 characters", "1,412 ms". */
+  /** The value as read: "612 px", "1,412 ms". */
   valueText: string;
   /** The limit's words for screen readers: "allowed 30 to 60". By default from `min` and `max`. */
   limitText?: string | undefined;

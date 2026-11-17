@@ -140,6 +140,26 @@ export function fontPackages(fontsDir) {
     }));
 }
 
+/**
+ * The font metrics the engine carries, not a font: the advance widths of Liberation Sans 2.1.5, which the title and
+ * description checks measure text by (engine/src/ShoutingIguana.Engine/Analysis/Rules/ArialAdvanceWidths.cs), with the
+ * OFL text the generator keeps beside the table.
+ */
+export function engineFontPackages(rulesDir) {
+  const textFile = path.join(rulesDir, 'LiberationSans-OFL.txt');
+  if (!existsSync(textFile)) throw new Error(`${textFile} is missing`);
+  return [
+    {
+      name: 'Liberation Sans (advance widths)',
+      version: '2.1.5',
+      source: 'font',
+      licence: 'OFL-1.1',
+      url: 'https://github.com/liberationfonts/liberation-fonts',
+      textFile,
+    },
+  ];
+}
+
 /** The list, its texts kept once: { packages, texts }. */
 export function assemble(found) {
   const texts = [];
@@ -218,6 +238,9 @@ export function collect({ strict = false, log = console } = {}) {
     return nugetPackages(JSON.parse(readFileSync(assets, 'utf8')), cache, RUNTIMES[triple ?? ''] ?? 'win-x64');
   });
   attempt('fonts', () => fontPackages(path.join(appDir, 'src', 'styles', 'fonts')));
+  attempt('engine fonts', () =>
+    engineFontPackages(path.join(appDir, '..', 'engine', 'src', 'ShoutingIguana.Engine', 'Analysis', 'Rules')),
+  );
   if (problems.length > 0) {
     const message = `licences: left out of the list: ${problems.join('; ')}`;
     if (strict) throw new Error(message);

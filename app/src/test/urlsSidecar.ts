@@ -55,6 +55,9 @@ export function testUrlRows(count = 12): UrlRow[] {
       ttfbMs: 40 + ((id * 17) % 300),
       titleLength: 30 + (id % 40),
       descriptionLength: 120 + (id % 50),
+      // About as wide as that many ordinary characters: 9.4 px each in a title, 6.2 in a description.
+      titleWidth: Math.round((30 + (id % 40)) * 9.4),
+      descriptionWidth: Math.round((120 + (id % 50)) * 6.2),
       canonicalUrl: `https://example.com/${path}`,
       noindex: false,
       nofollow: false,

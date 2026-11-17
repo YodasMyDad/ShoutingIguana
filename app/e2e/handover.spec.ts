@@ -71,27 +71,30 @@ test('a limit changed turns the crawl’s analysis out of date in the library, a
   page,
 }) => {
   await page.goto('/settings/analysis');
-  const field = page.getByRole('textbox', { name: 'Longest title' });
-  await expect(field).toHaveValue('60');
+  const field = page.getByRole('textbox', { name: 'Widest title' });
+  await expect(field).toHaveValue('580');
+  // A width says the characters it holds, from what's typed.
+  await expect(field).toHaveAccessibleDescription(/About 60 characters of ordinary text\.$/);
 
   // Refused as it's typed, beside the limit.
-  await field.fill('10');
-  await expect(page.getByText(/must be more than the shortest/)).toBeVisible();
+  await field.fill('100');
+  await expect(page.getByText(/must be more than the narrowest/)).toBeVisible();
   await expect(field).toHaveAttribute('aria-invalid', 'true');
   await page.screenshot({ path: `${SHOTS}/analysis-refused-light.png` });
 
-  await field.fill('70');
+  await field.fill('700');
+  await expect(field).toHaveAccessibleDescription(/About 75 characters of ordinary text\.$/);
   await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByRole('button', { name: 'Put back 60 characters' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Put back 580 px' })).toBeVisible();
   const library = page.getByRole('region', { name: 'Library' });
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }).click();
   await expect(library.getByText('Analysis out of date')).toBeVisible();
 
   // Reloaded, the change is remembered: the engine keeps it.
   await page.goto('/settings/analysis');
-  await expect(page.getByRole('textbox', { name: 'Longest title' })).toHaveValue('70');
+  await expect(page.getByRole('textbox', { name: 'Widest title' })).toHaveValue('700');
   await page.getByRole('button', { name: 'Put back every limit' }).click();
-  await expect(page.getByRole('textbox', { name: 'Longest title' })).toHaveValue('60');
+  await expect(page.getByRole('textbox', { name: 'Widest title' })).toHaveValue('580');
   await expect(
     page.getByRole('region', { name: /Notifications/ }).getByText('Every limit is the engine’s again'),
   ).toBeVisible();

@@ -47,6 +47,7 @@ internal static class AnalysisSettingsEndpoints
 
     private static AnalysisSettingsDto Dto(AnalysisSettings settings) => new(
         AnalysisLimits.Values(settings),
-        [.. AnalysisLimits.All.Select(limit => new AnalysisLimitDto(limit.Id, limit.Get(settings), limit.Get(AnalysisLimits.Defaults), limit.Unit, limit.Min, limit.Max, limit.Description))],
+        [.. AnalysisLimits.All.Select(limit => new AnalysisLimitDto(limit.Id, limit.Get(settings), limit.Get(AnalysisLimits.Defaults), limit.Unit, limit.Min, limit.Max, limit.Description,
+            limit.PixelsPerCharacter))],
         settings == AnalysisLimits.Defaults);
 }

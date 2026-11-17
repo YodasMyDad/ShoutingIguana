@@ -266,9 +266,10 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     ten checks [the Simple design](../docs/v2-ui-simple.md#ten-checks-written-out) writes out to the document, word
     for word: change one of those ten in both places. A check with no entry would say null, never the technical
     text: a test demands an entry for every check and every skip reason.
-  - A text names a threshold as `{limit:name}` (`{limit:titleMaxLength}`, `{limit:largeImageBytes}`), never as a
-    number. `PlainLimits.Fill` fills it from an `AnalysisSettings` with the value and its unit ("60 characters", "200
-    KB", "1 second"): the settings a crawl's analysis ran with (`AnalysisInfo.Settings`) for that crawl's words, the
+  - A text names a threshold as `{limit:name}` (`{limit:titleMaxPixels}`, `{limit:largeImageBytes}`), never as a
+    number. `PlainLimits.Fill` fills it from an `AnalysisSettings` with the value and its unit ("200 words", "200 KB",
+    "1 second"; a title's or description's width in pixels as the ordinary characters it holds, "about 60
+    characters"): the settings a crawl's analysis ran with (`AnalysisInfo.Settings`) for that crawl's words, the
     current ones otherwise. Every numeric threshold has a name, and a name no setting has is an error a test looks for
     in every text.
 - **Scope.** Content checks (titles, descriptions, headings, word count, duplicates, Open Graph, URL style,
@@ -331,10 +332,18 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     for an origin only probes went to. Once the site links there, they count like any URL.
   - The redirect checks still look at them: a version that redirects temporarily, to http, in a loop or to a broken
     URL is a problem.
-- **Thresholds.** `AnalysisSettings` holds every limit (title 30–60 characters, description 70–155, 200
+- **Thresholds.** `AnalysisSettings` holds every limit (titles 200–580 px wide, descriptions 400–985 px, 200
   words, images over 200 KB, pages slower than 1 s, near duplicates within 24 of 256 fingerprint bits...). Each
-  analysis stores the values it used. Title and description lengths count full-width (CJK) characters and emoji as
-  two, as they take about twice the room.
+  analysis stores the values it used.
+- **Title and description widths.** The four length checks judge how wide the text is in Google's desktop results,
+  in pixels (`Rules/SearchResultWidth`): Arial at 20 px for titles and 14 px for descriptions, by Liberation Sans
+  2.1.5's advance widths (metric-compatible with Arial, SIL OFL 1.1), with full-width characters and emoji one em.
+  Details read `612 px, over 580 (64 characters)`. The table, `Rules/ArialAdvanceWidths.cs`, is generated: don't edit
+  it. Run `node engine/tests/ShoutingIguana.Engine.Tests/Analysis/ArialWidths/generate.mjs
+  <path>/LiberationSans-Regular.ttf` from the repo root with the TTF from the 2.1.5 release (`--check` writes
+  nothing and fails when the table isn't what the font gives); the font's licence is `Rules/LiberationSans-OFL.txt`,
+  beside it. Limits saved in characters by an earlier engine (`titleMaxLength`) are read converted
+  (`LegacyAnalysisSettings`). The design as built: [pixel widths](../docs/v2-pixel-widths.md).
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
 - **Details name their status codes.** Where a rule writes a status into a detail it carries its standard name: "404
@@ -382,6 +391,9 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     before the summary is out of date this way.
   - `SettingsChanged`: the stored settings differ from the ones an analysis would run with now. A threshold the
     analysing engine didn't have takes its default: one that changes what the checks find comes with a new `VERSION`.
+    The title and description limits an engine before 12 stored in characters are read in pixels
+    (`LegacyAnalysisSettings`: the old default as the new, any other at 9.4 px a title character and 6.2 a
+    description's), so an analysis at the old defaults isn't `SettingsChanged`.
   - A score worked out by another `ScoreCalculator.VERSION` is `EngineChanged` too.
 
 Categories: response codes, redirects, links, indexability, canonicals, sitemaps, titles, meta descriptions,
@@ -529,7 +541,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
 | `link_summary`, `link_blocks`, `link_summary_state` | The links counted for the links grid, by the first analysis of the crawl as it stands: by target, and by block of 16,384 consecutive link ids, each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page; and the crawl row's stamp they were counted under, with the number of links, their highest id, the size of a block and the version of the counting |
-| `url_summary` | One row per URL for the grids, rebuilt by each analysis: how it was found, indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, the room the title and meta description take as the checks measure it, and copies of the URL's depth, status, size, time and word count |
+| `url_summary` | One row per URL for the grids, rebuilt by each analysis: how it was found, indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, the first title's and meta description's characters (`title_length`, `description_length`) and their widths in pixels as the checks measure them (`title_width`, `description_width`), and copies of the URL's depth, status, size, time and word count |
 
 URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`) in `urls`, which is how orphan pages
 show up. The URL summary has no depth for them.

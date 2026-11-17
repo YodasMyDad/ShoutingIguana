@@ -277,7 +277,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     public async Task ALimitInACheckSWordsIsTheOneTheAnalysisRanWith()
     {
         var copy = crawl.Copy();
-        var thresholds = new AnalysisSettings { TitleMaxLength = 41, TitleMinLength = 17, DescriptionMaxLength = 131, DescriptionMinLength = 59, MinWordCount = 173, MaxUrlLength = 67 };
+        var thresholds = new AnalysisSettings { TitleMaxPixels = 385, TitleMinPixels = 160, DescriptionMaxPixels = 812, DescriptionMinPixels = 366, MinWordCount = 173, MaxUrlLength = 67 };
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy, thresholds);
         var results = IssueReader.ReadResults(copy)!;
         Assert.Equal(thresholds, results.Analysis.Settings);
@@ -292,15 +292,15 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         var html = ReportExport.Build(copy, settings: SETTINGS);
         Assert.DoesNotContain("{limit:", html, StringComparison.Ordinal);
         var text = Parse(html).Body!.TextContent;
-        Assert.Contains("These pages have a title of more than 41 characters.", text, StringComparison.Ordinal);
+        Assert.Contains("These pages have a title too long to show in full in search results, where there's room for about 40 characters.", text, StringComparison.Ordinal);
         foreach (var check in found)
         {
             Assert.Contains(string.Join(' ', PlainLimits.Fill(check.Plain!, thresholds).What), text, StringComparison.Ordinal);
         }
 
         // With the default thresholds the same sentence says the default: the number is the analysis's, not the document's.
-        Assert.Contains($"These pages have a title of more than {new AnalysisSettings().TitleMaxLength} characters.", Parse(ReportExport.Build(crawl.Path, settings: SETTINGS)).Body!.TextContent,
-            StringComparison.Ordinal);
+        Assert.Contains("These pages have a title too long to show in full in search results, where there's room for about 60 characters.",
+            Parse(ReportExport.Build(crawl.Path, settings: SETTINGS)).Body!.TextContent, StringComparison.Ordinal);
 
         // The workbook, whose summary names every check, and one check's sheet as CSV.
         var workbook = Path.Combine(_folder, "limits.xlsx");
@@ -455,6 +455,44 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             Assert.Equal(options.Examples == 51 ? "examples" : "lookExamples", failure.Field);
         }
     }
+
+    /// <summary>
+    /// A title or description too long or too short is said in the report as Simple says it: where Google will likely cut
+    /// it, or how many characters it has. Never in pixels, which plain words don't use.
+    /// </summary>
+    [Fact]
+    public void TitleAndDescriptionExamplesSayWhereGoogleWillLikelyCutThem()
+    {
+        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { LookExamples = 50 }, SETTINGS));
+        var order = ReportSources.FixFirst(IssueReader.ReadResults(crawl.Path)!).ToList();
+        string Examples(string id) => document.QuerySelectorAll("article.problem")[order.IndexOf(id)].QuerySelector(".examples")!.TextContent;
+
+        var titles = Examples("title-too-long");
+        Assert.Contains("Google will likely cut this title off after “…runs on far past what search”", titles, StringComparison.Ordinal);
+        Assert.Contains("Google will likely cut this title off after “…HEATERS: MODERN LANTERNS AND”", titles, StringComparison.Ordinal);
+        Assert.Contains("Only 10 characters long", Examples("title-too-short"), StringComparison.Ordinal);
+        Assert.Contains("Google will likely cut this description off after “…", Examples("description-too-long"), StringComparison.Ordinal);
+        Assert.Contains("Only 10 characters long", Examples("description-too-short"), StringComparison.Ordinal);
+        foreach (var id in new[] { "title-too-long", "title-too-short", "description-too-long", "description-too-short" })
+        {
+            Assert.DoesNotContain(" px", Examples(id), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The quote is the last whole words shown, up to 30 characters, with "…" only when more comes before them, and never
+    /// opens on a separator left from the words before ("…| Phone").
+    /// </summary>
+    [Theory]
+    [InlineData("title", "Garden Sofa Set…", "Google will likely cut this title off after “Garden Sofa Set”")]
+    [InlineData("title", "Brisbane Wooden Garden Storage Tool Shed With Sloped…", "Google will likely cut this title off after “…Storage Tool Shed With Sloped”")]
+    [InlineData("description", "Supercalifragilisticexpialidocious-and-then-some-more…",
+        "Google will likely cut this description off after “…ialidocious-and-then-some-more”")]
+    [InlineData("title", "Contact Us - GardenFurnitureSets | Phone, Email or Contract…", "Google will likely cut this title off after “…Phone, Email or Contract”")]
+    [InlineData("title", "Garden Sofa Set", null)]
+    [InlineData("title", null, null)]
+    public void WhereGoogleWillLikelyCutIsQuotedByItsLastWords(string what, string? inResults, string? said) =>
+        Assert.Equal(said, ReportWords.CutOff(what, inResults));
 
     /// <summary>
     /// A crawl stopped or failed part-way, analysed as it stands: the report says so, its score is "so far" and says why,

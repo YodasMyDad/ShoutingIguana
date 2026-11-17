@@ -267,7 +267,12 @@ export function linkEndIds(
 // -------------------------------------------------------------------------------------------- Analysis settings
 
 const CHARACTERS: AnalysisLimitUnit = 'characters';
+const PIXELS: AnalysisLimitUnit = 'pixels';
 const MAX_CHARACTERS = 10_000;
+const MAX_PIXELS = 100_000;
+/** How wide an ordinary character is, in a title at 20 px and a description at 14 px (AnalysisSettings.cs). */
+const TITLE_PIXELS_PER_CHARACTER = 9.4;
+const DESCRIPTION_PIXELS_PER_CHARACTER = 6.2;
 const MAX_BYTES = 10 * 1024 * 1024 * 1024;
 
 type LimitInfo = Omit<AnalysisLimit, 'value'>;
@@ -275,36 +280,42 @@ type LimitInfo = Omit<AnalysisLimit, 'value'>;
 /** Every limit, in the order Settings lists them, as the sidecar describes them (Sidecar/Options/AnalysisLimits.cs). */
 export const ANALYSIS_LIMITS: readonly LimitInfo[] = [
   {
-    id: 'titleMinLength',
-    default: 30,
-    unit: CHARACTERS,
+    id: 'titleMinPixels',
+    default: 200,
+    unit: PIXELS,
     min: 0,
-    max: MAX_CHARACTERS,
-    description: 'A title shorter than this is flagged as too short.',
+    max: MAX_PIXELS,
+    description: 'A title narrower than this is flagged as too short.',
+    pixelsPerCharacter: TITLE_PIXELS_PER_CHARACTER,
   },
   {
-    id: 'titleMaxLength',
-    default: 60,
-    unit: CHARACTERS,
+    id: 'titleMaxPixels',
+    default: 580,
+    unit: PIXELS,
     min: 1,
-    max: MAX_CHARACTERS,
-    description: 'A title longer than this is flagged as too long: search results cut it short.',
+    max: MAX_PIXELS,
+    description:
+      'A title wider than this in search results is flagged as too long: Google’s desktop results would likely cut it off. Measured in Arial at 20 px, as Google shows titles.',
+    pixelsPerCharacter: TITLE_PIXELS_PER_CHARACTER,
   },
   {
-    id: 'descriptionMinLength',
-    default: 70,
-    unit: CHARACTERS,
+    id: 'descriptionMinPixels',
+    default: 400,
+    unit: PIXELS,
     min: 0,
-    max: MAX_CHARACTERS,
-    description: 'A meta description shorter than this is flagged as too short.',
+    max: MAX_PIXELS,
+    description: 'A meta description narrower than this is flagged as too short.',
+    pixelsPerCharacter: DESCRIPTION_PIXELS_PER_CHARACTER,
   },
   {
-    id: 'descriptionMaxLength',
-    default: 155,
-    unit: CHARACTERS,
+    id: 'descriptionMaxPixels',
+    default: 985,
+    unit: PIXELS,
     min: 1,
-    max: MAX_CHARACTERS,
-    description: 'A meta description longer than this is flagged as too long: search results cut it short.',
+    max: MAX_PIXELS,
+    description:
+      'A meta description wider than this in search results is flagged as too long: Google’s desktop results would likely cut it off. Measured in Arial at 14 px, as Google shows descriptions.',
+    pixelsPerCharacter: DESCRIPTION_PIXELS_PER_CHARACTER,
   },
   {
     id: 'minWordCount',
@@ -374,8 +385,8 @@ export const ANALYSIS_LIMITS: readonly LimitInfo[] = [
 ];
 
 const PAIRS: readonly [min: string, max: string, what: string][] = [
-  ['titleMinLength', 'titleMaxLength', 'title'],
-  ['descriptionMinLength', 'descriptionMaxLength', 'meta description'],
+  ['titleMinPixels', 'titleMaxPixels', 'title'],
+  ['descriptionMinPixels', 'descriptionMaxPixels', 'meta description'],
 ];
 
 export interface SettingsAnswer {
@@ -418,7 +429,7 @@ export function createAnalysisSettings() {
     for (const [min, max, what] of PAIRS) {
       if (errors[min] === undefined && errors[max] === undefined && valueOf(max) <= valueOf(min)) {
         errors[max] = [
-          `The longest ${what} allowed must be more than the shortest (${valueOf(min).toLocaleString('en')}).`,
+          `The widest ${what} allowed must be more than the narrowest (${valueOf(min).toLocaleString('en')}).`,
         ];
       }
     }

@@ -2,18 +2,33 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 
 /// <summary>
 /// Thresholds the rules use. The defaults follow common SEO tool defaults; each analysis stores the values it ran
-/// with in the crawl file. Title and description lengths count user-perceived characters, with full-width (CJK)
-/// characters and emoji counted as two because they take about twice the room in search results.
+/// with in the crawl file. Title and description widths are in pixels, as Google's desktop results show them (Arial at
+/// 20 px and 14 px, <see cref="Rules.SearchResultWidth"/>).
 /// </summary>
+/// <remarks>
+/// The four widths took new names when they went from characters to pixels (<c>titleMaxLength</c> became
+/// <c>titleMaxPixels</c>), so a limit saved in characters is never read as pixels: <see cref="LegacyAnalysisSettings"/>
+/// converts the old names where saved settings and crawl files are read.
+/// </remarks>
 public sealed record AnalysisSettings
 {
-    public int TitleMinLength { get; init; } = 30;
+    /// <summary>How wide an ordinary title's character is, on average, in pixels: for a limit's characters hint, and to convert a limit saved in characters.</summary>
+    public const double TYPICAL_TITLE_CHARACTER_PX = 9.4;
 
-    public int TitleMaxLength { get; init; } = 60;
+    /// <summary>How wide an ordinary description's character is, on average, in pixels.</summary>
+    public const double TYPICAL_DESCRIPTION_CHARACTER_PX = 6.2;
 
-    public int DescriptionMinLength { get; init; } = 70;
+    /// <summary>A title narrower than this, in pixels, is too short: about 20 characters.</summary>
+    public int TitleMinPixels { get; init; } = 200;
 
-    public int DescriptionMaxLength { get; init; } = 155;
+    /// <summary>A title wider than this, in pixels, will likely be cut off in Google's desktop results: about 60 characters.</summary>
+    public int TitleMaxPixels { get; init; } = 580;
+
+    /// <summary>A meta description narrower than this, in pixels, is too short: about 65 characters.</summary>
+    public int DescriptionMinPixels { get; init; } = 400;
+
+    /// <summary>A meta description wider than this, in pixels, will likely be cut off: about 160 characters.</summary>
+    public int DescriptionMaxPixels { get; init; } = 985;
 
     /// <summary>Main-content words below which a page counts as thin.</summary>
     public int MinWordCount { get; init; } = 200;
@@ -49,14 +64,14 @@ public sealed record AnalysisSettings
     public IReadOnlyList<string> Validate()
     {
         List<string> errors = [];
-        if (TitleMinLength < 0 || TitleMaxLength <= TitleMinLength)
+        if (TitleMinPixels < 0 || TitleMaxPixels <= TitleMinPixels)
         {
-            errors.Add("Title lengths must satisfy 0 <= minimum < maximum.");
+            errors.Add("Title widths must satisfy 0 <= minimum < maximum.");
         }
 
-        if (DescriptionMinLength < 0 || DescriptionMaxLength <= DescriptionMinLength)
+        if (DescriptionMinPixels < 0 || DescriptionMaxPixels <= DescriptionMinPixels)
         {
-            errors.Add("Description lengths must satisfy 0 <= minimum < maximum.");
+            errors.Add("Description widths must satisfy 0 <= minimum < maximum.");
         }
 
         // Every 4 bits more add a block to each lane's search, with more and less selective keys; past 32 bits (92% alike)

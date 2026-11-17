@@ -1,7 +1,8 @@
 namespace ShoutingIguana.Engine.Storage.Models;
 
 /// <summary>What a parsed page says, as the checks judge it.</summary>
-/// <param name="Titles">Every title element, in page order, with the room each takes.</param>
+/// <param name="Titles">Every title element, in page order, with its characters and width.</param>
+/// <param name="Descriptions">Every meta description, in page order, with its characters and width.</param>
 /// <param name="Headings">How many H1 to H6 headings, in that order.</param>
 /// <param name="Robots">The robots directives that apply to the crawler and to Googlebot, from meta tags and headers.</param>
 public sealed record PageContent(

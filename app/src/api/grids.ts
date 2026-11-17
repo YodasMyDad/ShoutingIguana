@@ -203,8 +203,18 @@ export interface UrlRow {
   sizeBytes?: number | null;
   responseMs?: number | null;
   ttfbMs?: number | null;
+  /** The title's characters, as a reader counts them, white space run together. */
   titleLength?: number | null;
   descriptionLength?: number | null;
+  /** The title's width in Google's desktop results, in pixels: what `title-too-long` and `title-too-short` judge. */
+  titleWidth?: number | null;
+  descriptionWidth?: number | null;
+  /**
+   * The title as Google's desktop results will likely show it: up to where it's cut, ending "…", or the whole title
+   * when it fits. Worked out for the rows read: shown only.
+   */
+  titleInResults?: string | null;
+  descriptionInResults?: string | null;
   finalUrl?: string | null;
   finalStatusCode?: number | null;
   inSitemap?: boolean | null;

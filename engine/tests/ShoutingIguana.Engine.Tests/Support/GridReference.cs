@@ -116,8 +116,14 @@ internal sealed class GridReference
                     ["fetchError"] = fetched && outcome != FetchOutcome.Success ? Text(6) : null,
                     ["responseMs"] = requested ? Number(16) : null,
                     ["ttfbMs"] = requested ? Number(17) : null,
-                    ["titleLength"] = fetched && Text(10) is { } title ? (long)DisplayWidth.Measure(title).Width : null,
-                    ["descriptionLength"] = fetched && Text(11) is { } description ? (long)DisplayWidth.Measure(description).Width : null,
+                    ["titleLength"] = fetched && Text(10) is { } title ? (long)SearchResultWidth.Measure(title, SearchResultText.Title).Characters : null,
+                    ["descriptionLength"] = fetched && Text(11) is { } description ? (long)SearchResultWidth.Measure(description, SearchResultText.Description).Characters : null,
+                    ["titleWidth"] = fetched && Text(10) is { } wide ? (long)SearchResultWidth.Measure(wide, SearchResultText.Title).Pixels : null,
+                    ["descriptionWidth"] = fetched && Text(11) is { } snippet ? (long)SearchResultWidth.Measure(snippet, SearchResultText.Description).Pixels : null,
+                    ["titleInResults"] = Text(10) is { } shown ? UrlComputedColumns.InResults(shown, SearchResultText.Title, new AnalysisSettings().TitleMaxPixels) : null,
+                    ["descriptionInResults"] = Text(11) is { } shownDescription
+                        ? UrlComputedColumns.InResults(shownDescription, SearchResultText.Description, new AnalysisSettings().DescriptionMaxPixels)
+                        : null,
                     ["finalUrl"] = urls[s.FinalUrlId],
                     ["finalStatusCode"] = (long?)s.FinalStatusCode,
                     ["inSitemap"] = s.InSitemap,

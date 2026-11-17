@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { assemble, cargoPackages, npmPackages, nugetPackages, nuspecLicence } from './licences.mjs';
+import { assemble, cargoPackages, engineFontPackages, npmPackages, nugetPackages, nuspecLicence } from './licences.mjs';
 
 test('npm: the production packages only, by their own names', () => {
   const lock = {
@@ -131,6 +131,22 @@ test("a nuspec's licence: its expression, its file, or its URL", () => {
     licence: 'https://x/licence',
     file: null,
   });
+});
+
+test("the engine's font metrics: Liberation Sans's advance widths, with the OFL text beside them", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'licences-'));
+  try {
+    assert.throws(() => engineFontPackages(dir), /LiberationSans-OFL.txt/);
+    writeFileSync(path.join(dir, 'LiberationSans-OFL.txt'), 'SIL OPEN FONT LICENSE Version 1.1');
+    assert.deepEqual(
+      engineFontPackages(dir).map(
+        (pkg) => `${pkg.name}@${pkg.version} ${pkg.source} ${pkg.licence} ${path.basename(pkg.textFile)}`,
+      ),
+      ['Liberation Sans (advance widths)@2.1.5 font OFL-1.1 LiberationSans-OFL.txt'],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('texts are kept once, and the list is in order', () => {

@@ -3,8 +3,8 @@ using ShoutingIguana.Engine.Analysis.Models;
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
-/// Title presence and length on indexable pages. Length is the room a title takes in search results
-/// (<see cref="DisplayWidth"/>). Duplicates are checked across pages by <see cref="DuplicateRules"/>.
+/// Title presence and width on indexable pages: how wide the title is in Google's desktop results, in pixels
+/// (<see cref="SearchResultWidth"/>). Duplicates are checked across pages by <see cref="DuplicateRules"/>.
 /// </summary>
 internal sealed class TitleRules(AnalysisSettings settings) : IPageRule
 {
@@ -27,14 +27,16 @@ internal sealed class TitleRules(AnalysisSettings settings) : IPageRule
             yield return new IssueHit(IssueCatalog.TITLE_MULTIPLE, page.UrlId, RuleText.Listed(titles.Count, "title", "titles", titles));
         }
 
-        var measured = DisplayWidth.Measure(titles[0]);
-        if (measured.Width > settings.TitleMaxLength)
+        var measured = SearchResultWidth.Measure(titles[0], SearchResultText.Title);
+        if (measured.Pixels > settings.TitleMaxPixels)
         {
-            yield return new IssueHit(IssueCatalog.TITLE_TOO_LONG, page.UrlId, RuleText.Over(RuleText.Width(measured), settings.TitleMaxLength));
+            yield return new IssueHit(IssueCatalog.TITLE_TOO_LONG, page.UrlId,
+                RuleText.WithCharacters(RuleText.Over(RuleText.Pixels(measured.Pixels), settings.TitleMaxPixels), measured.Characters));
         }
-        else if (measured.Width < settings.TitleMinLength)
+        else if (measured.Pixels < settings.TitleMinPixels)
         {
-            yield return new IssueHit(IssueCatalog.TITLE_TOO_SHORT, page.UrlId, RuleText.Under(RuleText.Width(measured), settings.TitleMinLength));
+            yield return new IssueHit(IssueCatalog.TITLE_TOO_SHORT, page.UrlId,
+                RuleText.WithCharacters(RuleText.Under(RuleText.Pixels(measured.Pixels), settings.TitleMinPixels), measured.Characters));
         }
     }
 }

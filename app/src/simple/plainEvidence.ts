@@ -246,8 +246,19 @@ export function plainLinkedFrom(found: UrlFoundOn, origin: string | null, few = 
 
 // ------------------------------------------------------------------------------------------ A page's evidence
 
-/** The evidence columns a page's line in Simple leaves out: the page's title is its name there, a length its detail. */
-const SAID_ELSEWHERE: ReadonlySet<string> = new Set(['title', 'titleLength', 'descriptionLength']);
+/**
+ * The evidence columns a page's line in Simple leaves out: the page's title is its name there, a length or a width its
+ * detail's, and where results cut the title the detail's plain line (`plainDetail`). No width in pixels is Simple's.
+ */
+const SAID_ELSEWHERE: ReadonlySet<string> = new Set([
+  'title',
+  'titleLength',
+  'descriptionLength',
+  'titleWidth',
+  'descriptionWidth',
+  'titleInResults',
+  'descriptionInResults',
+]);
 
 /** A redirect chain, plainly: "Forwards to /b/, then /new/, which works". */
 function plainChain(chain: RedirectChain, origin: string | null): string {
@@ -315,6 +326,79 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
     default:
       return value;
   }
+}
+
+// --------------------------------------------------------------------- A title or description's length, plainly
+
+/** What Google adds where it cuts a title or description, as `titleInResults` ends. */
+const CUT_MARK = '…';
+
+/** The most characters of a title or description quoted before where Google will likely cut it. */
+const CUT_QUOTE_MAX = 30;
+
+/** Separators a quote doesn't open on, as the engine's cut doesn't end on them (`SearchResultWidth.DANGLING`). */
+const SEPARATORS: ReadonlySet<string> = new Set(['|', '-', '\u2013', '\u2014', '\u00b7', ':', ',', '&', '/']);
+
+/** A text's characters as a reader counts them: an emoji or an accented letter once, as the engine counts them. */
+function graphemes(text: string): string[] {
+  if (typeof Intl.Segmenter !== 'function') return Array.from(text);
+  return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), (part) => part.segment);
+}
+
+/**
+ * Where Google will likely cut a page's title or description: "Google will likely cut this title off after “…Garden
+ * Sofa”". The quote is the last whole words that show, up to 30 characters, opening with "…" when more comes before
+ * them, and never on a separator ("…| Phone"); a single word longer than that is quoted by its end. Null when nothing is cut (`inResults` doesn't end "…").
+ * The engine's report says it the same (`ReportWords.CutOff`).
+ */
+export function plainCutOff(what: 'title' | 'description', inResults: unknown): string | null {
+  if (typeof inResults !== 'string' || !inResults.endsWith(CUT_MARK)) return null;
+  const shown = inResults.slice(0, -CUT_MARK.length).trimEnd();
+  let tail = shown;
+  if (graphemes(shown).length > CUT_QUOTE_MAX) {
+    const words = shown.split(' ');
+    let first = words.length - 1;
+    while (first > 0 && graphemes(words.slice(first - 1).join(' ')).length <= CUT_QUOTE_MAX) first--;
+    // Not "…| Phone, Email": a separator left from the words before isn't quoted.
+    if (first < words.length - 1 && SEPARATORS.has(words[first] ?? '')) first++;
+    tail = words.slice(first).join(' ');
+    const characters = graphemes(tail);
+    if (characters.length > CUT_QUOTE_MAX) tail = characters.slice(-CUT_QUOTE_MAX).join('');
+  }
+  const more = tail.length < shown.length ? CUT_MARK : '';
+  return `Google will likely cut this ${what} off after “${more}${tail}”`;
+}
+
+/** A title or description too short: "Only 5 characters long". Null without a count. */
+function plainOnlyCharacters(characters: unknown): string | null {
+  if (typeof characters !== 'number') return null;
+  return `Only ${formatCount(characters)} ${characters === 1 ? 'character' : 'characters'} long`;
+}
+
+/**
+ * The checks whose page Simple says plainly in place of the engine's detail ("612 px, over 580 (64 characters)"), each
+ * from one of its evidence columns: where Google will likely cut a title, how many characters a short one has.
+ */
+const PLAIN_DETAILS: Readonly<Record<string, { column: string; say: (value: unknown) => string | null }>> = {
+  'title-too-long': { column: 'titleInResults', say: (value) => plainCutOff('title', value) },
+  'description-too-long': { column: 'descriptionInResults', say: (value) => plainCutOff('description', value) },
+  'title-too-short': { column: 'titleLength', say: plainOnlyCharacters },
+  'description-too-short': { column: 'descriptionLength', say: plainOnlyCharacters },
+};
+
+/** The column a check's plain line reads (`plainDetail`), for a read that asks for its rows; null for most checks. */
+export function plainDetailColumn(check: Pick<Check, 'id'>): string | null {
+  return PLAIN_DETAILS[check.id]?.column ?? null;
+}
+
+/**
+ * A page's line in place of the engine's detail, for a check Simple says plainly: "Google will likely cut this title
+ * off after “…Garden Sofa”", "Only 5 characters long". Null for every other check, and where the row can't say it
+ * (nothing cut, no count): the detail then says it.
+ */
+export function plainDetail(check: Pick<Check, 'id'>, row: Readonly<Record<string, unknown>>): string | null {
+  const plain = PLAIN_DETAILS[check.id];
+  return plain ? plain.say(row[plain.column]) : null;
 }
 
 // ------------------------------------------------------------------------------- An image bigger than it's shown

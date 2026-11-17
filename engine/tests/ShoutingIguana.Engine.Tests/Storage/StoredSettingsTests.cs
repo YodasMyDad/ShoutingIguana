@@ -89,6 +89,36 @@ public sealed class StoredSettingsTests : IDisposable
         Assert.Equal(new AnalysisSettings().NearDuplicateMaxBits, IssueReader.ReadAnalysis(path)!.Settings!.NearDuplicateMaxBits);
     }
 
+    /// <summary>
+    /// Analyses before pixels stored the title and description limits in characters (titleMaxLength, 60 by default). Read
+    /// under their new names, a limit at its old default takes the new default, and one the user changed keeps its intent:
+    /// 70 characters of title is 658 px. A file with both names keeps the new one's value.
+    /// </summary>
+    [Fact]
+    public async Task TitleAndDescriptionLimitsStoredInCharactersAreReadInPixels()
+    {
+        var path = await CrawlAndAnalyseAsync();
+        var stored = Stored(path, "SELECT settings_json FROM analysis WHERE id = 1");
+        foreach (var name in new[] { "titleMinPixels", "titleMaxPixels", "descriptionMinPixels", "descriptionMaxPixels" })
+        {
+            stored.Remove(name);
+        }
+
+        stored["titleMinLength"] = 30;
+        stored["titleMaxLength"] = 70;
+        stored["descriptionMinLength"] = 70;
+        stored["descriptionMaxLength"] = 160;
+        Change(path, "UPDATE analysis SET settings_json = $json", stored.ToJsonString());
+
+        var read = IssueReader.ReadAnalysis(path)!.Settings!;
+        Assert.Equal((200, 658, 400, 992), (read.TitleMinPixels, read.TitleMaxPixels, read.DescriptionMinPixels, read.DescriptionMaxPixels));
+        Assert.Equal(7, read.NearDuplicateMaxBits);
+
+        stored["titleMaxPixels"] = 700;
+        Change(path, "UPDATE analysis SET settings_json = $json", stored.ToJsonString());
+        Assert.Equal(700, IssueReader.ReadAnalysis(path)!.Settings!.TitleMaxPixels);
+    }
+
     /// <summary>The property left out reads as its default, and every other one as stored.</summary>
     private static void AssertDefault(string name, JsonObject defaults, JsonObject without, JsonObject read)
     {
@@ -117,7 +147,7 @@ public sealed class StoredSettingsTests : IDisposable
         Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(options, path)).Status);
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path, new AnalysisSettings
         {
-            TitleMinLength = 1, TitleMaxLength = 2, DescriptionMinLength = 3, DescriptionMaxLength = 4, MinWordCount = 5, DuplicateMinWordCount = 6,
+            TitleMinPixels = 1, TitleMaxPixels = 2, DescriptionMinPixels = 3, DescriptionMaxPixels = 4, MinWordCount = 5, DuplicateMinWordCount = 6,
             NearDuplicateMaxBits = 7, ImageAltMaxLength = 8, LargeImageBytes = 9, LargePageBytes = 10, SlowResponseMs = 11, MaxUrlLength = 12
         });
         return path;

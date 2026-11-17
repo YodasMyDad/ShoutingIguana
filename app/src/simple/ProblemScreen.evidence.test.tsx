@@ -105,7 +105,23 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
     );
     cleanup();
     await open('title-too-long');
-    expect(await where().findByText('78 characters, over 60')).toBeVisible();
+    expect((await where().findAllByText(/^Google will likely cut this title off/)).length).toBe(3);
     expect(screen.queryByText(/One fix clears/)).toBeNull();
+  });
+
+  it('says where Google will likely cut a long title, in place of its width, and never says pixels', async () => {
+    await open('title-too-long');
+    expect(
+      await where().findByText('Google will likely cut this title off after “…every season, delivered free”'),
+    ).toBeVisible();
+    expect(
+      where().getByText('Google will likely cut this title off after “…small gardens and balconies in”'),
+    ).toBeVisible();
+    expect(
+      where().getByText('Google will likely cut this title off after “…cushions and storage boxes”'),
+    ).toBeVisible();
+    // The engine's detail and the evidence's widths are Advanced's.
+    expect(where().queryByText(/742 px/)).toBeNull();
+    expect(screen.getByRole('main')).not.toHaveTextContent(/\bpx\b|pixels/);
   });
 });

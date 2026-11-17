@@ -58,7 +58,8 @@ internal static class ReportReader
             cancellationToken.ThrowIfCancellationRequested();
             var check = IssueCatalog.Find(id)!;
             var listed = examples(check.Severity);
-            var rows = listed > 0 ? ReportRows.Read(crawlPath, check, listed, export, cancellationToken) : [];
+            var words = ReportSources.Words(check, settings);
+            var rows = listed > 0 ? ReportRows.Read(crawlPath, check, listed, export, words.IsPlain, cancellationToken) : [];
             var (foundOn, targets) = References(crawlPath, check, rows, export, cancellationToken);
             var group = check.Grouping == IssueGrouping.None ? null : IssueGroupReader.ReadGroups(crawlPath, id, 0, 1, export.Cache, cancellationToken)?.Groups.FirstOrDefault();
             var oneFix = group is { LikelyTemplate: true } ? new ReportOneFix(group.Pages, group.RelatedUrl, group.Detail)
@@ -67,7 +68,7 @@ internal static class ReportReader
             problems.Add(new ReportProblem(
                 problems.Count + 1,
                 check,
-                ReportSources.Words(check, settings),
+                words,
                 counts[id],
                 score?.Lines.FirstOrDefault(line => line.CheckId == id),
                 [

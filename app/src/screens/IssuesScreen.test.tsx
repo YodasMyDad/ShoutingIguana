@@ -432,7 +432,7 @@ describe('the Issues screen', () => {
     const { requests } = sidecar();
     const { router } = await open(`${ISSUES}/title-too-long`);
     const grid = await screen.findByRole('grid', { name: /Title too long: affected pages/ });
-    expect(await within(grid).findByText('78 characters')).toBeVisible();
+    expect(await within(grid).findByText('742 px, over 580 (78 characters)')).toBeVisible();
     fireEvent.click(within(grid).getByRole('button', { name: 'Detail' }));
     await waitFor(() =>
       expect(router.state.location.search).toMatchObject({ sort: [{ column: 'detail', desc: false }] }),
@@ -451,7 +451,7 @@ describe('the Issues screen', () => {
     sidecar();
     const { router } = await open(`${ISSUES}/title-too-long`);
     const grid = await screen.findByRole('grid', { name: /Title too long: affected pages/ });
-    await within(grid).findByText('78 characters');
+    await within(grid).findByText('742 px, over 580 (78 characters)');
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'ArrowUp' });
     fireEvent.keyDown(grid, { key: 'ArrowRight' });
@@ -471,7 +471,7 @@ describe('the Issues screen', () => {
     sidecar();
     const { router, history } = await open(`${ISSUES}/title-too-long`);
     const grid = await screen.findByRole('grid', { name: /Title too long: affected pages/ });
-    await within(grid).findByText('78 characters');
+    await within(grid).findByText('742 px, over 580 (78 characters)');
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'Enter' });
     await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 12 }));

@@ -16,6 +16,7 @@ import { TextField } from '../../../ui/TextField';
 import {
   changeOf,
   ANALYSIS_SETTINGS_KEY,
+  charactersHint,
   draftOf,
   limitName,
   rangeWords,
@@ -49,7 +50,7 @@ export function Section() {
   return (
     <SectionPage
       title="Analysis"
-      purpose="The limits the checks judge by: a title longer than this is too long. A change applies to the next analysis of any crawl, and crawls analysed with other limits read as out of date until they’re analysed again."
+      purpose="The limits the checks judge by: a title wider than this is too long. A change applies to the next analysis of any crawl, and crawls analysed with other limits read as out of date until they’re analysed again."
     >
       {read.error ? (
         <ErrorState error={read.error} title="The limits couldn’t be read" onRetry={() => void read.refetch()} />
@@ -172,8 +173,8 @@ export function LimitsForm({
   };
 
   const { byLimit, whole } = splitErrors(errors, ids);
-  // Every error is beside its limit. One on a limit the user didn't change (the engine keys "the longest must be more
-  // than the shortest" on the longest, whichever was changed) is said above the form too, named, as that's where
+  // Every error is beside its limit. One on a limit the user didn't change (the engine keys "the widest must be more
+  // than the narrowest" on the widest, whichever was changed) is said above the form too, named, as that's where
   // the eye is.
   const shownError = (limit: AnalysisLimit) => byLimit[limit.id] ?? null;
   const elsewhere = Object.entries(byLimit)
@@ -240,6 +241,8 @@ function LimitField({
   onReset: () => void;
 }) {
   const changed = limit.value !== limit.default;
+  // A width says the characters it holds, from what's typed.
+  const hint = charactersHint(limit, value);
   return (
     <div className="flex flex-wrap items-end gap-3">
       <TextField
@@ -247,6 +250,12 @@ function LimitField({
         description={
           <>
             {limit.description} {rangeWords(limit)}
+            {hint ? (
+              <>
+                {' '}
+                <span className="block">{hint}</span>
+              </>
+            ) : null}
           </>
         }
         inputMode="numeric"

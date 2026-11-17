@@ -2,7 +2,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
-/// <summary>Meta description presence and length on indexable pages, measured as the room it takes (<see cref="DisplayWidth"/>).</summary>
+/// <summary>Meta description presence and width on indexable pages, in pixels as Google's desktop results show it (<see cref="SearchResultWidth"/>).</summary>
 internal sealed class DescriptionRules(AnalysisSettings settings) : IPageRule
 {
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
@@ -25,14 +25,16 @@ internal sealed class DescriptionRules(AnalysisSettings settings) : IPageRule
                 RuleText.Listed(descriptions.Count, "meta description", "meta descriptions", descriptions));
         }
 
-        var measured = DisplayWidth.Measure(descriptions[0]);
-        if (measured.Width > settings.DescriptionMaxLength)
+        var measured = SearchResultWidth.Measure(descriptions[0], SearchResultText.Description);
+        if (measured.Pixels > settings.DescriptionMaxPixels)
         {
-            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_LONG, page.UrlId, RuleText.Over(RuleText.Width(measured), settings.DescriptionMaxLength));
+            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_LONG, page.UrlId,
+                RuleText.WithCharacters(RuleText.Over(RuleText.Pixels(measured.Pixels), settings.DescriptionMaxPixels), measured.Characters));
         }
-        else if (measured.Width < settings.DescriptionMinLength)
+        else if (measured.Pixels < settings.DescriptionMinPixels)
         {
-            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_SHORT, page.UrlId, RuleText.Under(RuleText.Width(measured), settings.DescriptionMinLength));
+            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_SHORT, page.UrlId,
+                RuleText.WithCharacters(RuleText.Under(RuleText.Pixels(measured.Pixels), settings.DescriptionMinPixels), measured.Characters));
         }
     }
 }

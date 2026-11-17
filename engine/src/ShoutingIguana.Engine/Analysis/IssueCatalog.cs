@@ -564,26 +564,26 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition TITLE_TOO_LONG = new("title-too-long", IssueCategory.Titles, IssueSeverity.Notice,
         "Title too long",
-        """The page's title is longer than 60 characters (the default, which can be changed in the analysis settings), counting full-width characters such as Chinese, Japanese and Korean, and emoji, as two.""",
+        """The page's title is wider than 580 pixels (the default, which can be changed in the analysis settings), about 60 characters of ordinary text, measured as Google's desktop results show titles: Arial at 20 px, with full-width characters such as Chinese, Japanese and Korean, and emoji, one em wide.""",
         """Shorten the title or move the important words to the front; cut repeated words and long brand suffixes.""")
     {
-        Why = """Google sets no length limit for titles, but truncates title links to fit the device width, so the end of a long title may not show; 60 characters is a rough guide to what fits, not a rule. Google may also rewrite titles that are long-winded or stuffed with keywords. With the important words first, a cut-off rarely matters.""",
+        Why = """Google sets no length limit for titles, but truncates title links to fit the device width, so the end of a long title may not show. Width depends on the letters ("WWW" is more than four times as wide as "iii"), so pixels predict the cut better than characters: 580 px is about where Google's desktop results cut a title, after the last whole word that fits, and a rough guide, not a rule. Google may also rewrite titles that are long-winded or stuffed with keywords. With the important words first, a cut-off rarely matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
-        Evidence = ["title", "titleLength"]
+        Evidence = ["title", "titleInResults", "titleWidth", "titleLength"]
     };
 
     public static readonly IssueDefinition TITLE_TOO_SHORT = new("title-too-short", IssueCategory.Titles, IssueSeverity.Notice,
         "Title too short",
-        """The page's title is shorter than 30 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.""",
+        """The page's title is narrower than 200 pixels (the default, which can be changed in the analysis settings), about 20 characters of ordinary text, measured as Google's desktop results show titles: Arial at 20 px, with full-width characters and emoji one em wide.""",
         """Describe the page in the title: add the specific topic, product or place and, if you like, the site name.""")
     {
         Why = """Short isn't wrong: a brand or product name can be exactly right. But very short titles are often vague, such as "Home", "Products" or "Page 2", which Google's guidance warns against because they don't tell searchers what the page is or set it apart from similar pages.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
-        Evidence = ["title", "titleLength"]
+        Evidence = ["title", "titleWidth", "titleLength"]
     };
 
     public static readonly IssueDefinition TITLE_DUPLICATE = new("title-duplicate", IssueCategory.Titles, IssueSeverity.Warning,
@@ -624,26 +624,26 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition DESCRIPTION_TOO_LONG = new("description-too-long", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
         "Meta description too long",
-        """The page's meta description is longer than 155 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.""",
+        """The page's meta description is wider than 985 pixels (the default, which can be changed in the analysis settings), about 160 characters of ordinary text, measured as Google's desktop results show snippets: Arial at 14 px, with full-width characters and emoji one em wide.""",
         """Put what matters in the first sentence and trim the rest, so the description still works if it's cut.""")
     {
-        Why = """There's no length limit, but Google truncates snippets to fit the device width, so the end of a long description may not show, and it often builds the snippet from page text anyway. With the key point first, the cut rarely matters.""",
+        Why = """There's no length limit, but Google truncates snippets to fit the device width, about two lines on a desktop, so the end of a long description may not show, and it often builds the snippet from page text anyway. Width depends on the letters, so pixels predict the cut better than characters; 985 px is Screaming Frog's default. With the key point first, the cut rarely matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
-        Evidence = ["description", "descriptionLength"]
+        Evidence = ["description", "descriptionInResults", "descriptionWidth", "descriptionLength"]
     };
 
     public static readonly IssueDefinition DESCRIPTION_TOO_SHORT = new("description-too-short", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
         "Meta description too short",
-        """The page's meta description is shorter than 70 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.""",
+        """The page's meta description is narrower than 400 pixels (the default, which can be changed in the analysis settings), about 65 characters of ordinary text, measured as Google's desktop results show snippets: Arial at 14 px, with full-width characters and emoji one em wide.""",
         "Expand it into a specific one- or two-sentence summary of what the page offers and for whom.")
     {
         Why = """There's no minimum, but a very short description rarely summarises the page, and Google uses the meta description only when it describes the page better than the page's own text. A short one is fine if it says everything that matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#use-quality-descriptions",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
-        Evidence = ["description", "descriptionLength"]
+        Evidence = ["description", "descriptionWidth", "descriptionLength"]
     };
 
     public static readonly IssueDefinition DESCRIPTION_DUPLICATE = new("description-duplicate", IssueCategory.MetaDescriptions, IssueSeverity.Notice,

@@ -683,9 +683,9 @@ public static class UrlInspectorReader
         }
 
         return new PageContent(
-            [.. facts.Titles.Select(Measured)],
-            [.. facts.MetaDescriptions.Select(Measured)],
-            [.. facts.Headings.Where(heading => heading.Level == 1).Select(heading => Measured(heading.Text))],
+            [.. facts.Titles.Select(title => Measured(title, SearchResultText.Title))],
+            [.. facts.MetaDescriptions.Select(description => Measured(description, SearchResultText.Description))],
+            [.. facts.Headings.Where(heading => heading.Level == 1).Select(heading => Measured(heading.Text, kind: null))],
             headings,
             facts.WordCount,
             facts.Language,
@@ -697,10 +697,15 @@ public static class UrlInspectorReader
             facts.Images.Count(image => !image.HasAlt));
     }
 
-    private static MeasuredText Measured(string text) => new(text, DisplayWidth.Measure(text).Width);
+    /// <summary>The text's characters and, for a title or description, its width in pixels, as the checks measure them.</summary>
+    private static MeasuredText Measured(string text, SearchResultText? kind)
+    {
+        var measured = SearchResultWidth.Measure(text, kind ?? SearchResultText.Title);
+        return new MeasuredText(text, measured.Characters, kind is null ? null : measured.Pixels);
+    }
 
     private static ContentLimits Limits(AnalysisSettings settings, bool fromAnalysis) => new(
-        settings.TitleMinLength, settings.TitleMaxLength, settings.DescriptionMinLength, settings.DescriptionMaxLength, settings.MinWordCount,
+        settings.TitleMinPixels, settings.TitleMaxPixels, settings.DescriptionMinPixels, settings.DescriptionMaxPixels, settings.MinWordCount,
         settings.SlowResponseMs, settings.LargePageBytes, settings.LargeImageBytes, settings.ImageAltMaxLength, settings.MaxUrlLength, fromAnalysis);
 
     private static StructuredDataBlock StructuredData(string block)

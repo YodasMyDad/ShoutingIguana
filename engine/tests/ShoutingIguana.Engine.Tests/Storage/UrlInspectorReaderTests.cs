@@ -362,8 +362,12 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         var row = crawl.Reference.Rows[id];
         var product = Read(crawl.Path, id);
         var content = product.Content!;
-        Assert.Equal([((string)row["title"]!, DisplayWidth.Measure((string)row["title"]!).Width)], content.Titles.Select(title => (title.Text, title.Length)));
-        Assert.Equal([((string)row["description"]!, DisplayWidth.Measure((string)row["description"]!).Width)], content.Descriptions.Select(text => (text.Text, text.Length)));
+        var (title, description) = ((string)row["title"]!, (string)row["description"]!);
+        var (titleMeasured, descriptionMeasured) = (SearchResultWidth.Measure(title, SearchResultText.Title), SearchResultWidth.Measure(description, SearchResultText.Description));
+        Assert.Equal([(title, titleMeasured.Characters, (int?)titleMeasured.Pixels)], content.Titles.Select(text => (text.Text, text.Length, text.Width)));
+        Assert.Equal([(description, descriptionMeasured.Characters, (int?)descriptionMeasured.Pixels)],
+            content.Descriptions.Select(text => (text.Text, text.Length, text.Width)));
+        Assert.All(content.H1s, heading => Assert.Null(heading.Width));
         Assert.Equal([(string)row["h1"]!], content.H1s.Select(h1 => h1.Text));
         Assert.Equal((long)row["h1Count"]!, content.Headings[0]);
         Assert.Equal(6, content.Headings.Count);
@@ -372,7 +376,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         Assert.Null(content.MetaRefresh);
         Assert.Contains(product.Headers, header => header.Name == "content-type");
         Assert.True(product.SourceStored);
-        Assert.Equal(new ContentLimits(30, 60, 70, 155, 200, 1_000, 1_048_576, 204_800, 125, 115, FromAnalysis: true), product.Limits);
+        Assert.Equal(new ContentLimits(200, 580, 400, 985, 200, 1_000, 1_048_576, 204_800, 125, 115, FromAnalysis: true), product.Limits);
 
         Assert.True(Inspect("/plants/image-srcset").Content!.ImagesMissingAlt >= 1);
         var delayed = Inspect("/plants/meta-refresh").Content!.MetaRefresh!;
@@ -514,7 +518,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
 
         var limits = Read(copy, Id("/p/7")).Limits;
         Assert.False(limits.FromAnalysis);
-        Assert.Equal(new AnalysisSettings().TitleMaxLength, limits.TitleMax);
+        Assert.Equal(new AnalysisSettings().TitleMaxPixels, limits.TitleMaxPixels);
     }
 
     /// <summary>

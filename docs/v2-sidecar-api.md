@@ -55,6 +55,11 @@ Built in stages:
   targets and groups that say what each URL is; the image checks naming their images; details that name what they
   count; a template hint for a check that doesn't group; rows by importance; and exports that carry it all.
   [Engine changes evidence makes](#engine-changes-evidence-makes) has the engine's side.
+- **Pixel widths** (step 3b) change shapes the app reads, as the app and the sidecar ship together: the title and
+  description limits are in pixels under new names (`titleMaxPixels`, with `pixelsPerCharacter` for the characters
+  hint), `titleLength` and `descriptionLength` count characters, and the URL grid gains `titleWidth`,
+  `descriptionWidth`, `titleInResults` and `descriptionInResults`; the inspector's measured texts gain `width` and its
+  limits the new names. [Pixel widths](v2-pixel-widths.md) has the design as built.
 
 ## Process (E1)
 
@@ -252,12 +257,12 @@ Built in stages:
   `sources` (the links to update), and `image-missing-alt`, `image-alt-too-long` and `image-missing-dimensions`
   become `targets` (the images at fault: see [Issue groups](#issue-groups-e3a)).
 - **`evidence`** (evidence) is the URL columns that show what the check found, in the order to show them, beside each
-  row's `url` and `detail`: `["title", "titleLength"]` for `title-too-long`, `["metaRobots", "xRobotsTag"]` for
-  `noindex-page` (where the noindex comes from), `["redirectChain"]` for the redirect checks, `["robotsRule"]` for
-  `blocked-by-robots`. Each is a column of [`/rows`](#issue-groups-e3a) and of [the URL grid](#urls-e3a), so a view
-  asks `/rows` for `url`, `detail` and these. Empty for a check whose URL and detail say it all (27 checks have some);
-  [the per-check table](v2-evidence.md#the-checks) has every one. A column that needs the URL summary has no values
-  without one, and is listed in `/rows`' `unavailable`, as any is.
+  row's `url` and `detail`: `["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
+  `["metaRobots", "xRobotsTag"]` for `noindex-page` (where the noindex comes from), `["redirectChain"]` for the
+  redirect checks, `["robotsRule"]` for `blocked-by-robots`. Each is a column of [`/rows`](#issue-groups-e3a) and
+  of [the URL grid](#urls-e3a), so a view asks `/rows` for `url`, `detail` and these. Empty for a check whose URL and
+  detail say it all (27 checks have some); [the per-check table](v2-evidence.md#the-checks) has every one. A column
+  that needs the URL summary has no values without one, and is listed in `/rows`' `unavailable`, as any is.
 - **`targetFacts`** (evidence) is what to say about each URL the check's issues name, in the order to say it: the
   fields of a target on [`/issues/{checkId}/targets`](#where-a-url-is-found-found-on), and of a group's `related` URL
   on [`/groups`](#issue-groups-e3a). `image-too-large` has `["sizeBytes", "contentType", "pixelWidth", "pixelHeight",
@@ -308,20 +313,22 @@ Built in stages:
     says null in every plain field**, the two optional ones included: never an empty string, never the technical
     text. No check of this catalog is without (a test holds that), and a UI should take null all the same: a check
     added to the catalog before its words are written would say it.
-  - **Limits are filled in.** A plain text names a threshold as a token (`{limit:titleMaxLength}`), and the API serves
-    it filled, with the value and its unit as a sentence says them: "60 characters", "200 words", "200 KB", "1 MB",
-    "1 second", "1.5 seconds". No served text holds a token. **`GET /api/checks` fills them from the thresholds an
-    analysis would run with now; `GET /api/checks?crawl={id}` from the ones that crawl's last analysis ran with**, so
-    a crawl's words say the limits it was judged by. A crawl never analysed, or whose stored settings can't be read,
-    takes the current ones. `crawl` is one crawl's id: `crawl-not-found` when no crawl has it, `bad-request` when it
-    is empty or given twice. Everything else in the answer is the same for every crawl.
+  - **Limits are filled in.** A plain text names a threshold as a token (`{limit:titleMaxPixels}`), and the API serves
+    it filled, with the value and its unit as a sentence says them: "200 words", "200 KB", "1 MB", "1 second", "1.5
+    seconds", and a title's or description's width in pixels as the ordinary characters it holds, "about 60
+    characters" ([pixel widths](v2-pixel-widths.md#6-settings)). No served text holds a token. **`GET /api/checks`
+    fills them from the thresholds an analysis would run with now; `GET /api/checks?crawl={id}` from the ones that
+    crawl's last analysis ran with**, so a crawl's words say the limits it was judged by. A crawl never analysed, or
+    whose stored settings can't be read, takes the current ones. `crawl` is one crawl's id: `crawl-not-found` when no
+    crawl has it, `bad-request` when it is empty or given twice. Everything else in the answer is the same for every
+    crawl.
 
     Ten checks name a limit (`title-too-long`, `title-too-short`, `description-too-long`, `description-too-short`,
     `low-word-count`, `image-alt-too-long`, `image-too-large`, `url-too-long`, `slow-response`, `large-page`). For a
-    crawl analysed with titles to 70 characters and 2.5 seconds to answer, `title-too-long`'s first sentence is
-    "These pages have a title of more than 70 characters." and `slow-response`'s "These pages took more than 2.5
-    seconds to arrive when the check asked for them."; without `crawl`, at the defaults, they say "60 characters" and
-    "1 second".
+    crawl analysed with titles to 658 px and 2.5 seconds to answer, `title-too-long`'s first sentence is "These pages
+    have a title too long to show in full in search results, where there's room for about 70 characters." and
+    `slow-response`'s "These pages took more than 2.5 seconds to arrive when the check asked for them."; without
+    `crawl`, at the defaults, they say "about 60 characters" and "1 second".
   - A category's `plainTitle` is filled for all 17. Like every plain word it is words, not results: none of them is
     stored with an analysis, and writing one makes no analysis out of date.
 
@@ -959,7 +966,7 @@ one moment is never set against a total from another, and the app, the report an
 
 ### Analysis settings (E6)
 
-The limits every analysis here judges by ("a title longer than this is too long"), for Settings to show and change.
+The limits every analysis here judges by ("a title wider than this is too long"), for Settings to show and change.
 They're the engine's until the user saves their own, which are kept in the state folder (`analysis-settings.json`)
 and outlive a restart. The names are the JSON names of the engine's `AnalysisSettings` properties, which are also
 what each analysis stores in its crawl file.
@@ -969,28 +976,33 @@ what each analysis stores in its crawl file.
 | `GET /api/analysis-settings` | The limits in force, with what each is |
 | `PUT /api/analysis-settings` | Saves limits, and answers as `GET` does. Every limit is optional: one left out, or null, takes the engine's value |
 | `POST /api/analysis-settings/validate` | `{ errors: { <limit>: [messages] } }`, 200: what a save of the same body would refuse, as it's typed. Nothing is saved |
-| `POST /api/analysis-settings/reset` | Body `{ "limits": ["titleMaxLength"] }`: puts those limits back to the engine's values and leaves the rest; with no body, or none named, all of them. Answers as `GET` does |
+| `POST /api/analysis-settings/reset` | Body `{ "limits": ["titleMaxPixels"] }`: puts those limits back to the engine's values and leaves the rest; with no body, or none named, all of them. Answers as `GET` does |
 
 ```json
-{"settings":{"titleMinLength":30,"titleMaxLength":60,"descriptionMinLength":70,"descriptionMaxLength":155,"minWordCount":200,
+{"settings":{"titleMinPixels":200,"titleMaxPixels":580,"descriptionMinPixels":400,"descriptionMaxPixels":985,"minWordCount":200,
              "duplicateMinWordCount":50,"nearDuplicateMaxBits":24,"imageAltMaxLength":125,"largeImageBytes":204800,
              "largePageBytes":1048576,"slowResponseMs":1000,"maxUrlLength":115},
- "limits":[{"id":"titleMaxLength","value":60,"default":60,"unit":"characters","min":1,"max":10000,
-            "description":"A title longer than this is flagged as too long: search results cut it short."}],
+ "limits":[{"id":"titleMaxPixels","value":580,"default":580,"unit":"pixels","min":1,"max":100000,
+            "description":"A title wider than this in search results is flagged as too long: Google's desktop results would likely cut it off. Measured in Arial at 20 px, as Google shows titles.",
+            "pixelsPerCharacter":9.4}],
  "isDefault":true}
 ```
 
 - **`settings`** is each limit's value by name: the body `PUT` and `validate` take. **`limits`** lists every limit in
   the order Settings shows them, each with its `value` (the same number), the engine's `default`, its `unit`
-  (`characters`, `words`, `bits`, `bytes` or `ms`), the `min` and `max` it may be set within, and a `description`: one
-  sentence saying what it does, to show as it is. **`isDefault`** is true while every limit is at the engine's value.
+  (`characters`, `pixels`, `words`, `bits`, `bytes` or `ms`), the `min` and `max` it may be set within, and a
+  `description`: one sentence saying what it does, to show as it is. A width in `pixels` also has
+  **`pixelsPerCharacter`** (9.4 for a title, 6.2 for a description; no other limit has the field): an ordinary
+  character's width, so the value over it is the characters it holds, rounded to the nearest 5 from 20 on and to the
+  nearest whole below, as the plain words round it ("about 60 characters"). **`isDefault`** is true while every limit
+  is at the engine's value.
 
   | Limit | Default | Unit | Range | A page, image or URL is flagged when |
   | --- | --- | --- | --- | --- |
-  | `titleMinLength` | 30 | characters | 0 to 10,000 | its title is shorter |
-  | `titleMaxLength` | 60 | characters | 1 to 10,000 | its title is longer |
-  | `descriptionMinLength` | 70 | characters | 0 to 10,000 | its meta description is shorter |
-  | `descriptionMaxLength` | 155 | characters | 1 to 10,000 | its meta description is longer |
+  | `titleMinPixels` | 200 | pixels | 0 to 100,000 | its title is narrower, in Google's desktop results (about 20 characters) |
+  | `titleMaxPixels` | 580 | pixels | 1 to 100,000 | its title is wider (about 60 characters) |
+  | `descriptionMinPixels` | 400 | pixels | 0 to 100,000 | its meta description is narrower (about 65 characters) |
+  | `descriptionMaxPixels` | 985 | pixels | 1 to 100,000 | its meta description is wider (about 160 characters) |
   | `minWordCount` | 200 | words | 0 to 1,000,000 | it has fewer words of main content (thin) |
   | `duplicateMinWordCount` | 50 | words | 0 to 1,000,000 | (a page with fewer words is left out of the duplicate content checks) |
   | `nearDuplicateMaxBits` | 24 | bits | 0 to 32 | its content fingerprint is within this many bits, of 256, of another page's |
@@ -1000,18 +1012,21 @@ what each analysis stores in its crawl file.
   | `slowResponseMs` | 1,000 | ms | 1 to 3,600,000 | it takes longer to answer |
   | `maxUrlLength` | 115 | characters | 1 to 10,000 | the URL is longer |
 
-  The inspector's `limits` are these as the URL's analysis ran with them, under the inspector's own shorter names.
+  The inspector's `limits` are these as the URL's analysis ran with them, under the inspector's own names (the four
+  widths' are the same).
 - **Checked limit by limit.** A save that can't be made is `invalid-settings` (422) with `errors` keyed by the limit, and
-  saves nothing: a value outside its range ("This must be from 1 to 10,000 characters."), one that isn't a whole
-  number (text, a fraction, true: a field error here, not a 400, as an option of the wrong type is), and a longest
-  length that isn't more than its shortest, reported on the longest (`titleMaxLength`, `descriptionMaxLength`) and
-  judged with the engine's value for whichever of the two wasn't sent. A rule of the engine's that no one limit
-  breaks, only the limits together, is keyed `settings`: so `errors`' keys are limits' names, `settings`, or (for
-  `reset`) `limits[<index>]`, and a client shows a key it has no field for above the form. A limit that doesn't
-  exist, or a body that isn't an object of limits, is a `bad-request` (400), as a property the API doesn't know is
-  everywhere. `reset` with a name that's no limit's is `invalid-settings` on `limits[<index>]`, and changes nothing.
-- **Resetting one of a pair** that would leave the longest under the shortest (the shortest title raised to 70, the
-  longest put back to 60) puts both back.
+  saves nothing: a value outside its range ("This must be from 1 to 100,000 pixels."), one that isn't a whole
+  number (text, a fraction, true: a field error here, not a 400, as an option of the wrong type is), and a widest
+  width that isn't more than its narrowest, reported on the widest (`titleMaxPixels`, `descriptionMaxPixels`: "The
+  widest title allowed must be more than the narrowest (700).") and judged with the engine's value for whichever of
+  the two wasn't sent. A rule of the engine's that no one limit breaks, only the limits together, is keyed
+  `settings`: so `errors`' keys are limits' names, `settings`, or (for `reset`) `limits[<index>]`, and a client shows
+  a key it has no field for above the form. A limit that doesn't exist, or a body that isn't an object of limits, is a
+  `bad-request` (400), as a property the API doesn't know is everywhere: the names the limits had in characters
+  (`titleMaxLength` and the rest) included. `reset` with a name that's no limit's is `invalid-settings` on
+  `limits[<index>]`, and changes nothing.
+- **Resetting one of a pair** that would leave the widest under the narrowest (the narrowest title raised to 700, the
+  widest put back to 580) puts both back.
 - **What a change does to the crawls already analysed.** An analysis stores the limits it ran with, and one that ran
   with other limits than those now in force is out of date: `outOfDate` on its library item and `outOfDateReasons`
   `settingsChanged` on `/analysis`, from the next read of either, for every crawl, open or not. Nothing else changes
@@ -1022,7 +1037,13 @@ what each analysis stores in its crawl file.
   (`settingsChanged`) the moment it's done.
 - **What's kept.** Only the limits that differ from the engine's are written, so a limit never changed follows the
   engine's default if a later version moves it. A file edited by hand keeps the values that could be saved today,
-  and the rest take the engine's.
+  and the rest take the engine's; a pair that's broken goes back together.
+- **Limits saved in characters** (`titleMinLength`, `titleMaxLength`, `descriptionMinLength`,
+  `descriptionMaxLength`), by a version before pixels, are converted as the file is read, and logged in one line: a
+  limit at its old default takes the new default, any other its characters times `pixelsPerCharacter`, so 70
+  characters of title is 658 px; when the file has the new name too, it wins. The next save writes only the new
+  names. A crawl's stored analysis settings are read converted the same way
+  ([pixel widths](v2-pixel-widths.md#6-settings)).
 
 ### Data (E1: the readers that exist today)
 
@@ -1222,7 +1243,8 @@ in a row is the JSON object below, or null; its titles are "Redirect chain" and 
 https://www.example.com/c/ (200)` (the URL's own status, then each hop's URL and status; `(meta refresh)` before a
 hop reached by one; `, a loop` or `, more than 20 hops` at the end), and `Disallow: /cart/ (line 12 of
 https://www.example.com/robots.txt)`, `robots.txt couldn’t be read` or `No rule kept`. A new **`unit`**, `px`, is
-`pixelWidth`'s and `pixelHeight`'s ("Image width (px)").
+`pixelWidth`'s and `pixelHeight`'s ("Image width (px)"), and since [pixel widths](v2-pixel-widths.md) `titleWidth`'s
+and `descriptionWidth`'s.
 
 ```json
 {"id":31,"url":"https://www.example.com/a/","statusCode":301,
@@ -1266,7 +1288,9 @@ inspector chains do.
 | `outlinks` | number | | Hyperlinks on a page whose HTML was read |
 | `sizeBytes` | number | | Bytes on the wire |
 | `responseMs`, `ttfbMs` | number | | The whole response, and the first byte. Null when no request was made |
-| `titleLength`, `descriptionLength` | number | Yes | The room the title and meta description take in search results, as the checks measure it: full-width characters and emoji count two |
+| `titleLength`, `descriptionLength` | number | Yes | The first title's and meta description's characters, as a reader counts them: user-perceived, white space run together, an emoji or an accented letter once |
+| `titleWidth`, `descriptionWidth` | number | Yes | How wide the first title and meta description are in Google's desktop results, in pixels (unit `px`): what the length checks judge ([pixel widths](v2-pixel-widths.md)) |
+| `titleInResults`, `descriptionInResults` | text | | The first title and meta description as Google's desktop results will likely show them: up to where they're cut, with "…", or all of it when it fits, against the analysis's `titleMaxPixels` and `descriptionMaxPixels` (the engine's before the first analysis). Shown only: worked out for the rows of the page, as `redirectChain` is |
 | `finalUrl`, `finalStatusCode` | text, number | Yes | Where the URL's redirects end, meta refreshes included, and the status there. The URL itself when it doesn't redirect |
 | `inSitemap` | boolean | Yes | Listed in a sitemap. False only when every sitemap was read |
 | `inlinks`, `followedInlinks`, `nofollowInlinks`, `linkingPages` | number | Yes | Hyperlinks to the URL on the pages audited, each counted, a page's links to itself left out: all, those followed, the nofollow ones, and the pages they're on |
@@ -1354,17 +1378,17 @@ below, or past what an id holds), and `invalid-query` without one.
             {"test":"noindex","outcome":"pass","meta":false,"header":false},
             {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200,"outcome":"success"},
              "canonicalUrl":"https://www.example.com/blog/"}]},
- "content":{"titles":[{"text":"Blog, page 2","length":12}],"descriptions":[],"h1s":[{"text":"Blog","length":4}],
+ "content":{"titles":[{"text":"Blog, page 2","length":12,"width":112}],"descriptions":[],"h1s":[{"text":"Blog","length":4,"width":null}],
             "headings":[1,3,0,0,0,0],"wordCount":412,"language":"en-GB","charset":"utf-8","robots":[],"metaRefresh":null,
             "images":12,"imagesMissingAlt":0},
- "limits":{"titleMin":30,"titleMax":60,"descriptionMin":70,"descriptionMax":155,"minWords":200,"slowResponseMs":1000,
+ "limits":{"titleMinPixels":200,"titleMaxPixels":580,"descriptionMinPixels":400,"descriptionMaxPixels":985,"minWords":200,"slowResponseMs":1000,
            "largePageBytes":1048576,"largeImageBytes":204800,"imageAltMaxLength":125,"maxUrlLength":115,"fromAnalysis":true},
  "links":{"inlinks":3,"followedInlinks":3,"nofollowInlinks":0,"linkingPages":2,"outlinks":45,"inSitemap":false},
  "linkTotals":{"inlinks":4,"outlinks":63,"hyperlinkInlinks":3},
  "headers":[{"name":"content-type","value":"text/html; charset=utf-8"}],
  "structuredData":[{"valid":true,"types":["BlogPosting"],"json":"{…}","error":null,"truncated":false}],
  "hreflang":[],
- "issues":[{"checkId":"title-too-short","severity":"notice","detail":"12 characters","related":null,"group":null}],
+ "issues":[{"checkId":"title-too-short","severity":"notice","detail":"112 px, under 200 (12 characters)","related":null,"group":null}],
  "namedBy":{"total":0,"checks":[]},
  "summary":{"available":true,"reason":null},
  "source":{"stored":false},
@@ -1429,14 +1453,17 @@ below, or past what an id holds), and `invalid-query` without one.
     URL itself.
   - A field that doesn't apply is left out, as the other tests' are.
 - **`content`** is null for anything that isn't a parsed page. Titles, descriptions and H1s are each listed in page
-  order with their `length` as the checks measure it; `headings` counts H1 to H6, `images` the images and
-  `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the crawler or to Googlebot;
-  `charset` is the character set the page declares: its meta tag's, or with no meta tag the encoding its byte-order
-  mark declares (`utf-8`, `utf-16le`, `utf-16be`), else null (the header's is in `headers`);
+  order with their `length`, the characters as a reader counts them, and their `width`, in pixels as the checks
+  measure it in Google's desktop results (null for an H1, which no result shows); `headings` counts H1 to H6,
+  `images` the images and `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the
+  crawler or to Googlebot; `charset` is the character set the page declares: its meta tag's, or with no meta tag the
+  encoding its byte-order mark declares (`utf-8`, `utf-16le`, `utf-16be`), else null (the header's is in `headers`);
   `metaRefresh` is `{ delaySeconds, url }` for a page with a meta refresh, else null.
   **`limits`** are what the analysis judged the URL against: its stored settings (`fromAnalysis: true`), or the engine's
-  defaults before the first analysis (`fromAnalysis: false`). They include an image's (`largeImageBytes`, which
-  `image-too-large` goes by, and `imageAltMaxLength`) and a URL's (`maxUrlLength`).
+  defaults before the first analysis (`fromAnalysis: false`). A title's and a description's are widths in pixels
+  (`titleMinPixels`, `titleMaxPixels`, `descriptionMinPixels`, `descriptionMaxPixels`), to set against `width`. They
+  include an image's (`largeImageBytes`, which `image-too-large` goes by, and `imageAltMaxLength`) and a URL's
+  (`maxUrlLength`).
 - **`links`** comes from the URL summary, and is null without one (`summary` says why). `type` is judged as the
   grid's column is.
 - **`linkTotals`** (E3c) is every link to the URL and from it, `{ inlinks, outlinks }`: links of every kind, a page's
@@ -1528,7 +1555,7 @@ catalog's to say, per check, and `GET /api/checks` gives it as each check's `gro
 | --- | --- | --- |
 | `detail` | The detail and the other URL involved: the detail names the cause, or the fault it's an instance of | `open-graph-missing` ("Missing og:image"), `internal-client-error` ("404 Not Found"), `structured-data-invalid` |
 | `relatedUrl` | Each other URL the issue is about: the detail is a count, and the URLs are the cause | `broken-internal-links` (each broken target), `empty-anchor-text`, `canonicalised-page`, `title-duplicate` (the cluster, named after its first page) |
-| `none` | Nothing: the detail is a measurement (78 characters, 1,250 ms, 3 images), or the same on every issue | `title-too-long`, `slow-response`, `noindex-page` |
+| `none` | Nothing: the detail is a measurement (612 px, 1,250 ms, 3 images), or the same on every issue | `title-too-long`, `slow-response`, `noindex-page` |
 
 The UI lists a `none` check's URLs flat (`/rows` below), with the detail as a column.
 
@@ -1636,8 +1663,8 @@ with `matching` the rows the filters match and `total` the check's flagged URLs,
   on 200 pages first), then `depth`, then `url`. Without a URL summary, which `inlinks` and `usedOn` need, it is
   `depth`, then `url`. So a group's pages, a check's export and the report's examples come in the same order. Crawl
   order is still there to ask for: `[{ "column": "id" }]`. A cursor is of the order its page was read in, as always.
-- **A check's evidence** is asked for as any columns are: `"columns": ["url", "detail", "title", "titleLength"]` for
-  `title-too-long`, the check's `evidence` from [`/checks`](#checks-e1).
+- **A check's evidence** is asked for as any columns are: `"columns": ["url", "detail", "title", "titleInResults",
+  "titleWidth", "titleLength"]` for `title-too-long`, the check's `evidence` from [`/checks`](#checks-e1).
 
 ```json
 {"group":{"detail":null,"relatedUrlId":1},"columns":["url","inlinks","detail"],"sort":[{"column":"inlinks","desc":true}],"limit":100}
@@ -2418,8 +2445,11 @@ path (`kind` `report`), and `si report` writes it from the command line.
   checked", with why; "What was checked and found nothing wrong"; and "About this check".
 - **A problem's pages** (evidence) are its most important first, as `/rows` without `sort` gives them (`examples`
   counts them from there, not in crawl order). Each says, beside the page:
-  - *What was found*: the detail, then the check's evidence, a value each, in the check's order: "78 characters, over
-    60 · “Garden sofas and chairs for every garden and every…”", "noindex (meta robots)", `301 → https://x/b/ (301) → https://x/c/ (200)`;
+  - *What was found*: the detail, then the check's evidence, a value each, in the check's order: "780 px, over 580 (78
+    characters) · “Garden sofas and chairs for every garden and every…” · Title in results: Garden sofas…", "noindex
+    (meta robots)", `301 → https://x/b/ (301) → https://x/c/ (200)`. In plain words the four title and description
+    length checks say instead where Google will likely cut, "Google will likely cut this title off after “…for every
+    garden and”", or "Only 10 characters long", as Simple does, never px;
   - *Where to fix it*: for a `sources` check, the pages linking to it with where on each the link is and its text
     ("/garden/ (footer, “Old range”), /sofas/ (content, “Sale”) and 3 more"), the sitemaps listing it, the start
     address; for a `targets` check (new: these said only "and N others"), what the page names, each with what it is,
@@ -2687,7 +2717,8 @@ Each has its own tests, and each of those tests was seen to fail with the code i
   `ReadCache` for every crawl, so a filter set is counted once while its crawl stands still.
 - **The URL summary** gains `title_length` and `description_length`, measured as the title and description checks
   measure them, so the grid sorts and filters on them. `AnalysisFreshness.VERSION` is 3: every earlier analysis is out
-  of date (`engineChanged`) until analysed again.
+  of date (`engineChanged`) until analysed again. (Since [pixel widths](v2-pixel-widths.md), VERSION 12, the two
+  count characters, and `title_width` and `description_width` hold what the checks measure, in pixels.)
 - **Issue groups.** Each check in the catalog says how its issues group (`IssueDefinition.Grouping`, which
   `GET /api/checks` gives as `grouping`), and each analysis adds the index `ix_issues_group` on
   `issues (issue, detail, related_url_id)`.
@@ -3365,7 +3396,7 @@ a new field; nothing is taken away. Each has its own tests.
     (`robots-txt-unreachable`: "A rules file that search engines can't read").
   - **Limits follow the settings.** A text names a threshold as `{limit:name}`, the name an analysis setting's as its
     JSON has it; `PlainLimits.Fill` puts the value there with its unit. All 12 numeric thresholds have a name
-    (`titleMinLength`, `titleMaxLength`, `descriptionMinLength`, `descriptionMaxLength`, `minWordCount`,
+    (`titleMinPixels`, `titleMaxPixels`, `descriptionMinPixels`, `descriptionMaxPixels`, `minWordCount`,
     `duplicateMinWordCount`, `nearDuplicateMaxBits`, `imageAltMaxLength`, `largeImageBytes`, `largePageBytes`,
     `slowResponseMs`, `maxUrlLength`), a test holds the names to the settings, and a name no setting has is an error
     that a test looks for in every plain text the engine has. Ten checks name a limit, eleven times in all (ten of

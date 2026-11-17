@@ -271,26 +271,26 @@ describe('the API client', () => {
   it('reads, saves, checks and resets the analysis’s limits, a reset of all of them with no body', async () => {
     fetchMock.mockImplementation(() => Promise.resolve(Response.json({ settings: {}, limits: [], isDefault: true })));
     await api.analysisSettings();
-    await api.saveAnalysisSettings({ titleMaxLength: 70, minWordCount: null });
-    await api.validateAnalysisSettings({ titleMaxLength: 0 });
-    await api.resetAnalysisSettings(['titleMaxLength']);
+    await api.saveAnalysisSettings({ titleMaxPixels: 700, minWordCount: null });
+    await api.validateAnalysisSettings({ titleMaxPixels: 0 });
+    await api.resetAnalysisSettings(['titleMaxPixels']);
     await api.resetAnalysisSettings();
     expect(sent()).toEqual([
       { method: 'GET', url: 'http://127.0.0.1:5000/api/analysis-settings', body: undefined },
       {
         method: 'PUT',
         url: 'http://127.0.0.1:5000/api/analysis-settings',
-        body: { titleMaxLength: 70, minWordCount: null },
+        body: { titleMaxPixels: 700, minWordCount: null },
       },
       {
         method: 'POST',
         url: 'http://127.0.0.1:5000/api/analysis-settings/validate',
-        body: { titleMaxLength: 0 },
+        body: { titleMaxPixels: 0 },
       },
       {
         method: 'POST',
         url: 'http://127.0.0.1:5000/api/analysis-settings/reset',
-        body: { limits: ['titleMaxLength'] },
+        body: { limits: ['titleMaxPixels'] },
       },
       { method: 'POST', url: 'http://127.0.0.1:5000/api/analysis-settings/reset', body: undefined },
     ]);
@@ -303,15 +303,15 @@ describe('the API client', () => {
           type: 'invalid-settings',
           title: 'Some limits can’t be saved.',
           status: 422,
-          errors: { titleMaxLength: ['This must be from 1 to 10,000 characters.'] },
+          errors: { titleMaxPixels: ['This must be from 1 to 100,000 pixels.'] },
         },
         422,
       ),
     );
-    const error: unknown = await api.saveAnalysisSettings({ titleMaxLength: 0 }).catch((caught: unknown) => caught);
+    const error: unknown = await api.saveAnalysisSettings({ titleMaxPixels: 0 }).catch((caught: unknown) => caught);
     expect(isProblem(error, 'invalid-settings')).toBe(true);
     expect((error as ProblemError).errors).toEqual({
-      titleMaxLength: ['This must be from 1 to 10,000 characters.'],
+      titleMaxPixels: ['This must be from 1 to 100,000 pixels.'],
     });
   });
 

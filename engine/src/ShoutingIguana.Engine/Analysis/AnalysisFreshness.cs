@@ -42,9 +42,12 @@ public static class AnalysisFreshness
     /// 429 is held back and asked again, and stored as not checked if it never gets through; and the notes tell the URLs
     /// not checked for a site asking to slow down, or for a private network address, apart from those whose site stopped
     /// answering. Pages stored as not checked for a site asking to slow down still count as refused when the orphan check
-    /// is skipped for the pages the crawl couldn't read.
+    /// is skipped for the pages the crawl couldn't read. 12 measures titles and descriptions in pixels, as Google's desktop
+    /// results show them (Arial at 20 px and 14 px, <c>titleMaxPixels</c> and the rest), with details such as
+    /// <c>612 px, over 580 (64 characters)</c>, and stores <c>title_width</c> and <c>description_width</c> in the URL
+    /// summary, with <c>title_length</c> and <c>description_length</c> in plain characters.
     /// </summary>
-    public const int VERSION = 11;
+    public const int VERSION = 12;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and
