@@ -9,7 +9,7 @@ Analytics / Ads integrations later.
 | Project | What it is |
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `compare`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
 | `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
@@ -31,12 +31,41 @@ dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind url
 dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind workbook --out all.xlsx # a sheet for each check
 dotnet run --project src/ShoutingIguana.Cli -- report example.sicrawl --out report.html           # the report
 dotnet run --project src/ShoutingIguana.Cli -- analyze example.sicrawl                          # re-run the checks
+dotnet run --project src/ShoutingIguana.Cli -- compare example.sicrawl before.sicrawl           # since an earlier crawl: fixed, new, not checked
+dotnet run --project src/ShoutingIguana.Cli -- compare example.sicrawl before.sicrawl --check title-too-long   # one check's URLs and causes
 dotnet run --project src/ShoutingIguana.Cli -- stats example.sicrawl
 dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl              # after Ctrl+C
 dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000
 dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000 --db bench.sicrawl              # keeps the crawl
 dotnet run --project src/ShoutingIguana.Cli -c Release -- readbench bench.sicrawl --max-p95-ms 300            # the grids' reads
+dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000 --revisions --db bench.sicrawl  # and revision 1, compared
+dotnet run --project src/ShoutingIguana.Cli -c Release -- readbench bench.revision1.sicrawl --compare-with bench.sicrawl --gate
 ```
+
+`si compare <crawl> <other>` compares a crawl with another crawl of the site (the fix loop): how far the two can be
+compared and what differs (`comparable`: full, partial, or counts only when the start URL's scheme or host differs or the
+other crawl's analysis was made by other rules, which `si analyze <other>` mends), the score then and now, and a line for
+each check that moved, with how its URLs did: fixed, gone (no longer found), not checked this time (never counted as
+fixed), still there, new, on a new URL, or not compared then. `--check <id>` lists one check's URLs now and then, each
+with its state (and why one wasn't checked), and its causes then and now; `--json` writes either for scripts and agents,
+camelCase as the sidecar serves it. A missing file, one never analysed, or an unknown check is a one-line error, exit 2.
+
+`si recheck <crawl> --check <id>` is the fix loop's "Recheck these N pages": it fetches the check's URLs again into the
+same crawl file (`--group-url <url>` or `--group-detail <detail>` for one of its groups, `--urls <file>` for a list of
+URLs instead), analyses the crawl, and says what it found: "4 of 5 fixed. 1 still has it.", with the URLs it couldn't
+check, those past its limit of 1,000, and those that have the problem now and didn't (`--plan` only says what it would
+do, how long it should take, and how long working that out took, fetching nothing). The crawl's analysis is brought
+up to date first when it's out of date, so the "before" it records is today's. A crawl that sent header values, which a
+crawl file doesn't keep, needs them again with `--header`, as `--resume` does (and `--proxy` for a proxy's password). A
+check a recheck can't settle (`orphan-page`, `no-https`), a crawl that was interrupted or never analysed, and one open
+elsewhere are one-line errors, exit 2. See [Rechecks](#rechecks-the-fix-loop).
+
+`si bench --revisions` crawls the synthetic site, switches it to revision 1 ("after the fixes") through its control
+route, crawls it again into a second file (`<name>.revision1.sicrawl` beside `--db`), analyses both, and fails unless
+their comparison is exactly what the site planted (`SyntheticSite.GetChanges`), each crawl held to its own revision's
+issues and to the memory limits as the bench holds one. `si readbench --compare-with <other>` adds the class `compare`:
+the comparison's summary, the first page of the biggest check's rows and of a grouped check's groups with the other crawl,
+and the first page of what the biggest check no longer flags, each held to 300 ms at p95 with `--gate`.
 
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),
@@ -635,6 +664,57 @@ runs, each with its stretches, and their total (`CrawlFileSummary.TimeCrawling`,
   system. A sleep shorter than that still counts on Windows, and the stretch it's left out of then spans more wall
   time than its length says: it isn't split in two.
 
+### Rechecks (the fix loop)
+
+"Recheck these N pages" fetches a problem's URLs again into the same crawl file, analyses the crawl, and keeps the
+result as a record in the file ("rechecked 5 pages on 17 Nov: 4 fixed"). The design, with its reasons, is
+[the fix loop](../docs/v2-fix-loop.md#3-recheck-these-n-pages).
+
+- **The plan** (`RecheckPlanReader.Plan`, read only) works out what a recheck of a check, one of its groups or a list
+  of URLs does from the check's `References`: a check of what others refer to (a 404, a redirect, a blocked URL) fetches
+  its URLs, then the pages referring to those still failing, where the fix may be (a link removed or changed); a check of
+  pages holding a bad reference fetches the pages and every URL their issues name; any other fetches its pages. At most
+  1,000 URLs (`LIMIT`), the check's most important first, as its rows come. It says how long it should take (at the
+  crawl's own pace, no faster than a slow start), whether the analysis must be brought up to date first, and why it
+  can't run: the crawl interrupted, never analysed or open elsewhere, or a check a recheck can't settle
+  (`IssueDefinition.Recheck` empty: `orphan-page`, `no-https`) or that the analysis skipped.
+- **What else it reads**, by the check's `Recheck` kinds: `sitemaps` reads every sitemap again as the crawl found
+  them, each one's entries replacing those read before, a file nothing lists any more dropped, and a URL a sitemap newly
+  lists recorded and not fetched; `robotsTxt` reads the robots.txt of the origins the crawl couldn't read, and the start
+  URL's, again; `siteVersions` asks every probe of the site's other versions again.
+- **The run** (`CrawlEngine.Recheck`) is a run of the crawl in a recheck mode: the file opened as a continue opens it
+  (locked), the crawl's options and secrets, its pace through the same host gates, robots.txt read afresh. Only the
+  recheck's own URLs are handed out, never the crawl's queue, and only URLs the crawl fetched (a URL it never read, a
+  nofollow link's, stays as it is). Each is stored over its old record, its response, details, HTML and outgoing links
+  replaced in one batch. A redirect is followed to its end, each hop fetched again once; a URL the crawl didn't have that
+  a page in the scope now links to is fetched one step, and what that links to is recorded as skipped (`SkipReason.Recheck`,
+  "found by a recheck, not followed"). The crawl's status and queue are left as they were (a stopped crawl continues as
+  it would have), and its row is stamped, so its analysis is out of date until the one after the recheck. A site that
+  stops answering ends a recheck after a minute, not a crawl's ten.
+- **Let go.** A page fetched again may have dropped a link (the owner removed the footer link to a 404). At the end,
+  each URL that lost a link is looked at, and what only it led to in turn: the part of the link graph the recheck
+  changed. A URL there is kept if it's the start URL, a probe of the site's versions or in a sitemap, or a URL outside
+  that part (or one kept within it) links to it by any kind of link; the rest are let go, pages linking only to each
+  other among them (`RecheckLetGo`). Past 10,000 URLs the whole graph is walked from those roots instead. A URL let go
+  keeps its row (ids stay stable) but loses its response, details, HTML and links, and is skipped as `NoLongerLinked`:
+  the stats leave it out of the URLs found, and the URL grid's `skipReason` column says "No longer linked". A URL still
+  queued is never let go.
+- **The record**, in three crawl-time tables made the first time a file is rechecked (`CrawlSchema.RECHECKS`): the
+  recheck (its run, the check, its group or list, its kinds, how many URLs it judges and fetched, the check's count and
+  the score before), its URLs by role (judged, named, referring, new, let go) as they stood before, and the check's
+  targets on them. The schema version doesn't change: a file never rechecked has none of them, and its readers find no
+  rechecks.
+- **Settled once.** The analysis after a recheck settles it in its own commit (`RecheckSettlement`): each URL it judged
+  is fixed (read again in a way the check can judge, or let go, and not flagged), still flagged, not checked (an error, a
+  block or a redirect in place of what the check needs: `CheckJudging`, the comparison's own line), or not rechecked (past
+  the cap, or not reached); URLs in its scope flagged now and not before are new; with the score after. A recheck never
+  says fixed where a full crawl says still: a duplicate is fixed only when its own text changed (every stored page of its
+  cluster is fetched too), else not checked, as a page the recheck didn't fetch may share the text now. A recheck whose
+  process died is settled as interrupted, with what it fetched. Later analyses never work it out again: it records what
+  that recheck found, and the crawl's issues say what's true now. `RecheckReader` reads the rechecks and a recheck's URLs.
+- **Time.** A recheck's run is a run in `run_time`, listed by `CrawlRunReader` as one (`CrawlRun.IsRecheck`), and its
+  time is its own: the crawl's time spent crawling leaves it out.
+
 ### URL summary
 
 What its columns mean:
@@ -1213,6 +1293,19 @@ The e2e tests also crawl these variants:
   ask for some of them, and the dead URL's retries add seconds to a small crawl.
 
 A second origin serves a partner site, so links, images and sitemap entries on another host are tested too.
+
+**Revisions** (the fix loop). `SyntheticSiteOptions.Revision` 1 is the same site "after the fixes": a quarter of the
+products' broken links restored, a quarter unlinked and a quarter moved to another missing URL; a third of the duplicate
+title pairs given their own title and a third renamed at their first page while the next page takes the old title; the
+long-title plant shortened, the capitals one now a 500, the short-title one removed and unlinked, and a new page with a
+long title; the second H1 moved to another page; a noindex dropped; the large image replaced at its address; a chain's
+first hop sent straight to its end; an hreflang alternate linking back; one private URL allowed by robots.txt; the
+sitemap index's missing file dropped; the first category listed; a security header dropped from the home page; and over
+HTTPS, the plain-HTTP side answering robots.txt and redirecting its home page. `GetExpectations(revision)` gives each
+revision's exact issues, and `GetChanges(from, to, judging)` the exact comparison of a crawl of each: every check's state
+and counts and every URL's state, which the comparison's tests and `si bench --revisions` hold the engine to. A running
+site switches revision in process (`SyntheticSiteServer.Revision`) or, run by `si testsite` (`--revision` picks the first),
+through `POST /__si/revision/{n}` with the token its READY line prints as its third field, in `X-SI-Token`.
 
 The one allowance is for response times, which depend on the machine. Up to 5% of pages (at least 25) may be
 flagged slow besides the planted one, and the e2e test checks the stored times directly.

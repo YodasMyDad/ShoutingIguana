@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ShoutingIguana.Engine.Storage.Models;
 
 /// <summary>The issues of one check with the same detail and other URL.</summary>
@@ -29,4 +31,12 @@ public sealed record IssueGroup(string? Detail, int? RelatedUrlId, string? Relat
 
     /// <summary>The URLs in the group: pages for a check that flags only pages, any URL for one that can flag any.</summary>
     public long Urls => Pages;
+
+    /// <summary>
+    /// How the group moved since another crawl, when its groups were read with one to compare with
+    /// (<see cref="IssueGroupPage.Compared"/>); null otherwise, and when the comparison is counts only. Left out of JSON
+    /// when null, so a host that serves the group as it is serves it as before when nothing is compared.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GroupChange? Change { get; init; }
 }

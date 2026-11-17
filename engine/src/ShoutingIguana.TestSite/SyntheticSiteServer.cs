@@ -20,25 +20,51 @@ namespace ShoutingIguana.TestSite;
 /// </summary>
 public sealed class SyntheticSiteServer : IAsyncDisposable
 {
+    /// <summary>
+    /// The control route that switches a running site's revision: <c>POST /__si/revision/{n}</c> on the site's port, with
+    /// <see cref="CONTROL_TOKEN_HEADER"/> set to <see cref="ControlToken"/>. It is for a site run in another process (the
+    /// CLI's <c>testsite</c>), which prints the token with its ready line.
+    /// </summary>
+    public const string REVISION_ROUTE = "/__si/revision/";
+
+    /// <summary>The request header that carries <see cref="ControlToken"/>.</summary>
+    public const string CONTROL_TOKEN_HEADER = "X-SI-Token";
+
     /// <summary>The first byte of every TLS connection: a handshake record.</summary>
     private const byte TLS_HANDSHAKE = 0x16;
 
     private readonly WebApplication _app;
     private readonly SyntheticRateLimiter? _limiter;
+    private readonly SiteHolder _holder;
 
-    private SyntheticSiteServer(WebApplication app, SyntheticSite site, Uri baseUri, Uri externalBaseUri, X509Certificate2? certificate,
-        SyntheticRequestLog requests, SyntheticRateLimiter? limiter)
+    private SyntheticSiteServer(WebApplication app, SiteHolder holder, Uri baseUri, Uri externalBaseUri, X509Certificate2? certificate,
+        SyntheticRequestLog requests, SyntheticRateLimiter? limiter, string controlToken)
     {
         _app = app;
         _limiter = limiter;
-        Site = site;
+        _holder = holder;
         BaseUri = baseUri;
         ExternalBaseUri = externalBaseUri;
         Certificate = certificate;
         Requests = requests;
+        ControlToken = controlToken;
     }
 
-    public SyntheticSite Site { get; }
+    /// <summary>The site as it is served now, at <see cref="Revision"/>.</summary>
+    public SyntheticSite Site => _holder.Current;
+
+    /// <summary>
+    /// The revision the site serves (<see cref="SyntheticSiteOptions.Revision"/>). Setting it switches every response from
+    /// the next request on, as a site's owner publishing a fix would; the URLs and ports stay the same.
+    /// </summary>
+    public int Revision
+    {
+        get => _holder.Current.Revision;
+        set => _holder.Current = _holder.Current.AtRevision(value);
+    }
+
+    /// <summary>The secret <see cref="REVISION_ROUTE"/> requires, so nothing that merely finds the port can switch the site.</summary>
+    public string ControlToken { get; }
 
     /// <summary>What the crawler sent the site, for tests of its options.</summary>
     public SyntheticRequestLog Requests { get; }
@@ -113,19 +139,20 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
 
         // The ports are only known once Kestrel has bound them, and the site renders absolute URLs, so it's created after
         // the start. Nothing can request a page before then: nobody knows the ports yet.
-        SyntheticSite? syntheticSite = null;
+        var holder = new SiteHolder();
         var boundExternalPort = 0;
         var requests = new SyntheticRequestLog();
         var limiter = options.RateLimit is { } limit ? new SyntheticRateLimiter(limit, TimeProvider.System) : null;
-        app.Run(context => RespondAsync(context, syntheticSite!, boundExternalPort, requests, limiter));
+        var controlToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+        app.Run(context => RespondAsync(context, holder, boundExternalPort, requests, limiter, controlToken));
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
         var sitePort = ((IPEndPoint)site!.EndPoint).Port;
         boundExternalPort = ((IPEndPoint)external!.EndPoint).Port;
         var baseUri = new Uri($"{(certificate is null ? "http" : "https")}://127.0.0.1:{sitePort}/");
         var externalBaseUri = new Uri($"http://127.0.0.1:{boundExternalPort}/");
-        syntheticSite = new SyntheticSite(options, baseUri, externalBaseUri);
-        return new SyntheticSiteServer(app, syntheticSite, baseUri, externalBaseUri, certificate, requests, limiter);
+        holder.Current = new SyntheticSite(options, baseUri, externalBaseUri);
+        return new SyntheticSiteServer(app, holder, baseUri, externalBaseUri, certificate, requests, limiter, controlToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -135,10 +162,17 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         Certificate?.Dispose();
     }
 
-    private static async Task RespondAsync(HttpContext context, SyntheticSite site, int externalPort, SyntheticRequestLog requests,
-        SyntheticRateLimiter? limiter)
+    private static async Task RespondAsync(HttpContext context, SiteHolder holder, int externalPort, SyntheticRequestLog requests,
+        SyntheticRateLimiter? limiter, string controlToken)
     {
         var path = context.Request.Path.Value ?? "/";
+        var site = holder.Current;
+        if (context.Connection.LocalPort != externalPort && path.StartsWith(REVISION_ROUTE, StringComparison.Ordinal))
+        {
+            context.Response.StatusCode = SwitchRevision(context.Request, path[REVISION_ROUTE.Length..], holder, controlToken);
+            return;
+        }
+
         if (context.Connection.LocalPort == externalPort)
         {
             await ServeAsync(context, site.Handle(path, external: true)).ConfigureAwait(false);
@@ -158,6 +192,30 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         {
             requests.Finished();
         }
+    }
+
+    /// <summary>The control route: the status to answer with, having switched the revision when the request may.</summary>
+    private static int SwitchRevision(HttpRequest request, string revision, SiteHolder holder, string controlToken)
+    {
+        if (!HttpMethods.IsPost(request.Method))
+        {
+            return StatusCodes.Status405MethodNotAllowed;
+        }
+
+        var token = request.Headers[CONTROL_TOKEN_HEADER].ToString();
+        if (!CryptographicOperations.FixedTimeEquals(System.Text.Encoding.ASCII.GetBytes(token), System.Text.Encoding.ASCII.GetBytes(controlToken)))
+        {
+            return StatusCodes.Status403Forbidden;
+        }
+
+        if (!int.TryParse(revision, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) ||
+            number > SyntheticSite.LATEST_REVISION)
+        {
+            return StatusCodes.Status404NotFound;
+        }
+
+        holder.Current = holder.Current.AtRevision(number);
+        return StatusCodes.Status204NoContent;
     }
 
     private static async Task ServeAsync(HttpContext context, SyntheticResponse response)
@@ -193,6 +251,18 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         else if (response.Text is not null)
         {
             await context.Response.WriteAsync(response.Text, context.RequestAborted).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The site the server answers with: swapped whole when its revision switches, so a request sees one revision.</summary>
+    private sealed class SiteHolder
+    {
+        private SyntheticSite? _current;
+
+        public SyntheticSite Current
+        {
+            get => Volatile.Read(ref _current)!;
+            set => Volatile.Write(ref _current, value);
         }
     }
 
