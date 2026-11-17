@@ -5,6 +5,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
@@ -74,6 +75,74 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var listed = CrawlSummaryReader.Read(path);
         Assert.Equal(listed.FetchedUrlCount - SyntheticSite.DEAD_TWIN_UNCHECKED, listed.CrawledUrlCount);
         Assert.Equal(listed.CrawledUrlCount, UrlGridReader.Query(path, new UrlQuery { Filters = [GridQueries.Boolean("fetched", true)], Limit = 1 }).Matching);
+    }
+
+    /// <summary>
+    /// A shop whose product pages are behind a rate limit that further requests renew, as a real one was: the crawl trips
+    /// it, slows to the pace it learns, asks again at its end for what it was refused, and finds every planted issue and
+    /// nothing else, with no URL left unchecked.
+    /// </summary>
+    [Fact]
+    public async Task ARateLimitedSiteIsCrawledWholeAtThePaceItTeaches()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
+        {
+            PageCount = VARIANT_PAGES,
+            RateLimit = new SyntheticRateLimit(MaxRequests: 40, Window: TimeSpan.FromSeconds(1), Penalty: TimeSpan.FromSeconds(1))
+        });
+
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
+
+        Assert.True(server.RateLimited > 0, "The crawl should have tripped the rate limit, and slowed down.");
+        Assert.Equal(0, Count(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"));
+        Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM responses WHERE status_code = 429"));
+    }
+
+    /// <summary>
+    /// One that never lets the crawler through: its product pages are asked for once, then once more at the end of the crawl,
+    /// and stored as not checked because the site asked the crawler to slow down. That is no fault of the site's pages, so
+    /// no check flags them, the analysis says why they weren't judged, and a notice says what to do.
+    /// </summary>
+    [Fact]
+    public async Task ASiteThatNeverStopsAskingToSlowDownLeavesItsUrlsNotCheckedAndSaysSo()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
+        {
+            PageCount = 6,
+            RateLimit = new SyntheticRateLimit(MaxRequests: 1, Window: TimeSpan.FromSeconds(1), Penalty: TimeSpan.FromSeconds(1), NeverRelents: true)
+        });
+        var path = NewDatabasePath();
+        var observer = new RecordingObserver();
+        CrawlSummary summary;
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(Options(server), path), observer))
+        {
+            summary = await job.Completion.WaitAsync(CRAWL_TIMEOUT);
+        }
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        const string PRODUCTS = "FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1 AND u.url LIKE '%/p/%'";
+        var products = Count(path, $"SELECT COUNT(*) {PRODUCTS}");
+        Assert.True(products >= 5, $"{products} product URLs");
+        Assert.Equal(products, Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests)'"));
+        Assert.Equal(2 * products, server.RateLimited);
+        Assert.Equal(products, CrawlStatsReader.Read(path).NotCheckedCount);
+
+        var slowDown = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited");
+        Assert.Contains("asked the crawler to slow down (429 Too Many Requests). It waits 1 second as asked", slowDown.Message, StringComparison.Ordinal);
+        var left = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited-unchecked");
+        Assert.Equal(products, left.Data!.Count);
+        Assert.StartsWith($"{products} URLs weren't checked because ", left.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Check the site again later, or at the Polite speed.", left.Message, StringComparison.Ordinal);
+        // The site's planted firewall block is still one; no 429 is.
+        Assert.DoesNotContain(observer.Notices, notice => notice.Code == "blocked" && notice.Data?.Reason?.Contains("429", StringComparison.Ordinal) == true);
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        Assert.Contains($"{products} URLs weren't checked because their sites kept asking the crawler to slow down (429 Too Many Requests), so links to them aren't judged. Check the site again later, or at the Polite speed.",
+            analysis.Notes);
+        Assert.DoesNotContain(analysis.Notes, note => note.Contains("stopped answering", StringComparison.Ordinal));
+        string[] failures = ["internal-blocked", "internal-client-error", "internal-server-error", "internal-unreachable", "broken-internal-links"];
+        Assert.DoesNotContain(IssueReader.ReadAll(path), row => failures.Contains(row.Issue) && (row.Url.Contains("/p/", StringComparison.Ordinal) ||
+            row.RelatedUrl?.Contains("/p/", StringComparison.Ordinal) == true));
     }
 
     [Fact]

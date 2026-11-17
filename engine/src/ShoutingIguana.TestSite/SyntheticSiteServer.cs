@@ -24,11 +24,13 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
     private const byte TLS_HANDSHAKE = 0x16;
 
     private readonly WebApplication _app;
+    private readonly SyntheticRateLimiter? _limiter;
 
     private SyntheticSiteServer(WebApplication app, SyntheticSite site, Uri baseUri, Uri externalBaseUri, X509Certificate2? certificate,
-        SyntheticRequestLog requests)
+        SyntheticRequestLog requests, SyntheticRateLimiter? limiter)
     {
         _app = app;
+        _limiter = limiter;
         Site = site;
         BaseUri = baseUri;
         ExternalBaseUri = externalBaseUri;
@@ -44,6 +46,9 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
     public Uri BaseUri { get; }
 
     public Uri ExternalBaseUri { get; }
+
+    /// <summary>The 429s the product pages' rate limit (<see cref="SyntheticSiteOptions.RateLimit"/>) has answered with.</summary>
+    public long RateLimited => _limiter?.Limited ?? 0;
 
     /// <summary>The self-signed certificate of an HTTPS site, for the crawler to trust. Null over plain HTTP.</summary>
     public X509Certificate2? Certificate { get; }
@@ -111,7 +116,8 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         SyntheticSite? syntheticSite = null;
         var boundExternalPort = 0;
         var requests = new SyntheticRequestLog();
-        app.Run(context => RespondAsync(context, syntheticSite!, boundExternalPort, requests));
+        var limiter = options.RateLimit is { } limit ? new SyntheticRateLimiter(limit, TimeProvider.System) : null;
+        app.Run(context => RespondAsync(context, syntheticSite!, boundExternalPort, requests, limiter));
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
         var sitePort = ((IPEndPoint)site!.EndPoint).Port;
@@ -119,7 +125,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         var baseUri = new Uri($"{(certificate is null ? "http" : "https")}://127.0.0.1:{sitePort}/");
         var externalBaseUri = new Uri($"http://127.0.0.1:{boundExternalPort}/");
         syntheticSite = new SyntheticSite(options, baseUri, externalBaseUri);
-        return new SyntheticSiteServer(app, syntheticSite, baseUri, externalBaseUri, certificate, requests);
+        return new SyntheticSiteServer(app, syntheticSite, baseUri, externalBaseUri, certificate, requests, limiter);
     }
 
     public async ValueTask DisposeAsync()
@@ -129,7 +135,8 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         Certificate?.Dispose();
     }
 
-    private static async Task RespondAsync(HttpContext context, SyntheticSite site, int externalPort, SyntheticRequestLog requests)
+    private static async Task RespondAsync(HttpContext context, SyntheticSite site, int externalPort, SyntheticRequestLog requests,
+        SyntheticRateLimiter? limiter)
     {
         var path = context.Request.Path.Value ?? "/";
         if (context.Connection.LocalPort == externalPort)
@@ -141,7 +148,11 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         requests.Started(context.Request);
         try
         {
-            await ServeAsync(context, site.Handle(path, external: false, plainHttp: !context.Request.IsHttps)).ConfigureAwait(false);
+            var response = limiter?.IsOverTheLimit(path) == true
+                ? new SyntheticResponse(429, "text/html; charset=utf-8", "<html><body>Too many requests</body></html>", null, null,
+                    new Dictionary<string, string> { ["Retry-After"] = limiter.RetryAfter })
+                : site.Handle(path, external: false, plainHttp: !context.Request.IsHttps);
+            await ServeAsync(context, response).ConfigureAwait(false);
         }
         finally
         {
