@@ -280,9 +280,9 @@ export function robotsBlockedOffer(args: {
           }
         : args.reason === 'unknown'
           ? {
-              title: 'Blocked with no rule kept',
-              which: 'every URL blocked whose rule the crawl didn’t keep',
-              file: `blocked by ${host} robots.txt no rule kept`,
+              title: 'Blocked with no matching rule',
+              which: 'every URL blocked that no rule in the copy of the file kept matches',
+              file: `blocked by ${host} robots.txt no matching rule`,
             }
           : args.reason === 'rule'
             ? {

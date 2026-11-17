@@ -176,6 +176,18 @@ export const File: Story = {
   render: () => <ScreenApp path={at(SITE)} />,
 };
 
+/** At 1440 px: the file beside the blocked URLs, every column of them in the pane, none cut off. */
+export const FileAt1440: Story = {
+  loaders: [() => own(EVERY_STATE)],
+  render: () => <ScreenApp path={at(SITE)} size={{ width: 1440, height: 900 }} />,
+};
+
+/** At the window's least (960 x 600, the shell's): the file over the blocked URLs, which keep every column. */
+export const FileAtMinimumWindow: Story = {
+  loaders: [() => own(EVERY_STATE)],
+  render: () => <ScreenApp path={at(SITE)} size={{ width: 960, height: 600 }} />,
+};
+
 /** A line chosen: it's marked in the file, and the list is the URLs it blocked. */
 export const FileLineChosen: Story = {
   loaders: [() => own(EVERY_STATE)],

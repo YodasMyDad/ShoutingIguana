@@ -322,13 +322,13 @@ export function redirectChainWords(chain: RedirectChain, siteOrigin: string | nu
   return `${hops.join(' ')}${end}`;
 }
 
-/** Why robots.txt refused a URL: "Disallow: /cart/ · line 12", "robots.txt couldn’t be read", "No rule kept". */
+/** Why robots.txt refused a URL: "Disallow: /cart/ · line 12", "robots.txt couldn’t be read", "No matching rule". */
 export function robotsRuleWords(rule: RobotsRule): string {
   if (rule.reason === 'unreachable') return 'robots.txt couldn’t be read';
   if (rule.reason === 'rule' && rule.rule) {
     return rule.line === null ? rule.rule : `${rule.rule}${FACT_GAP}line ${formatCount(rule.line)}`;
   }
-  return 'No rule kept';
+  return 'No matching rule';
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

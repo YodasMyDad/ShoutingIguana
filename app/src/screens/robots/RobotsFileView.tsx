@@ -66,8 +66,10 @@ import {
 } from './robotsFile';
 import {
   IGNORED,
+  UNKNOWN_ACTION,
   UNMATCHED_WORDS,
   blockedWhy,
+  conflictShortWords,
   conflictWords,
   conflictsWords,
   costsUnknownWords,
@@ -80,11 +82,13 @@ import {
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
-const WHY_WIDTH = 200;
+// Every column fits beside the URL in the pane, at 1440 px and at the window's least (stacked there): a few words in
+// each, the whole of it behind them on hover and for a screen reader.
+const WHY_WIDTH = 136;
 const LINKED_WIDTH = 104;
-const SITEMAP_WIDTH = 168;
-const CONFLICT_WIDTH = 232;
-const MIN_URL_WIDTH = 160;
+const SITEMAP_WIDTH = 112;
+const CONFLICT_WIDTH = 128;
+const MIN_URL_WIDTH = 140;
 /** The grid's edges and the card's around it, and the room its scrollbar takes. */
 const FRAME_SLACK = 36;
 
@@ -306,7 +310,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
       {/* The frame every grid screen shares: what's over the two panes keeps its height, and the panes take the rest,
           never less than their own least (the blocked URLs keep five rows): a window too short for that scrolls the
           screen. In a narrow panel the two stack, each at its own height, and the screen scrolls through them. */}
-      <GridScreen className="@max-split:h-auto">
+      <GridScreen className="@max-robots-split:h-auto">
         <div className="px-6 pt-2">{back}</div>
         <GridHeader
           titleRef={title}
@@ -360,13 +364,13 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             {IGNORED}
           </Banner>
         ) : null}
-        <GridScreenBody className="grid grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-split:flex-none @max-split:grid-cols-1">
+        <GridScreenBody className="grid grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-robots-split:flex-none @max-robots-split:grid-cols-1">
           <Card
             as="section"
             flush
             aria-label="The file"
             aria-busy={file.isFetching && !crawl.crawling}
-            className="flex min-h-(--robots-file-min-height) flex-col @max-split:h-(--robots-pane-height)"
+            className="flex min-h-(--robots-file-min-height) flex-col @max-robots-split:h-(--robots-pane-height)"
           >
             <FilePane
               file={file.data}
@@ -387,7 +391,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             flush
             aria-label="Blocked URLs"
             // At least as tall as the file beside or over it, and never less than its list's five rows need.
-            className="flex min-h-(--robots-file-min-height) flex-col @max-split:min-h-(--robots-pane-height)"
+            className="flex min-h-(--robots-file-min-height) flex-col @max-robots-split:min-h-(--robots-pane-height)"
           >
             <BlockedUrls
               crawlId={crawlId}
@@ -560,7 +564,10 @@ function BlockedUrls({
   }, [live, blockedNow, blockedInFile, onFileChanged]);
 
   // The URL and whether it conflicts lead, as they're what a site owner decides on; the rule is the file's to show.
-  const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 400) - CONFLICT_WIDTH - LINKED_WIDTH - FRAME_SLACK);
+  const urlWidth = Math.max(
+    MIN_URL_WIDTH,
+    (width ?? 400) - CONFLICT_WIDTH - LINKED_WIDTH - SITEMAP_WIDTH - WHY_WIDTH - FRAME_SLACK,
+  );
   const unknown = costsUnknownWords(live);
   const columns = useMemo<GridColumn<RobotsBlockedUrl>[]>(
     () => [
@@ -581,9 +588,15 @@ function BlockedUrls({
           const words = conflictWords(row);
           if (words !== null) {
             return (
-              <SeverityBadge severity="warning" variant="inline">
-                {words}
-              </SeverityBadge>
+              // A few words to see; the sentence to hover and to hear.
+              <span title={words} className="block truncate">
+                <span aria-hidden="true">
+                  <SeverityBadge severity="warning" variant="inline">
+                    {conflictShortWords(row) ?? words}
+                  </SeverityBadge>
+                </span>
+                <span className="sr-only">{words}</span>
+              </span>
             );
           }
           return row.conflict === false ? null : <NotCounted why={unknown} />;
@@ -621,14 +634,22 @@ function BlockedUrls({
         cell: (row) => {
           const words = inSitemapWords(row);
           if (words === null) return <NotCounted why={unknown} />;
-          if (!row.sitemap) return <span title={words.title}>{words.short}</span>;
+          if (!row.sitemap) {
+            return (
+              <span title={words.title} className="block truncate">
+                {words.short}
+              </span>
+            );
+          }
           return (
+            // The sitemap's name cut short where it's long, its whole address on hover.
             <TextLink
               to="/crawls/$crawl/sitemaps/{-$sitemap}"
               params={{ crawl: crawlId, sitemap: String(row.sitemap.id) }}
               search={{}}
               tabIndex={-1}
               title={words.title}
+              className="block truncate"
             >
               {words.short}
             </TextLink>
@@ -642,7 +663,11 @@ function BlockedUrls({
         width: WHY_WIDTH,
         cell: (row) => {
           const why = blockedWhy(row);
-          return <span title={withRecorded(why.sentence, why.recorded)}>{why.short}</span>;
+          return (
+            <span title={withRecorded(why.sentence, why.recorded)} className="block truncate">
+              {why.cell}
+            </span>
+          );
         },
         text: (row) => blockedWhy(row).short,
       },
@@ -754,7 +779,7 @@ function BlockedUrls({
           ) : null}
           {(['unreachable', 'unknown'] as const).map((reason) =>
             unmatched && unmatched[reason] > 0 ? (
-              <li key={reason} className="flex min-h-(--target-min) items-center">
+              <li key={reason} className="flex min-h-(--target-min) flex-wrap items-center gap-x-1.5">
                 <TextLink
                   to={ROUTE}
                   params={{ crawl: crawlId, origin }}
@@ -765,6 +790,7 @@ function BlockedUrls({
                 >
                   {UNMATCHED_WORDS[reason](unmatched[reason])}
                 </TextLink>
+                {reason === 'unknown' ? <span className="text-text-muted">{UNKNOWN_ACTION}</span> : null}
               </li>
             ) : null,
           )}

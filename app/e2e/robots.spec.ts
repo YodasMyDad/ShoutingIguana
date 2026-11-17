@@ -164,9 +164,13 @@ test('the file shows the line that blocked a planted URL, and choosing the line 
   await expect(link).toHaveText(`Blocked ${rule.blocked} URLs`);
   await expect(file(page).locator('.cm-si-line-strong').first()).toBeVisible();
 
-  // Every blocked URL names the line that decided it.
+  // Every blocked URL names the line that decided it, the rule's text behind it (and in the file beside the list).
   await expect(shown(page)).toHaveText(String(own.blocked));
-  await expect(blocked(page).getByRole('row').nth(1)).toContainText(`Line ${rule.number}: ${rule.text}`);
+  await expect(blocked(page).getByRole('row').nth(1)).toContainText(`Line ${rule.number}`);
+  await expect(blocked(page).getByRole('row').nth(1).getByText(`Line ${rule.number}`, { exact: true })).toHaveAttribute(
+    'title',
+    `Line ${rule.number} refused it: ${rule.text}`,
+  );
   await expect(blocked(page).getByRole('row').nth(1)).toContainText('/private/');
 
   // Choosing the line lists its URLs, marks it, and keeps it in the route.
@@ -246,6 +250,32 @@ test('each blocked URL says what blocking it costs, and the ones the site asks f
   await expect(page).toHaveURL(/\/links\?filter=/);
   await expect(main(page).getByRole('grid', { name: 'Links' }).getByRole('row').nth(1)).toContainText(path);
 });
+
+// The window at 1440 px, at 1280, and at the shell's least (window.rs: min_inner_size 960 x 600): every column of the blocked
+// URLs is in its pane, the last one whole, with nothing to scroll sideways to.
+for (const [width, height] of [
+  [1440, 900],
+  [1280, 800],
+  [960, 600],
+] as const) {
+  test(`the blocked URLs’ columns all fit in their pane at ${width} px, the last one whole`, async ({ page }) => {
+    const { at, own } = await planted();
+    await page.setViewportSize({ width, height });
+    await page.goto(at);
+    await expect(shown(page)).toHaveText(String(own.blocked));
+    const grid = blocked(page);
+    const headers = grid.getByRole('columnheader');
+    await expect(headers).toHaveText(['Blocked URL', 'Conflict', 'Linked from', 'In a sitemap', 'Blocked by']);
+    const pane = await grid.boundingBox();
+    const last = await headers.last().boundingBox();
+    if (!pane || !last) throw new Error('The blocked URLs and their last column are drawn');
+    expect(last.x + last.width).toBeLessThanOrEqual(pane.x + pane.width + 0.5);
+    expect(await grid.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
+    // The URL keeps room to be read.
+    const url = await headers.first().boundingBox();
+    expect(url?.width ?? 0).toBeGreaterThanOrEqual(140);
+  });
+}
 
 test('choosing a URL shows its line, and Enter opens the inspector, which leads back to this file', async ({
   page,
@@ -347,7 +377,8 @@ test('the blocked URLs stay where they are whether the note over them wraps or n
     return { lines, top };
   };
   const wide = await measured(1920);
-  const narrow = await measured(1280);
+  // A 1280 px window at 200% zoom: the file over the list, which is narrow enough for the note to wrap.
+  const narrow = await measured(640);
   // The note is on one line in the wide window and two in the narrow one, and the list hasn't moved for it.
   expect(wide.lines).toBe(1);
   expect(narrow.lines).toBe(2);
