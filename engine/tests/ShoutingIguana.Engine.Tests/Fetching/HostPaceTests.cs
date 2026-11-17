@@ -188,6 +188,24 @@ public sealed class HostPaceTests
         Assert.Null(pace.SlowedTo);
     }
 
+    /// <summary>The end of the crawl's last tries go at the pace the host taught, not one probing upward to trip it again.</summary>
+    [Fact]
+    public void HeldRecoveryKeepsThePaceItSlowedTo()
+    {
+        var pace = AtFullSpeed(maxConcurrency: 4, maxRate: 20);
+        var tripped = StartEvery(pace, TimeSpan.FromMilliseconds(100), 32, T0);
+        pace.Answered(HostSignal.Throttled, TimeSpan.FromSeconds(1), tripped, tripped);
+
+        pace.IsRecoveryHeld = true;
+        pace.Answered(HostSignal.Success, null, tripped, tripped + TimeSpan.FromMinutes(5));
+        Assert.Equal(5, pace.Rate!.Value, precision: 6);
+        Assert.Equal(1, pace.Window);
+
+        pace.IsRecoveryHeld = false;
+        pace.Answered(HostSignal.Success, null, tripped, tripped + TimeSpan.FromMinutes(5));
+        Assert.Equal(6, pace.Rate!.Value, precision: 6);
+    }
+
     [Fact]
     public void RepeatedTripsHalveItAgainDownToOneRequestEveryTenSeconds()
     {

@@ -65,6 +65,15 @@ internal sealed class HostGate
         }
     }
 
+    /// <summary>Holds the pace's recovery, or lets it go on (<see cref="HostPace.IsRecoveryHeld"/>).</summary>
+    public void HoldRecovery(bool held)
+    {
+        lock (_sync)
+        {
+            _pace.IsRecoveryHeld = held;
+        }
+    }
+
     /// <summary>What holds this host's requests up now, beyond the crawl's settings, for its progress to say.</summary>
     public HostGateState ReadState()
     {

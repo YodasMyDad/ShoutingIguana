@@ -23,6 +23,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 {
     private const int PAGES = 600;
     private const int VARIANT_PAGES = 250;
+    private const int RATE_LIMITED_PAGES = 60;
 
     /// <summary>A URL the site led to, as opposed to the crawler's probe of another version of the site.</summary>
     private static readonly string NOT_A_PROBE = $"source <> {(int)DiscoverySource.SiteVersion}";
@@ -80,15 +81,16 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     /// <summary>
     /// A shop whose product pages are behind a rate limit that further requests renew, as a real one was: the crawl trips
     /// it, slows to the pace it learns, asks again at its end for what it was refused, and finds every planted issue and
-    /// nothing else, with no URL left unchecked.
+    /// nothing else, with no URL left unchecked. Five product pages a second with a two-second penalty is strict enough
+    /// that the engine before the learned pace lost pages to it (the bursts after each pause renewed the penalty).
     /// </summary>
     [Fact]
     public async Task ARateLimitedSiteIsCrawledWholeAtThePaceItTeaches()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
         {
-            PageCount = VARIANT_PAGES,
-            RateLimit = new SyntheticRateLimit(MaxRequests: 40, Window: TimeSpan.FromSeconds(1), Penalty: TimeSpan.FromSeconds(1))
+            PageCount = RATE_LIMITED_PAGES,
+            RateLimit = new SyntheticRateLimit(MaxRequests: 5, Window: TimeSpan.FromSeconds(1), Penalty: TimeSpan.FromSeconds(2))
         });
 
         var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));

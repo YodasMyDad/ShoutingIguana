@@ -520,6 +520,7 @@ internal sealed class CrawlSession
                 // retried URL leaves the held-back ones before it is recorded), whatever is left, such as those URLs.
                 if (_phase == CrawlPhase.ReadingSitemaps || (_phase == CrawlPhase.Retrying && !retrying && _retried.IsEmpty))
                 {
+                    _gates.HoldRecovery(false);
                     _phase = CrawlPhase.Crawling;
                 }
             }
@@ -551,8 +552,10 @@ internal sealed class CrawlSession
                         return true;
                     }
 
-                    // The held-back URLs' one more try, after robots.txt's cool-down if it's due, until the last is over.
+                    // The held-back URLs' one more try, after robots.txt's cool-down if it's due, until the last is over, at
+                    // the pace each host has taught.
                     _phase = CrawlPhase.Retrying;
+                    _gates.HoldRecovery(true);
                     if (!IsRobotsTxtCoolingDown())
                     {
                         _logger.LogInformation("Retrying {Count} URLs that got no response", deferred);

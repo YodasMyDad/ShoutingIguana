@@ -136,7 +136,8 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      crawl stops, to be resumed.
    - The site's URLs that got no response, or were asked to slow down (429, 503), are tried once more when nothing
      else can be claimed (at most 10,000 are held back for it), handed to the workers as they have room, at the pace
-     the host has taught and after any pause it asked for. A 429 or 503 isn't retried on the spot: that would renew a
+     the host has taught (which doesn't recover during those last tries, so it never probes upward into the limit
+     again) and after any pause it asked for. A 429 or 503 isn't retried on the spot: that would renew a
      rate limit's penalty. That comes before the URLs only sitemaps list. URLs refused because robots.txt couldn't be
      read wait for its two-minute cool-down first, as do the sitemaps it declares. Sitemaps aren't read while the
      crawl is paused.

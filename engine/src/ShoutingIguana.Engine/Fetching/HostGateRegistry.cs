@@ -49,6 +49,18 @@ internal sealed class HostGateRegistry(CrawlScope scope, Func<bool, HostGate> cr
     public IEnumerable<(string Host, HostGateState State)> ReadSiteStates() =>
         _siteGates.Select(site => (scope.HostName(site.Key), site.Value.ReadState()));
 
+    /// <summary>
+    /// The site's gates keep the pace they have learned, without recovering, while the URLs held back for the end of the
+    /// crawl get their last try; then they recover again.
+    /// </summary>
+    public void HoldRecovery(bool held)
+    {
+        foreach (var gate in _siteGates.Values)
+        {
+            gate.HoldRecovery(held);
+        }
+    }
+
     /// <summary>Whether the URL's exact origin (scheme, host and port) answers.</summary>
     public OriginReachability OriginOf(Uri uri) =>
         _origins.GetOrAdd($"{uri.Scheme}://{UrlNormalizer.GetHost(uri)}:{uri.Port}", static _ => new OriginReachability());

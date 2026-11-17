@@ -89,6 +89,13 @@ internal sealed class HostPace
     /// <summary>Requests allowed at once now.</summary>
     public int Window { get; private set; } = 1;
 
+    /// <summary>
+    /// The pace doesn't recover while this is set: the URLs held back for the end of the crawl are asked again at the pace
+    /// the host has taught, not one that probes upward and trips its limit again, which would cost them their last try.
+    /// The slow start still runs.
+    /// </summary>
+    public bool IsRecoveryHeld { get; set; }
+
     /// <summary>Requests a second allowed now, or null for no limit.</summary>
     public double? Rate => _rate;
 
@@ -219,7 +226,7 @@ internal sealed class HostPace
             return;
         }
 
-        if (now - _lastStep < RECOVERY_STEP)
+        if (IsRecoveryHeld || now - _lastStep < RECOVERY_STEP)
         {
             return;
         }
