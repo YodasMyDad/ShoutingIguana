@@ -100,8 +100,28 @@ internal static class GridEndpoints
             TypedResults.Json(await data.RowsAsync(id, checkId, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GridQueryRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlPageDto));
 
+        api.MapPost("/api/crawls/{id}/issues/{checkId}/fixed", async (string id, string checkId, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.FixedAsync(id, checkId, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.FixedRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.FixedPageDto));
+
+        // The fix loop: the comparison with the crawl's previous crawl, or the one `with` names.
+        api.MapGet("/api/crawls/{id}/changes", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            await data.ChangesAsync(id, With(request.Query), cancellationToken).ConfigureAwait(false) switch
+            {
+                ChangesDto changes => Results.Json(changes, SidecarJsonContext.Default.ChangesDto),
+                var none => Results.Json((NoComparisonDto)none, SidecarJsonContext.Default.NoComparisonDto)
+            });
+
         api.MapPost("/api/crawls/{id}/issues/{checkId}/targets", async (string id, string checkId, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.TargetsAsync(id, checkId, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.FoundOnRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.IssueTargetsDto));
     }
+
+    /// <summary>The crawl <c>/changes</c> compares with: <c>previous</c> when left out, or once given, a crawl's id.</summary>
+    private static string? With(IQueryCollection query) => query["with"] switch
+    {
+        { Count: 0 } => null,
+        { Count: 1 } with when !string.IsNullOrEmpty(with[0]) => with[0],
+        _ => throw Errors.Problems.BadRequest("with must be previous, or one crawl's id.")
+    };
 }

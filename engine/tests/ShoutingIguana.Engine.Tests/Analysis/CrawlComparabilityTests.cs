@@ -16,6 +16,40 @@ public sealed class CrawlComparabilityTests
     private static readonly DateTimeOffset STAMP = new(2026, 11, 17, 9, 0, 0, TimeSpan.Zero);
     private static readonly CrawlOptions OPTIONS = new() { StartUrl = "https://www.example.com/" };
 
+    /// <summary>
+    /// The options fingerprint a list of crawls keeps: the same for options that differ only in what is noted (the client,
+    /// the timeouts) or never differs (speed, stored HTML), and another for any option that makes a comparison partial.
+    /// </summary>
+    [Fact]
+    public void TheOptionsFingerprintChangesWithWhatMakesAComparisonPartialOnly()
+    {
+        var fingerprint = CrawlComparability.OptionsFingerprint(OPTIONS);
+        Assert.Equal(fingerprint, CrawlComparability.OptionsFingerprint(OPTIONS with { }));
+        Assert.Equal(fingerprint, CrawlComparability.OptionsFingerprint(OPTIONS with
+        {
+            Concurrency = 32, StoreHtml = true, UserAgent = UserAgentPreset.Custom, CustomUserAgent = "Other/1.0", RequestTimeoutSeconds = 99, MaxRetries = 0,
+            ExtraHeaders = new Dictionary<string, string> { ["X-Test"] = "1" }
+        }));
+
+        // The start URL isn't in it: a summary has its own.
+        Assert.Equal(fingerprint, CrawlComparability.OptionsFingerprint(OPTIONS with { StartUrl = "https://www.example.com/blog/" }));
+        CrawlOptions[] partial =
+        [
+            OPTIONS with { StayInStartFolder = !OPTIONS.StayInStartFolder }, OPTIONS with { IncludeSubdomains = !OPTIONS.IncludeSubdomains },
+            OPTIONS with { FollowNofollow = !OPTIONS.FollowNofollow }, OPTIONS with { CrawlCanonicals = !OPTIONS.CrawlCanonicals },
+            OPTIONS with { CrawlHreflang = !OPTIONS.CrawlHreflang }, OPTIONS with { CrawlPagination = !OPTIONS.CrawlPagination },
+            OPTIONS with { MaxUrls = 5_000 }, OPTIONS with { MaxDepth = 3 }, OPTIONS with { CheckResources = !OPTIONS.CheckResources },
+            OPTIONS with { CheckExternalLinks = !OPTIONS.CheckExternalLinks }, OPTIONS with { DiscoverSitemaps = !OPTIONS.DiscoverSitemaps },
+            OPTIONS with { ExtraSitemaps = ["https://www.example.com/more.xml"] }, OPTIONS with { RespectRobotsTxt = !OPTIONS.RespectRobotsTxt }
+        ];
+        Assert.All(partial, options =>
+        {
+            Assert.Equal(Comparability.Partial, CrawlComparability.Judge(Crawl(), Crawl(options)).Comparable);
+            Assert.NotEqual(fingerprint, CrawlComparability.OptionsFingerprint(options));
+        });
+        Assert.Equal(partial.Length, partial.Select(CrawlComparability.OptionsFingerprint).Distinct().Count());
+    }
+
     [Fact]
     public void TwoCrawlsAlikeAreComparedFully()
     {

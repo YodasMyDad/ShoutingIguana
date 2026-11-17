@@ -31,6 +31,10 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// <param name="PlainLooksFor">What the check looks for, as a short noun phrase ("A missing sitemap"). Optional, as <paramref name="PlainOneFix"/> is.</param>
 /// <param name="Evidence">The URL columns that show what the check found on each row, in order (evidence).</param>
 /// <param name="TargetFacts">The fields of a target, and of a group's related URL, to say about each URL the check names, in order (evidence).</param>
+/// <param name="Recheck">
+/// What a recheck of the check reads again (the fix loop): <c>urls</c>, <c>sitemaps</c>, <c>robotsTxt</c>,
+/// <c>siteVersions</c>. Empty for a check only a full crawl can settle (<c>orphan-page</c>, <c>no-https</c>).
+/// </param>
 internal sealed record CheckDto(
     string Id,
     IssueCategory Category,
@@ -53,7 +57,8 @@ internal sealed record CheckDto(
     string? PlainOneFix,
     string? PlainLooksFor,
     IReadOnlyList<string> Evidence,
-    IReadOnlyList<string> TargetFacts)
+    IReadOnlyList<string> TargetFacts,
+    IReadOnlyList<RecheckKind> Recheck)
 {
     /// <param name="settings">The thresholds the plain words' limits are filled from.</param>
     public static CheckDto From(IssueDefinition check, AnalysisSettings settings)
@@ -61,6 +66,6 @@ internal sealed record CheckDto(
         var plain = PlainLimits.Fill(check.Plain, settings);
         return new CheckDto(check.Id, check.Category, check.Severity, check.Title, check.Description, check.Fix, check.Why, check.LearnMore,
             GridRequests.Grouping(check.Grouping), check.Subject, check.References, check.SiteWide, check.ReportedOnce,
-            plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts);
+            plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts, check.Recheck);
     }
 }

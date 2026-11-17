@@ -44,6 +44,9 @@ internal sealed class LiveCrawl(string id, string path, string startUrl)
 
     public CancellationTokenSource? Analysis { get; set; }
 
+    /// <summary>The recheck this process runs on the crawl (the fix loop), from its analysis first to the analysis after it; null otherwise.</summary>
+    public LiveRecheck? Recheck { get; init; }
+
     /// <summary>Everything this process does with the crawl, from opening its file to the end of its analysis.</summary>
     public Task Lifetime { get; set; } = Task.CompletedTask;
 

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Export.Models;
@@ -64,6 +66,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         }
 
         RefuseSitemap(request);
+        RefuseCompareWith(request);
 
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
@@ -96,6 +99,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         }
 
         RefuseSitemap(request);
+        RefuseCompareWith(request);
         RefuseLinkEnds(request?.LinkEnds);
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
@@ -299,7 +303,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
     {
         var path = crawls.PathOf(id);
         var sort = GridRequests.GroupSort(request?.Sort);
-        var page = await ReadAsync(token => IssueGroupReader.ReadGroups(path, checkId, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, sort, cache, token),
+        var (offset, limit) = (request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT);
+        var other = request?.CompareWith is { } with ? crawls.ComparedWith(id, with).Other : null;
+        var page = await ReadAsync(token => other is null
+                           ? IssueGroupReader.ReadGroups(path, checkId, offset, limit, sort, cache, token)
+                           : IssueGroupReader.ReadGroups(path, checkId, offset, limit, sort, other.Item.Path, cache, token),
                        cancellationToken).ConfigureAwait(false)
                    ?? throw Problems.NotAnalyzed();
         if (page.Total is null && IssueCatalog.Find(checkId) is null)
@@ -310,7 +318,10 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         return new IssueGroupPageDto(page.CheckId, GridRequests.Grouping(page.Grouping), page.Total, page.GroupCount, page.Offset, page.Groups)
         {
             Sort = page.Sort == IssueGroupSort.Size ? "size" : "pages",
-            LikelyTemplate = page.LikelyTemplate
+            LikelyTemplate = page.LikelyTemplate,
+            Compared = other is not null && page.Compared is { } compared
+                ? new GroupsComparedDto(other.Item.Id, other.Item.StartedAt, compared.Comparable, compared.FixedGroups)
+                : null
         };
     }
 
@@ -320,17 +331,146 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var group = request?.Group is { } key ? new IssueGroupKey(key.Detail, key.RelatedUrlId) : null;
-        var rows = await ReadAsync(token => IssueGroupReader.ReadRows(path, checkId, query, group, cache, token), cancellationToken).ConfigureAwait(false)
+        var other = request?.CompareWith is { } with ? crawls.ComparedWith(id, with).Other : null;
+        var rows = await ReadAsync(token => other is null
+                           ? IssueGroupReader.ReadRows(path, checkId, query, group, cache, token)
+                           : IssueGroupReader.ReadRows(path, checkId, query, group, other.Item.Path, cache, token), cancellationToken).ConfigureAwait(false)
                    ?? throw Problems.NotAnalyzed();
         if (rows.Page is { } page)
         {
-            return Page(page);
+            return other is not null && rows.Compared is { } compared
+                ? new UrlPageDto(page.Columns, new UrlRowsDto(page.Columns, page.Rows, rows.Changes), page.Offset, page.Matching, page.Total, page.Next, page.Summary,
+                    page.Unavailable) { Compared = new ComparedDto(other.Item.Id, other.Item.StartedAt, compared.Comparable) }
+                : Page(page);
         }
 
         // Skipped: no rows and no counts, never 0.
         return IssueCatalog.Find(checkId) is null
             ? throw Problems.CheckNotFound(checkId)
             : new UrlPageDto(["id"], new UrlRowsDto(["id"], []), query.Offset, null, null, null, rows.Summary, []);
+    }
+
+    /// <summary>
+    /// The comparison with the crawl's previous crawl, or the one <paramref name="with"/> names (the fix loop), read in one of
+    /// the read slots and kept with the grids' counts under both files' stamps. A crawl with no previous one has nothing
+    /// to compare: <see cref="NoComparisonDto"/>.
+    /// </summary>
+    public async Task<object> ChangesAsync(string id, string? with, CancellationToken cancellationToken)
+    {
+        var pair = crawls.ComparedWith(id, with);
+        if (pair.Other is not { } other)
+        {
+            return new NoComparisonDto(id, null);
+        }
+
+        var path = pair.Current.Item.Path;
+        var comparison = await ReadAsync(token => CrawlComparisonReader.ReadSummary(path, other.Item.Path, cache, token), cancellationToken).ConfigureAwait(false)
+                         ?? throw Problems.CrawlNotComparable("That crawl's analysis has gone: analyse it again to compare with it.");
+        var item = other.Item;
+        var counts = comparison.Totals.Checks;
+        return new ChangesDto(
+            id,
+            new ComparedCrawlDto(item.Id, item.StartedAt, item.FinishedAt, item.Status, item.StartUrl, item.AnalyzedAt, item.PagesAnalyzed, item.CrawledUrlCount,
+                pair.Picked ? "picked" : CrawlManager.PREVIOUS),
+            comparison.Comparable,
+            [.. comparison.Differences.Select(Difference)],
+            comparison.PreviousNeedsAnalysis,
+            comparison.Score,
+            new ComparisonTotalsDto(
+                new CheckStateCountsDto(counts[CheckChangeState.Fixed], counts[CheckChangeState.New], counts[CheckChangeState.Fewer], counts[CheckChangeState.More],
+                    counts[CheckChangeState.Same], counts[CheckChangeState.NewCheck], counts[CheckChangeState.NotCheckedNow]),
+                comparison.Totals.Issues),
+            [.. comparison.Checks.Select(CheckChangeDto.From)]);
+    }
+
+    /// <summary>
+    /// A page of what a check flagged in the other crawl and doesn't flag now, by URL or by cause (the fix loop). A crawl with
+    /// no previous crawl has none: no comparison, no total, no rows.
+    /// </summary>
+    public async Task<FixedPageDto> FixedAsync(string id, string checkId, FixedRequest? request, CancellationToken cancellationToken)
+    {
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        var level = request?.Level switch
+        {
+            null or "rows" => ClearedLevel.Rows,
+            "groups" => ClearedLevel.Groups,
+            _ => (ClearedLevel?)null
+        };
+        if (level is null)
+        {
+            errors["level"] = ["Give the level: rows (each URL) or groups (each cause with no URL now)."];
+        }
+
+        List<RowChangeState> states = [];
+        foreach (var (state, index) in (request?.States ?? []).Select((state, index) => (state, index)))
+        {
+            switch (state)
+            {
+                case "fixed":
+                    states.Add(RowChangeState.Fixed);
+                    break;
+                case "gone":
+                    states.Add(RowChangeState.Gone);
+                    break;
+                case "notChecked":
+                    states.Add(RowChangeState.NotChecked);
+                    break;
+                default:
+                    errors[$"states[{index}]"] = [$"There's no state called '{state}': there are fixed, gone and notChecked."];
+                    break;
+            }
+        }
+
+        GridRequests.ThrowIfAny(errors);
+        var levelName = level == ClearedLevel.Groups ? "groups" : "rows";
+        var offset = request?.Offset ?? 0;
+        var pair = crawls.ComparedWith(id, request?.CompareWith);
+        if (pair.Other is not { } other)
+        {
+            return IssueCatalog.Find(checkId) is null
+                ? throw Problems.CheckNotFound(checkId)
+                : new FixedPageDto(checkId, null, levelName, null, offset) { Rows = level == ClearedLevel.Rows ? [] : null, Groups = level == ClearedLevel.Groups ? [] : null };
+        }
+
+        var query = new ClearedQuery(level!.Value, states, request?.Group is { } group ? new ClearedGroupKey(group.Detail, group.RelatedUrl) : null, offset,
+            request?.Limit ?? UrlGridReader.DEFAULT_LIMIT);
+        var path = pair.Current.Item.Path;
+        var page = await ReadAsync(token => CrawlComparisonReader.ReadCleared(path, other.Item.Path, checkId, query, cache, token), cancellationToken).ConfigureAwait(false)
+                   ?? throw Problems.CrawlNotComparable("That crawl's analysis has gone: analyse it again to compare with it.");
+        if (page.Total is null && IssueCatalog.Find(checkId) is null)
+        {
+            throw Problems.CheckNotFound(checkId);
+        }
+
+        return new FixedPageDto(checkId, new ComparedDto(other.Item.Id, other.Item.StartedAt, page.Comparable), levelName, page.Total, page.Offset)
+        {
+            Rows = page.Level == ClearedLevel.Rows ? page.Rows : null,
+            Groups = page.Level == ClearedLevel.Groups ? page.Groups : null
+        };
+    }
+
+    /// <summary>A difference as the API writes it: a field, a side and the values only where it has them.</summary>
+    private static JsonObject Difference(ComparisonDifference difference)
+    {
+        JsonObject written = new() { ["code"] = JsonNamingPolicy.CamelCase.ConvertName(difference.Code.ToString()) };
+        if (difference.Field is { } field)
+        {
+            written["field"] = field;
+        }
+
+        if (difference.Side is { } side)
+        {
+            written["side"] = JsonNamingPolicy.CamelCase.ConvertName(side.ToString());
+        }
+
+        // An option's values are always given, none (no limit) as null; other differences give theirs where they have them.
+        if (difference.Field is not null && difference.Code != ComparisonDifferenceCode.Rules || difference.Then is not null || difference.Now is not null)
+        {
+            written["then"] = difference.Then?.DeepClone();
+            written["now"] = difference.Now?.DeepClone();
+        }
+
+        return written;
     }
 
     /// <summary>The sitemaps the crawl looked for, as the engine lists them.</summary>
@@ -348,6 +488,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
             throw Problems.BadRequest("Only a check's rows take a group: filter by the check, with its group, instead.");
         }
 
+        RefuseCompareWith(request);
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var sitemap = request.SitemapId switch
@@ -411,9 +552,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
     /// The report's document (E5), read as a grid is: in one of the read slots, and stopped when its request is given up.
     /// A crawl never analysed has none (<c>not-analyzed</c>).
     /// </summary>
-    public async Task<string> ReportAsync(string id, ReportOptions report, CancellationToken cancellationToken)
+    /// <param name="compareWith">The fix loop: <c>previous</c> (null), <c>none</c> or a crawl's id, which the report says it couldn't be compared with when it can't.</param>
+    public async Task<string> ReportAsync(string id, ReportOptions report, string? compareWith, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
+        report = crawls.WithComparison(id, report, compareWith);
         return await ReadAsync(token =>
         {
             try
@@ -438,6 +581,15 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         if (ends is not null)
         {
             throw Problems.BadRequest("Only the URL grids take linkEnds: the links grid takes the link filters themselves.");
+        }
+    }
+
+    /// <summary>Only a check's rows are compared with another crawl.</summary>
+    private static void RefuseCompareWith(GridQueryRequest? request)
+    {
+        if (request?.CompareWith is not null)
+        {
+            throw Problems.BadRequest("Only a check's rows and groups take compareWith.");
         }
     }
 

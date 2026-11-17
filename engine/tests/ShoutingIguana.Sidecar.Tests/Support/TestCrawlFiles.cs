@@ -73,6 +73,26 @@ internal static class TestCrawlFiles
         UPDATE crawl SET updated_at = updated_at + 1000;
         """);
 
+    /// <summary>The crawl started later (or earlier) by <paramref name="by"/>; its analysis still stands, as the crawl's stamp doesn't move.</summary>
+    public static void ShiftStartedAt(string path, TimeSpan by) =>
+        Assert.Equal(1, Execute(path, $"UPDATE crawl SET started_at = started_at + {(long)by.TotalMilliseconds}"));
+
+    /// <summary>The crawl as one started at another URL: its row and its stored options, as a crawl from there has them.</summary>
+    public static void SetStartUrl(string path, string startUrl) => Assert.Equal(1, Execute(path, $"""
+        UPDATE crawl SET start_url = '{startUrl}', options_json = json_set(options_json, '$.startUrl', '{startUrl}')
+        """));
+
+    /// <summary>The crawl as one run with a URL limit: its stored options say so.</summary>
+    public static void SetMaxUrls(string path, int maxUrls) =>
+        Assert.Equal(1, Execute(path, $"UPDATE crawl SET options_json = json_set(options_json, '$.maxUrls', {maxUrls})"));
+
+    /// <summary>The crawl as one that sent a header: its stored options keep the name, never the value.</summary>
+    public static void SetHeaderNames(string path, string name) =>
+        Assert.Equal(1, Execute(path, $"UPDATE crawl SET options_json = json_set(options_json, '$.extraHeaders', json('{{\"{name}\":\"\"}}'))"));
+
+    /// <summary>What a crawl never analysed has: no analysis.</summary>
+    public static void DropAnalysis(string path) => Execute(path, "DROP TABLE analysis");
+
     private static int Execute(string path, string sql)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());

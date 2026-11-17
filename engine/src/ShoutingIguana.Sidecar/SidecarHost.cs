@@ -197,6 +197,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         AnalysisEndpoints.Map(app);
         GridEndpoints.Map(app);
         ExportEndpoints.Map(app);
+        RecheckEndpoints.Map(app);
         endpoint = bound!;
         return app;
     }

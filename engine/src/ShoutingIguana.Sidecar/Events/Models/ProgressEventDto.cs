@@ -38,7 +38,7 @@ internal sealed record ProgressEventDto(
     long BytesDownloaded,
     double UrlsPerSecond,
     DateTime At,
-    CrawlPhase Phase,
+    ProgressPhase Phase,
     long InternalFound,
     long InternalFetched,
     int? MaxUrls,
@@ -51,7 +51,8 @@ internal sealed record ProgressEventDto(
     SiteVersionsDto SiteVersions,
     long? CrawlingMs)
 {
-    public static ProgressEventDto From(string crawlId, CrawlListStatus status, CrawlProgress progress, DateTime at) => new(
+    /// <param name="phase">The phase to say in place of the engine's: a recheck's run is rechecking.</param>
+    public static ProgressEventDto From(string crawlId, CrawlListStatus status, CrawlProgress progress, DateTime at, ProgressPhase? phase = null) => new(
         crawlId,
         status,
         (long)progress.Elapsed.TotalMilliseconds,
@@ -68,7 +69,7 @@ internal sealed record ProgressEventDto(
         progress.BytesDownloaded,
         Math.Round(progress.PagesPerSecond, 2),
         at,
-        progress.Phase,
+        phase ?? Enum.Parse<ProgressPhase>(progress.Phase.ToString()),
         progress.InternalFound,
         progress.InternalFetched,
         progress.MaxUrls,

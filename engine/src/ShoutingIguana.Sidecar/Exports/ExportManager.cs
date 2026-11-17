@@ -62,6 +62,11 @@ internal sealed class ExportManager(CrawlManager crawls, ReadCache cache, EventH
     {
         var crawlPath = crawls.PathOf(crawlId);
         var request = ExportRequests.Request(body);
+        if (request.Kind is ExportKind.Report or ExportKind.Workbook)
+        {
+            request = request with { Report = crawls.WithComparison(crawlId, request.Report, body.CompareWith) };
+        }
+
         string path;
         try
         {

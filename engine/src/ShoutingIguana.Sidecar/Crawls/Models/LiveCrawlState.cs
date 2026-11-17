@@ -8,5 +8,8 @@ internal enum LiveCrawlState
     Running,
     Paused,
     Stopping,
+
+    /// <summary>A recheck is fetching some of its URLs again (the fix loop).</summary>
+    Rechecking,
     Analyzing
 }

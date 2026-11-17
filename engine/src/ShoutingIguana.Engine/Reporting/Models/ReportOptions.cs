@@ -34,6 +34,20 @@ public sealed record ReportOptions
     /// <summary>The most checks either list takes: more than the catalog has, few enough to keep a request small.</summary>
     public const int MAX_CHECKS = 500;
 
+    /// <summary>
+    /// The fix loop: the file of another crawl of the site to compare with. The report gains "Since your last check" after
+    /// its summary (a line of it in the summary cut) and says what it was compared with under About this check; the
+    /// workbook's summary gains each check's count then and its change, and a sheet of what was fixed. Null compares with
+    /// nothing.
+    /// </summary>
+    public string? CompareWith { get; init; }
+
+    /// <summary>
+    /// Why a comparison that was asked for can't be made (the other crawl is of another site, say), said under About this
+    /// check in place of one: the report is never refused for it. Null when there is nothing to say.
+    /// </summary>
+    public string? NotCompared { get; init; }
+
     /// <summary>Whether a check is in the lists: not hidden, and among the view's checks where there are some.</summary>
     public bool Lists(string checkId) =>
         !HiddenChecks.Contains(checkId, StringComparer.Ordinal) && (Checks is null || Checks.Contains(checkId, StringComparer.Ordinal));

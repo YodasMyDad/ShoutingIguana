@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Sidecar.Api.Models;
@@ -12,4 +13,8 @@ internal sealed record IssueGroupPageDto(string CheckId, string Grouping, long? 
 
     /// <summary>For a check that doesn't group, that it flagged nearly every page audited: probably the site's template (evidence).</summary>
     public bool LikelyTemplate { get; init; }
+
+    /// <summary>With <c>compareWith</c> (the fix loop): what the groups were compared with, each group then having its <c>change</c>. Left out without one.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GroupsComparedDto? Compared { get; init; }
 }
