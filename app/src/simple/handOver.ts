@@ -14,6 +14,7 @@ import { openExportDialog } from '../export/exportFlow';
 import type { ExportOffer } from '../export/exportOffer';
 import { issuesOffer } from '../export/offers';
 import { longDate } from './dates';
+import { plainDetail, plainDetailColumn } from './plainEvidence';
 import { plainTitle } from './plainWords';
 
 /** The most rows one read asks for (the contract's limit). */
@@ -51,7 +52,11 @@ export function problemListText(context: ProblemListContext, rows: readonly Issu
   if (steps.length > 0) lines.push('How to fix it:', ...steps, '');
   if (check.grouping === 'none') {
     lines.push('Where it is:');
-    for (const row of rows) lines.push(row.detail ? `${row.url ?? ''} (${row.detail})` : (row.url ?? ''));
+    for (const row of rows) {
+      // As the page says it: a few checks' details are said plainly ("Google will likely cut this title off after…").
+      const detail = plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail;
+      lines.push(detail ? `${row.url ?? ''} (${detail})` : (row.url ?? ''));
+    }
     return lines.join('\n');
   }
   const causes = new Map<string, string[]>();
@@ -76,12 +81,15 @@ async function readAllRows(
   onPage: (read: number, total: number | null) => void,
 ): Promise<IssueRow[]> {
   const rows: IssueRow[] = [];
+  // And the column a check's plain line reads, where it has one.
+  const plain = plainDetailColumn({ id: checkId });
+  const columns = ['url', 'detail', 'relatedUrl', ...(plain ? [plain] : [])];
   let after: string | undefined;
   for (;;) {
     const page = await api.issueRows(
       crawlId,
       checkId,
-      { columns: ['url', 'detail', 'relatedUrl'], filters: [], sort: [], limit: PAGE, ...(after ? { after } : {}) },
+      { columns, filters: [], sort: [], limit: PAGE, ...(after ? { after } : {}) },
       signal,
     );
     rows.push(...page.rows);

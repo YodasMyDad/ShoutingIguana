@@ -3,6 +3,9 @@ import type { RelatedFacts } from '../api/grids';
 import type { IssueTarget, LinkRow, UrlFoundOn } from '../api/inspector';
 import {
   plainAlt,
+  plainCutOff,
+  plainDetail,
+  plainDetailColumn,
   plainEvidence,
   plainFinal,
   plainImageFile,
@@ -203,6 +206,93 @@ describe('a page’s own evidence, in plain words', () => {
     expect(plainEvidence('title', 'Sofas', ORIGIN)).toBeNull();
     expect(plainEvidence('titleLength', 78, ORIGIN)).toBeNull();
     expect(plainEvidence('fetchError', null, ORIGIN)).toBeNull();
+  });
+
+  it('never says a width in pixels, nor the text up to the cut, which the page’s line says its own way', () => {
+    for (const column of ['titleWidth', 'descriptionWidth', 'titleInResults', 'descriptionInResults']) {
+      expect(
+        plainEvidence(column, column.endsWith('Width') ? 612 : 'Garden sofas for every season…', ORIGIN),
+      ).toBeNull();
+    }
+  });
+});
+
+describe('where Google will likely cut a title or description, in plain words', () => {
+  const CUT = '…';
+
+  it('quotes the last whole words that show, up to 30 characters, opening with “…” where more comes before', () => {
+    expect(plainCutOff('title', `Garden sofas and chairs for every season, delivered free${CUT}`)).toBe(
+      'Google will likely cut this title off after “…every season, delivered free”',
+    );
+    expect(
+      plainCutOff('description', `Our rattan corner sofa seats six, fully weatherproofed, comes flat-packed for${CUT}`),
+    ).toBe('Google will likely cut this description off after “…comes flat-packed for”');
+  });
+
+  it('quotes all of what shows, with no “…” before it, when it’s 30 characters or fewer', () => {
+    expect(plainCutOff('title', `Rattan sofas for small gardens${CUT}`)).toBe(
+      'Google will likely cut this title off after “Rattan sofas for small gardens”',
+    );
+    // Characters as a reader counts them: an emoji family is one, though JavaScript counts it as eight.
+    const family = String.fromCodePoint(0x1f469, 0x200d, 0x1f469, 0x200d, 0x1f467);
+    const shown = `Garden ${family} sofas for the family`;
+    expect(shown.length).toBeGreaterThan(30);
+    expect(plainCutOff('title', `${shown}${CUT}`)).toBe(`Google will likely cut this title off after “${shown}”`);
+  });
+
+  it('quotes the end of one word longer than 30 characters', () => {
+    const word = 'Gartenmöbelsetbestellungsbestätigungsnummer';
+    expect(plainCutOff('title', `Bestellen ${word}${CUT}`)).toBe(
+      `Google will likely cut this title off after “…${word.slice(-30)}”`,
+    );
+  });
+
+  it('says nothing where nothing is cut', () => {
+    expect(plainCutOff('title', 'Garden sofas')).toBeNull();
+    expect(plainCutOff('title', null)).toBeNull();
+    expect(plainCutOff('title', 612)).toBeNull();
+  });
+});
+
+describe('a length check’s page in plain words, in place of the detail', () => {
+  const row = {
+    title: 'Garden sofas and chairs for every season, delivered free across the UK | Example',
+    titleInResults: 'Garden sofas and chairs for every season, delivered free…',
+    titleWidth: 742,
+    titleLength: 80,
+    description: 'Sofas.',
+    descriptionWidth: 46,
+    descriptionLength: 6,
+    detail: '742 px, over 580 (80 characters)',
+  };
+
+  it('says where a long one is cut, and how many characters a short one has, never pixels', () => {
+    expect(plainDetail({ id: 'title-too-long' }, row)).toBe(
+      'Google will likely cut this title off after “…every season, delivered free”',
+    );
+    expect(plainDetail({ id: 'description-too-short' }, row)).toBe('Only 6 characters long');
+    expect(plainDetail({ id: 'title-too-short' }, { titleLength: 1 })).toBe('Only 1 character long');
+    expect(plainDetail({ id: 'title-too-short' }, { titleLength: 1_234 })).toBe('Only 1,234 characters long');
+    expect(
+      plainDetail(
+        { id: 'description-too-long' },
+        { descriptionInResults: 'Our rattan corner sofa seats six and comes flat-packed for…' },
+      ),
+    ).toBe('Google will likely cut this description off after “…six and comes flat-packed for”');
+  });
+
+  it('leaves the detail to say it where it can’t: nothing cut, no length, or another check', () => {
+    expect(plainDetail({ id: 'title-too-long' }, { ...row, titleInResults: row.title })).toBeNull();
+    expect(plainDetail({ id: 'title-too-short' }, { titleLength: null })).toBeNull();
+    expect(plainDetail({ id: 'title-duplicate' }, row)).toBeNull();
+  });
+
+  it('names the column each reads, for the reads that ask for it', () => {
+    expect(plainDetailColumn({ id: 'title-too-long' })).toBe('titleInResults');
+    expect(plainDetailColumn({ id: 'description-too-long' })).toBe('descriptionInResults');
+    expect(plainDetailColumn({ id: 'title-too-short' })).toBe('titleLength');
+    expect(plainDetailColumn({ id: 'description-too-short' })).toBe('descriptionLength');
+    expect(plainDetailColumn({ id: 'title-duplicate' })).toBeNull();
   });
 });
 

@@ -17,7 +17,7 @@ import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
 import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
 import { ImageThumb } from '../ui/ImageThumb';
-import { plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
+import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
 import { pathOrigin, shownWords } from './whereWords';
 
@@ -210,7 +210,8 @@ export function WhereItIs({
                       <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                     </td>
                     <td className="text-text-secondary">
-                      {row.detail ?? ''}
+                      {/* The engine's detail is Advanced's words: a few checks say it plainly ("Google will likely cut this title off after…"). */}
+                      {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? ''}
                       <EvidenceLines row={row} check={check} origin={origin} />
                     </td>
                   </tr>

@@ -4,7 +4,9 @@ import { closeExportDialog, defaultFileName, getExportDialog } from '../export/e
 import { liveStore } from '../live/liveStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
 import { SIMPLE_CHECKS } from '../test/simpleSidecar';
-import { checkSheetOffer, problemListText, saveCheckSheet } from './handOver';
+import type { TransportRequest } from '../api/transport';
+import { json } from '../test/fakeSidecar';
+import { checkSheetOffer, copyProblemList, problemListText, saveCheckSheet } from './handOver';
 import { nothingRead } from './nothingRead';
 
 const check = (id: string) => SIMPLE_CHECKS.checks.find((candidate) => candidate.id === id)!;
@@ -50,6 +52,51 @@ describe('Copy the list', () => {
       { id: 1, url: 'https://example.com/login/', detail: '5,476 ms' },
     ]);
     expect(text.endsWith('Where it is:\nhttps://example.com/login/ (5,476 ms)')).toBe(true);
+  });
+
+  it('says a long title’s pages as the page does, where Google will likely cut it, never in pixels', async () => {
+    const asked: TransportRequest[] = [];
+    setTransport(
+      fakeSidecar([
+        [
+          'POST',
+          /\/issues\/title-too-long\/rows$/,
+          (request: TransportRequest) => {
+            asked.push(request);
+            return json({
+              columns: ['id', 'url', 'detail', 'relatedUrl', 'titleInResults'],
+              rows: [
+                {
+                  id: 1,
+                  url: 'https://example.com/sofas/',
+                  detail: '742 px, over 580 (80 characters)',
+                  relatedUrl: null,
+                  titleInResults: 'Garden sofas and chairs for every season, delivered free…',
+                },
+              ],
+              offset: 0,
+              matching: 1,
+              total: 1,
+              next: null,
+              summary: { available: true, reason: null },
+              unavailable: [],
+            });
+          },
+        ],
+      ]),
+    );
+    let copied = '';
+    await copyProblemList({ ...context, check: check('title-too-long') }, (text) => {
+      copied = text;
+      return Promise.resolve(true);
+    });
+    expect((asked[0]?.body as { columns: string[] }).columns).toContain('titleInResults');
+    expect(
+      copied.endsWith(
+        'Where it is:\nhttps://example.com/sofas/ (Google will likely cut this title off after “…every season, delivered free”)',
+      ),
+    ).toBe(true);
+    expect(copied).not.toMatch(/\bpx\b/);
   });
 });
 
