@@ -1,7 +1,7 @@
 // A sidecar for the Issues screen's tests and stories: a small catalog over three categories, an analysis with a
 // check of each kind (grouped by detail, by related URL, flat, skipped and passed), and groups and rows answered as
 // the real `/groups` and `/rows` do (a group narrows the rows, `after` reads on, `detail` sorts).
-import type { GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
+import type { GridPage, GridQuery, IssueGroup, IssueGroupPage, IssueRow } from '../api/grids';
 import type { IssueTargetsOfUrl, LinkRow, UrlFoundOn } from '../api/inspector';
 import type { Analysis, Check, CheckReferences, CheckSubject, Checks, CrawlListItem } from '../api/types';
 import { json, problem, standardRoutes, testCrawlItem, type FakeRoute } from './fakeSidecar';
@@ -247,6 +247,8 @@ export interface IssuesSidecarOptions {
   foundOn?: Record<number, UrlFoundOn>;
   /** What each flagged page names, by check and page id. */
   targets?: Record<string, Record<number, IssueTargetsOfUrl>>;
+  /** What a check's groups answer carries beside its groups (the order used: `sort`), by check. */
+  groupPages?: Record<string, Partial<IssueGroupPage>>;
   onAnalyse?: () => void;
   onCancelAnalysis?: () => void;
   onContinue?: () => void;
@@ -314,13 +316,15 @@ export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
         const checkId = match[1] ?? '';
         const list = groups[checkId] ?? [];
         const { offset, limit } = request.body as { offset: number; limit: number };
+        const grouping = (options.checks ?? ISSUES_CHECKS).checks.find((entry) => entry.id === checkId)?.grouping;
         return json({
           checkId,
-          grouping: 'detail',
+          grouping: grouping === 'relatedUrl' ? 'relatedUrl' : 'detail',
           total: counted.counts.find((count) => count.checkId === checkId)?.count ?? null,
           groupCount: list.length,
           offset,
           groups: list.slice(offset, offset + limit),
+          ...options.groupPages?.[checkId],
         });
       },
     ],

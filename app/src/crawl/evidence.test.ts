@@ -113,11 +113,24 @@ describe('what a URL a page names is', () => {
     expect(targetFactParts(hero, IMAGE_TOO_LARGE, SITE, 'image-too-large')).toEqual([
       '1.8 MB · JPEG · 4000×3000 px',
       'shown at 400×300',
-      'alt “Garden sofa”',
       'srcset',
       'lazy',
       'in the content',
     ]);
+    // An image without alt text says that, and one without dimensions which it lacks.
+    const img = { width: '400', height: null, alt: null, hasAlt: false, altLength: null, srcset: false, loading: null };
+    expect(targetFactParts(target({ img }), ['img', 'position', 'links'], SITE, 'image-missing-alt')).toEqual([
+      'no alt',
+      'in the content',
+    ]);
+    expect(
+      targetFactParts(
+        target({ img, pixelWidth: 1200, pixelHeight: 800 }),
+        ['img', 'pixelWidth', 'pixelHeight'],
+        SITE,
+        'image-missing-dimensions',
+      ),
+    ).toEqual(['shown 400 wide, no height', '1200×800 px']);
   });
 
   it('says where a redirecting link should point instead, where on the page it is and what it says', () => {

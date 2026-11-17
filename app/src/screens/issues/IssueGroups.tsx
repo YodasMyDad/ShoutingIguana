@@ -25,7 +25,8 @@ import type { RowWindowModel } from '../../grid/rowWindow';
 import type { GridColumn, GridRange, GridTree, RowFetcher } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
-import { formatCount } from '../../lib/format';
+import { FACT_GAP, evidenceValueWords, namesFileSize, quoted, relatedFactParts } from '../../crawl/evidence';
+import { formatBytes, formatCount } from '../../lib/format';
 import { revealInScrollParent } from '../../lib/scroll';
 import { Badge } from '../../ui/Badge';
 import { Callout } from '../../ui/Callout';
@@ -36,6 +37,7 @@ import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { followWords } from '../../inspector/links';
+import { OUTCOME_WORDS } from '../../inspector/words';
 import { StatusCode } from '../../ui/StatusCode';
 import { linksOfUrl } from '../links/linkPlaces';
 import {
@@ -52,6 +54,7 @@ import {
 } from './groupTree';
 import { IssuePageMenu } from './IssuePageMenu';
 import { checkUrlsReader, copyUrls } from './copyUrls';
+import { evidenceOf, groupRowColumns } from './evidenceColumns';
 import { useTemplateLink, useWhereFoundOf } from './useWhereFound';
 import { WhereFoundLine } from './WhereFoundLine';
 import {
@@ -119,6 +122,10 @@ const NO_GROUP: CheckGroupRef = { detail: null, relatedUrlId: null };
 
 const PAGES_WIDTH = 88;
 const SHARE_WIDTH = 176;
+/** A group's file size, for a check of oversized files: "1.8 MB". */
+const SIZE_WIDTH = 104;
+/** A group's words narrower than this: its "Likely template" badge is its icon. */
+const NARROW_ROOM = 420;
 const MIN_TEXT_WIDTH = 200;
 /** The frame's edges and the room a scrollbar may take. */
 const FRAME_SLACK = 24;
@@ -130,6 +137,54 @@ const SHORT_CHIP = 32;
 /** What the "Related URL" means here is the check's to say; the column says only that it's the other URL involved. */
 function relatedWords(group: IssueGroup, siteOrigin: string | null): string {
   return group.relatedUrl ? urlDisplay(group.relatedUrl, siteOrigin).shown : 'No other URL';
+}
+
+/** The first column's header for a check grouped by URL: the image, the shared title, or the other URL. */
+function relatedHeader(check: Check, shared: boolean): string {
+  if (shared) {
+    const evidence = evidenceOf(check);
+    if (evidence.includes('title')) return 'Shared title';
+    if (evidence.includes('description')) return 'Shared description';
+    if (evidence.includes('h1')) return 'Shared H1';
+    return 'Shared text';
+  }
+  return check.id.startsWith('image-') ? 'Image' : 'Related URL';
+}
+
+/**
+ * What a group's related URL is, as the check's `targetFacts` say it: "1.8 MB · JPEG · 4000×3000 px", "→ /new/ 200",
+ * "noindex". Empty for a group without one, or a sidecar from before the evidence.
+ */
+function relatedFactsWords(
+  group: IssueGroup,
+  check: Check,
+  siteOrigin: string | null,
+  /** The file's size has a column of its own: the line says the rest. */
+  sizeShown = false,
+): string {
+  if (!group.related || !check.targetFacts?.length) return '';
+  const facts = sizeShown ? check.targetFacts.filter((fact) => fact !== 'sizeBytes') : check.targetFacts;
+  return relatedFactParts(group.related, facts, siteOrigin).join(FACT_GAP);
+}
+
+/**
+ * The related URL's status where it's what's wrong (a 404, a redirect, no answer): a 2xx is said by nothing, as most
+ * groups' URLs answer, and the check's facts then say what's wrong instead (its size, its being noindex).
+ */
+function relatedStatus(group: IssueGroup, check: Check): { code: number | null; reason?: string } | null {
+  const related = group.related;
+  if (!related || !(check.targetFacts ?? []).includes('statusCode')) return null;
+  if (related.statusCode !== null) return related.statusCode >= 300 ? { code: related.statusCode } : null;
+  return related.outcome ? { code: null, reason: OUTCOME_WORDS[related.outcome] } : null;
+}
+
+/** A page's evidence in one line, where its column headers aren't beside it: "→ /b/ 302 → /c/ 200", "“Sofas” · 12 inlinks". */
+function evidenceLine(row: IssueRow, check: Check, siteOrigin: string | null): string {
+  const values = row as unknown as Record<string, string | number | boolean | object | null | undefined>;
+  return evidenceOf(check)
+    .map((column) => evidenceValueWords(column, values[column], siteOrigin))
+    .filter((words): words is string => words !== null)
+    .join(FACT_GAP);
 }
 
 export interface IssueGroupsProps {
@@ -209,7 +264,13 @@ export function IssueGroups({
   }, [missing, openRef?.detail, openRef?.relatedUrlId]);
 
   const firstRows = useQuery({
-    ...issueGroupRowsQuery(crawlId, check.id, openRef ?? { detail: null, relatedUrlId: null }, FIRST_GROUP_ROWS),
+    ...issueGroupRowsQuery(
+      crawlId,
+      check.id,
+      openRef ?? { detail: null, relatedUrlId: null },
+      FIRST_GROUP_ROWS,
+      groupRowColumns(check),
+    ),
     enabled: openGroup !== null,
   });
   const loadedRows = firstRows.data?.rows ?? null;
@@ -228,10 +289,10 @@ export function IssueGroups({
   const where = useWhereFoundOf(crawlId, check, expandedAt >= 0 ? expandedId : null);
   const whereRows = useMemo<WhereRow[] | null>(() => {
     if (where.foundOn) return foundOnRows(where.foundOn);
-    if (where.targets) return targetRows(where.targets);
+    if (where.targets) return targetRows(where.targets, check, siteOrigin);
     if (where.error) return [{ kind: 'nothing', words: 'Where it’s found couldn’t be read' }];
     return null;
-  }, [where.foundOn, where.targets, where.error]);
+  }, [where.foundOn, where.targets, where.error, check, siteOrigin]);
   // While its rows are read, one row stands in for them (drawn as a placeholder).
   const openPage: OpenPage | null = expandedAt >= 0 ? { page: expandedAt, rows: whereRows?.length ?? 1 } : null;
   const openChildren = openGroup
@@ -435,7 +496,14 @@ export function IssueGroups({
   const showRelated =
     grouping === 'relatedUrl' ||
     (groups.firstPage?.rows ?? []).some((group) => group.relatedUrl !== null || group.relatedUrlId !== null);
-  const room = Math.max(MIN_TEXT_WIDTH, (width ?? 720) - PAGES_WIDTH - SHARE_WIDTH - FRAME_SLACK);
+  // A duplicate cluster is named by what its pages share (the title), not by its first page.
+  const shared = (groups.firstPage?.rows ?? []).some((group) => group.sharedText);
+  // A check of oversized files: each group's file size, the order its groups come in.
+  const showSize = grouping === 'relatedUrl' && namesFileSize(check.targetFacts);
+  const room = Math.max(
+    MIN_TEXT_WIDTH,
+    (width ?? 720) - PAGES_WIDTH - SHARE_WIDTH - (showSize ? SIZE_WIDTH : 0) - FRAME_SLACK,
+  );
   const columns = useMemo<GridColumn<TreeRow>[]>(() => {
     const text = (row: TreeRow) => (row.kind === 'group' ? row.group : null);
     const groupTitle = (row: TreeRow, words: ReactNode, title: string) => (
@@ -445,33 +513,80 @@ export function IssueGroups({
         </span>
         <span className="min-w-0 flex-1 truncate">{words}</span>
         {row.kind === 'group' && row.group.likelyTemplate ? (
-          <Badge variant="outline" icon={Layers} className="ml-2 shrink-0">
-            Likely template
-          </Badge>
+          // In a narrow column the badge is its icon, so the group's URL keeps the room: the words are its name.
+          <span className="ml-2 shrink-0" title={room < NARROW_ROOM ? 'Likely template' : undefined}>
+            <Badge variant="outline" icon={Layers}>
+              {room < NARROW_ROOM ? <span className="sr-only">Likely template</span> : 'Likely template'}
+            </Badge>
+          </span>
         ) : null}
       </span>
     );
-    const relatedCell = (group: IssueGroup) =>
-      group.relatedUrl ? (
-        <Url url={group.relatedUrl} siteOrigin={siteOrigin} copyable={false} tabbable={false} />
-      ) : (
-        <span className="text-text-muted">No other URL</span>
+    // The URL, then what's wrong with it: its status where that's the fault, and the check's facts about it.
+    const relatedCell = (group: IssueGroup) => {
+      if (group.sharedText) {
+        return (
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="min-w-0 shrink truncate">{quoted(group.sharedText, 120)}</span>
+            {group.relatedUrl ? (
+              <Url
+                url={group.relatedUrl}
+                siteOrigin={siteOrigin}
+                copyable={false}
+                tabbable={false}
+                className="max-w-1/3 min-w-0 shrink text-text-muted"
+              />
+            ) : null}
+          </span>
+        );
+      }
+      if (!group.relatedUrl) return <span className="text-text-muted">No other URL</span>;
+      const status = relatedStatus(group, check);
+      const facts = relatedFactsWords(group, check, siteOrigin, showSize);
+      // The URL first, as much of it as fits in three fifths; what it is takes the rest, cut at its end.
+      return (
+        <span className="flex min-w-0 items-center gap-2">
+          <Url
+            url={group.relatedUrl}
+            siteOrigin={siteOrigin}
+            copyable={false}
+            tabbable={false}
+            className={facts || status ? 'max-w-3/5 min-w-0 shrink-0' : 'min-w-0 flex-1'}
+          />
+          {status ? (
+            <StatusCode code={status.code} {...(status.reason ? { reason: status.reason } : {})} className="shrink-0" />
+          ) : null}
+          {facts ? (
+            <span className="si-group-facts min-w-0 flex-1 truncate text-text-muted" title={facts}>
+              {facts}
+            </span>
+          ) : null}
+        </span>
       );
+    };
+    const relatedText = (group: IssueGroup) =>
+      [
+        group.sharedText ? quoted(group.sharedText, 120) : null,
+        group.relatedUrl,
+        relatedFactsWords(group, check, siteOrigin, showSize),
+      ]
+        .filter((part) => part)
+        .join(FACT_GAP);
     const first: GridColumn<TreeRow>[] =
       grouping === 'relatedUrl'
         ? [
             {
               id: 'relatedUrl',
-              header: 'Related URL',
+              header: relatedHeader(check, shared),
               width: room,
               cell: (row) => {
                 const group = text(row);
                 if (!group) return null;
-                return groupTitle(row, relatedCell(group), group.relatedUrl ?? 'No other URL');
+                return groupTitle(row, relatedCell(group), relatedText(group) || 'No other URL');
               },
               text: (row) =>
                 row.kind === 'group'
-                  ? (row.group.relatedUrl ?? '')
+                  ? relatedText(row.group)
                   : row.kind === 'page'
                     ? (row.row.url ?? '')
                     : row.kind === 'where'
@@ -507,17 +622,37 @@ export function IssueGroups({
                     width: room - Math.round(room * 0.55),
                     cell: (row: TreeRow) => (row.kind === 'group' ? relatedCell(row.group) : null),
                     text: (row: TreeRow) =>
-                      row.kind === 'group'
-                        ? (row.group.relatedUrl ?? '')
-                        : row.kind === 'page'
-                          ? (row.row.detail ?? '')
-                          : '',
+                      row.kind === 'group' ? relatedText(row.group) : row.kind === 'page' ? (row.row.detail ?? '') : '',
                   },
                 ]
               : []),
           ];
     return [
       ...first,
+      ...(showSize
+        ? [
+            {
+              id: 'size',
+              header: 'File size',
+              width: SIZE_WIDTH,
+              numeric: true,
+              headerHint: 'The image file’s size where its redirects end: the groups come largest first',
+              cell: (row: TreeRow) =>
+                row.kind === 'group' ? (
+                  typeof row.group.related?.sizeBytes === 'number' ? (
+                    formatBytes(row.group.related.sizeBytes)
+                  ) : (
+                    <span className="text-text-muted">–</span>
+                  )
+                ) : null,
+              // Copied as the number itself, so a spreadsheet can add it up.
+              text: (row: TreeRow) =>
+                row.kind === 'group' && typeof row.group.related?.sizeBytes === 'number'
+                  ? String(row.group.related.sizeBytes)
+                  : '',
+            },
+          ]
+        : []),
       {
         id: 'pages',
         header: words.column,
@@ -535,7 +670,7 @@ export function IssueGroups({
         text: (row) => (row.kind === 'group' ? String(row.group.share) : ''),
       },
     ];
-  }, [grouping, room, showRelated, siteOrigin, total, words]);
+  }, [grouping, room, showRelated, showSize, shared, check, siteOrigin, total, words]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.groups', columns);
 
@@ -543,6 +678,7 @@ export function IssueGroups({
     (row: TreeRow): ReactNode => {
       if (row.kind === 'group') return null;
       if (row.kind === 'page') {
+        const evidence = evidenceLine(row.row, check, siteOrigin);
         return (
           <span className="flex min-w-0 items-center gap-3">
             {references === 'none' ? null : (
@@ -557,6 +693,11 @@ export function IssueGroups({
               tabbable={false}
               className="min-w-1/3 flex-1"
             />
+            {evidence ? (
+              <span className="si-row-evidence max-w-2/5 min-w-0 shrink truncate text-text-secondary" title={evidence}>
+                {evidence}
+              </span>
+            ) : null}
             {references === 'none' ? null : (
               <WhereFoundLine
                 crawlId={crawlId}
@@ -568,7 +709,8 @@ export function IssueGroups({
               />
             )}
             {row.row.detail && row.row.detail !== row.group.detail ? (
-              <span className="max-w-1/4 min-w-0 shrink truncate text-text-muted" title={row.row.detail}>
+              // The detail gives way first: the where line beside it says what the page names.
+              <span className="max-w-1/4 min-w-0 shrink-3 truncate text-text-muted" title={row.row.detail}>
                 {row.row.detail}
               </span>
             ) : null}
@@ -756,7 +898,8 @@ function WhereCell({
       );
     }
     case 'target': {
-      const place = linkPlaceWords(where.target);
+      // The check's facts where it says them (evidence), else where on the page the link is.
+      const place = where.facts ?? linkPlaceWords(where.target);
       return (
         <span className="si-where-row flex min-w-0 items-center gap-3" data-where="target">
           <span className="shrink-0 text-text-muted">Names</span>
@@ -769,7 +912,7 @@ function WhereCell({
           />
           <StatusCode code={where.target.statusCode} className="shrink-0" />
           {place ? (
-            <span className="max-w-1/3 shrink truncate text-text-muted" title={place}>
+            <span className="max-w-3/5 shrink truncate text-text-muted" title={place}>
               {place}
             </span>
           ) : null}
@@ -843,12 +986,18 @@ function TemplateCallout({
   const share = partOfAffected(check, group.pages, total);
   // Where on the pages the shared link is, for a check whose pages hold it: "It’s a link in the footer."
   const place = templateLinkWords(useTemplateLink(crawlId, check, group));
+  const facts = relatedFactsWords(group, check, siteOrigin);
   return (
     <Callout tone="insight" title="Likely in the site’s template">
-      {grouping === 'relatedUrl' && group.relatedUrl ? (
+      {group.sharedText ? (
         <>
-          The same URL, <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>, on{' '}
-          {share}, so it’s likely in the site’s template: one fix clears the group.
+          The same text, {quoted(group.sharedText, 120)}, on {share}, so it’s likely in the site’s template: one fix
+          clears the group.
+        </>
+      ) : grouping === 'relatedUrl' && group.relatedUrl ? (
+        <>
+          The same URL, <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>
+          {facts ? ` (${facts})` : null}, on {share}, so it’s likely in the site’s template: one fix clears the group.
           {place ? ` ${place}.` : null}
         </>
       ) : grouping === 'relatedUrl' ? (

@@ -96,11 +96,24 @@ export function altWords(img: Pick<ImgFacts, 'alt' | 'hasAlt' | 'altLength'>, wi
   return `alt ${quoted(alt)}${length}`;
 }
 
-/** An `<img>` as facts: the size it's shown at, its alt text, and how it loads ("srcset", "lazy"). */
+/**
+ * An `<img>` as facts, as its check needs them: an oversized image the size it's shown at and how it loads ("srcset",
+ * "lazy"); one without alt text, or too long a one, its alt; one without dimensions, which of them it lacks. A check
+ * this version doesn't know of gets the size and the alt.
+ */
 export function imgParts(img: ImgFacts, checkId?: string): string[] {
-  const parts = [shownAtWords(img), altWords(img, checkId === 'image-alt-too-long')];
-  if (img.srcset) parts.push('srcset');
-  if (img.loading?.trim()) parts.push(img.loading.trim().toLowerCase() === 'lazy' ? 'lazy' : `loading ${img.loading}`);
+  const loads = [
+    ...(img.srcset ? ['srcset'] : []),
+    ...(img.loading?.trim() ? [img.loading.trim().toLowerCase() === 'lazy' ? 'lazy' : `loading ${img.loading}`] : []),
+  ];
+  const parts: (string | null)[] =
+    checkId === 'image-too-large'
+      ? [shownAtWords(img), ...loads]
+      : checkId === 'image-missing-alt' || checkId === 'image-alt-too-long'
+        ? [altWords(img, checkId === 'image-alt-too-long')]
+        : checkId === 'image-missing-dimensions'
+          ? [shownAtWords(img)]
+          : [shownAtWords(img), altWords(img)];
   return parts.filter((part): part is string => part !== null);
 }
 

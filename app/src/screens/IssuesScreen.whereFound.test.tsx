@@ -54,8 +54,10 @@ describe('where an issue’s URL is found', () => {
     const requests = sidecar();
     await open(`${ISSUES}/internal-client-error?group=${BROKEN_GROUP}`);
     const grid = await screen.findByRole('treegrid');
-    expect(await within(grid).findByText('Found on 3 pages · /garden-furniture/ +2')).toBeVisible();
-    expect(within(grid).getByText('Found on 1 page · /garden-furniture/')).toBeVisible();
+    expect(
+      await within(grid).findByText('Found on 3 pages · /garden-furniture/ (Footer · “Old range”) +2'),
+    ).toBeVisible();
+    expect(within(grid).getByText('Found on 1 page · /garden-furniture/ (Content · “Gone for good”)')).toBeVisible();
     // Both rows' answers came in one request, of both their ids.
     const reads = requests.filter((request) => request.path.endsWith('/urls/found-on'));
     expect(reads).toHaveLength(1);
@@ -66,7 +68,7 @@ describe('where an issue’s URL is found', () => {
     sidecar();
     const router = await open(`${ISSUES}/internal-client-error?group=${BROKEN_GROUP}`);
     const grid = await screen.findByRole('treegrid');
-    await within(grid).findByText('Found on 3 pages · /garden-furniture/ +2');
+    await within(grid).findByText('Found on 3 pages · /garden-furniture/ (Footer · “Old range”) +2');
     const page = within(grid).getByRole('row', { name: /\/old\// });
     expect(page).toHaveAttribute('aria-expanded', 'false');
     expect(page).toHaveAttribute('aria-level', '2');
@@ -100,7 +102,7 @@ describe('where an issue’s URL is found', () => {
     sidecar();
     const router = await open(`${ISSUES}/internal-client-error?group=${BROKEN_GROUP}`);
     const grid = await screen.findByRole('treegrid');
-    await within(grid).findByText('Found on 1 page · /garden-furniture/');
+    await within(grid).findByText('Found on 1 page · /garden-furniture/ (Content · “Gone for good”)');
     const gone = within(grid).getByRole('row', { name: /\/gone\// });
     fireEvent.pointerDown(within(gone).getByText('', { selector: '[data-tree-toggle]' }), { button: 0 });
     await waitFor(() => expect(gone).toHaveAttribute('aria-expanded', 'true'));
@@ -133,7 +135,7 @@ describe('where an issue’s URL is found', () => {
     sidecar();
     const router = await open(`${ISSUES}/internal-client-error?group=${BROKEN_GROUP}`);
     const grid = await screen.findByRole('treegrid');
-    await within(grid).findByText('Found on 3 pages · /garden-furniture/ +2');
+    await within(grid).findByText('Found on 3 pages · /garden-furniture/ (Footer · “Old range”) +2');
     fireEvent.contextMenu(cellOf(within(grid).getByRole('row', { name: /\/old\// })));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Show where it’s found in Links' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/links`));

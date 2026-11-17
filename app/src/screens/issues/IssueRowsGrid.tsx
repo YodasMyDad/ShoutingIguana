@@ -1,7 +1,8 @@
+import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { api } from '../../api/client';
 import type { GridSort, IssueRow } from '../../api/grids';
-import { queryKeys } from '../../api/queries';
+import { queryKeys, urlColumnsQuery } from '../../api/queries';
 import type { Check } from '../../api/types';
 import { affectedWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
@@ -15,6 +16,8 @@ import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { Url } from '../../ui/Url';
 import { linksOfUrl } from '../links/linkPlaces';
+import { urlGridColumns } from '../urls/urlColumns';
+import { flatRowColumns } from './evidenceColumns';
 import { IssuePageMenu } from './IssuePageMenu';
 import { WhereFoundLine } from './WhereFoundLine';
 import { referencesOf } from './whereFound';
@@ -26,9 +29,18 @@ function issueRowKey(row: IssueRow): string {
 }
 
 const DETAIL_WIDTH = 260;
+/** The detail beside a check's evidence: the evidence says the rest, so the detail gives way to it. */
+const DETAIL_WITH_EVIDENCE_WIDTH = 220;
 /** "Found on 3 pages · /garden-furniture/ +2", for a check whose URLs other pages refer to. */
 const WHERE_WIDTH = 300;
 const MIN_URL_WIDTH = 240;
+/** The least the URL and each column of the evidence's words get, where they share the room. */
+const MIN_SHARED_URL_WIDTH = 200;
+const MIN_WORDS_WIDTH = 160;
+/** The same in a narrow panel (a 1280 px window zoomed to 150%): the words cut sooner, the figures stay whole. */
+const TIGHT_DETAIL_WIDTH = 180;
+const TIGHT_URL_WIDTH = 160;
+const TIGHT_WORDS_WIDTH = 120;
 const FRAME_SLACK = 24;
 
 export interface IssueRowsGridProps {
@@ -46,8 +58,10 @@ export interface IssueRowsGridProps {
 }
 
 /**
- * A check that doesn't group (its detail is a measurement, "78 characters", or the same on every page): its URLs
- * flat, server-paged and sortable, with the detail as a column (E3a, `/rows`).
+ * A check that doesn't group (its detail is a measurement, "78 characters, over 60", or the same on every page): its
+ * URLs flat, server-paged and sortable, with the detail as a column (E3a, `/rows`), then the check's evidence (the
+ * title and its length, the redirect chain, the robots.txt rule: docs/v2-evidence.md), then the URL's inlinks (or the
+ * pages using it), which the engine's order goes by when no sort is chosen: the pages that matter most first.
  */
 export function IssueRowsGrid({
   crawlId,
@@ -61,16 +75,18 @@ export function IssueRowsGrid({
 }: IssueRowsGridProps) {
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
-  const queryKey = useMemo(() => queryKeys.issueRowsGrid(crawlId, check.id, sort), [crawlId, check.id, sort]);
+  // The URL, the detail, the check's evidence and what orders the rows: one key per set, so a check's own are cached.
+  const asked = useMemo(() => flatRowColumns(check), [check]);
+  const extra = useMemo(() => asked.filter((id) => id !== 'url' && id !== 'detail'), [asked]);
+  const catalogue = useQuery(urlColumnsQuery()).data;
+  const queryKey = useMemo(
+    () => [...queryKeys.issueRowsGrid(crawlId, check.id, sort), asked] as const,
+    [crawlId, check.id, sort, asked],
+  );
   const fetchPage = useCallback(
     (offset: number, limit: number, signal: AbortSignal) =>
-      api.issueRows(
-        crawlId,
-        check.id,
-        { columns: ['url', 'detail'], filters: [], sort: [...sort], offset, limit },
-        signal,
-      ),
-    [crawlId, check.id, sort],
+      api.issueRows(crawlId, check.id, { columns: asked, filters: [], sort: [...sort], offset, limit }, signal),
+    [crawlId, check.id, sort, asked],
   );
   const rows = usePagedRows<IssueRow>({ queryKey, fetchPage, rowHeight });
   const handoff = useHeaderHandoff(sort);
@@ -80,7 +96,31 @@ export function IssueRowsGrid({
 
   const references = referencesOf(check);
   const whereWidth = references === 'none' ? 0 : WHERE_WIDTH;
-  const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 720) - DETAIL_WIDTH - whereWidth - FRAME_SLACK);
+  // The evidence's columns, drawn as the URL grid draws them: a number right-aligned, a chain hop by hop.
+  const drawn = useMemo<GridColumn<IssueRow>[]>(
+    () => urlGridColumns(extra, catalogue, { siteOrigin, fullUrls: false, sort, crawling: false }),
+    [extra, catalogue, siteOrigin, sort],
+  );
+  // The room: the detail, the figures and the where line keep their widths; the URL and the evidence's words (a
+  // title, a chain) share the rest, so a narrow window keeps every figure in view rather than scrolling to it.
+  const words = drawn.filter((column) => !column.numeric).length;
+  const fixed = drawn.filter((column) => column.numeric).reduce((sum, column) => sum + column.width, 0);
+  const available = (width ?? 720) - fixed - whereWidth - FRAME_SLACK;
+  // Where the usual widths don't fit, the words take less: a figure is never scrolled out of view for them.
+  const usual = extra.length > 1 ? DETAIL_WITH_EVIDENCE_WIDTH : DETAIL_WIDTH;
+  const tight = words > 0 && available < usual + MIN_SHARED_URL_WIDTH + MIN_WORDS_WIDTH * words;
+  const detailWidth = tight ? TIGHT_DETAIL_WIDTH : usual;
+  const room = available - detailWidth;
+  const urlWidth =
+    words > 0
+      ? Math.max(tight ? TIGHT_URL_WIDTH : MIN_SHARED_URL_WIDTH, Math.round(room * 0.4))
+      : Math.max(MIN_URL_WIDTH, room);
+  const wordsWidth =
+    words > 0 ? Math.max(tight ? TIGHT_WORDS_WIDTH : MIN_WORDS_WIDTH, Math.floor((room - urlWidth) / words)) : 0;
+  const evidenceColumns = useMemo(
+    () => drawn.map((column) => (column.numeric ? column : { ...column, width: wordsWidth })),
+    [drawn, wordsWidth],
+  );
   const columns = useMemo<GridColumn<IssueRow>[]>(() => {
     const sorted = (id: string) => {
       const entry = sort.find((candidate) => candidate.column === id);
@@ -99,12 +139,13 @@ export function IssueRowsGrid({
       {
         id: 'detail',
         header: 'Detail',
-        width: DETAIL_WIDTH,
+        width: detailWidth,
         sortable: true,
         ...sorted('detail'),
         cell: (row) => <span title={row.detail ?? undefined}>{row.detail ?? '–'}</span>,
         text: (row) => row.detail ?? '',
       },
+      ...evidenceColumns,
       // Where each is found (or what each page names): read for the rows drawn, a page of them in one request.
       ...(references === 'none'
         ? []
@@ -126,7 +167,7 @@ export function IssueRowsGrid({
             },
           ]),
     ];
-  }, [sort, urlWidth, siteOrigin, references, crawlId, check]);
+  }, [sort, urlWidth, detailWidth, evidenceColumns, siteOrigin, references, crawlId, check]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.rows', columns);
 

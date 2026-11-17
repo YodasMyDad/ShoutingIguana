@@ -44,18 +44,25 @@ const found = (overrides: Partial<UrlFoundOn> = {}): UrlFoundOn => ({
 });
 
 describe('where a URL is found, in words', () => {
-  it('says how many pages link to it and the first, then the sitemap, the start URL, or nothing', () => {
+  it('says how many pages link to it and the first, where on it and what it says, then the sitemap, the start URL, or nothing', () => {
     const three = found({
       links: 4,
       pages: 3,
-      sources: [link(1, '/garden-furniture/'), link(1, '/garden-furniture/'), link(2, '/sofas/')],
+      sources: [
+        link(1, '/garden-furniture/', { position: 'footer', text: 'Old range' }),
+        link(1, '/garden-furniture/'),
+        link(2, '/sofas/'),
+      ],
     });
-    expect(foundOnSummary(three, ORIGIN)).toBe('Found on 3 pages · /garden-furniture/ +2');
+    expect(foundOnSummary(three, ORIGIN)).toBe('Found on 3 pages · /garden-furniture/ (Footer · “Old range”) +2');
     expect(foundOnSummary(found({ links: 1, pages: 1, sources: [link(1, '/a/')] }), ORIGIN)).toBe(
-      'Found on 1 page · /a/',
+      'Found on 1 page · /a/ (Content)',
     );
     expect(
-      foundOnSummary(found({ links: 9_000, pages: 5_000, pagesExact: false, sources: [link(1, '/a/')] }), ORIGIN),
+      foundOnSummary(
+        found({ links: 9_000, pages: 5_000, pagesExact: false, sources: [link(1, '/a/', { position: null })] }),
+        ORIGIN,
+      ),
     ).toBe('Found on 5,000+ pages · /a/ +4,999');
     const listed = found({ sitemaps: { total: 2, sitemaps: [{ id: 1, url: `${ORIGIN}/sitemap.xml` }] } });
     expect(foundOnSummary(listed, ORIGIN)).toBe('In a sitemap · /sitemap.xml +1');
@@ -64,7 +71,7 @@ describe('where a URL is found, in words', () => {
     // Another host shows whole.
     expect(
       foundOnSummary(
-        found({ links: 1, pages: 1, sources: [link(1, '/a/', { url: 'https://other.example/a/' })] }),
+        found({ links: 1, pages: 1, sources: [link(1, '/a/', { url: 'https://other.example/a/', position: null })] }),
         ORIGIN,
       ),
     ).toBe('Found on 1 page · https://other.example/a/');
