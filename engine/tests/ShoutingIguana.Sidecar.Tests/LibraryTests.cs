@@ -313,7 +313,7 @@ public sealed class LibraryTests : IAsyncLifetime
         // As the build before it left the file: the format before, and nothing said of an icon.
         var file = Path.Combine(_root, "state", "summaries.json");
         var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
-        Assert.Equal(5, (int)cache["format"]!);
+        Assert.Equal(6, (int)cache["format"]!);
         cache["format"] = 4;
         Assert.All(cache["summaries"]!.AsArray(), summary => Assert.True(summary!["summary"]!.AsObject().Remove("hasFavicon")));
         await File.WriteAllTextAsync(file, cache.ToJsonString());
@@ -337,7 +337,7 @@ public sealed class LibraryTests : IAsyncLifetime
         // As the build before it left the file: the format it kept, and no score with the analysis.
         var file = Path.Combine(_root, "state", "summaries.json");
         var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
-        Assert.Equal(5, (int)cache["format"]!);
+        Assert.Equal(6, (int)cache["format"]!);
         cache["format"] = 3;
         foreach (var summary in cache["summaries"]!.AsArray())
         {
@@ -350,6 +350,36 @@ public sealed class LibraryTests : IAsyncLifetime
         _sidecar = await TestSidecar.StartAsync(_root);
         var item = await _sidecar.GetJsonAsync($"api/crawls/{id}");
         Assert.Equal((score, false), (item["score"]!.ToJsonString(), (bool)item["outOfDate"]!));
+    }
+
+    /// <summary>
+    /// Summaries kept by a build from before the fix loop (the format before this one) aren't used: one has no check counts
+    /// and no options fingerprint, so it would say a crawl has no previous crawl to compare with. The crawls are read again.
+    /// </summary>
+    [Fact]
+    public async Task SummariesKeptBeforeTheFixLoopAreReadAgain()
+    {
+        var then = CrawlIds.For(await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "before-the-fix-loop-1.sicrawl"), analyse: true));
+        var now = CrawlIds.For(await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "before-the-fix-loop-2.sicrawl"), analyse: true));
+        Assert.Equal(then, (string?)(await _sidecar.GetJsonAsync($"api/crawls/{now}"))["previous"]!["id"]);
+        await _sidecar.DisposeAsync();
+
+        // As the build before it left the file: the format it kept, and neither the counts nor the fingerprint.
+        var file = Path.Combine(_root, "state", "summaries.json");
+        var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+        Assert.Equal(6, (int)cache["format"]!);
+        cache["format"] = 5;
+        foreach (var summary in cache["summaries"]!.AsArray())
+        {
+            Assert.True(summary!["summary"]!.AsObject().Remove("checkCounts") && summary["summary"]!.AsObject().Remove("optionsFingerprint"));
+        }
+
+        await File.WriteAllTextAsync(file, cache.ToJsonString());
+
+        _sidecar = await TestSidecar.StartAsync(_root);
+        var item = await _sidecar.GetJsonAsync($"api/crawls/{now}");
+        Assert.Equal(then, (string?)item["previous"]!["id"]);
+        Assert.NotNull(item["changes"]);
     }
 
     /// <summary>

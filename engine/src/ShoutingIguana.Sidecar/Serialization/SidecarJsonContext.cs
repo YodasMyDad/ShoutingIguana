@@ -82,7 +82,17 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IssueFixer>),
 
         // The proxy test (round 5).
-        typeof(CamelCaseEnumConverter<ProxyTestOutcome>)
+        typeof(CamelCaseEnumConverter<ProxyTestOutcome>),
+
+        // The fix loop.
+        typeof(CamelCaseEnumConverter<Comparability>),
+        typeof(CamelCaseEnumConverter<ComparisonDifferenceCode>),
+        typeof(CamelCaseEnumConverter<ComparisonSide>),
+        typeof(CamelCaseEnumConverter<CheckChangeState>),
+        typeof(CamelCaseEnumConverter<RowChangeState>),
+        typeof(CamelCaseEnumConverter<GroupChangeState>),
+        typeof(CamelCaseEnumConverter<NotCheckedCode>),
+        typeof(CamelCaseEnumConverter<RecheckKind>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]
@@ -164,6 +174,13 @@ namespace ShoutingIguana.Sidecar.Serialization;
 // The proxy test (round 5).
 [JsonSerializable(typeof(ProxyTestRequest))]
 [JsonSerializable(typeof(ProxyTestResult))]
+
+// The fix loop.
+[JsonSerializable(typeof(ChangesDto))]
+[JsonSerializable(typeof(NoComparisonDto))]
+[JsonSerializable(typeof(RowChange))]
+[JsonSerializable(typeof(FixedRequest))]
+[JsonSerializable(typeof(FixedPageDto))]
 internal sealed partial class SidecarJsonContext : JsonSerializerContext
 {
 }

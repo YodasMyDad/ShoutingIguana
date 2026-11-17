@@ -14,6 +14,7 @@ using ShoutingIguana.Sidecar.Errors;
 using ShoutingIguana.Sidecar.Events;
 using ShoutingIguana.Sidecar.Events.Models;
 using ShoutingIguana.Sidecar.Library;
+using ShoutingIguana.Sidecar.Library.Models;
 using ShoutingIguana.Sidecar.Models;
 using ShoutingIguana.Sidecar.Options;
 
@@ -41,6 +42,9 @@ internal sealed class CrawlManager(
     private const string SHUTTING_DOWN = "The engine is shutting down.";
     private const string NETWORK_PATH = "Crawls on another computer can't be opened. Copy the crawl to this computer first.";
 
+    /// <summary>What <c>with</c> and <c>compareWith</c> say for a crawl's previous crawl.</summary>
+    public const string PREVIOUS = "previous";
+
     private readonly Lock _sync = new();
     private readonly Dictionary<string, LiveCrawl> _crawls = new(StringComparer.Ordinal);
     private readonly CrawlEngine _engine = new(loggerFactory);
@@ -67,21 +71,13 @@ internal sealed class CrawlManager(
     /// </summary>
     public AnalysisSettings AnalysisSettings => analysisSettings.Current;
 
-    /// <summary>Every crawl in the library, newest first.</summary>
+    /// <summary>Every crawl in the library, newest first, each with its previous crawl and its changes since.</summary>
     public IReadOnlyList<CrawlListItem> List()
     {
-        List<(string Id, string Path)> crawls = [.. library.List()];
-        HashSet<string> listed = [.. crawls.Select(crawl => crawl.Id)];
-        lock (_sync)
-        {
-            // Live crawls are listed whatever the library says: one can't be removed while it runs.
-            crawls.AddRange([.. _crawls.Values.Where(live => !listed.Contains(live.Id)).Select(live => (live.Id, live.Path))]);
-        }
-
+        var entries = Entries();
         List<CrawlListItem> items =
         [
-            .. crawls.Select(crawl => Item(crawl.Id, crawl.Path))
-                .OfType<CrawlListItem>()
+            .. PreviousCrawls.Fill(entries)
                 .OrderByDescending(item => item.StartedAt ?? DateTime.MinValue)
                 .ThenBy(item => item.Path, StringComparer.Ordinal)
         ];
@@ -89,12 +85,82 @@ internal sealed class CrawlManager(
         return items;
     }
 
+    /// <summary>One crawl's item, with its previous crawl among those the library lists (a crawl removed from it isn't one).</summary>
     public CrawlListItem Get(string id)
     {
-        var path = PathOf(id);
-        var item = Item(id, path) ?? throw EngineErrors.ForRead(summaries.Get(id, path).Error ?? new InvalidOperationException(EngineErrors.NOT_A_CRAWL));
+        var (entry, entries) = EntryOf(id);
         summaries.Save();
-        return item;
+        return PreviousCrawls.With(entry, entries);
+    }
+
+    /// <summary>
+    /// The crawl <paramref name="id"/> is compared with: its previous crawl when <paramref name="with"/> is null or
+    /// <c>previous</c> (null when it has none), or the crawl it names, which must be another crawl of the same site that can
+    /// be compared (<see cref="PreviousCrawls.IsCandidate"/>).
+    /// </summary>
+    /// <exception cref="ProblemException">
+    /// not-analyzed when <paramref name="id"/> was never analysed; crawl-not-found for an id no crawl has; crawl-not-comparable
+    /// for one that can't be compared.
+    /// </exception>
+    public ComparedPair ComparedWith(string id, string? with)
+    {
+        var (entry, entries) = EntryOf(id);
+        if (entry.Summary?.Analysis is null)
+        {
+            throw Problems.NotAnalyzed();
+        }
+
+        if (with is null or PREVIOUS)
+        {
+            return new ComparedPair(entry, PreviousCrawls.Choose(entry, entries), Picked: false);
+        }
+
+        var otherPath = PathOf(with);
+        var other = entries.FirstOrDefault(listed => listed.Item.Id == with) ?? Entry(with, otherPath);
+        return other switch
+        {
+            null => throw Problems.CrawlNotComparable("That crawl can't be read, so it can't be compared."),
+            _ when other.Item.Id == id => throw Problems.CrawlNotComparable("A crawl can't be compared with itself."),
+            _ when other.Item.SiteKey is null || other.Item.SiteKey != entry.Item.SiteKey => throw Problems.CrawlNotComparable("That crawl is of another site."),
+            _ when !PreviousCrawls.IsCandidate(other) => throw Problems.CrawlNotComparable(other.Item switch
+            {
+                { Missing: true } => "That crawl's file isn't there any more.",
+                { Status: CrawlListStatus.Unreadable } => "That crawl's file can't be read.",
+                { Status: CrawlListStatus.Interrupted } => "That crawl was interrupted. Continue it, and let it finish or stop it, before comparing with it.",
+                { Status: CrawlListStatus.InUse } => "That crawl is open in another program.",
+                { Status: not (CrawlListStatus.Completed or CrawlListStatus.Stopped or CrawlListStatus.Failed) } => "That crawl is running here. Wait for it to finish.",
+                _ when other.Summary?.Analysis is null => "That crawl hasn't been analysed yet.",
+                _ => "That crawl's analysis read no page."
+            }),
+            _ => new ComparedPair(entry, other, Picked: true)
+        };
+    }
+
+    /// <summary>A crawl's entry, and those of every crawl the library lists, which it may not be among (removed, say).</summary>
+    private (LibraryEntry Entry, List<LibraryEntry> Library) EntryOf(string id)
+    {
+        var path = PathOf(id);
+        var entries = Entries();
+        var entry = entries.FirstOrDefault(listed => listed.Item.Id == id) ?? Entry(id, path)
+                    ?? throw EngineErrors.ForRead(summaries.Get(id, path).Error ?? new InvalidOperationException(EngineErrors.NOT_A_CRAWL));
+        return (entry, entries);
+    }
+
+    /// <summary>
+    /// Every crawl the library lists, with the summary its item was made from: the files at the top of the data folder and
+    /// those opened from elsewhere, minus the removed ones, and the crawls live here whatever the library says (one can't
+    /// be removed while it runs).
+    /// </summary>
+    private List<LibraryEntry> Entries()
+    {
+        List<(string Id, string Path)> crawls = [.. library.List()];
+        HashSet<string> listed = [.. crawls.Select(crawl => crawl.Id)];
+        lock (_sync)
+        {
+            crawls.AddRange([.. _crawls.Values.Where(live => !listed.Contains(live.Id)).Select(live => (live.Id, live.Path))]);
+        }
+
+        return [.. crawls.Select(crawl => Entry(crawl.Id, crawl.Path)).OfType<LibraryEntry>()];
     }
 
     /// <summary>The file of a crawl the library knows, live ones included.</summary>
@@ -821,7 +887,7 @@ internal sealed class CrawlManager(
     /// The library's view of one crawl: live state from here, the rest from the file's cached summary. Null for a file
     /// that isn't a crawl this engine reads; a file that may be one but couldn't be read is listed as unreadable.
     /// </summary>
-    private CrawlListItem? Item(string id, string path)
+    private LibraryEntry? Entry(string id, string path)
     {
         (LiveCrawlState State, CrawlProgress? Progress, string StartUrl)? live;
         lock (_sync)
@@ -837,6 +903,11 @@ internal sealed class CrawlManager(
             return null;
         }
 
+        return new LibraryEntry(Item(id, path, live, cached), cached.Summary);
+    }
+
+    private CrawlListItem Item(string id, string path, (LiveCrawlState State, CrawlProgress? Progress, string StartUrl)? live, CachedSummary cached)
+    {
         var summary = cached.Summary;
         var unreadable = live is null && cached.IsUnreadable;
         var crawling = live is { State: not LiveCrawlState.Analyzing };
@@ -848,6 +919,7 @@ internal sealed class CrawlManager(
             Path = path,
             FileName = Path.GetFileName(path),
             Site = SiteOf(startUrl),
+            SiteKey = PreviousCrawls.SiteKeyOf(startUrl),
             StartUrl = startUrl,
             Status = live is { } now ? StatusOf(now.State) : unreadable ? CrawlListStatus.Unreadable : StoredStatus(summary, cached.Exists, path),
             Error = unreadable ? EngineErrors.UnreadableMessage(cached.Error!) : null,

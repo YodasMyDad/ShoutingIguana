@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Sidecar.Api.Models;
@@ -11,4 +12,9 @@ internal sealed record UrlPageDto(
     long? Total,
     string? Next,
     SummaryState Summary,
-    IReadOnlyList<string> Unavailable);
+    IReadOnlyList<string> Unavailable)
+{
+    /// <summary>With <c>compareWith</c> on a check's rows (the fix loop): what they were compared with, each row then having its <c>change</c>. Left out without one.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ComparedDto? Compared { get; init; }
+}

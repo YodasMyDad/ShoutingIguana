@@ -40,6 +40,9 @@ internal static class Problems
 
     public static ProblemException NotAnalyzed() => new(new ProblemDto("not-analyzed", "This crawl hasn't been analysed yet.", 404));
 
+    /// <summary>A comparison with a crawl that can't be compared (the fix loop): another site's, never analysed, live, interrupted, missing.</summary>
+    public static ProblemException CrawlNotComparable(string title) => new(new ProblemDto("crawl-not-comparable", title, 409));
+
     public static ProblemException CheckNotFound(string checkId) =>
         new(new ProblemDto("check-not-found", $"There's no check called '{checkId}'.", 404));
 
