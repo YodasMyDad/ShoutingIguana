@@ -118,7 +118,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["type"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": ["broken-internal-links", "image-broken", "canonical-broken", "hreflang-broken-target"]
     },
     {
       "id": "internal-server-error",
@@ -150,7 +151,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["type", "responseMs"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": ["broken-internal-links", "image-broken", "canonical-broken", "hreflang-broken-target"]
     },
     {
       "id": "internal-unreachable",
@@ -182,7 +184,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["type", "fetchError", "responseMs"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": ["broken-internal-links", "image-broken", "canonical-broken", "hreflang-broken-target"]
     },
     {
       "id": "internal-blocked",
@@ -214,7 +217,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["type"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "soft-404",
@@ -246,7 +250,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["title", "h1", "wordCount"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "redirect-chain",
@@ -277,7 +282,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["redirectChain"],
-      "targetFacts": ["statusCode", "indexability"]
+      "targetFacts": ["statusCode", "indexability"],
+      "clears": ["links-to-redirects"]
     },
     {
       "id": "redirect-loop",
@@ -309,7 +315,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["redirectChain"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": ["broken-internal-links", "canonical-broken"]
     },
     {
       "id": "redirect-broken",
@@ -341,7 +348,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["redirectChain"],
-      "targetFacts": ["statusCode"]
+      "targetFacts": ["statusCode"],
+      "clears": ["broken-internal-links", "image-broken", "canonical-broken"]
     },
     {
       "id": "redirect-temporary",
@@ -374,7 +382,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["redirectChain"],
-      "targetFacts": ["statusCode"]
+      "targetFacts": ["statusCode"],
+      "clears": []
     },
     {
       "id": "redirect-downgrade",
@@ -406,7 +415,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["redirectChain"],
-      "targetFacts": ["statusCode", "final"]
+      "targetFacts": ["statusCode", "final"],
+      "clears": []
     },
     {
       "id": "meta-refresh",
@@ -439,7 +449,8 @@
       "plainOneFix": "That's almost certainly one line in your page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "broken-internal-links",
@@ -471,7 +482,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "text", "position", "fragment", "flags", "links"]
+      "targetFacts": ["statusCode", "final", "text", "position", "fragment", "flags", "links"],
+      "clears": []
     },
     {
       "id": "broken-external-links",
@@ -504,7 +516,8 @@
       "plainOneFix": "That's almost certainly a link in your menu, footer or page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "text", "position", "fragment", "flags", "links"]
+      "targetFacts": ["statusCode", "final", "text", "position", "fragment", "flags", "links"],
+      "clears": []
     },
     {
       "id": "links-to-redirects",
@@ -537,7 +550,8 @@
       "plainOneFix": "That's almost certainly a link in your menu, footer or page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "text", "position", "links"]
+      "targetFacts": ["statusCode", "final", "text", "position", "links"],
+      "clears": []
     },
     {
       "id": "internal-nofollow-links",
@@ -570,7 +584,8 @@
       "plainOneFix": "That's almost certainly a link in your menu, footer or page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "text", "position", "flags", "links"]
+      "targetFacts": ["statusCode", "text", "position", "flags", "links"],
+      "clears": []
     },
     {
       "id": "empty-anchor-text",
@@ -603,7 +618,8 @@
       "plainOneFix": "That's almost certainly your logo, which sits in the part of the site every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "position", "flags", "links"]
+      "targetFacts": ["statusCode", "position", "flags", "links"],
+      "clears": []
     },
     {
       "id": "broken-fragment-links",
@@ -636,7 +652,8 @@
       "plainOneFix": "That's almost certainly a link in your page design, such as \"Skip to content\", which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "fragment", "text", "position", "links"]
+      "targetFacts": ["statusCode", "fragment", "text", "position", "links"],
+      "clears": []
     },
     {
       "id": "orphan-page",
@@ -668,7 +685,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "noindex-page",
@@ -701,7 +719,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["metaRobots", "xRobotsTag"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "nofollow-page",
@@ -733,7 +752,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["metaRobots", "xRobotsTag"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "blocked-by-robots",
@@ -767,7 +787,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["robotsRule"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "snippet-blocked",
@@ -799,7 +820,8 @@
       "plainOneFix": "These pages most likely get it from one setting, in your page design or SEO plugin.",
       "plainLooksFor": null,
       "evidence": ["metaRobots", "xRobotsTag"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "robots-txt-unreachable",
@@ -832,7 +854,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A rules file that search engines can't read",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "robots-txt-unreachable-other-origin",
@@ -864,7 +887,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A rules file that fails on another part of your site",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "robots-txt-missing",
@@ -898,7 +922,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A missing rules file for search engines",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "site-hidden-from-search",
@@ -932,7 +957,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A site that hides its home page and most pages from search",
       "evidence": ["metaRobots", "xRobotsTag"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "canonicalised-page",
@@ -964,7 +990,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "indexability", "canonical", "flags"]
+      "targetFacts": ["statusCode", "final", "indexability", "canonical", "flags"],
+      "clears": []
     },
     {
       "id": "canonical-missing",
@@ -995,7 +1022,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "canonical-multiple",
@@ -1027,7 +1055,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "canonical-broken",
@@ -1059,7 +1088,8 @@
       "plainOneFix": "That's almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "flags"]
+      "targetFacts": ["statusCode", "final", "flags"],
+      "clears": []
     },
     {
       "id": "canonical-to-redirect",
@@ -1091,7 +1121,8 @@
       "plainOneFix": "That's almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "flags"]
+      "targetFacts": ["statusCode", "final", "flags"],
+      "clears": []
     },
     {
       "id": "canonical-to-non-indexable",
@@ -1123,7 +1154,8 @@
       "plainOneFix": "That's almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "indexability", "canonical", "final", "flags"]
+      "targetFacts": ["statusCode", "indexability", "canonical", "final", "flags"],
+      "clears": []
     },
     {
       "id": "canonical-outside-head",
@@ -1155,7 +1187,8 @@
       "plainOneFix": null,
       "plainLooksFor": "Main addresses written in the wrong part of the page",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "canonical-relative",
@@ -1187,7 +1220,8 @@
       "plainOneFix": "That's almost certainly how your page design or SEO plugin writes the main address on every page.",
       "plainLooksFor": "Main addresses written as partial addresses",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "canonical-invalid",
@@ -1218,7 +1252,8 @@
       "plainOneFix": "That's almost certainly a gap in your page design, which writes the same mistake on every page.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "noindex-with-canonical",
@@ -1250,7 +1285,8 @@
       "plainOneFix": "That's almost certainly one setting in your page design or SEO plugin, which names the same address on every page.",
       "plainLooksFor": null,
       "evidence": ["metaRobots", "xRobotsTag"],
-      "targetFacts": ["statusCode", "indexability", "flags"]
+      "targetFacts": ["statusCode", "indexability", "flags"],
+      "clears": []
     },
     {
       "id": "sitemap-non-indexable",
@@ -1283,7 +1319,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["indexability", "finalUrl", "canonicalUrl"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "not-in-sitemap",
@@ -1316,7 +1353,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "sitemap-error",
@@ -1349,7 +1387,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A sitemap that can't be read",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "sitemap-missing",
@@ -1382,7 +1421,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A missing sitemap",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "sitemap-url-other-host",
@@ -1415,7 +1455,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["finalUrl"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "title-missing",
@@ -1447,7 +1488,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "title-multiple",
@@ -1479,7 +1521,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "title-too-long",
@@ -1511,7 +1554,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["title", "titleInResults", "titleWidth", "titleLength"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "title-too-short",
@@ -1544,7 +1588,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["title", "titleWidth", "titleLength"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "title-duplicate",
@@ -1575,7 +1620,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["title"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "description-missing",
@@ -1607,7 +1653,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "description-multiple",
@@ -1639,7 +1686,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "description-too-long",
@@ -1671,7 +1719,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["description", "descriptionInResults", "descriptionWidth", "descriptionLength"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "description-too-short",
@@ -1702,7 +1751,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["description", "descriptionWidth", "descriptionLength"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "description-duplicate",
@@ -1734,7 +1784,8 @@
       "plainOneFix": "That's almost certainly a default description that your page design or SEO plugin gives to pages without one of their own.",
       "plainLooksFor": null,
       "evidence": ["description"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "h1-missing",
@@ -1767,7 +1818,8 @@
       "plainOneFix": "If these pages share one page design, marking its headline as the main heading fixes them all.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "h1-multiple",
@@ -1800,7 +1852,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "h1-duplicate",
@@ -1832,7 +1885,8 @@
       "plainOneFix": "That's almost certainly one heading in your page design, such as your site's name, marked as the main heading of every page.",
       "plainLooksFor": null,
       "evidence": ["h1"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "low-word-count",
@@ -1864,7 +1918,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "duplicate-content",
@@ -1896,7 +1951,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["indexability", "canonicalUrl", "inlinks"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "near-duplicate-content",
@@ -1929,7 +1985,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["indexability", "canonicalUrl", "inlinks", "wordCount"],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "duplicate-site-version",
@@ -1962,7 +2019,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A site that answers at more than one address",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "image-missing-alt",
@@ -1994,7 +2052,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["img", "position", "links"]
+      "targetFacts": ["img", "position", "links"],
+      "clears": []
     },
     {
       "id": "image-alt-too-long",
@@ -2026,7 +2085,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["img", "position"]
+      "targetFacts": ["img", "position"],
+      "clears": []
     },
     {
       "id": "image-missing-dimensions",
@@ -2058,7 +2118,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["img", "pixelWidth", "pixelHeight", "position"]
+      "targetFacts": ["img", "pixelWidth", "pixelHeight", "position"],
+      "clears": []
     },
     {
       "id": "image-broken",
@@ -2091,7 +2152,8 @@
       "plainOneFix": "That's almost certainly an image in your page design, such as a logo or icon, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "text", "position", "links"]
+      "targetFacts": ["statusCode", "final", "text", "position", "links"],
+      "clears": []
     },
     {
       "id": "image-too-large",
@@ -2133,7 +2195,8 @@
         "final",
         "position",
         "links"
-      ]
+      ],
+      "clears": []
     },
     {
       "id": "hreflang-invalid-code",
@@ -2165,7 +2228,8 @@
       "plainOneFix": "That's almost certainly the list of language versions in your page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "hreflang-missing-self",
@@ -2197,7 +2261,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "hreflang-missing-return",
@@ -2229,7 +2294,8 @@
       "plainOneFix": "That's almost certainly one entry in the list of language versions in your page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "text", "indexability"]
+      "targetFacts": ["statusCode", "text", "indexability"],
+      "clears": []
     },
     {
       "id": "hreflang-broken-target",
@@ -2261,7 +2327,8 @@
       "plainOneFix": "That's almost certainly one entry in the list of language versions in your page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "text"]
+      "targetFacts": ["statusCode", "final", "text"],
+      "clears": []
     },
     {
       "id": "hreflang-to-non-indexable",
@@ -2293,7 +2360,8 @@
       "plainOneFix": "That's almost certainly one entry in the list of language versions in your page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "indexability", "final", "canonical", "text"]
+      "targetFacts": ["statusCode", "indexability", "final", "canonical", "text"],
+      "clears": []
     },
     {
       "id": "hreflang-duplicate-code",
@@ -2325,7 +2393,8 @@
       "plainOneFix": "That's almost certainly the list of language versions in your page design, which every page shares.",
       "plainLooksFor": "Languages listed at more than one address",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "hreflang-missing-x-default",
@@ -2356,7 +2425,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "hreflang-outside-head",
@@ -2388,7 +2458,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "structured-data-invalid",
@@ -2420,7 +2491,8 @@
       "plainOneFix": "That's almost certainly one mistake in your page design, which writes the same code on every page.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "structured-data-missing-required",
@@ -2452,7 +2524,8 @@
       "plainOneFix": "That's almost certainly your page design, which leaves the same detail out of every page of one kind.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "no-https",
@@ -2486,7 +2559,8 @@
       "plainOneFix": null,
       "plainLooksFor": "A site that isn't secure (no HTTPS)",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "http-page",
@@ -2518,7 +2592,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "mixed-content",
@@ -2551,7 +2626,8 @@
       "plainOneFix": "That's almost certainly a file your page design loads on every page, such as a script, style file or logo.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["kind", "statusCode", "contentType", "position", "links"]
+      "targetFacts": ["kind", "statusCode", "contentType", "position", "links"],
+      "clears": []
     },
     {
       "id": "security-headers-missing",
@@ -2583,7 +2659,8 @@
       "plainOneFix": null,
       "plainLooksFor": "Missing security settings",
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "url-uppercase",
@@ -2615,7 +2692,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "url-underscores",
@@ -2647,7 +2725,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "url-too-long",
@@ -2680,7 +2759,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "slow-response",
@@ -2712,7 +2792,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "large-page",
@@ -2745,7 +2826,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "html-past-crawl-limit",
@@ -2777,7 +2859,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "viewport-missing",
@@ -2809,7 +2892,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "lang-missing",
@@ -2840,7 +2924,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "charset-missing",
@@ -2871,7 +2956,8 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     },
     {
       "id": "open-graph-missing",
@@ -2903,7 +2989,8 @@
       "plainOneFix": "That's almost certainly your page design, which leaves the same details out of every page.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": []
+      "targetFacts": [],
+      "clears": []
     }
   ]
 }

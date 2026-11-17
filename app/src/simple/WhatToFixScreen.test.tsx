@@ -224,24 +224,25 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     fireEvent.click(main().getByRole('button', { name: 'Copy this list' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toContain('Serious (2)');
-    // A row's count without what it's a share of, so the rows compare, and the points fixing it gives back.
-    expect(writes[0]).toContain("- Pages or files that can't be found: 9 addresses, 2 points back.");
+    // A row's count without what it's a share of, so the rows compare, and the points fixing it gives back: with the
+    // broken links its fix clears, folded under it.
+    expect(writes[0]).toContain(
+      "- Pages or files that can't be found: 9 addresses, 6 points back. Some addresses on your site answer with an error",
+    );
+    expect(writes[0]).toContain('  - Fixed along with it: Links that lead to broken pages, 5 pages.\n');
   });
 });
 
-/** The garden crawl as the step 3b sidecar analyses it: restoring the 9 missing addresses clears the 5 pages' links. */
-const RELATED_ANALYSIS: Analysis = {
+/** The garden crawl as a sidecar from before related checks gave it: nothing folded, so the parts can be reordered. */
+const UNRELATED_ANALYSIS: Analysis = {
   ...GARDEN_ANALYSIS,
-  counts: GARDEN_ANALYSIS.counts.map((count) =>
-    count.checkId === 'internal-client-error'
-      ? { ...count, causes: 9, templateCauses: 0, clears: [{ checkId: 'broken-internal-links', pages: 5, all: true }] }
-      : count,
-  ),
+  counts: GARDEN_ANALYSIS.counts.map((count) => ({ ...count, clears: [] })),
 };
 
 describe.skipIf(TABLE_STUBBED)('What to fix, related and ordered', () => {
   it('folds a problem a fix of another clears under that one, as one job with the points of both', async () => {
-    await open(FIX, RELATED_ANALYSIS);
+    // The garden crawl: restoring its 9 missing addresses clears the broken links on all 5 pages.
+    await open(FIX);
     await whatToFix();
     const serious = within(main().getByRole('region', { name: /^Serious/ }));
     const rows = serious.getAllByRole('link');
@@ -263,7 +264,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix, related and ordered', () => {
   });
 
   it('orders each part by the most points back or the most found, remembered for Simple', async () => {
-    await open(FIX);
+    await open(FIX, UNRELATED_ANALYSIS);
     await whatToFix();
     const serious = () =>
       within(main().getByRole('region', { name: /^Serious/ }))
@@ -294,7 +295,7 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
   });
 
   it('says what fixing it also fixes, and which fix fixes it, each a link to the other problem', async () => {
-    const { router } = await open(`${FIX}/internal-client-error`, RELATED_ANALYSIS);
+    const { router } = await open(`${FIX}/internal-client-error`);
     await problem("Pages or files that can't be found");
     const also = main().getByRole('list', { name: 'Fixed along with it' });
     expect(also).toHaveTextContent(

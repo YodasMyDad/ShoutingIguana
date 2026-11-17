@@ -178,7 +178,8 @@ export function CheckDetail({
                 context={groupedBy(check)}
               />
             ) : null}
-            {entry.causes !== null ? (
+            {entry.causes !== null && count !== null && entry.causes < count ? (
+              // Only when its URLs share causes: a thing to change for each URL says nothing the count doesn't.
               <Stat
                 compact
                 size="md"
@@ -187,9 +188,7 @@ export function CheckDetail({
                 context={
                   entry.templateCauses
                     ? `${formatCount(entry.templateCauses)} in the site’s template`
-                    : entry.causes === count
-                      ? 'one for each URL'
-                      : 'causes shared by its URLs'
+                    : 'its URLs share causes'
                 }
               />
             ) : null}

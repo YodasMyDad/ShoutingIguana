@@ -117,9 +117,9 @@ export interface AnalysisTotals {
   passed: number;
   skipped: number;
   /**
-   * The separate things to change the found checks' issues come to (their `causes` added up); null when a found check
-   * has none (an analysis from a sidecar that doesn't count them), so a sum is never short. Left out where only the
-   * counts are known.
+   * The separate things to change the found checks' issues come to (their `causes` added up, a check another one's fix
+   * clears entirely left out as the same job); null when a found check has none (an analysis from a sidecar that doesn't
+   * count them), so a sum is never short. Left out where only the counts are known.
    */
   causes?: number | null;
   /** Of `causes`, those likely in the site's template. */
@@ -218,12 +218,22 @@ export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
   let skipped = 0;
   let causes: number | null = 0;
   let templateCauses = 0;
+  // A check another one's fix clears entirely is the same job: its things to change are that one's.
+  const isFound = (entry: CheckEntry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped';
+  const foundIds = new Set(entries.filter(isFound).map((entry) => entry.check.id));
+  const sameJob = new Set(
+    entries
+      .filter(isFound)
+      .flatMap((entry) => entry.clears.filter((cleared) => cleared.all && foundIds.has(cleared.checkId)))
+      .map((cleared) => cleared.checkId),
+  );
   for (const entry of entries) {
     if (entry.outcome === 'skipped') skipped++;
     else if (entry.outcome === 'passed') passed++;
     else {
       found++;
       issues += entry.count ?? 0;
+      if (sameJob.has(entry.check.id)) continue;
       causes = causes === null || entry.causes === null ? null : causes + entry.causes;
       templateCauses += entry.templateCauses ?? 0;
     }

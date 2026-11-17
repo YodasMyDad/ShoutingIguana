@@ -297,16 +297,30 @@ describe('the Issues screen', () => {
     });
     const { router } = await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    // A 404 is a thing to change a URL.
-    expect(screen.getByText('Things to change', { selector: '.si-stat__label' }).parentElement).toHaveTextContent(
-      /^Things to change2one for each URL$/,
-    );
+    // A 404 is a thing to change a URL: nothing to say beyond the count.
+    expect(screen.queryByText('Things to change', { selector: '.si-stat__label' })).toBeNull();
     const related = screen.getByRole('list', { name: 'Related checks' });
     expect(related).toHaveTextContent(
       'Fixing this also clears Links to broken internal URLs: all 3 pages it flags (4 points back).',
     );
     fireEvent.click(within(related).getByRole('link', { name: 'Links to broken internal URLs' }));
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/broken-internal-links`));
+  });
+
+  it('says the things to change when a check’s URLs share causes, with those in the template', async () => {
+    sidecar({
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        counts: ISSUES_ANALYSIS.counts.map((count) =>
+          count.checkId === 'empty-anchor-text' ? { ...count, causes: 2, templateCauses: 1, clears: [] } : count,
+        ),
+      },
+    });
+    await open(`${ISSUES}/empty-anchor-text`);
+    await screen.findByRole('heading', { name: 'Internal links without anchor text', level: 2 });
+    expect(screen.getByText('Things to change', { selector: '.si-stat__label' }).parentElement).toHaveTextContent(
+      /^Things to change21 in the site’s template$/,
+    );
   });
 
   it('puts what the check flags ahead of why it matters and how to fix it, a button away', async () => {

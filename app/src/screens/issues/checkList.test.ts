@@ -418,15 +418,19 @@ describe('things to change', () => {
     expect(checkEntries(CHECKS, ANALYSIS)[0]).toMatchObject({ causes: null, templateCauses: null, clears: [] });
   });
 
-  it('add up for the answer, with those in the template', () => {
+  it('add up for the answer, with those in the template, a check another’s fix clears entirely being that job', () => {
+    // 9 + 2 + 86: the links to the 404s are cleared by fixing the 404s, so their 3 aren't counted again.
     expect(analysisTotals(checkEntries(CHECKS, COUNTED))).toEqual({
       found: 4,
       issues: 365,
       passed: 2,
       skipped: 2,
-      causes: 100,
+      causes: 97,
       templateCauses: 1,
     });
+    // With the 404s hidden, the links are a job of their own again.
+    const hidden = checkEntries(CHECKS, COUNTED, new Set(['internal-client-error']));
+    expect(analysisTotals(countedEntries(hidden)).causes).toBe(91);
   });
 
   it('lead the answer when the analysis counts them', () => {
