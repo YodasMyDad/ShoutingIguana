@@ -162,7 +162,9 @@ public static class RecheckPlanReader
 
             var (flagged, detail, related) = check is null ? (false, null, null) : Issue(connection, snapshot, check.Id, id);
             List<int> targets = check is null ? [] : Targets(connection, snapshot, check.Id, id);
-            var named = namesTargets ? targets.Where(target => target != id && !taken.Contains(target)).Distinct().ToList() : [];
+            var named = namesTargets ? targets.Where(target => target != id && !taken.Contains(target)).Distinct().ToList()
+                : RecheckDuplicates.TextOf(check?.Id) is not null ? ClusterMembers(connection, snapshot, check!.Id, targets).Where(member => member != id && !taken.Contains(member)).ToList()
+                : [];
             if (taken.Count + 1 + named.Count > limit && !taken.Contains(id))
             {
                 break;
@@ -279,6 +281,28 @@ public static class RecheckPlanReader
         }
 
         return targets;
+    }
+
+    /// <summary>Every page of the duplicate clusters named by their first pages, as the analysis stored them.</summary>
+    private static List<int> ClusterMembers(SqliteConnection connection, SqliteTransaction snapshot, string checkId, List<int> clusters)
+    {
+        List<int> members = [];
+        foreach (var cluster in clusters)
+        {
+            using var command = Command(connection, snapshot, """
+                SELECT url_id FROM issue_targets WHERE issue = $check AND related_url_id = $cluster
+                UNION SELECT url_id FROM issues WHERE issue = $check AND related_url_id = $cluster
+                UNION SELECT $cluster
+                ORDER BY 1
+                """, ("$check", checkId), ("$cluster", cluster));
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                members.Add(reader.GetInt32(0));
+            }
+        }
+
+        return [.. members.Distinct()];
     }
 
     /// <summary>The pages linking to <paramref name="id"/> by any kind of link, shallowest first, then in crawl order.</summary>

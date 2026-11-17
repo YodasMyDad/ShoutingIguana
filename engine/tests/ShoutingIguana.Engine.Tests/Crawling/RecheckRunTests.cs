@@ -227,21 +227,46 @@ public sealed class RecheckRunTests(RecheckCrawls crawls) : IDisposable
     }
 
     /// <summary>
-    /// A duplicate is settled against the other pages as the crawl stored them: the page renamed is fixed, and so is the
-    /// page that kept the old title, which a page the recheck didn't fetch took meanwhile. Only a full crawl sees that.
+    /// A duplicate is fixed only when its own text changed. The page renamed is fixed; the page that kept the old title,
+    /// which a page the recheck didn't fetch took meanwhile, isn't flagged any more, but its title is as it was: only a full
+    /// crawl can say no other page shares it now, so it's not checked, never fixed (a full crawl finds it still a
+    /// duplicate). So is the page whose copy took a title of its own. A pair left as it was is still a pair.
     /// </summary>
     [Fact]
-    public async Task DuplicatesAreSettledAgainstTheOtherPagesAsStored()
+    public async Task ADuplicateIsFixedOnlyWhenItsOwnTextChanged()
     {
         var path = crawls.Copy(crawls.Then);
         var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("title-duplicate"));
 
-        var outcomes = RecheckReader.ReadRows(path, recheck.Id, null, [RecheckRole.Judged], 0, 100)!.Rows.ToDictionary(row => row.Url[(crawls.Server.BaseUri.AbsoluteUri.Length - 1)..], row => row.Outcome);
+        var outcomes = Outcomes(path, recheck.Id);
         Assert.Equal((RecheckOutcome?)RecheckOutcome.Fixed, outcomes["/p/184"]);
-        Assert.Equal((RecheckOutcome?)RecheckOutcome.Fixed, outcomes["/p/185"]);
-        Assert.Equal((RecheckOutcome?)RecheckOutcome.Still, outcomes["/p/111"]);
+        Assert.Equal((RecheckOutcome?)RecheckOutcome.NotChecked, outcomes["/p/185"]);
         Assert.Contains($"{crawls.Server.BaseUri}p/185", crawls.Server.Site.GetExpectations().IssueUrls["title-duplicate"]);
+        Assert.Equal(((RecheckOutcome?)RecheckOutcome.Fixed, (RecheckOutcome?)RecheckOutcome.NotChecked), (outcomes["/p/37"], outcomes["/p/36"]));
+        Assert.Equal((RecheckOutcome?)RecheckOutcome.Still, outcomes["/p/111"]);
     }
+
+    /// <summary>
+    /// Asked for one page of a duplicate cluster, a recheck fetches every page the cluster had too, so it judges the page
+    /// against them as they are now.
+    /// </summary>
+    [Fact]
+    public async Task ARecheckOfOnePageOfAClusterFetchesTheWholeCluster()
+    {
+        var path = crawls.Copy(crawls.Then);
+        var id = (int)TestCrawls.Count(path, $"SELECT id FROM urls WHERE url = '{crawls.Server.BaseUri}p/185'");
+        var cluster = (int)TestCrawls.Count(path, $"SELECT id FROM urls WHERE url = '{crawls.Server.BaseUri}p/184'");
+
+        var plan = RecheckPlanReader.Plan(path, new RecheckAsk("title-duplicate", UrlIds: [id]), new AnalysisSettings());
+        Assert.Equal(new[] { (id, RecheckRole.Judged), (cluster, RecheckRole.Named) }.Order(), plan.Scope.Select(url => (url.Id, url.Role)).Order());
+
+        var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("title-duplicate", UrlIds: [id]));
+        Assert.Equal((2, (RecheckOutcome?)RecheckOutcome.NotChecked), (recheck.Fetched, Outcomes(path, recheck.Id)["/p/185"]));
+    }
+
+    private Dictionary<string, RecheckOutcome?> Outcomes(string path, int recheck) =>
+        RecheckReader.ReadRows(path, recheck, null, [RecheckRole.Judged], 0, 100)!.Rows
+            .ToDictionary(row => row.Url[(crawls.Server.BaseUri.AbsoluteUri.Length - 1)..], row => row.Outcome);
 
     /// <summary>
     /// Past its cap, a recheck takes the check's most important URLs, as the check's rows come, and leaves the rest as the
@@ -251,14 +276,16 @@ public sealed class RecheckRunTests(RecheckCrawls crawls) : IDisposable
     public async Task PastItsCapARecheckTakesTheMostImportantFirst()
     {
         var path = crawls.Copy(crawls.Then);
-        var plan = RecheckPlanReader.Plan(path, new RecheckAsk("title-duplicate"), new AnalysisSettings(), limit: 3);
-        var first = IssueGroupReader.ReadRows(path, "title-duplicate", new UrlQuery { Columns = ["url"], Limit = 3 })!.Page!.Rows.Select(row => row.Id);
+        var count = (int)IssueReader.ReadCounts(path)["description-missing"];
+        var plan = RecheckPlanReader.Plan(path, new RecheckAsk("description-missing"), new AnalysisSettings(), limit: 3);
+        var first = IssueGroupReader.ReadRows(path, "description-missing", new UrlQuery { Columns = ["url"], Limit = 3 })!.Page!.Rows.Select(row => row.Id);
 
-        Assert.Equal((10, 3, true, 7), (plan.Judged, plan.Phase1, plan.Capped, plan.NotRechecked));
+        Assert.True(count > 3);
+        Assert.Equal((count, 3, true, count - 3), (plan.Judged, plan.Phase1, plan.Capped, plan.NotRechecked));
         Assert.Equal(first, plan.Scope.Select(url => url.Id));
 
-        var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("title-duplicate"), limit: 3);
-        Assert.Equal((10, 7, 3), (recheck.Judged, recheck.Result!.NotRechecked, recheck.Fetched));
+        var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("description-missing"), limit: 3);
+        Assert.Equal((count, count - 3, 3), (recheck.Judged, recheck.Result!.NotRechecked, recheck.Fetched));
     }
 
     /// <summary>A recheck is paced as the crawl's options say: never faster than its rate, as polite as the crawl was.</summary>

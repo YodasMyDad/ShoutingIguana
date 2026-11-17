@@ -305,9 +305,12 @@ isn't part of the checks' fingerprint, like `references`. It lists what a rechec
 | `["siteVersions"]` | `duplicate-site-version` | The probes of the site's other versions (`SiteVersions.Of`) and where they redirect |
 | `[]` | `orphan-page`, `no-https` | Nothing. An orphan is a page that *nothing* links to, so only a full crawl can show that something now does. Moving to HTTPS changes every address. The UI offers "Check the site again" in place of Recheck |
 
-Duplicates (`title-duplicate` and the rest) are settled against the other pages as the crawl stored them. If page A
-gets a title of its own, A is fixed. If that new title matches an unrechecked page Z's stored title, A and Z are a new
-cluster, which is what the stored data says.
+A recheck never says "fixed" where a full crawl would say "still". Duplicates (`title-duplicate`, `description-duplicate`,
+`h1-duplicate`, `duplicate-content`, `near-duplicate-content`) depend on pages a recheck doesn't read, so it fetches every
+page the clusters it judges had, and a page is fixed only if its own text changed (its title, description, H1 or
+content). One whose text is as it was, and that isn't flagged any more because the others changed, is **not checked**: a
+page the recheck didn't fetch may have taken that text meanwhile, which only a full crawl sees. If page A gets a title of
+its own that matches an unrechecked page Z's stored title, A and Z are a new cluster, which is what the stored data says.
 
 ### How a recheck runs
 
@@ -934,6 +937,13 @@ exact (33,156 rows compared in 24.8 s), memory flat.
 - **One step.** A redirect is followed into each URL it leads to once, at the step of the URL redirecting; a URL the
   crawl didn't have, linked from the scope, is fetched; one linked from those is recorded as `SkipReason.Recheck`. A URL
   the recheck found and didn't reach before a stop is recorded as skipped the same way, so the crawl's queue is as it was.
+- **Never "fixed" where a full crawl says "still"** (the coordinator's ruling: the loop rests on "fixed" being true). An
+  invariant test rechecks every check a recheck can settle on its own copy of a revision 0 crawl, with the site at
+  revision 1, and holds each URL it judged to a full crawl of revision 1: flagged there, it's still (or not checked);
+  not flagged, it's fixed (or not checked where the recheck can't know). It found one false "fixed": product 185 of the
+  renamed duplicate cluster, which kept its title while product 186, which the recheck didn't fetch, took it. Duplicates
+  are now judged as section 3 says (every stored page of their clusters fetched; fixed only when the page's own text
+  changed, else not checked), with the text before kept in `recheck_urls.text_before`.
 - **Let go** (`RecheckLetGo`) never lets go a URL still queued (a stopped crawl's frontier is untouched), and roots
   include the probes of the site's versions.
 - **The kinds.** `sitemaps` replaces each sitemap's entries as it's read again and drops, once every sitemap is read,

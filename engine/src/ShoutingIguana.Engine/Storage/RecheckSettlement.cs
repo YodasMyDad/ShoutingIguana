@@ -89,6 +89,12 @@ internal static class RecheckSettlement
             ? "COALESCE((SELECT r2.fetched_at FROM responses r2 WHERE r2.url_id = recheck_urls.url_id), 0) >= $startedAt"
             : readOnlyCompleted ? "1" : "0";
         var reading = $"(SELECT {CheckJudging.READING} FROM urls u LEFT JOIN responses r ON r.url_id = u.id WHERE u.id = recheck_urls.url_id)";
+
+        // A duplicate no longer flagged though its own text is as it was: the others changed, and a page the recheck didn't
+        // fetch may share it now. Only a full crawl can say it's fixed.
+        var unchanged = RecheckDuplicates.TextOf(check.Id) is { } text
+            ? $"WHEN {reading} IN ({judges}) AND text_before IS (SELECT {text} FROM responses r WHERE r.url_id = recheck_urls.url_id) THEN {(int)RecheckOutcome.NotChecked}"
+            : string.Empty;
         using var command = Command(connection, transaction, $"""
             UPDATE recheck_urls SET outcome = CASE
                 WHEN $skipped = 1 THEN {(int)RecheckOutcome.NotChecked}
@@ -96,6 +102,7 @@ internal static class RecheckSettlement
                 WHEN NOT ({rechecked}) THEN {(int)RecheckOutcome.NotRechecked}
                 WHEN EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = recheck_urls.url_id)
                     THEN CASE WHEN flagged_before = 1 THEN {(int)RecheckOutcome.Still} ELSE {(int)RecheckOutcome.New} END
+                {unchanged}
                 WHEN {reading} IN ({judges}) THEN CASE WHEN flagged_before = 1 THEN {(int)RecheckOutcome.Fixed} END
                 ELSE {(int)RecheckOutcome.NotChecked}
             END

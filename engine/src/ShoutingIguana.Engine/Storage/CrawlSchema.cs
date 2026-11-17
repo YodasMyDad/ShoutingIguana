@@ -215,8 +215,9 @@ internal static class CrawlSchema
     /// stored as it opens, and the result (the counts, <c>score_after</c>, <c>settled_at</c>) by the analysis after it,
     /// once, never again.</item>
     /// <item><c>recheck_urls</c>: the URLs it set out to judge, as they stood before (flagged or not, the issue's detail and
-    /// other URL), and the others it fetched or let go, by role (<c>Models.RecheckRole</c>); <c>outcome</c>
-    /// (<c>Models.RecheckOutcome</c>) is set for the judged ones when it's settled.</item>
+    /// other URL, and for a duplicate check the text it compares pages by), and the others it fetched or let go, by role
+    /// (<c>Models.RecheckRole</c>); <c>outcome</c> (<c>Models.RecheckOutcome</c>) is set for the judged ones when it's
+    /// settled.</item>
     /// <item><c>recheck_targets</c>: the check's <c>issue_targets</c> on the judged URLs, before.</item>
     /// </list>
     /// </summary>
@@ -252,6 +253,7 @@ internal static class CrawlSchema
             flagged_before INTEGER NOT NULL,
             detail_before TEXT,
             related_before INTEGER,
+            text_before TEXT,
             outcome INTEGER,
             PRIMARY KEY (recheck_id, url_id)
         ) WITHOUT ROWID;

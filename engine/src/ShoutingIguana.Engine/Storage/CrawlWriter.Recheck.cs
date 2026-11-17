@@ -164,6 +164,15 @@ internal sealed partial class CrawlWriter
             }
         }
 
+        // A duplicate check's pages are judged by whether their own text changed: it's kept as it stood.
+        if (RecheckDuplicates.TextOf(plan.CheckId) is { } text)
+        {
+            RunTime($"""
+                UPDATE recheck_urls SET text_before = (SELECT {text} FROM responses r WHERE r.url_id = recheck_urls.url_id)
+                WHERE recheck_id = $id
+                """, transaction, ("$id", recheck.Id));
+        }
+
         transaction.Commit();
         _logger.LogInformation("Rechecking {Phase1} URLs of the crawl ({Judged} judged), recheck {Id}", plan.Phase1, plan.Judged, recheck.Id);
     }
