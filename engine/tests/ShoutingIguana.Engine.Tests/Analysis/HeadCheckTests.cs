@@ -93,10 +93,12 @@ public sealed class HeadCheckTests
         Assert.Null(Charset("<meta charset=\"UTF8\">", "text/html; charset=utf-8"));
         Assert.Null(Charset(string.Empty));
 
-        // A meta tag past the first 1024 bytes declares nothing: with the header declaring too it's out of place, with nothing
-        // else the encoding is missing, which is another check's.
+        // A meta tag past the first 1024 bytes declares nothing. With the header declaring the encoding, the late one changes
+        // nothing a browser does (the real-site audit found it on every page of two of three sites, injected by the
+        // platform), so it isn't flagged; with nothing else the encoding is missing, which is another check's.
         var late = $"<style>{new string('x', 1_100)}</style><meta charset=\"utf-8\">";
-        Assert.Equal("<meta charset> after the first 1,024 bytes", Charset(late, "text/html; charset=utf-8"));
+        Assert.Null(Charset(late, "text/html; charset=utf-8"));
+        Assert.Null(Charset($"<style>{new string('x', 1_100)}</style><meta charset=\"iso-8859-1\">", "text/html; charset=utf-8"));
         Assert.Null(Charset(late));
     }
 

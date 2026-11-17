@@ -161,8 +161,8 @@ internal sealed class HtmlRules : IPageRule
     /// <summary>
     /// What's wrong with how the page declares its encoding, the first of: the header and the meta tag name different
     /// encodings; the one that counts (a byte-order mark, else the header, else the meta tag) isn't UTF-8; two meta
-    /// declarations differ; the meta tag is past the first 1024 bytes though another declaration exists (with none, the
-    /// encoding is missing, its own check). Null when nothing is.
+    /// declarations differ. A meta tag past the first 1024 bytes declares nothing: with a header or byte-order mark it changes
+    /// nothing a browser does, so it isn't flagged (with neither, the encoding is missing, its own check). Null when nothing is.
     /// </summary>
     private static string? CharsetFault(PageFacts facts, string? contentType)
     {
@@ -184,9 +184,7 @@ internal sealed class HtmlRules : IPageRule
             return RuleText.Fit($"{RuleText.Count(facts.CharsetDeclarations.Count, "declaration", "declarations")}: {string.Join(", ", facts.CharsetDeclarations)}");
         }
 
-        return lateMeta && (facts.ByteOrderMark is not null || header is not null)
-            ? string.Create(CultureInfo.InvariantCulture, $"<meta charset> after the first {CharsetDecoder.PRESCAN_BYTES:N0} bytes")
-            : null;
+        return null;
 
         static string Label(string charset) => UTF8.Contains(charset.Trim()) ? "utf-8" : charset.Trim();
         static bool SameEncoding(string one, string other) => string.Equals(Label(one), Label(other), StringComparison.OrdinalIgnoreCase);

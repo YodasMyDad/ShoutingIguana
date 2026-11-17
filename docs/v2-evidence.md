@@ -285,7 +285,7 @@ and is in the group without a related URL.
 | 117 | `head-tags-in-body` (new) | P/PD/– | – | – | `title, meta description and 3 Open Graph tags are in the body: <div id="promo"> on line 12 ended the head early`, or `… are in the body, after <body> on line 30`; grouped by the cause (`FaultOf`: the element, without its line, or "After <body>") | imp · pages |
 | 118 | `html-structure-errors` (new) | P/PD/– | – | – | `2 <head> tags; 2 <body> tags`, `<html> after content`, `<head> after content` | imp · pages |
 | 119 | `viewport-invalid` (new) | P/PD/– | – | – | `user-scalable=no; maximum-scale=1`, `no width or initial-scale`, `2 viewport tags that differ` | imp · pages |
-| 120 | `charset-invalid` (new) | P/PD/– | – | – | `Declares windows-1252, not UTF-8`, `The header says iso-8859-1; the page says utf-8`, `2 declarations: utf-8, iso-8859-1`, `<meta charset> after the first 1,024 bytes` | imp · pages |
+| 120 | `charset-invalid` (new) | P/PD/– | – | – | `Declares windows-1252, not UTF-8`, `The header says iso-8859-1; the page says utf-8`, `2 declarations: utf-8, iso-8859-1` (a late `<meta charset>` with the header declaring isn't flagged: the real-site audit found it on every page of two of three sites, to no effect) | imp · pages |
 | 121 | `lang-invalid` (new) | P/PD/– | – | – | The value: `english` (the specification's `language` URL column isn't built: the detail is the value) | imp · pages |
 | 122 | `mobile-alternate` (new) | P/N/– | – | – | `Mobile version: https://m.example.com/x` | imp · – |
 

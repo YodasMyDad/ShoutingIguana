@@ -905,10 +905,11 @@ HTML · **Notice**: the page usually shows right; a wrong guess garbles accents 
 - **Simple:** "Pages that name the wrong text encoding"
 - **Rule:** a page whose encoding, as declared (a byte-order mark, else the Content-Type header, else the meta), isn't
   UTF-8 (the WHATWG labels `utf-8`, `utf8` and `unicode-1-1-utf-8` all are); or with two meta declarations that differ;
-  or whose meta declaration and header name different encodings (the header wins); or whose meta declaration starts
-  after the first 1,024 characters. Detail: one of `Declares windows-1252, not UTF-8`,
-  `2 declarations: utf-8, iso-8859-1`, `The header says iso-8859-1; the page says utf-8`,
-  `<meta charset> after the first 1,024 bytes`; grouped by it.
+  or whose meta declaration and header name different encodings (the header wins). Detail: one of
+  `Declares windows-1252, not UTF-8`, `2 declarations: utf-8, iso-8859-1`,
+  `The header says iso-8859-1; the page says utf-8`; grouped by it. *Built, then changed by the real-site audit:* a meta
+  declaration after the first 1,024 bytes was flagged too when the header declared the encoding; it was on every page of
+  two of the three audited sites (injected by the platform) and changes nothing a browser does, so it isn't.
 - **Standard:** HTML: the encoding "must be UTF-8"; only one meta declaration; within the first 1,024 bytes *(read
   through a summary of the spec page)*.
 - **Data:** `DeclaredCharset`, `ByteOrderMark`, the header; `PageFacts.CharsetDeclarations` (new: values and the first's
