@@ -70,6 +70,9 @@ describe('the inspector’s Images', () => {
     expect(await within(panel).findByText('2 images, 1 over 200 KB')).toBeVisible();
     const grid = within(panel).getByRole('grid', { name: 'Images' });
     const [hero, icon] = within(grid).getAllByRole('row').slice(1);
+    // Named by its file, its folder after it; the whole URL is its name.
+    expect(hero!.querySelector('.si-url__file')).toHaveTextContent('harpswell-hero.jpg');
+    expect(hero!.querySelector('.si-url__rest')).toHaveTextContent('/wp-content/uploads/');
     expect(hero).toHaveTextContent('2.1 MB');
     expect(hero).toHaveTextContent('4000×3000 px');
     expect(hero).toHaveTextContent('Harpswell metal patio set on a lawn');

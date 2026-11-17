@@ -57,6 +57,14 @@ describe('a page an image check flagged', () => {
     expect(search.sort).toEqual([...IMAGE_SORT]);
   });
 
+  it('names the image a group is about by its file, read and copied in full', async () => {
+    await open(`${ISSUES}/image-too-large${groupOf(812)}`);
+    const grid = await screen.findByRole('treegrid', { name: /Images over 200 KB/ });
+    const hero = await within(grid).findByRole('row', { name: /hero\.jpg/ });
+    expect(hero.querySelector('.si-url__file')).toHaveTextContent('hero.jpg');
+    expect(hero.querySelector('.si-url__rest')).toHaveTextContent('/img/');
+  });
+
   it('is the only kind of page with the item', async () => {
     await open(`${ISSUES}/links-to-redirects${groupOf(90)}`);
     const grid = await screen.findByRole('treegrid', { name: /Internal links to redirects/ });

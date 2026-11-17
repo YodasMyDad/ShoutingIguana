@@ -197,6 +197,8 @@ describe('the Images preset', () => {
     for (const row of [first, second]) {
       expect(row).toHaveTextContent('1.8 MB');
       expect(row).toHaveTextContent('4000×3000 px');
+      // Named by its file, its folder after it.
+      expect(row?.querySelector('.si-url__file')).toHaveTextContent('logo.png');
     }
     expect(within(grid).getByText('Logo')).toBeVisible();
     // Another preset after it puts the default columns back.
@@ -211,7 +213,8 @@ describe('the Images preset', () => {
     const grid = await screen.findByRole('treegrid', { name: 'Images, one row an image' });
     expect(within(grid).getByRole('columnheader', { name: /Used on/ })).toBeVisible();
     const logo = within(grid).getAllByRole('row')[1]!;
-    expect(logo).toHaveTextContent('/img/logo.png');
+    expect(logo.querySelector('.si-url__file')).toHaveTextContent('logo.png');
+    expect(logo.querySelector('.si-url__rest')).toHaveTextContent('/img/');
     expect(logo).toHaveTextContent('1.8 MB');
     expect(logo).toHaveTextContent('4000×3000 px');
     expect(logo).toHaveTextContent('Logo');

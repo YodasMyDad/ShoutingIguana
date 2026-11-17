@@ -22,7 +22,7 @@ import { isBrokenImage } from '../../ui/imageFacts';
 import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
-import { urlDisplay } from '../../ui/urlText';
+import { isResourceType, urlDisplay } from '../../ui/urlText';
 import { treeLayout, type OpenGroup } from '../issues/groupTree';
 import { linkFollowWords } from './linkColumns';
 import {
@@ -323,6 +323,8 @@ export function LinkGroupsGrid({
                 siteOrigin={siteOrigin}
                 tabbable={false}
                 onGo={() => onInspect(value.id, 'to')}
+                // An image, a stylesheet, a script: named by its file, never cut in the middle of its name.
+                label={images || isResourceType(value.target.contentType) ? 'file' : 'address'}
                 className="min-w-0 flex-1"
               />
             </span>

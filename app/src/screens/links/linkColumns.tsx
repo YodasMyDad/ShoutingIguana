@@ -14,6 +14,7 @@ import { ImageThumb } from '../../ui/ImageThumb';
 import { isBrokenImage } from '../../ui/imageFacts';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
+import { RESOURCE_LINK_KINDS } from '../../ui/urlText';
 import {
   FOLLOW_COLUMN,
   LINK_GROUP_TITLES,
@@ -272,11 +273,15 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
         const url = row[`${end.end}.url`];
         const urlId = row[`${end.end}.id`];
         if (typeof url !== 'string') return '';
+        // A target that's a file a page loads (an image, a stylesheet) is named by its file, never cut in its name.
+        const resource = typeof row.kind === 'string' && RESOURCE_LINK_KINDS.has(row.kind);
+        const file = end.end === 'to' && (context.images === true || resource);
         const link = (
           <Url
             url={url}
             siteOrigin={context.siteOrigin}
             tabbable={false}
+            label={file ? 'file' : 'address'}
             {...(typeof urlId === 'number' ? { onGo: () => context.onOpen(urlId, end.end) } : {})}
           />
         );

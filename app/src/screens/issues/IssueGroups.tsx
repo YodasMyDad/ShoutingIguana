@@ -625,6 +625,8 @@ export function IssueGroups({
             siteOrigin={siteOrigin}
             copyable={false}
             tabbable={false}
+            // An image is named by its file: its name leads, never cut in the middle.
+            label={images ? 'file' : 'address'}
             className={(facts || status) && !images ? 'max-w-3/5 min-w-0 shrink-0' : 'min-w-0 flex-1'}
           />
           {status ? (

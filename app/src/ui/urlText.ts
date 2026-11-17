@@ -146,3 +146,77 @@ export function fileNameOf(url: string): string {
     return url;
   }
 }
+
+/** The most of a query a file's label shows after its name: the rest is in the full URL, on hover and copy. */
+const MAX_QUERY = 60;
+
+/** A file's label: its name, then what tells it from others of the name, muted (its query, or its folder). */
+export interface FileLabel {
+  name: string;
+  rest: string | null;
+}
+
+const decoded = (text: string): string => {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+};
+
+/**
+ * How a file a page loads (an image, a stylesheet, a script) is named where it's a row's label: by the file's name, the
+ * last segment of its path, percent-decoded and without its query (`harpswell-metal-patio-set-9.jpg`), then its query
+ * where it has one (what tells `?width=896` from `?width=480`), else its folder; another host than the site's leads
+ * that. A path that ends in `/` is named by its last folder, one with none by its host. The whole URL is never lost:
+ * it's what hover, copy and a screen reader get. Text that isn't a URL is its own name.
+ */
+export function fileLabelOf(url: string, siteOrigin?: string | null): FileLabel {
+  if (/^data:/i.test(url)) {
+    const type = /^data:([^;,]*)/i.exec(url)?.[1]?.toLowerCase() ?? '';
+    return { name: type.startsWith('image/') ? 'Image in the page' : 'Data in the page', rest: type || null };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { name: url, rest: null };
+  }
+  const other = siteOrigin && originOf(siteOrigin) !== parsed.origin ? parsed.host : null;
+  const query = parsed.search
+    ? parsed.search.length > MAX_QUERY
+      ? `${decoded(parsed.search).slice(0, MAX_QUERY)}${ELLIPSIS}`
+      : decoded(parsed.search)
+    : null;
+  const segments = parsed.pathname.split('/');
+  const trailing = segments.at(-1) === '';
+  const segment = (trailing ? segments.at(-2) : segments.at(-1)) ?? '';
+  if (segment === '') {
+    // No path: the host is its name, its query after it.
+    return { name: parsed.host, rest: query };
+  }
+  const name = `${decoded(segment)}${trailing ? '/' : ''}`;
+  const folder = parsed.pathname.slice(0, parsed.pathname.length - segment.length - (trailing ? 1 : 0));
+  const said = query ?? (folder === '/' ? null : decoded(folder));
+  const rest = [other, said].filter((part): part is string => part !== null).join(' ');
+  return { name, rest: rest || null };
+}
+
+/** Whether a response is a file a page loads (an image, a stylesheet, a script, a font), named by its file. */
+export function isResourceType(contentType: string | null | undefined): boolean {
+  if (!contentType) return false;
+  const type = contentType.toLowerCase();
+  return (
+    type.startsWith('image/') ||
+    type.startsWith('font/') ||
+    type.startsWith('text/css') ||
+    type.includes('javascript') ||
+    type.includes('font')
+  );
+}
+
+/** The kinds of link to a file a page loads, which a row names by the file: the links grid's and the inspector's. */
+export const RESOURCE_LINK_KINDS: ReadonlySet<string> = new Set(['image', 'script', 'stylesheet', 'icon', 'media']);
+
+/** The URL grid's types of a file a page loads, which a row names by the file. */
+export const RESOURCE_URL_TYPES: ReadonlySet<string> = new Set(['image', 'script', 'stylesheet', 'font', 'media']);

@@ -63,6 +63,7 @@ export function ImagesSection() {
               siteOrigin={siteOrigin}
               tabbable={false}
               onGo={() => walk(row.id)}
+              label="file"
               className="min-w-0 flex-1"
             />
           </span>
