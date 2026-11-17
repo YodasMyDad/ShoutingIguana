@@ -290,7 +290,29 @@ the installer) run once per merged round on a quiet machine. At merge, the orche
 - renumbers `AnalysisFreshness`;
 - adds the fix loop's `IssueDefinition.Recheck` to the new checks, from the checks lane's table.
 
-Next: S1 and S2, then U1 and U2 side by side, once E1 to E4 are merged; batches 4 to 9 after 1 to 3.
+Merged from the lanes so far (local; each lane's own verify green, the round's long gates still to run on a quiet
+machine):
+
+- **`8b6d891`: new checks, batches 1 to 3** (`ui/3b-checks` at `ffc7204`).
+  - 35 checks: indexing and canonicals, links and crawlability, the head and served files. The catalog is 122, and
+    `AnalysisFreshness` is 13.
+  - Older crawls skip the checks whose facts they don't store ("earlier version").
+  - The real-site audit re-parsed the three crawls' stored HTML.
+    - Garden: `canonical-to-first-page` 3, `non-indexable-inlinks-only` 9, `pagination-to-non-indexable` 2, all
+      correct. Every other new check is 0.
+    - Two wrong flags were fixed first: `charset-invalid` for a late meta charset when the header already says utf-8,
+      and `uncrawlable-links` for links that lead nowhere.
+- **`7e36b8a`: the fix loop's engine, E1 to E4** (`ui/3b-fixloop-engine` at `e208ece`; as built in
+  [v2-fix-loop.md](v2-fix-loop.md) §12).
+  - Test-site revisions, `si compare`, rechecks (`si recheck`) of URLs, robots.txt, sitemaps and site versions.
+  - `IssueDefinition.Recheck` is required on every check.
+  - The invariant test: on revision 1, a recheck matches a full crawl for all 122 checks. A recheck never says
+    "fixed" where a full crawl says "still". A duplicate is fixed only when its own text changed, and its whole stored
+    cluster is fetched again.
+  - Verify on `e208ece` (this merge's tree): engine 1,971, CLI 34, sidecar 287; bench and readbench exit 0.
+
+Next: S1 and S2 (running in the fix-loop lane), then U1 and U2 side by side. Batches 4 to 9 continue in the checks
+lane, which now merges `ui/step-3` for `Recheck`. The views lane is still building.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.
