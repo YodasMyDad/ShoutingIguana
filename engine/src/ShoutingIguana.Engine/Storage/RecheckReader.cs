@@ -29,6 +29,22 @@ public static class RecheckReader
         return HasTables(connection, snapshot) ? Records(connection, snapshot, $"SELECT {COLUMNS} FROM rechecks k ORDER BY k.id DESC") : [];
     }
 
+    /// <summary>
+    /// How many rechecks a crawl has, and the latest, in one snapshot on a connection a reader already has open (a list of
+    /// crawls reads it with the crawl's summary): none for a file never rechecked.
+    /// </summary>
+    internal static (int Count, RecheckRecord? Latest) ReadLatest(SqliteConnection connection)
+    {
+        using var snapshot = connection.BeginTransaction(deferred: true);
+        if (!HasTables(connection, snapshot))
+        {
+            return (0, null);
+        }
+
+        var count = Convert.ToInt32(Scalar(connection, snapshot, "SELECT COUNT(*) FROM rechecks"), System.Globalization.CultureInfo.InvariantCulture);
+        return (count, count == 0 ? null : Records(connection, snapshot, $"SELECT {COLUMNS} FROM rechecks k ORDER BY k.id DESC LIMIT 1").Single());
+    }
+
     /// <summary>One recheck, or null when the file has none by that number.</summary>
     public static RecheckRecord? Read(string databasePath, int id)
     {

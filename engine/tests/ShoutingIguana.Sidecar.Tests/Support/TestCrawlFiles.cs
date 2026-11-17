@@ -86,6 +86,10 @@ internal static class TestCrawlFiles
     public static void SetMaxUrls(string path, int maxUrls) =>
         Assert.Equal(1, Execute(path, $"UPDATE crawl SET options_json = json_set(options_json, '$.maxUrls', {maxUrls})"));
 
+    /// <summary>The crawl as one that sent a header: its stored options keep the name, never the value.</summary>
+    public static void SetHeaderNames(string path, string name) =>
+        Assert.Equal(1, Execute(path, $"UPDATE crawl SET options_json = json_set(options_json, '$.extraHeaders', json('{{\"{name}\":\"\"}}'))"));
+
     /// <summary>What a crawl never analysed has: no analysis.</summary>
     public static void DropAnalysis(string path) => Execute(path, "DROP TABLE analysis");
 

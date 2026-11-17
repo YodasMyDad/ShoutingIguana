@@ -28,7 +28,7 @@ namespace ShoutingIguana.Sidecar.Crawls;
 /// events are published under the same lock as the change they announce, so streams hear of the changes in the order
 /// they happened.
 /// </summary>
-internal sealed class CrawlManager(
+internal sealed partial class CrawlManager(
     SidecarOptions options,
     CrawlLibrary library,
     CrawlSummaryCache summaries,
@@ -343,6 +343,7 @@ internal sealed class CrawlManager(
         lock (_sync)
         {
             ThrowIfStopping();
+            ThrowIfSiteRechecked(crawlOptions.StartUrl);
             var path = FreePath(CrawlDatabase.DefaultDatabasePath(crawlOptions.StartUrl));
             crawl = new LiveCrawl(library.IdOf(path), path, crawlOptions.StartUrl) { AnalyzeWhenDone = analyzeWhenDone, RunStartedAt = DateTime.UtcNow };
             _crawls[crawl.Id] = crawl;
@@ -405,6 +406,7 @@ internal sealed class CrawlManager(
         {
             ThrowIfStopping();
             ThrowIfLive(id);
+            ThrowIfSiteRechecked(plan.Options.StartUrl);
             crawl = new LiveCrawl(id, path, plan.Options.StartUrl) { AnalyzeWhenDone = true, RunStartedAt = DateTime.UtcNow, Resumed = true };
             _crawls[id] = crawl;
             crawl.Lifetime = Task.Run(() => RunAsync(crawl, new CrawlRequest(plan.Options, path, Resume: true)));
@@ -424,6 +426,23 @@ internal sealed class CrawlManager(
     {
         PathOf(id);
         CrawlJob? job;
+        CancellationTokenSource? analysisFirst = null;
+        lock (_sync)
+        {
+            // A recheck stopped while its analysis first runs isn't run at all: the analysis is cancelled, outside the lock.
+            if (_crawls.TryGetValue(id, out var first) && first is { State: LiveCrawlState.Analyzing, Recheck.Started: false, Analysis: { } analysis })
+            {
+                first.StopRequested = true;
+                analysisFirst = analysis;
+            }
+        }
+
+        if (analysisFirst is not null)
+        {
+            analysisFirst.Cancel();
+            return;
+        }
+
         lock (_sync)
         {
             if (!_crawls.TryGetValue(id, out var crawl) || crawl.State is LiveCrawlState.Analyzing)
@@ -455,8 +474,8 @@ internal sealed class CrawlManager(
             ThrowIfStopping();
             if (_crawls.TryGetValue(id, out var live))
             {
-                throw live.State is LiveCrawlState.Analyzing
-                    ? Problems.CrawlBusy("This crawl is already being analysed.")
+                throw live.Recheck is not null ? Problems.CrawlBusy(RECHECKING_HERE)
+                    : live.State is LiveCrawlState.Analyzing ? Problems.CrawlBusy("This crawl is already being analysed.")
                     : Problems.NotAnalysable("This crawl is still running. Stop it, or let it finish, before analysing it.");
             }
         }
@@ -791,9 +810,19 @@ internal sealed class CrawlManager(
 
     private async Task AnalyzeAsync(LiveCrawl crawl)
     {
+        var (error, errorType, _) = await RunAnalysisAsync(crawl).ConfigureAwait(false);
+
+        // Back to what the file says (completed, or stopped), with the new results.
+        End(crawl, error, errorType);
+    }
+
+    /// <summary>Analyses a crawl live here as analysing: why it failed, if it did, and whether it ran to its end (not cancelled, not failed).</summary>
+    private async Task<(string? Error, string? ErrorType, bool Completed)> RunAnalysisAsync(LiveCrawl crawl)
+    {
         var cancellation = crawl.Analysis!;
         string? error = null;
         string? errorType = null;
+        var completed = false;
         try
         {
             // The limits in force as it starts are the ones it runs with to its end, and stores: saved again meanwhile, the
@@ -803,6 +832,7 @@ internal sealed class CrawlManager(
             var summary = await new CrawlAnalyzer(loggerFactory)
                 .AnalyzeAsync(crawl.Path, settings, new SidecarAnalysisProgress(this, crawl), cancellation.Token).ConfigureAwait(false);
             _logger.LogInformation("Analysed {Pages} pages of {Path} in {Duration}", summary.PagesAnalyzed, crawl.Path, summary.Duration);
+            completed = true;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -827,8 +857,7 @@ internal sealed class CrawlManager(
             error = $"The analysis failed: {exception.Message}";
         }
 
-        // Back to what the file says (completed, or stopped), with the new results.
-        End(crawl, error, errorType);
+        return (error, errorType, completed);
     }
 
     /// <summary>
@@ -905,14 +934,25 @@ internal sealed class CrawlManager(
         }
 
         crawl.Progress = progress;
-        var status = crawl.State is LiveCrawlState.Stopping && progress.Status is CrawlStatus.Running or CrawlStatus.Paused
+
+        // A recheck's run reports the crawl's counts, as rechecking: its own are in its recheck event.
+        var rechecking = crawl.Recheck is not null;
+        var status = crawl.State is LiveCrawlState.Stopping && (rechecking || progress.Status is CrawlStatus.Running or CrawlStatus.Paused)
             ? CrawlListStatus.Stopping
-            : StatusOf(progress.Status);
+            : rechecking ? CrawlListStatus.Rechecking : StatusOf(progress.Status);
         var at = DateTime.UtcNow;
-        crawl.History.Add(at, progress);
-        var dto = ProgressEventDto.From(crawl.Id, status, progress, at);
+        if (!rechecking)
+        {
+            crawl.History.Add(at, progress);
+        }
+
+        var dto = ProgressEventDto.From(crawl.Id, status, progress, at, rechecking ? ProgressPhase.Rechecking : null);
         Publishing?.Invoke(dto);
         events.PublishProgress(dto);
+        if (rechecking && crawl.Recheck!.Started)
+        {
+            PublishRecheck(crawl, RecheckStatus.Running, progress.Recheck, result: null, force: false);
+        }
     }
 
     /// <summary>
@@ -921,14 +961,15 @@ internal sealed class CrawlManager(
     /// </summary>
     private LibraryEntry? Entry(string id, string path)
     {
-        (LiveCrawlState State, CrawlProgress? Progress, string StartUrl)? live;
+        (LiveCrawlState State, CrawlProgress? Progress, string StartUrl, bool Rechecking)? live;
         lock (_sync)
         {
-            live = _crawls.TryGetValue(id, out var crawl) ? (crawl.State, crawl.Progress, crawl.StartUrl) : null;
+            live = _crawls.TryGetValue(id, out var crawl) ? (crawl.State, crawl.Progress, crawl.StartUrl, crawl.Recheck is not null) : null;
         }
 
+        // While a crawl is analysed or rechecked, what the library shows of it is its summary from before.
         var cached = live is { } state
-            ? summaries.GetWhileLive(id, path, analysing: state.State is LiveCrawlState.Analyzing)
+            ? summaries.GetWhileLive(id, path, analysing: state.State is LiveCrawlState.Analyzing || state.Rechecking)
             : summaries.Get(id, path);
         if (live is null && cached.IsNotACrawl)
         {
@@ -938,11 +979,12 @@ internal sealed class CrawlManager(
         return new LibraryEntry(Item(id, path, live, cached), cached.Summary);
     }
 
-    private CrawlListItem Item(string id, string path, (LiveCrawlState State, CrawlProgress? Progress, string StartUrl)? live, CachedSummary cached)
+    private CrawlListItem Item(string id, string path, (LiveCrawlState State, CrawlProgress? Progress, string StartUrl, bool Rechecking)? live, CachedSummary cached)
     {
         var summary = cached.Summary;
         var unreadable = live is null && cached.IsUnreadable;
-        var crawling = live is { State: not LiveCrawlState.Analyzing };
+        var crawling = live is { State: not LiveCrawlState.Analyzing, Rechecking: false };
+        var rechecking = live is { Rechecking: true };
         var startUrl = summary?.StartUrl ?? live?.StartUrl ?? library.OpenedStartUrl(id);
         var analyzedAt = summary?.AnalyzedAt;
         return new CrawlListItem
@@ -954,6 +996,9 @@ internal sealed class CrawlManager(
             SiteKey = PreviousCrawls.SiteKeyOf(startUrl),
             StartUrl = startUrl,
             Status = live is { } now ? StatusOf(now.State) : unreadable ? CrawlListStatus.Unreadable : StoredStatus(summary, cached.Exists, path),
+            Rechecks = summary is { RecheckCount: > 0, LastRecheck: { } last }
+                ? new RechecksBriefDto(summary.RecheckCount, new LastRecheckDto(last.Id, last.EndedAt?.UtcDateTime, last.CheckId, last.Judged, last.Result?.Fixed))
+                : null,
             Error = unreadable ? EngineErrors.UnreadableMessage(cached.Error!) : null,
             StartedAt = summary?.StartedAt.UtcDateTime,
             FinishedAt = crawling ? null : summary?.FinishedAt?.UtcDateTime,
@@ -971,7 +1016,7 @@ internal sealed class CrawlManager(
             Score = summary?.Analysis?.Score,
 
             // A crawl running here changes its file as it goes; otherwise the file says whether its analysis still stands.
-            OutOfDate = analyzedAt is not null && (crawling || summary!.OutOfDate(AnalysisSettings).Count > 0),
+            OutOfDate = analyzedAt is not null && (crawling || rechecking || summary!.OutOfDate(AnalysisSettings).Count > 0),
             SizeBytes = cached.Stamp?.SizeBytes ?? 0,
             HasFavicon = summary?.HasFavicon ?? false,
 
@@ -1025,6 +1070,7 @@ internal sealed class CrawlManager(
         LiveCrawlState.Starting or LiveCrawlState.Running => CrawlListStatus.Running,
         LiveCrawlState.Paused => CrawlListStatus.Paused,
         LiveCrawlState.Stopping => CrawlListStatus.Stopping,
+        LiveCrawlState.Rechecking => CrawlListStatus.Rechecking,
         _ => CrawlListStatus.Analyzing
     };
 
@@ -1067,7 +1113,7 @@ internal sealed class CrawlManager(
     {
         if (_crawls.TryGetValue(id, out var crawl))
         {
-            throw Problems.CrawlBusy(crawl.State is LiveCrawlState.Analyzing ? ANALYSING_HERE : RUNNING_HERE);
+            throw Problems.CrawlBusy(LiveMessage(crawl));
         }
     }
 

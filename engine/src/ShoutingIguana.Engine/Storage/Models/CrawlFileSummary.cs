@@ -87,6 +87,12 @@ public sealed record CrawlFileSummary
     /// </summary>
     public string? OptionsFingerprint { get; init; }
 
+    /// <summary>How many times the crawl was rechecked (the fix loop); 0 for one never rechecked.</summary>
+    public int RecheckCount { get; init; }
+
+    /// <summary>The crawl's latest recheck, as <see cref="RecheckReader"/> reads it; null for one never rechecked.</summary>
+    public RecheckRecord? LastRecheck { get; init; }
+
     /// <summary>Why the last analysis no longer stands, if it doesn't; nothing when it does, or there's none.</summary>
     /// <param name="settings">The thresholds an analysis would run with now.</param>
     public IReadOnlyList<OutOfDateReason> OutOfDate(AnalysisSettings settings) =>

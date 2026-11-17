@@ -13,7 +13,8 @@ internal static class Problems
     public static ProblemException InvalidSettings(IReadOnlyDictionary<string, IReadOnlyList<string>> errors) =>
         new(new ProblemDto("invalid-settings", "Some of the analysis's limits need changing.", 422) { Errors = errors });
 
-    public static ProblemException NeedsSecrets(IReadOnlyList<string> missingHeaders, bool proxyCredentials)
+    /// <param name="doing">What needs them: continuing the crawl, or rechecking it (the fix loop).</param>
+    public static ProblemException NeedsSecrets(IReadOnlyList<string> missingHeaders, bool proxyCredentials, string doing = "Continuing")
     {
         var needed = (missingHeaders.Count > 0, proxyCredentials) switch
         {
@@ -22,7 +23,7 @@ internal static class Problems
             _ => "its proxy's user name and password"
         };
 
-        return new(new ProblemDto("needs-secrets", $"Continuing this crawl needs {needed} again: crawl files don't store them.", 422)
+        return new(new ProblemDto("needs-secrets", $"{doing} this crawl needs {needed} again: crawl files don't store them.", 422)
         {
             MissingHeaders = missingHeaders,
             ProxyCredentials = proxyCredentials
@@ -38,7 +39,19 @@ internal static class Problems
 
     public static ProblemException NotAnalysable(string title) => new(new ProblemDto("not-analysable", title, 409));
 
-    public static ProblemException NotAnalyzed() => new(new ProblemDto("not-analyzed", "This crawl hasn't been analysed yet.", 404));
+    public static ProblemException NotAnalyzed(string title = "This crawl hasn't been analysed yet.") => new(new ProblemDto("not-analyzed", title, 404));
+
+    /// <summary>A recheck while another run of the same site is live here, or a crawl while one of the site's is rechecked (the fix loop).</summary>
+    public static ProblemException SiteBusy(string title) => new(new ProblemDto("site-busy", title, 409));
+
+    /// <summary>A recheck of a crawl that isn't its site's latest: it would rewrite what the newer one compares with (the fix loop).</summary>
+    public static ProblemException RecheckNotLatest() => new(new ProblemDto("recheck-not-latest", "Recheck works on the site’s latest check.", 409));
+
+    /// <summary>The crawl file has no recheck with this number (the fix loop).</summary>
+    public static ProblemException RecheckNotFound() => new(new ProblemDto("recheck-not-found", "This crawl has no recheck with that number.", 404));
+
+    /// <summary>A recheck of a check a recheck can't settle, or one the analysis skipped (the fix loop).</summary>
+    public static ProblemException RecheckUnsupported(string title) => new(new ProblemDto("recheck-unsupported", title, 422));
 
     /// <summary>A comparison with a crawl that can't be compared (the fix loop): another site's, never analysed, live, interrupted, missing.</summary>
     public static ProblemException CrawlNotComparable(string title) => new(new ProblemDto("crawl-not-comparable", title, 409));

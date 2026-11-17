@@ -27,9 +27,10 @@ internal sealed class CrawlSummaryCache
     /// the analysis's score and the URLs crawled when it ran (a summary kept without them would say a scored crawl has no
     /// score, and that its analysis is out of date), and 5 whether the crawl kept the site's icon (a summary kept without
     /// it would say a crawl with an icon has none), 6 each check's count and the options' fingerprint (the fix loop: a
-    /// summary kept without them would say a crawl has no previous crawl to compare with).
+    /// summary kept without them would say a crawl has no previous crawl to compare with), 7 the crawl's rechecks (a
+    /// summary kept without them would say a rechecked crawl never was).
     /// </summary>
-    private const int FORMAT = 6;
+    private const int FORMAT = 7;
 
     private readonly ConcurrentDictionary<string, CachedSummary> _summaries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _paths = new(StringComparer.Ordinal);

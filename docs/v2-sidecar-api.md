@@ -2950,6 +2950,20 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
 - **`refused`** is null, or why it can't run now, as the problem `POST /rechecks` would give: `{ type, title }` with
   `type` one of `crawl-busy`, `site-busy`, `recheck-not-latest`, `recheck-unsupported`, `not-analyzed`,
   `not-analysable`. The UI shows `title` beside a disabled button.
+- **As built (S2).**
+  - **The body** takes `checkId`, `urlIds`, or both: with both, the list's URLs are judged by the check (as the
+    engine's `RecheckAsk` has it). Neither, more than 1,000 ids (or none), and a `group` without its `checkId` or with
+    `urlIds`, are `invalid-query`; an unknown check is `check-not-found`; an id the crawl has no URL for is
+    `invalid-query` (`errors.urlIds`, the engine's words); a field the body doesn't have is `bad-request`.
+  - The answer also gives **`countBefore`**, the check's count in the analysis as it stands (null without a check).
+    `secrets` is what a recheck asked for with none would need.
+  - **`refused`** is the first that applies, in this order: the crawl is live here (`crawl-busy`); what the engine finds
+    in the file (`crawl-busy` when another program has it, `not-analysable` when interrupted, `not-analyzed`,
+    `recheck-unsupported`), with the engine's titles ("This check hasn’t been analysed yet.", "Only checking the whole
+    site again can show whether this is fixed."); another run of the site live here (`site-busy`: "A check of this site
+    is running. Its results will show what’s fixed."), which comes before `recheck-not-latest` ("Recheck works on the
+    site’s latest check.") as such a run is usually the newer crawl. The latest crawl is the newest of the site's that
+    the library lists, in Home's order, a missing file apart.
 
 **`POST /api/crawls/{id}/rechecks`** starts one: the plan's body, plus Continue's `extraHeaders`, `proxyUrl` and
 `skipMissingHeaders`. It answers 202 with `{ recheckId, …plan }`, and the crawl's status goes `rechecking` (an
@@ -2970,6 +2984,21 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
 - **One at a time.** A crawl being rechecked is live (`crawl-busy` for continue, analyse, remove, delete, and another
   recheck). Rechecks and crawls of other sites run beside it; a crawl of the same site can't start while it runs, nor it
   while one does (`site-busy`).
+- **As built (S2).**
+  - The 202's `recheckId` is the next number in the file, which the run then takes (nothing else can while it is live
+    here); the plan in it is as it stood when asked, before the analysis first. `secrets` lists the headers skipped.
+    `needs-secrets` says "Rechecking this crawl needs …"; options the secrets make invalid are `invalid-options`.
+  - **The flow**: `analyzing` (when `analysisFirst`) with its `analysis` events, then the plan is made again from
+    today's analysis (a refusal now ends it, with the reason as the crawl event's `error`); `rechecking`; `analyzing`
+    (the analysis that settles it); then the file's status, with a `library` event. A failed run is still analysed,
+    and its end says why.
+  - **Stop**: during the run, the crawl event says `stopping`, the run ends (`recheck` event `stopped`), and the analysis
+    runs and settles it. During the analysis first, it cancels that analysis and no recheck is run (no `recheck`
+    event). During the analysis after, `crawl-busy`, as for any analysis: `/analyze/cancel` cancels it. A sidecar shut
+    down mid-run stops it and doesn't analyse: the next analysis settles it.
+  - **Busy**: a crawl being rechecked is `crawl-busy` also for pause, resume and a plan's `refused`. A new crawl, or the
+    continuing of a crawl, of a site being rechecked here is `site-busy` ("This site is being rechecked. Start the check
+    once that’s done."); a running analysis doesn't make a site busy, as it fetches nothing.
 
 **`GET /api/crawls/{id}/rechecks`**, the crawl's rechecks, newest first, and **`GET /api/crawls/{id}/rechecks/{n}`**,
 one (`recheck-not-found`, 404, for an id the file doesn't have):
@@ -3007,13 +3036,28 @@ one (`recheck-not-found`, 404, for an id the file doesn't have):
   (a `sources` check's phase 2), `new` (fetched one step), `letGo` (no longer linked: let go).
 - **`outcome`** for a judged URL: `fixed`, `still`, `notChecked`, `notRechecked`, or `new` (wasn't flagged, is now);
   null for the other roles. `reason` as on `/fixed`.
+- **As built (S2).** A recheck's fields are the engine's `RecheckRecord`'s, its times in UTC, `group` as
+  `{ detail, relatedUrlId }`. `recheck-not-found` also for a number that isn't one (`/rechecks/first`). The rows come
+  judged first, then in crawl order; `outcomes` and `roles` take the names above (another is `invalid-query`,
+  `errors["outcomes[0]"]`), `limit` 1 to 1,000 (100 when left out), `offset` 0 or more. **`reason` isn't built**: the
+  engine's `RecheckRow` has none, so rows leave it out.
 
 **Events.** The crawl's `crawl` events carry `rechecking` as its status. `progress` events are sent as for any run,
 `phase` `rechecking`. A `recheck` event carries the recheck's own counts (`phase` 1 or 2, `done` of `total` fetches),
 at most every 500 ms, and a last one with `result` once settled, which is the UI's cue to read the check again.
 
+As built (S2): a `progress` event during the run has `status` `rechecking` (`stopping` once stopped) and `phase`
+`rechecking`, and the crawl's own counts; it isn't added to the live history (the chart reads the run from the file once
+it ends). `recheck` events are `{ crawlId, recheckId, status, phase, done, total, result }`: one as the run starts, then
+with the progress at most every 500 ms (`running`), one as the run ends (the file's status: `completed`, `stopped` or
+`failed`, `result` null), and one once settled (`result`), after the analysis's events and before the crawl's last
+event. `phase` is null before the run's first progress. A stream that connects meanwhile gets the latest after its
+`hello` and the crawls' progress, until the crawl is no longer live here.
+
 **The library afterwards.** The item's `rechecks` (above); its counts, score and `changes` are the analysis's after
-the recheck, as for any analysis.
+the recheck, as for any analysis. As built: `rechecks` comes from the summary cache (format 7: the count and the latest
+recheck); `last.fixed` is null until the latest is settled. While the crawl is rechecked here, the item is its summary
+from before, with `status` `rechecking` and `outOfDate` true.
 
 ## Engine changes E1 needs
 
@@ -4435,8 +4479,9 @@ it). Built on `ui/3b-evidence` (775c6a4, 48d6576, 439dbba): the API above is wha
 Step 3b's fix loop ([the design](v2-fix-loop.md), with its table of parts under "Engine and storage"). This is the
 plan the API above is written to. The engine's part (stages E1 to E4) is built on `ui/3b-fixloop-engine`, as below;
 [the design's "As built"](v2-fix-loop.md#12-as-built-the-engine-stages-e1-to-e4) says where it differs, and what was
-measured. The sidecar's comparison (S1) is built on `ui/3b-fixloop-sidecar`, as the "(fix loop)" sections above say
-where it differs; [the design's "S1/S2 as built"](v2-fix-loop.md#s1-and-s2-as-built-the-sidecar) has the rest.
+measured. The sidecar's part (S1, the comparison, and S2, the rechecks) is built on `ui/3b-fixloop-sidecar`, as the
+"(fix loop)" sections above say where it differs; [the design's "S1 and S2 as built"](v2-fix-loop.md#s1-and-s2-as-built-the-sidecar)
+has the rest.
 
 - **Built: what the sidecar calls.**
   - The comparison: `CrawlComparisonReader.ReadSummary(current, other, cache, ct)` (a `CrawlComparison`),
@@ -4461,7 +4506,7 @@ where it differs; [the design's "S1/S2 as built"](v2-fix-loop.md#s1-and-s2-as-bu
   - Added for the sidecar (S1): `CrawlFileSummary.CheckCounts` and `OptionsFingerprint` (read by `CrawlSummaryReader`),
     `CrawlComparability.OptionsFingerprint` and `FromSummaries` (a `SummaryComparison`: the check-level comparison from
     two summaries alone); `ReportOptions.CompareWith` and `NotCompared`, with the report's part and the workbook's
-    columns and sheet.
+    columns and sheet. For S2, `CrawlFileSummary.RecheckCount` and `LastRecheck` (`RecheckReader.ReadLatest`).
 
 - **Comparison, read only.** `Storage/CrawlComparisonReader`: `ReadSummary` (`/changes`), `ReadRowChanges` and
   `ReadGroupChanges` (`compareWith` on `/rows` and `/groups`, through `IssueGroupReader`), `ReadCleared` (`/fixed`).

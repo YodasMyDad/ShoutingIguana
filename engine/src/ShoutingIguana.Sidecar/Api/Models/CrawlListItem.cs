@@ -96,4 +96,7 @@ internal sealed record CrawlListItem
     /// describe it.
     /// </summary>
     public CrawlChangesDto? Changes { get; init; }
+
+    /// <summary>The crawl's rechecks (the fix loop): how many, and the latest in brief. Null for a crawl never rechecked.</summary>
+    public RechecksBriefDto? Rechecks { get; init; }
 }

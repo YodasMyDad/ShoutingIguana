@@ -1003,3 +1003,26 @@ say each call as built; what follows is what the design left open, and where the
   The workbook's summary gains "Compared with", and its table "Found on 3 Nov" and "Change" as its last columns, so no
   column moves; a last sheet "Fixed since 3 Nov" lists every row cleared. `compareWith` on an export is the sidecar's
   own field (report and workbook only), not the engine's `ExportFields`, as only the library can resolve it.
+
+**S2, the rechecks** (`Crawls/CrawlManager.Rechecks.cs`, `Api/RecheckEndpoints.cs`).
+
+- **The flow**: the analysis first when it is out of date, then the plan made again from it (the "before" is today's),
+  the run (`CrawlEngine.Recheck` with the crawl's stored options and the secrets given again), then the analysis, which
+  settles it. The crawl is live from the 202 to the end of that analysis: `crawl-busy` for everything else on it.
+- **The recheck's number** in the 202 is the next in the file, which the run takes (the writer numbers from the highest),
+  so the UI can key its events before they come.
+- **Refusals**, the first that applies: live here; the engine's (in use elsewhere, interrupted, never analysed, a check
+  a recheck can't settle or that was skipped); another run of the site live here (`site-busy`); not the site's latest
+  (`recheck-not-latest`). `site-busy` comes before `recheck-not-latest`, as the run holding it up is usually the newer
+  crawl, and "its results will show what's fixed" is then the useful thing to say. An analysis alone doesn't make the
+  site busy; a recheck does in all its steps, analyses included, as it is about to fetch or just has.
+- **Stop** during the analysis first cancels it and runs no recheck; during the run it stops it, and the analysis still
+  runs and settles it `stopped`; during the analysis after it is the analysis's (`/analyze/cancel`). A sidecar that
+  shuts down stops the run and doesn't analyse: the next analysis settles it.
+- **Events**: the crawl's `analyzing`, `rechecking` (or `stopping`), `analyzing`, then its file status; `progress` as
+  `rechecking` with the crawl's counts (left out of the live history); `recheck` events as it starts, every 500 ms at
+  most, as its run ends and once settled, the latest kept for a stream that connects meanwhile. A test holds them to
+  that order end to end on the synthetic site (revision 0 crawled, switched to 1, the analysis made out of date,
+  rechecked, settled).
+- **The library item's `rechecks`** comes from the summary cache (format 7).
+- **Not built:** a recheck row's `reason` (the engine's rows have none). Pausing a recheck isn't offered (`crawl-busy`).

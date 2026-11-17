@@ -1,8 +1,13 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Library;
 using ShoutingIguana.Sidecar.Tests.Support;
 using ShoutingIguana.TestSite;
@@ -313,7 +318,7 @@ public sealed class LibraryTests : IAsyncLifetime
         // As the build before it left the file: the format before, and nothing said of an icon.
         var file = Path.Combine(_root, "state", "summaries.json");
         var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
-        Assert.Equal(6, (int)cache["format"]!);
+        Assert.Equal(7, (int)cache["format"]!);
         cache["format"] = 4;
         Assert.All(cache["summaries"]!.AsArray(), summary => Assert.True(summary!["summary"]!.AsObject().Remove("hasFavicon")));
         await File.WriteAllTextAsync(file, cache.ToJsonString());
@@ -337,7 +342,7 @@ public sealed class LibraryTests : IAsyncLifetime
         // As the build before it left the file: the format it kept, and no score with the analysis.
         var file = Path.Combine(_root, "state", "summaries.json");
         var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
-        Assert.Equal(6, (int)cache["format"]!);
+        Assert.Equal(7, (int)cache["format"]!);
         cache["format"] = 3;
         foreach (var summary in cache["summaries"]!.AsArray())
         {
@@ -367,7 +372,7 @@ public sealed class LibraryTests : IAsyncLifetime
         // As the build before it left the file: the format it kept, and neither the counts nor the fingerprint.
         var file = Path.Combine(_root, "state", "summaries.json");
         var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
-        Assert.Equal(6, (int)cache["format"]!);
+        Assert.Equal(7, (int)cache["format"]!);
         cache["format"] = 5;
         foreach (var summary in cache["summaries"]!.AsArray())
         {
@@ -380,6 +385,42 @@ public sealed class LibraryTests : IAsyncLifetime
         var item = await _sidecar.GetJsonAsync($"api/crawls/{now}");
         Assert.Equal(then, (string?)item["previous"]!["id"]);
         Assert.NotNull(item["changes"]);
+    }
+
+    /// <summary>
+    /// Summaries kept by a build from before rechecks were kept with them (the format before this one) aren't used: one
+    /// would say a rechecked crawl never was. The crawl is read again.
+    /// </summary>
+    [Fact]
+    public async Task SummariesKeptBeforeTheRechecksAreReadAgain()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "before-the-rechecks.sicrawl"), analyse: true);
+        var plan = RecheckPlanReader.Plan(path, new RecheckAsk(null, UrlIds: [UrlGridReader.Lookup(path, "/")!.Id]), new AnalysisSettings());
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Recheck(new RecheckRequest(path, plan, CrawlDatabase.ReadOptions(path))))
+        {
+            await job.Completion.WaitAsync(EventStreamReader.TIMEOUT);
+        }
+
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        var id = CrawlIds.For(path);
+        var rechecks = (await _sidecar.GetJsonAsync($"api/crawls/{id}"))["rechecks"]!.ToJsonString();
+        Assert.Contains("\"count\":1", rechecks, StringComparison.Ordinal);
+        await _sidecar.DisposeAsync();
+
+        // As the build before it left the file: the format it kept, and nothing said of rechecks.
+        var file = Path.Combine(_root, "state", "summaries.json");
+        var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+        Assert.Equal(7, (int)cache["format"]!);
+        cache["format"] = 6;
+        foreach (var summary in cache["summaries"]!.AsArray())
+        {
+            Assert.True(summary!["summary"]!.AsObject().Remove("recheckCount") && summary["summary"]!.AsObject().Remove("lastRecheck"));
+        }
+
+        await File.WriteAllTextAsync(file, cache.ToJsonString());
+
+        _sidecar = await TestSidecar.StartAsync(_root);
+        Assert.Equal(rechecks, (await _sidecar.GetJsonAsync($"api/crawls/{id}"))["rechecks"]!.ToJsonString());
     }
 
     /// <summary>

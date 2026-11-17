@@ -48,6 +48,7 @@ public static class CrawlSummaryReader
             var checks = analysis is null ? null : IssueReader.ReadCounts(connection, transaction: null);
             cancellationToken.ThrowIfCancellationRequested();
             var (fetched, crawled, pages) = withCounts ? Counts(connection) : (null, null, null);
+            var (rechecks, lastRecheck) = RecheckReader.ReadLatest(connection);
             return summary with
             {
                 HasFavicon = FaviconReader.Has(connection, transaction: null),
@@ -59,7 +60,9 @@ public static class CrawlSummaryReader
                 Analysis = analysis,
                 FlaggedChecks = flagged,
                 CheckCounts = checks,
-                OptionsFingerprint = CrawlComparability.OptionsFingerprint(ReadOptions(connection, summary.StartUrl))
+                OptionsFingerprint = CrawlComparability.OptionsFingerprint(ReadOptions(connection, summary.StartUrl)),
+                RecheckCount = rechecks,
+                LastRecheck = lastRecheck
             };
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == raw.SQLITE_INTERRUPT && cancellationToken.IsCancellationRequested)
