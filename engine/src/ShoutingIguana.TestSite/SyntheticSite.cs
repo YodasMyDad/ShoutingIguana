@@ -75,12 +75,18 @@ public sealed partial class SyntheticSite
     private readonly IReadOnlyList<Plant> _plants;
     private readonly Dictionary<string, Plant> _plantsByPath;
     private readonly Dictionary<string, Plant> _partnerPlantsByPath;
+    private readonly Dictionary<string, Plant> _plantsByUrl;
 
     public SyntheticSite(SyntheticSiteOptions options, Uri baseUri, Uri externalBaseUri)
     {
         if (options.PageCount < 2)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "A synthetic site needs at least two pages.");
+        }
+
+        if (options.Revision is < 0 or > LATEST_REVISION)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), $"A synthetic site has revisions 0 to {LATEST_REVISION}.");
         }
 
         _options = options;
@@ -94,6 +100,7 @@ public sealed partial class SyntheticSite
         _plants = CreatePlants();
         _plantsByPath = _plants.Where(plant => !plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
         _partnerPlantsByPath = _plants.Where(plant => plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
+        _plantsByUrl = _plants.ToDictionary(PlantUrl, StringComparer.Ordinal);
     }
 
     public int PageCount => _options.PageCount;
@@ -133,22 +140,34 @@ public sealed partial class SyntheticSite
                 : NotFound(path);
         }
 
+        // Revision 1 redirects the HTTPS site's plain-HTTP home page to the HTTPS one, so the site has one version.
+        if (path == "/" && IsHttps && plainHttp && Revision >= 1)
+        {
+            return Redirect(301, _base + "/");
+        }
+
         if (path == "/")
         {
-            return Html(RenderHome());
+            return Html(RenderHome()) with { Headers = Revision >= 1 ? HOME_HEADERS_AFTER : SECURITY_HEADERS };
         }
 
         // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do. The HTTPS site's plain-HTTP side
         // drops the connection for it, though it still serves its page.
+        // Revision 1 mends it: robots.txt answers on the plain-HTTP side too. The rest of that side still serves pages, as the
+        // plain HTTP page shows.
         if (path == "/robots.txt" && IsHttps && plainHttp)
         {
-            return new SyntheticResponse(0, HTML, null, null, null, Abort: true);
+            return Revision == 0
+                ? new SyntheticResponse(0, HTML, null, null, null, Abort: true)
+                : new SyntheticResponse(200, "text/plain; charset=utf-8", "User-agent: *\nDisallow: /private/\n", null, null);
         }
 
+        // Revision 1 lets the crawler into one URL of the private area, the one robots.txt now allows.
         if (path == "/robots.txt")
         {
             var sitemap = _options.Sitemaps ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
-            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\nDisallow: /private/\n{sitemap}", null, null);
+            var allowed = Revision >= 1 ? $"Allow: {UNBLOCKED_PRIVATE}\n" : string.Empty;
+            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\n{allowed}Disallow: /private/\n{sitemap}", null, null);
         }
 
         if (_options.Sitemaps && path == "/sitemap.xml")
@@ -191,6 +210,11 @@ public sealed partial class SyntheticSite
             return Html(RenderSimple($"Orphan {orphan}", "Only the sitemap lists this page.", path, twinLinks));
         }
 
+        if (TryNumber(path, "/broken/", string.Empty, out var restored) && FateOfBrokenLink(restored) == BrokenLinkFate.Restored)
+        {
+            return Html(RenderSimple($"Restored {restored}", "A page that was missing, now back.", path));
+        }
+
         if (TryNumber(path, "/hidden/", string.Empty, out var hidden))
         {
             return Html(RenderSimple($"Hidden {hidden}", "Only nofollow links point here.", path));
@@ -221,9 +245,10 @@ public sealed partial class SyntheticSite
             return new SyntheticResponse(200, "image/jpeg", null, IMAGE_BYTES, null);
         }
 
+        // Revision 1 replaces the oversized photo with one of a normal size, at the same address.
         if (path == "/img/large.jpg")
         {
-            return new SyntheticResponse(200, "image/jpeg", null, LARGE_IMAGE_BYTES, null);
+            return new SyntheticResponse(200, "image/jpeg", null, Revision >= 1 ? IMAGE_BYTES : LARGE_IMAGE_BYTES, null);
         }
 
         // The site's icon, where browsers look for one: no page links it, so it's no URL of a crawl.
@@ -252,7 +277,7 @@ public sealed partial class SyntheticSite
 
     public SyntheticSiteExpectations GetExpectations()
     {
-        HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [];
+        HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [], restored = [];
         Dictionary<string, HashSet<string>> issues = new(StringComparer.Ordinal);
 
         // Paths are on this site; links to the external site are already absolute.
@@ -266,12 +291,17 @@ public sealed partial class SyntheticSite
             urls.Add(pathOrUrl.StartsWith('/') ? _base + pathOrUrl : pathOrUrl);
         }
 
+        List<(string Title, string Path)> titles = [];
         for (var product = 1; product < PageCount; product++)
         {
             var path = $"/p/{product}";
             foreach (var (href, _, _) in ContentLinks(product))
             {
-                if (href.StartsWith("/broken/", StringComparison.Ordinal))
+                if (IsRestored(href))
+                {
+                    restored.Add(href);
+                }
+                else if (href.StartsWith("/broken/", StringComparison.Ordinal))
                 {
                     broken.Add(href);
                     Flag("internal-client-error", href);
@@ -297,7 +327,7 @@ public sealed partial class SyntheticSite
                     Flag("redirect-chain", href);
                     Flag("redirect-temporary", href);
                 }
-                else if (href.StartsWith("/private/", StringComparison.Ordinal))
+                else if (href.StartsWith("/private/", StringComparison.Ordinal) && href != UnblockedPrivate)
                 {
                     disallowed.Add(href);
                     Flag("blocked-by-robots", href);
@@ -349,11 +379,10 @@ public sealed partial class SyntheticSite
                 Flag("canonical-to-non-indexable", path);
             }
 
-            // Content checks only look at indexable pages, so a pair counts only when both are indexable.
-            if (HasDuplicateTitle(product) && IsIndexable(product) && IsIndexable(product - 1))
+            // Content checks only look at indexable pages, so a shared title counts only between indexable ones.
+            if (IsIndexable(product))
             {
-                Flag("title-duplicate", path);
-                Flag("title-duplicate", $"/p/{product - 1}");
+                titles.Add((TitleFor(product), path));
             }
 
             if (MissesDescription(product) && IsIndexable(product))
@@ -364,6 +393,14 @@ public sealed partial class SyntheticSite
             if (MissesAlt(product))
             {
                 Flag("image-missing-alt", path);
+            }
+        }
+
+        foreach (var shared in titles.GroupBy(page => page.Title, StringComparer.Ordinal).Where(group => group.Count() > 1))
+        {
+            foreach (var (_, page) in shared)
+            {
+                Flag("title-duplicate", page);
             }
         }
 
@@ -381,8 +418,14 @@ public sealed partial class SyntheticSite
         // and the plain-HTTP robots.txt that doesn't answer. The HTTPS site's plain-HTTP side serves the home page rather
         // than redirect, a duplicate version of the site. Over plain HTTP, the https:// version doesn't answer, as on a
         // site without TLS, which is no duplicate.
+        // Revision 1 drops a security header from the home page, and mends the plain-HTTP side of the HTTPS site.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
-        if (IsHttps)
+        if (!IsHttps && Revision >= 1)
+        {
+            Flag("security-headers-missing", "/");
+        }
+
+        if (IsHttps && Revision == 0)
         {
             Flag("robots-txt-unreachable-other-origin", "/");
             Flag("duplicate-site-version", "http" + _base["https".Length..] + "/");
@@ -396,17 +439,25 @@ public sealed partial class SyntheticSite
 
         if (_options.Sitemaps)
         {
-            // The sitemap index lists a file that doesn't exist, and the orphans are only in the extra sitemap.
-            Flag("sitemap-error", "/");
+            // The sitemap index lists a file that doesn't exist (until revision 1 drops it), and the orphans are only in
+            // the extra sitemap.
+            if (Revision == 0)
+            {
+                Flag("sitemap-error", "/");
+            }
+
             for (var orphan = 0; orphan < OrphanCount; orphan++)
             {
                 Flag("orphan-page", $"/orphan/{orphan}");
             }
 
-            // Categories are linked from every page but listed in no sitemap.
+            // Categories are linked from every page but listed in no sitemap, but for the first in revision 1.
             for (var category = 0; category < CATEGORY_COUNT; category++)
             {
-                Flag("not-in-sitemap", $"/c/{category}");
+                if (!IsCategoryListed(category))
+                {
+                    Flag("not-in-sitemap", $"/c/{category}");
+                }
             }
         }
         else
@@ -425,7 +476,9 @@ public sealed partial class SyntheticSite
 
         var products = PageCount - 1;
         var orphans = _options.Sitemaps ? OrphanCount : 0;
-        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true } && !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
+        var unblocked = UnblockedPrivate is null ? 0 : 1;
+        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + restored.Count + unblocked +
+                        _plants.Count(plant => plant is { Status: 200, IsPage: true } && !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
         // Cloudflare's /cdn-cgi/ endpoint is no page of the site's in any count (the engine's CrawlSchema.PAGE), so it's
         // out of both; a page the analysis doesn't audit for another reason would be out of this one alone.
         var analysedPages = htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false } &&
@@ -447,8 +500,9 @@ public sealed partial class SyntheticSite
             Products: products,
             Orphans: orphans,
             BrokenUrls: broken.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: false }),
-            ServerErrorUrls: errors.Count,
-            Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
+            ServerErrorUrls: errors.Count + _plants.Count(plant => plant is { Status: >= 500, OnPartnerSite: false }),
+            // Over HTTPS, revision 1's plain-HTTP home page, which the crawler probes as another version of the site, redirects.
+            Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400) + (IsHttps && Revision >= 1 ? 1 : 0),
             RobotsDisallowed: disallowed.Count + _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: false }),
             NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
             ExternalOk: externalOk.Count,
@@ -522,9 +576,19 @@ public sealed partial class SyntheticSite
             yield return ($"/p/{target}", false, $"Product {target}");
         }
 
+        // Revision 1 restores some of these pages, drops the link to others, and moves some links to another URL that
+        // doesn't exist either.
         if (product % 29 == 0)
         {
-            yield return ($"/broken/{product}", false, "Broken link");
+            switch (FateOfBrokenLink(product))
+            {
+                case BrokenLinkFate.Broken or BrokenLinkFate.Restored:
+                    yield return ($"/broken/{product}", false, "Broken link");
+                    break;
+                case BrokenLinkFate.Relinked:
+                    yield return ($"/broken/{product}{RELINKED}", false, "Broken link");
+                    break;
+            }
         }
 
         if (product % 211 == 0)
@@ -589,7 +653,7 @@ public sealed partial class SyntheticSite
         return Render(new PageSpec
         {
             Path = $"/p/{product}",
-            Title = TitleOf(HasDuplicateTitle(product) ? product - 1 : product),
+            Title = TitleFor(product),
             Description = MissesDescription(product) ? null : $"Synthetic product {product}: {Words(product, 99, DESCRIPTION_WORDS)}.",
             H1 = $"Product {product}",
             Content = content.ToString(),
@@ -738,10 +802,14 @@ public sealed partial class SyntheticSite
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/pages-").Append(chunk).Append(".xml</loc></sitemap>");
         }
 
-        // The last entry doesn't exist: a planted sitemap error.
+        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends.
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/extra.xml</loc></sitemap>");
-        xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap></sitemapindex>");
-        return xml.ToString();
+        if (Revision == 0)
+        {
+            xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap>");
+        }
+
+        return xml.Append("</sitemapindex>").ToString();
     }
 
     private string RenderPagesSitemap(int chunk)
@@ -772,6 +840,13 @@ public sealed partial class SyntheticSite
         foreach (var plant in _plants.Where(plant => plant.InSitemap))
         {
             xml.Append("<url><loc>").Append(PlantUrl(plant)).Append("</loc></url>");
+        }
+
+        // Revision 1 lists what it adds and mends: the pages it restored, the private page robots.txt now allows, and the
+        // first category.
+        foreach (var path in RevisionListedPaths())
+        {
+            xml.Append("<url><loc>").Append(_base).Append(path).Append("</loc></url>");
         }
 
         return xml.Append("</urlset>").ToString();

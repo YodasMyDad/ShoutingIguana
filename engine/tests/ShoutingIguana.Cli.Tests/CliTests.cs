@@ -420,6 +420,7 @@ public sealed class CliTests : IAsyncLifetime
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, _server.BaseUri.AbsoluteUri), "the start URL can't change");
         AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", "", "-q"), "empty");
         AssertFails(await RunAsync("issues", crawl, "--csv", ""), "empty");
+        AssertFails(await RunAsync("testsite", "--revision", "2"), "--revision must be 0 to 1");
     }
 
     /// <summary>
