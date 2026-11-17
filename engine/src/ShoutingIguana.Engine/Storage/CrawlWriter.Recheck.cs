@@ -453,14 +453,16 @@ internal sealed partial class CrawlWriter
     /// </summary>
     private void ApplyRecheckDiscover(DiscoverCommand command)
     {
-        foreach (var link in command.Urls)
+        for (var index = 0; index < command.Urls.Count; index++)
         {
+            var link = command.Urls[index];
             var id = _urls.TryGetValue(link.Key, out var entry)
                 ? entry.Id
                 : Insert(link, CrawlDepth.UNLINKED, SkipReason.Recheck, command.Source, null, exemptFromDepthLimit: true);
             if (command.SitemapId is { } sitemapId)
             {
-                _statements.InsertSitemapUrl(sitemapId, id);
+                // With its lastmod as read now, as a crawl keeps it (sitemap-lastmod-invalid reads it).
+                _statements.InsertSitemapUrl(sitemapId, id, command.Lastmods is { } lastmods && index < lastmods.Count ? lastmods[index] : null);
             }
         }
     }
