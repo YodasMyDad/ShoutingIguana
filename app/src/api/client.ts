@@ -26,6 +26,8 @@ import type {
   LinkColumn,
   LinkEndsPage,
   LinkEndsQuery,
+  LinkGroupsPage,
+  LinkGroupsQuery,
   LinkFacetsPage,
   LinkFacetsQuery,
   LinkRow,
@@ -40,7 +42,15 @@ import type {
   UrlLookup,
   UrlRow,
 } from './grids';
-import type { FoundOnPage, HtmlSource, IssueTargetsPage, LinkPage, LinksQuery, UrlDetail } from './inspector';
+import type {
+  FoundOnPage,
+  HtmlSource,
+  IssueTargetsPage,
+  LinkPage,
+  LinksQuery,
+  PageImages,
+  UrlDetail,
+} from './inspector';
 import { getTransport, type TransportRequest } from './transport';
 import type {
   AlertEvent,
@@ -317,6 +327,9 @@ export const api = {
    */
   foundOn: (id: string, urlIds: readonly number[], limit?: number, signal?: Signal) =>
     post<FoundOnPage>(`${crawl(id)}/urls/found-on`, limit === undefined ? { urlIds } : { urlIds, limit }, signal),
+  /** Step 3b: the images a page shows, each file once, the largest first; `limit` 1 to 500 (100 when left out). */
+  urlImages: (id: string, urlId: number, limit?: number, signal?: Signal) =>
+    post<PageImages>(`${crawl(id)}/urls/images`, limit === undefined ? { urlId } : { urlId, limit }, signal),
   /** The stored HTML, streamed as one JSON object. `bytes` is null for a page over 512 MB. */
   urlSource: (id: string, urlId: number, signal?: Signal) =>
     post<HtmlSource>(`${crawl(id)}/urls/source`, { urlId }, signal),
@@ -353,6 +366,9 @@ export const api = {
    */
   linkEnds: (id: string, query: LinkEndsQuery, signal?: Signal) =>
     post<LinkEndsPage>(`${crawl(id)}/links/ends`, withHiddenChecks(id, query), signal),
+  /** Step 3b: a view's links grouped by target, one row a target; the most linked from pages first unless asked. */
+  linkGroups: (id: string, query: LinkGroupsQuery, signal?: Signal) =>
+    post<LinkGroupsPage>(`${crawl(id)}/links/groups`, withHiddenChecks(id, query), signal),
   sitemaps: (id: string, signal?: Signal) => get<SitemapList>(`${crawl(id)}/sitemaps`, signal),
   /** The URL grid for one sitemap (an index: every sitemap under it). `sitemap-not-found` for an id the crawl lacks. */
   sitemapUrls: (id: string, sitemapId: number, query: UrlGridQuery, signal?: Signal) =>
