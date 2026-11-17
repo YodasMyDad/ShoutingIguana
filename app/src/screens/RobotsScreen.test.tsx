@@ -286,7 +286,8 @@ describe('robots.txt: one origin’s file', () => {
     await open(FILE);
     const grid = await screen.findByRole('grid', { name: 'Blocked URLs' });
     await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
-    const why = (url: string) => rowOf(url).querySelector('[aria-colindex="2"]');
+    // The URL and what blocking it costs lead; the rule is the fifth column (the file shows it for the cursor's row).
+    const why = (url: string) => rowOf(url).querySelector('[aria-colindex="5"]');
     expect(why(`${SITE}/admin/users`)).toHaveTextContent('Line 6: Disallow: /admin/');
     expect(why(`${SITE}/old-private`)).toHaveTextContent('No rule kept');
     expect(within(rowOf(`${SITE}/old-private`)).getByText('No rule kept')).toHaveAttribute(
@@ -329,6 +330,82 @@ describe('robots.txt: one origin’s file', () => {
     await waitFor(() => expect(viewer()).toHaveAttribute('data-chosen', ''));
     fireEvent.keyDown(grid, { key: 'ArrowUp' });
     await waitFor(() => expect(viewer()).toHaveAttribute('data-chosen', '6'));
+  });
+
+  it('says what blocking each URL costs: the pages linking to it, its sitemap, and a flag where the site asks for it', async () => {
+    sidecar();
+    const { router } = await open(FILE);
+    const grid = await screen.findByRole('grid', { name: 'Blocked URLs' });
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
+    expect(
+      within(grid)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Blocked URL', 'Conflict', 'Linked from', 'In a sitemap', 'Blocked by']);
+    const cell = (url: string, column: number) => rowOf(url).querySelector(`[aria-colindex="${column}"]`);
+    expect(cell(`${SITE}/admin/`, 2)).toHaveTextContent('In your menu but blocked');
+    expect(cell(`${SITE}/admin/orders?page=2`, 2)).toHaveTextContent('In your sitemap but blocked');
+    expect(cell(`${SITE}/admin/users`, 2)).toHaveTextContent(/^$/);
+    expect(cell(`${SITE}/admin/users`, 3)).toHaveTextContent('3 pages');
+    expect(cell(`${SITE}/old-private`, 3)).toHaveTextContent('No pages');
+    expect(cell(`${SITE}/admin/users`, 4)).toHaveTextContent('No');
+    expect(cell(`${SITE}/admin/orders?page=2`, 4)).toHaveTextContent('Yes: pages.xml and 1 more');
+
+    // The count leads to the links to it in Links; the sitemap to its page in Sitemaps.
+    const linked = within(rowOf(`${SITE}/admin/`)).getByRole('link', {
+      name: 'Linked from 1,284 pages: show the links in Links',
+    });
+    expect(linked.getAttribute('href')).toMatch(/\/links\?filter=/);
+    expect(decodeURIComponent(linked.getAttribute('href') ?? '')).toContain('"value":21');
+    const listed = within(rowOf(`${SITE}/admin/orders?page=2`)).getByRole('link', {
+      name: 'Yes: pages.xml and 1 more',
+    });
+    expect(listed).toHaveAttribute('title', `Listed in 2 sitemaps, the first ${SITE}/sitemaps/pages.xml`);
+    fireEvent.click(listed);
+    await waitFor(() => expect(pathOf(router)).toBe(`/crawls/${TEST_CRAWL_ID}/sitemaps/2`));
+  });
+
+  it('lists the URLs the site asks for and blocks from their own link, and says when none is', async () => {
+    const { transport } = sidecar();
+    const { router } = await open(FILE);
+    fireEvent.click(await screen.findByRole('link', { name: '2 URLs in your sitemap or menu but blocked' }));
+    await waitFor(() => expect(searchOf(router).conflict).toBe(true));
+    await waitFor(() =>
+      expect(screen.getByRole('grid', { name: 'Blocked URLs' })).toHaveAttribute('aria-rowcount', '3'),
+    );
+    expect(blockedRequests(transport).at(-1)).toMatchObject({ origin: SITE, conflict: true });
+    expect(screen.getByText('in your sitemap or menu but blocked').closest('.si-chip')).toHaveTextContent(
+      'Conflict is in your sitemap or menu but blocked',
+    );
+    expect(screen.queryByText(`${SITE}/admin/users`)).toBeNull();
+
+    // An origin none of whose blocked URLs anything asks for says so, quietly, and has no link.
+    sidecar({
+      blocked: { [SITE]: TEST_BLOCKED.map((row) => ({ ...row, inSitemap: false, inMenu: false, conflict: false })) },
+    });
+    await open(FILE);
+    expect(await screen.findByText('None of them is in your sitemap or menu.')).toBeVisible();
+  });
+
+  it('says the costs are known once the crawl is analysed, while they aren’t', async () => {
+    const unknown = {
+      linkingPages: null,
+      inSitemap: null,
+      sitemaps: null,
+      sitemap: null,
+      inMenu: null,
+      conflict: null,
+    };
+    sidecar({ blocked: { [SITE]: TEST_BLOCKED.map((row) => ({ ...row, ...unknown })) } });
+    await open(FILE);
+    const grid = await screen.findByRole('grid', { name: 'Blocked URLs' });
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
+    for (const column of [2, 3, 4]) {
+      expect(rowOf(`${SITE}/admin/`).querySelector(`[aria-colindex="${column}"]`)).toHaveTextContent(
+        'Known once the crawl is analysed as it stands.',
+      );
+    }
+    expect(screen.queryByText(/in your sitemap or menu/)).toBeNull();
   });
 
   it('lists the URLs no line accounts for from their own link, in words that say which case they are', async () => {
@@ -527,7 +604,7 @@ describe('robots.txt: an origin without a file to show', () => {
     ).toBeGreaterThan(0);
     expect(await screen.findByRole('heading', { name: 'No file to show' })).toBeVisible();
     const row = await waitFor(() => rowOf('https://cdn.example.net/a.js'));
-    expect(row.querySelector('[aria-colindex="2"]')).toHaveTextContent('robots.txt couldn’t be read');
+    expect(row.querySelector('[aria-colindex="5"]')).toHaveTextContent('robots.txt couldn’t be read');
     expect(screen.getByRole('link', { name: '2 URLs were refused while robots.txt couldn’t be read' })).toBeVisible();
     expect(screen.queryByTestId('source-viewer')).toBeNull();
   });

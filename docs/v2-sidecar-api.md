@@ -375,6 +375,29 @@ The options DTO has every public `CrawlOptions` property. `extraHeaders` is an o
   answered and the site replied 200 OK in 182 ms.", "The proxy asks for a user name and password (407).", "Nothing
   answered at the proxy's address.".
 
+#### SOCKS5 with a login (step 3b)
+
+A `socks5://user:password@host:port` proxy logs in with that user name and password (RFC 1929), for the proxy test
+and for every request a crawl makes: .NET's own SOCKS5 client does it from the proxy's credentials, which
+`ProxyFactory` takes out of the address. Tested against a SOCKS5 server of the tests' own that requires a login
+(`TestSite/Socks5ProxyServer`): a crawl through it reads the site exactly as a crawl straight to it does, every
+connection logged in with the password as typed; the proxy test answers `ok` through it (`Socks5CrawlTests`,
+`ProxyTesterTests`, `ProxyEndpointTests`). The engine renders no page in a browser, so nothing else needs the login.
+
+A SOCKS5 proxy's refusal comes from .NET as a failed tunnel whatever it was; the engine reads which from the runtime's
+own words (`SocksRefusals`) and says it plainly:
+
+- a wrong user name or password: the proxy test's `proxyAuthRequired`, "The SOCKS5 proxy didn't accept the user name
+  and password."; a crawl stores "The SOCKS5 proxy didn't accept the user name and password" as the request's error
+  (its robots.txt answer's, when the start origin's robots.txt is what it asked first) and doesn't ask again as if it
+  could pass;
+- none given to a proxy that wants one: `proxyAuthRequired`, "The SOCKS5 proxy asks for a user name and password.";
+- a proxy that let the crawler in but couldn't reach the site: `siteUnreachable`, "The SOCKS5 proxy let the test in,
+  but couldn't reach the site." (a crawl: "The SOCKS5 proxy couldn't reach the site", asked again as any network
+  failure is).
+
+Before step 3b both refusals of a login read "The proxy answered, but it couldn't reach the site.".
+
 ### Library (E1)
 
 `GET /api/crawls` returns `[CrawlListItem]`, newest first. It lists the `.sicrawl` files at the top of the data
@@ -2299,6 +2322,47 @@ three are optional:
   `blocked` is the URLs its lines and `unmatched` account for, and `/robots/blocked` lists that many. The list of
   origins is kept apart (for 2 s while a crawl runs): an origin's `blocked` there can be a moment behind its file's.
 
+#### What blocking a URL costs (step 3b)
+
+Each row of `/robots/blocked` also says what blocking the URL costs, as the analysis counted it, so the owner can see
+which refusals matter: a URL the site's sitemap lists, or its menu links to, is one the site asks for and blocks.
+The page says how many of the origin's blocked URLs do, and `conflict` lists them alone:
+
+```json
+{"origin":"https://www.example.com","total":12,"matching":1,"offset":0,
+ "rows":[{"id":3411,"url":"https://www.example.com/private/listed","reason":"rule","line":2,"rule":"Disallow: /private/","error":null,
+          "linkingPages":0,"inSitemap":true,"sitemaps":1,"sitemap":{"id":3,"url":"https://www.example.com/sitemaps/extra.xml"},
+          "inMenu":false,"conflict":true}],
+ "conflicts":1}
+```
+
+- **`linkingPages`**: the pages that link to the URL, a page's links to itself left out (the URL grid's
+  `linkingPages`). The Links grid's links to it are `to.id` equal to its `id`, `selfLink` false, `kind` `hyperlink`.
+- **`inSitemap`**: a sitemap lists it; `false` only when every sitemap was read and none does, `null` otherwise when
+  none of those read does (the URL grid's `inSitemap`). **`sitemap`** is the first sitemap that lists it, in the order
+  the crawl found them, by the `id` the Sitemaps screen opens, and **`sitemaps`** how many do; both null where
+  `inSitemap` isn't true.
+- **`inMenu`**: a page links to it from its navigation (a hyperlink whose `position` is `navigation`), a page's link
+  to itself left out.
+- **`conflict`**: `inSitemap` or `inMenu`. **`conflicts`**, on the page, is how many of the origin's blocked URLs
+  conflict, whatever `line`, `reason`, `urlId` or `conflict` narrow the rows to.
+- **`conflict` in the request** (optional): `true` lists only the URLs that conflict, `false` only those that don't;
+  with `line`, `reason` and `urlId` as they narrow. `matching` is what it narrows to; `total` stays the origin's.
+- **All of these are null** (and `conflicts` too, and `conflict` in the request lists nothing) while the crawl has
+  changed since its analysis or was never analysed, as the URL grid's columns of the URL summary are: what they count
+  is the analysis's. The UI says they're known once the crawl is analysed.
+- **Cost of the read**: two lookups by key for each of the origin's blocked URLs (its row of the URL summary; a row of
+  the link summary, or the links to it on their `(to_id, kind)` index where an older analysis left no link summary),
+  never a pass over the links, kept as the origin's list is. `sitemap` and `sitemaps` are looked up for the page's
+  rows alone, a lookup by key in each sitemap's list. readbench, 100k bench crawl (11 blocked URLs, 20 runs, nothing
+  cached): the site's blocked URLs 47.8 ms at p95, the conflicts alone 48.6 ms, one blocked URL's row 50.0 ms (the
+  `robots` gate is 200 ms). On a copy of it with 50,011 of its URLs stored as blocked: the site's file (no costs)
+  105 ms at p50, its blocked URLs with their costs 141 ms at p50, 169 ms at p95.
+- **The export** (`robotsBlocked`) takes `conflict` too, and writes every row with five more columns: Linked from
+  (pages), In a sitemap (Yes or No), Sitemap (the first's address), In a menu (Yes or No) and Conflict ("In your
+  sitemap but blocked", "In your menu but blocked", "In your sitemap and menu but blocked"), each empty while not
+  known. `si export --kind robotsBlocked --conflict true` is the same.
+
 ### Export (E5)
 
 What a grid shows as CSV or as an Excel workbook, the workbook of everything, and the report, each written **by the
@@ -2334,7 +2398,7 @@ An export only reads the crawl.
   | `links` | The links grid | `csv`, `xlsx` | The same but `linkEnds`, over the links grid's columns; one sort key |
   | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's five |
   | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's five, the check's own columns among them |
-  | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
+  | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line`, `reason` and `conflict` (step 3b) to narrow them, as `/robots/blocked` takes them |
   | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId`, `hiddenChecks` (round 5's review) |
   | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
   | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |

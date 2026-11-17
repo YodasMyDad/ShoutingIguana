@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.TestSite;
 
 namespace ShoutingIguana.Engine.Tests.Fetching;
 
@@ -89,6 +90,35 @@ public sealed class ProxyTesterTests : IAsyncLifetime
 
         Assert.Equal(ProxyTestOutcome.Ok, result.Outcome);
         Assert.Equal(200, result.Status);
+    }
+
+    /// <summary>
+    /// A SOCKS5 proxy that asks for a login (RFC 1929): the test goes through it with the right user name and password,
+    /// and says plainly when they're wrong or missing, or when the proxy can't reach the site.
+    /// </summary>
+    [Fact]
+    public async Task ASocks5ProxysLoginIsSentAndAWrongOrMissingOneIsSaidPlainly()
+    {
+        await using var socks = Socks5ProxyServer.Start(USER, PASSWORD);
+
+        var through = await TestAsync(socks.Address(USER, PASSWORD), _site.Url("/page"));
+        Assert.Equal((ProxyTestOutcome.Ok, 200), (through.Outcome, through.Status));
+        Assert.Equal([(USER, PASSWORD, true)], socks.Logins);
+        Assert.EndsWith($":{_site.BaseUri.Port}", Assert.Single(socks.Tunnels), StringComparison.Ordinal);
+
+        var wrong = await TestAsync(socks.Address(USER, "wrong"), _site.Url("/page"));
+        Assert.Equal((ProxyTestOutcome.ProxyAuthRequired, null, "The SOCKS5 proxy didn't accept the user name and password."),
+            (wrong.Outcome, wrong.Status, wrong.Message));
+        Assert.Equal((USER, "wrong", false), socks.Logins[^1]);
+
+        var none = await TestAsync(socks.Address(), _site.Url("/page"));
+        Assert.Equal((ProxyTestOutcome.ProxyAuthRequired, null, "The SOCKS5 proxy asks for a user name and password."), (none.Outcome, none.Status, none.Message));
+        Assert.Equal(2, socks.Logins.Count);
+
+        var nowhere = await TestAsync(socks.Address(USER, PASSWORD), new Uri($"http://127.0.0.1:{ClosedPort()}/page"));
+        Assert.Equal((ProxyTestOutcome.SiteUnreachable, null, "The SOCKS5 proxy let the test in, but couldn't reach the site."),
+            (nowhere.Outcome, nowhere.Status, nowhere.Message));
+        Assert.Single(socks.Tunnels);
     }
 
     [Fact]

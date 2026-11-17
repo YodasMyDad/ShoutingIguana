@@ -249,13 +249,18 @@ export function sitemapUrlsOffer(args: GridViewArgs & { sitemapId: number; sitem
   return { ...base(args.item, 'Export a sitemap’s URLs', args.crawling), choices: [view] };
 }
 
-/** An origin's blocked URLs, all or one line's (or one reason's), as CSV or Excel. */
+/**
+ * An origin's blocked URLs, all or one line's (or one reason's, or those your sitemap or menu asks for), as CSV or
+ * Excel, each with what blocking it costs: the pages linking to it, its sitemap, and whether that conflicts.
+ */
 export function robotsBlockedOffer(args: {
   item: CrawlListItem;
   crawling: boolean;
   origin: string;
   line?: number | undefined;
   reason?: RobotsBlockReason | undefined;
+  /** Step 3b: only the blocked URLs a sitemap lists or a menu links to. */
+  conflict?: boolean | undefined;
   rows: number | null;
 }): ExportOffer {
   const host = args.origin.replace(/^[a-z]+:\/\//i, '');
@@ -285,14 +290,25 @@ export function robotsBlockedOffer(args: {
                 which: 'every URL a rule blocked',
                 file: `blocked by ${host} robots.txt rules`,
               }
-            : { title: 'The blocked URLs', which: 'every URL it blocked', file: `blocked by ${host} robots.txt` };
+            : args.conflict === true
+              ? {
+                  title: 'In your sitemap or menu but blocked',
+                  which: 'every URL it blocked that your sitemap or menu asks for',
+                  file: `blocked by ${host} robots.txt in sitemap or menu`,
+                }
+              : { title: 'The blocked URLs', which: 'every URL it blocked', file: `blocked by ${host} robots.txt` };
+  // The conflicts are the ones the costs are about: their line is the file's to show.
+  const columns =
+    args.conflict === true
+      ? 'with the pages linking to each and its sitemap'
+      : 'with the line that decided each, the pages linking to it and its sitemap';
   const view: ExportChoice = {
     id: 'view',
     title: narrowed.title,
     description:
       args.rows === null
-        ? `${host}’s robots.txt: ${narrowed.which}, with the line that decided each`
-        : `${formatCountOf(args.rows, 'URL')}: ${narrowed.which}, with the line that decided each`,
+        ? `${host}’s robots.txt: ${narrowed.which}, ${columns}`
+        : `${formatCountOf(args.rows, 'URL')}: ${narrowed.which}, ${columns}`,
     formats: ['csv', 'xlsx'],
     fileView: narrowed.file,
     build: ({ format, path }) => ({
@@ -302,6 +318,7 @@ export function robotsBlockedOffer(args: {
       origin: args.origin,
       ...(args.line !== undefined ? { line: args.line } : {}),
       ...(args.reason !== undefined ? { reason: args.reason } : {}),
+      ...(args.conflict === true ? { conflict: true } : {}),
     }),
   };
   return { ...base(args.item, 'Export blocked URLs', args.crawling), choices: [view] };

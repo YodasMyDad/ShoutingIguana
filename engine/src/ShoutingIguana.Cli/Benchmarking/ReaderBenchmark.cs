@@ -247,6 +247,11 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Timed("robots.txt: the site's file, with what each line blocked", "robots", "robots", site.Blocked, () => RobotsReader.ReadFile(path, site.Origin));
             Paged("robots.txt: the site's blocked URLs", "robots", "robots", site.Blocked, offset => RobotsReader.ReadBlocked(path, site.Origin, offset: offset));
 
+            // What blocking each costs (the pages linking to it, a sitemap, a menu) is counted for every blocked URL of the
+            // origin, as the conflicts are listed alone: two lookups a URL in the summaries, never a pass over the links.
+            Timed("robots.txt: the site's blocked URLs a sitemap lists or a menu links to", "robots", "robots", null,
+                () => RobotsReader.ReadBlocked(path, site.Origin, conflict: true));
+
         }
 
         // What the inspector links by: one blocked URL's row, and the URL inspected, with the line that refused it. Of the

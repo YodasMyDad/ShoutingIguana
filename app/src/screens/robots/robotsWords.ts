@@ -259,6 +259,70 @@ export const UNMATCHED_WORDS = {
     `${formatCountOf(count, 'URL')} ${count === 1 ? 'is' : 'are'} stored as refused, though nothing kept here refuses ${count === 1 ? 'it' : 'them'}`,
 } as const;
 
+// ------------------------------------------------------------------------------- What blocking a URL costs (step 3b)
+
+type Costs = Pick<RobotsBlockedUrl, 'linkingPages' | 'inSitemap' | 'sitemaps' | 'sitemap' | 'inMenu' | 'conflict'>;
+
+/**
+ * The Conflict cell: the site asks for a URL it blocks, by listing it in a sitemap or linking it from a menu. The same
+ * words as the engine's export (`RobotsOriginWords.Conflict`). Null for a URL that isn't one, or while that isn't known.
+ */
+export function conflictWords(row: Partial<Costs>): string | null {
+  if (row.conflict !== true) return null;
+  if (row.inSitemap === true && row.inMenu === true) return 'In your sitemap and menu but blocked';
+  return row.inSitemap === true ? 'In your sitemap but blocked' : 'In your menu but blocked';
+}
+
+/** The Linked from cell: the pages linking to the URL. Null while the analysis hasn't counted them. */
+export function linkedFromWords(count: number | null | undefined): string | null {
+  if (count === null || count === undefined) return null;
+  return count === 0 ? 'No pages' : formatCountOf(count, 'page');
+}
+
+/** The last segment of a sitemap's address, which tells a site's sitemaps apart: "products-2.xml". */
+function sitemapName(url: string): string {
+  const path = url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  return path.slice(path.lastIndexOf('/') + 1) || url;
+}
+
+/**
+ * The In a sitemap cell: which sitemap lists the URL, and how many more do; "No" only when every sitemap was read.
+ * Null while the analysis hasn't said (the Linked from count is its sign: they come and go together).
+ */
+export function inSitemapWords(row: Partial<Costs>): { short: string; title: string } | null {
+  if (row.inSitemap === true && row.sitemap) {
+    const more = (row.sitemaps ?? 1) - 1;
+    return more > 0
+      ? {
+          short: `Yes: ${sitemapName(row.sitemap.url)} and ${formatCount(more)} more`,
+          title: `Listed in ${formatCountOf(more + 1, 'sitemap')}, the first ${row.sitemap.url}`,
+        }
+      : { short: `Yes: ${sitemapName(row.sitemap.url)}`, title: `Listed in ${row.sitemap.url}` };
+  }
+  if (row.inSitemap === true) return { short: 'Yes', title: 'A sitemap lists it.' };
+  if (row.inSitemap === false) return { short: 'No', title: 'No sitemap lists it.' };
+  return row.linkingPages === null || row.linkingPages === undefined
+    ? null
+    : {
+        short: 'Not in those read',
+        title: 'No sitemap the crawl read lists it, but not every sitemap could be read.',
+      };
+}
+
+/** Over the list: how many of the origin's blocked URLs conflict, as the link that lists them, or that none does. */
+export function conflictsWords(count: number): string {
+  return count === 0
+    ? 'None of them is in your sitemap or menu.'
+    : `${formatCountOf(count, 'URL')} in your sitemap or menu but blocked`;
+}
+
+/** Why the costs are empty: the analysis counts them, of the crawl as it stands. */
+export function costsUnknownWords(crawling: boolean): string {
+  return crawling
+    ? 'Known once the crawl has finished and been analysed.'
+    : 'Known once the crawl is analysed as it stands.';
+}
+
 /** Why the crawler made nothing of a line, whatever the line is. `lineProblemWords` says it by the line's kind. */
 export const LINE_PROBLEM_WORDS: Record<RobotsLineProblem, string> = {
   noUserAgent: 'Ignored: it comes before any User-agent line, so it belongs to no group',

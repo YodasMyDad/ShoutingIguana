@@ -141,7 +141,14 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
         var path = Path.Combine(_folder, "blocked.csv");
         var done = await ExportAsync(grid.Id, new JsonObject { ["kind"] = "robotsBlocked", ["format"] = "csv", ["origin"] = (string)origin["origin"]! }.ToJsonString(), path);
         Assert.Equal((long)origin["blocked"]!, (long)done["result"]!["rows"]!);
-        Assert.StartsWith("Blocked URL,Blocked by,Line,Rule,Error\r\n", (await File.ReadAllTextAsync(path)).TrimStart('\uFEFF'), StringComparison.Ordinal);
+        Assert.StartsWith("Blocked URL,Blocked by,Line,Rule,Error,Linked from (pages),In a sitemap,Sitemap,In a menu,Conflict\r\n",
+            (await File.ReadAllTextAsync(path)).TrimStart('\uFEFF'), StringComparison.Ordinal);
+
+        // The conflicts alone: the one URL the site's sitemap lists though robots.txt refuses it.
+        var conflicts = await ExportAsync(grid.Id,
+            new JsonObject { ["kind"] = "robotsBlocked", ["format"] = "csv", ["origin"] = grid.Url(string.Empty), ["conflict"] = true }.ToJsonString(), path = Path.Combine(_folder, "conflicts.csv"));
+        Assert.Equal(1L, (long)conflicts["result"]!["rows"]!);
+        Assert.EndsWith(",0,Yes," + grid.Url("/sitemaps/extra.xml") + ",No,In your sitemap but blocked", (await File.ReadAllLinesAsync(path))[1], StringComparison.Ordinal);
     }
 
     /// <summary>The lists that aren't grids, and the URL grid narrowed to a links view's ends: each file is what its screen's call lists, row for row.</summary>
@@ -298,6 +305,7 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"sitemapUrls","format":"csv","sitemapId":1,"linkEnds":{"end":"to"}}""", "linkEnds")]
     [InlineData("""{"kind":"urls","format":"csv","blocked":true}""", "blocked")]
     [InlineData("""{"kind":"robotsBlocked","format":"csv","origin":"https://a.example","blocked":true}""", "blocked")]
+    [InlineData("""{"kind":"urls","format":"csv","conflict":true}""", "conflict")]
     [InlineData("""{"kind":"sitemaps","format":"csv","search":"x"}""", "search")]
     [InlineData("""{"kind":"sitemaps","format":"html"}""", "format")]
     [InlineData("""{"kind":"robotsOrigins","format":"csv","columns":["origin"]}""", "columns")]

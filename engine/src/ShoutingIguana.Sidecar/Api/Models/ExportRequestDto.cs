@@ -50,6 +50,9 @@ internal sealed record ExportRequestDto
     /// <summary><c>rule</c>, <c>unreachable</c> or <c>unknown</c>.</summary>
     public string? Reason { get; init; }
 
+    /// <summary>For <c>robotsBlocked</c>: only the URLs a sitemap lists or a menu links to (true), or only the others (false).</summary>
+    public bool? Conflict { get; init; }
+
     /// <summary>For <c>issueRows</c> and <c>check</c>.</summary>
     public string? CheckId { get; init; }
 

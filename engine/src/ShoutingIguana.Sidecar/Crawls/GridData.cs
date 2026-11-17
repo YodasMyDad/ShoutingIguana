@@ -439,7 +439,8 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         // An id no URL could have is one the origin didn't block: no rows, as for any other URL it didn't.
         int? urlId = request.UrlId is { } asked ? asked is < 1 or > int.MaxValue ? 0 : (int)asked : null;
         return await ReadAsync(
-                       token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token, urlId),
+                       token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token, urlId,
+                           request.Conflict),
                        cancellationToken).ConfigureAwait(false)
                ?? throw Problems.OriginNotFound();
     }

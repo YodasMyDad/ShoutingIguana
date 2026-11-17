@@ -398,21 +398,70 @@ export const TEST_FILE: RobotsFile = {
   unmatched: { unreachable: 0, unknown: 1 },
 };
 
+/** What blocking a URL costs, as the analysis counted it: none of it, by default. */
+const NOT_ASKED_FOR = {
+  linkingPages: 0,
+  inSitemap: false,
+  sitemaps: null,
+  sitemap: null,
+  inMenu: false,
+  conflict: false,
+};
+
+/**
+ * The site's blocked URLs: the back office's home linked from every page's menu, a page of it a sitemap lists, one
+ * nothing asks for, and one whose rule the crawl didn't keep.
+ */
 export const TEST_BLOCKED: RobotsBlockedUrl[] = [
-  { id: 21, url: `${SITE}/admin/`, reason: 'rule', line: 6, rule: 'Disallow: /admin/', error: null },
-  { id: 22, url: `${SITE}/admin/users`, reason: 'rule', line: 6, rule: 'Disallow: /admin/', error: null },
-  { id: 23, url: `${SITE}/admin/orders?page=2`, reason: 'rule', line: 6, rule: 'Disallow: /admin/', error: null },
-  { id: 24, url: `${SITE}/old-private`, reason: 'unknown', line: null, rule: null, error: null },
+  {
+    id: 21,
+    url: `${SITE}/admin/`,
+    reason: 'rule',
+    line: 6,
+    rule: 'Disallow: /admin/',
+    error: null,
+    ...NOT_ASKED_FOR,
+    linkingPages: 1_284,
+    inMenu: true,
+    conflict: true,
+  },
+  {
+    id: 22,
+    url: `${SITE}/admin/users`,
+    reason: 'rule',
+    line: 6,
+    rule: 'Disallow: /admin/',
+    error: null,
+    ...NOT_ASKED_FOR,
+    linkingPages: 3,
+  },
+  {
+    id: 23,
+    url: `${SITE}/admin/orders?page=2`,
+    reason: 'rule',
+    line: 6,
+    rule: 'Disallow: /admin/',
+    error: null,
+    ...NOT_ASKED_FOR,
+    inSitemap: true,
+    sitemaps: 2,
+    sitemap: { id: 2, url: `${SITE}/sitemaps/pages.xml` },
+    conflict: true,
+  },
+  { id: 24, url: `${SITE}/old-private`, reason: 'unknown', line: null, rule: null, error: null, ...NOT_ASKED_FOR },
 ];
 
 export function blockedPage(
   query: RobotsBlockedQuery,
   all: readonly RobotsBlockedUrl[] = TEST_BLOCKED,
 ): RobotsBlockedPage {
+  // As the engine: what blocking each costs is known for every row or none (a crawl changed since its analysis).
+  const counted = all.length > 0 && all.every((row) => typeof row.conflict === 'boolean');
   const matching = all.filter(
     (row) =>
       (query.line === undefined || row.line === query.line) &&
-      (query.reason === undefined || row.reason === query.reason),
+      (query.reason === undefined || row.reason === query.reason) &&
+      (query.conflict === undefined || (counted && row.conflict === query.conflict)),
   );
   const offset = query.offset ?? 0;
   return {
@@ -421,6 +470,7 @@ export function blockedPage(
     matching: matching.length,
     offset,
     rows: matching.slice(offset, offset + (query.limit ?? 100)),
+    conflicts: counted ? all.filter((row) => row.conflict === true).length : null,
   };
 }
 

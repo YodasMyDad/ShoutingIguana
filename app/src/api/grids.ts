@@ -760,6 +760,20 @@ export interface RobotsBlockedUrl extends UrlRef {
   rule: string | null;
   /** How robots.txt failed, for `unreachable`, when stored. */
   error: string | null;
+  // Step 3b: what blocking it costs, as the analysis counted it. Each is null while the crawl has changed since its
+  // analysis (or was never analysed), and absent from a sidecar built before step 3b.
+  /** The pages that link to it, a page's links to itself left out. */
+  linkingPages?: number | null;
+  /** A sitemap lists it; false only when every sitemap was read and none does. */
+  inSitemap?: boolean | null;
+  /** How many sitemaps list it, where one does. */
+  sitemaps?: number | null;
+  /** The first sitemap that lists it, by the id the Sitemaps screen opens. */
+  sitemap?: { id: number; url: string } | null;
+  /** A page's menu (a navigation hyperlink) links to it. */
+  inMenu?: boolean | null;
+  /** The site asks for it and blocks it: a sitemap lists it, or a menu links to it. */
+  conflict?: boolean | null;
 }
 
 export interface RobotsBlockedQuery {
@@ -769,6 +783,8 @@ export interface RobotsBlockedQuery {
   reason?: RobotsBlockReason;
   /** E6: only this URL: its row and `matching` 1, or no rows and `matching` 0 for a URL the origin didn't block. */
   urlId?: number;
+  /** Step 3b: only the URLs a sitemap lists or a menu links to (true), or only the others (false). */
+  conflict?: boolean;
   offset?: number;
   /** 1 to 1,000. */
   limit?: number;
@@ -783,6 +799,11 @@ export interface RobotsBlockedPage {
   matching: number;
   offset: number;
   rows: RobotsBlockedUrl[];
+  /**
+   * Step 3b: the origin's blocked URLs that conflict (a sitemap lists them or a menu links to them), whatever is
+   * narrowed to; null while the crawl has changed since its analysis. Absent from a sidecar built before step 3b.
+   */
+  conflicts?: number | null;
 }
 
 // ---------------------------------------------------------------------------------------------------- Search (E6)

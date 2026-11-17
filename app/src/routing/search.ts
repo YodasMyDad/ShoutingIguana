@@ -377,14 +377,18 @@ export interface RobotsSearch {
   line?: number | undefined;
   /** The blocked URLs no line refused, by why. A line and a reason can't both narrow: the line wins. */
   reason?: RobotsReasonSearch | undefined;
+  /** Step 3b: the blocked URLs a sitemap lists or a menu links to. A line or a reason wins over it. */
+  conflict?: true | undefined;
   inspect?: number | undefined;
 }
 
 export function validateRobotsSearch(search: Record<string, unknown>): RobotsSearch {
   const line = positiveInteger(search.line);
+  const reason = line === undefined ? ROBOTS_REASONS.find((each) => each === search.reason) : undefined;
   return strictSearch(search, {
     line,
-    reason: line === undefined ? ROBOTS_REASONS.find((reason) => reason === search.reason) : undefined,
+    reason,
+    conflict: line === undefined && reason === undefined && search.conflict === true ? true : undefined,
     inspect: positiveInteger(search.inspect),
   });
 }

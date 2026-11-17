@@ -452,7 +452,7 @@
   /* Sitemaps and robots.txt (their slice). */
   --robots-file-min-height: 240px; /* the file keeps this much, and the blocked URLs at least it, however short the window */
   --robots-pane-height: 360px; /* the file where they stack, in a narrow panel; the blocked URLs at least it */
-  --robots-columns: minmax(0, 11fr) minmax(0, 9fr); /* the file, then the URLs it blocked */
+  --robots-columns: minmax(0, 9fr) minmax(0, 11fr); /* the file, then the URLs it blocked, with what blocking each costs */
   /* The note over the blocked URLs: room for two lines of 12px text, so the list never moves when it wraps or comes. */
   --robots-note-height: calc(2 * var(--leading-12) + var(--space-3));
   /* The Report screen (round 4). */

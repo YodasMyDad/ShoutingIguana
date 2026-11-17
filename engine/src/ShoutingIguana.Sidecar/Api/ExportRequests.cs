@@ -55,6 +55,7 @@ internal static class ExportRequests
         Only(body.Origin is not null, "origin");
         Only(body.Line is not null, "line");
         Only(body.Reason is not null, "reason");
+        Only(body.Conflict is not null, "conflict");
         Only(body.CheckId is not null, "checkId");
         Only(body.Cut is not null, "cut");
         Only(body.Examples is not null, "examples");
@@ -104,6 +105,7 @@ internal static class ExportRequests
             Origin = body.Origin,
             Line = body.Line,
             Reason = reason,
+            Conflict = body.Conflict,
             CheckId = body.CheckId,
             Group = body.Group is { } group ? new IssueGroupKey(group.Detail, group.RelatedUrlId) : null,
             Report = Report(cut, body.Examples, body.LookExamples) with { HiddenChecks = body.HiddenChecks ?? [], Checks = body.Checks }

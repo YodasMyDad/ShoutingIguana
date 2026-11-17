@@ -49,6 +49,10 @@ internal static class ExportCommand
         var origin = new Option<string?>("--origin") { Description = "For robotsBlocked: the origin, such as https://www.example.com." };
         var line = new Option<int?>("--line") { Description = "For robotsBlocked: only the URLs this line of robots.txt refused." };
         var reason = new Option<string?>("--reason") { Description = "For robotsBlocked: only the URLs refused for this reason: rule, unreachable or unknown." };
+        var conflict = new Option<bool?>("--conflict")
+        {
+            Description = "For robotsBlocked: true for only the URLs a sitemap lists or a menu links to, false for only the others."
+        };
         var check = new Option<string?>("--check") { Description = "For issueRows and check: the check's id, such as title-too-long." };
         var cut = new Option<string?>("--cut") { Description = "For report: full (the default) or summary." };
         var examples = new Option<int>("--examples") { Description = "For report: the first pages listed for each problem to fix.", DefaultValueFactory = _ => ReportOptions.DEFAULT_EXAMPLES };
@@ -63,7 +67,7 @@ internal static class ExportCommand
         var onlyChecks = new Option<string?>("--checks") { Description = "For workbook: only these checks, by id, comma-separated: the ones an Issues view listed." };
         var command = new Command("export", "Write what a crawl holds to a file: a grid as CSV or Excel, the workbook of everything, or the report.")
         {
-            database, kind, output, format, columns, filters, search, sort, linkEnds, linkFilters, linkSearch, blocked, sitemap, origin, line, reason, check, cut, examples,
+            database, kind, output, format, columns, filters, search, sort, linkEnds, linkFilters, linkSearch, blocked, sitemap, origin, line, reason, conflict, check, cut, examples,
             lookExamples, hiddenChecks, onlyChecks
         };
 
@@ -86,7 +90,8 @@ internal static class ExportCommand
             (Option Option, string Field)[] owned =
             [
                 (columns, "columns"), (filters, "filters"), (search, "search"), (sort, "sort"), (linkEnds, "linkEnds"), (linkFilters, "linkEnds"), (linkSearch, "linkEnds"),
-                (blocked, "blocked"), (sitemap, "sitemapId"), (origin, "origin"), (line, "line"), (reason, "reason"), (check, "checkId"), (cut, "cut"), (examples, "examples"),
+                (blocked, "blocked"), (sitemap, "sitemapId"), (origin, "origin"), (line, "line"), (reason, "reason"), (conflict, "conflict"), (check, "checkId"), (cut, "cut"),
+                (examples, "examples"),
                 (lookExamples, "lookExamples"), (hiddenChecks, "hiddenChecks"), (onlyChecks, "checks")
             ];
             var misplaced = owned.Where(option => parse.GetResult(option.Option) is { Implicit: false } && !ExportFields.Takes(exportKind, option.Field)).ToList();
@@ -121,6 +126,7 @@ internal static class ExportCommand
                 Origin = parse.GetValue(origin),
                 Line = parse.GetValue(line),
                 Reason = blockReason,
+                Conflict = parse.GetValue(conflict),
                 CheckId = parse.GetValue(check),
                 Report = new ReportOptions
                 {

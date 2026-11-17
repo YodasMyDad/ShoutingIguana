@@ -68,6 +68,8 @@ export type ExportRequest =
       origin: string;
       line?: number;
       reason?: RobotsBlockReason;
+      /** Step 3b: only the URLs a sitemap lists or a menu links to. */
+      conflict?: boolean;
     } & ExportTarget)
   | ({
       kind: 'check';

@@ -15,8 +15,9 @@ import {
   SIMPLE_FIELDS,
   focusSetting,
   formFromOptions,
-  hasCredentials,
+  formHasSecrets,
   hiddenChanges,
+  missingSecrets,
   optionsFromForm,
   withScheme,
   type CrawlForm,
@@ -24,7 +25,8 @@ import {
   type FormSection,
 } from '../crawl/options/form';
 import { formErrors, useValidation, type FormErrors } from '../crawl/options/useValidation';
-import { listOf } from '../crawl/options/words';
+import { listOf, savedDefaultsWords, secretsAgainWords } from '../crawl/options/words';
+import { rememberedSecretsQuery } from '../crawl/secrets';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyError, notifyResult } from '../feedback/notify';
 import { useCommands } from '../keyboard/registry';
@@ -51,6 +53,8 @@ export function NewCrawlScreen() {
   const { url, from, focus } = useSearch({ from: '/new' });
   const defaults = useQuery(crawlOptionDefaultsQuery());
   const source = useQuery({ ...crawlOptionsQuery(from ?? ''), enabled: from !== undefined });
+  // Whether the secrets the form starts with are remembered: the option to remember them starts ticked if so.
+  const remembered = useQuery(rememberedSecretsQuery(from ? `crawl:${from}` : 'defaults'));
   const mode = useMode();
 
   // A crawl to copy from that isn't in the library any more: the saved defaults, with a note, not a dead end.
@@ -67,7 +71,7 @@ export function NewCrawlScreen() {
       </Page>
     );
   }
-  if (!defaults.data || (from && !source.data && !sourceGone)) {
+  if (!defaults.data || (from && !source.data && !sourceGone) || remembered.data === undefined) {
     return (
       <Page mode={mode}>
         <FormSkeleton />
@@ -85,6 +89,7 @@ export function NewCrawlScreen() {
         startUrl={url ?? source.data?.startUrl ?? ''}
         focus={focus}
         mode={mode}
+        remembered={remembered.data}
       />
     </Page>
   );
@@ -129,6 +134,7 @@ function NewCrawlForm({
   focus,
   mode,
   sourceGone = false,
+  remembered,
 }: {
   defaults: CrawlOptionDefaults;
   source: CrawlOptions | null;
@@ -137,6 +143,8 @@ function NewCrawlForm({
   startUrl: string;
   focus: SettingFocus | undefined;
   mode: Mode;
+  /** The secrets the form starts with are remembered in the credential store (the defaults', or the crawl's). */
+  remembered: boolean;
 }) {
   const router = useRouter();
   const navigate = useNavigate();
@@ -155,6 +163,9 @@ function NewCrawlForm({
   const [starting, setStarting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [everyTime, setEveryTime] = useState(false);
+  // The user's consent to remember the proxy's password and the headers' values: off until chosen, ticked where they
+  // already are remembered (an earlier version remembered them without asking: unticking takes them out).
+  const [remember, setRemember] = useState(remembered);
   const rootRef = useRef<HTMLFormElement>(null);
 
   const options = useMemo(() => optionsFromForm({ ...form, startUrl: withScheme(form.startUrl) }), [form]);
@@ -197,13 +208,15 @@ function NewCrawlForm({
     setSubmitted(true);
     setStarting(true);
     try {
-      const item = await api.startCrawl({
-        options: { ...options, startUrl: await startUrlFor(form.startUrl, options) },
-      });
+      const item = await api.startCrawl(
+        { options: { ...options, startUrl: await startUrlFor(form.startUrl, options) } },
+        { remember },
+      );
+      void queryClient.invalidateQueries({ queryKey: ['secrets', 'remembered'] });
       // "Use these choices every time": once they've started a crawl, so a start the engine refuses changes nothing.
       if (mode === 'simple' && everyTime) {
         await api
-          .saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }), optionsFromForm(form))
+          .saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }), optionsFromForm(form), { remember })
           .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.crawlOptionDefaults }))
           .catch((error: unknown) => notifyError(error, { title: 'Your choices couldn’t be saved for next time' }));
       }
@@ -225,10 +238,17 @@ function NewCrawlForm({
     if (saving) return;
     setSaving(true);
     try {
-      const saved = await api.saveCrawlOptionDefaults(optionsFromForm(form, { secrets: false }), optionsFromForm(form));
+      const saved = await api.saveCrawlOptionDefaults(
+        optionsFromForm(form, { secrets: false }),
+        optionsFromForm(form),
+        {
+          remember,
+        },
+      );
       queryClient.setQueryData(queryKeys.crawlOptionDefaults, saved);
+      void queryClient.invalidateQueries({ queryKey: ['secrets', 'remembered'] });
       notifyResult('Saved as your defaults', {
-        description: 'Every new crawl starts with these settings. Header values and proxy passwords aren’t saved.',
+        description: savedDefaultsWords({ secrets: formHasSecrets(form), remember }),
       });
     } catch (error) {
       if (isProblem(error, 'invalid-options')) {
@@ -267,7 +287,7 @@ function NewCrawlForm({
       },
     ],
     // The form's latest values: `start` reads them.
-    [mode, options, everyTime],
+    [mode, options, everyTime, remember],
   );
 
   // Ctrl+Enter from anywhere in the form, before a control there takes Enter for itself (a checkbox prevents it).
@@ -307,9 +327,8 @@ function NewCrawlForm({
       else focusSetting(rootRef.current, 'startUrl');
     });
   };
-  const secretsAgain =
-    source !== null &&
-    (Object.keys(source.extraHeaders ?? {}).length > 0 || source.hasRedactedProxyCredentials === true);
+  // Only what nothing kept: a crawl's secrets kept this session, or remembered, come back in with its options.
+  const secretsAgain = source !== null && missingSecrets(source);
 
   return (
     <form
@@ -327,8 +346,7 @@ function NewCrawlForm({
       ) : null}
       {secretsAgain ? (
         <Callout tone="info" title="Some of this crawl’s settings must be given again">
-          Header values and a proxy’s user name and password aren’t kept with a crawl.
-          {mode === 'simple' ? ' They’re Advanced settings.' : ' Type them again under Headers and network.'}
+          {secretsAgainWords(mode)}
         </Callout>
       ) : null}
       <CrawlOptionsForm
@@ -348,6 +366,7 @@ function NewCrawlForm({
         }
         onTouch={touch}
         autoFocusStart={!focus}
+        remember={{ checked: remember, onCheckedChange: setRemember, mode }}
       />
 
       {mode === 'simple' && hiddenErrors.length > 0 ? (
@@ -410,12 +429,6 @@ function NewCrawlForm({
               Open in Advanced
             </Button>
           </span>
-        </p>
-      ) : null}
-      {mode === 'advanced' && hasCredentials(form.proxyUrl) ? (
-        <p className="text-12 text-text-muted">
-          The proxy’s user name and password are used for this crawl only: neither your defaults nor the crawl file
-          keeps them.
         </p>
       ) : null}
     </form>
