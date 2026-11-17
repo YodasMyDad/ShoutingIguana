@@ -204,6 +204,30 @@ public sealed class IssueCatalogTests
         Assert.Equal(IssueCategory.Indexability, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Category);
     }
 
+    /// <summary>
+    /// Every check says what a recheck of it reads again (the fix loop's "Recheck these N pages"). The property is
+    /// required, so a check added without one doesn't build; this holds each to its kinds. Every check reads its URLs again
+    /// but those the table names: the sitemaps' checks read the sitemaps too (or only them), robots.txt's the robots.txt of
+    /// the origins they name, the duplicate version the site's other versions, and the two a recheck can't settle nothing.
+    /// </summary>
+    [Fact]
+    public void EveryCheckSaysWhatARecheckReadsAgain()
+    {
+        Assert.All(IssueCatalog.All, check => Assert.NotNull(check.Recheck));
+        Assert.All(IssueCatalog.All, check => Assert.Equal((check.Id, check.Recheck.Count), (check.Id, check.Recheck.Distinct().Count())));
+
+        var byKinds = IssueCatalog.All
+            .GroupBy(check => string.Join(",", check.Recheck), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(check => check.Id).Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
+        Assert.Equal(["", "RobotsTxt", "SiteVersions", "Sitemaps", "Urls", "Urls,Sitemaps"], byKinds.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["no-https", "orphan-page"], byKinds[""]);
+        Assert.Equal(["not-in-sitemap", "sitemap-non-indexable", "sitemap-url-other-host"], byKinds["Urls,Sitemaps"]);
+        Assert.Equal(["sitemap-error", "sitemap-missing"], byKinds["Sitemaps"]);
+        Assert.Equal(["robots-txt-missing", "robots-txt-unreachable", "robots-txt-unreachable-other-origin"], byKinds["RobotsTxt"]);
+        Assert.Equal(["duplicate-site-version"], byKinds["SiteVersions"]);
+        Assert.Equal(IssueCatalog.All.Count - 11, byKinds["Urls"].Count);
+    }
+
     /// <summary>Hosts show the titles as they are, so every category needs a plain name of its own, never its identifier.</summary>
     [Fact]
     public void EveryCategoryHasItsOwnPlainTitle()

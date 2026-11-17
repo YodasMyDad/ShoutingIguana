@@ -18,6 +18,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#4xx-client-errors",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["type"]
     };
@@ -31,6 +32,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#5xx-server-errors",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["type", "responseMs"]
     };
@@ -44,6 +46,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/dns-network-errors",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["type", "fetchError", "responseMs"]
     };
@@ -59,6 +62,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/crawlers-fetchers/verify-google-requests",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["type"]
     };
@@ -71,6 +75,7 @@ public static class IssueCatalog
         Why = """Google detects pages like this as soft 404s and excludes them from search, but keeps crawling them, which wastes crawling on large sites. Serving an error with 200 also hides real breakage from monitoring that only looks at status codes. If the page is fine and only mentions "not found" in a heading, ignore this.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/troubleshoot-crawling-errors#soft-404-errors",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["title", "h1", "wordCount"]
     };
@@ -86,6 +91,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["redirectChain"],
         TargetFacts = ["statusCode", "indexability"]
@@ -100,6 +106,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["redirectChain"]
     };
@@ -113,6 +120,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#3xx-redirection",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["redirectChain"],
         TargetFacts = ["statusCode"]
@@ -127,6 +135,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/301-redirects#overview-of-redirect-types",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["redirectChain"],
         TargetFacts = ["statusCode"]
@@ -141,6 +150,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#prefer-https-over-http-for-canonical-urls",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["redirectChain"],
         TargetFacts = ["statusCode", "final"]
@@ -154,6 +164,7 @@ public static class IssueCatalog
         Why = """Google treats an instant meta refresh as a permanent redirect and a delayed one as temporary, but recommends a server-side redirect wherever you can set one up; that's faster too, as the browser doesn't load the page first. A timed redirect or reload also moves content away while people are reading, which WCAG counts as a failure. A refresh on old URLs where the server can't redirect is an acceptable fallback.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/301-redirects#metarefresh",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail
     };
 
@@ -168,6 +179,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/troubleshooting/http-status-codes#4xx-client-errors",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "text", "position", "fragment", "flags", "links"]
     };
@@ -181,6 +193,7 @@ public static class IssueCatalog
         LearnMore = null,
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "text", "position", "fragment", "flags", "links"]
     };
@@ -194,6 +207,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#best-practices",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "text", "position", "links"]
     };
@@ -207,6 +221,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/qualify-outbound-links#nofollow",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "text", "position", "flags", "links"]
     };
@@ -220,6 +235,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "position", "flags", "links"]
     };
@@ -233,6 +249,7 @@ public static class IssueCatalog
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "fragment", "text", "position", "links"]
     };
@@ -246,6 +263,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
+        Recheck = [],
         Grouping = IssueGrouping.None
     };
 
@@ -259,6 +277,7 @@ public static class IssueCatalog
         Why = """Google drops a noindex page from its results entirely, even if other sites link to it. That's right for thank-you pages, internal search results, account pages and staging copies. On a page that should rank, a leftover noindex from a launch or a plugin setting is a common reason it vanishes from search.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["metaRobots", "xRobotsTag"]
     };
@@ -271,6 +290,7 @@ public static class IssueCatalog
         Why = """Search engines that honour it won't use the page's links to discover the pages they point to, so pages linked only from here may go unfound. A page-wide nofollow is rarely intended on a normal page; it's usually left over from a staging setup or set by a plugin.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nofollow",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["metaRobots", "xRobotsTag"]
     };
@@ -284,6 +304,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots/intro",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["robotsRule"]
     };
@@ -296,6 +317,7 @@ public static class IssueCatalog
         Why = """Google shows the page in results without a text snippet or video preview, and doesn't use its content as direct input for AI Overviews or AI Mode. That can be intended, for example for sensitive content, but a result with no description tells searchers less about the page.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nosnippet",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail,
         Evidence = ["metaRobots", "xRobotsTag"]
     };
@@ -308,6 +330,7 @@ public static class IssueCatalog
         Why = """Google treats a robots.txt it can't fetch as a server error: it stops crawling the whole site for the first 12 hours, then uses its last good copy for up to 30 days (or assumes no restrictions if it has none). If it's still failing after that and the site is otherwise up, Google acts as if there were no robots.txt. Until it's fixed, new and changed pages aren't crawled, so fix this first.""",
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#http-status-codes",
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.RobotsTxt],
         Grouping = IssueGrouping.None,
         SiteWide = true,
         ReportedOnce = true
@@ -321,6 +344,7 @@ public static class IssueCatalog
         Why = """Each origin (scheme, host and port) has its own robots.txt, so only that origin is affected: Google stops crawling it for 12 hours, then relies on its last good copy for up to 30 days. The main site carries on as normal. It matters if pages or files you want in search live there, or if that origin's redirects to the main site haven't been picked up yet.""",
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#file-location-and-range-of-validity",
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.RobotsTxt],
         Grouping = IssueGrouping.None,
         SiteWide = true,
         ReportedOnce = true
@@ -334,6 +358,7 @@ public static class IssueCatalog
         Why = """Crawling isn't affected: Google treats a missing robots.txt as having no restrictions, so everything can be crawled. What's missing is a Sitemap: line, which Google, Bing and other search engines read to find your sitemaps, and a way to keep crawlers out of URLs with no search value should you need one. A 401 or 403 meant to keep crawlers out has the opposite effect.""",
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/create-robots-txt",
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.RobotsTxt],
         Grouping = IssueGrouping.None,
         ReportedOnce = true
     };
@@ -346,6 +371,7 @@ public static class IssueCatalog
         Why = """Google drops a noindex page from its results, so most of this site can't be found in search. It's nearly always a launch mistake: a staging site's noindex or a "discourage search engines" setting left on. If the pages are meant to stay out, as on a private site or a staging copy, check the noindex pages and ignore this.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         SiteWide = true,
         ReportedOnce = true,
@@ -363,6 +389,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "indexability", "canonical", "flags"]
     };
@@ -375,6 +402,7 @@ public static class IssueCatalog
         Why = """Google doesn't require one: without it, Google picks the best URL itself when the same content is reachable at several addresses, such as with tracking parameters or with and without a trailing slash. A canonical pointing to the page itself makes your preference explicit, and Google recommends one on canonical pages. Low priority on its own, but it helps most on sites with many URL variants.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -386,6 +414,7 @@ public static class IssueCatalog
         Why = """Google has said that when a page specifies more than one canonical, it will likely ignore all of them, so the page effectively has none and Google chooses on its own. It usually comes from two systems, such as a theme and an SEO plugin, or the HTML and a server or CDN header, each adding its own.""",
         LearnMore = "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -398,6 +427,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "flags"]
     };
@@ -411,6 +441,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "flags"]
     };
@@ -424,6 +455,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "indexability", "canonical", "final", "flags"]
     };
@@ -436,6 +468,7 @@ public static class IssueCatalog
         Why = """Google only accepts rel="canonical" in the <head>, so the page has no canonical in effect. Often the tag is in the head in the source, but an element that doesn't belong there, such as an <img>, a <div> or stray text from a script or plugin, ends the head early and pushes everything after it into the body. The same break can push other head tags, such as hreflang, out too.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -447,6 +480,7 @@ public static class IssueCatalog
         Why = """Google supports relative canonicals, but recommends absolute URLs because relative ones can cause problems later, for example when a testing copy of the site gets crawled and its canonicals point at itself. A mistyped relative path (page instead of /page) also resolves against the current folder. Low priority if the canonicals resolve to the right URLs.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.RelativeCanonical
     };
 
@@ -458,6 +492,7 @@ public static class IssueCatalog
         Why = """Search engines can't resolve it, so it's ignored: if it's the page's only canonical, the page has none in effect. It's usually a template variable that didn't fill in.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.InvalidCanonical
     };
 
@@ -470,6 +505,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#best-practices",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["metaRobots", "xRobotsTag"],
         TargetFacts = ["statusCode", "indexability", "flags"]
@@ -486,6 +522,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#general-guidelines",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls, RecheckKind.Sitemaps],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["indexability", "finalUrl", "canonicalUrl"]
     };
@@ -498,6 +535,7 @@ public static class IssueCatalog
         Why = """Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate. Login, account and basket pages don't belong in a sitemap: they're better kept out of search with noindex.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls, RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None
     };
 
@@ -509,6 +547,7 @@ public static class IssueCatalog
         Why = """Search engines get no URLs from a sitemap they can't fetch or parse: Google keeps retrying for a few days, then stops trying that URL. Well-linked pages are still found, but what the sitemap adds, such as quicker discovery of new and deep pages, is lost. A referenced sitemap that returns 404 is usually stale and only needs removing.""",
         LearnMore = "https://support.google.com/webmasters/answer/7451001",
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
         ReportedOnce = true
     };
@@ -521,6 +560,7 @@ public static class IssueCatalog
         Why = """A sitemap isn't required: Google finds pages through links, and a small, well-linked site may not need one. It helps most on large sites, new sites with few links from elsewhere, and sites with pages that links don't reach. A sitemap at another path that's only submitted in Search Console isn't visible to this crawl, so this may not be a real gap.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
         ReportedOnce = true
     };
@@ -534,6 +574,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#cross-submit",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls, RecheckKind.Sitemaps],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["finalUrl"]
     };
@@ -548,6 +589,7 @@ public static class IssueCatalog
         Why = """Google uses the <title> as one of its main sources for the page's title link in search results, and browsers show it in tabs and bookmarks. Without one, Google builds the title link from headings, anchor text and other text on the page, which may not say what you'd choose. Google asks for every page to have one, so fix this first.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -559,6 +601,7 @@ public static class IssueCatalog
         Why = """HTML allows only one per page, and browsers use the first. Which one search engines use isn't documented, so the title you wrote may not be the one considered. A second title usually means two systems, such as a theme and an SEO plugin, are both writing the page's metadata.""",
         LearnMore = "https://html.spec.whatwg.org/multipage/semantics.html#the-title-element",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -570,6 +613,7 @@ public static class IssueCatalog
         Why = """Google sets no length limit for titles, but truncates title links to fit the device width, so the end of a long title may not show. Width depends on the letters ("WWW" is more than four times as wide as "iii"), so pixels predict the cut better than characters: 580 px is about where Google's desktop results cut a title, after the last whole word that fits, and a rough guide, not a rule. Google may also rewrite titles that are long-winded or stuffed with keywords. With the important words first, a cut-off rarely matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["title", "titleInResults", "titleWidth", "titleLength"]
     };
@@ -582,6 +626,7 @@ public static class IssueCatalog
         Why = """Short isn't wrong: a brand or product name can be exactly right. But very short titles are often vague, such as "Home", "Products" or "Page 2", which Google's guidance warns against because they don't tell searchers what the page is or set it apart from similar pages.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["title", "titleWidth", "titleLength"]
     };
@@ -594,6 +639,7 @@ public static class IssueCatalog
         Why = """Google asks for distinct titles on every page, because identical ones make it impossible for searchers to tell pages apart, and it may rewrite title links that repeat boilerplate. Duplicate titles often mean duplicate pages, or a template that leaves out the distinguishing detail, such as the product, place or page number.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["title"]
     };
@@ -608,6 +654,7 @@ public static class IssueCatalog
         Why = """Google writes most snippets from the page's content, but uses the meta description when it describes the page better, and says high-quality descriptions can improve the quality and quantity of search traffic. Without one, the snippet is whatever text Google picks. Descriptions don't affect ranking, so prioritise important pages, such as the home page and key landing pages.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -619,6 +666,7 @@ public static class IssueCatalog
         Why = """HTML allows only one per page, and which one search engines use isn't documented, so you can't be sure the one you wrote is the one considered for the snippet. It usually comes from a theme and an SEO plugin both adding one.""",
         LearnMore = "https://html.spec.whatwg.org/multipage/semantics.html#meta-description",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -630,6 +678,7 @@ public static class IssueCatalog
         Why = """There's no length limit, but Google truncates snippets to fit the device width, about two lines on a desktop, so the end of a long description may not show, and it often builds the snippet from page text anyway. Width depends on the letters, so pixels predict the cut better than characters; 985 px is Screaming Frog's default. With the key point first, the cut rarely matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["description", "descriptionInResults", "descriptionWidth", "descriptionLength"]
     };
@@ -642,6 +691,7 @@ public static class IssueCatalog
         Why = """There's no minimum, but a very short description rarely summarises the page, and Google uses the meta description only when it describes the page better than the page's own text. A short one is fine if it says everything that matters.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#use-quality-descriptions",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         Evidence = ["description", "descriptionWidth", "descriptionLength"]
     };
@@ -654,6 +704,7 @@ public static class IssueCatalog
         Why = """Google says identical descriptions aren't helpful when individual pages appear in search, and recommends a unique one per page, with site-level wording only on the home page and other aggregation pages. Repeated descriptions usually come from a template default.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#create-unique-descriptions-for-each-page-on-your-site",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["description"]
     };
@@ -668,6 +719,7 @@ public static class IssueCatalog
         Why = """The H1 is the page's main heading, and screen reader users jump between headings to find their way, so a page without one is harder to scan. Google lists headings such as the H1 among its sources for title links, but says it can rarely rely on HTML semantics, so this matters mostly for readers. Often the visible main heading is just styled text.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/Heading_Elements#navigation",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail
     };
 
@@ -679,6 +731,7 @@ public static class IssueCatalog
         Why = """Google says the number and order of headings don't matter for Search, so this isn't a search problem. For readers and screen reader users, one H1 naming the page with H2s for its sections gives the clearest outline, which is why MDN advises against multiple H1s. Often a logo or a sidebar title is marked up as an H1 by the theme.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/Heading_Elements#avoid_using_multiple_h1_elements_on_one_page",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -690,6 +743,7 @@ public static class IssueCatalog
         Why = """Identical main headings make similar pages hard to tell apart for visitors arriving from search, and often signal duplicate pages or a template whose heading lacks the distinguishing detail. Google doesn't document duplicate headings as a problem in themselves, so it's low priority unless the pages are duplicates too.""",
         LearnMore = null,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["h1"]
     };
@@ -704,6 +758,7 @@ public static class IssueCatalog
         Why = """Google says content length alone doesn't matter for ranking: there's no minimum word count. Plenty of good pages are short, such as contact, product and category pages. Use this to find pages that are empty by mistake, such as an unfilled template, a placeholder or content that only appears with JavaScript, not as a reason to pad pages out.""",
         LearnMore = "https://developers.google.com/search/docs/fundamentals/seo-starter-guide#focusing",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -715,6 +770,7 @@ public static class IssueCatalog
         Why = """Some duplication is normal and isn't against Google's spam policies. Google groups duplicates and shows one URL from the group, which may not be the one you'd choose, and crawls the others less often. The usual cause is the same page at several URLs, through parameters, trailing slashes or print versions.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["indexability", "canonicalUrl", "inlinks"]
     };
@@ -727,6 +783,7 @@ public static class IssueCatalog
         Why = """Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That's fine for variants you don't need to rank separately. Pages that should rank on their own need differences that are, in Google's words, clear and significant.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/canonicalization-troubleshooting",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["indexability", "canonicalUrl", "inlinks", "wordCount"]
     };
@@ -739,6 +796,7 @@ public static class IssueCatalog
         Why = """Every page is then reachable at two or more addresses. Google treats the versions as duplicate URLs and picks one, preferring HTTPS, which may not be the version you want, and it crawls the copies less. If the duplicate is the http version, visitors who land on it browse unencrypted. The other version is only probed, not parsed, so a canonical on it isn't seen; a redirect is what makes the choice yours.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#reasons-to-specify-a-canonical-url",
         Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.SiteVersions],
         Grouping = IssueGrouping.ResponseDetail,
         SiteWide = true,
         ReportedOnce = true
@@ -755,6 +813,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/appearance/google-images",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["img", "position", "links"]
     };
@@ -768,6 +827,7 @@ public static class IssueCatalog
         LearnMore = "https://www.w3.org/WAI/tutorials/images/tips/",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["img", "position"]
     };
@@ -781,6 +841,7 @@ public static class IssueCatalog
         LearnMore = "https://web.dev/articles/optimize-cls#images-without-dimensions",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["img", "pixelWidth", "pixelHeight", "position"]
     };
@@ -794,6 +855,7 @@ public static class IssueCatalog
         LearnMore = null,
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "text", "position", "links"]
     };
@@ -807,6 +869,7 @@ public static class IssueCatalog
         LearnMore = "https://web.dev/articles/optimize-lcp#reduce-size",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["sizeBytes", "contentType", "pixelWidth", "pixelHeight", "img", "statusCode", "final", "position", "links"]
     };
@@ -821,6 +884,7 @@ public static class IssueCatalog
         Why = """Google supports only ISO 639-1 languages and ISO 3166-1 alpha-2 regions, and says other codes, such as es-419, aren't supported, so the entry is ignored. An unknown language makes it useless. A reserved region such as UK, EU or UN is different: Google ignores the region and the code still works as the language alone, so en-UK only works as plain en and doesn't target the United Kingdom (whose code is GB). A country code on its own isn't valid either: hreflang="be" means Belarusian, not Belgium.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#language-codes",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail
     };
 
@@ -832,6 +896,7 @@ public static class IssueCatalog
         Why = """Google's rule is that each language version must list itself as well as all the other versions, with the same set of links on every page. Without the self-reference the set breaks that rule and may not be used as intended. Often the self-reference is there but in a different form of the URL, such as http instead of https, without the trailing slash or with a tracking parameter.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#all-method-guidelines",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -844,6 +909,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#common-mistakes",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "text", "indexability"]
     };
@@ -857,6 +923,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "final", "text"]
     };
@@ -870,6 +937,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["statusCode", "indexability", "final", "canonical", "text"]
     };
@@ -882,6 +950,7 @@ public static class IssueCatalog
         Why = """Each language or language-region code should name exactly one URL; when a code names several, search engines can't tell which to show for that audience. It's usually two systems adding hreflang, such as a plugin and the theme, or the HTML and an HTTP header, or a copy-paste mistake in the set.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#html",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.HreflangCodes
     };
 
@@ -893,6 +962,7 @@ public static class IssueCatalog
         Why = """x-default names the page for searchers whose language or region isn't in your list, usually a language selector or the main international version. Google suggests adding one, especially on language or country selectors and home pages that redirect by locale, but it's optional.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#xdefault",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -904,6 +974,7 @@ public static class IssueCatalog
         Why = """Google requires hreflang <link> elements to be inside a well-formed <head>, so these entries don't count and the set is incomplete, which can also break return links from the other versions. Usually the tags are in the head in the source, but an element that doesn't belong there, such as an <img>, a <div> or stray text, ends the head early.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#html",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -917,6 +988,7 @@ public static class IssueCatalog
         Why = """JSON-LD has to be valid JSON: a trailing comma or a comment is enough for Google to drop the whole block, and its Unparsable structured data report lists the error a trailing comma produces. Nothing in the block is used, so it can't produce a rich result. Other valid blocks on the page still work. A single template error usually breaks the same block on every page that uses it.""",
         LearnMore = "https://support.google.com/webmasters/answer/9166415",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.JsonError
     };
 
@@ -928,6 +1000,7 @@ public static class IssueCatalog
         Why = """Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties aren't checked, since they don't affect eligibility. FAQPage isn't checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#completeness",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail
     };
 
@@ -941,6 +1014,7 @@ public static class IssueCatalog
         Why = """Browsers label HTTP pages "Not secure", and anything visitors send, such as form data, can be read or changed on the way. Google has used HTTPS as a lightweight ranking signal since 2014 and prefers HTTPS URLs as canonical when both versions exist. Fix this first.""",
         LearnMore = "https://web.dev/articles/enable-https",
         Subject = IssueSubject.Page,
+        Recheck = [],
         Grouping = IssueGrouping.None,
         SiteWide = true,
         ReportedOnce = true
@@ -955,6 +1029,7 @@ public static class IssueCatalog
         LearnMore = "https://web.dev/articles/enable-https#redirect-to-https",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -967,6 +1042,7 @@ public static class IssueCatalog
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
         TargetFacts = ["kind", "statusCode", "contentType", "position", "links"]
     };
@@ -979,6 +1055,7 @@ public static class IssueCatalog
         Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites (browsers already default to a safe policy, so it matters least). Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
         LearnMore = "https://web.dev/articles/security-headers",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
         ReportedOnce = true
     };
@@ -994,6 +1071,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure#be-aware-that-urls-are-case-sensitive",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1006,6 +1084,7 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure#use-hyphens-to-separate-words",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1017,6 +1096,7 @@ public static class IssueCatalog
         Why = """Google doesn't document a length limit that affects search, and results usually show the domain and a breadcrumb made from parts of the URL rather than the whole thing. Long URLs are mainly harder to read, share and type, and they often point to deep folder structures, keyword-stuffed slugs or tracking parameters worth cleaning up.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure#use-descriptive-urls",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1030,6 +1110,7 @@ public static class IssueCatalog
         Why = """Nothing on the page can render until its HTML arrives, so a slow response delays everything visitors see; web.dev's rough guide is a time to first byte of 0.8 seconds or less. Google also crawls less when a site's response times get longer, which matters mainly for large sites. Times depend on the crawler's location and speed preset, so recheck a few slow pages before acting.""",
         LearnMore = "https://web.dev/articles/ttfb",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1041,6 +1122,7 @@ public static class IssueCatalog
         Why = """Large HTML takes longer to download and parse, especially on phones. Googlebot reads only the first 2 MB of an HTML file, measured uncompressed, for Google Search, and ignores the rest; a page past that limit is reported on its own. The bulk is usually inline scripts, framework state data, inline SVG or base64 images.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1052,6 +1134,7 @@ public static class IssueCatalog
         Why = """Googlebot stops at the first 2 MB of the uncompressed file and ignores everything after it, so content and links past that point aren't indexed or followed for Google Search. Other Google fetchers use different limits. The usual cause is inline scripts, framework data, inline SVG or base64 images pushing the real content past the cut-off.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1065,6 +1148,7 @@ public static class IssueCatalog
         Why = """Without it, mobile browsers lay the page out at a desktop width (about 980 pixels) and shrink it to fit, so text is tiny and visitors have to zoom and pan. Google indexes pages as its smartphone crawler sees them, and its page experience guidance asks whether content displays well on mobile devices.""",
         LearnMore = "https://web.dev/articles/responsive-web-design-basics#viewport",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1076,6 +1160,7 @@ public static class IssueCatalog
         Why = """Screen readers use lang to choose the right voice and pronunciation, and WCAG requires the page's language to be set this way; browsers use it too, for example for hyphenation. Google doesn't: it detects the language from the visible content, so this is about accessibility, not search.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/lang#accessibility_concerns",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1087,6 +1172,7 @@ public static class IssueCatalog
         Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again. Likewise a crawl made before the crawler recorded where the meta tag ends passes one past the first 1024 bytes.""",
         LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
 
@@ -1098,6 +1184,7 @@ public static class IssueCatalog
         Why = """Social networks and chat apps build link previews from Open Graph tags; without them they guess the title and image or show a bare link. Google also lists og:title among its sources for title links and accepts og:image as a way to suggest a page's preferred image. Low priority for pages nobody shares.""",
         LearnMore = "https://ogp.me/",
         Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail
     };
 
