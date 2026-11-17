@@ -73,6 +73,20 @@ public sealed record CrawlFileSummary
     /// </summary>
     public IReadOnlyDictionary<IssueSeverity, long>? FlaggedChecks { get; init; }
 
+    /// <summary>
+    /// The URLs each check flagged in the last analysis, by check id, as <see cref="AnalysisResults.Counts"/> has them: 0
+    /// for a check that ran and found nothing, and a check it skipped is missing. Null when the crawl has never been
+    /// analysed. With <see cref="OptionsFingerprint"/>, what a comparison with another crawl needs at the check level
+    /// without opening either file (<see cref="CrawlComparability.FromSummaries"/>).
+    /// </summary>
+    public IReadOnlyDictionary<string, long>? CheckCounts { get; init; }
+
+    /// <summary>
+    /// <see cref="CrawlComparability.OptionsFingerprint"/> of the options the crawl was started with, as a comparison reads
+    /// them: two crawls with the same fingerprint differ in none of the options that make a comparison partial.
+    /// </summary>
+    public string? OptionsFingerprint { get; init; }
+
     /// <summary>Why the last analysis no longer stands, if it doesn't; nothing when it does, or there's none.</summary>
     /// <param name="settings">The thresholds an analysis would run with now.</param>
     public IReadOnlyList<OutOfDateReason> OutOfDate(AnalysisSettings settings) =>
