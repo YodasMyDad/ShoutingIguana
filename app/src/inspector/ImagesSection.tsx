@@ -29,7 +29,7 @@ const SIZE_WIDTH = 96;
 const PIXELS_WIDTH = 112;
 const ALT_WIDTH = 192;
 const SHOWN_WIDTH = 160;
-const MIN_URL_WIDTH = 176;
+const MIN_URL_WIDTH = 260;
 const FRAME_SLACK = 24;
 
 /**

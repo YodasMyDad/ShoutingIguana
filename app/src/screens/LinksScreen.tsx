@@ -881,6 +881,10 @@ export function LinksScreen() {
           ) : null}
         </>
       ) : null}
+      {/* A crawl that didn't measure images' pixel sizes: said once, where their column would be. */}
+      {unmeasured ? (
+        <p className="mx-6 mb-2 text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
+      ) : null}
       {failed ? (
         isProblem(rows.error, 'needs-analysis') ? (
           <NeedsAnalysis error={rows.error} action={analyse} onClear={clearView} />
@@ -974,9 +978,6 @@ export function LinksScreen() {
         </GridScreenBody>
       ) : (
         <GridScreenBody ref={measure} className="mx-6 pb-4">
-          {unmeasured ? (
-            <p className="mb-2 text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
-          ) : null}
           <GridCore<LinkRow>
             key={view}
             label="Links"

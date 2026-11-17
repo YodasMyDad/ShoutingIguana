@@ -160,6 +160,9 @@ describe('the Links grid grouped by target', () => {
     await user.click(screen.getByRole('button', { name: 'Export' }));
     const dialog = await screen.findByRole('dialog', { name: 'Export links by target' });
     expect(within(dialog).getByText(/8 targets, one row a target: the most linked from pages first/)).toBeVisible();
+    // The dialog is the app's: closed, so the tests after this one start without it.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('sorts the targets by a header, and back to the most linked from pages first', async () => {

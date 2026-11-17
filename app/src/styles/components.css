@@ -2191,15 +2191,15 @@
   }
 
   .si-url__file {
-    flex: 0 1 auto;
-    min-width: 0;
+    flex: 0 0 auto;
+    max-width: 100%;
     overflow: hidden;
     color: var(--color-text);
     text-overflow: ellipsis;
   }
 
   .si-url__rest {
-    flex: 0 100 auto;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     color: var(--color-text-muted);
