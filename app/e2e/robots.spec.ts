@@ -1,9 +1,9 @@
 // robots.txt against the real sidecar and a crawl of the engine's synthetic test site, whose robots.txt disallows
 // /private/ (which every 61st product links to: the seeded crawl of 40 pages is too small to have one, so the spec
-// crawls the site itself), whose partner origin has no robots.txt, and whose https twin doesn't answer: the origins
-// say what each answer meant, the file shows the line that blocked a planted URL and lists a line's URLs, the two are
-// chosen from either side on the keyboard, a deep link survives a reload, and axe finds nothing in both themes and
-// under forced colours. Never a real site, and the crawl is deleted when the spec is done.
+// crawls the site itself), whose partner origin's robots.txt keeps crawlers out of /ext-private/, and whose https twin
+// doesn't answer: the origins say what each answer meant, the file shows the line that blocked a planted URL and lists
+// a line's URLs, the two are chosen from either side on the keyboard, a deep link survives a reload, and axe finds
+// nothing in both themes and under forced colours. Never a real site, and the crawl is deleted when the spec is done.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { countOf, crawlTestSite, expectNoViolations, read, removeCrawl, type SeededCrawl } from './support';
 
@@ -106,8 +106,10 @@ test('the origins: the site’s own first, and what each answer meant to the cra
     const row = origins(page).getByRole('row').filter({ hasText: origin.origin });
     await expect(row.getByRole('gridcell').nth(1), origin.origin).toHaveText(words[origin.state ?? ''] ?? 'None kept');
   }
-  // The partner's robots.txt is missing, and the site's https twin never answered: neither is said to refuse a URL.
-  expect(list.origins.some((origin) => origin.state === 'missing')).toBe(true);
+  // The partner's robots.txt is read as the site's is, and the site's https twin never answered: that isn't said to
+  // refuse a URL.
+  expect(list.origins.filter((origin) => origin.state === 'read')).toHaveLength(2);
+  expect(list.origins.some((origin) => origin.state === 'unanswered')).toBe(true);
   expect(list.origins.filter((origin) => origin.state !== 'read').every((origin) => origin.blocked === 0)).toBe(true);
 });
 

@@ -136,7 +136,7 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   await expect.poll(() => crawled(page)).toBeGreaterThan(0);
   const before = await crawled(page);
   await expect.poll(() => crawled(page)).toBeGreaterThan(before);
-  await expect(page.getByRole('region', { name: 'Status codes' }).getByText(/URLs? so far/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Status codes' }).getByText(/^[\d,]+ URLs? so far$/)).toBeVisible();
   await expect(page.getByRole('region', { name: 'Alerts' })).toBeVisible();
   await expectNoViolations(page);
 
@@ -222,7 +222,8 @@ async function landsOn(page: Page, link: Locator): Promise<number> {
 test('while a crawl is paused, every live figure lands on exactly its count in the URL grid', async ({ page }) => {
   test.setTimeout(180_000);
   await startCrawl(page);
-  await expect.poll(() => crawled(page)).toBeGreaterThan(200);
+  // The crawl starts the site slowly (1, 2, 4 requests a second at first), so 200 take a few seconds.
+  await expect.poll(() => crawled(page), { timeout: 60_000 }).toBeGreaterThan(200);
   await page.keyboard.press('F7');
   await expect(main(page).getByText('The crawl is paused.', { exact: false })).toBeVisible();
   // The requests on their way when it paused land: then nothing moves.

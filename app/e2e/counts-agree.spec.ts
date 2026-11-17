@@ -306,7 +306,20 @@ test.describe('a crawl of the test site', () => {
     // Paused, every live count is of one moment: Overview's, the sidebar's, the top bar's and Home's card.
     const crawledLive = async () => countOf(await progress.locator('.si-stat__value').first().innerText());
     await expect.poll(crawledLive, { timeout: 10_000 }).toBeGreaterThan(0);
-    // The requests on their way when it paused finish and are counted: the live count settles on the grid's.
+    // The requests on their way when it paused finish and are counted: the live count stands still (a request paced at
+    // the site's gate can land a moment later), then it's the grid's.
+    let before = -1;
+    await expect
+      .poll(
+        async () => {
+          const now = await crawledLive();
+          const still = now === before;
+          before = now;
+          return still;
+        },
+        { intervals: [2_000], timeout: 30_000 },
+      )
+      .toBe(true);
     const inGrid = async () => (await gridCount(started.id, [{ column: 'fetched', op: 'is', value: true }])).matching;
     await expect.poll(async () => (await crawledLive()) - (await inGrid()), { timeout: 15_000 }).toBe(0);
     const live = await crawledLive();
