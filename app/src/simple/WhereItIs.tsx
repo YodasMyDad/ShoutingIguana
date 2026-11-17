@@ -210,7 +210,7 @@ export function WhereItIs({
                       <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                     </td>
                     <td className="text-text-secondary">
-                      {/* The engine's detail is Advanced's words: a few checks say it plainly ("Google will likely cut this title off after…"). */}
+                      {/* The engine's detail, unless the check says it plainly ("Google will likely cut…"). */}
                       {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? ''}
                       <EvidenceLines row={row} check={check} origin={origin} />
                     </td>

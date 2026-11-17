@@ -299,3 +299,28 @@ test('switching mode on the Summary shows Overview within the budget, and back',
   report(`Mode switch on the Summary to a visible screen: ${times.join(', ')} ms`);
   expect(times.every((time) => time >= 0)).toBe(true);
 });
+
+test('a title or description too long says where Google will likely cut it, one too short its characters, and never pixels', async ({
+  page,
+}) => {
+  const { crawl, counts } = await facts();
+  const lines: [string, RegExp][] = [
+    ['title-too-long', /Google will likely cut this title off after “[^”]+”/],
+    ['description-too-long', /Google will likely cut this description off after “[^”]+”/],
+    ['title-too-short', /Only [\d,]+ characters? long/],
+    ['description-too-short', /Only [\d,]+ characters? long/],
+  ];
+  let shown = 0;
+  for (const [id, line] of lines) {
+    const count = counts.get(id) ?? 0;
+    if (count === 0) continue;
+    await page.goto(`/crawls/${crawl.id}/issues/${id}`);
+    const where = main(page).getByRole('region', { name: 'Where it is' });
+    await expect(where.getByRole('table')).toBeVisible();
+    // Every page listed says it plainly, in place of the engine's "612 px, over 580 (64 characters)".
+    await expect(where.getByRole('cell').filter({ hasText: line })).toHaveCount(Math.min(count, 25));
+    await expect(main(page)).not.toContainText(/\bpx\b/);
+    shown++;
+  }
+  report(`Length checks said plainly on ${crawl.site ?? crawl.fileName}: ${shown} of 4 had pages`);
+});
