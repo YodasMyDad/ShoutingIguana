@@ -260,7 +260,9 @@ test('while a crawl is paused, every live figure lands on exactly its count in t
   }
   // The total the classes add up to: the site's own URLs crawled, and the probes of its other versions apart, which
   // together are what Crawled counts.
-  const total = count(/([\d,]+) URLs? so far/.exec(await status.getByText(/URLs? so far/).innerText())?.[1] ?? null);
+  const total = count(
+    /([\d,]+) URLs? so far/.exec(await status.getByText(/^[\d,]+ URLs? so far$/).innerText())?.[1] ?? null,
+  );
   const probeLine = status
     .locator('p', { hasText: 'the crawler tried for the site’s other versions' })
     .getByRole('link');
@@ -281,9 +283,9 @@ test('a stopped crawl says how far it got, and continues from there', async ({ p
   await startCrawl(page);
   await expect.poll(() => crawled(page)).toBeGreaterThan(0);
 
-  // F8 stops it.
+  // F8 stops it: at the crawl's slow start that can be after its first URL alone.
   await page.keyboard.press('F8');
-  const stopped = main(page).getByText(/This crawl was stopped after [\d,]+ URLs/);
+  const stopped = main(page).getByText(/This crawl was stopped after [\d,]+ URLs?/);
   await expect(stopped).toBeVisible({ timeout: 30_000 });
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
   // A stopped crawl is analysed when it stops (round 5, gap 2): its results so far, never "hasn't been analysed".
