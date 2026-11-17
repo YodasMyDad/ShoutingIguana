@@ -150,10 +150,13 @@ internal sealed class SitemapDiscoverer(
 
         try
         {
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)), timeProvider);
+            // The deadline starts with the first request, not with the wait for a turn at the gate: a host that asked
+            // for a minute's pause would otherwise time its sitemap out before it was asked.
+            using var deadline = new CancellationTokenSource(Timeout.InfiniteTimeSpan, timeProvider);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
-            var (response, lease, location) = await SendFollowingRedirectsAsync(uri, timeout.Token).ConfigureAwait(false);
+            var (response, lease, location) = await SendFollowingRedirectsAsync(uri, cancellationToken, timeout.Token,
+                () => deadline.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)))).ConfigureAwait(false);
             using var heldLease = lease;
             using var disposeResponse = response;
             uri = location;
@@ -224,15 +227,24 @@ internal sealed class SitemapDiscoverer(
     /// Sitemaps often redirect (Yoast's /sitemap.xml goes to /sitemap_index.xml, http to https), so follow up to
     /// <see cref="MAX_REDIRECTS"/> hops. The gate lease for the last hop is held while its body is read.
     /// </summary>
-    private async Task<(HttpResponseMessage Response, HostGateLease Lease, Uri Location)> SendFollowingRedirectsAsync(Uri uri, CancellationToken cancellationToken)
+    /// <param name="waiting">Ends the waits for a turn at the gate: the crawl stopping.</param>
+    /// <param name="sending">Ends the requests: the crawl stopping, or the sitemap's deadline.</param>
+    /// <param name="startDeadline">Called once, when the first request's turn has come.</param>
+    private async Task<(HttpResponseMessage Response, HostGateLease Lease, Uri Location)> SendFollowingRedirectsAsync(Uri uri,
+        CancellationToken waiting, CancellationToken sending, Action startDeadline)
     {
         for (var hop = 0; ; hop++)
         {
-            var lease = await gates.For(uri).AcquireAsync(cancellationToken).ConfigureAwait(false);
+            var lease = await gates.For(uri).AcquireAsync(waiting).ConfigureAwait(false);
+            if (hop == 0)
+            {
+                startDeadline();
+            }
+
             HttpResponseMessage response;
             try
             {
-                response = await fetcher.SendAsync(uri, cancellationToken).ConfigureAwait(false);
+                response = await fetcher.SendAsync(uri, sending).ConfigureAwait(false);
             }
             catch
             {

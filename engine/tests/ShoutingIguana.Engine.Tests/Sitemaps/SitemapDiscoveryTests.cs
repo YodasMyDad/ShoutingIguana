@@ -27,6 +27,7 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
     private readonly Dictionary<string, (string ContentType, string Body)> _files = new(StringComparer.Ordinal);
     private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _robotsFailures;
+    private int _homeThrottles;
     private int _sitemapRequests;
     private LoopbackServer _server = null!;
 
@@ -123,6 +124,31 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Equal(_server.Url("/real-sitemap.xml").AbsoluteUri, sitemap.Url);
         Assert.False(sitemap.IsProbe);
         Assert.Equal(2, sitemap.UrlCount);
+    }
+
+    /// <summary>
+    /// The site asks for a minute and a half's pause as the crawl starts (the home page's first answer is a 429): the
+    /// sitemaps wait their turn at the gate, and their 60-second deadline only starts when it comes. A real shop's sitemap
+    /// timed out this way while the crawl waited out its Retry-After.
+    /// </summary>
+    [Fact]
+    public async Task ASitemapWaitingOutTheSitesPauseIsStillRead()
+    {
+        _homeThrottles = 1;
+        Serve("/robots.txt", "text/plain", "User-agent: *\nDisallow:\nSitemap: /first.xml\nSitemap: /second.xml");
+        Serve("/first.xml", "application/xml", $"{URLSET}{Loc("/a")}</urlset>");
+        Serve("/second.xml", "application/xml", $"{URLSET}{Loc("/b")}</urlset>");
+        var time = new FakeTimeProvider();
+        var path = NewDatabasePath();
+
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(
+            new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 }, path));
+        var summary = await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromMilliseconds(100), realLimit: TimeSpan.FromSeconds(60));
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(0, Volatile.Read(ref _homeThrottles));
+        Assert.All(Sitemaps(path), sitemap => Assert.Null(sitemap.Error));
+        Assert.Equal(2, Sitemaps(path).Sum(sitemap => sitemap.UrlCount));
     }
 
     /// <summary>A crawl paused as it starts reads no sitemaps until it is resumed.</summary>
@@ -317,6 +343,13 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         if (context.Request.Path == "/robots.txt" && Interlocked.Decrement(ref _robotsFailures) >= 0)
         {
             context.Response.StatusCode = 503;
+            return Task.CompletedTask;
+        }
+
+        if (context.Request.Path == "/" && Volatile.Read(ref _homeThrottles) > 0 && Interlocked.Decrement(ref _homeThrottles) >= 0)
+        {
+            context.Response.StatusCode = 429;
+            context.Response.Headers.RetryAfter = "90";
             return Task.CompletedTask;
         }
 
