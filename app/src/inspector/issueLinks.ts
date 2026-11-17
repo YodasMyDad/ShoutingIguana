@@ -16,6 +16,8 @@ export const FAULT_GROUPED_CHECKS: readonly string[] = [
   'canonical-relative',
   'canonical-invalid',
   'structured-data-invalid',
+  'pagination-sequence-error',
+  'head-tags-in-body',
 ];
 
 /** The checks whose groups are clusters of pages that share something, each named after its first page. */

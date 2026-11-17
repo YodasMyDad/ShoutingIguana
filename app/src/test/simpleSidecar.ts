@@ -8,10 +8,10 @@ import { json, problem, testCrawlItem, type FakeRoute } from './fakeSidecar';
 import engineChecks from './simple/engine-checks.json';
 import gardenAnalysis from './simple/garden-analysis.json';
 
-/** The catalog of 87 checks with their plain words, as `GET /api/checks` answers. */
+/** The catalog of 122 checks with their plain words, as `GET /api/checks` answers. */
 export const SIMPLE_CHECKS = engineChecks as Checks;
 
-/** The garden crawl's analysis: 87, Good; 2 serious, 3 worth fixing, 14 worth a look; 4 skipped. */
+/** The garden crawl's analysis: 86, Good; 2 serious, 4 worth fixing, 14 worth a look; 13 skipped. */
 export const GARDEN_ANALYSIS = gardenAnalysis as Analysis;
 
 /** The garden crawl's library item, as the Summary reads it. */
