@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -8,6 +9,7 @@ using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Tests.Fetching;
+using ShoutingIguana.Engine.Tests.Support;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -87,15 +89,20 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// A shop that rate-limits the crawler on its product pages leaves their links unknown, so the collection only they
-    /// link to would look orphaned. With the refused pages 1 in 20 or more of those the crawl tried to read, the orphan
-    /// check is skipped, saying why; one refusal among 22 pages doesn't stop it, and the collection is then reported.
+    /// A shop that rate-limits the crawler on its product pages, or puts them behind a bot challenge, leaves their links
+    /// unknown, so the collection only they link to would look orphaned. With the refused pages 1 in 20 or more of those the
+    /// crawl tried to read, the orphan check is skipped, saying why; one refusal among 22 pages doesn't stop it, and the
+    /// collection is then reported. A page the site only ever answered 429 is asked again at the end, at the pace the site
+    /// allows, and stored as not checked: it's counted as refused all the same, but isn't internal-blocked, which is for
+    /// a firewall's refusals.
     /// </summary>
     /// <param name="others">Pages besides the products that the home page links to, which answer.</param>
+    /// <param name="challenge">The products answer with a bot challenge, not 429.</param>
     [Theory]
-    [InlineData(2, 0, true)]
-    [InlineData(1, 19, false)]
-    public async Task OrphansArentCheckedWhenTheSiteRefusedManyOfThePagesTheCrawlTriedToRead(int refused, int others, bool skipped)
+    [InlineData(2, 0, false, true)]
+    [InlineData(1, 19, false, false)]
+    [InlineData(2, 0, true, true)]
+    public async Task OrphansArentCheckedWhenTheSiteRefusedManyOfThePagesTheCrawlTriedToRead(int refused, int others, bool challenge, bool skipped)
     {
         await using var site = await LoopbackServer.StartAsync(context =>
         {
@@ -103,6 +110,13 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
             var path = context.Request.Path.Value!;
             if (path.StartsWith("/products/", StringComparison.Ordinal))
             {
+                if (challenge)
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    context.Response.Headers["cf-mitigated"] = "challenge";
+                    return Write(context, "text/html; charset=utf-8", "<!doctype html><title>Just a moment...</title>");
+                }
+
                 context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
                 return Write(context, "text/html; charset=utf-8", "<!doctype html><title>Too many requests</title>");
             }
@@ -119,7 +133,8 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
             };
         });
 
-        var analysis = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0 });
+        // The crawler waits as long as the site asks, so the clock is a fake one, moved on a second at a time.
+        var analysis = await CrawlOnAFakeClockAndAnalyseAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0 });
 
         // Read: the home page, the collection (from the sitemap) and the others.
         var reason = $"{refused} of the {refused + others + 2} pages the crawl tried to read refused it or didn't answer, and pages linked only from them would look orphaned.";
@@ -135,7 +150,19 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
             Assert.Equal([site.BaseUri + "collection"], IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id).Select(row => row.Url));
         }
 
-        Assert.Equal(refused, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.INTERNAL_BLOCKED).Count);
+        var blocked = analysis.Issues.Single(issue => issue.Issue == IssueCatalog.INTERNAL_BLOCKED).Count;
+        if (challenge)
+        {
+            Assert.Equal(refused, blocked);
+        }
+        else
+        {
+            Assert.Equal(0, blocked);
+            Assert.Contains(refused == 1
+                ? "1 URL wasn't checked because its site kept asking the crawler to slow down (429 Too Many Requests), so links to it aren't judged. Check the site again later, or at the Polite speed."
+                : $"{refused} URLs weren't checked because their sites kept asking the crawler to slow down (429 Too Many Requests), so links to them aren't judged. Check the site again later, or at the Polite speed.",
+                analysis.Notes);
+        }
 
         static string Page(string title, string body) =>
             $"<!doctype html><html lang=\"en\"><head><title>{title}</title></head><body><p>Text</p>{body}</body></html>";
@@ -215,7 +242,9 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         // Obeying robots.txt: both origins' files were read, and both are listed.
         var obeying = await CrawlAndAnalyseAsync(options);
         Assert.Empty(OfRobots(obeying));
-        Assert.Equal($"{plainOrigin}/robots.txt (404 Not Found), {origin}/robots.txt (404 Not Found)", Missing());
+        // In the order they were read, which the crawl's pace decides.
+        Assert.Equal([$"{plainOrigin}/robots.txt (404 Not Found)", $"{origin}/robots.txt (404 Not Found)"],
+            Missing()!.Split(", ").Order(StringComparer.Ordinal));
 
         // Ignoring it, sitemaps on: the start origin's was read for its Sitemap lines, and is judged; the other origin's wasn't.
         DeleteCrawl();
@@ -375,6 +404,17 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, _path)))
         {
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
+        }
+
+        return await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
+    }
+
+    private async Task<AnalysisSummary> CrawlOnAFakeClockAndAnalyseAsync(CrawlOptions options)
+    {
+        var time = new FakeTimeProvider();
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, _path)))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromSeconds(1), realLimit: TimeSpan.FromMinutes(2))).Status);
         }
 
         return await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);

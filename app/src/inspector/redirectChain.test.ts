@@ -160,7 +160,7 @@ describe('redirectChainLayout', () => {
     expect(end('robotsDisallowed').steps[1]?.noCode).toBe('Blocked by robots.txt');
     expect(end('networkError').summary).toBe('The chain ends at a URL that didn’t answer.');
     expect(end('notChecked').summary).toBe(
-      'The chain ends at a URL the crawl didn’t request: its host had stopped answering.',
+      'The chain ends at a URL the crawl couldn’t check: its host had stopped answering, asked the crawler to slow down, or is on a private network.',
     );
     expect(end('notChecked').steps[1]?.noCode).toBe('Not checked');
     expect(end('timeout').steps[1]?.noCode).toBe('Timed out');

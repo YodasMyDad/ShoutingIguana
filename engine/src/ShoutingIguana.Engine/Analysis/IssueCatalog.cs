@@ -48,12 +48,14 @@ public static class IssueCatalog
         Evidence = ["type", "fetchError", "responseMs"]
     };
 
-    public static readonly IssueDefinition INTERNAL_BLOCKED = new("internal-blocked", IssueCategory.ResponseCodes, IssueSeverity.Warning,
-        "Internal URL blocked by a firewall",
-        """A firewall, bot protection service (such as Cloudflare, Akamai, AWS WAF, DataDome or Imperva) or a rate limit (HTTP 429) refused the crawler on this internal URL. The detail names the protection when it's recognised.""",
+    // A 429 is not one of these: the crawler slows down and asks again, and a URL the site still answers with 429 at the
+    // end of the crawl is stored as not checked, which no check judges.
+    public static readonly IssueDefinition INTERNAL_BLOCKED = new("internal-blocked", IssueCategory.ResponseCodes, IssueSeverity.Notice,
+        "Internal URL refused the crawler",
+        """A firewall or bot protection service (such as Cloudflare, Akamai, AWS WAF, DataDome or Imperva) refused the crawler on this internal URL with a block page or a challenge. The detail names the protection when it's recognised.""",
         """Allowlist the crawler in the firewall or bot protection (by user agent, IP address or a secret header), or crawl at a slower speed preset. Make sure the same rules let verified search engine crawlers through: verify Googlebot by reverse DNS or Google's published IP ranges rather than by user agent, which anyone can fake.""")
     {
-        Why = """Nothing on this URL could be checked, so other checks can't see its problems. If the same rules challenge search engine crawlers, they can't crawl it either, and Google slows its crawling of sites that answer with 429. Many protections only challenge automated traffic, so visitors are usually unaffected.""",
+        Why = """Nothing on this URL could be checked, so other checks can't see its problems. If the same rules challenge search engine crawlers, they can't crawl it either. Many protections only challenge automated traffic, so visitors are usually unaffected.""",
         LearnMore = "https://developers.google.com/crawling/docs/crawlers-fetchers/verify-google-requests",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,

@@ -42,6 +42,11 @@ internal sealed class SitemapDiscoverer(
     internal const int MAX_SITEMAPS = 1_000;
     internal const int MAX_NESTING = 3;
     private const int MAX_REDIRECTS = 5;
+
+    /// <summary>Times a sitemap answered 429 is asked, each after the wait its host or section asked for, as a page is.</summary>
+    private const int MAX_TRIES = 4;
+
+    private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromMinutes(2);
     private const int BATCH_SIZE = 1_000;
 
     public async Task RunAsync(Uri startUri, CancellationToken cancellationToken)
@@ -150,10 +155,12 @@ internal sealed class SitemapDiscoverer(
 
         try
         {
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)), timeProvider);
+            // The deadline starts with the first request, not with the wait for a turn at the gate: a host that asked
+            // for a minute's pause would otherwise time its sitemap out before it was asked.
+            using var deadline = new CancellationTokenSource(Timeout.InfiniteTimeSpan, timeProvider);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
-            var (response, lease, location) = await SendFollowingRedirectsAsync(uri, timeout.Token).ConfigureAwait(false);
+            var (response, lease, location) = await SendAskingAgainAfter429Async(uri, deadline, timeout.Token, cancellationToken).ConfigureAwait(false);
             using var heldLease = lease;
             using var disposeResponse = response;
             uri = location;
@@ -220,18 +227,72 @@ internal sealed class SitemapDiscoverer(
     }
 
     /// <summary>
+    /// Sends for a sitemap, and asks again if its host answers 429, up to <see cref="MAX_TRIES"/> times in all, as a page
+    /// would be: after the pause the host asked for (the gate keeps it), or at the section's turn when the host limits
+    /// the section apart. The deadline restarts with each try's turn at the gate.
+    /// </summary>
+    private async Task<(HttpResponseMessage Response, HostGateLease Lease, Uri Location)> SendAskingAgainAfter429Async(Uri uri,
+        CancellationTokenSource deadline, CancellationToken sending, CancellationToken cancellationToken)
+    {
+        for (var tries = 1; ; tries++)
+        {
+            var (response, lease, location) = await SendFollowingRedirectsAsync(uri, cancellationToken, sending,
+                () => deadline.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)))).ConfigureAwait(false);
+            var retryAfter = fetcher.GetRetryAfter(response);
+            lease.ReportStatus((int)response.StatusCode, retryAfter, location);
+            if ((int)response.StatusCode != 429 || tries == MAX_TRIES)
+            {
+                return (response, lease, location);
+            }
+
+            response.Dispose();
+            lease.Dispose();
+            logger.LogInformation("Sitemap {Url} answered 429; asking again", location);
+            await WaitAfter429Async(location, retryAfter, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Until the section's turn when its host limits it apart; otherwise for the Retry-After, or ten seconds.</summary>
+    private async Task WaitAfter429Async(Uri location, TimeSpan? retryAfter, CancellationToken cancellationToken)
+    {
+        if (gates.For(location).LimitedSectionOf(location) is { } section)
+        {
+            while (!section.TryStart(timeProvider.GetUtcNow()))
+            {
+                var wait = section.NextDue - timeProvider.GetUtcNow();
+                await Task.Delay(wait < TimeSpan.FromSeconds(1) && wait > TimeSpan.Zero ? wait : TimeSpan.FromSeconds(1), timeProvider, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        var asked = retryAfter is { } given && given > TimeSpan.Zero ? given : SectionPace.DEFAULT_INTERVAL;
+        await Task.Delay(asked < MAX_RETRY_WAIT ? asked : MAX_RETRY_WAIT, timeProvider, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Sitemaps often redirect (Yoast's /sitemap.xml goes to /sitemap_index.xml, http to https), so follow up to
     /// <see cref="MAX_REDIRECTS"/> hops. The gate lease for the last hop is held while its body is read.
     /// </summary>
-    private async Task<(HttpResponseMessage Response, HostGateLease Lease, Uri Location)> SendFollowingRedirectsAsync(Uri uri, CancellationToken cancellationToken)
+    /// <param name="waiting">Ends the waits for a turn at the gate: the crawl stopping.</param>
+    /// <param name="sending">Ends the requests: the crawl stopping, or the sitemap's deadline.</param>
+    /// <param name="startDeadline">Called once, when the first request's turn has come.</param>
+    private async Task<(HttpResponseMessage Response, HostGateLease Lease, Uri Location)> SendFollowingRedirectsAsync(Uri uri,
+        CancellationToken waiting, CancellationToken sending, Action startDeadline)
     {
         for (var hop = 0; ; hop++)
         {
-            var lease = await gates.For(uri).AcquireAsync(cancellationToken).ConfigureAwait(false);
+            var lease = await gates.For(uri).AcquireAsync(waiting).ConfigureAwait(false);
+            if (hop == 0)
+            {
+                startDeadline();
+            }
+
             HttpResponseMessage response;
             try
             {
-                response = await fetcher.SendAsync(uri, cancellationToken).ConfigureAwait(false);
+                response = await fetcher.SendAsync(uri, sending).ConfigureAwait(false);
             }
             catch
             {

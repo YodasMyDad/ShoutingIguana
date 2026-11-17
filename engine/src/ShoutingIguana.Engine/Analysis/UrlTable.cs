@@ -108,15 +108,22 @@ internal sealed class UrlTable
 
     /// <summary>
     /// The site's pages the crawl tried to read: <see cref="Unread"/>, the site's URLs other than images and files that
-    /// refused the crawler (a firewall, a bot challenge, a rate limit) or gave no answer, so their links are unknown; and
-    /// <see cref="Read"/>, its HTML pages that were. The crawler's probes of the site's other versions aren't counted, nor
-    /// URLs robots.txt kept it from, which search engines can't read either.
+    /// refused the crawler (a firewall, a bot challenge) or gave no answer, or that the site kept rate limiting (stored as
+    /// not checked after the crawl's last tries), so their links are unknown; and <see cref="Read"/>, its HTML pages that
+    /// were. The crawler's probes of the site's other versions aren't counted, nor URLs robots.txt kept it from, which
+    /// search engines can't read either.
     /// </summary>
     public (int Read, int Unread) CountPagesRead()
     {
         int read = 0, unread = 0;
         foreach (var status in _statuses)
         {
+            if (status is { IsInternal: true, IsRateLimited: true, IsResource: false, IsSiteVersionProbe: false })
+            {
+                unread++;
+                continue;
+            }
+
             if (status is not { IsInternal: true, Fetched: true, IsSiteVersionProbe: false })
             {
                 continue;

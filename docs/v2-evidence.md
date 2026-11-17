@@ -87,7 +87,7 @@ and is in the group without a related URL.
 | 1 | `internal-client-error` | U/RD/S | `type` | – | Same ("404 Not Found") | use · pages |
 | 2 | `internal-server-error` | U/RD/S | `type`, `responseMs` | – | Same ("500 Internal Server Error") | use · pages |
 | 3 | `internal-unreachable` | U/RD/S | `type`, `fetchError`, `responseMs` | – | Same ("Timed out", "Connection failed": the group stays one per kind; the column says which failure) | use · pages |
-| 4 | `internal-blocked` | U/RD/S | `type` | – | Same (the protection, or "429 Too Many Requests") | use · pages |
+| 4 | `internal-blocked` | U/RD/S | `type` | – | Same (the protection). Since the polite crawl a 429 isn't this check's: it's held back, asked again, and stored as not checked if it never gets through | use · pages |
 | 5 | `soft-404` | P/N/– | `title`, `h1`, `wordCount` | – | "The title or H1 says the page wasn't found" → `The title reads as an error: "Page not found – Example" · 120 words, under 300` (or "The H1 reads as an error: …"; the quoted text is the field that matched) | imp · – |
 
 ### Redirects

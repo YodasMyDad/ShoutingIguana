@@ -51,4 +51,11 @@ public sealed record SyntheticSiteOptions
     /// indexed, so the site isn't hiding itself. The products' other checks follow as they do there. Off by default.
     /// </summary>
     public bool NoindexProducts { get; init; }
+
+    /// <summary>
+    /// Product pages behind a rate limit with a renewing penalty, like a real shop's: a crawl that keeps to the pace the
+    /// site teaches it ends with every page fetched, and one the limit never lets through ends with them not checked.
+    /// Null, the default, for none.
+    /// </summary>
+    public SyntheticRateLimit? RateLimit { get; init; }
 }

@@ -50,4 +50,16 @@ internal sealed record FetchResponse
 
     /// <summary>A network-level failure that is worth retrying.</summary>
     public bool IsTransientFailure { get; init; }
+
+    /// <summary>
+    /// The host answered 429 Too Many Requests, and no firewall's challenge came with it: it asked the crawler to slow
+    /// down. Not a fault of the URL's, and nothing about the URL itself is known.
+    /// </summary>
+    public bool IsRateLimited => StatusCode == 429 && BlockReason?.StartsWith(BlockDetector.RATE_LIMITED, StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// The host asked the crawler to slow down, or may be overloaded: 429, or 503 without a firewall's challenge. Such a
+    /// URL isn't retried at once; the crawl asks again for the site's own at its end, at the pace the host has taught.
+    /// </summary>
+    public bool IsThrottled => IsRateLimited || StatusCode == 503 && Outcome == FetchOutcome.ServerError;
 }

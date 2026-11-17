@@ -105,10 +105,35 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
    one for status checks on other sites.
 3. Each worker checks robots.txt and waits on a per-site gate. `example.com` and `www.example.com` are one site,
    on http and https alike, so they share one: sites serve one host and redirect the other.
-   - The gate caps concurrency and applies the optional rate cap.
-   - It backs off automatically on 429/503 responses, block pages and repeated failures, honouring Retry-After. The
-     backoff halves every half second, and a request waiting on it starts by the backoff as it stands when it is
-     due.
+   - The gate keeps to the pace the host's answers teach (`Fetching/HostPace`); the crawl's concurrency and rate are
+     its ceiling, never its starting pace. Every request to the host goes through it: pages, assets, robots.txt,
+     sitemaps and the icon. A sitemap answered 429 is asked again like a page, up to four times, after the wait its host
+     or section asked for, and its deadline starts with each try's turn at the gate.
+   - Slow start: one request at a time at one a second. While answers stay healthy, the rate and the requests at once
+     double at most once a second, so a site sees 1, 2, 4 requests a second in its first seconds; on a host that answers
+     within 100 ms (a local or nearby server), once every ten of its round trips but no more than every 100 ms, so the
+     100k bench is at full speed in about two and a half seconds. Answers that come back much slower than the host's
+     first ones hold the pace where it is, for eight answers at most.
+   - A limit on one section (`Fetching/SectionPace`): a 429 is put down to a folder of its URL, a section already
+     limited if the URL is in one, else its last folder (so /products/belt and /collections/belts/products/belt are both
+     in /products/; a URL in no folder is in the root's). That section alone is limited: its URLs are held back from the
+     workers and asked one at a time (`Crawling/SectionTrickle`), during the crawl and after it, an interval apart that
+     starts at the first Retry-After, doubles at each 429 of a page the section let go (never sooner than the
+     Retry-After, and past five minutes up to 20, so a limit that each refused try renews gets a long quiet spell before
+     the last tries), and shortens by a tenth each time a page gets through. The rest of the host keeps its pace. Only 429s
+     from three sections within ten minutes are the host's own limit and slow the whole host, as below. Nothing is given
+     up while pages get through: a section is given up on after three 429s in a row at its slowest (one page every 20
+     minutes), and every section 20 minutes after the rest of the crawl is over; what is left is not checked. Progress
+     says how many are left and when the next is tried.
+   - A host that asks to slow down as a whole (429s from three sections, or 503 with Retry-After) is paused, all of it, for its Retry-After (or 10 s,
+     doubling while it keeps asking, up to two minutes), then resumes one request at a time at half the pace that
+     tripped it (never below one every five seconds), so nothing queued bursts out after the pause. 429s to requests sent before that slowdown don't slow
+     it again. Two failures in a row (502, 504, a 503 without Retry-After) slow it the same way without a pause, at
+     most once every 30 s and never below one a second. A firewall's block page says nothing about pace, and nor does
+     no answer at all: whether an origin is down is judged per origin (below), so a dead www twin never slows the
+     site.
+   - It recovers additively: every 30 s without a slowdown, a tenth of the pace it slowed from and one more request at
+     once; and for ten minutes after a host asked to slow down, never above nine tenths of the pace that tripped it.
 
    The worker then fetches over plain HTTP without following redirects (every hop is its own URL) and parses the
    HTML once into `PageFacts`.
@@ -123,10 +148,24 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      like another site; the URLs it was asked for keep their real error. Any other origin is down: it is waited out
      with one-minute pauses and a notice, never written off, and after ten minutes down (time paused aside) the
      crawl stops, to be resumed.
-   - The site's URLs that got no response are tried once more when nothing else can be claimed (at most 10,000 are
-     held back for it), handed to the workers as they have room. That comes before the URLs only sitemaps list. URLs
-     refused because robots.txt couldn't be read wait for its two-minute cool-down first, as do the sitemaps it
-     declares. Sitemaps aren't read while the crawl is paused.
+   - The site's URLs that got no response, or were asked to slow down (429, 503), are tried once more when nothing
+     else can be claimed (one answered 429 again, up to three times, each after the pause the host asked for) (at most 10,000 are held back for it), handed to the workers as they have room, at the pace
+     the host has taught (which doesn't recover during those last tries, so it never probes upward into the limit
+     again) and after any pause it asked for. A 429 or 503 isn't retried on the spot: that would renew a
+     rate limit's penalty. That comes before the URLs only sitemaps list. URLs refused because robots.txt couldn't be
+     read wait for its two-minute cool-down first, as do the sitemaps it declares. Sitemaps aren't read while the
+     crawl is paused.
+   - A 429 says nothing about the URL. One the site still answers with 429 at its last try (another site's, after its
+     retries) is stored as not checked ("Not checked: the site asked the crawler to slow down"), like a URL whose host
+     stopped answering: no check judges it, and the analysis says how many there were. A firewall's block page (403, a
+     challenge) is still a block.
+   - A public site's crawl never asks the user's own machine or network (`Fetching/PrivateNetworkGuard`): a link to
+     localhost, 127.x, ::1 or a private range (10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7, link-local) is stored
+     as not checked ("Not checked: private network address; not checked from a public site"), with no request, not
+     even for its robots.txt, and judged by no check. They are asked when the start URL is itself on such an address,
+     or its name resolves to one (a staging or intranet site, the synthetic test site on 127.0.0.1). A name that
+     resolves only to private addresses is refused as the crawler connects; through a proxy, which resolves names
+     itself, only addresses written into the URL are.
 4. A single writer applies results in batched transactions: the response row, a compressed detail blob, the
    links, and newly discovered URLs. It also owns the frontier, so "nothing queued and nothing in flight" is an
    exact completion test.
@@ -159,17 +198,21 @@ the site's host gates:
 - the phase: starting, reading robots.txt (nothing else can be fetched), crawling, reading sitemaps (nothing else is
   left), retrying (the last tries of URLs that got no response, until they're over), finishing;
 - what holds it up now: the site's URLs waiting for its robots.txt and other sites' (link checks) waiting for theirs, a
-  crawl-delay, a backoff or Retry-After, an origin that's down, robots.txt's cool-down. At most five for each reason,
+  crawl-delay, a pace the site's answers have slowed (`backoff`, with the time between requests now) or a Retry-After,
+  an origin that's down, robots.txt's cool-down. At most five for each reason,
   the longest first, with a count of the rest; none once the crawl is finishing.
 
 Progress and notices name one of the site's hosts the same way: the start URL's host for it and its www twin, which are
 one site with one budget, and a subdomain without its `www.` (`CrawlScope.HostName`). Origins (scheme, host and port)
 are named as they are.
 
-Every notice (the site blocking the crawler, robots.txt unreadable, the site down, the sitemaps read) is kept in the
+Every notice (the site blocking the crawler, or asking it to slow down, robots.txt unreadable, the site down, the
+sitemaps read) is kept in the
 crawl file, numbered across runs, with the facts it's about (which host, how many responses were blocked), so any
-program that opens the crawl can show it (`CrawlNoticeReader`). `blocked` is said once per host, and
-`robots-unreachable` once per origin, in each run. Read back, a `blocked` notice counts the host's blocked responses in
+program that opens the crawl can show it (`CrawlNoticeReader`). `blocked` (a firewall's block page or challenge) and
+`rate-limited` (a 429: the pause asked for and the pace the crawler goes on at) are said once per host, and
+`robots-unreachable` once per origin, in each run. `rate-limited-unchecked` is said at the end of a run whose site
+still answered 429 at the last try, with how many of its URLs weren't checked and what to do. Read back, a `blocked` notice counts the host's blocked responses in
 the whole crawl, every run's. Ids carry on from the file's highest, so the last ones heard before a crash can be given
 again: a notice is its id and its time. `CrawlHistoryReader` counts a crawl's fetching over time back from the stored
 fetch times, for a chart of a crawl continued later, and the site's own URLs found, each from when the page that first
@@ -298,7 +341,8 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   Not Found", "301 Moved Permanently" (`Rules/HttpStatusNames`, RFC 9110's reason phrases). A code with no standard
   name stays "HTTP 599". The crawl stores its own sentences the same way, through the same helper: a sitemap's
   "404 Not Found", a robots.txt's "503 Service Unavailable" (as the reason of its alert and of the URLs it refused),
-  a firewall's "Rate limited (429 Too Many Requests)". A crawl an earlier engine stored keeps its words ("HTTP 404"),
+  a firewall's "Cloudflare challenge". A crawl an earlier engine stored keeps its words ("HTTP 404", or a 429 stored as
+  blocked, "Rate limited (429 Too Many Requests)"),
   which a detail still names when it quotes them; the crawl file is never rewritten.
 - **Where to fix it.** Each check says how its URLs stand to the references between URLs
   (`IssueDefinition.References`, not stored): `Sources` when each is something other URLs refer to (a 404, a redirect,

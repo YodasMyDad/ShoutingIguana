@@ -13,6 +13,15 @@ export interface WaitEntry {
 const urls = (count: number | undefined) => (count === undefined ? 'URLs' : formatCountOf(count, 'URL'));
 const time = (ms: number | undefined) => (ms === undefined ? 'a while' : formatDuration(ms));
 
+/** "about 0.5 requests a second", "about one request every 10 s", from the time between requests. */
+function pace(ms: number | undefined): string {
+  if (ms === undefined || ms <= 0) return 'fewer requests';
+  const perSecond = 1000 / ms;
+  if (perSecond >= 0.95 && perSecond < 1.05) return 'about 1 request a second';
+  if (perSecond >= 0.5) return `about ${Number(perSecond.toFixed(perSecond >= 10 ? 0 : 1))} requests a second`;
+  return `about one request every ${formatDuration(ms)}`;
+}
+
 function words(wait: CrawlWait): Omit<WaitEntry, 'key'> {
   const host = wait.host ?? 'the site';
   switch (wait.reason) {
@@ -34,7 +43,7 @@ function words(wait: CrawlWait): Omit<WaitEntry, 'key'> {
     case 'backoff':
       return {
         title: 'Slowing down',
-        detail: `${host} answered with errors or asked for less, so requests to it are ${time(wait.durationMs)} further apart for now.`,
+        detail: `${host} asked the crawler to slow down, or kept failing, so it now gets ${pace(wait.durationMs)}. That rises slowly while it answers well.`,
       };
     case 'heldBack':
       return {
@@ -45,6 +54,11 @@ function words(wait: CrawlWait): Omit<WaitEntry, 'key'> {
       return {
         title: 'The site isn’t answering',
         detail: `${host} hasn’t answered for ${time(wait.durationMs)}. The crawl stops after 10 minutes of it, and can be continued later.`,
+      };
+    case 'sectionLimited':
+      return {
+        title: 'Reading some pages slowly',
+        detail: `${host} limits its ${wait.section ?? 'some'} pages: ${formatCountOf(wait.urls ?? 0, 'URL')} left, the next tried in ${time(wait.durationMs)}. The rest of the site isn’t held up.`,
       };
     case 'robotsTxtCoolDown':
       return {
@@ -65,6 +79,7 @@ const MORE_NOUNS: Record<CrawlWaitReason, readonly [string, string]> = {
   heldBack: ['host', 'hosts'],
   siteDown: ['origin', 'origins'],
   robotsTxtCoolDown: ['wait', 'waits'],
+  sectionLimited: ['section', 'sections'],
 };
 
 /** The waits to list, as the engine ordered them (the longest first), then "and 212 more hosts" where it says so. */

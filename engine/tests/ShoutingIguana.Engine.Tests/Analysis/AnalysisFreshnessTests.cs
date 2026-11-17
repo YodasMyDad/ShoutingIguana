@@ -45,6 +45,10 @@ public sealed class AnalysisFreshnessTests
         // stored what the other judged differently, so both are out of date.
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 9 }, CRAWLED, new AnalysisSettings()));
 
+        // Version 10 called a 429 a block (internal-blocked, then a warning) and counted the URLs a site kept rate limiting,
+        // or that were on a private address, among those whose site had stopped answering.
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 10 }, CRAWLED, new AnalysisSettings()));
+
         // A score worked out by another version of the formula, or none at all, isn't the score the crawl would get now.
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = ScoreCalculator.VERSION + 1 }, CRAWLED, new AnalysisSettings()));
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { ScoreVersion = null }, CRAWLED, new AnalysisSettings()));

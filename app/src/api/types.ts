@@ -194,7 +194,7 @@ export interface CrawlOptions {
   maxDepth?: number | null;
   concurrency?: number | null;
   externalConcurrency?: number | null;
-  /** 0 is no cap, with the engine's automatic backoff. */
+  /** 0 is no cap: the engine still starts each host slowly and slows down when one asks. */
   maxRequestsPerSecond?: number | null;
   userAgent?: UserAgentPreset | null;
   customUserAgent?: string | null;
@@ -229,7 +229,7 @@ export interface SpeedPreset {
   /** `polite`, `standard` or `fast`. */
   id: string;
   concurrency: number;
-  /** 0 is no cap, with the engine's automatic backoff. */
+  /** 0 is no cap: the engine still starts each host slowly and slows down when one asks. */
   maxRequestsPerSecond: number;
 }
 
@@ -684,9 +684,19 @@ export interface SiteVersionCounts {
   noResponse: NoResponseCounts;
 }
 
-/** E4: `robotsTxt`, `otherSitesRobotsTxt`, `crawlDelay`, `backoff`, `heldBack`, `siteDown` or `robotsTxtCoolDown`. */
+/**
+ * E4: `robotsTxt`, `otherSitesRobotsTxt`, `crawlDelay`, `backoff`, `heldBack`, `siteDown` or `robotsTxtCoolDown`; 3b:
+ * `sectionLimited`.
+ */
 export type CrawlWaitReason =
-  'robotsTxt' | 'otherSitesRobotsTxt' | 'crawlDelay' | 'backoff' | 'heldBack' | 'siteDown' | 'robotsTxtCoolDown';
+  | 'robotsTxt'
+  | 'otherSitesRobotsTxt'
+  | 'crawlDelay'
+  | 'backoff'
+  | 'heldBack'
+  | 'siteDown'
+  | 'robotsTxtCoolDown'
+  | 'sectionLimited';
 
 /** E4: something holding part of the crawl up now. Fields that don't apply to its reason are left out. */
 export interface CrawlWait {
@@ -694,6 +704,8 @@ export interface CrawlWait {
   host?: string;
   urls?: number;
   durationMs?: number;
+  /** For `sectionLimited`: the section the site limits, "/products/". */
+  section?: string;
 }
 
 export interface ProgressEvent {

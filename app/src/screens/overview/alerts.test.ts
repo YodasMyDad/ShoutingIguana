@@ -170,6 +170,29 @@ describe('waits', () => {
     expect(more).toBe('and 212 more hosts');
   });
 
+  it('say how fast a site that asked to slow down is asked now', () => {
+    const detail = (durationMs: number) =>
+      waitEntries([{ reason: 'backoff', host: 'shop.example.com', durationMs }]).entries[0]?.detail;
+    expect(detail(2_000)).toBe(
+      'shop.example.com asked the crawler to slow down, or kept failing, so it now gets about 0.5 requests a second. That rises slowly while it answers well.',
+    );
+    expect(detail(1_000)).toMatch(/gets about 1 request a second\./);
+    expect(detail(250)).toMatch(/gets about 4 requests a second\./);
+    expect(detail(10_000)).toMatch(/gets about one request every 10 s\./);
+  });
+
+  it('say how a section the site limits is read, and how long it has left', () => {
+    const { entries } = waitEntries([
+      { reason: 'sectionLimited', host: 'jitsunami.com', section: '/products/', urls: 6, durationMs: 480_000 },
+    ]);
+    expect(entries.map((entry) => [entry.title, entry.detail])).toEqual([
+      [
+        'Reading some pages slowly',
+        'jitsunami.com limits its /products/ pages: 6 URLs left, the next tried in 8 min. The rest of the site isn’t held up.',
+      ],
+    ]);
+  });
+
   it('has nothing to say when nothing waits', () => {
     expect(waitEntries([], {})).toEqual({ entries: [], more: null });
   });

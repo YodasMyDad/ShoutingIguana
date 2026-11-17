@@ -6,4 +6,5 @@ namespace ShoutingIguana.Engine.Crawling.Models;
 /// which are one. For <see cref="CrawlWaitReason.SiteDown"/>, the origin that is down: its scheme, host and port.
 /// </param>
 /// <param name="Urls">How many URLs are waiting.</param>
-public sealed record CrawlWait(CrawlWaitReason Reason, string? Host = null, long? Urls = null, TimeSpan? Duration = null);
+/// <param name="Section">For <see cref="CrawlWaitReason.SectionLimited"/>, the section: "/products/".</param>
+public sealed record CrawlWait(CrawlWaitReason Reason, string? Host = null, long? Urls = null, TimeSpan? Duration = null, string? Section = null);

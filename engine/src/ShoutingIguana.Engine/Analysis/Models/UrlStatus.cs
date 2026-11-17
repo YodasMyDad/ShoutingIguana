@@ -15,6 +15,10 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 /// <param name="IsMetaRefresh">A 200 page that moves on with an instant meta refresh, so it counts as a redirect.</param>
 /// <param name="IsResource">An image, video, audio file, font, stylesheet or script rather than a page (see <see cref="ResourceTypes"/>).</param>
 /// <param name="Source">How the crawl found it. <see cref="DiscoverySource.SiteVersion"/>: only a probe of the site's other versions did.</param>
+/// <param name="IsRateLimited">
+/// Asked, but the site only ever answered 429 Too Many Requests, however long the crawl waited: stored as not checked
+/// (<see cref="Fetched"/> false), so nothing judges it, but the crawl did try to read it.
+/// </param>
 internal readonly record struct UrlStatus(
     bool Known,
     bool IsInternal,
@@ -31,7 +35,8 @@ internal readonly record struct UrlStatus(
     bool InSitemap,
     bool IsMetaRefresh = false,
     bool IsResource = false,
-    DiscoverySource Source = DiscoverySource.Link)
+    DiscoverySource Source = DiscoverySource.Link,
+    bool IsRateLimited = false)
 {
     /// <summary>Statuses many sites send crawlers but not people (Amazon answers unknown bots with 503, LinkedIn with 999).</summary>
     private static readonly HashSet<int> BOT_REFUSALS = [401, 403, 405, 429, 503, 999];

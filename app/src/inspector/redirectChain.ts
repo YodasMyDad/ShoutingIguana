@@ -53,7 +53,7 @@ function endWithoutCode(outcome: UrlOutcome | null): string {
   if (outcome === 'timeout' || outcome === 'networkError') return 'The chain ends at a URL that didn’t answer.';
   if (outcome === 'blocked') return 'The chain ends at a URL whose server refused the crawler.';
   if (outcome === 'notChecked') {
-    return 'The chain ends at a URL the crawl didn’t request: its host had stopped answering.';
+    return 'The chain ends at a URL the crawl couldn’t check: its host had stopped answering, asked the crawler to slow down, or is on a private network.';
   }
   // Queued or left alone: a hop comes without its state, so only that it wasn't fetched.
   if (outcome === null) return 'The chain ends at a URL the crawl didn’t fetch.';

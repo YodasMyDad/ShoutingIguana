@@ -38,8 +38,13 @@ public static class AnalysisFreshness
     /// images at fault as the image checks' targets (they group by image), names in a detail what it counts (each title,
     /// H1, canonical, missing section, a loop's hops) and the limit a measurement is over, and counts the pages that use
     /// each URL in the URL summary (<c>used_on</c>). 10 is both together, so an analysis either 9 stored is out of date.
+    /// 11 is the polite crawl's: <c>internal-blocked</c> is a notice for a firewall or bot protection's refusal only, as a
+    /// 429 is held back and asked again, and stored as not checked if it never gets through; and the notes tell the URLs
+    /// not checked for a site asking to slow down, or for a private network address, apart from those whose site stopped
+    /// answering. Pages stored as not checked for a site asking to slow down still count as refused when the orphan check
+    /// is skipped for the pages the crawl couldn't read.
     /// </summary>
-    public const int VERSION = 10;
+    public const int VERSION = 11;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

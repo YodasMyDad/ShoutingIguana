@@ -33,13 +33,19 @@ public sealed record CrawlOptions
     /// <summary>Maximum link depth from the start URL. 0 means unlimited.</summary>
     public int MaxDepth { get; init; }
 
-    /// <summary>Parallel requests to the site being crawled.</summary>
+    /// <summary>
+    /// Parallel requests to the site being crawled, at most: the ceiling of the pace each host is asked at, which starts
+    /// at one and grows while the host answers well.
+    /// </summary>
     public int Concurrency { get; init; } = 5;
 
     /// <summary>Parallel status checks against other sites.</summary>
     public int ExternalConcurrency { get; init; } = 4;
 
-    /// <summary>Request cap per host. 0 means as fast as concurrency allows, with automatic backoff.</summary>
+    /// <summary>
+    /// Request cap per host: the ceiling of the pace it is asked at, which starts at one a second, grows while the host
+    /// answers well and slows when it asks. 0 means no cap: as fast as concurrency and the host's answers allow.
+    /// </summary>
     public double MaxRequestsPerSecond { get; init; }
 
     public UserAgentPreset UserAgent { get; init; } = UserAgentPreset.ShoutingIguana;

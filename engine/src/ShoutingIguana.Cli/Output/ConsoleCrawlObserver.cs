@@ -34,6 +34,16 @@ internal sealed class ConsoleCrawlObserver(bool quiet) : ICrawlObserver
         var line = string.Create(CultureInfo.InvariantCulture,
             $"[{Format.Duration(progress.Elapsed)}] {progress.Fetched:N0} fetched ({progress.PagesPerSecond:N0}/s) | {progress.HtmlPages:N0} pages | {progress.Queued:N0} queued | {progress.InFlight} in flight | {progress.Errors:N0} errors | {progress.Blocked:N0} blocked | {Format.Bytes(progress.BytesDownloaded)}");
 
+        // A section the site limits apart is read one page at a time: said plainly, with what is left and when it goes on.
+        foreach (var wait in progress.Waits.Where(wait => wait is { Reason: CrawlWaitReason.SectionLimited, Duration: not null }))
+        {
+            var seconds = wait.Duration!.Value.TotalSeconds;
+            var next = seconds < 120
+                ? string.Create(CultureInfo.InvariantCulture, $"{Math.Ceiling(seconds):0} s")
+                : string.Create(CultureInfo.InvariantCulture, $"{Math.Ceiling(seconds / 60):0} min");
+            line += string.Create(CultureInfo.InvariantCulture, $" | {wait.Host} limits {wait.Section} pages: {wait.Urls ?? 0:N0} left, next try in {next}");
+        }
+
         lock (_sync)
         {
             if (_interactive)

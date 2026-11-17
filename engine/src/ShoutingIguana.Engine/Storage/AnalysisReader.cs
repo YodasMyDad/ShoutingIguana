@@ -96,9 +96,17 @@ internal sealed class AnalysisReader : IDisposable
         return ids;
     }
 
-    /// <summary>URLs that were never requested because their host had stopped answering.</summary>
+    /// <summary>
+    /// URLs that were never checked: their host had stopped answering, it kept asking the crawler to slow down, or it is
+    /// on a private network address a public site's crawl doesn't ask (<see cref="CountNotCheckedFor"/> tells them apart).
+    /// </summary>
     public int CountNotChecked() =>
         Convert.ToInt32(CrawlDatabase.Scalar(_connection, $"SELECT COUNT(*) FROM responses r WHERE {NOT_CHECKED}"), CultureInfo.InvariantCulture);
+
+    /// <summary>URLs never checked whose error starts with <paramref name="error"/>, one of the engine's own (no quotes in it).</summary>
+    public int CountNotCheckedFor(string error) => Convert.ToInt32(CrawlDatabase.Scalar(_connection,
+        $"SELECT COUNT(*) FROM responses r WHERE substr(r.error, 1, {error.Length}) = '{error}'"),
+        CultureInfo.InvariantCulture);
 
     /// <summary>The URLs <see cref="ReadUrls"/> will read: ids run from 1 with none missing, so the highest is the count.</summary>
     public int CountUrls() => Convert.ToInt32(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM urls"), CultureInfo.InvariantCulture);
@@ -118,7 +126,8 @@ internal sealed class AnalysisReader : IDisposable
         Rows($"""
             SELECT u.id, u.is_internal, substr(u.url, 1, 6) = 'https:', u.depth, u.source,
                    r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
-                   r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type
+                   r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type,
+                   COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0)
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -146,7 +155,8 @@ internal sealed class AnalysisReader : IDisposable
                 SizeBytes: reader.IsDBNull(11) ? null : reader.GetInt64(11),
                 InSitemap: inSitemap[id],
                 IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType),
-                Source: (DiscoverySource)reader.GetInt32(4));
+                Source: (DiscoverySource)reader.GetInt32(4),
+                IsRateLimited: reader.GetBoolean(15));
             read++;
             progress?.Advance(read);
         });

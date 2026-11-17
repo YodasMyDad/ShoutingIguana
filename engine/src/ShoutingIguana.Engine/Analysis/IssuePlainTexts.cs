@@ -71,7 +71,7 @@ public static class IssuePlainTexts
             """No page or file failed to answer"""),
 
         ["internal-blocked"] = new(
-            """Pages or files your site's security wouldn't show""",
+            """Pages or files that refused the check""",
             [
                 """Your site's firewall or security service turned the check away from some addresses, so they couldn't be read.""",
                 """Any problems on those addresses are missing from these results.""",
@@ -80,11 +80,10 @@ public static class IssuePlainTexts
             [
                 """Open one of the addresses in your browser to see that it loads for you.""",
                 """Ask your hosting company, or whoever runs the firewall, to let Shouting Iguana through, then check the site again.""",
-                """Ask them to make sure Google and other search engines aren't turned away by the same rules.""",
-                """Check again at the "Polite" speed if the list shows "too many requests" (a 429): the check was asking too fast."""
+                """Ask them to make sure Google and other search engines aren't turned away by the same rules."""
             ],
             IssueFixer.Developer,
-            """No page or file was refused by the site's security"""),
+            """No page or file refused the check"""),
 
         ["soft-404"] = new(
             """Pages that read like an error page""",

@@ -5,6 +5,11 @@
 import type { UrlDetail } from '../api/inspector';
 import { NOT_FETCHED_WORDS, TYPE_IN_A_SENTENCE, reasonPhrase } from './words';
 
+/** How the engine's error starts for a URL its site answered only with 429 Too Many Requests. */
+const RATE_LIMITED_ERROR = 'Not checked: the site asked the crawler to slow down';
+/** The engine's error for a private network address that a crawl of a public site doesn't ask. */
+const PRIVATE_ADDRESS_ERROR = 'Not checked: private network address';
+
 export type FetchKind =
   /** Found, not reached yet. */
   | 'queued'
@@ -15,7 +20,7 @@ export type FetchKind =
   | 'robots'
   /** The server refused the crawler. */
   | 'blocked'
-  /** Its host had stopped answering. */
+  /** Its host had stopped answering, kept asking the crawler to slow down, or is on a private network. */
   | 'notChecked'
   /** No answer: a timeout, a network error, or one that couldn't be read. */
   | 'failed'
@@ -99,6 +104,21 @@ export function fetchState(subject: Subject, crawling: boolean): FetchState {
         { answered: code !== null },
       );
     case 'notChecked':
+      // The engine's error says why: its site kept answering 429, it's on a private network, or its host stopped answering.
+      if (response.error?.startsWith(RATE_LIMITED_ERROR)) {
+        return state(
+          'notChecked',
+          'Not checked',
+          'The site kept asking the crawler to slow down (429 Too Many Requests), even when it was asked again at the end of the crawl.',
+        );
+      }
+      if (response.error?.startsWith(PRIVATE_ADDRESS_ERROR)) {
+        return state(
+          'notChecked',
+          'Not checked',
+          'It’s on a private network address (such as localhost), which a crawl of a public site doesn’t request.',
+        );
+      }
       return state('notChecked', 'Not checked', 'Its host had stopped answering, so the crawl didn’t request it.');
     case 'timeout':
       return state('failed', 'Timed out', 'It didn’t answer in the time the crawl allows.');

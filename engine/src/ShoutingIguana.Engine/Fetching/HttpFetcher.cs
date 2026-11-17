@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Security;
+using System.Net.Sockets;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Urls;
@@ -40,6 +41,7 @@ internal sealed class HttpFetcher : IDisposable
         _timeProvider = timeProvider;
         _userAgent = userAgent.Header;
         _timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        Guard = new PrivateNetworkGuard(options.StartUrl);
 
         var handler = new SocketsHttpHandler
         {
@@ -56,6 +58,12 @@ internal sealed class HttpFetcher : IDisposable
             Proxy = ProxyFactory.Create(options.ProxyUrl)
         };
 
+        // Connecting by itself, the crawl sees the addresses a name resolves to; through a proxy it would see the proxy's.
+        if (options.ProxyUrl is null)
+        {
+            handler.ConnectCallback = ConnectAsync;
+        }
+
         if (options.TrustedCertificate is { } trusted)
         {
             handler.SslOptions.RemoteCertificateValidationCallback = (_, certificate, _, errors) =>
@@ -65,8 +73,16 @@ internal sealed class HttpFetcher : IDisposable
         _client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
     }
 
+    /// <summary>What keeps a crawl of a public site off private network addresses.</summary>
+    public PrivateNetworkGuard Guard { get; }
+
     public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null)
     {
+        if (await Guard.RefusesAsync(uri).ConfigureAwait(false))
+        {
+            return PrivateNetworkGuard.NotChecked(uri);
+        }
+
         var stopwatch = Stopwatch.StartNew();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeout);
@@ -149,6 +165,10 @@ internal sealed class HttpFetcher : IDisposable
         {
             return Failed(uri, FetchOutcome.Timeout, $"No response within {_timeout.TotalSeconds:0} seconds", true, stopwatch);
         }
+        catch (HttpRequestException exception) when (exception.InnerException is PrivateNetworkAddressException)
+        {
+            return PrivateNetworkGuard.NotChecked(uri);
+        }
         catch (HttpRequestException exception)
         {
             var transient = exception.HttpRequestError is not (HttpRequestError.NameResolutionError or HttpRequestError.SecureConnectionError);
@@ -165,8 +185,35 @@ internal sealed class HttpFetcher : IDisposable
     }
 
     /// <summary>Sends a GET and returns once headers arrive. The caller owns the response.</summary>
-    public Task<HttpResponseMessage> SendAsync(Uri uri, CancellationToken cancellationToken) =>
-        _client.SendAsync(CreateRequest(uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+    /// <exception cref="HttpRequestException">It failed, or <see cref="Guard"/> refused the address: nothing was asked.</exception>
+    public async Task<HttpResponseMessage> SendAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        if (await Guard.RefusesAsync(uri).ConfigureAwait(false))
+        {
+            throw new HttpRequestException(PrivateNetworkGuard.ERROR, new PrivateNetworkAddressException(uri.IdnHost));
+        }
+
+        return await _client.SendAsync(CreateRequest(uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Connects as the handler would by itself (the name's addresses in turn), save those <see cref="Guard"/> refuses.
+    /// </summary>
+    private async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+    {
+        var addresses = await Guard.AddressesToConnectToAsync(context.DnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
+        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        try
+        {
+            await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, cancellationToken).ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
 
     /// <summary>Opens the response body with any Content-Encoding removed.</summary>
     public static async Task<Stream> OpenBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
@@ -357,7 +404,8 @@ internal sealed class HttpFetcher : IDisposable
         return UrlNormalizer.IsHttp(absolute) ? absolute : null;
     }
 
-    private TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    /// <summary>The response's Retry-After as a wait from now, for the fetches beside this one (sitemaps, the icon) too.</summary>
+    internal TimeSpan? GetRetryAfter(HttpResponseMessage response)
     {
         var retryAfter = response.Headers.RetryAfter;
         if (retryAfter?.Delta is { } delta)

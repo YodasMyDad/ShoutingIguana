@@ -13,8 +13,9 @@ public enum CrawlWaitReason
     CrawlDelay,
 
     /// <summary>
-    /// The site asked the crawler to slow down (429, 503, a block page) or keeps failing, so requests are spaced further
-    /// apart, easing off by half every half second. Host. Duration: the extra spacing now.
+    /// The site asked the crawler to slow down (429, or 503 with Retry-After) or kept failing, so the crawler learned a
+    /// slower pace for it, one request at a time, which rises slowly while the site answers well. Listed while it is slower
+    /// than the crawl's settings. Host. Duration: the time between requests now (one over the requests a second).
     /// </summary>
     Backoff,
 
@@ -40,5 +41,12 @@ public enum CrawlWaitReason
     /// Status checks of links to other sites wait for those sites' robots.txt, which comes before a host's first request.
     /// They hold up nothing of the site's own. Urls: how many.
     /// </summary>
-    OtherSitesRobotsTxt
+    OtherSitesRobotsTxt,
+
+    /// <summary>
+    /// The host limits one section apart from the rest (its product pages, say): that section's URLs are read one at a
+    /// time, an interval apart learned from its 429s and what got through, while the rest goes on. Host. Section: the
+    /// section, "/products/". Urls: how many are left. Duration: how long until the next of them is tried.
+    /// </summary>
+    SectionLimited
 }

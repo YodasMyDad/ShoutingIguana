@@ -7,8 +7,10 @@ namespace ShoutingIguana.Engine.Fetching;
 
 /// <summary>
 /// The polite way to fetch, shared by pages and robots.txt: through the host's gate, telling the gate how the host
-/// answered, and retrying transient failures (no response, 429, 502, 503, 504) after an exponential backoff or the
-/// server's Retry-After, capped at a minute. When <see cref="HostGate.UNREACHABLE_AFTER_URLS"/> URLs in a row on one
+/// answered so it learns the host's pace, and retrying transient failures (no response, 429, 502, 503, 504) after an
+/// exponential backoff or the server's Retry-After, capped at a minute. The site's own URLs that are asked to slow down
+/// (429, 503) aren't retried here at all: the crawl holds them back and asks again at its end, at the pace the host has
+/// taught, rather than renew a rate limit's penalty. When <see cref="HostGate.UNREACHABLE_AFTER_URLS"/> URLs in a row on one
 /// origin get no answer, another site's remaining URLs there fail at once instead of each costing several timeouts. On
 /// the site being crawled, the origin's robots.txt is asked first (headers only): an answer means the URLs failed for
 /// reasons of their own. An origin that has never answered, while the origin of the site that answered last still does,
@@ -27,6 +29,12 @@ internal sealed class RetryingFetcher(
 {
     /// <summary>Starts the error of a URL failed without a request, so the analysis can tell it from one that failed.</summary>
     internal const string NOT_CHECKED_ERROR = "Not checked";
+
+    /// <summary>
+    /// Starts the error of a URL the site answered only with 429 Too Many Requests, however long the crawl waited: not
+    /// checked, and no fault of the URL's. The analysis counts it as never fetched, as it does every "Not checked".
+    /// </summary>
+    internal const string RATE_LIMITED_ERROR = NOT_CHECKED_ERROR + ": the site asked the crawler to slow down";
 
     private const int MAX_JITTER_MS = 250;
     private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromSeconds(60);
@@ -47,8 +55,16 @@ internal sealed class RetryingFetcher(
     private Uri _lastAnswered = scope.StartOrigin;
 
     /// <param name="singleAttempt">No retries: the URL already had them, and this is its one more try at the end of the crawl.</param>
-    public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null, bool singleAttempt = false)
+    /// <param name="holdBackThrottled">A 429 or 503 comes back at once, unretried: the caller asks again later.</param>
+    public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null, bool singleAttempt = false,
+        bool holdBackThrottled = false)
     {
+        // A private address a public site's crawl won't ask: no request, so nothing to tell the gate or the origin's count.
+        if (await fetcher.Guard.RefusesAsync(uri).ConfigureAwait(false))
+        {
+            return PrivateNetworkGuard.NotChecked(uri);
+        }
+
         var gate = gates.For(uri);
         var origin = gates.OriginOf(uri);
         var isInternal = scope.IsInternal(uri);
@@ -61,18 +77,26 @@ internal sealed class RetryingFetcher(
             }
 
             FetchResponse response;
-            using (await gate.AcquireAsync(cancellationToken).ConfigureAwait(false))
+            DateTimeOffset startedAt;
+            using (var lease = await gate.AcquireAsync(cancellationToken).ConfigureAwait(false))
             {
+                startedAt = lease.StartedAt;
                 response = await fetcher.FetchAsync(uri, body, cancellationToken, maxBodyBytes).ConfigureAwait(false);
             }
 
-            var answered = Report(uri, gate, origin, isInternal, response);
+            // Its name resolved to one: refused as it connected, so nothing was asked either.
+            if (PrivateNetworkGuard.IsRefusal(response))
+            {
+                return response;
+            }
+
+            var answered = Report(uri, gate, origin, isInternal, response, startedAt);
             if (!answered && origin.IsDown)
             {
                 gate.Pause(UNREACHABLE_PAUSE);
             }
 
-            if (attempt >= retries || !IsRetryable(response))
+            if (attempt >= retries || !IsRetryable(response) || holdBackThrottled && response.IsThrottled)
             {
                 if (origin.ReportUrl(answered))
                 {
@@ -133,18 +157,21 @@ internal sealed class RetryingFetcher(
     {
         var robots = new Uri(uri, "/robots.txt");
         FetchResponse response;
-        using (await gate.AcquireAsync(cancellationToken).ConfigureAwait(false))
+        DateTimeOffset startedAt;
+        using (var lease = await gate.AcquireAsync(cancellationToken).ConfigureAwait(false))
         {
+            startedAt = lease.StartedAt;
             response = await fetcher.FetchAsync(robots, FetchBody.None, cancellationToken).ConfigureAwait(false);
         }
 
-        return Report(robots, gate, origin, isInternal: true, response);
+        return Report(robots, gate, origin, isInternal: true, response, startedAt);
     }
 
     /// <summary>Tells the gate how the host answered, and the registry whether it answered at all. Returns the latter.</summary>
-    private bool Report(Uri uri, HostGate gate, OriginReachability origin, bool isInternal, FetchResponse response)
+    private bool Report(Uri uri, HostGate gate, OriginReachability origin, bool isInternal, FetchResponse response, DateTimeOffset startedAt)
     {
-        gate.Report(SignalFor(response), response.RetryAfter);
+        gate.Report(SignalFor(response), response.RetryAfter, startedAt,
+            response.StatusCode is null ? null : TimeSpan.FromMilliseconds(response.TimeToFirstByteMs), uri);
         if (response.StatusCode is null)
         {
             return false;
@@ -167,10 +194,17 @@ internal sealed class RetryingFetcher(
         Error = $"{NOT_CHECKED_ERROR}: {uri.GetLeftPart(UriPartial.Authority)} stopped answering ({HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response)"
     };
 
-    private static HostSignal SignalFor(FetchResponse response) => response switch
+    /// <summary>
+    /// A 429 asks the crawler to slow down, whoever sends it, and so does a 503 that says when to come back; one that
+    /// doesn't is a server failing, like a 502 or 504. A firewall's block page says nothing about pace, and nor does no
+    /// answer at all, which the origin's reachability judges.
+    /// </summary>
+    internal static HostSignal SignalFor(FetchResponse response) => response switch
     {
-        { Outcome: FetchOutcome.Blocked } or { StatusCode: 429 or 503 } => HostSignal.Throttled,
-        { Outcome: FetchOutcome.Timeout or FetchOutcome.NetworkError } or { StatusCode: 502 or 504 } => HostSignal.Failed,
+        { StatusCode: 429 } or { StatusCode: 503, RetryAfter: not null } => HostSignal.Throttled,
+        { Outcome: FetchOutcome.Blocked } => HostSignal.Refused,
+        { StatusCode: 502 or 503 or 504 } => HostSignal.Failed,
+        { StatusCode: null } => HostSignal.NoAnswer,
         _ => HostSignal.Success
     };
 

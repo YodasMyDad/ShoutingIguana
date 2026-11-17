@@ -135,12 +135,17 @@ public sealed class LiveProgressTests : IAsyncLifetime
         var time = new FakeTimeProvider();
 
         await using var job = Start(Options(_server), time);
-        var progress = await ProgressAsync(job, progress => progress.Waits.Any(wait => wait.Reason == CrawlWaitReason.HeldBack));
 
-        var held = Assert.Single(progress.Waits, wait => wait.Reason == CrawlWaitReason.HeldBack);
+        // The clock moves on as the crawl's slow start spaces its first requests, a second at most.
+        var progress = await ProgressAsync(job, progress => progress.Waits.Any(wait => wait.Reason == CrawlWaitReason.SectionLimited), time);
+
+        // The 429 is the root pages' (the home page's), so it is that section's wait: its next try comes after the
+        // Retry-After it asked for.
+        var held = Assert.Single(progress.Waits, wait => wait.Reason == CrawlWaitReason.SectionLimited);
         Assert.Equal("127.0.0.1", held.Host);
+        Assert.Equal("/", held.Section);
+        Assert.Equal(1, held.Urls);
         Assert.InRange(held.Duration!.Value, TimeSpan.FromSeconds(25), TimeSpan.FromSeconds(30));
-        Assert.Contains(progress.Waits, wait => wait is { Reason: CrawlWaitReason.Backoff, Host: "127.0.0.1" } && wait.Duration > TimeSpan.Zero);
         await job.StopAsync();
     }
 
@@ -459,11 +464,13 @@ public sealed class LiveProgressTests : IAsyncLifetime
             return progress.Phase == phase;
         });
 
-    private static async Task<CrawlProgress> ProgressAsync(CrawlJob job, Func<CrawlProgress, bool> condition)
+    /// <param name="pump">A fake clock to move on 50 ms at each look, for a crawl whose requests are spaced on it.</param>
+    private static async Task<CrawlProgress> ProgressAsync(CrawlJob job, Func<CrawlProgress, bool> condition, FakeTimeProvider? pump = null)
     {
         var deadline = DateTime.UtcNow + WAIT;
         while (true)
         {
+            pump?.Advance(TimeSpan.FromMilliseconds(50));
             var progress = job.Progress;
             if (condition(progress))
             {
