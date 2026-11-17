@@ -86,7 +86,7 @@ export const AnalysisRefused: Story = {
     () =>
       ownSidecar([
         ...analysisRoutes({
-          titleMaxLength: ['The longest title allowed must be more than the shortest (30).'],
+          titleMaxPixels: ['The widest title allowed must be more than the narrowest (200).'],
           settings: ['These limits can’t all hold at once.'],
         }),
         ...standardRoutes(),
@@ -95,14 +95,14 @@ export const AnalysisRefused: Story = {
   render: () => (
     <QueryClientProvider client={createQueryClient()}>
       <div className="max-w-(--form-max) p-6">
-        <LimitsForm settings={analysisSettingsOf({})} initialDraft={{ titleMaxLength: '20' }} />
+        <LimitsForm settings={analysisSettingsOf({})} initialDraft={{ titleMaxPixels: '150' }} />
       </div>
     </QueryClientProvider>
   ),
 };
 /** Limits changed from the engine's: each with Put back. */
 export const AnalysisChanged = at('/settings/analysis', 'advanced', () =>
-  ownSidecar([...analysisRoutes({}, { titleMaxLength: 70, slowResponseMs: 2_000 }), ...standardRoutes()]),
+  ownSidecar([...analysisRoutes({}, { titleMaxPixels: 700, slowResponseMs: 2_000 }), ...standardRoutes()]),
 );
 /** The limits couldn't be read. */
 export const AnalysisFailed = at('/settings/analysis', 'advanced', () =>

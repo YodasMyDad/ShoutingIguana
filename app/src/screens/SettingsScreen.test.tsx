@@ -75,7 +75,7 @@ const EVERY_SECTION = [
 const READY: Record<string, () => Promise<unknown>> = {
   general: () => screen.findByRole('radiogroup', { name: 'Density' }),
   'crawl-defaults': () => screen.findByRole('radio', { name: 'Polite' }),
-  analysis: () => screen.findByRole('textbox', { name: 'Longest title' }),
+  analysis: () => screen.findByRole('textbox', { name: 'Widest title' }),
   data: () => screen.findByText('C:\\data'),
   shortcuts: () => screen.findByText('Open settings'),
   diagnostics: () => screen.findByText('C:\\state'),

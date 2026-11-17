@@ -141,7 +141,8 @@ export interface Check {
   plainLooksFor?: string | null;
   /**
    * Evidence (step 3b): the URL columns that show what the check found, in the order to show them, beside each row's
-   * `url` and `detail` (`["title", "titleLength"]` for `title-too-long`, `["redirectChain"]` for the redirect checks).
+   * `url` and `detail` (`["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
+   * `["redirectChain"]` for the redirect checks).
    * Ask `/rows` for them as for any column. Empty for a check whose URL and detail say it all. Left out by a sidecar
    * from before it, which reads as empty.
    */
@@ -391,11 +392,11 @@ export type OutOfDateReason = 'crawlChanged' | 'engineChanged' | 'settingsChange
 
 // ----------------------------------------------------------------------------------------- Analysis settings (E6)
 
-export type AnalysisLimitUnit = 'characters' | 'words' | 'bits' | 'bytes' | 'ms';
+export type AnalysisLimitUnit = 'characters' | 'pixels' | 'words' | 'bits' | 'bytes' | 'ms';
 
-/** One limit an analysis judges by ("a title longer than this is too long"), with what Settings needs to show it. */
+/** One limit an analysis judges by ("a title wider than this is too long"), with what Settings needs to show it. */
 export interface AnalysisLimit {
-  /** The limit's name, as the engine's analysis settings and every crawl file have it: `titleMaxLength`. */
+  /** The limit's name, as the engine's analysis settings and every crawl file have it: `titleMaxPixels`. */
   id: string;
   /** The value in force. */
   value: number;
@@ -407,6 +408,12 @@ export interface AnalysisLimit {
   max: number;
   /** One sentence saying what the limit does, to show as it is. */
   description: string;
+  /**
+   * For a width in pixels only (a title's or a description's, as Google's results show it), how wide an ordinary
+   * character is: the value over it is about how many characters fit ("about 60 characters" for 580 px of title).
+   * Left out for every other limit.
+   */
+  pixelsPerCharacter?: number;
 }
 
 /**
@@ -431,7 +438,7 @@ export interface AnalysisSettings {
 export type AnalysisSettingsChange = Record<string, number | null>;
 
 /**
- * What `invalid-settings` (and `validate`) key their messages by: a limit's name (`titleMaxLength`) for a value of its
+ * What `invalid-settings` (and `validate`) key their messages by: a limit's name (`titleMaxPixels`) for a value of its
  * own; `settings` (`ANALYSIS_SETTINGS_WHOLE`) for a rule only the limits together break; and, for a reset,
  * `limits[<index>]` for a name that's no limit's. Show a key with no field of its own above the form.
  */

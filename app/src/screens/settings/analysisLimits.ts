@@ -2,17 +2,17 @@
 // in words, what's typed held as typed, and the engine's errors sorted into those of a field and those of the whole.
 // Pure, so every word is tested.
 import type { AnalysisLimit, AnalysisSettingsChange } from '../../api/types';
-import { formatBytes, formatCount } from '../../lib/format';
+import { formatBytes, formatCount, formatCountOf } from '../../lib/format';
 
 /** The limits' read: one for the app, as the engine keeps one set for every crawl. */
 export const ANALYSIS_SETTINGS_KEY = ['analysis-settings'] as const;
 
 /** Each limit's name in the list: the engine gives what it does, in a sentence; the name is the app's. */
 const NAMES: Readonly<Record<string, string>> = {
-  titleMinLength: 'Shortest title',
-  titleMaxLength: 'Longest title',
-  descriptionMinLength: 'Shortest meta description',
-  descriptionMaxLength: 'Longest meta description',
+  titleMinPixels: 'Narrowest title',
+  titleMaxPixels: 'Widest title',
+  descriptionMinPixels: 'Narrowest meta description',
+  descriptionMaxPixels: 'Widest meta description',
   minWordCount: 'Fewest words on a page',
   duplicateMinWordCount: 'Fewest words to compare for duplicates',
   nearDuplicateMaxBits: 'Near-duplicate distance',
@@ -33,29 +33,57 @@ export function limitName(id: string): string {
 
 const UNIT_WORDS: Record<string, [string, string]> = {
   characters: ['character', 'characters'],
+  pixels: ['px', 'px'],
   words: ['word', 'words'],
   bits: ['bit', 'bits'],
   bytes: ['byte', 'bytes'],
   ms: ['ms', 'ms'],
 };
 
-/** "60 characters", "1 word", "1,000 ms", "200 KB" for bytes. */
+/** "60 characters", "580 px", "1 word", "1,000 ms", "200 KB" for bytes. */
 export function valueWords(value: number, unit: string): string {
   if (unit === 'bytes') return formatBytes(value);
   const [one, many] = UNIT_WORDS[unit] ?? [unit, unit];
   return `${formatCount(value)} ${value === 1 ? one : many}`;
 }
 
-/** The unit beside the field: "characters", "ms". */
+/** The unit beside the field: "characters", "px", "ms". */
 export function unitWords(unit: string): string {
   return UNIT_WORDS[unit]?.[1] ?? unit;
 }
 
-/** "From 1 to 10,000 characters. The engine’s is 60 characters." */
+/**
+ * "From 1 to 10,000 characters. The engine’s is 115 characters."; a width with the characters it holds, "From 1 to
+ * 100,000 px. The engine’s is 580 px (about 60 characters)."
+ */
 export function rangeWords(limit: AnalysisLimit): string {
   const range = `From ${formatCount(limit.min)} to ${formatCount(limit.max)} ${unitWords(limit.unit)}`;
   const bytes = limit.unit === 'bytes' ? ` (${formatBytes(limit.max)})` : '';
-  return `${range}${bytes}. The engine’s is ${valueWords(limit.default, limit.unit)}.`;
+  const about = limit.pixelsPerCharacter
+    ? ` (about ${formatCountOf(approximateCharacters(limit.default, limit.pixelsPerCharacter), 'character')})`
+    : '';
+  return `${range}${bytes}. The engine’s is ${valueWords(limit.default, limit.unit)}${about}.`;
+}
+
+/**
+ * About how many ordinary characters fit in a width: 580 px of title is about 60, 200 about 20, 985 px of description
+ * about 160 and 400 about 65. Rounded as the engine's plain words round it (`PlainLimits.ApproximateCharacters`): to the
+ * nearest 5 from 20 on, to the nearest whole below.
+ */
+export function approximateCharacters(pixels: number, pixelsPerCharacter: number): number {
+  const characters = pixels / pixelsPerCharacter;
+  return characters >= 20 ? Math.round(characters / 5) * 5 : Math.round(characters);
+}
+
+/**
+ * Under a width's field, what's typed as the characters it holds: "About 60 characters of ordinary text." Null for a
+ * limit that isn't a width, and for a field that's empty or holds no width the engine would take.
+ */
+export function charactersHint(limit: AnalysisLimit, typed: string): string | null {
+  if (!limit.pixelsPerCharacter) return null;
+  const value = changeOf({ [limit.id]: typed })[limit.id];
+  if (typeof value !== 'number' || value < limit.min || value > limit.max) return null;
+  return `About ${formatCountOf(approximateCharacters(value, limit.pixelsPerCharacter), 'character')} of ordinary text.`;
 }
 
 /** What's typed in each field, as typed: a half-typed value stays, and reaches the engine as typed for its message. */

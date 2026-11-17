@@ -177,7 +177,20 @@ describe('the mock’s analysis settings', () => {
     const read = body(settings.get());
     expect(read.isDefault).toBe(true);
     expect(read.limits.map((limit) => limit.id)).toEqual(ANALYSIS_LIMITS.map((limit) => limit.id));
-    expect(read.settings.titleMaxLength).toBe(60);
+    expect(read.settings.titleMaxPixels).toBe(580);
+    // A width says how wide an ordinary character is, for the characters it holds; no other limit does.
+    expect(read.limits.find((limit) => limit.id === 'titleMaxPixels')).toMatchObject({
+      unit: 'pixels',
+      min: 1,
+      max: 100_000,
+      pixelsPerCharacter: 9.4,
+    });
+    expect(read.limits.find((limit) => limit.id === 'descriptionMinPixels')).toMatchObject({
+      default: 400,
+      min: 0,
+      pixelsPerCharacter: 6.2,
+    });
+    expect(read.limits.find((limit) => limit.id === 'maxUrlLength')?.pixelsPerCharacter).toBeUndefined();
     expect(read.limits.find((limit) => limit.id === 'largeImageBytes')).toMatchObject({
       value: 204_800,
       unit: 'bytes',
@@ -187,45 +200,47 @@ describe('the mock’s analysis settings', () => {
 
   it('saves limits, each checked by itself and the pairs together, and resets one or all', () => {
     const settings = createAnalysisSettings();
-    expect(body(settings.put({ titleMaxLength: 70, minWordCount: null }))).toMatchObject({
+    expect(body(settings.put({ titleMaxPixels: 700, minWordCount: null }))).toMatchObject({
       isDefault: false,
-      settings: { titleMaxLength: 70, minWordCount: 200 },
+      settings: { titleMaxPixels: 700, minWordCount: 200 },
     });
 
-    const outOfRange = settings.put({ titleMaxLength: 0, maxUrlLength: 1.5 });
+    const outOfRange = settings.put({ titleMaxPixels: 0, maxUrlLength: 1.5 });
     expect(outOfRange.status).toBe(422);
     expect(outOfRange.body).toMatchObject({
       type: 'invalid-settings',
       errors: {
-        titleMaxLength: ['This must be from 1 to 10,000 characters.'],
+        titleMaxPixels: ['This must be from 1 to 100,000 pixels.'],
         maxUrlLength: ['This must be a whole number.'],
       },
     });
-    expect(settings.put({ titleMinLength: 80 }).body).toMatchObject({
-      errors: { titleMaxLength: [expect.stringContaining('more than the shortest (80)')] },
+    expect(settings.put({ titleMinPixels: 800 }).body).toMatchObject({
+      errors: { titleMaxPixels: ['The widest title allowed must be more than the narrowest (800).'] },
     });
+    // The old names, in characters, are no limit's.
+    expect(settings.put({ titleMaxLength: 60 }).status).toBe(400);
     expect(settings.put({ colour: 1 }).status).toBe(400);
     expect(settings.put([1]).status).toBe(400);
-    expect(body(settings.get()).settings.titleMaxLength).toBe(70);
+    expect(body(settings.get()).settings.titleMaxPixels).toBe(700);
 
-    expect(settings.validate({ titleMaxLength: 0 })).toEqual({
+    expect(settings.validate({ titleMaxPixels: 0 })).toEqual({
       status: 200,
-      body: { errors: { titleMaxLength: ['This must be from 1 to 10,000 characters.'] } },
+      body: { errors: { titleMaxPixels: ['This must be from 1 to 100,000 pixels.'] } },
     });
-    expect(settings.validate({ titleMaxLength: 61 })).toEqual({ status: 200, body: { errors: {} } });
+    expect(settings.validate({ titleMaxPixels: 581 })).toEqual({ status: 200, body: { errors: {} } });
 
     // A name that's no limit's is keyed by its place in the list, and changes nothing.
-    expect(settings.reset({ limits: ['titleMaxLength', 'colour'] }).body).toMatchObject({
+    expect(settings.reset({ limits: ['titleMaxPixels', 'colour'] }).body).toMatchObject({
       type: 'invalid-settings',
       errors: { 'limits[1]': [expect.any(String)] },
     });
-    expect(body(settings.get()).settings.titleMaxLength).toBe(70);
+    expect(body(settings.get()).settings.titleMaxPixels).toBe(700);
 
-    // Resetting one of a pair that would leave the longest under the shortest puts both back.
-    settings.put({ titleMinLength: 65, titleMaxLength: 70 });
-    expect(body(settings.reset({ limits: ['titleMaxLength'] })).settings).toMatchObject({
-      titleMinLength: 30,
-      titleMaxLength: 60,
+    // Resetting one of a pair that would leave the widest under the narrowest puts both back.
+    settings.put({ titleMinPixels: 650, titleMaxPixels: 700 });
+    expect(body(settings.reset({ limits: ['titleMaxPixels'] })).settings).toMatchObject({
+      titleMinPixels: 200,
+      titleMaxPixels: 580,
     });
     settings.put({ slowResponseMs: 2_000 });
     expect(body(settings.reset(undefined)).isDefault).toBe(true);
@@ -311,8 +326,8 @@ describe('the mock’s E6 routes', () => {
     expect([icon.status, icon.headers.get('Content-Type')]).toEqual([200, 'image/png']);
     expect(new Uint8Array(await icon.arrayBuffer())).toEqual(SYNTHETIC_FAVICON);
     expect(((await (await send('GET', '/api/analysis-settings')).json()) as AnalysisSettings).isDefault).toBe(true);
-    expect((await send('PUT', '/api/analysis-settings', { titleMaxLength: 0 })).status).toBe(422);
-    expect((await send('POST', '/api/analysis-settings/validate', { titleMaxLength: 0 })).status).toBe(200);
+    expect((await send('PUT', '/api/analysis-settings', { titleMaxPixels: 0 })).status).toBe(422);
+    expect((await send('POST', '/api/analysis-settings/validate', { titleMaxPixels: 0 })).status).toBe(200);
     expect((await send('POST', '/api/analysis-settings/reset')).status).toBe(200);
     for (const [method, path] of [
       ['POST', '/search'],
