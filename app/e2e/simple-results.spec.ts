@@ -53,6 +53,19 @@ async function facts() {
   return { crawl, analysis, checks, byId, counts, found };
 }
 
+/**
+ * "9 addresses", as a row in Simple's lists writes a check's count (without what it's a share of, so rows compare),
+ * then the points fixing it gives back, when it gives some: "9 addresses 2 points back".
+ */
+function rowWords(check: Check, count: number, points: number): string {
+  const words = check.siteWide
+    ? 'The whole site'
+    : check.reportedOnce
+      ? 'Once, for the whole site'
+      : `${number(count)} ${(check.subject ?? 'page') === 'page' ? (count === 1 ? 'page' : 'pages') : count === 1 ? 'address' : 'addresses'}`;
+  return points > 0 ? `${words} ${number(points)} ${points === 1 ? 'point' : 'points'} back` : words;
+}
+
 /** "9 of 4,521 addresses", as Simple writes a check's count and what it is a share of. */
 function shareOf(check: Check, count: number, analysis: Analysis): string {
   if (check.siteWide) return 'The whole site';
@@ -185,7 +198,8 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
   for (const row of firstRows) {
     const id = row.href.split('/').pop() ?? '';
     const check = byId.get(id)!;
-    expect(row.count).toBe(shareOf(check, counts.get(id) ?? 0, analysis));
+    const points = analysis.score?.lines.find((line) => line.checkId === id)?.points ?? 0;
+    expect(row.count).toBe(rowWords(check, counts.get(id) ?? 0, points));
   }
 
   // What to fix: every problem's count is the engine's, and its page says the same and lists exactly that many.
@@ -202,7 +216,8 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
     const check = byId.get(id)!;
     const count = counts.get(id) ?? 0;
     const share = shareOf(check, count, analysis);
-    expect(row.count).toBe(share);
+    // A row folded under another says no points (they're on that row); any other its own, or with what's folded under it.
+    expect(row.count.startsWith(rowWords(check, count, 0)), `${id}: ${row.count}`).toBe(true);
     await page.goto(row.href);
     await expect(main(page).getByRole('heading', { level: 1 })).toBeVisible();
     await expect(main(page).getByRole('list').first()).toContainText(share);

@@ -22,7 +22,12 @@ export const SYNTHETIC_CRAWL = '5d66706ffdaef5e0';
 
 /** Every story starts clean: nothing hidden, nothing live. */
 export function freshStory(): void {
-  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {}, gridColumns: {} });
+  updateSettings({
+    hiddenChecks: [],
+    hiddenChecksByCrawl: {},
+    gridColumns: {},
+    checkSort: { advanced: 'fixFirst', simple: 'fixFirst' },
+  });
   liveStore.reset();
   // No secrets kept from the story before, as a new run of the app. The credential store is the story’s own to set.
   resetSessionSecretsForTests();

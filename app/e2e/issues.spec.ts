@@ -34,7 +34,11 @@ async function openIssues(page: Page) {
 
 test('triage: pick a check, read it, open a group, its URLs, inspect one, then Esc and Alt+Left', async ({ page }) => {
   await openIssues(page);
-  await expect(page.getByText(/^\d+ checks found [\d,]+ issues on this crawl\./)).toBeVisible();
+  await expect(
+    page.getByText(
+      /^(About [\d,]+ things to change|1 thing to change)[^:]*: \d+ checks found [\d,]+ issues on this crawl\./,
+    ),
+  ).toBeVisible();
 
   await page.getByRole('option', { name: /Duplicate title/ }).click();
   await expect(page).toHaveURL(/\/issues\/title-duplicate$/);

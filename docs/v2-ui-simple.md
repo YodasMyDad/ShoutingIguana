@@ -286,14 +286,21 @@ The sentence is built from counts only:
 - **Order and grouping.** Three groups, by severity, each with its count and one line on what the group means:
   Serious ("These stop pages working or being found. Fix them first"), Worth fixing ("These hold pages back"),
   Worth a look ("Often fine as they are. They don't change the score: read each one and decide"). Within a group,
-  a site-wide fault first, then the most affected: the engine's "Fix first" order. Then **Couldn't check**, always
-  listed with reasons, and **Nothing wrong**, folded.
+  a site-wide fault first, then the most affected: the engine's "Fix first" order, or, from the **Order** menu (step
+  3b, remembered for Simple), the most points back or the most found first. Then **Couldn't check**, always listed
+  with reasons, and **Nothing wrong**, folded.
+- **Related problems are one job (step 3b).** A problem a fix of another clears entirely (the analysis's
+  `clears[].all`: restoring 9 missing addresses clears the broken links on all 5 pages) is folded under that one, in
+  the same group: "Fixed along with the problem above", and the row above carries the points of both ("6 points
+  back").
 - **How many at once.** Every Serious and Worth fixing problem. Worth a look shows its first three and "Show all
   13 things worth a look" while anything above needs fixing; with nothing above, it shows them all. Nothing wrong
   is folded behind "Show the 63 checks that found nothing wrong", and lists each check's good-news line ("Every
   page has a title"). Why fold: 13 notices and 63 passes would bury 6 problems.
 - **A row** has at most two labels: the severity mark, and "One fix" when one cause covers most of the pages.
-  Then the plain title, the first sentence of what's wrong, and "5 of 265 pages".
+  Then the plain title, the first sentence of what's wrong, and "5 pages", with the points fixing it gives back
+  under it ("4 points back"). A row doesn't say what its count is a share of (step 3b: "9 of 4,521 addresses" beside
+  "5 of 265 pages" couldn't be compared); the problem's page does.
 - **No search and no filter.** A site has at most 86 rows here. Advanced has both.
 - **Copy this list** copies the titles, counts and one-line summaries as text. **Open the report** is beside it.
 - **Hidden checks** (hidden in Advanced) stay out of the list, and a last line says "1 check is hidden", with
@@ -306,7 +313,8 @@ The sentence is built from counts only:
 
 - **Head.** Back to What to fix; the severity badge; the plain title; one line of three facts: "5 of 265 pages",
   "Takes 4 points off the score" (or "Doesn't change the score"), "Usually fixed by you, in your site's editor".
-  At the right, **See it in Advanced**.
+  At the right, **See it in Advanced**. Under the facts (step 3b), what fixing it also fixes ("Fixing this also fixes
+  Links that lead to broken pages: all 5 pages, 4 more points back.") and which problem's fix fixes it, each a link.
 - **Two columns:** "What's wrong, and why it matters" and "How to fix it", as numbered steps.
 - **Where it is.** The check's groups, as Advanced has them, in plain columns: the cause on the left ("This address
   doesn't work"), and where it is on the right ("Linked from"), each page by its title and its address. A check

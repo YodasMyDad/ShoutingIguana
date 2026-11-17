@@ -59,7 +59,11 @@ const crawled = async (page: Page) =>
 
 test('the answer comes first, and Fix first leads to its check in Issues', async ({ page }) => {
   await openOverview(page);
-  await expect(main(page).getByText(/^\d+ checks found [\d,]+ issues on this crawl\./)).toBeVisible();
+  await expect(
+    main(page).getByText(
+      /^(About [\d,]+ things to change|1 thing to change)[^:]*: \d+ checks found [\d,]+ issues on this crawl\./,
+    ),
+  ).toBeVisible();
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
 
   const first = page.getByRole('region', { name: 'Fix first' }).getByRole('listitem').first().getByRole('link');
@@ -174,7 +178,11 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   const answer = main(page).getByRole('heading', { name: 'Fix first' });
   await expect(answer).toBeVisible({ timeout: 150_000 });
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
-  await expect(main(page).getByText(/^\d+ checks found [\d,]+ issues on this crawl\./)).toBeVisible();
+  await expect(
+    main(page).getByText(
+      /^(About [\d,]+ things to change|1 thing to change)[^:]*: \d+ checks found [\d,]+ issues on this crawl\./,
+    ),
+  ).toBeVisible();
   await expect(main(page).getByRole('list', { name: 'Status codes by class' })).toBeVisible();
   // "Pages" is one count everywhere: the test site has an iframe's target, which answers 2xx with HTML but was only
   // status-checked, so it isn't one of the pages read, nor one of the pages by depth.
