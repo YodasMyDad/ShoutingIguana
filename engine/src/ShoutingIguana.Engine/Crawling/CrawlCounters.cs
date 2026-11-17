@@ -120,6 +120,27 @@ internal sealed class CrawlCounters
         _queued++;
     }
 
+    /// <summary>
+    /// A recheck let a URL go (nothing leads to it any more): its stored response, if it had one, is dropped, and it counts
+    /// as skipped rather than found.
+    /// </summary>
+    /// <param name="isSiteUrl">One of the site's own URLs: internal, and not a probe of the site's other versions.</param>
+    /// <param name="wasCounted">It was counted as found rather than skipped.</param>
+    public void OnLetGo(RecordedResponse? response, bool isSiteUrl, bool wasCounted)
+    {
+        if (response is { } stored)
+        {
+            AddResponses(stored.Outcome, stored.StatusCode, -1, stored.IsSitePage ? -1 : 0, -stored.Bytes,
+                stored.IsSiteUrl ? -1 : 0, stored.IsNotChecked ? -1 : 0, stored.IsProbe);
+        }
+
+        if (wasCounted)
+        {
+            _skipped++;
+            _internalFound -= isSiteUrl ? 1 : 0;
+        }
+    }
+
     public void OnRecorded(RecordedResponse response)
     {
         _inFlight--;

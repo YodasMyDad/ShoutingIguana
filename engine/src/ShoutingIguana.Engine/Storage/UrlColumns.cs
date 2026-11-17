@@ -118,6 +118,15 @@ internal static class UrlColumns
             CrawlSql = $"CASE WHEN r.url_id IS NULL THEN NULL WHEN {AnalysisReader.NOT_CHECKED} THEN {(int)UrlOutcome.NotChecked} ELSE r.outcome END",
             Values = Enum.GetNames<UrlOutcome>().Select(Camel).ToList()
         },
+
+        // Why a URL found wasn't read: a link not followed, a limit, or (the fix loop) found by a recheck and not followed,
+        // or let go by one as no longer linked.
+        new("skipReason", UrlColumnType.Enum)
+        {
+            Source = ColumnSource.Urls, Sortable = false,
+            CrawlSql = $"CASE WHEN u.state = {(int)UrlState.Skipped} AND u.skip_reason > 0 THEN u.skip_reason END",
+            Values = Enum.GetNames<SkipReason>().Select(Camel).ToList()
+        },
         new("redirectTarget", UrlColumnType.Text)
         {
             Source = ColumnSource.Responses, CrawlSql = "(SELECT rt.url FROM urls rt WHERE rt.id = r.redirect_url_id)", UrlIdSql = "r.redirect_url_id",
@@ -158,6 +167,7 @@ internal static class UrlColumns
         {
             Source = ColumnSource.Responses, CrawlSql = "CASE WHEN r.word_count IS NOT NULL THEN r.h1_count END", Sortable = false
         },
+        new("language", UrlColumnType.Text) { Source = ColumnSource.Responses, CrawlSql = "r.language", Sortable = false },
         new("wordCount", UrlColumnType.Number) { SummarySql = "s.word_count", CrawlSql = $"CASE WHEN {FETCHED} THEN r.word_count END", Indexed = true },
         new("outlinks", UrlColumnType.Number)
         {

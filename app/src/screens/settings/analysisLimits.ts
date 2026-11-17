@@ -21,6 +21,11 @@ const NAMES: Readonly<Record<string, string>> = {
   largePageBytes: 'Largest page',
   slowResponseMs: 'Slowest response',
   maxUrlLength: 'Longest URL',
+  minInternalOutlinks: 'Fewest links to other pages',
+  maxClickDepth: 'Deepest page',
+  maxInternalLinks: 'Most internal links',
+  maxExternalLinks: 'Most links to other sites',
+  slowExternalLinkMs: 'Slowest page linked elsewhere',
 };
 
 /** A limit's name: the app's for the limits it knows, else its id in words ("someNewLimit" is "Some new limit"). */
@@ -38,6 +43,8 @@ const UNIT_WORDS: Record<string, [string, string]> = {
   bits: ['bit', 'bits'],
   bytes: ['byte', 'bytes'],
   ms: ['ms', 'ms'],
+  links: ['link', 'links'],
+  clicks: ['click', 'clicks'],
 };
 
 /** "60 characters", "580 px", "1 word", "1,000 ms", "200 KB" for bytes. */

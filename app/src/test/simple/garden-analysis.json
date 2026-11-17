@@ -1,687 +1,127 @@
 {
-  "analyzedAt": "2026-11-17T20:22:10.144Z",
+  "analyzedAt": "2026-11-17T21:05:36.611Z",
   "engineVersion": "2.0.0-alpha.1",
   "pagesAnalyzed": 265,
-  "durationMs": 353,
+  "durationMs": 247,
   "isPartial": true,
   "outOfDate": false,
   "outOfDateReasons": [],
   "notes": [
-    "No sitemap could be read, so orphan pages and pages missing from the sitemaps weren't checked.",
-    "The site's other versions (www or not, http or https) weren't all checked, so duplicate versions of the site weren't looked for.",
-    "Near-duplicate content wasn't checked: this crawl was made by an earlier version, which didn't record what the check needs. Crawl again to check it."
+    "No sitemap could be read, so orphan pages and pages missing from the sitemaps weren\u0027t checked.",
+    "The site\u0027s other versions (www or not, http or https) weren\u0027t all checked, so duplicate versions of the site weren\u0027t looked for.",
+    "Near-duplicate content wasn\u0027t checked: this crawl was made by an earlier version, which didn\u0027t record what the check needs. Crawl again to check it.",
+    "9 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them."
   ],
   "counts": [
-    {
-      "checkId": "internal-client-error",
-      "count": 9,
-      "likelyTemplate": false,
-      "causes": 9,
-      "templateCauses": 0,
-      "clears": [
-        {
-          "checkId": "broken-internal-links",
-          "pages": 5,
-          "all": true
-        }
-      ]
-    },
-    {
-      "checkId": "internal-server-error",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "internal-unreachable",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "internal-blocked",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "soft-404",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "redirect-chain",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "redirect-loop",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "redirect-broken",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "redirect-temporary",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "redirect-downgrade",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "meta-refresh",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "broken-internal-links",
-      "count": 5,
-      "likelyTemplate": false,
-      "causes": 5,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "broken-external-links",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "links-to-redirects",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "internal-nofollow-links",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "empty-anchor-text",
-      "count": 265,
-      "likelyTemplate": false,
-      "causes": 5,
-      "templateCauses": 1,
-      "clears": []
-    },
-    {
-      "checkId": "broken-fragment-links",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "noindex-page",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "nofollow-page",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "blocked-by-robots",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "snippet-blocked",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "robots-txt-unreachable",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "robots-txt-unreachable-other-origin",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "robots-txt-missing",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "site-hidden-from-search",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "canonicalised-page",
-      "count": 1,
-      "likelyTemplate": false,
-      "causes": 1,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-missing",
-      "count": 8,
-      "likelyTemplate": false,
-      "causes": 8,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-multiple",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-broken",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-to-redirect",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-to-non-indexable",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-outside-head",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-relative",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "canonical-invalid",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "noindex-with-canonical",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "sitemap-non-indexable",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "sitemap-error",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "sitemap-missing",
-      "count": 1,
-      "likelyTemplate": false,
-      "causes": 1,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "sitemap-url-other-host",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "title-missing",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "title-multiple",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "title-too-long",
-      "count": 72,
-      "likelyTemplate": false,
-      "causes": 72,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "title-too-short",
-      "count": 7,
-      "likelyTemplate": false,
-      "causes": 7,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "title-duplicate",
-      "count": 6,
-      "likelyTemplate": false,
-      "causes": 3,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "description-missing",
-      "count": 11,
-      "likelyTemplate": false,
-      "causes": 11,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "description-multiple",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "description-too-long",
-      "count": 168,
-      "likelyTemplate": false,
-      "causes": 168,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "description-too-short",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "description-duplicate",
-      "count": 8,
-      "likelyTemplate": false,
-      "causes": 4,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "h1-missing",
-      "count": 1,
-      "likelyTemplate": false,
-      "causes": 1,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "h1-multiple",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "h1-duplicate",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "low-word-count",
-      "count": 7,
-      "likelyTemplate": false,
-      "causes": 7,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "duplicate-content",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "image-missing-alt",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "image-alt-too-long",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "image-missing-dimensions",
-      "count": 230,
-      "likelyTemplate": false,
-      "causes": 230,
-      "templateCauses": 2,
-      "clears": []
-    },
-    {
-      "checkId": "image-broken",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "image-too-large",
-      "count": 61,
-      "likelyTemplate": false,
-      "causes": 61,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-invalid-code",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-missing-self",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-missing-return",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-broken-target",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-to-non-indexable",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-duplicate-code",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-missing-x-default",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "hreflang-outside-head",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "structured-data-invalid",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "structured-data-missing-required",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "no-https",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "http-page",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "mixed-content",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "security-headers-missing",
-      "count": 1,
-      "likelyTemplate": false,
-      "causes": 1,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "url-uppercase",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "url-underscores",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "url-too-long",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "slow-response",
-      "count": 3,
-      "likelyTemplate": false,
-      "causes": 3,
-      "templateCauses": 0,
-      "clears": []
-    },
-    {
-      "checkId": "large-page",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "html-past-crawl-limit",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "viewport-missing",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "lang-missing",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "charset-missing",
-      "count": 0,
-      "likelyTemplate": false,
-      "causes": null,
-      "templateCauses": null,
-      "clears": []
-    },
-    {
-      "checkId": "open-graph-missing",
-      "count": 11,
-      "likelyTemplate": false,
-      "causes": 11,
-      "templateCauses": 0,
-      "clears": []
-    }
+    { "checkId": "internal-client-error", "count": 9, "likelyTemplate": false },
+    { "checkId": "internal-server-error", "count": 0, "likelyTemplate": false },
+    { "checkId": "internal-unreachable", "count": 0, "likelyTemplate": false },
+    { "checkId": "internal-blocked", "count": 0, "likelyTemplate": false },
+    { "checkId": "content-type-mismatch", "count": 0, "likelyTemplate": false },
+    { "checkId": "soft-404", "count": 0, "likelyTemplate": false },
+    { "checkId": "redirect-chain", "count": 0, "likelyTemplate": false },
+    { "checkId": "redirect-loop", "count": 0, "likelyTemplate": false },
+    { "checkId": "redirect-broken", "count": 0, "likelyTemplate": false },
+    { "checkId": "redirect-temporary", "count": 0, "likelyTemplate": false },
+    { "checkId": "redirect-temporary-cached", "count": 0, "likelyTemplate": false },
+    { "checkId": "redirect-downgrade", "count": 0, "likelyTemplate": false },
+    { "checkId": "meta-refresh", "count": 0, "likelyTemplate": false },
+    { "checkId": "broken-internal-links", "count": 5, "likelyTemplate": false },
+    { "checkId": "broken-external-links", "count": 0, "likelyTemplate": false },
+    { "checkId": "links-to-redirects", "count": 0, "likelyTemplate": false },
+    { "checkId": "internal-nofollow-links", "count": 0, "likelyTemplate": false },
+    { "checkId": "empty-anchor-text", "count": 265, "likelyTemplate": false },
+    { "checkId": "broken-fragment-links", "count": 0, "likelyTemplate": false },
+    { "checkId": "broken-resources", "count": 0, "likelyTemplate": false },
+    { "checkId": "links-to-localhost", "count": 0, "likelyTemplate": false },
+    { "checkId": "few-internal-outlinks", "count": 0, "likelyTemplate": false },
+    { "checkId": "generic-anchor-text", "count": 0, "likelyTemplate": false },
+    { "checkId": "non-indexable-inlinks-only", "count": 2, "likelyTemplate": false },
+    { "checkId": "deep-page", "count": 0, "likelyTemplate": false },
+    { "checkId": "too-many-links", "count": 0, "likelyTemplate": false },
+    { "checkId": "slow-external-links", "count": 0, "likelyTemplate": false },
+    { "checkId": "noindex-page", "count": 0, "likelyTemplate": false },
+    { "checkId": "nofollow-page", "count": 0, "likelyTemplate": false },
+    { "checkId": "blocked-by-robots", "count": 0, "likelyTemplate": false },
+    { "checkId": "snippet-blocked", "count": 0, "likelyTemplate": false },
+    { "checkId": "robots-txt-unreachable", "count": 0, "likelyTemplate": false },
+    { "checkId": "robots-txt-unreachable-other-origin", "count": 0, "likelyTemplate": false },
+    { "checkId": "robots-txt-missing", "count": 0, "likelyTemplate": false },
+    { "checkId": "site-hidden-from-search", "count": 0, "likelyTemplate": false },
+    { "checkId": "robots-directives-conflict", "count": 0, "likelyTemplate": false },
+    { "checkId": "noindex-near-home", "count": 0, "likelyTemplate": false },
+    { "checkId": "unavailable-after-passed", "count": 0, "likelyTemplate": false },
+    { "checkId": "media-preview-blocked", "count": 0, "likelyTemplate": false },
+    { "checkId": "translation-blocked", "count": 0, "likelyTemplate": false },
+    { "checkId": "indexifembedded-without-noindex", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonicalised-page", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-missing", "count": 8, "likelyTemplate": false },
+    { "checkId": "canonical-multiple", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-broken", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-to-redirect", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-to-non-indexable", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-outside-head", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-relative", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-invalid", "count": 0, "likelyTemplate": false },
+    { "checkId": "noindex-with-canonical", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-to-first-page", "count": 1, "likelyTemplate": false },
+    { "checkId": "canonical-other-domain", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-loop", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-on-redirect", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-fragment", "count": 0, "likelyTemplate": false },
+    { "checkId": "canonical-unlinked", "count": 0, "likelyTemplate": false },
+    { "checkId": "sitemap-non-indexable", "count": 0, "likelyTemplate": false },
+    { "checkId": "sitemap-error", "count": 0, "likelyTemplate": false },
+    { "checkId": "sitemap-missing", "count": 1, "likelyTemplate": false },
+    { "checkId": "sitemap-url-other-host", "count": 0, "likelyTemplate": false },
+    { "checkId": "title-missing", "count": 0, "likelyTemplate": false },
+    { "checkId": "title-multiple", "count": 0, "likelyTemplate": false },
+    { "checkId": "title-too-long", "count": 72, "likelyTemplate": false },
+    { "checkId": "title-too-short", "count": 7, "likelyTemplate": false },
+    { "checkId": "title-duplicate", "count": 6, "likelyTemplate": false },
+    { "checkId": "description-missing", "count": 11, "likelyTemplate": false },
+    { "checkId": "description-multiple", "count": 0, "likelyTemplate": false },
+    { "checkId": "description-too-long", "count": 168, "likelyTemplate": false },
+    { "checkId": "description-too-short", "count": 0, "likelyTemplate": false },
+    { "checkId": "description-duplicate", "count": 8, "likelyTemplate": false },
+    { "checkId": "h1-missing", "count": 1, "likelyTemplate": false },
+    { "checkId": "h1-multiple", "count": 0, "likelyTemplate": false },
+    { "checkId": "h1-duplicate", "count": 0, "likelyTemplate": false },
+    { "checkId": "low-word-count", "count": 7, "likelyTemplate": false },
+    { "checkId": "duplicate-content", "count": 0, "likelyTemplate": false },
+    { "checkId": "image-missing-alt", "count": 0, "likelyTemplate": false },
+    { "checkId": "image-alt-too-long", "count": 0, "likelyTemplate": false },
+    { "checkId": "image-missing-dimensions", "count": 230, "likelyTemplate": false },
+    { "checkId": "image-broken", "count": 0, "likelyTemplate": false },
+    { "checkId": "image-too-large", "count": 61, "likelyTemplate": false },
+    { "checkId": "hreflang-invalid-code", "count": 0, "likelyTemplate": false },
+    { "checkId": "hreflang-missing-self", "count": 0, "likelyTemplate": false },
+    { "checkId": "hreflang-missing-return", "count": 0, "likelyTemplate": false },
+    { "checkId": "hreflang-broken-target", "count": 0, "likelyTemplate": false },
+    { "checkId": "hreflang-to-non-indexable", "count": 0, "likelyTemplate": false },
+    { "checkId": "hreflang-duplicate-code", "count": 0, "likelyTemplate": false },
+    { "checkId": "hreflang-missing-x-default", "count": 0, "likelyTemplate": false },
+    { "checkId": "hreflang-outside-head", "count": 0, "likelyTemplate": false },
+    { "checkId": "structured-data-invalid", "count": 0, "likelyTemplate": false },
+    { "checkId": "structured-data-missing-required", "count": 0, "likelyTemplate": false },
+    { "checkId": "no-https", "count": 0, "likelyTemplate": false },
+    { "checkId": "http-page", "count": 0, "likelyTemplate": false },
+    { "checkId": "mixed-content", "count": 0, "likelyTemplate": false },
+    { "checkId": "security-headers-missing", "count": 1, "likelyTemplate": false },
+    { "checkId": "url-uppercase", "count": 0, "likelyTemplate": false },
+    { "checkId": "url-underscores", "count": 0, "likelyTemplate": false },
+    { "checkId": "url-too-long", "count": 0, "likelyTemplate": false },
+    { "checkId": "slow-response", "count": 3, "likelyTemplate": false },
+    { "checkId": "large-page", "count": 0, "likelyTemplate": false },
+    { "checkId": "html-past-crawl-limit", "count": 0, "likelyTemplate": false },
+    { "checkId": "resource-past-crawl-limit", "count": 0, "likelyTemplate": false },
+    { "checkId": "viewport-missing", "count": 0, "likelyTemplate": false },
+    { "checkId": "lang-missing", "count": 0, "likelyTemplate": false },
+    { "checkId": "charset-missing", "count": 0, "likelyTemplate": false },
+    { "checkId": "open-graph-missing", "count": 11, "likelyTemplate": false },
+    { "checkId": "viewport-invalid", "count": 0, "likelyTemplate": false },
+    { "checkId": "charset-invalid", "count": 0, "likelyTemplate": false },
+    { "checkId": "lang-invalid", "count": 0, "likelyTemplate": false }
   ],
   "skipped": [
     {
@@ -690,7 +130,61 @@
         "code": "no-sitemap",
         "text": "No sitemap could be read.",
         "plainText": "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
-        "plainAction": "Add a sitemap, or fix the one that can't be read, then check the site again."
+        "plainAction": "Add a sitemap, or fix the one that can\u0027t be read, then check the site again."
+      }
+    },
+    {
+      "checkId": "uncrawlable-links",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "pagination-not-linked",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "pagination-broken",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "pagination-to-non-indexable",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "pagination-sequence-error",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "canonical-invalid-attribute",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
       }
     },
     {
@@ -699,15 +193,15 @@
         "code": "no-sitemap",
         "text": "No sitemap could be read.",
         "plainText": "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
-        "plainAction": "Add a sitemap, or fix the one that can't be read, then check the site again."
+        "plainAction": "Add a sitemap, or fix the one that can\u0027t be read, then check the site again."
       }
     },
     {
       "checkId": "near-duplicate-content",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -715,8 +209,35 @@
       "checkId": "duplicate-site-version",
       "reason": {
         "code": "site-versions-unchecked",
-        "text": "The site's other versions (www or not, http or https) weren't all checked.",
-        "plainText": "The site's other addresses (with and without www, http and https) couldn't all be tried.",
+        "text": "The site\u0027s other versions (www or not, http or https) weren\u0027t all checked.",
+        "plainText": "The site\u0027s other addresses (with and without www, http and https) couldn\u0027t all be tried.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "head-tags-in-body",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "html-structure-errors",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "mobile-alternate",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     }
@@ -728,6 +249,7 @@
     "image-too-large",
     "title-duplicate",
     "slow-response",
+    "canonical-to-first-page",
     "empty-anchor-text",
     "image-missing-dimensions",
     "description-too-long",
@@ -738,24 +260,24 @@
     "description-duplicate",
     "title-too-short",
     "low-word-count",
-    "canonicalised-page",
+    "non-indexable-inlinks-only",
     "sitemap-missing",
     "h1-missing",
     "security-headers-missing"
   ],
   "score": {
     "version": 1,
-    "value": 87,
+    "value": 86,
     "band": "good",
-    "lost": 13,
-    "beforeCeiling": 87,
+    "lost": 14,
+    "beforeCeiling": 86,
     "heldBySerious": false,
     "partial": false,
     "covers": {
       "pages": 265,
       "urls": 4521,
-      "checksRun": 83,
-      "checksSkipped": 4,
+      "checksRun": 109,
+      "checksSkipped": 13,
       "complete": true,
       "reason": null,
       "blockedByRobots": 0
@@ -805,6 +327,15 @@
         "unit": "pages",
         "extent": "some",
         "points": 2
+      },
+      {
+        "checkId": "canonical-to-first-page",
+        "severity": "warning",
+        "count": 1,
+        "of": 265,
+        "unit": "pages",
+        "extent": "few",
+        "points": 1
       },
       {
         "checkId": "empty-anchor-text",
@@ -897,9 +428,9 @@
         "points": 0
       },
       {
-        "checkId": "canonicalised-page",
+        "checkId": "non-indexable-inlinks-only",
         "severity": "notice",
-        "count": 1,
+        "count": 2,
         "of": 265,
         "unit": "pages",
         "extent": "few",
@@ -941,7 +472,7 @@
         "title-duplicate",
         "slow-response"
       ],
-      "value": 100
+      "value": 99
     }
   },
   "noScoreReason": null

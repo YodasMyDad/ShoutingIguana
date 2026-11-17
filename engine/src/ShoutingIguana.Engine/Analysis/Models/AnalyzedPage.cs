@@ -25,6 +25,9 @@ internal sealed record AnalyzedPage
 
     public int ResponseMs { get; init; }
 
+    /// <summary>When the crawl fetched the page: what a date in its robots rules is compared with.</summary>
+    public DateTimeOffset FetchedAt { get; init; }
+
     /// <summary>As search engines will see it, which can differ from what the crawl recorded (see <see cref="UrlTable"/>).</summary>
     public IndexabilityReason IndexabilityReason { get; init; }
 

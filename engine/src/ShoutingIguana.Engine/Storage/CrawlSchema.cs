@@ -202,6 +202,71 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
+    /// The fix loop's rechecks ("Recheck these N pages"): crawl-time tables the writer creates the first time it rechecks a
+    /// file, as it creates <see cref="NOTICES"/> and <see cref="RUN_TIME"/>, so the schema version stays as it is and a
+    /// reader finds none in a file never rechecked.
+    /// <list type="bullet">
+    /// <item><c>rechecks</c>: one row a recheck, numbered from 1 in the file. <c>run</c> is the <see cref="RUN_TIME"/> run it
+    /// was made in, which the crawl's time spent crawling leaves out. <c>status</c> is <c>Models.RecheckStatus</c>'s number;
+    /// a row left running by a process that died is settled as interrupted. <c>check_id</c> is null for a list of URLs with
+    /// no check named; <c>url_list</c> says it was a list; <c>kinds</c> what it read again (<c>Analysis.Models.RecheckKind</c>
+    /// names, comma separated). <c>judged</c> is how many URLs it gives a result for (all the check's or the group's,
+    /// past the cap too), <c>fetched</c> the requests it made. The "before" (<c>count_before</c>, <c>score_before</c>) is
+    /// stored as it opens, and the result (the counts, <c>score_after</c>, <c>settled_at</c>) by the analysis after it,
+    /// once, never again.</item>
+    /// <item><c>recheck_urls</c>: the URLs it set out to judge, as they stood before (flagged or not, the issue's detail and
+    /// other URL, and for a duplicate check the text it compares pages by), and the others it fetched or let go, by role
+    /// (<c>Models.RecheckRole</c>); <c>outcome</c> (<c>Models.RecheckOutcome</c>) is set for the judged ones when it's
+    /// settled.</item>
+    /// <item><c>recheck_targets</c>: the check's <c>issue_targets</c> on the judged URLs, before.</item>
+    /// </list>
+    /// </summary>
+    public const string RECHECKS = """
+        CREATE TABLE IF NOT EXISTS rechecks (
+            id INTEGER PRIMARY KEY,
+            run INTEGER NOT NULL,
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            status INTEGER NOT NULL,
+            check_id TEXT,
+            group_detail TEXT,
+            group_related_url_id INTEGER,
+            url_list INTEGER NOT NULL DEFAULT 0,
+            kinds TEXT NOT NULL,
+            judged INTEGER NOT NULL,
+            fetched INTEGER NOT NULL DEFAULT 0,
+            count_before INTEGER,
+            score_before INTEGER,
+            score_after INTEGER,
+            fixed INTEGER,
+            still INTEGER,
+            not_checked INTEGER,
+            not_rechecked INTEGER,
+            new INTEGER,
+            settled_at INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS recheck_urls (
+            recheck_id INTEGER NOT NULL,
+            url_id INTEGER NOT NULL,
+            role INTEGER NOT NULL,
+            flagged_before INTEGER NOT NULL,
+            detail_before TEXT,
+            related_before INTEGER,
+            text_before TEXT,
+            outcome INTEGER,
+            PRIMARY KEY (recheck_id, url_id)
+        ) WITHOUT ROWID;
+
+        CREATE TABLE IF NOT EXISTS recheck_targets (
+            recheck_id INTEGER NOT NULL,
+            url_id INTEGER NOT NULL,
+            related_url_id INTEGER NOT NULL,
+            PRIMARY KEY (recheck_id, url_id, related_url_id)
+        ) WITHOUT ROWID;
+        """;
+
+    /// <summary>
     /// The columns of <see cref="FAVICON"/>, in order. A table of any other shape is another program's: the writer then
     /// keeps no icon (a crawl matters more than its icon), and readers find none.
     /// </summary>

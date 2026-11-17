@@ -6,7 +6,10 @@ namespace ShoutingIguana.Cli.Commands;
 
 internal static class TestSiteCommand
 {
-    /// <summary>Printed once the site is listening; the benchmark waits for this line.</summary>
+    /// <summary>
+    /// Printed once the site is listening, then the site's URL, the external site's and the token its revision route
+    /// takes (<see cref="SyntheticSiteServer.REVISION_ROUTE"/>), separated by spaces. The benchmark waits for this line.
+    /// </summary>
     public const string READY_PREFIX = "READY ";
 
     public static Command Create()
@@ -24,14 +27,23 @@ internal static class TestSiteCommand
         };
         var penalty = new Option<int>("--rate-limit-penalty") { Description = "The rate limit's penalty and Retry-After, in seconds.", DefaultValueFactory = _ => 5 };
         var neverRelents = new Option<bool>("--rate-limit-never-relents") { Description = "Answer every product page 429 Too Many Requests." };
+        var revision = new Option<int>("--revision")
+        {
+            Description = $"The site's revision to serve first: 0 as it has always been, 1 after the fixes. POST {SyntheticSiteServer.REVISION_ROUTE}{{n}} with the ready line's token in {SyntheticSiteServer.CONTROL_TOKEN_HEADER} switches it."
+        };
 
         var command = new Command("testsite", "Serve a synthetic site with planted SEO issues, for testing and benchmarks.")
         {
-            pages, port, externalPort, links, noCompression, deadTwin, hidden, rateLimit, penalty, neverRelents
+            pages, port, externalPort, links, noCompression, deadTwin, hidden, rateLimit, penalty, neverRelents, revision
         };
 
-        command.SetAction(async (parse, cancellationToken) =>
+        command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
+            if (parse.GetValue(revision) is < 0 or > SyntheticSite.LATEST_REVISION)
+            {
+                throw new InvalidOperationException($"--revision must be 0 to {SyntheticSite.LATEST_REVISION}.");
+            }
+
             var options = new SyntheticSiteOptions
             {
                 PageCount = parse.GetValue(pages),
@@ -39,6 +51,7 @@ internal static class TestSiteCommand
                 Compress = !parse.GetValue(noCompression),
                 DeadTwin = parse.GetValue(deadTwin),
                 HiddenFromSearch = parse.GetValue(hidden),
+                Revision = parse.GetValue(revision),
                 RateLimit = parse.GetValue(rateLimit) > 0 || parse.GetValue(neverRelents)
                     ? new SyntheticRateLimit(Math.Max(1, parse.GetValue(rateLimit)), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(parse.GetValue(penalty)),
                         parse.GetValue(neverRelents))
@@ -46,7 +59,7 @@ internal static class TestSiteCommand
             };
 
             await using var server = await SyntheticSiteServer.StartAsync(options, parse.GetValue(port), parse.GetValue(externalPort), cancellationToken);
-            Console.WriteLine($"{READY_PREFIX}{server.BaseUri} {server.ExternalBaseUri}");
+            Console.WriteLine($"{READY_PREFIX}{server.BaseUri} {server.ExternalBaseUri} {server.ControlToken}");
             Console.Out.Flush();
 
             try
@@ -59,7 +72,7 @@ internal static class TestSiteCommand
             }
 
             return 0;
-        });
+        }));
 
         return command;
     }

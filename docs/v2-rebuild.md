@@ -171,8 +171,8 @@ site still needs the owner's word, and so does a third Jitsunami crawl.
   Notice. Words were rewritten throughout. Scores: Jitsunami 76 → 79, the garden site 83 → 85.
 - **The evidence** (`73a2674` merges `ui/3b-evidence-ui`, which holds `ui/3b-evidence`). Every check names its evidence
   columns and target facts ([v2-evidence.md](v2-evidence.md)). New URL columns: redirect chain, robots.txt rule, used
-  on, pixel width and height, fetch error. Details name what they count ("78 characters, over 60"; "1 image over 200 KB:
-  293 KB"). The image checks are grouped by image, and rows are ordered by importance. The app shows it all in Advanced
+  on, pixel width and height, fetch error. Details name what they count ("1 image over 200 KB: 293 KB"; the title and
+  description lengths have read in pixels since the pixel-widths merge below, "742 px, over 580 (78 characters)"). The image checks are grouped by image, and rows are ordered by importance. The app shows it all in Advanced
   and in Simple's words, with thumbnails. Image matching was 100% on the three real crawls. `c6a9b40` captures Simple's
   fixtures again (the fixture garden crawl now scores 87).
 - **The polite crawl** (`9c1e8d2` merges `ui/3b-polite`):
@@ -189,7 +189,22 @@ site still needs the owner's word, and so does a third Jitsunami crawl.
   The integration made a page the site kept rate-limiting count as unread for the orphan skip. `3721374` captures the
   catalog fixture again, and `93bd1eb` and `35d4888` update five e2e expectations the slow start changed (the first
   figures can say "1 URL so far"; a paused count settles a moment later).
-- `AnalysisFreshness.VERSION` is **11**: every older analysis reads as out of date.
+- **Pixel widths** (`41b2c23` merges `ui/3b-pixels`; design as built in [v2-pixel-widths.md](v2-pixel-widths.md)):
+  - `title-too-long`, `title-too-short`, `description-too-long` and `description-too-short` (ids unchanged) measure
+    Liberation Sans 2.1.5 advance widths (OFL, metric-compatible with Arial; listed in About's licences): 20 px for
+    titles, 14 px for descriptions, CJK and emoji at 1 em;
+  - limits: titles over 580 px or under 200 px, descriptions over 985 px or under 400 px;
+  - Advanced says "612 px, over 580 (64 characters)". Simple and the report say where Google will likely cut it off,
+    at the last whole word, and never open the quote on a separator ("…Phone, Email or Contract", not "…| Phone");
+  - the setting fields are renamed (`titleMaxPixels` and so on). Old names in the sidecar's settings and in crawl
+    files convert: a default becomes the new default, anything else 9.4 px (titles) or 6.2 px (descriptions) a
+    character. Settings > Analysis shows px with a characters hint;
+  - new URL columns `titleWidth` and `descriptionWidth`, and where results cut them; the inspector shows both widths.
+
+  Real crawls (copies), characters → pixels: garden furniture's title too long 84 → 69, title too short 10 → 8,
+  description too long 203 → 163; aptitude.co.uk 14 → 11, 3 → 2, and description too short 1 → 0; Jitsunami's title too
+  short 6 → 3, the rest unchanged.
+- `AnalysisFreshness.VERSION` is **12**: every older analysis reads as out of date.
 
 **Checks on the merged `35d4888`: all green.** The engine verify and the scripted app verify ran on `3721374`; the two
 later commits touch only `app/e2e`, and everything from the final e2e on ran on `35d4888`.
@@ -204,6 +219,16 @@ later commits touch only `app/e2e`, and everything from the final e2e on ran on 
 | `e2e:filled` | 31 passed. |
 | Release app | `tauri build --no-bundle` passed; `smoke:shell` (19 + 9) and `check:orphans` passed. |
 | Linux in Docker | clippy clean; cargo test 136 + 3 passed. |
+
+**Checks on the merged `41b2c23`: green.** Its tree is identical to `ui/3b-pixels`' `510e6fe`, where everything ran:
+
+- engine: build, tests 1,692 + 287 + 28; the 100k bench (every planted page and issue, nothing else, peak 202 MB,
+  flat); readbench 0 of 22 gated reads over their gate;
+- app: `verify-app.sh` every step exit 0 (unit 3,988, scripts 54/54, e2e 260 passed, 3 skipped); `e2e:filled` 31;
+- stories: one story, `screens-overview--mock-crawl`, fails in a fresh worktree because its sample data
+  (`app/design/data/fixtures/`) is git-ignored and never generated. It fails the same way on `50b2338`.
+
+`app/src-tauri/` is unchanged, so neither the Linux check nor `smoke:shell` was run again.
 
 **Designed, not built yet:**
 
@@ -229,17 +254,11 @@ later commits touch only `app/e2e`, and everything from the final e2e on ran on 
   - `readability-low` applies to English pages only, as a Notice;
   - `deep-page` uses the crawl's recorded depth, and the bench's expected count is computed.
 
-  Batch 9 makes `og:image` a link kind, which moves the link-count tests.
-- **Pixel widths:** the design is [`handoff/2026-11-17/pixels-design.md`](handoff/2026-11-17/pixels-design.md). It
-  measures with Liberation Sans 2.1.5 widths (OFL, metric-compatible with Arial) at 20 px for titles and 14 px for
-  descriptions, with CJK and emoji at 1 em, and cuts at the last whole word. The orchestrator's rulings:
-  - titles: over **580 px** (the measured cut; Screaming Frog's 561 flags 97 garden titles to 69) and under 200 px;
-  - descriptions: over 985 px and under 400 px, as Screaming Frog;
-  - saved character limits are converted at 9.4 px (titles) and 6.2 px (descriptions) per character;
-  - the setting fields may be renamed (for example `titleMaxLength` → `titleMaxPixels`); no function is renamed.
-
-  Advanced says "612 px, over 580 (64 characters)". Simple says where Google will likely cut the title, without
-  pixels. The work goes on branch `ui/3b-pixels`, and `docs/v2-pixel-widths.md` lands there.
+  Batch 9 makes `og:image` a link kind, which moves the link-count tests. Its change C8 (pixel widths) is built and
+  merged (above). Its copy on `ui/3b-newchecks` still says 561 px; 580 is the ruling.
+- **Pixel widths:** built and merged (above). The design and its research are in
+  [`handoff/2026-11-17/pixels-design.md`](handoff/2026-11-17/pixels-design.md). Title too long is 580 px rather than
+  Screaming Frog's 561: 580 is the measured cut, and 561 flags 97 garden titles to 580's 69.
 
 **Settings against the old app:** every setting is here or was dropped on purpose (v2-ui-discovery.md, "Crawl
 settings"), proxy included: one address field for `http`, `https` or `socks5://user:pass@host:port`, with a Test
@@ -254,8 +273,50 @@ The defaults stay Standard with no rate cap, because the slow start and AIMD now
 
 **Left in step 3b, in order:**
 
-1. The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is closed.
-2. Pixel widths (`ui/3b-pixels`, off `ui/step-3`), before the new checks.
+Items 1 and 2 are done: the installer from `35d4888` passed `smoke:tauri` and upgraded the owner's install, and
+`41b2c23` merges pixel widths.
+
+**Since 2026-11-17 evening, at the owner's word ("Can we do this any faster?"), items 3 to 5 run side by side.** Three
+lanes, each in its own worktree off `ui/3b-pixels`:
+
+- `ui/3b-views`: item 3, all of it;
+- `ui/3b-fixloop-engine`: item 4's E1 to E4;
+- `ui/3b-checks`: item 5's batches 1 to 3.
+
+Their briefs (`lanes-common.md` and `lane-*-brief.md`) are in the session scratchpad's `audit3b/`, with a copy kept in
+the handoff folder at each merge. Each lane runs its own tests. The long gates (readbench, the full e2e, `e2e:filled`,
+the installer) run once per merged round on a quiet machine. At merge, the orchestrator:
+
+- renumbers `AnalysisFreshness`;
+- adds the fix loop's `IssueDefinition.Recheck` to the new checks, from the checks lane's table.
+
+Merged from the lanes so far (local; each lane's own verify green, the round's long gates still to run on a quiet
+machine):
+
+- **`8b6d891`: new checks, batches 1 to 3** (`ui/3b-checks` at `ffc7204`).
+  - 35 checks: indexing and canonicals, links and crawlability, the head and served files. The catalog is 122, and
+    `AnalysisFreshness` is 13.
+  - Older crawls skip the checks whose facts they don't store ("earlier version").
+  - The real-site audit re-parsed the three crawls' stored HTML.
+    - Garden: `canonical-to-first-page` 3, `non-indexable-inlinks-only` 9, `pagination-to-non-indexable` 2, all
+      correct. Every other new check is 0.
+    - Two wrong flags were fixed first: `charset-invalid` for a late meta charset when the header already says utf-8,
+      and `uncrawlable-links` for links that lead nowhere.
+- **`7e36b8a`: the fix loop's engine, E1 to E4** (`ui/3b-fixloop-engine` at `e208ece`; as built in
+  [v2-fix-loop.md](v2-fix-loop.md) §12).
+  - Test-site revisions, `si compare`, rechecks (`si recheck`) of URLs, robots.txt, sitemaps and site versions.
+  - `IssueDefinition.Recheck` is required on every check.
+  - The invariant test: on revision 1, a recheck matches a full crawl for all 122 checks. A recheck never says
+    "fixed" where a full crawl says "still". A duplicate is fixed only when its own text changed, and its whole stored
+    cluster is fetched again.
+  - Verify on `e208ece` (this merge's tree): engine 1,971, CLI 34, sidecar 287; bench and readbench exit 0.
+
+Next: S1 and S2 (running in the fix-loop lane), then U1 and U2 side by side. Batches 4 to 9 continue in the checks
+lane, which now merges `ui/step-3` for `Recheck`. The views lane is still building.
+
+1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
+   closed.~~ Done.
+2. ~~Pixel widths (`ui/3b-pixels`, off `ui/step-3`), before the new checks.~~ Done (`41b2c23`).
 3. The view fixes from [`ux-views.md`](handoff/2026-11-17/ux-views.md):
    - the Issues check list sorted by what matters;
    - related checks ("fixing this also clears …");

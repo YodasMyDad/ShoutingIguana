@@ -11,5 +11,17 @@ public enum SkipReason : byte
     ResourcesDisabled = 3,
     ExternalsDisabled = 4,
     DepthLimit = 5,
-    UrlLimit = 6
+    UrlLimit = 6,
+
+    /// <summary>
+    /// Found by a recheck (the fix loop) on a page it fetched one step from what it set out to fetch, and not followed:
+    /// a full crawl would. An earlier engine reads it as a skipped URL, which it is.
+    /// </summary>
+    Recheck = 7,
+
+    /// <summary>
+    /// Let go by a recheck: nothing the crawl still has leads to it any more (its last link was removed), so its response,
+    /// details, HTML and outgoing links were deleted. The row stays, so ids stay stable; it isn't counted as found.
+    /// </summary>
+    NoLongerLinked = 8
 }

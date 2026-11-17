@@ -18,7 +18,8 @@ namespace ShoutingIguana.Cli.Benchmarking;
 /// filter set does; the file itself is warm, as it is once a crawl is open.
 /// </summary>
 /// <param name="only">Run only the reads whose name contains this text (ignoring case); all of them when null.</param>
-internal sealed class ReaderBenchmark(string path, int runs, Action<string> progress, string? only = null)
+/// <param name="compareWith">Another crawl of the site to time the comparison with (<see cref="Compare"/>); none when null.</param>
+internal sealed class ReaderBenchmark(string path, int runs, Action<string> progress, string? only = null, string? compareWith = null)
 {
     /// <summary>
     /// Each class of read's gate at 100k URLs, p95 in ms: what CI holds the 100k benchmark crawl to. A read grows with the
@@ -90,7 +91,12 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["link-pass-split"] = 1_500,
         ["search"] = 25,
         ["search-first"] = 200,
-        ["causes"] = 200
+        ["causes"] = 200,
+
+        // The fix loop's comparison (the design's budget, docs/v2-fix-loop.md section 8): its summary, a page of a check's
+        // rows or groups with another crawl to compare with, and the first page of what a check no longer flags, each
+        // within 300 ms at p95 at 100k with nothing cached.
+        ["compare"] = 300
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
@@ -207,7 +213,43 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         WithoutSummary();
         Stats();
         Search();
+        if (compareWith is not null)
+        {
+            Compare(compareWith);
+        }
+
         return _cases;
+    }
+
+    /// <summary>
+    /// The comparison with another crawl of the site, as the app reads it, each read with nothing cached: the summary (every
+    /// check's join, the score, the differences), the first page of the biggest check's rows and of the biggest grouped
+    /// check's groups with the other crawl to compare with, and the first page of what the biggest check no longer flags.
+    /// The biggest is the check with the most rows on either side.
+    /// </summary>
+    private void Compare(string other)
+    {
+        Timed("Compare: the summary", "compare", "compare", null, () => CrawlComparisonReader.ReadSummary(path, other));
+        var (now, then) = (IssueReader.ReadCounts(path), IssueReader.ReadCounts(other));
+        long Size(string checkId) => Math.Max(now.GetValueOrDefault(checkId), then.GetValueOrDefault(checkId));
+        var checks = now.Keys.Union(then.Keys).Where(checkId => Size(checkId) > 0).OrderByDescending(Size).ThenBy(checkId => checkId, StringComparer.Ordinal).ToList();
+        if (checks.Count == 0)
+        {
+            progress("  skipped    Compare: no check flagged anything in either crawl");
+            return;
+        }
+
+        var biggest = checks[0];
+        Timed($"Compare: rows of {biggest}, with the other crawl", "compare", "compare", now.GetValueOrDefault(biggest),
+            () => IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Columns = [.. COLUMNS, "detail"] }, null, other));
+        if (checks.FirstOrDefault(checkId => IssueCatalog.Find(checkId)?.Grouping is { } grouping && grouping != IssueGrouping.None) is { } grouped)
+        {
+            Timed($"Compare: groups of {grouped}, with the other crawl", "compare", "compare", null,
+                () => IssueGroupReader.ReadGroups(path, grouped, 0, UrlGridReader.DEFAULT_LIMIT, null, other));
+        }
+
+        Timed($"Compare: what {biggest} no longer flags, the first page", "compare", "compare", then.GetValueOrDefault(biggest),
+            () => CrawlComparisonReader.ReadCleared(path, other, biggest, new ClearedQuery()));
     }
 
     /// <summary>A search no URL or title of the benchmark site matches, forty characters long.</summary>

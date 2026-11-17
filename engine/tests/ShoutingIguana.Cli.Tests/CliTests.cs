@@ -36,6 +36,38 @@ public sealed class CliTests : IAsyncLifetime
         Directory.Delete(_folder, recursive: true);
     }
 
+    /// <summary>
+    /// si recheck fetches a check's URLs again into the crawl, after the site's owner fixed some (revision 1 of the synthetic
+    /// site), analyses it and says how many are fixed: of the three long titles, one shortened, one a page that's now an
+    /// error, which couldn't be checked, and one left. A check a recheck can't settle, or none named, is a one-line error.
+    /// </summary>
+    [Fact]
+    public async Task RechecksAProblemsUrlsAndSaysHowManyAreFixed()
+    {
+        var crawl = await CrawlAsync();
+        _server.Revision = 1;
+
+        // --plan says what it would do, and fetches nothing.
+        var planned = await RunAsync("recheck", crawl, "--check", "title-too-long", "--plan");
+        Assert.True(planned.ExitCode == 0, planned.Error);
+        Assert.Contains("Rechecking 3 URLs. 3 judged, 0 past the limit of 1,000", planned.Output);
+        Assert.Contains("Rechecking the sitemaps. 1 judged", (await RunAsync("recheck", crawl, "--check", "sitemap-error", "--plan")).Output);
+        Assert.Empty(RecheckReader.ReadAll(crawl));
+
+        var recheck = await RunAsync("recheck", crawl, "--check", "title-too-long");
+
+        Assert.True(recheck.ExitCode == 0, recheck.Error);
+        Assert.Contains("Rechecking 3 URLs.", recheck.Output);
+        Assert.Contains("1 of 3 fixed. 1 still has it.", recheck.Output);
+        Assert.Contains("1 URL couldn't be checked", recheck.Output);
+        Assert.Contains("Other pages are as the crawl found them.", recheck.Output);
+
+        AssertFails(await RunAsync("recheck", crawl), "Name the check to recheck with --check");
+        AssertFails(await RunAsync("recheck", crawl, "--check", "orphan-page"), "Only checking the whole site again");
+        AssertFails(await RunAsync("recheck", crawl, "--check", "no-such-check"), "Unknown check 'no-such-check'");
+        AssertFails(await RunAsync("recheck", crawl, "--urls", Path.Combine(_folder, "missing.txt")), "missing.txt");
+    }
+
     [Fact]
     public async Task CrawlsAnalysesAndReportsTheIssues()
     {
@@ -421,6 +453,7 @@ public sealed class CliTests : IAsyncLifetime
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, _server.BaseUri.AbsoluteUri), "the start URL can't change");
         AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", "", "-q"), "empty");
         AssertFails(await RunAsync("issues", crawl, "--csv", ""), "empty");
+        AssertFails(await RunAsync("testsite", "--revision", "2"), "--revision must be 0 to 1");
     }
 
     /// <summary>
@@ -498,6 +531,9 @@ public sealed class CliTests : IAsyncLifetime
         var resumed = await RunAsync("crawl", "--resume", "--db", crawl, "-q", "--no-analyze");
         Assert.Equal(0, resumed.ExitCode);
         Assert.Contains("X-Crawler-Key", resumed.Error);
+
+        // A recheck asks the site as the crawl did, so it refuses to run without the header's value.
+        AssertFails(await RunAsync("recheck", crawl, "--check", "title-too-long"), "header X-Crawler-Key, whose values crawl files don't store");
     }
 
     /// <summary>
@@ -653,14 +689,14 @@ public sealed class CliTests : IAsyncLifetime
         return await RunAsync(stop.Token, args);
     }
 
-    private static void AssertFails((int ExitCode, string Output, string Error) result, string message)
+    internal static void AssertFails((int ExitCode, string Output, string Error) result, string message)
     {
         Assert.Equal(2, result.ExitCode);
         Assert.Contains(message, result.Error);
         Assert.DoesNotContain("   at ", result.Error);
     }
 
-    private static Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] args) => RunAsync(CancellationToken.None, args);
+    internal static Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] args) => RunAsync(CancellationToken.None, args);
 
     /// <param name="cancellationToken">Cancelling it is Ctrl+C.</param>
     private static async Task<(int ExitCode, string Output, string Error)> RunAsync(CancellationToken cancellationToken, params string[] args)

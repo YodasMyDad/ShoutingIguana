@@ -33,9 +33,18 @@ internal sealed record PageSpec
 
     public bool Viewport { get; init; } = true;
 
+    /// <summary>The viewport meta tag's content, when <see cref="Viewport"/> is on.</summary>
+    public string ViewportContent { get; init; } = "width=device-width, initial-scale=1";
+
     public bool Lang { get; init; } = true;
+
+    /// <summary>The html element's lang, when <see cref="Lang"/> is on.</summary>
+    public string LangValue { get; init; } = "en";
 
     public bool Charset { get; init; } = true;
 
     public bool OpenGraph { get; init; } = true;
+
+    /// <summary>The site's header, menu and footer around the content; false leaves the page with only its own links.</summary>
+    public bool Chrome { get; init; } = true;
 }

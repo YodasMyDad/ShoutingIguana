@@ -60,6 +60,11 @@ Built in stages:
   hint), `titleLength` and `descriptionLength` count characters, and the URL grid gains `titleWidth`,
   `descriptionWidth`, `titleInResults` and `descriptionInResults`; the inspector's measured texts gain `width` and its
   limits the new names. [Pixel widths](v2-pixel-widths.md) has the design as built.
+- **The fix loop** (step 3b) is marked "(fix loop)" below, each addition a new field, a new body field or a new call:
+  a crawl compared with the site's previous crawl (or another of its crawls) by check, by cause and by URL, and
+  "Recheck these N pages", which fetches a problem's URLs again into the same crawl file, analyses it and says "4 of 5
+  fixed". The design, with its reasons, is [the fix loop](v2-fix-loop.md); the engine's side is under
+  [Engine changes the fix loop makes](#engine-changes-the-fix-loop-makes).
 
 ## Process (E1)
 
@@ -207,6 +212,11 @@ Built in stages:
     | `export-crawl-changed` | 409 | The crawl changed under the export: analysed again, continued or finished (E5). A pause doesn't |
     | `export-too-large` | 422 | More rows than an Excel file holds here (16 sheets of 1,048,575); CSV has no limit (E5) |
     | `check-skipped` | 409 | The last analysis didn't run the check, so it has no rows to export (E5) |
+    | `crawl-not-comparable` | 409 | A comparison with a crawl of another site, one never analysed or whose analysis read no page, one live or interrupted, or one whose file is missing or unreadable (fix loop) |
+    | `site-busy` | 409 | A recheck while another crawl of the same site (`siteKey`) is live here: the two would double the load on the site (fix loop) |
+    | `recheck-not-latest` | 409 | A recheck of a crawl that isn't its site's latest (fix loop) |
+    | `recheck-not-found` | 404 | The crawl file has no recheck with this id (fix loop) |
+    | `recheck-unsupported` | 422 | A recheck of a check a recheck can't settle (its `recheck` is empty: `orphan-page`, `no-https`), or of a check the last analysis skipped (fix loop) |
     | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
     | `unauthorized` | 401 | The token is missing or wrong |
     | `origin-not-allowed` | 403 | An `Origin` not on the allowlist |
@@ -453,6 +463,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   | --- | --- |
   | `running`, `paused`, `stopping` | Live, in this process |
   | `analyzing` | An analysis is running, in this process |
+  | `rechecking` | A recheck is fetching some of the crawl's URLs again, in this process; `analyzing` follows it (fix loop) |
   | `stopped` | Stopped, resumable |
   | `interrupted` | The file says running, but nobody holds its lock. The engine gets a public lock probe for this |
   | `completed` | Finished |
@@ -566,6 +577,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 | `alert` | `{ crawlId, id, level, code, message, at, data }` | Each `CrawlNotice` (see below) |
 | `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
+| `recheck` | `{ crawlId, recheckId, status, phase, done, total, result }` | Fix loop. While a recheck runs, as it starts, at most every 500 ms and as it ends; then once more when the analysis after it has settled it, with `result`. Never merged or dropped. See [Rechecks](#rechecks-fix-loop) |
 | `analysis` | `{ crawlId, phase, done, total }` | E4. While an analysis runs: each phase as it starts (`done` 0) and as it ends (`done` equal to `total`), and at most every 250 ms between, the phases in the order under **Analysis progress** below. All of them come after the crawl's `analyzing` event and before the one that ends it |
 | `export` | The export, whole: `{ exportId, crawlId, kind, format, path, status, rowsWritten, rowsExpected, startedAt, finishedAt, result, error }` | E5. As an export starts, at most every 250 ms while it writes rows, and as it ends (`done`, `cancelled` or `failed`). Never merged or dropped. Its exact shape is under **Exports** below; what an export is, under [Export](#export-e5) |
 
@@ -1337,6 +1349,7 @@ inspector chains do.
 | `contentType` | text | | The `Content-Type` header |
 | `title`, `description`, `h1` | text | | The first title, meta description and H1. Null for anything that isn't a parsed page |
 | `h1Count` | number | | H1s on the page |
+| `language` (evidence) | text | | The page's `<html lang>` as it writes it (`en-GB`, `english`), what `lang-invalid` judges. Null for anything that isn't a parsed page, and for a page without one. Filters; doesn't sort |
 | `wordCount` | number | | Main-content words, for a page whose HTML was read |
 | `outlinks` | number | | Hyperlinks on a page whose HTML was read |
 | `sizeBytes` | number | | Bytes on the wire |
@@ -1814,7 +1827,7 @@ the page without opening anything:
 ```json
 {"checkId":"image-too-large","urls":[{"urlId":31,"total":2,
   "targets":[{"id":812,"url":"https://www.example.com/img/hero.jpg","statusCode":200,"fetched":true,"outcome":"success",
-              "contentType":"image/jpeg","sizeBytes":1887436,"pixelWidth":4000,"pixelHeight":3000,
+              "contentType":"image/jpeg","sizeBytes":1887436,"pixelWidth":4000,"pixelHeight":3000,"responseMs":240,
               "final":null,"indexability":"none","canonical":null,
               "kind":"image","text":"Garden sofa","position":"content","fragment":null,"flags":[],"links":1,
               "img":{"width":"400","height":"300","alt":"Garden sofa","hasAlt":true,"altLength":11,"srcset":true,"loading":"lazy"}}]}]}
@@ -1823,7 +1836,7 @@ the page without opening anything:
 ```json
 {"checkId":"links-to-redirects","urls":[{"urlId":31,"total":1,
   "targets":[{"id":90,"url":"https://www.example.com/old","statusCode":301,"fetched":true,"outcome":"redirect",
-              "contentType":"text/html; charset=utf-8","sizeBytes":18011,"pixelWidth":null,"pixelHeight":null,
+              "contentType":"text/html; charset=utf-8","sizeBytes":18011,"pixelWidth":null,"pixelHeight":null,"responseMs":95,
               "final":{"id":91,"url":"https://www.example.com/new/","statusCode":200,"outcome":"success","hops":1,"loop":false},
               "indexability":"redirected","canonical":null,
               "kind":"hyperlink","text":"Shop","position":"content","fragment":null,"flags":[],"links":2,"img":null}]}]}
@@ -1833,6 +1846,8 @@ the page without opening anything:
   - `contentType`, `sizeBytes`, `pixelWidth` and `pixelHeight` are the response the URL ends at, through its redirects
     if it has any (what a browser gets: an image that redirects is judged by its end, as `image-too-large` judges it),
     as the URL grid's columns of those names have them;
+  - `responseMs` is how long the URL's own answer took (not its redirects' end's: a slow redirect is slow), as the URL
+    grid's column; null when it wasn't fetched. `slow-external-links` names it;
   - `final` is where its redirects end, `{ id, url, statusCode, outcome, hops, loop }`, null when it doesn't
     redirect: `hops` the redirects followed, `loop` true when they come back on themselves (then `final` is the URL
     the loop returns to). Meta refreshes count, as the analysis counts them;
@@ -2840,6 +2855,297 @@ body, and the app draws the site's first letter. A crawl's item says which to ex
 - **While a crawl runs** it answers `204` until the icon is kept, a few requests after the first page, and the image
   from then on; `hasFavicon` turns true on the crawl's item the next time its file is read.
 - Errors: `crawl-not-found` (404), `unauthorized` (401).
+
+### Changes since another crawl (fix loop)
+
+A crawl compared with the site's previous crawl, or with another crawl of the site: by check, by cause and by URL. The
+design, its states and why each rule is as it is: [the fix loop](v2-fix-loop.md#2-what-is-compared-and-where).
+
+**On each library item** (`GET /api/crawls`, `GET /api/crawls/{id}`):
+
+```json
+{"siteKey":"example.com",
+ "previous":{"id":"41ab…","startedAt":"2026-11-03T09:12:00Z","score":{"value":71,"band":"good","partial":false},
+             "comparable":"full","needsAnalysis":false},
+ "changes":{"score":14,"partial":false,"fixed":["internal-client-error","no-https"],"new":["sitemap-error"],
+            "fewer":["broken-internal-links","title-too-long"],"more":["image-too-large"],"newCheck":[]},
+ "rechecks":{"count":1,"last":{"id":1,"endedAt":"2026-11-17T14:02:41Z","checkId":"broken-internal-links","judged":5,"fixed":4}}}
+```
+
+- **`siteKey`** is the site as the library groups it: `site` (the host without `www.`), then `:port` when the start
+  URL has a port of its own (`127.0.0.1:5001`). The app groups by it, and the sidecar picks the previous crawl by it, so
+  the two can't disagree. Null for a file with no start URL.
+- **`previous`** is the crawl this one is compared with by default, or null when there is none (a first crawl): the
+  newest crawl of the same `siteKey` that started before it, has an analysis that read a page, and isn't live, in use,
+  interrupted, missing or unreadable. **One with the same start URL comes first**; only without one is it the newest of
+  the site. `comparable` is as on `/changes` (below); `needsAnalysis` is true when the two analyses were made by other
+  rules (engine, checks or limits), so the comparison is counts only until the previous one is analysed again.
+- **`changes`** is the check-level change, worked out from the two crawls' cached summaries without opening either
+  file: `score` (now less then; null when either has no score or they were scored by different versions), and the
+  checks by state. Every check is in it, hidden or not: the app leaves out the hidden ones, as it does everywhere.
+  **`partial`** is true when either crawl didn't read all it set out to; then a check now at 0 is listed under `fewer`,
+  never `fixed`, as the rows it flagged may simply not have been read (`/changes` says which). Null with `previous`.
+- **`rechecks`** is the crawl's rechecks: how many, and the last one in brief. Null for a crawl never rechecked.
+- **Cost.** None to list: the library's summary cache keeps each check's count and a fingerprint of the options a
+  comparison looks at, beside what it kept before (its format changes, so each file is read once more after an
+  upgrade).
+
+**`GET /api/crawls/{id}/changes?with={otherId}`**, the comparison in full. Without `with`, or with `with=previous`,
+it is with `previous`. `with` names a crawl of the same `siteKey`; another site's, or one that can't be compared,
+is `crawl-not-comparable` (409), and a crawl with no previous answers 200 with `with` null and nothing else, which the
+UI shows as nothing at all (never zeros). `not-analyzed` when this crawl was never analysed.
+
+```json
+{"crawlId":"9f2c…",
+ "with":{"id":"41ab…","startedAt":"2026-11-03T09:12:00Z","finishedAt":"2026-11-03T09:49:25Z","status":"completed",
+         "startUrl":"https://www.example.com/","analyzedAt":"…","pagesAnalyzed":265,"crawledUrlCount":4480,"chosen":"previous"},
+ "comparable":"partial",
+ "differences":[{"code":"stoppedEarly","side":"now"},
+                {"code":"limits","field":"maxUrls","then":null,"now":5000}],
+ "previousNeedsAnalysis":[],
+ "score":{"then":{"value":71,"band":"good","partial":false},"now":{"value":85,"band":"good","partial":true},"change":14,
+          "lines":[{"checkId":"no-https","then":60,"now":0},{"checkId":"broken-internal-links","then":7,"now":4}]},
+ "totals":{"checks":{"fixed":5,"new":2,"fewer":6,"more":1,"same":60,"newCheck":1,"notCheckedNow":0},
+           "issues":{"fixed":38,"gone":3,"notChecked":3,"still":120,"new":5,"newUrl":1,"notComparedThen":0}},
+ "checks":[{"checkId":"broken-internal-links","severity":"error","severityThen":"error","state":"fewer","then":9,"now":4,
+            "fixed":5,"gone":0,"notChecked":0,"still":4,"new":0,"newUrl":0,"notComparedThen":0}]}
+```
+
+- **`with.chosen`** is `previous` (the default) or `picked` (named by `with`).
+- **`comparable`**: `full`; `partial` (the crawls differ in what they covered: see `differences`); or `countsOnly`
+  (the start URL's scheme or host differs, so no URL can be matched, or `previousNeedsAnalysis` isn't empty). With
+  `countsOnly`, every check's row split (`fixed` to `notComparedThen`) and `totals.issues` are null, and `score.change`
+  is null where the scores' versions differ.
+- **`differences`**, each `{ code, field?, side?, then?, now? }`:
+
+  | `code` | What differs | Makes it |
+  | --- | --- | --- |
+  | `startOrigin` | The start URL's scheme or host | `countsOnly` |
+  | `startPath` | The start URL's path | `partial` |
+  | `scope` | `field`: `stayInStartFolder`, `includeSubdomains`, `followNofollow`, `crawlCanonicals`, `crawlHreflang` or `crawlPagination` | `partial` |
+  | `limits` | `field`: `maxUrls` or `maxDepth` | `partial` |
+  | `fetching` | `field`: `checkResources`, `checkExternalLinks`, `discoverSitemaps`, `extraSitemaps` or `respectRobotsTxt` | `partial` |
+  | `client` | `field`: `userAgent`, `acceptLanguage`, `headers` (the names) or `useCookies` | Noted only |
+  | `timeouts` | `field`: `requestTimeoutSeconds` or `maxRetries` | Noted only |
+  | `stoppedEarly` | `side` (`then`, `now` or `both`) didn't read all it set out to (`score.covers.complete` false) | `partial` |
+  | `coverage` | One read fewer than half the pages the other did: `then` and `now` are the two `pagesAnalyzed` | `partial` |
+  | `rules` | The analyses were made by other rules, and the previous one can't be analysed again | `countsOnly` |
+
+  A value that isn't stored (a header's value) can't differ here.
+- **`previousNeedsAnalysis`** is the other crawl's `outOfDateReasons` against this crawl's analysis (`engineChanged`,
+  `settingsChanged`): the two analyses differ in analysis version, checks fingerprint, score version or limits.
+  `POST /api/crawls/{otherId}/analyze` mends it; the comparison is then like for like. Simple's app does it by itself,
+  Advanced's on a click.
+- **`score`**: each side's stored score in brief, `change` (now less then), and `lines`, every check that took points
+  on either side, with its points then and now (0 where it took none). Null when either crawl has no score.
+- **`checks`** is every check that ran on either side, in this crawl's `fixFirst` order and then catalog order, each
+  with its severity now and then, and:
+
+  | Field | What it is |
+  | --- | --- |
+  | `state` | `new` (ran then and found nothing; finds something now), `fixed` (found something then; nothing now, and none of what it flagged went unchecked), `fewer`, `more`, `same`, `newCheck` (didn't run then: newer than that analysis, or skipped), `notCheckedNow` (ran then, skipped now) |
+  | `then`, `now` | The URLs it flagged in each: `issue_types.url_count`. Null on the side it didn't run |
+  | `fixed` | Flagged then; read again now and not flagged |
+  | `gone` | Flagged then; this crawl didn't find the URL. For a `sources` check that means nothing links to it any more ("no longer linked") |
+  | `notChecked` | Flagged then; this crawl found it but didn't read it, read it and got no usable page (an error, a block, a rate limit, robots.txt refusing it, a redirect away), or the check didn't run now. **Never counted as fixed** |
+  | `still` | Flagged then and now |
+  | `new` | Flagged now; the other crawl read the URL and didn't flag it |
+  | `newUrl` | Flagged now; the other crawl didn't find the URL |
+  | `notComparedThen` | Flagged now; the other crawl found the URL but didn't read it, or the check didn't run then |
+
+  A URL is the same URL when its stored text is the same. One a response-code check flagged then that fails another
+  way now ("404 then, 500 now") is `fixed` for the old check and `new` for the new one.
+- **`totals`**: the checks by state, and the rows added up over every check. Every check is counted, hidden or not;
+  the app counts from `checks` to leave hidden ones out.
+- **Cost and caching.** The check level reads `issue_types`, `skipped_checks` and `analysis` in each file. The row
+  split is one streamed pass per check over each file's issues and their URLs, then index lookups for the rows that
+  moved: about 32,000 issues a side on the 100k benchmark, 323,000 on the 1M crawl. It's kept with the grids' counts,
+  keyed by both files' stamps and analyses, so Overview and Issues read it once, and it takes a read slot as a grid
+  does. Each file is read in its own snapshot, through its own read gate; nothing is written.
+
+**`compareWith` on a check's groups and rows.** `POST /api/crawls/{id}/issues/{checkId}/groups` and `…/rows` take
+`"compareWith": "previous"` or a crawl id in their bodies. Nothing else about them changes (the order, the columns,
+the paging); each group and row gains `change`, and the answer gains `compared`:
+
+```json
+{"checkId":"broken-internal-links","grouping":"relatedUrl","total":4,"groupCount":2,"offset":0,
+ "compared":{"with":"41ab…","startedAt":"2026-11-03T09:12:00Z","comparable":"full","fixedGroups":3},
+ "groups":[{"detail":null,"relatedUrlId":812,"relatedUrl":"https://www.example.com/old-range/","pages":3,"share":0.75,
+            "likelyTemplate":false,"urls":3,"change":{"state":"fewer","then":5}}]}
+```
+
+```json
+{"columns":["id","url","detail"],
+ "rows":[{"id":31,"url":"https://www.example.com/sofas/","detail":"Links to 1 broken URL",
+          "change":{"state":"still","detailThen":"Links to 2 broken URLs"}}],
+ "offset":0,"matching":4,"total":4,"compared":{"with":"41ab…","startedAt":"2026-11-03T09:12:00Z","comparable":"full"}}
+```
+
+- A group's **`change.state`** is `new` (no such cause then), `fewer`, `more` or `same`, with `then` its URLs then. A
+  cause is matched by its related URL's text, or by its detail or fault with the related URL's text. A duplicate
+  cluster (`title-duplicate`, `description-duplicate`, `h1-duplicate`, `duplicate-content`,
+  `near-duplicate-content`) is matched with the cluster then that shares the most of its pages, as its name (its
+  first page) can change when that page is fixed.
+- A row's **`change.state`** is `still`, `new`, `newUrl` or `notComparedThen` (as on `/changes`), and `detailThen` its
+  detail then (null unless `still`).
+- **`compared.fixedGroups`** is how many causes then have no URL now: what `/fixed` lists by cause.
+- With `comparable` `countsOnly`, every `change` is null. A `compareWith` that can't be compared is
+  `crawl-not-comparable`.
+- Cost: at most two index lookups a group or row of the page, in the other file.
+
+**`POST /api/crawls/{id}/issues/{checkId}/fixed`**: what the check flagged in the other crawl and doesn't flag now,
+by URL or by cause.
+
+```json
+{"compareWith":"previous","level":"rows","states":["fixed","gone"],"group":null,"offset":0,"limit":100}
+```
+
+```json
+{"checkId":"broken-internal-links","compared":{"with":"41ab…","startedAt":"2026-11-03T09:12:00Z","comparable":"full"},
+ "level":"rows","total":5,"offset":0,
+ "rows":[{"url":"https://www.example.com/garden-furniture/","urlId":40,"thenUrlId":38,"state":"fixed","reason":null,
+          "detailThen":"Links to 1 broken URL","relatedUrlThen":"https://www.example.com/old-range/"},
+         {"url":"https://www.example.com/winter-sale/","urlId":null,"thenUrlId":977,"state":"gone","reason":null,
+          "detailThen":"Links to 1 broken URL","relatedUrlThen":"https://www.example.com/old-range/"}]}
+```
+
+- **`level`**: `rows` (each URL) or `groups` (each cause with no URL now: `{ detail, relatedUrl, sharedText, then,
+  fixed, gone, notChecked }`).
+- **`states`** narrows to `fixed`, `gone` and `notChecked`; all three when left out. **`group`** narrows rows to one
+  cause then, as `{ detail, relatedUrl }` (the related URL's text, as ids differ between files).
+- A row's **`urlId`** is the URL's id in this crawl, null when this crawl didn't find it; **`thenUrlId`** its id in the
+  other. **`reason`** says why a `notChecked` row wasn't judged: `{ code, text }` with `code` one of `notRead` (found
+  but not fetched: a limit, stopped early, robots.txt couldn't be read), `failed` (an error or no answer, its status
+  in `text`), `blocked`, `rateLimited`, `robots` (robots.txt refuses it now), `redirects` (it now forwards elsewhere),
+  `checkSkipped`.
+- Rows come in the other crawl's order by importance ([evidence](#issue-groups-e3a)), then by its URL id; `total` is
+  the rows that match. The pass behind it is the check's, kept as `/changes` keeps it.
+
+**The report and the workbook.** `GET /api/crawls/{id}/report` takes `compareWith` (`previous` by default, `none`, or
+a crawl id): with a comparison, the report gains "Since your last check on 3 November" after its Summary (the score
+then and now, each problem fixed, new, fewer and more, and the crawl's rechecks), and its summary cut a line of it.
+The workbook (`kind: workbook`) takes `compareWith` in its request: its summary sheet gains the count then and the
+change, and a sheet lists the rows `/fixed` lists. A `compareWith` that can't be compared leaves the part out and
+says why in About this check; it never fails the report.
+
+### Rechecks (fix loop)
+
+"Recheck these N pages": a problem's URLs fetched again **into the same crawl file**, the crawl analysed, and the result
+kept as a record in the file ("rechecked 5 pages on 17 Nov: 4 fixed"). The design: [the fix
+loop](v2-fix-loop.md#3-recheck-these-n-pages).
+
+**`recheck` on each check** (`GET /api/checks`): what a recheck of it reads again, a list of `urls` (its URLs and what
+it needs to judge them), `sitemaps` (every sitemap the crawl read), `robotsTxt` (the robots.txt of the origins it
+names) and `siteVersions` (the probes of the site's other versions). **Empty for a check a recheck can't settle**:
+`orphan-page` (only a full crawl can show that something now links to a page) and `no-https` (moving to HTTPS changes
+every address). It is the catalog's, as `references` is: not stored, not in the fingerprint.
+
+| `recheck` | Checks |
+| --- | --- |
+| `["urls"]` | The rest: 108 of the 122 the catalog has with the new checks' batches 1 to 3 |
+| `["urls","sitemaps"]` | `sitemap-non-indexable`, `sitemap-url-other-host`, `not-in-sitemap` |
+| `["sitemaps"]` | `sitemap-error`, `sitemap-missing` |
+| `["robotsTxt"]` | `robots-txt-unreachable`, `robots-txt-unreachable-other-origin`, `robots-txt-missing` |
+| `["siteVersions"]` | `duplicate-site-version` |
+| `[]` | `orphan-page`, `no-https`, and of the new checks `canonical-unlinked`, `non-indexable-inlinks-only` and `deep-page` (each depends on every link to a page, which only a full crawl reads) |
+
+**`POST /api/crawls/{id}/rechecks/plan`**: what a recheck would do, without doing it. Nothing is written.
+
+```json
+{"checkId":"broken-internal-links","group":null}
+```
+
+```json
+{"checkId":"broken-internal-links","group":null,"urlList":false,"kinds":["urls"],
+ "judged":5,"phase1":8,"phase2Max":0,"limit":1000,"capped":false,"notRechecked":0,
+ "estimateMs":21000,"suggestFullCheck":false,"analysisFirst":false,
+ "secrets":{"missingHeaders":[],"proxyCredentials":false},"refused":null}
+```
+
+- **The body** names a check (`checkId`), optionally one of its groups (`group`, as `/rows` takes it), **or** a list of
+  URLs (`urlIds`, 1 to 1,000, for Advanced's selection; `checkId` then optional, to say which check's result to give).
+  Both or neither of `checkId` and `urlIds`, or more than 1,000 ids, is `invalid-query`.
+- **`judged`** is the URLs whose result the recheck gives (the check's flagged URLs, or the group's, or the list).
+  **`phase1`** is what it fetches first: those URLs, with, for a `targets` check, every URL their issues name.
+  **`phase2Max`** is, for a `sources` check, the most it fetches next: the pages referring to the URLs still failing
+  after phase 1. Neither counts what pages now link to that the crawl doesn't have yet, fetched one step, nor robots.txt.
+- **`capped`** is true when that would pass `limit` (1,000): the recheck then takes the most important first (the
+  check's rows in their default order) and leaves `notRechecked` of them as the crawl found them.
+- **`estimateMs`** comes from the crawl's own pace (its URLs crawled over its time spent crawling, no faster than the
+  slow start's), plus robots.txt and the analysis after (the last analysis's `durationMs`). **`suggestFullCheck`** is
+  true when the recheck would fetch more than half the crawl's URLs: a full crawl would take about as long and settle
+  every check.
+- **`analysisFirst`** is true when the crawl's analysis is out of date: the recheck analyses it first, so the "before"
+  it records is today's.
+- **`secrets`** is what Continue would ask for (`needs-secrets`'s fields): header values and proxy credentials the file
+  doesn't keep.
+- **`refused`** is null, or why it can't run now, as the problem `POST /rechecks` would give: `{ type, title }` with
+  `type` one of `crawl-busy`, `site-busy`, `recheck-not-latest`, `recheck-unsupported`, `not-analyzed`,
+  `not-analysable`. The UI shows `title` beside a disabled button.
+
+**`POST /api/crawls/{id}/rechecks`** starts one: the plan's body, plus Continue's `extraHeaders`, `proxyUrl` and
+`skipMissingHeaders`. It answers 202 with `{ recheckId, …plan }`, and the crawl's status goes `rechecking` (an
+`analyzing` first when `analysisFirst`), then `analyzing`, then what it was. Errors: those under `refused`, and
+`needs-secrets` as Continue gives it.
+
+- **What it does**, in order: the analysis if out of date; then in one run of the crawl (the file locked, as Continue
+  locks it) it stores the recheck and its "before" (the check's issues on its URLs, the check's count, the score),
+  fetches phase 1, then phase 2 for what still fails, follows redirects to their end, fetches one step of the new URLs
+  those pages link to (recording, not fetching, what they link to), and lets go the URLs nothing leads to any more;
+  then it analyses the crawl, which settles the recheck.
+- **The crawl is left as it was**: its status (completed, or stopped with its queue untouched), its options. Its stamp
+  moves, so its analysis is out of date between the run and the analysis, as after Continue.
+- **Pace** is the crawl's own options, through the same per-host pacing as a crawl. A site that stops answering ends a
+  recheck after a minute (a crawl waits ten).
+- **Stop** is the crawl's: `POST /api/crawls/{id}/stop`. What was fetched stays, the analysis runs, and the recheck is
+  `stopped`. Cancelling that analysis (`/analyze/cancel`) leaves the recheck unsettled until the next.
+- **One at a time.** A crawl being rechecked is live (`crawl-busy` for continue, analyse, remove, delete, and another
+  recheck). Rechecks and crawls of other sites run beside it; a crawl of the same site can't start while it runs, nor it
+  while one does (`site-busy`).
+
+**`GET /api/crawls/{id}/rechecks`**, the crawl's rechecks, newest first, and **`GET /api/crawls/{id}/rechecks/{n}`**,
+one (`recheck-not-found`, 404, for an id the file doesn't have):
+
+```json
+{"rechecks":[{"id":1,"status":"completed","startedAt":"2026-11-17T14:02:12Z","endedAt":"2026-11-17T14:02:31Z",
+              "settledAt":"2026-11-17T14:02:41Z","crawlingMs":19200,"checkId":"broken-internal-links","group":null,
+              "urlList":false,"kinds":["urls"],"judged":5,"fetched":8,"countBefore":5,
+              "result":{"fixed":4,"still":1,"notChecked":0,"notRechecked":0,"new":0,"scoreBefore":85,"scoreAfter":88}}]}
+```
+
+- **`status`**: `running` (here), `completed`, `stopped`, `failed`, or `interrupted` (its run ended with the process; the
+  analysis after it settled what it had fetched).
+- **`result`** is null until the analysis after it settles it. It is kept as that analysis found it, and later
+  analyses don't change it: it records what that recheck showed. `still` URLs are what the check flags now among those
+  it judged; `notChecked` couldn't be judged (no answer, an error that isn't the check's own fault, blocked,
+  rate-limited, refused by robots.txt, now forwarding elsewhere, or the check was skipped); `notRechecked` were past the
+  cap or the stop; `new` were in scope, not flagged before and flagged now.
+- **`crawlingMs`** is the recheck's own time. The crawl's `crawlingMs` leaves rechecks out.
+
+**`POST /api/crawls/{id}/rechecks/{n}/rows`**, the URLs of one recheck, paged as `/rows` is:
+
+```json
+{"outcomes":["still","notChecked"],"roles":["judged"],"offset":0,"limit":100}
+```
+
+```json
+{"total":1,"offset":0,
+ "rows":[{"urlId":31,"url":"https://www.example.com/sofas/","role":"judged","outcome":"still",
+          "flaggedBefore":true,"detailBefore":"Links to 2 broken URLs","detailAfter":"Links to 1 broken URL",
+          "statusCode":200,"reason":null}]}
+```
+
+- **`role`**: `judged` (a URL whose result the recheck gives), `named` (what a `targets` check's pages name), `referring`
+  (a `sources` check's phase 2), `new` (fetched one step), `letGo` (no longer linked: let go).
+- **`outcome`** for a judged URL: `fixed`, `still`, `notChecked`, `notRechecked`, or `new` (wasn't flagged, is now);
+  null for the other roles. `reason` as on `/fixed`.
+
+**Events.** The crawl's `crawl` events carry `rechecking` as its status. `progress` events are sent as for any run,
+`phase` `rechecking`. A `recheck` event carries the recheck's own counts (`phase` 1 or 2, `done` of `total` fetches),
+at most every 500 ms, and a last one with `result` once settled, which is the UI's cue to read the check again.
+
+**The library afterwards.** The item's `rechecks` (above); its counts, score and `changes` are the analysis's after
+the recheck, as for any analysis.
 
 ## Engine changes E1 needs
 
@@ -4255,3 +4561,63 @@ it). Built on `ui/3b-evidence` (775c6a4, 48d6576, 439dbba): the API above is wha
   p50 1.9 s; the crawl's facets of pages 258 ms against 245; run 2: three URL-grid filters at 117-182 ms against 110,
   the facets 246 ms), while another program's `si.exe` was running on the machine; each of those reads run alone
   passes its gate (1,352 ms against 2,500; 12, 27 and 23 ms against 110; 135 ms against 245).
+
+## Engine changes the fix loop makes
+
+Step 3b's fix loop ([the design](v2-fix-loop.md), with its table of parts under "Engine and storage"). This is the
+plan the API above is written to. The engine's part (stages E1 to E4) is built on `ui/3b-fixloop-engine`, as below;
+[the design's "As built"](v2-fix-loop.md#12-as-built-the-engine-stages-e1-to-e4) says where it differs, and what was
+measured. The sidecar's part (S1, S2) isn't built yet.
+
+- **Built: what the sidecar calls.**
+  - The comparison: `CrawlComparisonReader.ReadSummary(current, other, cache, ct)` (a `CrawlComparison`),
+    `ReadCleared(...)` (a `ClearedPage` of rows or causes), and `IssueGroupReader.ReadGroups` / `ReadRows` overloads
+    taking the other crawl's path (`IssueGroupPage.Compared`, `IssueGroup.Change`; `IssueRowPage.Compared` and
+    `Changes`, aligned with the rows). `CrawlComparability` gives the differences and `comparable`.
+  - The plan: `RecheckPlanReader.Plan(path, RecheckAsk(checkId, group, urlIds), settings, limit = 1000)`, a
+    `RecheckPlan` with the fields `/rechecks/plan` serves (`judged`, `phase1`, `phase2Max`, `limit`, `capped`,
+    `notRechecked`, `estimateMs`, `suggestFullCheck`, `analysisFirst`) and `Refused` (`RecheckRefusal`: `CrawlBusy`,
+    `NotAnalyzed`, `NotAnalysable`, `Unsupported`). The secrets are `CrawlOptions.PlanResume`'s, as Continue's; the
+    sidecar adds `site-busy` and `recheck-not-latest` from its library.
+  - The run: `CrawlEngine.Recheck(RecheckRequest(path, plan, options))`, a `CrawlJob` stopped as a crawl's is. Its
+    `CrawlProgress.Recheck` is `{ phase, done, total }`; its `CrawlSummary.RecheckId` the recheck's number. The crawl
+    must be analysed after it (`CrawlAnalyzer`), which settles the recheck.
+  - The record: `RecheckReader.ReadAll(path)` (newest first), `Read(path, id)` and `ReadRows(path, id, outcomes, roles,
+    offset, limit)`, as `/rechecks`, `/rechecks/{n}` and `/rechecks/{n}/rows` serve them. `CrawlRun.IsRecheck` marks a
+    recheck's run in the history.
+  - The catalog's `IssueDefinition.Recheck` (`RecheckKind`: `Urls`, `Sitemaps`, `RobotsTxt`, `SiteVersions`), served
+    camelCase as `recheck`.
+  - A new URL grid column, `skipReason` ("Why not read"), an enum of every skip reason, `recheck` ("Found by a recheck,
+    not followed") and `noLongerLinked` ("No longer linked (a recheck let it go)") among them: the grids' label for both.
+
+- **Comparison, read only.** `Storage/CrawlComparisonReader`: `ReadSummary` (`/changes`), `ReadRowChanges` and
+  `ReadGroupChanges` (`compareWith` on `/rows` and `/groups`, through `IssueGroupReader`), `ReadCleared` (`/fixed`).
+  Each file is opened as the grids' readers open it, one snapshot each through its own `CrawlReadGate`, and they're
+  joined in memory, keyed by `UrlKey.Compute` of the URL's text, a check at a time: no `ATTACH`, nothing written.
+  `Analysis/CrawlComparability` (pure) gives the differences and `comparable` from the two crawls' stored options,
+  `AnalysisInfo` and coverage. Models in `Storage/Models/`, one per file.
+- **The catalog.** `IssueDefinition.Recheck` (`urls`, `sitemaps`, `robotsTxt`, `siteVersions`; empty for
+  `orphan-page` and `no-https`), served as `recheck`. Not stored, not in `ChecksFingerprint`. A test holds every check
+  to having one.
+- **Rechecks.** `Storage/RecheckPlanReader` (the scope by `references`, read only); `CrawlEngine.Recheck` and
+  `RecheckRequest`; a recheck mode in `CrawlSession` (the plan's URLs handed to the workers directly, never through
+  the frontier; phase 2 after phase 1; redirects to their end; one step of new URLs; a minute's wait for a site that
+  stops answering) and in `CrawlWriter` (`OpenForRecheck`: the recheck tables, the "before", records replacing a URL's
+  response, details, HTML and outgoing links at once, the let-go walk at close, the crawl's status left as it was);
+  `IssueWriter` settles every recheck not yet settled as it commits; `Storage/RecheckReader`; `CrawlRunReader` leaves
+  recheck runs out of `TimeCrawling`.
+- **The crawl file: three tables, no new schema version.** `rechecks`, `recheck_urls`, `recheck_targets`, created by the
+  writer the first time a file is rechecked, as `notices` and `run_time` are; `CrawlSchema.VERSION` stays 2, and a
+  reader finds none in a file never rechecked. `SkipReason` gains `Recheck` (7: found by a recheck, not fetched) and
+  `NoLongerLinked` (8: let go). The stats leave let-go URLs out of "found"; the URL grids label both.
+- **`AnalysisFreshness.VERSION` doesn't change**: a crawl that was never rechecked analyses to what it did.
+- **The synthetic site** gets revisions (`SyntheticSiteOptions.Revision`, switched on a running server), with
+  `GetExpectations(revision)` and `GetChanges(from, to)`, so the comparison is proven exactly, as the issues are.
+- **The CLI.** `si compare <crawl> <other> [--check id] [--json]`; `si recheck <crawl> --check id [--group-url u |
+  --group-detail d] [--urls file]`; `si bench --revisions`; `si readbench --compare-with <crawl>` and its class
+  `compare`.
+- **The sidecar.** `siteKey`, `previous`, `changes` and `rechecks` on `CrawlListItem`, from the summary cache, which
+  keeps each check's count and an options fingerprint; `/changes`; `compareWith` on the groups and rows requests;
+  `/fixed`; `/rechecks/plan`, `/rechecks` and its reads; the `rechecking` status and the `recheck` event; the flow
+  (analyse first when out of date, recheck, analyse); `compareWith` on the report and the workbook. The app's types are
+  written by hand (`app/src/api`), and `sites.ts` groups by `siteKey`.

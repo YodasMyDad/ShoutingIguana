@@ -69,6 +69,16 @@ public sealed record IssueDefinition(
     public IReadOnlyList<string> Clears { get; init; } = [];
 
     /// <summary>
+    /// What a recheck of the check (the fix loop's "Recheck these N pages") reads again to settle it: its URLs and what
+    /// judges them, every sitemap, the robots.txt of the origins it names, or the site's other versions. Empty for a check
+    /// a recheck can't settle, because it depends on pages nobody can name in advance: an orphan (only a full crawl shows
+    /// that something now links to it) and a site not on HTTPS (moving changes every address). Required, so no check is
+    /// added without saying. Only what a recheck does: it isn't stored with an analysis, nor part of
+    /// <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public required IReadOnlyList<RecheckKind> Recheck { get; init; }
+
+    /// <summary>
     /// The check finds one fault of the whole site, not a fault of pages: robots.txt that search engines can't read, a
     /// site not on HTTPS. However many URLs it is reported on (one, or each other version of the site that answers), the
     /// score counts it as the whole site (<see cref="ScoreCalculator"/>). It isn't part of

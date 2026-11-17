@@ -52,6 +52,14 @@ public sealed class AnalysisStateTests : IAsyncLifetime
             [IssueCatalog.BROKEN_EXTERNAL_LINKS.Id] = (SkippedCheckReasons.EXTERNAL_LINKS_OFF, "Links to other sites weren't checked in this crawl."),
             [IssueCatalog.ORPHAN_PAGE.Id] = (SkippedCheckReasons.DEPTH_LIMIT,
                 string.Create(CultureInfo.InvariantCulture, $"The depth limit kept {keptOut:N0} internal URLs out of the crawl, and pages linked only from them would look orphaned.")),
+            [IssueCatalog.CANONICAL_UNLINKED.Id] = (SkippedCheckReasons.DEPTH_LIMIT,
+                string.Create(CultureInfo.InvariantCulture, $"The depth limit kept {keptOut:N0} internal URLs out of the crawl, and pages linked only from them would look orphaned.")),
+            [IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id] = (SkippedCheckReasons.DEPTH_LIMIT,
+                string.Create(CultureInfo.InvariantCulture, $"The depth limit kept {keptOut:N0} internal URLs out of the crawl, and pages linked only from them would look orphaned.")),
+            [IssueCatalog.BROKEN_RESOURCES.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
+            [IssueCatalog.CONTENT_TYPE_MISMATCH.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
+            [IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
+            [IssueCatalog.SLOW_EXTERNAL_LINKS.Id] = (SkippedCheckReasons.EXTERNAL_LINKS_OFF, "Links to other sites weren't checked in this crawl."),
             [IssueCatalog.IMAGE_BROKEN.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
             [IssueCatalog.IMAGE_TOO_LARGE.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.")
         };
@@ -121,7 +129,12 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.True(UrlSummaryReader.IsAvailable(path));
         Assert.Empty(CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
         Assert.Equal(analysis.IsPartial, IssueReader.ReadAnalysis(path)!.IsPartial);
-        Assert.Equal(SkippedCheckReasons.URL_LIMIT, Assert.Single(IssueReader.ReadSkippedChecks(path)).Reason);
+        Assert.Equal(
+            [
+                (IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.URL_LIMIT), (IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id, SkippedCheckReasons.URL_LIMIT),
+                (IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.URL_LIMIT)
+            ],
+            IssueReader.ReadSkippedChecks(path).Select(skip => (skip.CheckId, skip.Reason)));
     }
 
     /// <summary>

@@ -23,7 +23,11 @@ internal static class ReadBenchCommand
         var gate = new Option<bool>("--gate") { Description = "Fail if any read's p95 is over its class's gate for a crawl of 100k URLs." };
         var json = new Option<string?>("--json") { Description = "Write the results as JSON to this file." };
         var only = new Option<string?>("--only") { Description = "Run only the reads whose name contains this text." };
-        var command = new Command("readbench", "Benchmark the grids' readers on a crawl file.") { database, runs, maxP95, gate, json, only };
+        var compareWith = new Option<string?>("--compare-with")
+        {
+            Description = "Another analysed crawl of the site: also time the comparison with it (class compare): the summary, a check's rows and groups with it, and the first page of what the check no longer flags."
+        };
+        var command = new Command("readbench", "Benchmark the grids' readers on a crawl file.") { database, runs, maxP95, gate, json, only, compareWith };
 
         command.SetAction(async (parse, cancellationToken) => await CommandErrors.RunAsync(async () =>
         {
@@ -31,6 +35,12 @@ internal static class ReadBenchCommand
             if (!File.Exists(path))
             {
                 Console.Error.WriteLine($"No crawl file at {path}.");
+                return 2;
+            }
+
+            if (parse.GetValue(compareWith) is { } other && !File.Exists(other))
+            {
+                Console.Error.WriteLine($"No crawl file at {other}.");
                 return 2;
             }
 
@@ -45,7 +55,7 @@ internal static class ReadBenchCommand
                 Console.WriteLine($"  The crawl has no URL summary, as {Why(first.Summary.Reason!.Value)}, so the reads that need one are skipped. Analyse it first for the full run.");
             }
 
-            var benchmark = new ReaderBenchmark(path, runCount, Console.WriteLine, parse.GetValue(only));
+            var benchmark = new ReaderBenchmark(path, runCount, Console.WriteLine, parse.GetValue(only), parse.GetValue(compareWith));
             var cases = benchmark.Run();
             if (cases.Count == 0)
             {

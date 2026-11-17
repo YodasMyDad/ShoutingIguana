@@ -45,9 +45,13 @@ public static class AnalysisFreshness
     /// is skipped for the pages the crawl couldn't read. 12 measures titles and descriptions in pixels, as Google's desktop
     /// results show them (Arial at 20 px and 14 px, <c>titleMaxPixels</c> and the rest), with details such as
     /// <c>612 px, over 580 (64 characters)</c>, and stores <c>title_width</c> and <c>description_width</c> in the URL
-    /// summary, with <c>title_length</c> and <c>description_length</c> in plain characters.
+    /// summary, with <c>title_length</c> and <c>description_length</c> in plain characters. 13 is the new checks' (step 3b,
+    /// docs/v2-new-checks.md): a page's Refresh header is a refresh as its meta tag is, and an instant one makes it a
+    /// redirect; a canonical to another site, or from a later page of a series to its first, and the pages of a canonical
+    /// loop, are no longer reported as canonicalised or canonicalised to a non-indexable page; and a robots rule written
+    /// with a space after its colon is one rule.
     /// </summary>
-    public const int VERSION = 12;
+    public const int VERSION = 13;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and
@@ -100,5 +104,5 @@ public static class AnalysisFreshness
     /// new <see cref="VERSION"/>, so such an analysis is out of date anyway; one that doesn't leaves it standing, unless
     /// the threshold is set away from its default now.
     /// </summary>
-    private static string Canonical(AnalysisSettings settings) => JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings);
+    internal static string Canonical(AnalysisSettings settings) => JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings);
 }

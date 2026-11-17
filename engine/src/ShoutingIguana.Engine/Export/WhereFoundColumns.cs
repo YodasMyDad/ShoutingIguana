@@ -129,6 +129,11 @@ internal static class WhereFoundColumns
                 parts.Add(target.Facts.Canonical is { } canonical ? $"canonicalised to {canonical.Url}" : ReasonWord(reason));
             }
 
+            if (check.TargetFacts.Contains("responseMs") && target.Facts?.ResponseMs is { } responseMs)
+            {
+                parts.Add(string.Create(CultureInfo.InvariantCulture, $"answered in {responseMs / 1000d:0.0} s"));
+            }
+
             List<string> link = [];
             if (check == IssueCatalog.MIXED_CONTENT && target.Kind is { } kind)
             {

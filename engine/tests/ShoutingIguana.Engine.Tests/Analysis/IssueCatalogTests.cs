@@ -29,7 +29,21 @@ public sealed class IssueCatalogTests
         "no-https", "http-page", "mixed-content", "security-headers-missing", "url-uppercase", "url-underscores", "url-too-long",
         "slow-response", "large-page", "html-past-crawl-limit", "viewport-missing", "lang-missing", "charset-missing", "open-graph-missing",
         "sitemap-url-other-host", "noindex-with-canonical", "robots-txt-unreachable-other-origin", "duplicate-site-version",
-        "site-hidden-from-search"
+        "site-hidden-from-search",
+
+        // The new checks of step 3b (docs/v2-new-checks.md), batch 1.
+        "robots-directives-conflict", "noindex-near-home", "unavailable-after-passed", "media-preview-blocked", "translation-blocked",
+        "indexifembedded-without-noindex", "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "canonical-on-redirect",
+        "canonical-fragment", "canonical-invalid-attribute", "canonical-unlinked",
+
+        // Batch 2.
+        "uncrawlable-links", "broken-resources", "links-to-localhost", "few-internal-outlinks", "generic-anchor-text",
+        "non-indexable-inlinks-only", "deep-page", "too-many-links", "slow-external-links", "pagination-not-linked", "pagination-broken",
+        "pagination-to-non-indexable", "pagination-sequence-error",
+
+        // Batch 3.
+        "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "head-tags-in-body", "html-structure-errors",
+        "viewport-invalid", "charset-invalid", "lang-invalid", "mobile-alternate"
     ];
 
     [Fact]
@@ -182,7 +196,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(87, IssueCatalog.All.Count);
+        Assert.Equal(122, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(
@@ -233,6 +247,32 @@ public sealed class IssueCatalogTests
 
         Assert.Equal(["links-to-redirects"], IssueCatalog.REDIRECT_CHAIN.Clears);
         Assert.Contains("broken-internal-links", IssueCatalog.INTERNAL_CLIENT_ERROR.Clears);
+    }
+
+    /// <summary>
+    /// Every check says what a recheck of it reads again (the fix loop's "Recheck these N pages"). The property is
+    /// required, so a check added without one doesn't build; this holds each to its kinds. Every check reads its URLs again
+    /// but those the table names: the sitemaps' checks read the sitemaps too (or only them), robots.txt's the robots.txt of
+    /// the origins they name, the duplicate version the site's other versions, and those a recheck can't settle nothing:
+    /// what only a full crawl can show (an orphan, a page only non-indexable pages link to, a canonical nothing links to, a
+    /// page's depth) and a move to HTTPS.
+    /// </summary>
+    [Fact]
+    public void EveryCheckSaysWhatARecheckReadsAgain()
+    {
+        Assert.All(IssueCatalog.All, check => Assert.NotNull(check.Recheck));
+        Assert.All(IssueCatalog.All, check => Assert.Equal((check.Id, check.Recheck.Count), (check.Id, check.Recheck.Distinct().Count())));
+
+        var byKinds = IssueCatalog.All
+            .GroupBy(check => string.Join(",", check.Recheck), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(check => check.Id).Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
+        Assert.Equal(["", "RobotsTxt", "SiteVersions", "Sitemaps", "Urls", "Urls,Sitemaps"], byKinds.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["canonical-unlinked", "deep-page", "no-https", "non-indexable-inlinks-only", "orphan-page"], byKinds[""]);
+        Assert.Equal(["not-in-sitemap", "sitemap-non-indexable", "sitemap-url-other-host"], byKinds["Urls,Sitemaps"]);
+        Assert.Equal(["sitemap-error", "sitemap-missing"], byKinds["Sitemaps"]);
+        Assert.Equal(["robots-txt-missing", "robots-txt-unreachable", "robots-txt-unreachable-other-origin"], byKinds["RobotsTxt"]);
+        Assert.Equal(["duplicate-site-version"], byKinds["SiteVersions"]);
+        Assert.Equal(IssueCatalog.All.Count - 14, byKinds["Urls"].Count);
     }
 
     /// <summary>Hosts show the titles as they are, so every category needs a plain name of its own, never its identifier.</summary>

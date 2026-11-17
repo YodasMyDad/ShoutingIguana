@@ -58,4 +58,13 @@ public sealed record SyntheticSiteOptions
     /// Null, the default, for none.
     /// </summary>
     public SyntheticRateLimit? RateLimit { get; init; }
+
+    /// <summary>
+    /// Which version of the site to serve: 0, the site as it has always been, or 1, the same site "after the fixes",
+    /// for the fix loop's tests. Revision 1 fixes some planted problems, leaves others, and plants a few new ones, each
+    /// on its own URLs, so a comparison of a crawl of each finds every state exactly
+    /// (<see cref="SyntheticSite.GetChanges"/>). A running server switches between them
+    /// (<see cref="SyntheticSiteServer.Revision"/>).
+    /// </summary>
+    public int Revision { get; init; }
 }

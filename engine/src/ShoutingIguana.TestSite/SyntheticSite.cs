@@ -21,6 +21,9 @@ public sealed partial class SyntheticSite
     public const int DEAD_TWIN_UNCHECKED = 5;
 
     private const int PRODUCTS_PER_LISTING = 50;
+
+    /// <summary>The analysis's default deepest a page may be, in clicks from the start (AnalysisSettings.MaxClickDepth).</summary>
+    private const int MAX_CLICK_DEPTH = 4;
     private const int PARAGRAPHS = 8;
     private const int WORDS_PER_PARAGRAPH = 60;
     private const int DESCRIPTION_WORDS = 14;
@@ -75,12 +78,18 @@ public sealed partial class SyntheticSite
     private readonly IReadOnlyList<Plant> _plants;
     private readonly Dictionary<string, Plant> _plantsByPath;
     private readonly Dictionary<string, Plant> _partnerPlantsByPath;
+    private readonly Dictionary<string, Plant> _plantsByUrl;
 
     public SyntheticSite(SyntheticSiteOptions options, Uri baseUri, Uri externalBaseUri)
     {
         if (options.PageCount < 2)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "A synthetic site needs at least two pages.");
+        }
+
+        if (options.Revision is < 0 or > LATEST_REVISION)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), $"A synthetic site has revisions 0 to {LATEST_REVISION}.");
         }
 
         _options = options;
@@ -94,6 +103,7 @@ public sealed partial class SyntheticSite
         _plants = CreatePlants();
         _plantsByPath = _plants.Where(plant => !plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
         _partnerPlantsByPath = _plants.Where(plant => plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
+        _plantsByUrl = _plants.ToDictionary(PlantUrl, StringComparer.Ordinal);
     }
 
     public int PageCount => _options.PageCount;
@@ -133,22 +143,34 @@ public sealed partial class SyntheticSite
                 : NotFound(path);
         }
 
+        // Revision 1 redirects the HTTPS site's plain-HTTP home page to the HTTPS one, so the site has one version.
+        if (path == "/" && IsHttps && plainHttp && Revision >= 1)
+        {
+            return Redirect(301, _base + "/");
+        }
+
         if (path == "/")
         {
-            return Html(RenderHome());
+            return Html(RenderHome()) with { Headers = Revision >= 1 ? HOME_HEADERS_AFTER : SECURITY_HEADERS };
         }
 
         // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do. The HTTPS site's plain-HTTP side
         // drops the connection for it, though it still serves its page.
+        // Revision 1 mends it: robots.txt answers on the plain-HTTP side too. The rest of that side still serves pages, as the
+        // plain HTTP page shows.
         if (path == "/robots.txt" && IsHttps && plainHttp)
         {
-            return new SyntheticResponse(0, HTML, null, null, null, Abort: true);
+            return Revision == 0
+                ? new SyntheticResponse(0, HTML, null, null, null, Abort: true)
+                : new SyntheticResponse(200, "text/plain; charset=utf-8", "User-agent: *\nDisallow: /private/\n", null, null);
         }
 
+        // Revision 1 lets the crawler into one URL of the private area, the one robots.txt now allows.
         if (path == "/robots.txt")
         {
             var sitemap = _options.Sitemaps ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
-            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\nDisallow: /private/\n{sitemap}", null, null);
+            var allowed = Revision >= 1 ? $"Allow: {UNBLOCKED_PRIVATE}\n" : string.Empty;
+            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\n{allowed}Disallow: /private/\n{sitemap}", null, null);
         }
 
         if (_options.Sitemaps && path == "/sitemap.xml")
@@ -191,6 +213,11 @@ public sealed partial class SyntheticSite
             return Html(RenderSimple($"Orphan {orphan}", "Only the sitemap lists this page.", path, twinLinks));
         }
 
+        if (TryNumber(path, "/broken/", string.Empty, out var restored) && FateOfBrokenLink(restored) == BrokenLinkFate.Restored)
+        {
+            return Html(RenderSimple($"Restored {restored}", "A page that was missing, now back.", path));
+        }
+
         if (TryNumber(path, "/hidden/", string.Empty, out var hidden))
         {
             return Html(RenderSimple($"Hidden {hidden}", "Only nofollow links point here.", path));
@@ -221,9 +248,10 @@ public sealed partial class SyntheticSite
             return new SyntheticResponse(200, "image/jpeg", null, IMAGE_BYTES, null);
         }
 
+        // Revision 1 replaces the oversized photo with one of a normal size, at the same address.
         if (path == "/img/large.jpg")
         {
-            return new SyntheticResponse(200, "image/jpeg", null, LARGE_IMAGE_BYTES, null);
+            return new SyntheticResponse(200, "image/jpeg", null, Revision >= 1 ? IMAGE_BYTES : LARGE_IMAGE_BYTES, null);
         }
 
         // The site's icon, where browsers look for one: no page links it, so it's no URL of a crawl.
@@ -252,7 +280,9 @@ public sealed partial class SyntheticSite
 
     public SyntheticSiteExpectations GetExpectations()
     {
-        HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [];
+        HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [], restored = [];
+        var depths = ProductDepths();
+        var linkedBy = ProductInlinks();
         Dictionary<string, HashSet<string>> issues = new(StringComparer.Ordinal);
 
         // Paths are on this site; links to the external site are already absolute.
@@ -266,12 +296,17 @@ public sealed partial class SyntheticSite
             urls.Add(pathOrUrl.StartsWith('/') ? _base + pathOrUrl : pathOrUrl);
         }
 
+        List<(string Title, string Path)> titles = [];
         for (var product = 1; product < PageCount; product++)
         {
             var path = $"/p/{product}";
             foreach (var (href, _, _) in ContentLinks(product))
             {
-                if (href.StartsWith("/broken/", StringComparison.Ordinal))
+                if (IsRestored(href))
+                {
+                    restored.Add(href);
+                }
+                else if (href.StartsWith("/broken/", StringComparison.Ordinal))
                 {
                     broken.Add(href);
                     Flag("internal-client-error", href);
@@ -297,7 +332,7 @@ public sealed partial class SyntheticSite
                     Flag("redirect-chain", href);
                     Flag("redirect-temporary", href);
                 }
-                else if (href.StartsWith("/private/", StringComparison.Ordinal))
+                else if (href.StartsWith("/private/", StringComparison.Ordinal) && href != UnblockedPrivate)
                 {
                     disallowed.Add(href);
                     Flag("blocked-by-robots", href);
@@ -327,6 +362,12 @@ public sealed partial class SyntheticSite
             {
                 Flag("noindex-page", path);
 
+                // A noindex product one or two clicks from home, as every product a listing shows is.
+                if (depths[product] <= 2)
+                {
+                    Flag("noindex-near-home", path);
+                }
+
                 // noindex decides the page, so a canonical elsewhere is a mixed signal rather than a canonicalised page.
                 if (IsCanonicalised(product))
                 {
@@ -336,6 +377,16 @@ public sealed partial class SyntheticSite
             else if (IsCanonicalised(product))
             {
                 Flag("canonicalised-page", path);
+            }
+
+            if (IsIndexable(product) && depths[product] is > MAX_CLICK_DEPTH and < int.MaxValue)
+            {
+                Flag("deep-page", path);
+            }
+
+            if (IsIndexable(product) && linkedBy[product] is (true, false))
+            {
+                Flag("non-indexable-inlinks-only", path);
             }
 
             // Every product is in a sitemap, so each non-indexable one is a sitemap issue.
@@ -349,11 +400,10 @@ public sealed partial class SyntheticSite
                 Flag("canonical-to-non-indexable", path);
             }
 
-            // Content checks only look at indexable pages, so a pair counts only when both are indexable.
-            if (HasDuplicateTitle(product) && IsIndexable(product) && IsIndexable(product - 1))
+            // Content checks only look at indexable pages, so a shared title counts only between indexable ones.
+            if (IsIndexable(product))
             {
-                Flag("title-duplicate", path);
-                Flag("title-duplicate", $"/p/{product - 1}");
+                titles.Add((TitleFor(product), path));
             }
 
             if (MissesDescription(product) && IsIndexable(product))
@@ -364,6 +414,14 @@ public sealed partial class SyntheticSite
             if (MissesAlt(product))
             {
                 Flag("image-missing-alt", path);
+            }
+        }
+
+        foreach (var shared in titles.GroupBy(page => page.Title, StringComparer.Ordinal).Where(group => group.Count() > 1))
+        {
+            foreach (var (_, page) in shared)
+            {
+                Flag("title-duplicate", page);
             }
         }
 
@@ -381,8 +439,14 @@ public sealed partial class SyntheticSite
         // and the plain-HTTP robots.txt that doesn't answer. The HTTPS site's plain-HTTP side serves the home page rather
         // than redirect, a duplicate version of the site. Over plain HTTP, the https:// version doesn't answer, as on a
         // site without TLS, which is no duplicate.
+        // Revision 1 drops a security header from the home page, and mends the plain-HTTP side of the HTTPS site.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
-        if (IsHttps)
+        if (!IsHttps && Revision >= 1)
+        {
+            Flag("security-headers-missing", "/");
+        }
+
+        if (IsHttps && Revision == 0)
         {
             Flag("robots-txt-unreachable-other-origin", "/");
             Flag("duplicate-site-version", "http" + _base["https".Length..] + "/");
@@ -396,17 +460,25 @@ public sealed partial class SyntheticSite
 
         if (_options.Sitemaps)
         {
-            // The sitemap index lists a file that doesn't exist, and the orphans are only in the extra sitemap.
-            Flag("sitemap-error", "/");
+            // The sitemap index lists a file that doesn't exist (until revision 1 drops it), and the orphans are only in
+            // the extra sitemap.
+            if (Revision == 0)
+            {
+                Flag("sitemap-error", "/");
+            }
+
             for (var orphan = 0; orphan < OrphanCount; orphan++)
             {
                 Flag("orphan-page", $"/orphan/{orphan}");
             }
 
-            // Categories are linked from every page but listed in no sitemap.
+            // Categories are linked from every page but listed in no sitemap, but for the first in revision 1.
             for (var category = 0; category < CATEGORY_COUNT; category++)
             {
-                Flag("not-in-sitemap", $"/c/{category}");
+                if (!IsCategoryListed(category))
+                {
+                    Flag("not-in-sitemap", $"/c/{category}");
+                }
             }
         }
         else
@@ -414,10 +486,11 @@ public sealed partial class SyntheticSite
             Flag("sitemap-missing", "/");
         }
 
-        // A plant's sitemap issues come from its sitemap entry, which a site without sitemaps doesn't have.
+        // A plant's sitemap issues come from its sitemap entry, which a site without sitemaps doesn't have, and without
+        // one no page can be missing from them.
         foreach (var plant in _plants)
         {
-            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !issue.StartsWith("sitemap-", StringComparison.Ordinal)))
+            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !(issue.StartsWith("sitemap-", StringComparison.Ordinal) || issue is "not-in-sitemap" or "orphan-page")))
             {
                 Flag(issue, PlantUrl(plant));
             }
@@ -425,7 +498,9 @@ public sealed partial class SyntheticSite
 
         var products = PageCount - 1;
         var orphans = _options.Sitemaps ? OrphanCount : 0;
-        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true } && !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
+        var unblocked = UnblockedPrivate is null ? 0 : 1;
+        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + restored.Count + unblocked +
+                        _plants.Count(plant => plant is { Status: 200, IsPage: true } && !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
         // Cloudflare's /cdn-cgi/ endpoint is no page of the site's in any count (the engine's CrawlSchema.PAGE), so it's
         // out of both; a page the analysis doesn't audit for another reason would be out of this one alone.
         var analysedPages = htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false } &&
@@ -436,7 +511,7 @@ public sealed partial class SyntheticSite
         // canonical names its own page on another version of the site, so every one of them is out. Only a site with
         // HiddenFromSearch gets there: one with NoindexProducts has as many noindex pages less one, and a home page
         // that can be indexed.
-        if (IsHomeNoindex && Count(issues, "noindex-page") * 2 > analysedPages - Count(issues, "canonicalised-page"))
+        if (IsHomeNoindex && Count(issues, "noindex-page") * 2 > analysedPages - Canonicalised(issues))
         {
             Flag("site-hidden-from-search", "/");
         }
@@ -447,15 +522,16 @@ public sealed partial class SyntheticSite
             Products: products,
             Orphans: orphans,
             BrokenUrls: broken.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: false }),
-            ServerErrorUrls: errors.Count,
-            Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
+            ServerErrorUrls: errors.Count + _plants.Count(plant => plant is { Status: >= 500, OnPartnerSite: false }),
+            // Over HTTPS, revision 1's plain-HTTP home page, which the crawler probes as another version of the site, redirects.
+            Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400) + (IsHttps && Revision >= 1 ? 1 : 0),
             RobotsDisallowed: disallowed.Count + _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: false }),
             NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
             ExternalOk: externalOk.Count,
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
             Noindex: Count(issues, "noindex-page"),
-            Canonicalised: Count(issues, "canonicalised-page"),
+            Canonicalised: Canonicalised(issues),
             DuplicateTitlePages: Count(issues, "title-duplicate") - _plants.Count(plant => plant.Issues.Contains("title-duplicate")),
             MissingDescriptions: Count(issues, "description-missing") - _plants.Count(plant => plant.Issues.Contains("description-missing")),
             ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
@@ -473,6 +549,13 @@ public sealed partial class SyntheticSite
 
     private static int Count(Dictionary<string, HashSet<string>> issues, string issue) =>
         issues.TryGetValue(issue, out var urls) ? urls.Count : 0;
+
+    /// <summary>
+    /// The pages canonicalised to another URL: those reported as such, and those whose canonical is reported as a fault of
+    /// its own instead, to another site or from a later page of a series to its first.
+    /// </summary>
+    private static int Canonicalised(Dictionary<string, HashSet<string>> issues) =>
+        Count(issues, "canonicalised-page") + Count(issues, "canonical-other-domain") + Count(issues, "canonical-to-first-page");
 
     /// <summary>The absolute URL a plant is served, linked and listed at.</summary>
     private string PlantUrl(Plant plant) => plant.Url ?? (plant.OnPartnerSite ? _external : _base) + plant.Path;
@@ -522,9 +605,19 @@ public sealed partial class SyntheticSite
             yield return ($"/p/{target}", false, $"Product {target}");
         }
 
+        // Revision 1 restores some of these pages, drops the link to others, and moves some links to another URL that
+        // doesn't exist either.
         if (product % 29 == 0)
         {
-            yield return ($"/broken/{product}", false, "Broken link");
+            switch (FateOfBrokenLink(product))
+            {
+                case BrokenLinkFate.Broken or BrokenLinkFate.Restored:
+                    yield return ($"/broken/{product}", false, "Broken link");
+                    break;
+                case BrokenLinkFate.Relinked:
+                    yield return ($"/broken/{product}{RELINKED}", false, "Broken link");
+                    break;
+            }
         }
 
         if (product % 211 == 0)
@@ -589,7 +682,7 @@ public sealed partial class SyntheticSite
         return Render(new PageSpec
         {
             Path = $"/p/{product}",
-            Title = TitleOf(HasDuplicateTitle(product) ? product - 1 : product),
+            Title = TitleFor(product),
             Description = MissesDescription(product) ? null : $"Synthetic product {product}: {Words(product, 99, DESCRIPTION_WORDS)}.",
             H1 = $"Product {product}",
             Content = content.ToString(),
@@ -601,10 +694,114 @@ public sealed partial class SyntheticSite
         });
     }
 
+    /// <summary>The products the home page lists.</summary>
+    private IEnumerable<int> HomeProducts() => Enumerable.Range(1, Math.Min(PRODUCTS_PER_LISTING, PageCount - 1));
+
+    /// <summary>The products a category page lists: every twentieth from its number, up to a listing's worth.</summary>
+    private IEnumerable<int> CategoryProducts(int category)
+    {
+        for (int product = category, listed = 0; product < PageCount && listed < PRODUCTS_PER_LISTING; product += CATEGORY_COUNT)
+        {
+            if (product < 1)
+            {
+                continue;
+            }
+
+            yield return product;
+            listed++;
+        }
+    }
+
+    /// <summary>
+    /// Each product's depth as the crawl records it: the fewest links from the home page, any kind of link counting and a
+    /// redirect counting as none, so a product a redirect leads to is as deep as the link to the redirect. The home page
+    /// lists the first products, the categories (one click away) a listing's worth each, and each product links others.
+    /// </summary>
+    private int[] ProductDepths()
+    {
+        var depths = new int[PageCount];
+        Array.Fill(depths, int.MaxValue);
+        List<int> level = [.. HomeProducts()];
+        level.ForEach(product => depths[product] = 1);
+        for (var depth = 1; level.Count > 0; depth++)
+        {
+            List<int> next = [];
+            void Reach(int product)
+            {
+                if (depths[product] > depth + 1)
+                {
+                    depths[product] = depth + 1;
+                    next.Add(product);
+                }
+            }
+
+            if (depth == 1)
+            {
+                Enumerable.Range(0, CATEGORY_COUNT).SelectMany(CategoryProducts).ToList().ForEach(Reach);
+            }
+
+            foreach (var product in level)
+            {
+                foreach (var (href, _, _) in ContentLinks(product))
+                {
+                    if (TryNumber(href, "/p/", string.Empty, out var target) || TryNumber(href, "/r/", string.Empty, out target) ||
+                        TryNumber(href, "/r2/", string.Empty, out target))
+                    {
+                        Reach(target);
+                    }
+                }
+
+                if (IsCanonicalised(product) && product > 1)
+                {
+                    Reach(product - 1);
+                }
+            }
+
+            level = next;
+        }
+
+        return depths;
+    }
+
+    /// <summary>
+    /// For each product, whether any page links to it with a followed link, and whether an indexable one does, crediting a
+    /// link to a redirect to where it ends, as the analysis counts them: the home page and its categories list products, and
+    /// products link each other, directly and through /r/ and /r2/.
+    /// </summary>
+    private (bool Any, bool Indexable)[] ProductInlinks()
+    {
+        var linked = new (bool Any, bool Indexable)[PageCount];
+        void Link(int product, bool fromIndexable) => linked[product] = (true, linked[product].Indexable || fromIndexable);
+
+        foreach (var product in HomeProducts())
+        {
+            Link(product, !IsHomeNoindex);
+        }
+
+        foreach (var product in Enumerable.Range(0, CATEGORY_COUNT).SelectMany(CategoryProducts))
+        {
+            Link(product, true);
+        }
+
+        for (var product = 1; product < PageCount; product++)
+        {
+            foreach (var (href, noFollow, _) in ContentLinks(product))
+            {
+                if (!noFollow && (TryNumber(href, "/p/", string.Empty, out var target) || TryNumber(href, "/r/", string.Empty, out target) ||
+                                  TryNumber(href, "/r2/", string.Empty, out target)) && target != product)
+                {
+                    Link(target, IsIndexable(product));
+                }
+            }
+        }
+
+        return linked;
+    }
+
     private string RenderHome()
     {
         var list = new StringBuilder();
-        for (var product = 1; product <= Math.Min(PRODUCTS_PER_LISTING, PageCount - 1); product++)
+        foreach (var product in HomeProducts())
         {
             list.Append("<li><a href=\"/p/").Append(product).Append("\">Product ").Append(product).Append("</a></li>");
         }
@@ -623,15 +820,9 @@ public sealed partial class SyntheticSite
     private string RenderCategory(int category)
     {
         var list = new StringBuilder();
-        for (int product = category, listed = 0; product < PageCount && listed < PRODUCTS_PER_LISTING; product += CATEGORY_COUNT)
+        foreach (var product in CategoryProducts(category))
         {
-            if (product < 1)
-            {
-                continue;
-            }
-
             list.Append("<li><a href=\"/p/").Append(product).Append("\">Product ").Append(product).Append("</a></li>");
-            listed++;
         }
 
         // The plants hub hangs off the first category, two clicks from home, so depth-limited crawls stay unchanged.
@@ -658,7 +849,7 @@ public sealed partial class SyntheticSite
     private string Render(PageSpec page)
     {
         var html = new StringBuilder(32 * 1024);
-        html.Append("<!DOCTYPE html><html").Append(page.Lang ? " lang=\"en\"" : string.Empty).Append("><head>");
+        html.Append("<!DOCTYPE html><html").Append(page.Lang ? $" lang=\"{page.LangValue}\"" : string.Empty).Append("><head>");
         if (page.Charset)
         {
             html.Append("<meta charset=\"utf-8\">");
@@ -679,7 +870,7 @@ public sealed partial class SyntheticSite
 
         if (page.Viewport)
         {
-            html.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            html.Append("<meta name=\"viewport\" content=\"").Append(page.ViewportContent).Append("\">");
         }
 
         if (page.Canonical is not null)
@@ -707,26 +898,38 @@ public sealed partial class SyntheticSite
         }
 
         html.Append(page.ExtraHead);
-        html.Append("</head><body><header class=\"site-header\"><a href=\"/\" class=\"logo\">Synthetic Store</a></header>");
-        html.Append("<nav><ul><li><a href=\"/\">Home</a></li>");
-        for (var category = 0; category < CATEGORY_COUNT; category++)
+        html.Append("</head><body>");
+        if (page.Chrome)
         {
-            html.Append("<li><a href=\"/c/").Append(category).Append("\">Category ").Append(category).Append("</a></li>");
+            html.Append("<header class=\"site-header\"><a href=\"/\" class=\"logo\">Synthetic Store</a></header>");
+            html.Append("<nav><ul><li><a href=\"/\">Home</a></li>");
+            for (var category = 0; category < CATEGORY_COUNT; category++)
+            {
+                html.Append("<li><a href=\"/c/").Append(category).Append("\">Category ").Append(category).Append("</a></li>");
+            }
+
+            html.Append("</ul></nav>");
         }
 
-        html.Append("</ul></nav><main>");
+        html.Append("<main>");
         if (page.H1 is not null)
         {
             html.Append("<h1>").Append(page.H1).Append("</h1>");
         }
 
-        html.Append(page.Content).Append("</main><footer><ul>");
-        foreach (var staticPage in STATIC_PAGES)
+        html.Append(page.Content).Append("</main>");
+        if (page.Chrome)
         {
-            html.Append("<li><a href=\"/").Append(staticPage).Append("\">").Append(staticPage).Append("</a></li>");
+            html.Append("<footer><ul>");
+            foreach (var staticPage in STATIC_PAGES)
+            {
+                html.Append("<li><a href=\"/").Append(staticPage).Append("\">").Append(staticPage).Append("</a></li>");
+            }
+
+            html.Append("</ul><p>&copy; Synthetic Store</p></footer>");
         }
 
-        html.Append("</ul><p>&copy; Synthetic Store</p></footer></body></html>");
+        html.Append("</body></html>");
         return html.ToString();
     }
 
@@ -738,10 +941,14 @@ public sealed partial class SyntheticSite
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/pages-").Append(chunk).Append(".xml</loc></sitemap>");
         }
 
-        // The last entry doesn't exist: a planted sitemap error.
+        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends.
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/extra.xml</loc></sitemap>");
-        xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap></sitemapindex>");
-        return xml.ToString();
+        if (Revision == 0)
+        {
+            xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap>");
+        }
+
+        return xml.Append("</sitemapindex>").ToString();
     }
 
     private string RenderPagesSitemap(int chunk)
@@ -772,6 +979,13 @@ public sealed partial class SyntheticSite
         foreach (var plant in _plants.Where(plant => plant.InSitemap))
         {
             xml.Append("<url><loc>").Append(PlantUrl(plant)).Append("</loc></url>");
+        }
+
+        // Revision 1 lists what it adds and mends: the pages it restored, the private page robots.txt now allows, and the
+        // first category.
+        foreach (var path in RevisionListedPaths())
+        {
+            xml.Append("<url><loc>").Append(_base).Append(path).Append("</loc></url>");
         }
 
         return xml.Append("</urlset>").ToString();

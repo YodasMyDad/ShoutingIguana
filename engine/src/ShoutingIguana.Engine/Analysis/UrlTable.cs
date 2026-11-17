@@ -20,14 +20,22 @@ internal sealed class UrlTable
     /// <summary>Redirects followed before a trace stops: as many as Chrome and Firefox follow before giving up.</summary>
     public const int MAX_REDIRECT_HOPS = 20;
 
+    /// <summary>Canonicals followed, page to page, before a trace gives up looking for a loop.</summary>
+    public const int MAX_CANONICAL_STEPS = 10;
+
     private readonly UrlStatus[] _statuses;
     private readonly int[] _followedInlinks;
+    private readonly int[] _indexableInlinks;
     private readonly int[] _nofollowInlinks;
     private readonly int[] _inlinks;
     private readonly int[] _nofollowLinks;
     private readonly int[] _linkingPages;
     private readonly int[] _usedOn;
     private readonly HashSet<int> _pageTargets = [];
+
+    // Each canonicalised page's canonical target, and the pages whose canonicals, followed page to page, come back round.
+    private readonly Dictionary<int, int> _canonicalTargets = [];
+    private readonly HashSet<int> _canonicalLoops = [];
     private readonly List<(int UrlId, IndexabilityReason Reason)> _indexabilityChanges = [];
 
     /// <param name="instantRefreshes">Parsed pages with a 0-second meta refresh to another URL.</param>
@@ -37,6 +45,7 @@ internal sealed class UrlTable
     {
         _statuses = statuses;
         _followedInlinks = new int[statuses.Length];
+        _indexableInlinks = new int[statuses.Length];
         _nofollowInlinks = new int[statuses.Length];
         _inlinks = new int[statuses.Length];
         _nofollowLinks = new int[statuses.Length];
@@ -57,7 +66,8 @@ internal sealed class UrlTable
             }
         }
 
-        foreach (var (page, target) in canonicals ?? [])
+        List<(int Page, int Target)> canonicalised = [.. canonicals ?? []];
+        foreach (var (page, target) in canonicalised)
         {
             if (_statuses[page] is { IndexabilityReason: IndexabilityReason.Canonicalised } status &&
                 (TraceRedirects(target).FinalId == page || IsBrokenThroughRedirects(target)))
@@ -66,6 +76,16 @@ internal sealed class UrlTable
                 _indexabilityChanges.Add((page, IndexabilityReason.None));
             }
         }
+
+        foreach (var (page, target) in canonicalised)
+        {
+            if (_statuses[page].IndexabilityReason == IndexabilityReason.Canonicalised)
+            {
+                _canonicalTargets.TryAdd(page, target);
+            }
+        }
+
+        FindCanonicalLoops();
 
         var home = startId == 0 ? 0 : TraceRedirects(startId).FinalId;
         HomeId = home != 0 && _statuses[home] is { IsInternal: true, IsPage: true } ? home : startId;
@@ -151,6 +171,9 @@ internal sealed class UrlTable
     /// <summary>Pages with a followed link to this URL, not counting the URL itself.</summary>
     public int FollowedInlinks(int id) => _followedInlinks[id];
 
+    /// <summary>Of <see cref="FollowedInlinks"/>, the pages that can be indexed themselves.</summary>
+    public int IndexableInlinks(int id) => _indexableInlinks[id];
+
     /// <summary>Pages whose only links to this URL are nofollow.</summary>
     public int NofollowInlinks(int id) => _nofollowInlinks[id];
 
@@ -199,6 +222,10 @@ internal sealed class UrlTable
         foreach (var target in _pageTargets)
         {
             _followedInlinks[target]++;
+            if (page.IsIndexable)
+            {
+                _indexableInlinks[target]++;
+            }
         }
 
         foreach (var link in page.Links)
@@ -248,8 +275,69 @@ internal sealed class UrlTable
             if (final != id)
             {
                 _followedInlinks[final] += _followedInlinks[id];
+                _indexableInlinks[final] += _indexableInlinks[id];
                 _nofollowInlinks[final] += _nofollowInlinks[id];
             }
+        }
+    }
+
+    /// <summary>
+    /// The page is on a canonical loop: its canonical names a page whose canonical names another, and so on (through
+    /// redirects), until one names a page already passed, within <see cref="MAX_CANONICAL_STEPS"/>. Only the pages on the
+    /// loop itself are; a page whose canonical leads into one isn't.
+    /// </summary>
+    public bool IsOnCanonicalLoop(int id) => _canonicalLoops.Contains(id);
+
+    /// <summary>The pages of the canonical loop a page is on, in the order its canonicals lead, starting with it; empty when it's on none.</summary>
+    public IReadOnlyList<int> CanonicalLoop(int id)
+    {
+        if (!_canonicalLoops.Contains(id))
+        {
+            return [];
+        }
+
+        List<int> loop = [id];
+        for (var next = NextCanonicalPage(id); next is { } page && page != id && loop.Count <= MAX_CANONICAL_STEPS; next = NextCanonicalPage(page))
+        {
+            loop.Add(page);
+        }
+
+        return loop;
+    }
+
+    /// <summary>The canonicalised page a canonicalised page's canonical leads to, through redirects, or null when it leads to no such page.</summary>
+    private int? NextCanonicalPage(int page)
+    {
+        var next = TraceRedirects(_canonicalTargets[page]).FinalId;
+        return _canonicalTargets.ContainsKey(next) ? next : null;
+    }
+
+    /// <summary>
+    /// Follows every canonicalised page's canonical, page to page, and marks the pages of each loop found. Each page is
+    /// walked from once, whatever the order, so the result doesn't depend on which page the crawl read first.
+    /// </summary>
+    private void FindCanonicalLoops()
+    {
+        HashSet<int> done = [];
+        List<int> path = [];
+        foreach (var start in _canonicalTargets.Keys)
+        {
+            path.Clear();
+            int? current = start;
+            while (current is { } page && !done.Contains(page) && path.Count <= MAX_CANONICAL_STEPS)
+            {
+                var at = path.IndexOf(page);
+                if (at >= 0)
+                {
+                    _canonicalLoops.UnionWith(path.Skip(at));
+                    break;
+                }
+
+                path.Add(page);
+                current = NextCanonicalPage(page);
+            }
+
+            done.UnionWith(path);
         }
     }
 

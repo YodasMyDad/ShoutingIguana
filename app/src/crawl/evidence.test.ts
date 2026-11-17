@@ -157,6 +157,34 @@ describe('what a URL a page names is', () => {
     ]);
   });
 
+  it('says how long a slow link’s page took to answer, then where the link is and what it says', () => {
+    const slow = target({
+      url: 'https://elsewhere.example/slow',
+      kind: 'hyperlink',
+      text: 'Report',
+      position: 'content',
+      responseMs: 7_400,
+    });
+    expect(
+      targetFactParts(slow, ['statusCode', 'responseMs', 'text', 'position'], SITE, 'slow-external-links'),
+    ).toEqual(['answered in 7.4 s', 'in the content', '“Report”']);
+    // A group's related URL says it too; an older sidecar's, without it, says nothing of it.
+    const page: RelatedFacts = {
+      statusCode: 200,
+      outcome: 'success',
+      contentType: 'text/html',
+      sizeBytes: 20_000,
+      pixelWidth: null,
+      pixelHeight: null,
+      final: null,
+      indexability: null,
+      canonical: null,
+    };
+    const facts = ['statusCode', 'responseMs', 'text', 'position'];
+    expect(relatedFactParts({ ...page, responseMs: 3_200 }, facts, SITE)).toEqual(['answered in 3.2 s']);
+    expect(relatedFactParts(page, facts, SITE)).toEqual([]);
+  });
+
   it('names a missing section and a nofollow link, and an image link without alt text', () => {
     expect(
       targetFactParts(
@@ -310,6 +338,7 @@ describe('a row’s evidence as facts', () => {
     expect(evidenceValueWords('titleWidth', 742, null)).toBe('742 px');
     expect(evidenceValueWords('descriptionWidth', 1_204, null)).toBe('1,204 px');
     expect(evidenceValueWords('titleLength', 80, null)).toBe('80 characters');
+    expect(evidenceValueWords('language', 'english', null)).toBe('lang “english”');
     expect(
       evidenceValueWords('titleInResults', 'Garden sofas and chairs for every season, delivered free…', null),
     ).toBe('in results “Garden sofas and chairs for every season, delivered free…”');

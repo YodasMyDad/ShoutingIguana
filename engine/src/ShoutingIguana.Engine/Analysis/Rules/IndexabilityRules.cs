@@ -25,9 +25,11 @@ internal sealed class IndexabilityRules : IPageRule
 
         if (page.Facts.MetaRefresh is { } refresh)
         {
+            // A Refresh header works as the tag does, but it's set on the server, not in the page, so the detail says which.
             var delay = refresh.DelaySeconds is { } seconds ? $" after {RuleText.Count(seconds, "second", "seconds")}" : string.Empty;
+            var action = refresh.Url is { } target ? $"moves to {target}{delay}" : $"reloads the page{delay}";
             yield return new IssueHit(IssueCatalog.META_REFRESH, page.UrlId,
-                refresh.Url is { } target ? $"Moves to {target}{delay}" : $"Reloads the page{delay}");
+                refresh.FromHttpHeader ? $"The Refresh header {action}" : $"{char.ToUpperInvariant(action[0])}{action[1..]}");
         }
     }
 
