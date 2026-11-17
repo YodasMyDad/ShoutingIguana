@@ -12,6 +12,7 @@ import type { SourceViewerProps } from '../inspector/SourceViewer';
 import { commands, installKeyboard } from '../keyboard/registry';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { resetPlaces } from './listPlace';
+import { UNKNOWN_ACTION } from './robots/robotsWords';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { wholeText } from '../test/text';
 import {
@@ -288,11 +289,16 @@ describe('robots.txt: one origin’s file', () => {
     await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
     // The URL and what blocking it costs lead; the rule is the fifth column (the file shows it for the cursor's row).
     const why = (url: string) => rowOf(url).querySelector('[aria-colindex="5"]');
-    expect(why(`${SITE}/admin/users`)).toHaveTextContent('Line 6: Disallow: /admin/');
-    expect(why(`${SITE}/old-private`)).toHaveTextContent('No rule kept');
-    expect(within(rowOf(`${SITE}/old-private`)).getByText('No rule kept')).toHaveAttribute(
+    // The column says the line; the rule's text is behind it, and in the file beside the list.
+    expect(why(`${SITE}/admin/users`)).toHaveTextContent(/^Line 6$/);
+    expect(within(rowOf(`${SITE}/admin/users`)).getByText('Line 6')).toHaveAttribute(
       'title',
-      expect.stringContaining('doesn’t refuse it'),
+      'Line 6 refused it: Disallow: /admin/',
+    );
+    expect(why(`${SITE}/old-private`)).toHaveTextContent('No matching rule');
+    expect(within(rowOf(`${SITE}/old-private`)).getByText('No matching rule')).toHaveAttribute(
+      'title',
+      expect.stringContaining('has no rule that blocks it'),
     );
   });
 
@@ -343,8 +349,11 @@ describe('robots.txt: one origin’s file', () => {
         .map((header) => header.textContent),
     ).toEqual(['Blocked URL', 'Conflict', 'Linked from', 'In a sitemap', 'Blocked by']);
     const cell = (url: string, column: number) => rowOf(url).querySelector(`[aria-colindex="${column}"]`);
-    expect(cell(`${SITE}/admin/`, 2)).toHaveTextContent('In your menu but blocked');
-    expect(cell(`${SITE}/admin/orders?page=2`, 2)).toHaveTextContent('In your sitemap but blocked');
+    // In a few words, the whole sentence behind them (and read with them).
+    expect(cell(`${SITE}/admin/`, 2)).toHaveTextContent('In menu');
+    expect(within(rowOf(`${SITE}/admin/`)).getByTitle('In your menu but blocked')).toBeInTheDocument();
+    expect(cell(`${SITE}/admin/orders?page=2`, 2)).toHaveTextContent('In sitemap');
+    expect(within(rowOf(`${SITE}/admin/orders?page=2`)).getByTitle('In your sitemap but blocked')).toBeInTheDocument();
     expect(cell(`${SITE}/admin/users`, 2)).toHaveTextContent(/^$/);
     expect(cell(`${SITE}/admin/users`, 3)).toHaveTextContent('3 pages');
     expect(cell(`${SITE}/old-private`, 3)).toHaveTextContent('No pages');
@@ -412,7 +421,7 @@ describe('robots.txt: one origin’s file', () => {
     const { transport } = sidecar();
     const { router } = await open(FILE);
     const link = await screen.findByRole('link', {
-      name: '1 URL is stored as refused, though nothing kept here refuses it',
+      name: '1 URL was blocked by a rule that isn’t in this copy of the file',
     });
     fireEvent.click(link);
     await waitFor(() => expect(searchOf(router).reason).toBe('unknown'));
@@ -420,7 +429,9 @@ describe('robots.txt: one origin’s file', () => {
       expect(screen.getByRole('grid', { name: 'Blocked URLs' })).toHaveAttribute('aria-rowcount', '2'),
     );
     expect(blockedRequests(transport).at(-1)).toMatchObject({ origin: SITE, reason: 'unknown' });
-    expect(screen.getByText('no rule kept').closest('.si-chip')).toHaveTextContent('Reason is no rule kept');
+    expect(screen.getByText('no matching rule').closest('.si-chip')).toHaveTextContent('Reason is no matching rule');
+    // What happened, and what to do, under the link.
+    expect(screen.getByText(UNKNOWN_ACTION)).toBeVisible();
     expect(screen.getByText(`${SITE}/old-private`)).toBeVisible();
   });
 
@@ -604,7 +615,7 @@ describe('robots.txt: an origin without a file to show', () => {
     ).toBeGreaterThan(0);
     expect(await screen.findByRole('heading', { name: 'No file to show' })).toBeVisible();
     const row = await waitFor(() => rowOf('https://cdn.example.net/a.js'));
-    expect(row.querySelector('[aria-colindex="5"]')).toHaveTextContent('robots.txt couldn’t be read');
+    expect(row.querySelector('[aria-colindex="5"]')).toHaveTextContent('Couldn’t be read');
     expect(screen.getByRole('link', { name: '2 URLs were refused while robots.txt couldn’t be read' })).toBeVisible();
     expect(screen.queryByTestId('source-viewer')).toBeNull();
   });
@@ -657,7 +668,7 @@ describe('robots.txt: an origin without a file to show', () => {
       ),
     );
     expect(
-      await screen.findByRole('link', { name: '1 URL is stored as refused, though nothing kept here refuses it' }),
+      await screen.findByRole('link', { name: '1 URL was blocked by a rule that isn’t in this copy of the file' }),
     ).toBeVisible();
     expect(page).not.toHaveTextContent(/this origin’s URLs show their own errors/);
   });

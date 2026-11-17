@@ -141,6 +141,12 @@
   --container-content: 1136px;
   /* Issues stacks its checks list over the selected check in a main area narrower than this (200% zoom at 1280 px). */
   --container-split: 880px;
+  /*
+    robots.txt stacks its file over the URLs it blocked in a main area narrower than this, so the URLs keep room for
+    every column (what blocking each costs) without scrolling sideways: side by side at 1440 px, stacked at the
+    window's least (960 px).
+  */
+  --container-robots-split: 1160px;
   /* Simple's Your sites in a card narrower than this (200% zoom): a row's score and what to fix go under its name. */
   --container-sites: 640px;
   /*
@@ -452,7 +458,7 @@
   /* Sitemaps and robots.txt (their slice). */
   --robots-file-min-height: 240px; /* the file keeps this much, and the blocked URLs at least it, however short the window */
   --robots-pane-height: 360px; /* the file where they stack, in a narrow panel; the blocked URLs at least it */
-  --robots-columns: minmax(0, 9fr) minmax(0, 11fr); /* the file, then the URLs it blocked, with what blocking each costs */
+  --robots-columns: minmax(0, 2fr) minmax(0, 3fr); /* the file, then the URLs it blocked, with what blocking each costs */
   /* The note over the blocked URLs: room for two lines of 12px text, so the list never moves when it wraps or comes. */
   --robots-note-height: calc(2 * var(--leading-12) + var(--space-3));
   /* The Report screen (round 4). */

@@ -206,7 +206,7 @@ describe('a URL and its line, both ways', () => {
     expect(narrowingWords({ by: 'reason', reason: 'unreachable' }, TEST_FILE)?.value).toBe(
       'robots.txt couldn’t be read',
     );
-    expect(narrowingWords({ by: 'reason', reason: 'unknown' }, TEST_FILE)?.value).toBe('no rule kept');
+    expect(narrowingWords({ by: 'reason', reason: 'unknown' }, TEST_FILE)?.value).toBe('no matching rule');
     expect(narrowingWords({ by: 'conflict' }, TEST_FILE)).toEqual({
       field: 'Conflict',
       value: 'in your sitemap or menu but blocked',

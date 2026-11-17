@@ -279,6 +279,9 @@ function plainRule(rule: RobotsRule): string {
   if (rule.reason === 'rule' && rule.rule) {
     return `The rules file says “${rule.rule}”${rule.line === null ? '' : `, on line ${formatCount(rule.line)}`}`;
   }
+  if (rule.reason === 'unknown') {
+    return 'The rules file kept the check out then, but doesn’t now. Check the site again to be sure';
+  }
   return 'The rules file kept the check out';
 }
 

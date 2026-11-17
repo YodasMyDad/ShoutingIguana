@@ -326,7 +326,7 @@ public sealed class GridExportTests : IDisposable
             .. blocked.Rows.Select(url => new object?[]
             {
                 url.Url,
-                url.Reason switch { RobotsBlockReason.Rule => "A rule", RobotsBlockReason.Unreachable => "robots.txt couldn’t be read", _ => "No rule kept" },
+                url.Reason switch { RobotsBlockReason.Rule => "A rule", RobotsBlockReason.Unreachable => "robots.txt couldn’t be read", _ => "No matching rule" },
                 url.Line is { } line ? (long)line : null,
                 url.Rule,
                 url.Error,

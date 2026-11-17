@@ -267,7 +267,7 @@ internal static class GridExport
                 {
                     RobotsBlockReason.Rule => "A rule",
                     RobotsBlockReason.Unreachable => "robots.txt couldn’t be read",
-                    _ => "No rule kept"
+                    _ => "No matching rule"
                 };
                 cells[2] = url.Line is { } line ? (long)line : null;
                 cells[3] = url.Rule;

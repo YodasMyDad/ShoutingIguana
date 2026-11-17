@@ -122,7 +122,7 @@ internal static class UrlComputedColumns
         {
             RobotsBlockReason.Rule => string.Create(CultureInfo.InvariantCulture, $"{rule.Rule} (line {rule.Line:N0} of {rule.Origin}/robots.txt)"),
             RobotsBlockReason.Unreachable => "robots.txt couldn’t be read",
-            _ => "No rule kept"
+            _ => "No matching rule"
         },
         null => null,
         _ => Convert.ToString(value, CultureInfo.InvariantCulture)

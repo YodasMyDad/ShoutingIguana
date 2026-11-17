@@ -1310,7 +1310,7 @@ in a row is the JSON object below, or null; its titles are "Redirect chain" and 
 [export](#export-e5) writes it as one line of text: `301 → https://www.example.com/b/ (301) →
 https://www.example.com/c/ (200)` (the URL's own status, then each hop's URL and status; `(meta refresh)` before a
 hop reached by one; `, a loop` or `, more than 20 hops` at the end), and `Disallow: /cart/ (line 12 of
-https://www.example.com/robots.txt)`, `robots.txt couldn’t be read` or `No rule kept`. A new **`unit`**, `px`, is
+https://www.example.com/robots.txt)`, `robots.txt couldn’t be read` or `No matching rule`. A new **`unit`**, `px`, is
 `pixelWidth`'s and `pixelHeight`'s ("Image width (px)"), and since [pixel widths](v2-pixel-widths.md) `titleWidth`'s
 and `descriptionWidth`'s.
 
@@ -2495,7 +2495,7 @@ its export writes:
 A link's own columns have their titles ("Kind", "Anchor or alt text", "Links to its own page"), and either end's is
 the URL grid's under "Source" or "Target": `from.url` is "Source URL", `to.statusCode` "Target status". The fixed
 kinds have fixed headers: `robotsBlocked` writes "Blocked URL", "Blocked by" ("A rule", "robots.txt couldn’t be read"
-or "No rule kept"), "Line", "Rule" and "Error"; `check` and the workbook's sheets write "Address", "Page title", "What
+or "No matching rule"), "Line", "Rule" and "Error"; `check` and the workbook's sheets write "Address", "Page title", "What
 was found" and "Other address". The two lists (E7) write their screens' columns, in their cells' words:
 
 - `sitemaps`: "Sitemap", "Index" (Yes or No), "Listed by" (the index that lists it), "Found via" ("robots.txt",

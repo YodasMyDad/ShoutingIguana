@@ -158,7 +158,7 @@ export function narrowingWords(
     case 'reason':
       return {
         field: 'Reason',
-        value: narrowing.reason === 'unreachable' ? 'robots.txt couldn’t be read' : 'no rule kept',
+        value: narrowing.reason === 'unreachable' ? 'robots.txt couldn’t be read' : 'no matching rule',
       };
     case 'conflict':
       return { field: 'Conflict', value: 'in your sitemap or menu but blocked' };

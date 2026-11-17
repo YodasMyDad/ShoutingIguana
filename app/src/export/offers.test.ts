@@ -194,7 +194,7 @@ it('names an origin’s blocked URLs narrowed by their reason (the review’s fi
   expect(
     robotsBlockedOffer({ item, crawling: false, origin: 'https://example.com', reason: 'unknown', rows: 2 }).choices[0]
       ?.title,
-  ).toBe('Blocked with no rule kept');
+  ).toBe('Blocked with no matching rule');
 });
 
 it('names an origin’s blocked URLs narrowed to the conflicts, and every file says what blocking each costs', () => {

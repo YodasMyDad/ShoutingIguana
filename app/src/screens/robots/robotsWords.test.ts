@@ -7,7 +7,9 @@ import {
   UNMATCHED_WORDS,
   answerParts,
   answerSentence,
+  UNKNOWN_ACTION,
   blockedWhy,
+  conflictShortWords,
   conflictWords,
   conflictsWords,
   costsUnknownWords,
@@ -250,6 +252,7 @@ describe('why a URL was blocked', () => {
   it('names the line that decided it, with the line’s text', () => {
     expect(blockedWhy({ reason: 'rule', line: 6, rule: 'Disallow: /admin/', error: null })).toEqual({
       short: 'Line 6: Disallow: /admin/',
+      cell: 'Line 6',
       sentence: 'Line 6 refused it: Disallow: /admin/',
       recorded: null,
     });
@@ -264,6 +267,7 @@ describe('why a URL was blocked', () => {
   it('says in words that the file couldn’t be read, with how when that’s stored', () => {
     const why = blockedWhy({ reason: 'unreachable', line: null, rule: null, error: '503 Service Unavailable' });
     expect(why.short).toBe('robots.txt couldn’t be read');
+    expect(why.cell).toBe('Couldn’t be read');
     expect(why.sentence).toBe(
       'robots.txt couldn’t be read when the crawl came to this URL (503 Service Unavailable), which refuses everything.',
     );
@@ -282,17 +286,27 @@ describe('why a URL was blocked', () => {
     expect(why.recorded).toBe('TLS handshake failed: The remote certificate is invalid.');
   });
 
-  it('says in words that nothing kept refuses it, and no more than is known', () => {
+  it('says plainly that no rule in the copy kept matches it, what happened and what to do', () => {
     const why = blockedWhy({ reason: 'unknown', line: null, rule: null, error: null });
-    expect(why).toEqual({ short: 'No rule kept', sentence: UNKNOWN_REASON, recorded: null });
-    expect(UNKNOWN_REASON).toMatch(/doesn’t refuse it/);
+    expect(why).toEqual({
+      short: 'No matching rule',
+      cell: 'No matching rule',
+      sentence: UNKNOWN_REASON,
+      recorded: null,
+    });
+    expect(UNKNOWN_REASON).toBe(
+      'The crawl recorded this URL as blocked by robots.txt, but the copy of robots.txt it kept has no rule that blocks it: the file changed when the crawl read it again later, or wasn’t kept. Open the live robots.txt to check, or crawl again to see whether it’s still blocked.',
+    );
+    expect(UNKNOWN_ACTION).toBe(
+      'robots.txt changed after the crawl read it, or the crawl didn’t keep it. Open the live file to check, or crawl again to see what it blocks now.',
+    );
   });
 
   it('counts the two cases no line accounts for in words that agree in number', () => {
     expect(UNMATCHED_WORDS.unreachable(1)).toBe('1 URL was refused while robots.txt couldn’t be read');
     expect(UNMATCHED_WORDS.unreachable(1_204)).toBe('1,204 URLs were refused while robots.txt couldn’t be read');
-    expect(UNMATCHED_WORDS.unknown(1)).toBe('1 URL is stored as refused, though nothing kept here refuses it');
-    expect(UNMATCHED_WORDS.unknown(2)).toBe('2 URLs are stored as refused, though nothing kept here refuses them');
+    expect(UNMATCHED_WORDS.unknown(1)).toBe('1 URL was blocked by a rule that isn’t in this copy of the file');
+    expect(UNMATCHED_WORDS.unknown(2)).toBe('2 URLs were blocked by a rule that isn’t in this copy of the file');
   });
 });
 
@@ -309,6 +323,14 @@ describe('what blocking a URL costs', () => {
     // Not known (the crawl changed since its analysis, or a sidecar from before): no flag, rather than a guess.
     expect(conflictWords({ conflict: null, inSitemap: null, inMenu: null })).toBeNull();
     expect(conflictWords({})).toBeNull();
+  });
+
+  it('says it in a few words for the Conflict column, the whole sentence behind them', () => {
+    expect(conflictShortWords({ ...known, inSitemap: true, conflict: true })).toBe('In sitemap');
+    expect(conflictShortWords({ ...known, inMenu: true, conflict: true })).toBe('In menu');
+    expect(conflictShortWords({ ...known, inSitemap: true, inMenu: true, conflict: true })).toBe('In sitemap, menu');
+    expect(conflictShortWords(known)).toBeNull();
+    expect(conflictShortWords({})).toBeNull();
   });
 
   it('counts the pages linking to it, and says when that isn’t counted', () => {
