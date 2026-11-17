@@ -374,6 +374,12 @@ public sealed partial class SyntheticSite
             JsonLd = """{"@context":"https://schema.org","@type":"Product","name":"Incomplete product"}"""
         });
 
+        // A schema.org subtype is held to its parent's requirements: a Restaurant is a LocalBusiness, a MusicEvent an Event.
+        Page("jsonld-subtypes", "Incomplete subtype markup", ["structured-data-missing-required"], page => page with
+        {
+            JsonLd = """[{"@context":"https://schema.org","@type":"Restaurant","name":"Planted bistro"},{"@context":"https://schema.org","@type":"MusicEvent","name":"Planted concert","startDate":"2026-12-01T19:00"}]"""
+        });
+
         Page("large", "Large HTML", ["large-page"], page => page with { Content = page.Content + $"<!-- {new string('x', 1_100_000)} -->" });
         // Past Googlebot's 2 MB uncompressed HTML limit, and also over the 1 MB large-page threshold.
         Page("html-past-crawl-limit", "Huge HTML", ["large-page", "html-past-crawl-limit"],

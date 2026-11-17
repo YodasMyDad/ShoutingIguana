@@ -349,6 +349,27 @@ public sealed class PageRuleTests
         Assert.Equal("JobPosting: needs jobLocation or jobLocationType", rules.Check(jobWithoutLocation).Single().Detail);
     }
 
+    /// <summary>
+    /// A schema.org subtype is held to its parent's requirements, named as written: Google asks a business for its most
+    /// specific type, and a MusicEvent is an Event. One item typed both ways is judged once. NewsArticle's parent, Article,
+    /// requires nothing, and a ProductGroup has requirements of its own, so neither is held to anything here.
+    /// </summary>
+    [Fact]
+    public void StructuredDataSubtypesNeedWhatTheirParentTypesNeed()
+    {
+        var site = new RuleHarness();
+        var rules = new StructuredDataRules();
+        string Script(string json) => $"<script type=\"application/ld+json\">{json}</script>";
+
+        var subtypes = site.Page($"{site.Site}/a", RuleHarness.Html(Script(
+            """[{"@context":"https://schema.org","@type":"Restaurant","name":"Bistro"},{"@context":"https://schema.org","@type":"MusicEvent","name":"Gig","startDate":"2026-12-01"},{"@type":["FurnitureStore","LocalBusiness"],"name":"Chairs"}]""")));
+        var others = site.Page($"{site.Site}/b", RuleHarness.Html(Script(
+            """[{"@context":"https://schema.org","@type":"NewsArticle"},{"@context":"https://schema.org","@type":"ProductGroup","name":"Shirt"},{"@type":"Store","name":"Shop","address":"1 High St"}]""")));
+
+        Assert.Equal("Restaurant: needs address; MusicEvent: needs location; FurnitureStore: needs address", rules.Check(subtypes).Single().Detail);
+        Assert.Empty(Issues(rules, others));
+    }
+
     [Fact]
     public void CanonicalChecksTellRelativeInvalidAndConflictingApart()
     {

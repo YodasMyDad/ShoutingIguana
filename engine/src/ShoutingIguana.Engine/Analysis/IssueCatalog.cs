@@ -867,7 +867,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition STRUCTURED_DATA_MISSING_REQUIRED = new("structured-data-missing-required", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Structured data missing required properties",
-        """A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. The detail names the type and the missing properties.""",
+        """A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.""",
         """Add the missing properties with values that match what's visible on the page, then test it with the Rich Results Test.""")
     {
         Why = """Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties aren't checked, since they don't affect eligibility. FAQPage isn't checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.""",
