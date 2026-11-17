@@ -25,4 +25,17 @@ describe('an image’s thumbnail', () => {
     rerender(<ImageThumb url="https://example.com/gone.png" broken />);
     expect(screen.queryByRole('img')).toBeNull();
   });
+
+  it('draws a neutral image icon for one that couldn’t be read, and the broken one only for an image known to be broken', () => {
+    const { container, rerender } = render(<ImageThumb url="https://example.com/offline.png" />);
+    // Loading: the neutral icon stands in.
+    expect(container.querySelector('.lucide-image')).not.toBeNull();
+    fireEvent.error(screen.getByRole('img', { name: 'offline.png' }));
+    // Not read (offline, a policy that refuses it, not loaded yet): nothing says it's broken.
+    expect(container.querySelector('.lucide-image-off')).toBeNull();
+    expect(container.querySelector('.lucide-image')).not.toBeNull();
+    rerender(<ImageThumb url="https://example.com/gone.png" broken />);
+    expect(container.firstElementChild).toHaveAttribute('data-thumb', 'broken');
+    expect(container.querySelector('.lucide-image-off')).not.toBeNull();
+  });
 });

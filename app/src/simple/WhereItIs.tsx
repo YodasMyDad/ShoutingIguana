@@ -17,6 +17,7 @@ import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
 import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
 import { ImageThumb } from '../ui/ImageThumb';
+import { isBrokenImage } from '../ui/imageFacts';
 import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
 import { pathOrigin, shownWords } from './whereWords';
@@ -296,8 +297,7 @@ function GroupRow({
       : plainRelated(group.related, check, origin);
   // An image is known by sight before by its address.
   const image = check.grouping === 'relatedUrl' && check.id.startsWith('image-') && group.relatedUrl !== null;
-  const broken =
-    typeof group.related?.statusCode === 'number' ? group.related.statusCode >= 400 : Boolean(group.related?.outcome);
+  const broken = isBrokenImage(group.related ?? {});
   // Each page's own facts in plain words: the engine's detail is Advanced's words, so these lines say it instead.
   const pageLines = (row: IssueRow) => (
     <>

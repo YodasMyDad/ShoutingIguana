@@ -11,6 +11,7 @@ import { FLAG_WORDS } from '../../inspector/words';
 import { urlStatusWords } from '../urls/urlColumns';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
 import { ImageThumb } from '../../ui/ImageThumb';
+import { isBrokenImage } from '../../ui/imageFacts';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
 import {
@@ -77,9 +78,11 @@ export function shownLinkColumns(
  * columns the follow column is made of, and, with an end's status, how it answered, so no status reads as what
  * happened ("Blocked by robots.txt") and never as a guess.
  */
-export function linkQueryColumns(shown: readonly string[]): string[] {
+export function linkQueryColumns(shown: readonly string[], images = false): string[] {
   // Each end's URL too, shown or not: a row's menu opens and copies the URL of the end it was opened in.
   const asked = new Set<string>(['from.id', 'to.id', 'from.url', 'to.url']);
+  // An image view draws each image's thumbnail, broken only where the image is known to be: how it answered.
+  if (images) ['to.statusCode', 'to.outcome'].forEach((column) => asked.add(column));
   for (const id of shown) {
     if (id === FOLLOW_COLUMN) FOLLOW_PARTS.forEach((part) => asked.add(part));
     else if (id === PIXELS_COLUMN) PIXELS_PARTS.forEach((part) => asked.add(part));
@@ -280,9 +283,14 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
         if (!context.images || end.end !== 'to') return link;
         // An image is known by sight before by its address: its picture beside it, the address always there too.
         const status = row['to.statusCode'];
+        const outcome = row['to.outcome'];
+        const broken = isBrokenImage({
+          statusCode: typeof status === 'number' ? status : null,
+          outcome: typeof outcome === 'string' ? (outcome as UrlOutcome) : null,
+        });
         return (
           <span className="flex min-w-0 items-center gap-2">
-            <ImageThumb url={url} broken={typeof status === 'number' && status >= 400} />
+            <ImageThumb url={url} broken={broken} />
             <span className="min-w-0 flex-1">{link}</span>
           </span>
         );

@@ -70,6 +70,9 @@ describe('the pixel size column', () => {
     expect(linkQueryColumns([PIXELS_COLUMN])).toContain('to.pixelWidth');
     expect(linkQueryColumns([PIXELS_COLUMN])).toContain('to.pixelHeight');
     expect(linkQueryColumns([PIXELS_COLUMN])).not.toContain(PIXELS_COLUMN);
+    // An image view asks how each image answered, so only a broken one's thumbnail is drawn broken.
+    expect(linkQueryColumns(IMAGE_COLUMNS, true)).toEqual(expect.arrayContaining(['to.statusCode', 'to.outcome']));
+    expect(linkQueryColumns(IMAGE_COLUMNS)).not.toContain('to.outcome');
     expect(linkExportShown(['to.url', PIXELS_COLUMN, 'text'])).toEqual([
       'to.url',
       'to.pixelWidth',

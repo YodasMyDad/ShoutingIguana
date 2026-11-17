@@ -127,7 +127,7 @@ export function LinksScreen() {
   const catalogue = useQuery(linkColumnsQuery());
   const shown = useMemo(() => shownLinkColumns(search.cols, catalogue.data), [search.cols, catalogue.data]);
   // In one order whatever the columns' order: a column moved asks for nothing again.
-  const queryColumns = useMemo(() => [...linkQueryColumns(shown)].sort(), [shown]);
+  const queryColumns = useMemo(() => [...linkQueryColumns(shown, images)].sort(), [shown, images]);
 
   const view = useMemo(
     () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '' })}`,

@@ -18,6 +18,7 @@ import { openInBrowser } from '../../shell/os';
 import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
 import { ImageThumb } from '../../ui/ImageThumb';
+import { isBrokenImage } from '../../ui/imageFacts';
 import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
@@ -316,7 +317,7 @@ export function LinkGroupsGrid({
               <span data-tree-toggle aria-hidden="true" className="si-tree-toggle">
                 <Icon icon={ChevronRight} size="sm" />
               </span>
-              {images ? <ImageThumb url={value.url} broken={(value.target.statusCode ?? 0) >= 400} /> : null}
+              {images ? <ImageThumb url={value.url} broken={isBrokenImage(value.target)} /> : null}
               <Url
                 url={value.url}
                 siteOrigin={siteOrigin}

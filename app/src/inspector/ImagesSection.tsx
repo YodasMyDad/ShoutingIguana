@@ -14,6 +14,7 @@ import { formatBytes, formatCount, formatCountOf } from '../lib/format';
 import { imagesOfPage } from '../screens/links/presets';
 import { EmptyState } from '../ui/EmptyState';
 import { ImageThumb } from '../ui/ImageThumb';
+import { isBrokenImage } from '../ui/imageFacts';
 import { LiveBadge } from '../ui/LiveBadge';
 import { SeverityMark } from '../ui/SeverityMark';
 import { TextLink } from '../ui/TextLink';
@@ -56,7 +57,7 @@ export function ImagesSection() {
         width: urlWidth,
         cell: (row) => (
           <span className="flex min-w-0 items-center gap-2">
-            <ImageThumb url={row.url} broken={(row.target.statusCode ?? 0) >= 400} />
+            <ImageThumb url={row.url} broken={isBrokenImage(row.target)} />
             <Url
               url={row.url}
               siteOrigin={siteOrigin}
