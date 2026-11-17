@@ -20,6 +20,7 @@ import {
   type LinksSidecarOptions,
   type LinksSidecarState,
 } from '../test/linksSidecar';
+import { inspectorRoutes, testUrlDetail } from '../test/inspectorSidecar';
 import { IMAGE_COLUMNS, IMAGE_SORT } from './links/presets';
 
 const meta = { title: 'Screens/Links' } satisfies Meta;
@@ -545,3 +546,43 @@ async function waitForCell(find: () => HTMLElement | null, timeout = 5_000): Pro
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
+
+/** Export from the grouped view: what the file holds, as the dialog says it. */
+export const GroupedExport: Story = {
+  loaders: [() => own()],
+  render: () => <LinksApp path={`${LINKS}?by=target`} />,
+  play: async ({ canvasElement }) => {
+    const document = canvasElement.ownerDocument;
+    await waitForCell(() => document.querySelector<HTMLElement>('[role="treegrid"] [role="row"][aria-rowindex="2"]'));
+    const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (candidate) => candidate.textContent.trim() === 'Export',
+    );
+    button?.click();
+  },
+};
+
+/** The inspector open on a target while the cursor walks down the grouped view: it follows the row under the cursor. */
+export const GroupedInspectorFollows: Story = {
+  loaders: [
+    () =>
+      own({}, [
+        ...inspectorRoutes({
+          urls: (urlId) => {
+            const address = LINKS_URLS.find((candidate) => candidate.id === urlId)?.url;
+            return address ? testUrlDetail({ id: urlId, url: address }) : undefined;
+          },
+        }),
+      ]),
+  ],
+  render: () => <LinksApp path={`${LINKS}?by=target&inspect=2`} />,
+  play: async ({ canvasElement }) => {
+    const document = canvasElement.ownerDocument;
+    const grid = await waitForCell(() => document.querySelector<HTMLElement>('[role="treegrid"]'));
+    await waitForCell(() => grid.querySelector<HTMLElement>('[role="row"][aria-rowindex="4"]'));
+    grid.focus();
+    for (const key of ['Home', 'ArrowDown', 'ArrowDown']) {
+      grid.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+  },
+};

@@ -894,6 +894,7 @@ export function LinksScreen() {
             images={images}
             crawling={crawling}
             onInspect={openEnd}
+            following={inspecting ? inspectedEnd : undefined}
             onShowLinks={(next) =>
               void navigate({ search: (previous) => ({ ...previous, by: undefined, filter: next, sort: undefined }) })
             }

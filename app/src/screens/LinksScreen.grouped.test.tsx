@@ -8,6 +8,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { inspectorRoutes, testUrlDetail } from '../test/inspectorSidecar';
 import { LINKS_URLS, linksRoutes, testLinkRows } from '../test/linksSidecar';
 import { LINKS_FACTS } from '../test/linksSidecar';
 import { wholeText } from '../test/text';
@@ -17,7 +18,14 @@ const LINKS = `/crawls/${TEST_CRAWL_ID}/links`;
 
 function sidecar(options: Parameters<typeof linksRoutes>[0] = {}) {
   const { routes, state } = linksRoutes(options);
-  const transport = fakeSidecar(routes);
+  // The inspector on any of the crawl's URLs.
+  const inspector = inspectorRoutes({
+    urls: (urlId) => {
+      const address = LINKS_URLS.find((candidate) => candidate.id === urlId)?.url;
+      return address ? testUrlDetail({ id: urlId, url: address }) : undefined;
+    },
+  });
+  const transport = fakeSidecar([...inspector, ...routes]);
   setTransport(transport);
   return { transport, state };
 }
@@ -114,6 +122,35 @@ describe('the Links grid grouped by target', () => {
     await waitFor(() => expect(searchOf(router).by).toBeUndefined());
     expect(searchOf(router).filter).toEqual([{ column: 'to.id', op: 'eq', value: 4 }]);
     await counted('2 of 13 links');
+  });
+
+  it('has the inspector follow the cursor, on the target of the row it’s on', async () => {
+    sidecar();
+    const { router } = await open(`${LINKS}?by=target&inspect=2`);
+    const grid = await groupsGrid();
+    await within(grid).findByRole('row', { name: /\/gone/ });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'Home' });
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(1));
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(4));
+    // Opened, the target's links: the page each is on, when the inspector is on the links' pages.
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    await waitFor(() => expect(level2(grid)[0]).toHaveTextContent('“Gone”'));
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(4));
+  });
+
+  it('leaves the inspector where it is while it’s closed', async () => {
+    sidecar();
+    const { router } = await open(`${LINKS}?by=target`);
+    const grid = await groupsGrid();
+    await within(grid).findByRole('row', { name: /\/gone/ });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect((router.state.location.search as { inspect?: number }).inspect).toBeUndefined();
   });
 
   it('sorts the targets by a header, and back to the most linked from pages first', async () => {
