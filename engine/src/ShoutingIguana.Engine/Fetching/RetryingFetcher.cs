@@ -59,6 +59,12 @@ internal sealed class RetryingFetcher(
     public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null, bool singleAttempt = false,
         bool holdBackThrottled = false)
     {
+        // A private address a public site's crawl won't ask: no request, so nothing to tell the gate or the origin's count.
+        if (await fetcher.Guard.RefusesAsync(uri).ConfigureAwait(false))
+        {
+            return PrivateNetworkGuard.NotChecked(uri);
+        }
+
         var gate = gates.For(uri);
         var origin = gates.OriginOf(uri);
         var isInternal = scope.IsInternal(uri);
@@ -76,6 +82,12 @@ internal sealed class RetryingFetcher(
             {
                 startedAt = lease.StartedAt;
                 response = await fetcher.FetchAsync(uri, body, cancellationToken, maxBodyBytes).ConfigureAwait(false);
+            }
+
+            // Its name resolved to one: refused as it connected, so nothing was asked either.
+            if (PrivateNetworkGuard.IsRefusal(response))
+            {
+                return response;
             }
 
             var answered = Report(uri, gate, origin, isInternal, response, startedAt);

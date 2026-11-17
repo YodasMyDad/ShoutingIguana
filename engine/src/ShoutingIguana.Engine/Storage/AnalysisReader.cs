@@ -92,8 +92,8 @@ internal sealed class AnalysisReader : IDisposable
     }
 
     /// <summary>
-    /// URLs that were never checked: their host had stopped answering, or it kept asking the crawler to slow down
-    /// (<see cref="CountNotCheckedFor"/> tells them apart).
+    /// URLs that were never checked: their host had stopped answering, it kept asking the crawler to slow down, or it is
+    /// on a private network address a public site's crawl doesn't ask (<see cref="CountNotCheckedFor"/> tells them apart).
     /// </summary>
     public int CountNotChecked() =>
         Convert.ToInt32(CrawlDatabase.Scalar(_connection, $"SELECT COUNT(*) FROM responses r WHERE {NOT_CHECKED}"), CultureInfo.InvariantCulture);

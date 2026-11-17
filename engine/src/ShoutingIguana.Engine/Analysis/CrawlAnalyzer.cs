@@ -177,7 +177,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
 
             var rateLimited = reader.CountNotCheckedFor(RetryingFetcher.RATE_LIMITED_ERROR);
-            if (reader.CountNotChecked() - rateLimited is > 0 and var notChecked)
+            var privateAddresses = reader.CountNotCheckedFor(PrivateNetworkGuard.ERROR);
+            if (reader.CountNotChecked() - rateLimited - privateAddresses is > 0 and var notChecked)
             {
                 notes.Add(notChecked == 1
                     ? "1 URL wasn't checked because its site had stopped answering, so links to it aren't judged."
@@ -189,6 +190,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 notes.Add(rateLimited == 1
                     ? "1 URL wasn't checked because its site kept asking the crawler to slow down (429 Too Many Requests), so links to it aren't judged. Check the site again later, or at the Polite speed."
                     : $"{rateLimited:N0} URLs weren't checked because their sites kept asking the crawler to slow down (429 Too Many Requests), so links to them aren't judged. Check the site again later, or at the Polite speed.");
+            }
+
+            if (privateAddresses > 0)
+            {
+                notes.Add(privateAddresses == 1
+                    ? "1 URL wasn't checked because it is on a private network address (such as localhost or 192.168.x.x), which a crawl of a public site doesn't ask, so links to it aren't judged."
+                    : $"{privateAddresses:N0} URLs weren't checked because they are on private network addresses (such as localhost or 192.168.x.x), which a crawl of a public site doesn't ask, so links to them aren't judged.");
             }
 
             // The site lives on the start URL's origin and the home page's (after redirects); robots.txt failing there stops all crawling.
