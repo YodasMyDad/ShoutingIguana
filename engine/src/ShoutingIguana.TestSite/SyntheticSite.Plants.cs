@@ -412,6 +412,17 @@ public sealed partial class SyntheticSite
             Other($"long-chain-{hop}", 301, linked: hop == 0, hop == 0 ? ["redirect-chain"] : [], () => Redirect(301, next));
         }
         Other("moved", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+
+        // A link to a temporary redirect is right as it is: the linked URL stays the one to use, as with a shop's sign-in
+        // link, which sends visitors on to its hosted login with a one-off token. A temporary redirect to another site is
+        // such a hand-off, not a move, so only the one within the site is flagged (and, over HTTPS, the hand-off to the
+        // plain-HTTP partner site is a downgrade).
+        Page("temporary-links", "Links to temporary redirects", [], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}account-login\">Sign in</a> <a href=\"{PLANTS_PATH}sale\">This week's sale</a></p>"
+        });
+        Other("account-login", 302, linked: false, IsHttps ? ["redirect-downgrade"] : [], () => Redirect(302, $"{_external}/ext/account/login"));
+        Other("sale", 302, linked: false, ["redirect-temporary"], () => Redirect(302, PLANTS_PATH + "thin"));
         Other("gone", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone"));
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
         plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));

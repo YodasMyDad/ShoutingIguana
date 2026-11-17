@@ -108,7 +108,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition REDIRECT_TEMPORARY = new("redirect-temporary", IssueCategory.Redirects, IssueSeverity.Notice,
         "Temporary redirect",
-        "This internal URL redirects with a temporary status code: 302, 303 or 307.",
+        """This internal URL redirects to another URL on the site with a temporary status code: 302, 303 or 307. Temporary redirects to other sites, such as a shop's hosted login or checkout, don't count: they hand visitors over rather than move the page.""",
         "If the move is permanent, change the redirect to 301 or 308; if it's temporary, leave it.")
     {
         Why = """Google doesn't treat a temporary redirect as a sign that the target should replace the old URL (at most it's a weak signal), so the old URL can stay in search results. That's correct when the move really is temporary, such as a short-term campaign page or a login redirect. For a permanent move it delays the switch to the new URL.""",
@@ -169,7 +169,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition LINKS_TO_REDIRECTS = new("links-to-redirects", IssueCategory.Links, IssueSeverity.Notice,
         "Links to internal redirects",
-        """The page links to internal URLs that redirect (by HTTP or an instant meta refresh) to a working page.""",
+        """The page links to internal URLs that redirect permanently (301 or 308, or an instant meta refresh) to a working page. Links to temporary redirects (302, 303 or 307), such as a sign-in link that sends visitors on to a login page, don't count: the linked URL is still the one to use.""",
         """Change the links to point straight at the final URL. Keep the redirects for bookmarks and other sites' links.""")
     {
         Why = """Each click costs visitors an extra round trip before the page starts to load, and each crawl costs search engines an extra request. Google's advice is to link to the canonical URL within your site, which a redirecting URL isn't. A few are harmless; it's worth fixing in templates, where the same link repeats on every page.""",

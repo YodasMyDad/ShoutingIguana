@@ -6,7 +6,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
 /// Where a page's hyperlinks go: broken targets, redirects, nofollow and links without text. A link whose redirects
-/// end at an error (or loop) is broken, not just a link to a redirect.
+/// end at an error (or loop) is broken, not just a link to a redirect. A link to a temporary redirect isn't counted as
+/// one: the linked URL is still the one to use, as with a login page that sends visitors on.
 /// </summary>
 internal sealed class LinkRules(UrlTable urls) : IPageRule
 {
@@ -48,7 +49,8 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
             {
                 brokenInternal.Add(link.ToId);
             }
-            else if (target is { Fetched: true, Outcome: FetchOutcome.Redirect })
+            // An instant meta refresh answers 200, so it counts as the permanent redirect Google takes it for.
+            else if (target is { Fetched: true, Outcome: FetchOutcome.Redirect, StatusCode: not (302 or 303 or 307) })
             {
                 redirects.Add(link.ToId);
             }

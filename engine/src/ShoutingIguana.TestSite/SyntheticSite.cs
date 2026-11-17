@@ -284,12 +284,12 @@ public sealed partial class SyntheticSite
                 }
                 else if (href.StartsWith("/r2/", StringComparison.Ordinal))
                 {
-                    // A 302 to a 301: a chain, and a temporary redirect.
+                    // A 302 to a 301: a chain, and a temporary redirect. The link to it isn't a link to a redirect: the
+                    // temporary one keeps its URL the one to use.
                     redirects.Add(href);
                     redirects.Add("/r/" + href[4..]);
                     Flag("redirect-chain", href);
                     Flag("redirect-temporary", href);
-                    Flag("links-to-redirects", path);
                 }
                 else if (href.StartsWith("/private/", StringComparison.Ordinal))
                 {

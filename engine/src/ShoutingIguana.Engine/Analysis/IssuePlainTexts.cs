@@ -148,9 +148,10 @@ public static class IssuePlainTexts
         ["redirect-temporary"] = new(
             """Forwarding marked as temporary""",
             [
-                """Some addresses forward visitors on with a signal that the move is only temporary.""",
+                """Some addresses forward visitors to another of your pages with a signal that the move is only temporary.""",
                 """Google may then keep the old address in its results, which delays the switch when the move is really for good.""",
-                """That's right for a short-term move, such as a sale page or a login step, and then there's nothing to do."""
+                """That's right for a short-term move, such as a sale page, and then there's nothing to do.""",
+                """Forwarding to another website, such as a hosted checkout, isn't listed."""
             ],
             [
                 """Look at each address in the list and decide whether its move is for good.""",
@@ -230,9 +231,10 @@ public static class IssuePlainTexts
         ["links-to-redirects"] = new(
             """Links that go through a forwarding address""",
             [
-                """Some links on your pages point at an address on your site that forwards visitors on to another one.""",
-                """The link still works, but each click takes an extra step, and so does each visit from a search engine.""",
-                """A few of these do no harm, so there's nothing to do unless the link is in a menu or footer that repeats on every page."""
+                """Some links on your pages point at an address on your site that forwards visitors on for good.""",
+                """The link still works, but each click takes an extra step, as does each search engine visit.""",
+                """A few do no harm, so there's nothing to do unless the link is in a menu or footer on every page.""",
+                """Forwarding that's only for now, such as a sign-in link's, isn't listed."""
             ],
             [
                 """Open a page from the list in your site's editor and find the link: the list shows the address it points at.""",
