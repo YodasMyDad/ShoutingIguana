@@ -107,7 +107,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
-        Evidence = ["redirectChain"],
+        Evidence = ["redirectChain", "redirectKind"],
         TargetFacts = ["statusCode", "indexability"]
     };
 
@@ -136,7 +136,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["redirectChain"],
+        Evidence = ["redirectChain", "redirectKind"],
         TargetFacts = ["statusCode"]
     };
 
@@ -151,7 +151,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["redirectChain"],
+        Evidence = ["redirectChain", "redirectKind"],
         TargetFacts = ["statusCode"]
     };
 
@@ -181,7 +181,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["redirectChain"]
+        Evidence = ["redirectChain", "redirectKind"]
     };
 
     public static readonly IssueDefinition META_REFRESH = new("meta-refresh", IssueCategory.Redirects, IssueSeverity.Warning,
@@ -237,7 +237,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.RelatedUrl,
-        TargetFacts = ["statusCode", "final", "text", "position", "links"]
+        TargetFacts = ["statusCode", "final", "redirectKind", "text", "position", "links"]
     };
 
     public static readonly IssueDefinition INTERNAL_NOFOLLOW_LINKS = new("internal-nofollow-links", IssueCategory.Links, IssueSeverity.Warning,
@@ -939,7 +939,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SITEMAP_URL_OTHER_HOST = new("sitemap-url-other-host", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Sitemap lists a URL on another host",
-        """A sitemap lists this URL, but it's on a different host from the sitemap: another site, or another of this site's hosts, such as www in a sitemap on the bare domain. The detail says how the URL answered.""",
+        """A sitemap lists this URL, but it's on a different host from the sitemap: another site, or another of this site's hosts, such as www in a sitemap on the bare domain; or on another scheme, such as an http:// URL in an https:// sitemap. The detail says how the URL answered, or which schemes differ.""",
         """List the URL as it is on the sitemap's own host now (usually where it redirects), or remove the entry. For a sitemap that deliberately covers several hosts, set up cross-submission through Search Console or robots.txt.""")
     {
         Why = """The sitemaps protocol only accepts URLs on the sitemap's own host and drops the rest, so the page it was meant for isn't submitted. Google makes an exception for cross-submission: when every site involved is verified in Search Console and the sitemap is submitted there, or the other host's robots.txt references the sitemap. It's common after a move to or from www.""",
@@ -949,6 +949,84 @@ public static class IssueCatalog
         Recheck = [RecheckKind.Urls, RecheckKind.Sitemaps],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["finalUrl"]
+    };
+
+    public static readonly IssueDefinition ROBOTS_TXT_NO_SITEMAP = new("robots-txt-no-sitemap", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "robots.txt doesn't name the sitemap",
+        """The site's robots.txt has no Sitemap: line, though the crawl found a sitemap anyway: at /sitemap.xml, where crawlers look by convention, or in the crawl settings. Reported once, on the home page, when sitemaps were read and robots.txt answered. The detail names the robots.txt and where the sitemap was found.""",
+        """Add a line such as Sitemap: https://www.example.com/sitemap.xml to robots.txt, with the sitemap's full URL. It can go anywhere in the file, and there can be one for each sitemap.""")
+    {
+        Why = """Search engines read robots.txt before anything else, and its Sitemap: line is how all of them learn where the sitemap is, not only the ones it was submitted to. A sitemap at /sitemap.xml is usually found without it; one anywhere else may not be.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#addsitemap",
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.RobotsTxt, RecheckKind.Sitemaps],
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_OVER_LIMIT = new("sitemap-over-limit", IssueCategory.Sitemaps, IssueSeverity.Warning,
+        "Sitemap over 50,000 URLs or 50 MB",
+        """A sitemap lists more than 50,000 URLs, a sitemap index lists more than 50,000 sitemaps, or a sitemap file is bigger than 50 MB uncompressed: the limits Google and the sitemaps protocol set for one file. Reported once, on the home page; the detail lists up to three, with what each is over.""",
+        """Split the file into sitemaps of at most 50,000 URLs and 50 MB each, and list them in a sitemap index; an index over 50,000 sitemaps needs splitting into several indexes. Most CMS sitemap plugins can be set to fewer URLs per file.""")
+    {
+        Why = """Search engines don't read past a sitemap's limits, and Search Console reports such a file as an error, so the URLs past the limit, or all of the file's, may not reach them through the sitemap.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#sitemap-best-practices",
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Sitemaps],
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_NEAR_LIMIT = new("sitemap-near-limit", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "Sitemap near the 50,000-URL or 50 MB limit",
+        """A sitemap lists 45,000 to 50,000 URLs, a sitemap index 45,000 to 50,000 sitemaps, or a file is between 45 and 50 MB uncompressed: within a tenth of what one file can hold. Reported once, on the home page; the detail lists up to three.""",
+        """Split the file before it grows past the limit: several sitemaps, listed in a sitemap index. Most CMS sitemap plugins can be set to fewer URLs per file.""")
+    {
+        Why = """Nothing is lost yet, but a site that keeps adding pages will pass the limit, and the URLs past it may then not reach search engines through the sitemap.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#sitemap-best-practices",
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Sitemaps],
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_EMPTY = new("sitemap-empty", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "Empty sitemap",
+        """A sitemap that loaded without an error lists no URLs and no sitemaps. Reported once, on the home page; the detail lists up to three.""",
+        """Find out why it's empty: a sitemap plugin set to include nothing, a section with no pages yet, or a file left behind. If it isn't needed, remove it and its reference in robots.txt or the sitemap index.""")
+    {
+        Why = """An empty sitemap does no harm by itself, but it usually means a sitemap that should list pages doesn't, or one left over that search engines keep fetching for nothing.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Sitemaps],
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition SITEMAP_URL_REPEATED = new("sitemap-url-repeated", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "URL listed in more than one sitemap",
+        """More than one of the site's sitemap files lists this URL. The detail says how many; where it's found lists them.""",
+        """Keep each URL in one sitemap, usually the one for its kind of page. Repeats often come from two sitemap plugins at once, or a page listed under two sections.""")
+    {
+        Why = """The sitemaps protocol allows it and search engines cope, so this is housekeeping: repeated entries make sitemaps bigger and harder to keep right, and can give one URL two different lastmod dates.""",
+        LearnMore = "https://www.sitemaps.org/protocol.html",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Sitemaps],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition SITEMAP_LASTMOD_INVALID = new("sitemap-lastmod-invalid", IssueCategory.Sitemaps, IssueSeverity.Notice,
+        "Sitemap lastmod invalid or in the future",
+        """Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind and names the sitemaps. A crawl made before the crawler read lastmod isn't checked.""",
+        """Have the sitemap give each URL's real last change in W3C Datetime, as most CMS sitemap plugins do when left to themselves. Don't set every entry to today's date, or any to a date in the future.""")
+    {
+        Why = """Google uses lastmod only when it's consistently and verifiably accurate. Dates it can't read, or that haven't happened yet, show it they aren't, so it may ignore the sitemap's dates and find changed pages later.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#additional-notes-about-xml-sitemaps",
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Sitemaps],
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
     };
 
 
@@ -1246,6 +1324,86 @@ public static class IssueCatalog
         TargetFacts = ["sizeBytes", "contentType", "pixelWidth", "pixelHeight", "img", "statusCode", "final", "position", "links"]
     };
 
+    public static readonly IssueDefinition IMAGE_MISSING_SRC = new("image-missing-src", IssueCategory.Images, IssueSeverity.Warning,
+        "Image without a source",
+        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them. A crawl made before the crawler told data: images apart isn't checked.""",
+        """Give each image its file in src. If a lazy-loading script fills it in, check that it uses a standard attribute such as data-src or loading="lazy", and that the image shows without the script.""")
+    {
+        Why = """An image with no source never shows, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/google-images#use-html-image-elements",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition IMAGE_NO_SRCSET = new("image-no-srcset", IssueCategory.Images, IssueSeverity.Notice,
+        "Large image without srcset",
+        """The page shows image files at least 800 pixels wide (the default, which can be changed in the analysis settings) with no srcset and not in a <picture> with other sources, so phones download the whole file. It needs the files' pixel sizes, read when the crawl fetched them, so it isn't checked when images weren't fetched. The detail counts them and gives the widest.""",
+        """Offer smaller versions with srcset and sizes, such as 480, 800 and 1200 pixels wide, or a <picture> with sources; most CMSs do this for images uploaded through them.""")
+    {
+        Why = """A phone shows a 2,000-pixel image at a few hundred pixels: without other sizes to choose from, it downloads all of it, which costs visitors time and data and slows the page's largest paint. Google Images reads srcset and <picture> too.""",
+        LearnMore = "https://web.dev/learn/design/responsive-images",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["img", "pixelWidth", "pixelHeight", "sizeBytes"]
+    };
+
+    public static readonly IssueDefinition IMAGE_LEGACY_FORMAT = new("image-legacy-format", IssueCategory.Images, IssueSeverity.Notice,
+        "Image in an older format",
+        """The page shows JPEG, PNG, GIF or BMP files of 50 KB or more (the default, which can be changed in the analysis settings), as transferred. WebP or AVIF would usually make them smaller. It isn't checked when images weren't fetched. The detail counts them and gives the largest.""",
+        """Serve these images as WebP or AVIF: most CMSs and image CDNs can convert them, keeping the old format as a fallback in a <picture> if you need it.""")
+    {
+        Why = """WebP and AVIF usually make photos a quarter to a half smaller at the same quality, and every browser in use shows them, as Google Images does. Smaller images load sooner, above all on phones. 50 KB is about where the newer formats save a noticeable amount.""",
+        LearnMore = "https://developer.chrome.com/docs/lighthouse/performance/uses-webp-images",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["contentType", "sizeBytes", "pixelWidth", "pixelHeight"]
+    };
+
+    public static readonly IssueDefinition IMAGE_ALT_UNHELPFUL = new("image-alt-unhelpful", IssueCategory.Images, IssueSeverity.Notice,
+        "Alt text that's a file name or too short",
+        """The page has images whose alt text describes nothing: one or two characters (in an alphabet; in Chinese or Japanese that can be a word), no letter or digit at all, an image file name such as photo.jpg, a camera's or upload's name such as IMG_1234 or image-3, or the image file's own name. An empty alt is right for a decorative image and isn't counted. The detail counts them.""",
+        """Write alt text that says what the image shows or does, in a few words, as you'd describe it to someone who can't see it. Leave alt empty for an image that's only decoration.""")
+    {
+        Why = """Screen readers read the alt text aloud, and a file name or a stray character tells their users nothing. Google Images uses alt text to understand an image, so a file name is a chance missed.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/google-images#use-descriptive-alt-text",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["img", "position"]
+    };
+
+    public static readonly IssueDefinition IMAGE_HOTLINKED = new("image-hotlinked", IssueCategory.Images, IssueSeverity.Notice,
+        "Image loaded from another website",
+        """The page shows images straight from another website: not the site's own host or domain, nor an image CDN sites serve their own images from (Shopify's, CloudFront, Cloudinary, imgix, WordPress's i0.wp.com and others). On a crawl started at a private address, other private addresses aren't counted. The detail counts the images and the sites.""",
+        """Copy the images you have the right to use onto your own site, or a CDN of yours, and show them from there.""")
+    {
+        Why = """An image shown from someone else's server can vanish or change whenever they move or block it, and it uses their bandwidth, which many sites refuse. Google Images credits the image to the site it's on, not to yours.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/google-images",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "img", "position"]
+    };
+
+    public static readonly IssueDefinition IMAGE_INLINE_LARGE = new("image-inline-large", IssueCategory.Images, IssueSeverity.Notice,
+        "Large inline (data:) image",
+        """The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest.""",
+        """Save each as an image file and show it with an ordinary src, so browsers can cache it and download it alongside the page.""")
+    {
+        Why = """An inline image comes with the page every time, can't be cached on its own, and in base64 is a third bigger than the file. A small icon is fine; a photo makes every view of the page slower.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
 
     // Hreflang
     public static readonly IssueDefinition HREFLANG_INVALID_CODE = new("hreflang-invalid-code", IssueCategory.Hreflang, IssueSeverity.Error,
@@ -1366,14 +1524,51 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition STRUCTURED_DATA_MISSING_REQUIRED = new("structured-data-missing-required", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Structured data missing required properties",
-        """A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.""",
+        """A top-level schema.org item on this indexable page, in JSON-LD or Microdata, lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.""",
         """Add the missing properties with values that match what's visible on the page, then test it with the Rich Results Test.""")
     {
-        Why = """Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties aren't checked, since they don't affect eligibility. FAQPage isn't checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.""",
+        Why = """Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties don't affect eligibility, so they're another check's (Structured data missing recommended properties). FAQPage isn't checked: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#completeness",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition STRUCTURED_DATA_SCHEMA_ERRORS = new("structured-data-schema-errors", IssueCategory.StructuredData, IssueSeverity.Warning,
+        "Structured data that isn't valid schema.org",
+        """A JSON-LD block or Microdata item on the page has no @context or one that isn't schema.org, a @type schema.org doesn't have, a property schema.org doesn't define for that type or the types it descends from, a date property whose value isn't an ISO 8601 date, or a priceCurrency that isn't an ISO 4217 code. Types and properties written in another vocabulary aren't judged. The detail gives the first three faults.""",
+        """Correct each fault the detail names: the type's or property's spelling as schema.org writes it (Organization, not Organisation), dates as 2026-11-17 or 2026-11-17T09:30:00+00:00, and currencies as three-letter codes such as GBP. Then test the page with the Schema Markup Validator.""")
+    {
+        Why = """Search engines read structured data by schema.org's vocabulary: a type or property they don't know, or a date or currency they can't read, is ignored without a word, so the markup may do nothing for the page. Google's Rich Results Test only reports what its own features use, so these faults often go unnoticed.""",
+        LearnMore = "https://validator.schema.org/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition STRUCTURED_DATA_MISSING_RECOMMENDED = new("structured-data-missing-recommended", IssueCategory.StructuredData, IssueSeverity.Notice,
+        "Structured data missing recommended properties",
+        """A top-level item on this indexable page lacks properties Google recommends for its type: an Article, NewsArticle or BlogPosting its headline, image, datePublished or author; an Organization its url or logo; a Product its image, or its Offer a priceCurrency or availability. The detail names the type and what it lacks.""",
+        """Add the properties the detail names, with values that match what's visible on the page. Most SEO and shop plugins have a setting for each, such as the article's featured image or the product's stock status.""")
+    {
+        Why = """The markup works without them, but Google uses them for richer results: an article's image and date, a product's price and stock in merchant listings, an organization's logo in knowledge panels. A product needs an image to appear in merchant listings at all.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/article#structured-data-type-definitions",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition STRUCTURED_DATA_ON_NOINDEX = new("structured-data-on-noindex", IssueCategory.StructuredData, IssueSeverity.Notice,
+        "Structured data on a noindex page",
+        """The page tells search engines not to index it (noindex, in a meta tag or the X-Robots-Tag header) yet has structured data of a type with rich results, such as a Product, Article, Organization or BreadcrumbList, in JSON-LD or Microdata. The detail names the types.""",
+        """If the page should be in search results, remove the noindex. If it shouldn't, the structured data does nothing there and can stay or go; make sure the indexable page it describes has it instead.""")
+    {
+        Why = """Google can't show a rich result for a page it doesn't index, so the markup can't do anything there. It's harmless, but it often means the noindex is a mistake on a page meant to rank.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#technical-guidelines",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["metaRobots", "xRobotsTag"]
     };
 
 
@@ -1666,14 +1861,17 @@ public static class IssueCatalog
         CANONICAL_TO_FIRST_PAGE, CANONICAL_OTHER_DOMAIN, CANONICAL_LOOP, CANONICAL_ON_REDIRECT, CANONICAL_FRAGMENT,
         CANONICAL_INVALID_ATTRIBUTE, CANONICAL_UNLINKED,
         SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
+        ROBOTS_TXT_NO_SITEMAP, SITEMAP_OVER_LIMIT, SITEMAP_NEAR_LIMIT, SITEMAP_EMPTY, SITEMAP_URL_REPEATED, SITEMAP_LASTMOD_INVALID,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
         H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,
         LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT, DUPLICATE_SITE_VERSION,
         IMAGE_MISSING_ALT, IMAGE_ALT_TOO_LONG, IMAGE_MISSING_DIMENSIONS, IMAGE_BROKEN, IMAGE_TOO_LARGE,
+        IMAGE_MISSING_SRC, IMAGE_NO_SRCSET, IMAGE_LEGACY_FORMAT, IMAGE_ALT_UNHELPFUL, IMAGE_HOTLINKED, IMAGE_INLINE_LARGE,
         HREFLANG_INVALID_CODE, HREFLANG_MISSING_SELF, HREFLANG_MISSING_RETURN, HREFLANG_BROKEN_TARGET,
         HREFLANG_TO_NON_INDEXABLE, HREFLANG_DUPLICATE_CODE, HREFLANG_MISSING_X_DEFAULT, HREFLANG_OUTSIDE_HEAD,
-        STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED,
+        STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED, STRUCTURED_DATA_SCHEMA_ERRORS, STRUCTURED_DATA_MISSING_RECOMMENDED,
+        STRUCTURED_DATA_ON_NOINDEX,
         NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING,
         URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG,
         SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT, RESOURCE_PAST_CRAWL_LIMIT,

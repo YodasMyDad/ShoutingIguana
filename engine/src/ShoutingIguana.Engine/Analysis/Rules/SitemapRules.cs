@@ -16,10 +16,23 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// such as www.example.com pages in example.com's sitemap. URLs off the site are always on another host.
 /// </param>
 internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> sitemaps, CrawlOptions options, bool crawlComplete,
-    IReadOnlySet<int>? offHostEntries = null) : ISiteRule
+    IReadOnlySet<int>? offHostEntries = null, SitemapEntryFacts? entries = null) : ISiteRule
 {
     private const int LISTED_FAILURES = 3;
+    private const int LISTED_FILES = 3;
+
+    /// <summary>Google's and sitemaps.org's limits for one file: 50,000 URLs (or sitemaps, for an index), 50 MB uncompressed.</summary>
+    internal const int MAX_ENTRIES = 50_000;
+
+    internal const long MAX_BYTES = 50L * 1024 * 1024;
+
+    /// <summary>Near the limit: within a tenth of it (ours; the old app warned at 45,000).</summary>
+    internal const int NEAR_ENTRIES = 45_000;
+
+    internal const long NEAR_BYTES = 45L * 1024 * 1024;
+
     private readonly IReadOnlySet<int> _offHostEntries = offHostEntries ?? new HashSet<int>();
+    private readonly SitemapEntryFacts _entries = entries ?? new SitemapEntryFacts();
 
     /// <summary>
     /// The first sitemap listed in robots.txt or an index that failed for a reason that says nothing about what it
@@ -30,7 +43,12 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
     public static StoredSitemap? Unreadable(IReadOnlyList<StoredSitemap> sitemaps) =>
         sitemaps.FirstOrDefault(sitemap => sitemap is { Error: not null, IsProbe: false, StatusCode: not (404 or 410) });
 
-    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.SITEMAP_URL_OTHER_HOST, IssueCatalog.SITEMAP_NON_INDEXABLE, IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_ERROR, IssueCatalog.SITEMAP_MISSING];
+    public IReadOnlyList<IssueDefinition> Checks { get; } =
+    [
+        IssueCatalog.SITEMAP_URL_OTHER_HOST, IssueCatalog.SITEMAP_NON_INDEXABLE, IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_ERROR, IssueCatalog.SITEMAP_MISSING,
+        IssueCatalog.SITEMAP_OVER_LIMIT, IssueCatalog.SITEMAP_NEAR_LIMIT, IssueCatalog.SITEMAP_EMPTY, IssueCatalog.SITEMAP_URL_REPEATED,
+        IssueCatalog.SITEMAP_LASTMOD_INVALID
+    ];
 
     public void Observe(AnalyzedPage page)
     {
@@ -44,10 +62,19 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
         {
             var url = urls[id];
 
-            // sitemaps.org: every URL in a sitemap must be on the sitemap's own host, or search engines drop it.
+            // sitemaps.org: every URL in a sitemap must be on the sitemap's own host, and scheme, or search engines drop it.
             if (url.InSitemap && (!url.IsInternal || _offHostEntries.Contains(id)))
             {
                 yield return new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, id, url.Fetched ? $"The URL {RuleText.Status(url)}" : "The URL wasn't checked");
+            }
+            else if (url.InSitemap && _entries.OtherScheme.TryGetValue(id, out var schemes))
+            {
+                yield return new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, id, $"The URL is {schemes.Url}://, the sitemap {schemes.Sitemap}://");
+            }
+
+            if (url.IsInternal && _entries.Repeated.TryGetValue(id, out var listings))
+            {
+                yield return new IssueHit(IssueCatalog.SITEMAP_URL_REPEATED, id, $"In {listings:N0} sitemaps");
             }
 
             if (!url.IsInternal)
@@ -94,5 +121,79 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
         {
             yield return new IssueHit(IssueCatalog.SITEMAP_MISSING, urls.HomeId);
         }
+
+        var read = sitemaps.Where(sitemap => sitemap.IsRead).ToList();
+        if (Files(read.Where(sitemap => SizeWords(sitemap, MAX_ENTRIES, MAX_BYTES) is not null), MAX_ENTRIES, MAX_BYTES) is { } over)
+        {
+            yield return new IssueHit(IssueCatalog.SITEMAP_OVER_LIMIT, urls.HomeId, over);
+        }
+
+        if (Files(read.Where(sitemap => SizeWords(sitemap, MAX_ENTRIES, MAX_BYTES) is null && SizeWords(sitemap, NEAR_ENTRIES - 1, NEAR_BYTES - 1) is not null),
+                NEAR_ENTRIES - 1, NEAR_BYTES - 1) is { } near)
+        {
+            yield return new IssueHit(IssueCatalog.SITEMAP_NEAR_LIMIT, urls.HomeId, near);
+        }
+
+        // An index's <sitemap> entries are counted from this version on; a sitemap an earlier one read as an index isn't empty.
+        var empty = read.Where(sitemap => sitemap is { UrlCount: 0, IsIndex: false, ListedSitemaps: null or 0 }).Select(sitemap => sitemap.Url).ToList();
+        if (empty.Count > 0)
+        {
+            yield return new IssueHit(IssueCatalog.SITEMAP_EMPTY, urls.HomeId, Listed(empty));
+        }
+
+        if (_entries.Lastmods.Count > 0)
+        {
+            var future = _entries.Lastmods.Sum(fault => (long)fault.Future);
+            var unreadable = _entries.Lastmods.Sum(fault => (long)fault.Unreadable);
+            List<string> kinds = [];
+            if (future > 0)
+            {
+                kinds.Add($"{future:N0} in the future");
+            }
+
+            if (unreadable > 0)
+            {
+                kinds.Add($"{unreadable:N0} unreadable");
+            }
+
+            yield return new IssueHit(IssueCatalog.SITEMAP_LASTMOD_INVALID, urls.HomeId,
+                $"{RuleText.Count((int)Math.Min(future + unreadable, int.MaxValue), "entry", "entries")}: {string.Join(", ", kinds)} ({Listed([.. _entries.Lastmods.Select(fault => fault.SitemapUrl)])})");
+        }
     }
+
+    /// <summary>"https://x/a.xml (62,113 URLs), https://x/b.xml (51.2 MB) and 2 more"; null for none.</summary>
+    private static string? Files(IEnumerable<StoredSitemap> files, int entries, long bytes)
+    {
+        var listed = files.ToList();
+        return listed.Count == 0
+            ? null
+            : string.Join(", ", listed.Take(LISTED_FILES).Select(file => $"{file.Url} ({SizeWords(file, entries, bytes)})")) +
+              (listed.Count > LISTED_FILES ? $" and {listed.Count - LISTED_FILES:N0} more" : string.Empty);
+    }
+
+    /// <summary>What a file has more of than the given counts: "62,113 URLs", "51,000 sitemaps", "51.2 MB"; null for none.</summary>
+    private static string? SizeWords(StoredSitemap file, int entries, long bytes)
+    {
+        List<string> over = [];
+        if (file.UrlCount > entries)
+        {
+            over.Add(RuleText.Count(file.UrlCount, "URL", "URLs"));
+        }
+
+        if (file.ListedSitemaps > entries)
+        {
+            over.Add(RuleText.Count(file.ListedSitemaps.Value, "sitemap", "sitemaps"));
+        }
+
+        if (file.SizeBytes > bytes)
+        {
+            over.Add(RuleText.Size(file.SizeBytes.Value));
+        }
+
+        return over.Count == 0 ? null : string.Join(", ", over);
+    }
+
+    /// <summary>"https://x/a.xml", "https://x/a.xml and 2 more".</summary>
+    private static string Listed(IReadOnlyList<string> files) =>
+        files.Count == 1 ? files[0] : $"{files[0]} and {files.Count - 1:N0} more";
 }

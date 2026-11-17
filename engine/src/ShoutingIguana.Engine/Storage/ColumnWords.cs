@@ -52,6 +52,7 @@ internal static class ColumnWords
         ["sizeBytes"] = "Size",
         ["responseMs"] = "Response time",
         ["ttfbMs"] = "Time to first byte",
+        ["redirectKind"] = "Redirect kind",
         ["titleLength"] = "Title length",
         ["descriptionLength"] = "Description length",
         ["titleWidth"] = "Title width",

@@ -61,7 +61,9 @@ public sealed class AnalysisStateTests : IAsyncLifetime
             [IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
             [IssueCatalog.SLOW_EXTERNAL_LINKS.Id] = (SkippedCheckReasons.EXTERNAL_LINKS_OFF, "Links to other sites weren't checked in this crawl."),
             [IssueCatalog.IMAGE_BROKEN.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
-            [IssueCatalog.IMAGE_TOO_LARGE.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.")
+            [IssueCatalog.IMAGE_TOO_LARGE.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
+            [IssueCatalog.IMAGE_NO_SRCSET.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
+            [IssueCatalog.IMAGE_LEGACY_FORMAT.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.")
         };
         foreach (var check in IssueCatalog.All.Where(check => check.Category == IssueCategory.Sitemaps))
         {

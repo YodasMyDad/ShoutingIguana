@@ -171,6 +171,7 @@ export function adaptUrlRow(raw: Record<string, unknown>, severities: ReadonlyMa
     outcome: value('outcome'),
     redirectTarget: value('redirectUrl'),
     redirectTargetStatusCode: null,
+    redirectKind: null,
     indexable: value('indexable'),
     indexability: value('indexabilityReason'),
     noindex: value('isNoindex'),

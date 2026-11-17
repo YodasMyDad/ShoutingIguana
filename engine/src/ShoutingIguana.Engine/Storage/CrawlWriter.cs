@@ -152,8 +152,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             // made, whose pages so far have none.
             AddMissingColumns(connection, "responses", CrawlSchema.RESPONSE_COLUMNS);
 
-            // And the count of the sitemaps an index's file lists.
+            // And the count of the sitemaps an index's file lists, its size, and each entry's lastmod.
             AddMissingColumns(connection, "sitemaps", CrawlSchema.SITEMAP_COLUMNS);
+            AddMissingColumns(connection, "sitemap_urls", CrawlSchema.SITEMAP_URL_COLUMNS);
 
             // And the table for the site's icon: a continued crawl keeps the one it has.
             CrawlDatabase.Execute(connection, CrawlSchema.FAVICON);
@@ -249,6 +250,10 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
     public ValueTask DiscoverAsync(IReadOnlyList<OutLink> urls, DiscoverySource source, int? sitemapId, CancellationToken cancellationToken) =>
         _commands.Writer.WriteAsync(new DiscoverCommand(urls, source, sitemapId), cancellationToken);
+
+    /// <summary>A sitemap's URLs, each with its entry's lastmod (<see cref="CrawlSchema.SITEMAP_URL_COLUMNS"/>), in the same order.</summary>
+    public ValueTask DiscoverAsync(IReadOnlyList<OutLink> urls, IReadOnlyList<long?> lastmods, int sitemapId, CancellationToken cancellationToken) =>
+        _commands.Writer.WriteAsync(new DiscoverCommand(urls, DiscoverySource.Sitemap, sitemapId) { Lastmods = lastmods }, cancellationToken);
 
     /// <param name="parkedLinked">Linked URLs in flight that won't be done for a long while, which sitemap-only URLs don't wait for.</param>
     public async Task<FrontierClaim> ClaimAsync(int internalCount, int externalCount, CancellationToken cancellationToken, int parkedLinked = 0)
@@ -567,8 +572,10 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
         var depth = command.Source == DiscoverySource.Seed ? 0 : CrawlDepth.UNLINKED;
 
-        foreach (var link in command.Urls)
+        for (var index = 0; index < command.Urls.Count; index++)
         {
+            var link = command.Urls[index];
+
             // Sitemap and start URLs are crawled in full, whatever link found them first, and never held to the depth limit.
             var skip = !link.IsInternal && !_options.CheckExternalLinks ? SkipReason.ExternalsDisabled : SkipReason.None;
             int id;
@@ -584,7 +591,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
             if (command.SitemapId is { } sitemapId)
             {
-                _statements.InsertSitemapUrl(sitemapId, id);
+                _statements.InsertSitemapUrl(sitemapId, id, command.Lastmods is { } lastmods && index < lastmods.Count ? lastmods[index] : null);
             }
         }
 

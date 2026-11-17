@@ -7,7 +7,7 @@ import type { ChooserGroup } from '../../grid/ColumnChooser';
 import type { FilterColumn, FilterGroup } from '../../grid/filterEditing';
 import type { GridColumn } from '../../grid/types';
 import { midPhrase, urlColumnWords } from '../../grid/urlFilterWords';
-import { objectCellWords } from '../../crawl/evidence';
+import { objectCellWords, redirectKindWords } from '../../crawl/evidence';
 import { OUTCOME_WORDS } from '../../inspector/words';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
 import { StatusCode } from '../../ui/StatusCode';
@@ -203,6 +203,7 @@ const GROUP_OF: Record<string, UrlColumnGroup> = {
   outcome: 'response',
   redirectTarget: 'response',
   redirectTargetStatusCode: 'response',
+  redirectKind: 'response',
   finalUrl: 'response',
   finalStatusCode: 'response',
   responseMs: 'response',
@@ -289,6 +290,7 @@ const HINTS: Record<string, string> = {
   fetchError:
     'What went wrong, as the crawl recorded it, for a URL that didn’t succeed: a timeout, a connection that failed, robots.txt that couldn’t be read',
   redirectChain: 'Each redirect from it, with the status there, to where they end',
+  redirectKind: 'What its redirect changes: HTTP to HTTPS, www, a trailing slash, the case, or another page or host',
   language: 'The language the page gives in <html lang>, as it writes it',
   robotsRule: 'The robots.txt line that refused it, and where it is in the file',
   titleLength: 'The title’s characters, as a reader counts them: an emoji or an accented letter once',
@@ -460,6 +462,7 @@ const WIDTHS: Record<string, number> = {
   xRobotsTag: 176,
   redirectTarget: 240,
   redirectTargetStatusCode: 136,
+  redirectKind: 200,
   canonicalUrl: 240,
   finalUrl: 240,
   finalStatusCode: 104,
@@ -646,7 +649,8 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
     case 'text': {
       const words = (row: UrlRow) => {
         const raw = valueOf(row, id);
-        return raw === null || raw === undefined ? '' : String(raw);
+        if (raw === null || raw === undefined) return '';
+        return id === 'redirectKind' ? redirectKindWords(String(raw)) : String(raw);
       };
       if (URL_TEXT.has(id)) {
         const origin = context.fullUrls ? null : context.siteOrigin;

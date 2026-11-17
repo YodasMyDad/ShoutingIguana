@@ -397,6 +397,8 @@ export interface IssueTarget {
   pixelHeight?: number | null;
   /** Its own answer (not its redirects' end's): how long the whole response took, as the URL grid's column. */
   responseMs?: number | null;
+  /** What its own redirect changes (`httpToHttps,addsWww`…); null when it doesn't redirect. */
+  redirectKind?: string | null;
   /** Where its redirects end; null when it doesn't redirect. */
   final?: TargetEnd | null;
   /** As the URL grid's column: `none` for indexable, null when not judged. */

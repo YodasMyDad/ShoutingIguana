@@ -55,6 +55,15 @@ public sealed record AnalysisSettings
 
     public long LargeImageBytes { get; init; } = 200 * 1024;
 
+    /// <summary>An image file at least this many pixels wide, without srcset or a picture's sources, is sent to phones whole.</summary>
+    public int ResponsiveImageMinWidth { get; init; } = 800;
+
+    /// <summary>A JPEG, PNG, GIF or BMP image of at least this many bytes would usually be smaller as WebP or AVIF.</summary>
+    public long LegacyImageMinBytes { get; init; } = 50 * 1024;
+
+    /// <summary>A data: image larger than this, decoded, is built into the page.</summary>
+    public long InlineImageMaxBytes { get; init; } = 10 * 1024;
+
     public long LargePageBytes { get; init; } = 1024 * 1024;
 
     public int SlowResponseMs { get; init; } = 1_000;
@@ -105,6 +114,11 @@ public sealed record AnalysisSettings
         if (MinInternalOutlinks < 0 || MaxClickDepth < 1 || MaxInternalLinks < 1 || MaxExternalLinks < 1 || SlowExternalLinkMs < 1)
         {
             errors.Add("The fewest links must not be negative, and the most clicks, links and the slowest link must be positive.");
+        }
+
+        if (ResponsiveImageMinWidth < 1 || LegacyImageMinBytes < 1 || InlineImageMaxBytes < 1)
+        {
+            errors.Add("The image width and size limits must be positive.");
         }
 
         return errors;

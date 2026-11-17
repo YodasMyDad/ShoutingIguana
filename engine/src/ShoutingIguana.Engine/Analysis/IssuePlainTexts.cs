@@ -1121,6 +1121,91 @@ public static class IssuePlainTexts
             IssueFixer.Either,
             """No sitemap lists an address outside its own website"""),
 
+        ["robots-txt-no-sitemap"] = new(
+            """Your rules file doesn't say where your sitemap is""",
+            [
+                """Your site's rules file for search engines (its "robots.txt") doesn't give your sitemap's address.""",
+                """The check found the sitemap anyway, where search engines look first, so most will find it too.""",
+                """Naming it in the rules file makes sure every search engine does, wherever the sitemap is."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for an option to add the sitemap to the "robots.txt" file.""",
+                """Ask your developer to add a line to the "robots.txt" file that names your sitemap's full address, if there's no such option."""
+            ],
+            IssueFixer.Either,
+            """Your rules file for search engines names your sitemap"""),
+
+        ["sitemap-over-limit"] = new(
+            """A sitemap too big for Google to read""",
+            [
+                """A sitemap on your site lists more than 50,000 addresses, or is bigger than 50 MB.""",
+                """That's more than one sitemap file may hold, and search engines may not read the addresses past the limit.""",
+                """Those pages then aren't put forward to search engines by the sitemap."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.""",
+                """Ask your developer to split the sitemap into several smaller ones, listed in one sitemap of sitemaps, if there's no such setting."""
+            ],
+            IssueFixer.Either,
+            """No sitemap is too big for search engines to read"""),
+
+        ["sitemap-near-limit"] = new(
+            """A sitemap close to the size Google can read""",
+            [
+                """A sitemap on your site lists between 45,000 and 50,000 addresses, or is nearly 50 MB.""",
+                """That's close to what one sitemap file may hold, and nothing is lost yet.""",
+                """As you add pages it will pass the limit, and search engines may then not read the addresses past it."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.""",
+                """Ask your developer to split the sitemap into several smaller ones before it grows, if there's no such setting."""
+            ],
+            IssueFixer.Either,
+            """No sitemap is close to the size search engines can read"""),
+
+        ["sitemap-empty"] = new(
+            """A sitemap with nothing in it""",
+            [
+                """A sitemap on your site loads without an error but lists no pages.""",
+                """That does no harm by itself, but it usually means a sitemap that should list pages doesn't.""",
+                """Or it's an old one left behind, which search engines keep fetching for nothing."""
+            ],
+            [
+                """Open the sitemap's address from the list in your browser, to see what's in it.""",
+                """Check your site's SEO settings or plugin, in case that part of the sitemap is switched off.""",
+                """If the sitemap isn't needed, ask your developer to remove it and the line that names it."""
+            ],
+            IssueFixer.Either,
+            """No sitemap is empty"""),
+
+        ["sitemap-url-repeated"] = new(
+            """Addresses listed in more than one sitemap""",
+            [
+                """These pages are listed in more than one of your sitemaps.""",
+                """Search engines cope with that, so this is tidying rather than a problem.""",
+                """Repeats make sitemaps bigger, and the copies can disagree about when a page last changed."""
+            ],
+            [
+                """Look for two SEO plugins or settings that both make a sitemap, and switch one off.""",
+                """Otherwise keep each page in the one sitemap for its kind of page."""
+            ],
+            IssueFixer.Either,
+            """No page is listed in more than one sitemap"""),
+
+        ["sitemap-lastmod-invalid"] = new(
+            """Sitemap dates that are wrong""",
+            [
+                """Your sitemap gives some pages a last-changed date that isn't a date, or that hasn't happened yet.""",
+                """Google uses these dates only when they're accurate, so it may ignore them all.""",
+                """Pages you change may then show up changed in search later."""
+            ],
+            [
+                """Check your site's SEO settings or plugin: most fill in each page's real last-changed date when left to themselves.""",
+                """Ask your developer to correct the dates, if your sitemap is made some other way."""
+            ],
+            IssueFixer.Either,
+            """Every sitemap date is a real date in the past"""),
+
         ["title-missing"] = new(
             """Pages with no title""",
             [
@@ -1470,6 +1555,85 @@ public static class IssuePlainTexts
             IssueFixer.You,
             """No image is too big to load quickly"""),
 
+        ["image-missing-src"] = new(
+            """Images with no picture file named""",
+            [
+                """These pages have image spaces that don't say which picture to show.""",
+                """Nothing appears there, for visitors or in Google's image search.""",
+                """It's usually an empty slot in a page design, or code that fills pictures in a way that isn't standard."""
+            ],
+            [
+                """Open each page and find the empty picture space.""",
+                """Choose a picture for it in your site's editor, or remove the empty space.""",
+                """Ask your developer to check how pictures are loaded, if every page has the problem."""
+            ],
+            IssueFixer.Either,
+            """Every image names its picture file"""),
+
+        ["image-no-srcset"] = new(
+            """Big images sent to phones at full size""",
+            [
+                """These pages show pictures at least {limit:responsiveImageMinWidth} wide, with no smaller versions for small screens.""",
+                """Phones then download the whole picture, which makes the page slower and uses visitors' data."""
+            ],
+            [
+                """Upload these pictures through your site's media library, which usually makes smaller versions for phones.""",
+                """Ask your developer to offer smaller versions of each picture, if your site doesn't."""
+            ],
+            IssueFixer.Either,
+            """Big images come in smaller versions for phones"""),
+
+        ["image-legacy-format"] = new(
+            """Images that could be smaller in a newer format""",
+            [
+                """These pages show pictures of {limit:legacyImageMinBytes} or more saved in an older format, such as JPEG or PNG.""",
+                """Newer formats (WebP or AVIF) usually make the same picture a quarter to a half smaller, so pages load faster."""
+            ],
+            [
+                """Look for an image optimisation setting or plugin that converts pictures to WebP.""",
+                """Or save the pictures as WebP before you upload them."""
+            ],
+            IssueFixer.Either,
+            """No large image is in an older format"""),
+
+        ["image-alt-unhelpful"] = new(
+            """Image descriptions that don't describe anything""",
+            [
+                """These pages have pictures whose descriptions are a file name, a camera's number such as "IMG_1234", or a stray letter.""",
+                """People using screen readers hear that instead of what the picture shows, and Google learns nothing from it."""
+            ],
+            [
+                """Edit each picture in your site's media library and describe what it shows in a few words.""",
+                """Leave the description empty for a picture that's only decoration."""
+            ],
+            IssueFixer.You,
+            """Every image description says something"""),
+
+        ["image-hotlinked"] = new(
+            """Images shown straight from other websites""",
+            [
+                """These pages show pictures that are stored on other websites, not on yours.""",
+                """They can disappear or change whenever the other site moves them, and use that site's resources."""
+            ],
+            [
+                """Check you're allowed to use each picture.""",
+                """Download the ones you may use and upload them to your own site, then show them from there."""
+            ],
+            IssueFixer.You,
+            """Every image is shown from your own site"""),
+
+        ["image-inline-large"] = new(
+            """Pictures built into the page that slow it down""",
+            [
+                """These pages have pictures of more than {limit:inlineImageMaxBytes} written into the page itself, not kept as separate files.""",
+                """They come with the page on every visit and can't be saved by the browser, so every view is slower."""
+            ],
+            [
+                """Ask your developer to save these pictures as ordinary image files and link to them instead."""
+            ],
+            IssueFixer.Developer,
+            """No large picture is built into a page"""),
+
         ["hreflang-invalid-code"] = new(
             """Language versions labelled with an invalid code""",
             [
@@ -1640,6 +1804,50 @@ public static class IssuePlainTexts
         {
             OneFix = """That's almost certainly your page design, which leaves the same detail out of every page of one kind."""
         },
+
+        ["structured-data-schema-errors"] = new(
+            """Product or business details Google can't use""",
+            [
+                """These pages describe a product, article or business for search engines in words that code doesn't have.""",
+                """Search engines quietly ignore what they can't read, so those details may do nothing for the page.""",
+                """A misspelt name such as "Organisation", or a date or currency written the wrong way, is the usual cause."""
+            ],
+            [
+                """Send the list to your developer: it gives the first few mistakes on each page.""",
+                """If a plugin writes these details, check its settings for dates and currencies, or update it."""
+            ],
+            IssueFixer.Developer,
+            """All product and business details use words Google knows"""),
+
+        ["structured-data-missing-recommended"] = new(
+            """Product or article details that could be fuller""",
+            [
+                """These pages describe a product, an article or your business for search engines, but leave out details Google asks for.""",
+                """Nothing is broken, but Google uses them to show more in search, such as an article's picture or a product's price and stock.""",
+                """A product needs a picture to be shown in Google's shopping results at all."""
+            ],
+            [
+                """Check the list: it says what each page leaves out.""",
+                """Fill in the missing details in your site's SEO or shop settings, such as an article's featured image or a product's stock.""",
+                """Ask your developer to add them, if your site has no such settings."""
+            ],
+            IssueFixer.Either,
+            """Every product and article gives the details Google asks for"""),
+
+        ["structured-data-on-noindex"] = new(
+            """Product or article details on pages hidden from Google""",
+            [
+                """These pages describe a product or an article for search engines, but also ask not to be shown in search.""",
+                """Google can't show those details for a page it leaves out, so they do nothing here.""",
+                """It's harmless, but often a sign that a page meant to be found is hidden by mistake."""
+            ],
+            [
+                """Check whether each page should appear in search results.""",
+                """If it should, switch off "hide from search engines" for it in your site's settings.""",
+                """If it shouldn't, there's nothing to do."""
+            ],
+            IssueFixer.You,
+            """No hidden page carries product or article details"""),
 
         ["no-https"] = new(
             """Your site isn't secure (no HTTPS)""",

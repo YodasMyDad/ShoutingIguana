@@ -107,7 +107,11 @@ internal static class RichResultRequirements
         .ToDictionary(pair => pair.Subtype, pair => pair.Parent, StringComparer.Ordinal);
 
     /// <summary>The root object or array items, plus anything in a @graph. Nested values (offers, reviews) aren't entities of their own.</summary>
-    private static IEnumerable<JsonElement> TopLevelEntities(JsonElement root)
+    /// <summary>A type with rich results: one this knows the requirements of, and Article's and Organization's (batch 5's on-noindex check).</summary>
+    public static bool HasRichResult(string type) =>
+        REQUIRED.ContainsKey(PARENTS.GetValueOrDefault(type, type)) || type is "Article" or "NewsArticle" or "BlogPosting" or "Organization";
+
+    internal static IEnumerable<JsonElement> TopLevelEntities(JsonElement root)
     {
         var candidates = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().ToList() : [root];
         foreach (var candidate in candidates.Where(candidate => candidate.ValueKind == JsonValueKind.Object))
@@ -157,7 +161,7 @@ internal static class RichResultRequirements
     }
 
     /// <summary>@type may be a string or an array, with or without a schema.org prefix.</summary>
-    private static IEnumerable<string> Types(JsonElement entity)
+    internal static IEnumerable<string> Types(JsonElement entity)
     {
         if (!entity.TryGetProperty("@type", out var type))
         {
@@ -169,7 +173,7 @@ internal static class RichResultRequirements
     }
 
     /// <summary>A string that can't be read is there all the same, just invalid, so it counts as a value.</summary>
-    private static bool HasValue(JsonElement entity, string property) =>
+    internal static bool HasValue(JsonElement entity, string property) =>
         entity.TryGetProperty(property, out var value) && value.ValueKind switch
         {
             JsonValueKind.Null or JsonValueKind.Undefined => false,
