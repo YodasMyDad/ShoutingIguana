@@ -272,7 +272,11 @@ and is in the group without a related URL.
 | 74 | `no-https` | P/N/– | – | – | Same | once |
 | 75 | `http-page` | P/N/**S** | – | – | Same (none). Its found-on gives the links to update | imp · – |
 | 76 | `mixed-content` | P/RU/T | – | `kind`, `statusCode`, `contentType`, `position`, `links` | Same ("2 HTTP resources") | imp · pages |
-| 77 | `security-headers-missing` | P/N/– | – | – | Same ("Missing X-Content-Type-Options, Referrer-Policy") | once |
+| 77 | `security-headers-missing` | P/N/– | – | – | Same ("Missing X-Content-Type-Options, Referrer-Policy") | once |
+| 138 | `security-headers-weak` (new) | P/N/– | – | – | `HSTS max-age 86400 (1 day), under a year; X-Content-Type-Options "none"` | once |
+| 139 | `cookies-insecure` (new) | P/PD/– | – | – | `sessionid: no Secure, no HttpOnly` (each cookie at fault, what it lacks) | imp · pages |
+| 140 | `form-not-secure` (new) | P/PD/– | – | – | `Sends to http://x/subscribe`, `A password form on an http:// page` | imp · pages |
+| 141 | `protocol-relative-links` (new) | P/N/– | – | – | `3 URLs, such as //cdn.example.com/app.js` | imp · – |
 
 ### URLs
 
@@ -280,7 +284,14 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 78 | `url-uppercase` | P/N/**S** | – | – | Same (none). Its found-on gives the links to update if it's renamed | imp · – |
 | 79 | `url-underscores` | P/N/**S** | – | – | Same (none). As 78 | imp · – |
-| 80 | `url-too-long` | P/N/– | – | – | "132 characters" → `132 characters, over 115` | imp · – |
+| 80 | `url-too-long` | P/N/– | – | – | "132 characters" → `132 characters, over 115` | imp · – |
+| 142 | `url-tracking-parameters` (new) | U/N/S | – | – | The parameters: `utm_source, utm_medium` (its found-on lists the linking pages) | use · – |
+| 143 | `url-multiple-slashes` (new) | P/N/S | – | – | – | imp · – |
+| 144 | `url-space` (new) | P/N/S | – | – | – | imp · – |
+| 145 | `url-parameters` (new) | P/N/S | – | – | The parameter names: `sort, page` | imp · – |
+| 146 | `url-non-ascii` (new) | P/N/S | – | – | – | imp · – |
+| 147 | `url-repetitive-path` (new) | U/N/S | – | – | – | use · – |
+| 148 | `url-internal-search` (new) | P/N/S | – | – | The parameter names, when any: `q` | imp · – |
 
 ### Performance
 

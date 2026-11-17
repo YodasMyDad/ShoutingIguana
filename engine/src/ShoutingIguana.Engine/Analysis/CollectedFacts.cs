@@ -24,6 +24,8 @@ internal static class CollectedFacts
         [IssueCatalog.MOBILE_ALTERNATE] = 1,
         [IssueCatalog.IMAGE_MISSING_SRC] = 2,
         [IssueCatalog.IMAGE_NO_SRCSET] = 2,
-        [IssueCatalog.IMAGE_INLINE_LARGE] = 2
+        [IssueCatalog.IMAGE_INLINE_LARGE] = 2,
+        [IssueCatalog.FORM_NOT_SECURE] = 3,
+        [IssueCatalog.PROTOCOL_RELATIVE_LINKS] = 3
     };
 }

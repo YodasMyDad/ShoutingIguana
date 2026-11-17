@@ -282,7 +282,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     }),
                 new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins(), sitemaps), siteVersions,
                 new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl),
-                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType)
+                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType),
+                new UrlTextRules(urls, reader.ReadInternalUrls())
             ];
 
             // Pages parsed before each collection of facts that a check needs (CollectedFacts), counted as they're read.

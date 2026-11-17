@@ -452,6 +452,10 @@ public sealed partial class SyntheticSite
         // site without TLS, which is no duplicate.
         // Revision 1 drops a security header from the home page, and mends the plain-HTTP side of the HTTPS site.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
+
+        // The tracked link's URL: the thin page, canonicalised to itself without the tag.
+        Flag("url-tracking-parameters", PLANTS_PATH + "thin?utm_source=newsletter");
+        Flag("canonicalised-page", PLANTS_PATH + "thin?utm_source=newsletter");
         if (!IsHttps && Revision >= 1)
         {
             Flag("security-headers-missing", "/");
@@ -519,7 +523,8 @@ public sealed partial class SyntheticSite
         var products = PageCount - 1;
         var orphans = _options.Sitemaps ? OrphanCount : 0;
         var unblocked = UnblockedPrivate is null ? 0 : 1;
-        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + restored.Count + unblocked +
+        // The tracked link's URL is the thin page again, at another URL (url-tracking-parameters).
+        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + restored.Count + unblocked + 1 +
                         _plants.Count(plant => plant is { Status: 200, IsPage: true } && !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
         // Cloudflare's /cdn-cgi/ endpoint is no page of the site's in any count (the engine's CrawlSchema.PAGE), so it's
         // out of both; a page the analysis doesn't audit for another reason would be out of this one alone.

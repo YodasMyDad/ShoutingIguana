@@ -396,6 +396,14 @@ internal sealed class AnalysisReader : IDisposable
         return sitemaps;
     }
 
+    /// <summary>Every internal URL the crawl has, with its id, in id order.</summary>
+    public List<(int Id, string Url)> ReadInternalUrls()
+    {
+        List<(int Id, string Url)> internalUrls = [];
+        Rows("SELECT id, url FROM urls WHERE is_internal = 1 ORDER BY id", reader => internalUrls.Add((reader.GetInt32(0), reader.GetString(1))));
+        return internalUrls;
+    }
+
     /// <summary>Whether the crawl's sitemap entries have their lastmod (an engine from before it didn't read it).</summary>
     public bool HasSitemapLastmods() => HasColumn("sitemap_urls", "lastmod");
 

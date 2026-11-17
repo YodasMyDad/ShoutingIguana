@@ -13,9 +13,10 @@ public sealed record PageFacts
     /// attributes, the page's next and prev links, a <c>Refresh</c> header, the links search engines can't follow, the head's
     /// tags in the body, the document's structure errors, every charset declaration and a separate mobile URL. 2 is batch
     /// 6's: whether an image is a data: URI and its size, and whether it's in a picture with other sources (and the page's
-    /// Microdata, batch 5's, which only adds what an earlier page lacks).
+    /// Microdata, batch 5's, which only adds what an earlier page lacks). 3 is batch 7's: the page's forms, and its href
+    /// and src values written without a scheme.
     /// </summary>
-    public const int CURRENT_COLLECTION = 2;
+    public const int CURRENT_COLLECTION = 3;
 
     /// <summary>
     /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed
@@ -31,6 +32,7 @@ public sealed record PageFacts
     private readonly IReadOnlyList<string>? _structureErrors;
     private readonly IReadOnlyList<string>? _charsetDeclarations;
     private readonly IReadOnlyList<string>? _microdata;
+    private readonly IReadOnlyList<FormFact>? _forms;
 
     public IReadOnlyList<string> Titles { get; init; } = [];
     public IReadOnlyList<string> MetaDescriptions { get; init; } = [];
@@ -76,6 +78,12 @@ public sealed record PageFacts
     /// structured data checks read them as JSON-LD blocks. Empty for a page an earlier version parsed.
     /// </summary>
     public IReadOnlyList<string> Microdata { get => _microdata ?? []; init => _microdata = value; }
+
+    /// <summary>The page's forms, up to 20 (collection 3; empty for a page parsed before).</summary>
+    public IReadOnlyList<FormFact> Forms { get => _forms ?? []; init => _forms = value; }
+
+    /// <summary>The page's href and src values that start //, counted, with the first (collection 3); null for none.</summary>
+    public ProtocolRelativeFact? ProtocolRelativeUrls { get; init; }
 
     /// <summary>Element ids and named anchors, for checking <c>#fragment</c> links.</summary>
     public IReadOnlyList<string> AnchorIds { get; init; } = [];

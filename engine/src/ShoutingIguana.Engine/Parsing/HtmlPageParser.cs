@@ -109,6 +109,8 @@ public static class HtmlPageParser
             Images = walker.Images,
             JsonLd = walker.JsonLd,
             Microdata = MicrodataReader.Read(document, baseUri),
+            Forms = walker.Forms,
+            ProtocolRelativeUrls = walker.FirstProtocolRelative is { } first ? new ProtocolRelativeFact(walker.ProtocolRelativeCount, first) : null,
             AnchorIds = walker.AnchorIds,
             Icons = walker.Icons,
             MetaRefresh = refresh,

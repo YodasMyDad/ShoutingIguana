@@ -1626,6 +1626,54 @@ public static class IssueCatalog
         Grouping = IssueGrouping.None,
         ReportedOnce = true
     };
+    public static readonly IssueDefinition SECURITY_HEADERS_WEAK = new("security-headers-weak", IssueCategory.Security, IssueSeverity.Notice,
+        "Security headers set too weakly",
+        """The home page sends security headers set too weakly: Strict-Transport-Security (on HTTPS) whose max-age is missing, unreadable or under a year (31,536,000 seconds), or X-Content-Type-Options set to anything but nosniff. Checked once, for the whole site, as missing security headers are. The detail names each.""",
+        """Send Strict-Transport-Security: max-age=31536000 (a year) or more, once the whole site works over HTTPS, and X-Content-Type-Options: nosniff. Your host or CDN usually sets them.""")
+    {
+        Why = """HSTS keeps browsers on HTTPS between visits only for as long as its max-age, and the preload list browsers ship asks for a year; a short one lapses between visits. X-Content-Type-Options has one value, nosniff: anything else does nothing.""",
+        LearnMore = "https://hstspreload.org/#deployment-recommendations",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition COOKIES_INSECURE = new("cookies-insecure", IssueCategory.Security, IssueSeverity.Notice,
+        "Cookies without Secure or HttpOnly",
+        """The page's response sets cookies without basic protection: on HTTPS, without Secure; with SameSite=None but no Secure, which browsers refuse; or a session or login cookie (its name has sess, sid, auth, token, login or jwt) without HttpOnly. Only cookies the server sets are seen, not those a script sets. The detail names each cookie and what it lacks.""",
+        """Add Secure to every cookie on an HTTPS site, and HttpOnly to session and login cookies, in the server's or framework's cookie settings.""")
+    {
+        Why = """A cookie without Secure can be sent over plain HTTP, where it can be read in transit; one without HttpOnly can be read by a script injected into the page, which is how sessions are stolen. Browsers drop a SameSite=None cookie without Secure altogether.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition FORM_NOT_SECURE = new("form-not-secure", IssueCategory.Security, IssueSeverity.Warning,
+        "Form sends data over HTTP",
+        """On an HTTPS page, a form sends what's typed to an http:// address; or on an HTTP page, a form asks for a password. The detail says where it sends. A crawl made before the crawler read forms isn't checked.""",
+        """Point the form's action at the https:// address, or a relative one, and serve every page with a form over HTTPS.""")
+    {
+        Why = """What people type travels unencrypted, where others on the network can read or change it, and browsers warn them before sending it, or mark the page not secure.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/Security/Mixed_content",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition PROTOCOL_RELATIVE_LINKS = new("protocol-relative-links", IssueCategory.Security, IssueSeverity.Notice,
+        "Protocol-relative (//) URLs",
+        """The page has href or src values written without their scheme, starting // (such as //cdn.example.com/app.js), which take the page's own: on an HTTP copy of the page they load over HTTP. The detail counts them and gives the first. A crawl made before the crawler noted them isn't checked.""",
+        """Write each with https:// in front, now that every browser and most hosts support it.""")
+    {
+        Why = """They were a way to load the same file over HTTP and HTTPS. On an HTTPS page they load securely anyway, so the risk is only an HTTP copy of the page, but they're an old habit worth replacing, and some tools misread them.""",
+        LearnMore = "https://www.paulirish.com/2010/the-protocol-relative-url/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
 
 
     // URLs
@@ -1662,6 +1710,96 @@ public static class IssueCatalog
     {
         Why = """Google doesn't document a length limit that affects search, and results usually show the domain and a breadcrumb made from parts of the URL rather than the whole thing. Long URLs are mainly harder to read, share and type, and they often point to deep folder structures, keyword-stuffed slugs or tracking parameters worth cleaning up.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure#use-descriptive-urls",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+    public static readonly IssueDefinition URL_TRACKING_PARAMETERS = new("url-tracking-parameters", IssueCategory.Urls, IssueSeverity.Notice,
+        "Internal link with tracking parameters",
+        """Pages on the site link to this URL of the site's with ad or campaign tracking parameters in its query: utm_source and the other utm_ parameters, gclid, fbclid, msclkid, mc_cid or _ga. The detail names them; where it's found lists the pages linking to it.""",
+        """Link to the URL without its tracking parameters: they belong on links from emails, ads and other sites, not between your own pages.""")
+    {
+        Why = """Each tagged link is another URL for search engines to crawl and fold into the page they belong to, and analytics counts the visitor as arriving from a new campaign, which breaks up their visit.""",
+        LearnMore = "https://support.google.com/analytics/answer/10917952",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_MULTIPLE_SLASHES = new("url-multiple-slashes", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with multiple slashes",
+        """This indexable page's path has two slashes in a row (//), which makes it a different URL from the one with a single slash. Where it's found lists the pages linking to it.""",
+        """Link to the single-slash address, and redirect the double-slash one to it. The usual cause is a template joining a path and a folder that both end or start with a slash.""")
+    {
+        Why = """Most servers answer both with the same page, so the site has two URLs for it, which search engines must crawl and fold together.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_SPACE = new("url-space", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with a space",
+        """This indexable page's path has a space in it (written %20). Where it's found lists the pages linking to it.""",
+        """Rename the page with hyphens in place of spaces, redirect the old address to it, and update the links.""")
+    {
+        Why = """A space isn't allowed in a URL as written, so it's escaped as %20, which reads badly and breaks when the address is copied into emails or documents.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_PARAMETERS = new("url-parameters", IssueCategory.Urls, IssueSeverity.Notice,
+        "Indexable URL with parameters",
+        """This indexable page's URL has a query (a ? part), and it isn't the site's search, which is its own check. The detail names the parameters; where it's found lists the pages linking to it.""",
+        """If the parameters only sort, filter or track, point the page's canonical at the address without them. If they make a page worth finding, give it a plain address instead.""")
+    {
+        Why = """Every combination of parameters is another URL for search engines to crawl, and the same content under many of them divides its signals. Often fine, as for a page of a series, so it's for review.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_NON_ASCII = new("url-non-ascii", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with non-ASCII characters",
+        """This indexable page's path or query, decoded, has characters outside ASCII, such as accented or non-Latin letters. Where it's found lists the pages linking to it.""",
+        """Nothing is broken: search engines read them. Use ASCII letters, hyphens and digits in new addresses if people will type or share them, and don't rename pages that already rank.""")
+    {
+        Why = """URLs are sent as ASCII, so other characters travel percent-encoded (café becomes caf%C3%A9), which some tools, emails and people get wrong when copying.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_REPETITIVE_PATH = new("url-repetitive-path", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with a repeating path",
+        """This URL of the site's has a path that repeats itself: one segment three times or more, or the same run of segments twice in a row (/shop/shop/, /a/b/a/b/). Where it's found lists the pages linking to it.""",
+        """Find the link that builds it, usually a relative link such as href="shop/" that should be "/shop/", and fix it; redirect the URL to the right one.""")
+    {
+        Why = """A relative link resolved from the wrong place builds ever-longer URLs, which crawlers can follow without end, each answering with the same page.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_INTERNAL_SEARCH = new("url-internal-search", IssueCategory.Urls, IssueSeverity.Notice,
+        "Internal search results page",
+        """This indexable page is the site's own search: its path has a segment "search", or its query asks something (s, q, query, search, keyword or keywords). The detail names the parameters; where it's found lists the pages linking to it.""",
+        """Keep search results out of search engines: add noindex to them, or point their canonical at a real page, and avoid linking to searches from the site's pages.""")
+    {
+        Why = """Every search is another page of results that rarely helps anyone who lands on it from a search engine, and there's no end to them for a crawler.""",
+        LearnMore = "https://developers.google.com/search/docs/essentials/spam-policies#thin-affiliate-pages",
+        References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
@@ -1872,8 +2010,10 @@ public static class IssueCatalog
         HREFLANG_TO_NON_INDEXABLE, HREFLANG_DUPLICATE_CODE, HREFLANG_MISSING_X_DEFAULT, HREFLANG_OUTSIDE_HEAD,
         STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED, STRUCTURED_DATA_SCHEMA_ERRORS, STRUCTURED_DATA_MISSING_RECOMMENDED,
         STRUCTURED_DATA_ON_NOINDEX,
-        NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING,
-        URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG,
+        NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING, SECURITY_HEADERS_WEAK, COOKIES_INSECURE, FORM_NOT_SECURE,
+        PROTOCOL_RELATIVE_LINKS,
+        URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG, URL_TRACKING_PARAMETERS, URL_MULTIPLE_SLASHES, URL_SPACE, URL_PARAMETERS, URL_NON_ASCII,
+        URL_REPETITIVE_PATH, URL_INTERNAL_SEARCH,
         SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT, RESOURCE_PAST_CRAWL_LIMIT,
         VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING,
         HEAD_TAGS_IN_BODY, HTML_STRUCTURE_ERRORS, VIEWPORT_INVALID, CHARSET_INVALID, LANG_INVALID, MOBILE_ALTERNATE

@@ -72,6 +72,37 @@ public sealed partial class SyntheticSite
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
             plants.Add(new Plant(PLANTS_PATH + slug, status, linked, InSitemap: false, issues, respond));
 
+        // A page at a URL of its own: one with a query (the server routes by path), or with characters escaped in it.
+        void PageAt(string slug, string name, string[] issues, string url, Func<PageSpec, PageSpec>? change = null)
+        {
+            var page = PlantPage(slug, name);
+            page = change?.Invoke(page) ?? page;
+            plants.Add(new Plant(page.Path, 200, Linked: true, InSitemap: true, issues,
+                () => new SyntheticResponse(200, HTML, Render(page), null, null, SECURITY_HEADERS), Url: url));
+        }
+
+        // A session cookie without HttpOnly (and on HTTPS without Secure); a script written without its scheme.
+        Page("insecure-cookie", "Insecure cookie", ["cookies-insecure"], headers: new Dictionary<string, string> { ["Set-Cookie"] = "sessionid=planted; Path=/" });
+        Page("protocol-relative", "Protocol-relative script", ["protocol-relative-links"], page => page with
+        {
+            ExtraHead = $"<script src=\"{_base[_base.IndexOf("//", StringComparison.Ordinal)..]}/static/app.js\" defer></script>"
+        });
+
+        // A link tagged for ad tracking to the thin page, which canonicalises to itself without the tag (expected beside the
+        // other site-wide flags); URLs with a double slash, a space, a parameter, an accent, a repeating path, and a search.
+        Page("utm-link", "Tracked link", [], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin?utm_source=newsletter\">The newsletter's thin page</a></p>"
+        });
+        Page("double//slash", "Double slash", ["url-multiple-slashes"]);
+        PageAt("with space", "With a space", ["url-space"], $"{_base}{PLANTS_PATH}with%20space");
+        PageAt("params", "With a parameter", ["url-parameters"], $"{_base}{PLANTS_PATH}params?sort=price",
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}params?sort=price" });
+        PageAt("café", "Café", ["url-non-ascii"], $"{_base}{PLANTS_PATH}caf%C3%A9");
+        Page("shop/shop/", "Repeating path", ["url-repetitive-path"]);
+        PageAt("search", "Search results", ["url-internal-search"], $"{_base}{PLANTS_PATH}search?q=lamp",
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}search?q=lamp" });
+
         // An image with no file; a wide PNG without srcset; a 100 KB PNG; alt text that's a camera's file name; a 12 KB data:
         // image built into the page.
         Page("image-no-src", "Image without a source", ["image-missing-src"], page => page with
@@ -787,6 +818,12 @@ public sealed partial class SyntheticSite
             // Listed by its http:// URL in the https:// sitemap, which sitemaps.org drops.
             plants.Add(new Plant(insecure.Path, 200, Linked: true, InSitemap: true, ["http-page", "sitemap-url-other-host"],
                 () => new SyntheticResponse(200, HTML, insecureHtml, null, null, SECURITY_HEADERS), Url: insecureUrl));
+
+            // A form on an HTTPS page sending to http://.
+            Page("form-http-action", "Form over HTTP", ["form-not-secure"], page => page with
+            {
+                Content = page.Content + $"<form action=\"http{_base["https".Length..]}{PLANTS_PATH}subscribe\" method=\"post\"><input type=\"email\" name=\"e\"></form>"
+            });
 
             Page("mixed-content", "Mixed content", ["mixed-content"], page => page with
             {

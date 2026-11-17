@@ -1921,6 +1921,57 @@ public static class IssuePlainTexts
             LooksFor = """Missing security settings"""
         },
 
+        ["security-headers-weak"] = new(
+            """Security settings that are on but too weak""",
+            [
+                """Your site sends some security settings to browsers, but sets them too weakly to do their job.""",
+                """One that keeps visitors on the secure version of your site may lapse between visits, for example."""
+            ],
+            [
+                """Send the list to your developer or hosting company: it says which settings are too weak.""",
+                """Ask them to strengthen each one, as the list describes."""
+            ],
+            IssueFixer.Developer,
+            """Your site's security settings are strong enough"""),
+
+        ["cookies-insecure"] = new(
+            """Cookies your site sets without basic protection""",
+            [
+                """These pages store small files in visitors' browsers (cookies) without the basic protections browsers offer.""",
+                """A login cookie without them could be read by someone else, which is how accounts get taken over."""
+            ],
+            [
+                """Send the list to your developer: it names each cookie and what it lacks.""",
+                """Ask them to turn on the cookie protections in your site's settings or code."""
+            ],
+            IssueFixer.Developer,
+            """Your site's cookies are protected"""),
+
+        ["form-not-secure"] = new(
+            """Forms that send what people type without encryption""",
+            [
+                """These pages have forms that send what people type over an unencrypted connection.""",
+                """Others on the same network could read it, and browsers warn visitors before they send it."""
+            ],
+            [
+                """Ask your developer to make each form send to a secure address, one that starts with https.""",
+                """If a form plugin made the form, check its settings for the address it sends to."""
+            ],
+            IssueFixer.Developer,
+            """Every form sends securely"""),
+
+        ["protocol-relative-links"] = new(
+            """Links written in an old shortcut style""",
+            [
+                """These pages load files or link to addresses written without their start ("//" instead of "https://").""",
+                """That shortcut was once common, and still works on a secure page, but it's best replaced."""
+            ],
+            [
+                """Ask your developer to write each address in full, starting with "https://"."""
+            ],
+            IssueFixer.Developer,
+            """Every address is written in full"""),
+
         ["url-uppercase"] = new(
             """Addresses with capital letters""",
             [
@@ -1966,6 +2017,96 @@ public static class IssuePlainTexts
             ],
             IssueFixer.Either,
             """No page address is very long"""),
+
+        ["url-tracking-parameters"] = new(
+            """Links between your own pages tagged for ad tracking""",
+            [
+                """Some of your pages link to others with tracking codes meant for ads and emails in the address.""",
+                """Each such link is another address for search engines, and it muddles your visitor statistics."""
+            ],
+            [
+                """Find the links on the pages the list names, and remove the tracking codes after the "?" from each address."""
+            ],
+            IssueFixer.You,
+            """No link between your own pages is tagged for tracking"""),
+
+        ["url-multiple-slashes"] = new(
+            """Addresses with a double slash""",
+            [
+                """These pages' addresses have two slashes in a row.""",
+                """That makes them different addresses from the single-slash ones, so search engines may see two copies."""
+            ],
+            [
+                """Change the links to these pages to use a single slash.""",
+                """Ask your developer to forward each double-slash address to the single-slash one."""
+            ],
+            IssueFixer.Either,
+            """No address has a double slash"""),
+
+        ["url-space"] = new(
+            """Addresses with spaces in them""",
+            [
+                """These pages' addresses have a space in them, which addresses can't hold as typed.""",
+                """It shows as "%20", reads badly, and breaks when the address is copied into emails."""
+            ],
+            [
+                """Rename each page with hyphens in place of the spaces, in your site's editor.""",
+                """Ask your developer to forward the old addresses to the new ones."""
+            ],
+            IssueFixer.Either,
+            """No address has a space in it"""),
+
+        ["url-parameters"] = new(
+            """Pages whose address has a ? part""",
+            [
+                """These pages can appear in search, and their addresses have a "?" part, as sorting and filtering often add.""",
+                """Each different "?" part is another address for search engines to visit, often for the same content."""
+            ],
+            [
+                """Check whether each page is worth finding in search on its own.""",
+                """If not, ask your developer to point its main address at the version without the "?" part."""
+            ],
+            IssueFixer.Either,
+            """No page that can appear in search has a ? part"""),
+
+        ["url-non-ascii"] = new(
+            """Addresses with accented or non-English letters""",
+            [
+                """These pages' addresses have accented or non-English letters in them.""",
+                """Search engines read them fine, but they turn into long codes when copied, which some people and tools get wrong."""
+            ],
+            [
+                """Use plain letters, hyphens and numbers in new page addresses.""",
+                """Don't rename pages that already do well in search."""
+            ],
+            IssueFixer.You,
+            """Every address uses plain letters"""),
+
+        ["url-repetitive-path"] = new(
+            """Addresses that repeat themselves""",
+            [
+                """These addresses repeat part of themselves, such as "/shop/shop/".""",
+                """It's usually a link written slightly wrong, which builds ever-longer addresses for search engines to follow."""
+            ],
+            [
+                """Look at the pages the list names for the link that leads here.""",
+                """Ask your developer to correct the link and forward the address to the right page."""
+            ],
+            IssueFixer.Either,
+            """No address repeats itself"""),
+
+        ["url-internal-search"] = new(
+            """Your site's search results pages show up as pages""",
+            [
+                """Search engines can find and show your site's own search results pages.""",
+                """They rarely help anyone arriving from a search engine, and there's no end of them to visit."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for an option to hide search results from search engines.""",
+                """Avoid linking to search results from your own pages."""
+            ],
+            IssueFixer.Either,
+            """Your site's search results stay out of search engines"""),
 
         ["slow-response"] = new(
             """Pages that are slow to answer""",

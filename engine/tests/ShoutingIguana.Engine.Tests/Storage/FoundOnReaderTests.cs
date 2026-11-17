@@ -27,7 +27,8 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "internal-client-error", "internal-server-error", "internal-unreachable", "internal-blocked", "redirect-chain", "redirect-loop",
             "redirect-broken", "redirect-temporary", "redirect-downgrade", "orphan-page", "blocked-by-robots", "sitemap-non-indexable",
             "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores", "canonical-on-redirect", "canonical-unlinked",
-            "non-indexable-inlinks-only", "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "sitemap-url-repeated"
+            "non-indexable-inlinks-only", "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "sitemap-url-repeated",
+            "url-tracking-parameters", "url-multiple-slashes", "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search"
         ];
         string[] targets =
         [

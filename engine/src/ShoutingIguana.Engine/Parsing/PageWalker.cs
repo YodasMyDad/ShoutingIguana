@@ -28,6 +28,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     private const int MAX_ICON_ATTRIBUTE_CHARS = 100;
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
+
+    /// <summary>The forms a page's facts keep: enough for any page's search, sign-up and log-in.</summary>
+    private const int MAX_FORMS = 20;
     private const int MAX_PAGINATION_LINKS = 20;
     private const int MAX_UNCRAWLABLE_EXAMPLES = 3;
     private const int MAX_UNCRAWLABLE_TEXT = 60;
@@ -85,6 +88,14 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     /// <summary>Every charset the page declares, in order (<see cref="PageFacts.CharsetDeclarations"/>).</summary>
     public List<string> CharsetDeclarations { get; } = [];
+
+    /// <summary>The page's forms, up to <see cref="MAX_FORMS"/>.</summary>
+    public List<FormFact> Forms { get; } = [];
+
+    /// <summary>How many <c>href</c> and <c>src</c> values start <c>//</c>, and the first.</summary>
+    public int ProtocolRelativeCount { get; private set; }
+
+    public string? FirstProtocolRelative { get; private set; }
 
     /// <summary>The first separate mobile version the page names (<see cref="PageFacts.MobileAlternate"/>).</summary>
     public string? MobileAlternate { get; private set; }
@@ -172,6 +183,24 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         }
 
         var name = element.LocalName;
+
+        // An href or src written without its scheme ("//cdn.example.com/app.js") takes the page's.
+        foreach (var attribute in (string[])["href", "src"])
+        {
+            if (element.GetAttribute(attribute)?.TrimStart() is { } value && value.StartsWith("//", StringComparison.Ordinal) && value.Length > 2)
+            {
+                ProtocolRelativeCount++;
+                FirstProtocolRelative ??= value.Length > MAX_LABEL_CHARS ? value[..MAX_LABEL_CHARS] : value;
+            }
+        }
+
+        if (name == "form" && Forms.Count < MAX_FORMS)
+        {
+            var action = element.GetAttribute("action");
+            var target = string.IsNullOrWhiteSpace(action) ? baseUri : UrlNormalizer.TryResolve(baseUri, action, out var resolved) ? resolved : null;
+            Forms.Add(new FormFact(target is null ? null : UrlNormalizer.Normalize(target), NullIfBlank(element.GetAttribute("method"))?.Trim().ToLowerInvariant() ?? "get",
+                element.QuerySelector("input[type=password i]") is not null));
+        }
 
         // Only <a>, <area>, <link> and <base> take an href: on a <span> or <div>, one that leads somewhere is a link search
         // engines can't follow (a widget's href="javascript:void(0)" or "#reviews" leads nowhere they could go).
