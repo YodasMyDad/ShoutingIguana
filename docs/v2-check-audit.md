@@ -23,6 +23,10 @@ on the synthetic site, or a crawl test, that was seen failing without it.
 - **Scores after the fixes** (copies of the three crawls analysed again): aptitude 85, unchanged; jitsunami 76 to 79
   (10 `links-to-redirects` and 1 `redirect-temporary` gone, `orphan-page` skipped and saying why, its home page's logo
   link now among the links without text); garden 83 to 85 (duplicate descriptions are a notice).
+- **Since the audit**, the four title and description length checks measure pixels, not characters
+  ([pixel widths](v2-pixel-widths.md), `7047d4b`). On copies of the three crawls, `title-too-long` went from 14/0/84
+  to 11/0/69, `title-too-short` from 3/6/10 to 2/3/8, `description-too-long` from 0/2/203 to 0/2/163 and
+  `description-too-short` from 1/1/0 to 0/1/0. They're Notices.
 
 ## How it was checked
 
@@ -110,13 +114,13 @@ Re-crawl jitsunami and audit its product pages once that merges.
 | `sitemap-url-other-host` | Sitemaps, Warning | 0/0/0 | – | 0 | right, not seen | – | – |
 | `title-missing` | Titles, Error | 0/0/0 | – | 0 | right, not seen | – | – |
 | `title-multiple` | Titles, Warning | 0/0/0 | – | 0 | right, not seen | – | – |
-| `title-too-long` | Titles, Notice | 14/0/84 | 0 | 0 | reworded | Simple: "Titles that may be cut off in search results" | `b84ee69` |
-| `title-too-short` | Titles, Notice | 3/6/10 | 0 | 0 | reworded | Simple step: skip login and basket pages | `b84ee69` |
+| `title-too-long` | Titles, Notice | 14/0/84 | 0 | 0 | reworded; changed: pixels | Simple: "Titles that may be cut off in search results". Then pixels: over 580 px, not 60 characters (11/0/69 after) | `b84ee69`, `7047d4b` |
+| `title-too-short` | Titles, Notice | 3/6/10 | 0 | 0 | reworded; changed: pixels | Simple step: skip login and basket pages. Then pixels: under 200 px, not 30 characters (2/3/8 after) | `b84ee69`, `7047d4b` |
 | `title-duplicate` | Titles, Warning | 0/0/2 | 0 | 0 | right | – | – |
 | `description-missing` | Meta descriptions, Notice | 0/6/12 | 0 | 0 | right | – | – |
 | `description-multiple` | Meta descriptions, Warning | 0/0/0 | – | 0 | right, not seen | – | – |
-| `description-too-long` | Meta descriptions, Notice | 0/2/203 | 0 | 0 | reworded | Simple: "Search descriptions that may be cut off" | `b84ee69` |
-| `description-too-short` | Meta descriptions, Notice | 1/1/0 | 0 | 0 | right | – | – |
+| `description-too-long` | Meta descriptions, Notice | 0/2/203 | 0 | 0 | reworded; changed: pixels | Simple: "Search descriptions that may be cut off". Then pixels: over 985 px, not 155 characters (0/2/163 after) | `b84ee69`, `7047d4b` |
+| `description-too-short` | Meta descriptions, Notice | 1/1/0 | 0 | 0 | right; changed: pixels | Pixels: under 400 px, not 70 characters (0/1/0 after) | `7047d4b` |
 | `description-duplicate` | Meta descriptions, Notice | 0/0/4 | 0 | 0 | severity changed | Warning to Notice | `ef19fa0` |
 | `h1-missing` | Headings, Notice | 0/2/1 | 0 | 0 | right | – | – |
 | `h1-multiple` | Headings, Notice | 0/0/0 | – | 0 | right, not seen | – | – |
@@ -176,6 +180,7 @@ passes with it; the whole synthetic site is compared issue by issue, so nothing 
 | `ef19fa0` | Severities: `sitemap-error` Error to Warning (its own words: well-linked pages are still found), `structured-data-invalid` Error to Warning (the same effect as missing required properties, a warning; one stray comma no longer caps the score at 89), `description-duplicate` Warning to Notice (the effect of a missing description, a notice) | The score tests: the design's garden crawl (2026-10-31) now scores 87, not 85, and fixing its first five leaves 100; the design's worked example keeps 85 with another warning in its place |
 | `b84ee69` | Words, both modes: `canonicalised-page` (page 2 of a list isn't a copy and should name itself), `not-in-sitemap` (login, basket and account pages belong out of search), `sitemap-missing` (what checking again adds), `title-too-long` and `description-too-long` ("may be cut off"), `title-too-short` (skip login and basket pages), `near-duplicate-content` (no "24 of the 256 bits"), `broken-external-links` (refused and robots-disallowed links aren't counted), `security-headers-missing` (browsers already default Referrer-Policy) | `IssueCatalogTests`, the plain-words template and data tests, `docs/v2-ui-simple.md`'s ten checks |
 | `97e3352` | `AnalysisFreshness.VERSION` 9: analyses by 8 are out of date, so the app offers to run them again | – |
+| `7047d4b` | After the audit, at the owner's word: `title-too-long`, `title-too-short`, `description-too-long` and `description-too-short` measure the width in Google's desktop results in pixels, not characters: over 580 px or under 200 px for titles, over 985 px or under 400 px for descriptions. Details read `612 px, over 580 (64 characters)`; Simple and the report's plain words say where Google will likely cut. Limits saved in characters are converted. `AnalysisFreshness.VERSION` 12. The design as built: [pixel widths](v2-pixel-widths.md) | Six plants where characters and pixels disagree, each judged the other way by characters (`4268406`: `/plants/title-caps`, `title-narrow`, `title-narrow-short`, `title-caps-short`, `description-caps`, `description-narrow`); `SearchResultWidthTests`, `PageRuleTests` |
 
 **Why 1 in 20 for orphans.** The audit asked for the check to be skipped whenever the site's pages couldn't all be
 read. Taken literally, one URL that times out, or a "Log in" link to a `/wp-login.php` that answers bots with 403,
@@ -206,7 +211,8 @@ notice).
 - **`nofollow-page` as a Notice when the page is also noindex**: a deliberate `noindex, nofollow` login page is a fair
   case, but no site had one, and a severity that depends on another directive is a new kind of rule. Not seen.
 - **Details that name the limit** ("61 characters (limit 60)") and the full-width parenthetical only when it changes
-  the verdict: details belong to `ui/3b-evidence`, which is rewriting them.
+  the verdict: details belong to `ui/3b-evidence`, which is rewriting them. Pixels have since taken the parenthetical
+  away: a wide character takes its room in the width (`7047d4b`).
 - **`blocked-by-robots` judged for Googlebot's own group**: rules are matched for the crawler's token, falling back to
   `*`. None of the sites has a Googlebot group, so nothing here was misjudged; backlog.
 - **`soft-404` wording** ("We can't find the page you're looking for", "This page isn't available") and
