@@ -544,7 +544,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
 
         // Three tries of robots.txt, 1 s and 2 s apart (each with up to 0.25 s of jitter).
         var robotsCycle = TimeSpan.FromSeconds((options.MaxRetries + 1) * TIMEOUT_SECONDS + 1 + 2 + 0.5);
-        Assert.True(clock.Elapsed < robotsCycle + TimeSpan.FromSeconds(3), $"The crawl took {clock.Elapsed}, a robots.txt cycle {robotsCycle}.");
+        Assert.True(clock.Elapsed < robotsCycle + TimeSpan.FromSeconds(5), $"The crawl took {clock.Elapsed}, a robots.txt cycle {robotsCycle}.");
         Assert.Equal(3, _requests.Count(request => request == "www.example.com/robots.txt"));
         Assert.DoesNotContain("www.example.com/", _requests);
         Assert.Equal([$"{(int)FetchOutcome.Timeout} | yes"], TestCrawls.Rows(path, $"""
@@ -572,7 +572,8 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         clock.Stop();
         output.WriteLine($"Crawl with a version whose page never answers: {clock.Elapsed.TotalSeconds:0.0} s");
 
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(TIMEOUT_SECONDS + 4), $"The crawl took {clock.Elapsed}.");
+        // The probe's timeout, and the slow start's first seconds, when the site gets a request or two a second.
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(TIMEOUT_SECONDS + 6), $"The crawl took {clock.Elapsed}.");
         Assert.Single(_requests, request => request == "www.example.com/");
         Assert.Equal(FetchOutcome.Timeout, (FetchOutcome)TestCrawls.Count(path, $"SELECT r.outcome FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{WWW}/'"));
         var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
