@@ -8,6 +8,10 @@ namespace ShoutingIguana.Engine.Analysis;
 /// </summary>
 public static class IssueCatalog
 {
+    // What restoring a URL that doesn't work clears: the links, images, canonicals and hreflang entries naming it. Ids,
+    // not the definitions, which are made in the order written and so would be null here. First, as the checks use it.
+    private static readonly string[] BROKEN_TARGETS = ["broken-internal-links", "image-broken", "canonical-broken", "hreflang-broken-target"];
+
     // Response codes
     public static readonly IssueDefinition INTERNAL_CLIENT_ERROR = new("internal-client-error", IssueCategory.ResponseCodes, IssueSeverity.Error,
         "Internal URL returns 4xx",
@@ -19,7 +23,8 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["type"]
+        Evidence = ["type"],
+        Clears = BROKEN_TARGETS
     };
 
     public static readonly IssueDefinition INTERNAL_SERVER_ERROR = new("internal-server-error", IssueCategory.ResponseCodes, IssueSeverity.Error,
@@ -32,7 +37,8 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["type", "responseMs"]
+        Evidence = ["type", "responseMs"],
+        Clears = BROKEN_TARGETS
     };
 
     public static readonly IssueDefinition INTERNAL_UNREACHABLE = new("internal-unreachable", IssueCategory.ResponseCodes, IssueSeverity.Error,
@@ -45,7 +51,8 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
-        Evidence = ["type", "fetchError", "responseMs"]
+        Evidence = ["type", "fetchError", "responseMs"],
+        Clears = BROKEN_TARGETS
     };
 
     // A 429 is not one of these: the crawler slows down and asks again, and a URL the site still answers with 429 at the
@@ -88,7 +95,8 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["redirectChain"],
-        TargetFacts = ["statusCode", "indexability"]
+        TargetFacts = ["statusCode", "indexability"],
+        Clears = ["links-to-redirects"]
     };
 
     public static readonly IssueDefinition REDIRECT_LOOP = new("redirect-loop", IssueCategory.Redirects, IssueSeverity.Error,
@@ -101,7 +109,8 @@ public static class IssueCatalog
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.None,
-        Evidence = ["redirectChain"]
+        Evidence = ["redirectChain"],
+        Clears = ["broken-internal-links", "canonical-broken"]
     };
 
     public static readonly IssueDefinition REDIRECT_BROKEN = new("redirect-broken", IssueCategory.Redirects, IssueSeverity.Error,
@@ -115,7 +124,8 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["redirectChain"],
-        TargetFacts = ["statusCode"]
+        TargetFacts = ["statusCode"],
+        Clears = ["broken-internal-links", "image-broken", "canonical-broken"]
     };
 
     public static readonly IssueDefinition REDIRECT_TEMPORARY = new("redirect-temporary", IssueCategory.Redirects, IssueSeverity.Notice,

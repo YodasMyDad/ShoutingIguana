@@ -204,6 +204,37 @@ public sealed class IssueCatalogTests
         Assert.Equal(IssueCategory.Indexability, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Category);
     }
 
+    /// <summary>
+    /// What a fix also clears is data, so it's checked as data: every check named is a real one, never the check itself,
+    /// named once; the check flags URLs others refer to, and each check it clears flags the pages that refer to them, so
+    /// the pages it clears can be counted from the targets they name.
+    /// </summary>
+    [Fact]
+    public void EveryCheckAFixAlsoClearsIsARealCheckOfTheReferencesToIt()
+    {
+        var related = IssueCatalog.All.Where(check => check.Clears.Count > 0).ToList();
+        Assert.Equal(
+            ["internal-client-error", "internal-server-error", "internal-unreachable", "redirect-chain", "redirect-loop", "redirect-broken"],
+            related.Select(check => check.Id));
+        foreach (var check in related)
+        {
+            Assert.Equal(IssueReferences.Sources, check.References);
+            Assert.Equal(check.Clears.Count, check.Clears.Distinct(StringComparer.Ordinal).Count());
+            foreach (var id in check.Clears)
+            {
+                var cleared = IssueCatalog.Find(id);
+                Assert.True(cleared is not null, $"{check.Id} clears {id}, which isn't a check");
+                Assert.NotEqual(check.Id, id);
+                Assert.Equal(IssueReferences.Targets, cleared!.References);
+                Assert.Equal(IssueSubject.Page, cleared.Subject);
+                Assert.Equal(IssueGrouping.RelatedUrl, cleared.Grouping);
+            }
+        }
+
+        Assert.Equal(["links-to-redirects"], IssueCatalog.REDIRECT_CHAIN.Clears);
+        Assert.Contains("broken-internal-links", IssueCatalog.INTERNAL_CLIENT_ERROR.Clears);
+    }
+
     /// <summary>Hosts show the titles as they are, so every category needs a plain name of its own, never its identifier.</summary>
     [Fact]
     public void EveryCategoryHasItsOwnPlainTitle()

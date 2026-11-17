@@ -59,6 +59,16 @@ public sealed record IssueDefinition(
     public IReadOnlyList<string> TargetFacts { get; init; } = [];
 
     /// <summary>
+    /// The checks a fix of this one also clears, by id: this check flags the URLs others refer to (<see cref="References"/>
+    /// is <see cref="IssueReferences.Sources"/>: a 404, a redirect chain), and each of those flags the pages that refer to
+    /// them (<see cref="IssueReferences.Targets"/>: links to broken URLs, links to redirects). A fix of the URL, or of its
+    /// references as the fix says, clears the pages whose every target is one of this check's URLs; how many that is on a
+    /// crawl is counted from its issues (<c>Storage.IssueCauseReader</c>), never assumed. Only how the check is shown: it
+    /// isn't stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public IReadOnlyList<string> Clears { get; init; } = [];
+
+    /// <summary>
     /// The check finds one fault of the whole site, not a fault of pages: robots.txt that search engines can't read, a
     /// site not on HTTPS. However many URLs it is reported on (one, or each other version of the site that answers), the
     /// score counts it as the whole site (<see cref="ScoreCalculator"/>). It isn't part of

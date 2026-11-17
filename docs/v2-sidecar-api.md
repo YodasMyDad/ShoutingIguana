@@ -243,7 +243,7 @@ Built in stages:
   `plainTitle` (the score) is the category in Simple's words, such as "Search descriptions";
 - `checks: [{ id, category, severity, title, description, fix, why, learnMore, grouping, subject, siteWide,
   reportedOnce, plainTitle, plainWhat, plainFix, fixer, plainPassed, plainOneFix, plainLooksFor, evidence,
-  targetFacts }]`, in catalog order.
+  targetFacts, clears }]`, in catalog order.
   `description` is what is wrong, `why` is why it matters and `fix` is what to do. `learnMore` is an absolute URL, or
   null when no authoritative page exists. `grouping` (E3a) is how
   the check's issues group: see [Issue groups](#issue-groups-e3a).
@@ -256,6 +256,14 @@ Built in stages:
   **(evidence)** 16 are `sources` and 20 `targets`: `http-page`, `url-uppercase` and `url-underscores` become
   `sources` (the links to update), and `image-missing-alt`, `image-alt-too-long` and `image-missing-dimensions`
   become `targets` (the images at fault: see [Issue groups](#issue-groups-e3a)).
+- **`clears`** (step 3b, related checks) is the checks a fix of this one also clears, by id, as the catalog declares
+  them: this check's `references` is `sources` (it flags URLs others refer to) and each check named is a `targets` check
+  of pages, grouped by `relatedUrl` (it flags the pages that refer to them). `internal-client-error`,
+  `internal-server-error` and `internal-unreachable` clear `broken-internal-links`, `image-broken`, `canonical-broken`
+  and `hreflang-broken-target`; `redirect-chain` clears `links-to-redirects`; `redirect-loop` clears
+  `broken-internal-links` and `canonical-broken`; `redirect-broken` those two and `image-broken`. Empty for the rest.
+  What a fix clears **on a crawl** is counted, never assumed: the analysis's `counts[].clears`. Only how a check is
+  shown: not stored with an analysis, nor in the checks' fingerprint.
 - **`evidence`** (evidence) is the URL columns that show what the check found, in the order to show them, beside each
   row's `url` and `detail`: `["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
   `["metaRobots", "xRobotsTag"]` for `noindex-page` (where the noindex comes from), `["redirectChain"]` for the
@@ -862,7 +870,10 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 
 ```json
 {"analyzedAt":"…","engineVersion":"…","pagesAnalyzed":265,"durationMs":7012,"isPartial":true,"outOfDate":false,
- "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12,"likelyTemplate":false}],
+ "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12,"likelyTemplate":false,
+   "causes":12,"templateCauses":0,"clears":[]},
+   {"checkId":"internal-client-error","count":9,"likelyTemplate":false,"causes":9,"templateCauses":0,
+    "clears":[{"checkId":"broken-internal-links","pages":5,"all":true}]}],
  "skipped":[{"checkId":"orphan-page","reason":{"code":"no-sitemap","text":"No sitemap could be read.",
    "plainText":"No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
    "plainAction":"Add a sitemap, or fix the one that can't be read, then check the site again."}}],
@@ -880,6 +891,21 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   pages: every page lacks a viewport, or x-default. It is probably the site's template, so one fix: the UI says so. False
   otherwise, and for every other check, whose groups say it instead (`likelyTemplate` on each group). Worked out from
   the counts whenever the analysis is read, so an analysis by any engine has it.
+- **`counts[].causes` and `counts[].templateCauses`** (step 3b, headline counts) say what a check's issues come to as
+  work: the separate things to change, and how many of those are likely in the site's template. They are counted from
+  the check's groups as [Issue groups](#issue-groups-e3a) gives them: a group that shares a cause (one related URL, such
+  as a broken link's target or a large image) or is `likelyTemplate` is one thing; every other flagged URL is one of
+  its own. A check that doesn't group is one thing (in the template) when its `likelyTemplate` is true, else a thing a
+  URL; so is a check grouped by how each URL answered (`internal-client-error`: two 404s are two fixes). So the logo link
+  without text on 264 pages is 1, 40 titles too long are 40. The UI says "about 40 things to change, 3 of them in the
+  site's template". **Null** for a check this engine doesn't know, for a check that found nothing, and when another
+  analysis finished while this one was read (read again). Kept with the grid reads' counts while the file stands still.
+- **`counts[].clears`** (step 3b, related checks) is what a fix of the check also clears: for each check its catalog
+  `clears` names that also found something, **`pages`**, the pages it flagged whose every target is a URL this check
+  flagged (a page that also links to another broken URL keeps its issue, so isn't counted), and **`all`**, true when
+  that is every page it flagged: the fix clears it entirely, and the UI folds it under this one. Only checks with
+  `pages` above 0, in the order the catalog names them. Empty for every other check, and for an analysis from before
+  every target was kept (`AnalysisFreshness.VERSION` 4), which kept only a page's first target and so can't tell.
 - **`isPartial`** (E2) is true when a check was skipped or a rule failed on some pages; the notes say which.
 - **`skipped`** is every catalog check missing from the counts. Its `reason` (E2) has a stable `code` to key on, and
   a `text` to show beside the check ("No sitemap could be read."). A check skipped for several reasons gets the

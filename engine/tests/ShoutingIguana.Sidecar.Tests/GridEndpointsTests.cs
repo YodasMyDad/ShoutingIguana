@@ -18,6 +18,39 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
 {
     private TestSidecar Sidecar => grid.Sidecar;
 
+    /// <summary>
+    /// The analysis says what each check comes to as work, and what a fix of it clears, as the engine counts them; the
+    /// catalog says which checks a fix can clear.
+    /// </summary>
+    [Fact]
+    public async Task TheAnalysisSaysTheThingsToChangeAndWhatAFixClears()
+    {
+        var engine = IssueCauseReader.Read(grid.Path)!.Checks;
+        var counts = (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis"))["counts"]!.AsArray().Select(count => count!).ToList();
+        Assert.All(counts, count => Assert.Equal(["checkId", "count", "likelyTemplate", "causes", "templateCauses", "clears"],
+            count.AsObject().Select(property => property.Key)));
+        foreach (var count in counts)
+        {
+            var id = (string)count["checkId"]!;
+            if ((long)count["count"]! == 0)
+            {
+                Assert.Equal((null, null, "[]"), ((long?)count["causes"], (long?)count["templateCauses"], count["clears"]!.ToJsonString()));
+                continue;
+            }
+
+            Assert.Equal((engine[id].Causes, engine[id].InTemplate), ((long)count["causes"]!, (long)count["templateCauses"]!));
+            Assert.Equal(engine[id].Clears.Select(cleared => (cleared.CheckId, cleared.Pages, cleared.All)),
+                count["clears"]!.AsArray().Select(cleared => ((string)cleared!["checkId"]!, (long)cleared["pages"]!, (bool)cleared["all"]!)));
+        }
+
+        var cleared = counts.Single(count => (string?)count["checkId"] == "internal-client-error")["clears"]!.AsArray();
+        Assert.Contains(cleared, entry => (string?)entry!["checkId"] == "broken-internal-links" && (long)entry["pages"]! > 0);
+
+        var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
+        Assert.Equal("""["links-to-redirects"]""", checks.Single(check => (string?)check!["id"] == "redirect-chain")!["clears"]!.ToJsonString());
+        Assert.Equal("[]", checks.Single(check => (string?)check!["id"] == "title-too-long")!["clears"]!.ToJsonString());
+    }
+
     [Fact]
     public async Task TheColumnsListWhatEachGridTakes()
     {

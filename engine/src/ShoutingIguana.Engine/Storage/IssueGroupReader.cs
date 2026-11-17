@@ -169,7 +169,7 @@ public static class IssueGroupReader
     /// one; the fault each issue is an instance of; or, for the rest and for an earlier engine's analysis, each issue's own
     /// detail and first other URL.
     /// </summary>
-    private static string Counted(GridReadContext context, IssueDefinition check, IssueGrouping grouping) => grouping switch
+    internal static string Counted(GridReadContext context, IssueDefinition check, IssueGrouping grouping) => grouping switch
     {
         IssueGrouping.RelatedUrl when context.HasIssueTargets => $"""
             SELECT NULL AS detail, NULLIF(related_url_id, {IssueHit.NO_OTHER_URL}) AS related_url_id, COUNT(*) AS pages

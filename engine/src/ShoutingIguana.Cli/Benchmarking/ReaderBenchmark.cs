@@ -86,7 +86,8 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["stats-pass"] = 450,
         ["link-pass-split"] = 1_500,
         ["search"] = 25,
-        ["search-first"] = 200
+        ["search-first"] = 200,
+        ["causes"] = 350
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
@@ -162,6 +163,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Paged($"Rows of {biggest}, by importance", "rows", "check", rows,
                 offset => IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Columns = [.. COLUMNS, "detail"], Offset = offset }));
         }
+
+        // The analysis's checks as things to change, and what a fix of each clears: read once per analysis, then kept.
+        Timed("Analysis: every check's things to change and what fixing it clears", "causes", "causes", null, () => IssueCauseReader.Read(path));
 
         Timed("Facets of every URL", "facets", "facets", all.Total, () => UrlGridReader.Facets(path, new UrlFacetQuery()));
         Timed("Facets of the pages", "facets", "facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = [In("type", "page")] }));
