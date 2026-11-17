@@ -26,7 +26,7 @@ namespace ShoutingIguana.Engine.Storage;
 /// through the same loop, which makes "nothing queued and nothing in flight" an exact completion test.
 /// Memory stays flat because the only per-URL state held is a 128-bit key and a 12-byte entry.
 /// </summary>
-internal sealed class CrawlWriter : IAsyncDisposable
+internal sealed partial class CrawlWriter : IAsyncDisposable
 {
     private const int CHANNEL_CAPACITY = 1_024;
     private const int MAX_COMMANDS_PER_TRANSACTION = 2_000;
@@ -402,14 +402,26 @@ internal sealed class CrawlWriter : IAsyncDisposable
         {
             switch (command)
             {
+                case RecordPageCommand record when _recheck is not null:
+                    ApplyRecheckRecord(record.Record);
+                    break;
                 case RecordPageCommand record:
                     ApplyRecord(record.Record);
+                    break;
+                case DiscoverCommand discover when _recheck is not null:
+                    ApplyRecheckDiscover(discover);
                     break;
                 case DiscoverCommand discover:
                     ApplyDiscover(discover);
                     break;
+                case ClaimCommand claim when _recheck is not null:
+                    claim.Reply.TrySetResult(ApplyRecheckClaim(claim.InternalCount, claim.ExternalCount));
+                    break;
                 case ClaimCommand claim:
                     claim.Reply.TrySetResult(ApplyClaim(claim.InternalCount, claim.ExternalCount, claim.ParkedLinked));
+                    break;
+                case NextRecheckPhaseCommand next:
+                    next.Reply.TrySetResult(ApplyNextRecheckPhase());
                     break;
                 case RecordRobotsCommand robots:
                     _statements.UpsertRobots(robots.Record);
@@ -417,15 +429,25 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 case RecordFaviconCommand favicon:
                     ApplyFavicon(favicon.Record);
                     break;
+                case RegisterSitemapCommand register when _recheck is not null:
+                    register.Reply.TrySetResult(RegisterRecheckSitemap(register.Url, register.ParentId));
+                    break;
                 case RegisterSitemapCommand register:
                     register.Reply.TrySetResult(_statements.RegisterSitemap(register.Url, register.ParentId));
                     break;
                 case CompleteSitemapCommand complete:
                     _statements.UpdateSitemap(complete.Record);
                     break;
+                case MarkSitemapsDoneCommand when _recheck is not null:
+                    DropSitemapsNotReadAgain();
+                    _statements.MarkSitemapsDone();
+                    break;
                 case MarkSitemapsDoneCommand:
                     _statements.MarkSitemapsDone();
                     SitemapsDone = true;
+                    break;
+                case UpdateCrawlStatusCommand status when _recheck is not null:
+                    EndRecheck(status.Status);
                     break;
                 case UpdateCrawlStatusCommand status:
                     _statements.UpdateCrawlStatus(status.Status, status.IsFinished, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
@@ -775,7 +797,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
     {
         _statements.UpdateUrlDepth(entry.Id, depth);
         var updated = entry with { Depth = depth };
-        if (updated is { State: UrlState.Skipped, Skip: SkipReason.DepthLimit })
+
+        // A recheck leaves the crawl's queue as it was: a URL too deep for the crawl stays as it is, for a continue to queue.
+        if (updated is { State: UrlState.Skipped, Skip: SkipReason.DepthLimit } && _recheck is null)
         {
             // Only a followed page link is ever too deep, and it still leads here, now by a shorter path.
             var skip = Accept(isInternal, FetchMode.Crawl, depth, exemptFromDepthLimit: false);
@@ -1007,6 +1031,18 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
 
         _statements.SetTransaction(null);
+        var queued = RestoreKnownUrls();
+        SkipQueuedIfAtUrlLimit();
+        _counters.Publish();
+        _logger.LogInformation("Resuming crawl with {Known} known URLs, {Queued} still queued", _urls.Count, queued);
+    }
+
+    /// <summary>
+    /// Reads every URL the crawl knows back into memory, with the live counts as they stand, and where the crawl's sitemaps
+    /// and notices got to. Returns how many URLs are queued.
+    /// </summary>
+    private long RestoreKnownUrls()
+    {
         SitemapsDone = Convert.ToInt64(CrawlDatabase.Scalar(_connection, "SELECT sitemaps_done FROM crawl WHERE id = 1")) == 1;
         _lastNoticeId = Convert.ToInt64(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM notices"), CultureInfo.InvariantCulture);
 
@@ -1045,7 +1081,6 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
 
         _counters.RestoreUrls(_urls.Count, queued, skipped, siteUrlsFound);
-        SkipQueuedIfAtUrlLimit();
 
         // Grouped as the live counts are kept: by outcome and status code, the probes of the site's other versions apart.
         using (var command = _connection.CreateCommand())
@@ -1069,7 +1104,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
 
         _counters.Publish();
-        _logger.LogInformation("Resuming crawl with {Known} known URLs, {Queued} still queued", _urls.Count, queued);
+        return queued;
     }
 
     /// <summary>Stores the notices raised since the last batch, in the batch about to commit.</summary>
@@ -1331,6 +1366,12 @@ internal sealed class CrawlWriter : IAsyncDisposable
     {
         try
         {
+            if (_recheck is not null)
+            {
+                RecordRecheckFailure();
+                return;
+            }
+
             _statements.UpdateCrawlStatus(CrawlStatus.Failed, false, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             _crawlStamped = true;
             StoreRunTime();
@@ -1350,6 +1391,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 break;
             case RegisterSitemapCommand register:
                 register.Reply.TrySetException(exception);
+                break;
+            case NextRecheckPhaseCommand next:
+                next.Reply.TrySetException(exception);
                 break;
         }
     }

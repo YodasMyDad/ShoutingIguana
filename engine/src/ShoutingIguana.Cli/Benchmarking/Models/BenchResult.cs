@@ -39,4 +39,20 @@ internal sealed record BenchResult(
     string Machine,
     string Runtime,
     IReadOnlyList<string> Mismatches,
-    IReadOnlyList<string> Failures);
+    IReadOnlyList<string> Failures)
+{
+    /// <summary>With --revisions, the crawl of the site's revision 1 (after the fixes), measured as this one; null without.</summary>
+    public BenchResult? AfterFixes { get; init; }
+
+    /// <summary>With --revisions, the rows the comparison of the two crawls listed, flagged now or then.</summary>
+    public long? ComparedRows { get; init; }
+
+    /// <summary>With --revisions, how long the comparison took to read and hold to what the site planted.</summary>
+    public double? ComparisonSeconds { get; init; }
+
+    /// <summary>With --revisions, the peak working set while the comparison was read.</summary>
+    public double? ComparisonPeakWorkingSetMb { get; init; }
+
+    /// <summary>With --revisions, how the comparison differs from what the site planted: empty when exact.</summary>
+    public IReadOnlyList<string>? ComparisonMismatches { get; init; }
+}

@@ -139,6 +139,7 @@ public sealed class AppTests : IAsyncLifetime
         {
             Why = "Why it matters.",
             Subject = IssueSubject.Page,
+            Recheck = [RecheckKind.Urls],
             Grouping = IssueGrouping.None
         };
         var later = CheckDto.From(unwritten, new AnalysisSettings());

@@ -42,6 +42,34 @@ public static class IssueGroupReader
     public static IssueGroupPage? ReadGroups(string databasePath, string checkId, int offset, int limit, IssueGroupSort? sort, ReadCache? cache = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateGroups(checkId, offset, limit, sort);
+        return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadGroups(context, checkId, offset, limit, sort));
+    }
+
+    /// <summary>
+    /// One page of a check's groups, as <see cref="ReadGroups(string, string, int, int, IssueGroupSort?, ReadCache?, CancellationToken)"/>
+    /// reads them, compared with another crawl of the site (the fix loop): each group gains how it moved since
+    /// (<see cref="IssueGroup.Change"/>), and the page how far the two can be compared and how many causes then have no
+    /// URL now (<see cref="IssueGroupPage.Compared"/>). The order, the groups and the paging are as without it. Both files
+    /// are read in one snapshot each (<see cref="CrawlComparisonReader"/>). Null when this crawl was never analysed; when
+    /// the other wasn't, the page is as without it.
+    /// </summary>
+    /// <param name="compareWith">The other crawl's file.</param>
+    /// <exception cref="UrlQueryException">The paging is out of range, or the groups can't be in that order.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static IssueGroupPage? ReadGroups(string databasePath, string checkId, int offset, int limit, IssueGroupSort? sort, string compareWith,
+        ReadCache? cache = null, CancellationToken cancellationToken = default)
+    {
+        ValidateGroups(checkId, offset, limit, sort);
+        return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadGroups(context, checkId, offset, limit, sort) is not { } page
+            ? null
+            : GridReadContext.Read(compareWith, cache, context.Token, other => CrawlComparisonReader.GroupChangesOf(context, other, checkId, page.Groups) is { } changes
+                ? page with { Compared = changes.Compared, Groups = [.. page.Groups.Select((group, index) => group with { Change = changes.Changes[index] })] }
+                : page));
+    }
+
+    private static void ValidateGroups(string checkId, int offset, int limit, IssueGroupSort? sort)
+    {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidatePaging(offset, limit, after: null, errors);
         if (sort == IssueGroupSort.Size && IssueCatalog.Find(checkId)?.Grouping != IssueGrouping.RelatedUrl)
@@ -50,7 +78,6 @@ public static class IssueGroupReader
         }
 
         UrlGridReader.ThrowIfInvalid(errors);
-        return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadGroups(context, checkId, offset, limit, sort));
     }
 
     /// <summary>The order a check's groups come in when none is asked for: <c>image-too-large</c>'s largest file first, any other's largest group.</summary>
@@ -169,7 +196,7 @@ public static class IssueGroupReader
     /// one; the fault each issue is an instance of; or, for the rest and for an earlier engine's analysis, each issue's own
     /// detail and first other URL.
     /// </summary>
-    private static string Counted(GridReadContext context, IssueDefinition check, IssueGrouping grouping) => grouping switch
+    internal static string Counted(GridReadContext context, IssueDefinition check, IssueGrouping grouping) => grouping switch
     {
         IssueGrouping.RelatedUrl when context.HasIssueTargets => $"""
             SELECT NULL AS detail, NULLIF(related_url_id, {IssueHit.NO_OTHER_URL}) AS related_url_id, COUNT(*) AS pages
@@ -180,6 +207,20 @@ public static class IssueGroupReader
         IssueGrouping.RelatedUrl =>
             "SELECT NULL AS detail, related_url_id, COUNT(*) AS pages FROM issues WHERE issue = $check GROUP BY related_url_id",
         _ => "SELECT detail, related_url_id, COUNT(*) AS pages FROM issues WHERE issue = $check GROUP BY detail, related_url_id"
+    };
+
+    /// <summary>
+    /// The check's issues by the group each is in, <c>(detail, related_url_id, url_id)</c>, in no order: the rows behind
+    /// <see cref="Counted"/>'s counts, a URL in the group of each URL its issue names.
+    /// </summary>
+    internal static string Members(GridReadContext context, IssueDefinition check, IssueGrouping grouping) => grouping switch
+    {
+        IssueGrouping.RelatedUrl when context.HasIssueTargets =>
+            $"SELECT NULL AS detail, NULLIF(related_url_id, {IssueHit.NO_OTHER_URL}) AS related_url_id, url_id FROM issue_targets WHERE issue = $check",
+        IssueGrouping.PageDetail when context.HasIssueTargets && check.FaultOf is not null =>
+            "SELECT fault AS detail, NULL AS related_url_id, url_id FROM issue_faults WHERE issue = $check",
+        IssueGrouping.RelatedUrl => "SELECT NULL AS detail, related_url_id, url_id FROM issues WHERE issue = $check",
+        _ => "SELECT detail, related_url_id, url_id FROM issues WHERE issue = $check"
     };
 
     /// <summary>
@@ -233,6 +274,34 @@ public static class IssueGroupReader
     public static IssueRowPage? ReadRows(string databasePath, string checkId, UrlQuery query, IssueGroupKey? group = null, ReadCache? cache = null,
         CancellationToken cancellationToken = default)
     {
+        var scope = ValidateRows(checkId, query, group);
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadRows(context, checkId, query, scope)));
+    }
+
+    /// <summary>
+    /// One page of a check's rows, as <see cref="ReadRows(string, string, UrlQuery, IssueGroupKey?, ReadCache?, CancellationToken)"/>
+    /// reads them, compared with another crawl of the site (the fix loop): the page gains how far the two can be compared
+    /// (<see cref="IssueRowPage.Compared"/>) and how each row moved since (<see cref="IssueRowPage.Changes"/>), by a few
+    /// index seeks a row in the other file. The order, the columns and the paging are as without it. Null when this crawl
+    /// was never analysed; when the other wasn't, the page is as without it.
+    /// </summary>
+    /// <param name="compareWith">The other crawl's file.</param>
+    /// <inheritdoc cref="UrlGridReader.Query" path="/exception"/>
+    public static IssueRowPage? ReadRows(string databasePath, string checkId, UrlQuery query, IssueGroupKey? group, string compareWith, ReadCache? cache = null,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = ValidateRows(checkId, query, group);
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
+            ReadRows(context, checkId, query, scope) is not { } page ? null
+            : page.Page is not { } rows ? page
+            : GridReadContext.Read(compareWith, cache, context.Token, other =>
+                CrawlComparisonReader.RowChangesOf(context, other, checkId, [.. rows.Rows.Select(row => row.Id)]) is { } changes
+                    ? page with { Compared = changes.Compared, Changes = changes.Changes }
+                    : page)));
+    }
+
+    private static GridScope ValidateRows(string checkId, UrlQuery query, IssueGroupKey? group)
+    {
         var grouping = IssueCatalog.Find(checkId)?.Grouping ?? IssueGrouping.None;
         var scope = new GridScope(checkId, group, grouping);
         var errors = UrlQueryCompiler.Validate(query, scope);
@@ -242,19 +311,21 @@ public static class IssueGroupReader
         }
 
         UrlGridReader.ThrowIfInvalid(errors);
-        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
-        {
-            if (context.Analysis is null)
-            {
-                return null;
-            }
+        return scope;
+    }
 
-            // Without an order asked for, the URLs that matter most first.
-            var ordered = query.Sort.Count > 0 ? query : query with { Sort = ImportanceOrder(IssueCatalog.Find(checkId), context.Summary.Available) };
-            return Flagged(context, checkId) is null
-                ? new IssueRowPage(null, context.Summary)
-                : new IssueRowPage(UrlGridReader.Read(context, ordered, scope), context.Summary);
-        }));
+    private static IssueRowPage? ReadRows(GridReadContext context, string checkId, UrlQuery query, GridScope scope)
+    {
+        if (context.Analysis is null)
+        {
+            return null;
+        }
+
+        // Without an order asked for, the URLs that matter most first.
+        var ordered = query.Sort.Count > 0 ? query : query with { Sort = ImportanceOrder(IssueCatalog.Find(checkId), context.Summary.Available) };
+        return Flagged(context, checkId) is null
+            ? new IssueRowPage(null, context.Summary)
+            : new IssueRowPage(UrlGridReader.Read(context, ordered, scope), context.Summary);
     }
 
     /// <summary>

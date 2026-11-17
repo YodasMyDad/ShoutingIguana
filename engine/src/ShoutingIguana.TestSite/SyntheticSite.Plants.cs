@@ -63,26 +63,52 @@ public sealed partial class SyntheticSite
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
             plants.Add(new Plant(PLANTS_PATH + slug, status, linked, InSitemap: false, issues, respond));
 
+        var revised = Revision >= 1;
         Page("title-missing", "Missing title", ["title-missing"], page => page with { Title = null });
         Page("title-multiple", "Two titles", ["title-multiple"], page => page with { ExtraHead = "<title>A second title for the same planted page</title>" });
-        Page("title-long", "Long title", ["title-too-long"], page => page with
+
+        // Revision 1 shortens the long title, removes the short-title page and the hub's link to it, and adds a page with
+        // a long title.
+        if (revised)
         {
-            Title = "This planted page has a title that runs on far past what search results can show | Synthetic Store"
-        });
-        Page("title-short", "Short title", ["title-too-short"], page => page with { Title = "Short page" });
+            Page("title-long", "Long title", []);
+            Page("title-long-new", "New long title", ["title-too-long"], page => page with
+            {
+                Title = "A page added since the last crawl, with a title that runs on past what search results show | Synthetic Store"
+            });
+        }
+        else
+        {
+            Page("title-long", "Long title", ["title-too-long"], page => page with
+            {
+                Title = "This planted page has a title that runs on far past what search results can show | Synthetic Store"
+            });
+            Page("title-short", "Short title", ["title-too-short"], page => page with { Title = "Short page" });
+        }
 
         // Full-width characters are one em wide in results: 21 of them make a normal title (420 px), 48 a long one (960 px).
         Page("title-wide", "Full-width title", [], page => page with { Title = "合成ストアの全角タイトル付き試験ページです" });
         Page("title-wide-long", "Long full-width title", ["title-too-long"], page => page with { Title = string.Concat(Enumerable.Repeat("日本語の題名", 8)) });
 
         // Titles are judged by their width in pixels, not their characters: capitals are wide and il1t narrow.
-        // 59 characters, 736 px: too long.
-        Page("title-caps", "Title in capitals", ["title-too-long"], page => page with { Title = "WHOLESALE PATIO HEATERS: MODERN LANTERNS AND OUTDOOR LIGHTS" });
-
-        // 80 characters, 561 px: fits.
-        Page("title-narrow", "Title of narrow letters", [], page => page with
+        // 59 characters, 736 px: too long. In revision 1 the page answers 500, so its title can't be judged, and the hub's
+        // link to it and its sitemap entry are to an error.
+        if (revised)
         {
-            Title = "little lilies, fritillaries and tulips: a field list of all the lilies in flower"
+            plants.Add(new Plant(PLANTS_PATH + "title-caps", 500, Linked: true, InSitemap: true, ["internal-server-error", "sitemap-non-indexable"],
+                () => new SyntheticResponse(500, HTML, RenderSimple("Server error", "Something went wrong.", PLANTS_PATH + "title-caps"), null, null, SECURITY_HEADERS),
+                IsPage: false));
+        }
+        else
+        {
+            Page("title-caps", "Title in capitals", ["title-too-long"], page => page with { Title = "WHOLESALE PATIO HEATERS: MODERN LANTERNS AND OUTDOOR LIGHTS" });
+        }
+
+        // 80 characters, 561 px: fits. Revision 1 gives it a second H1, as it takes the one the two-H1 page had.
+        Page("title-narrow", "Title of narrow letters", revised ? ["h1-multiple"] : [], page => page with
+        {
+            Title = "little lilies, fritillaries and tulips: a field list of all the lilies in flower",
+            Content = revised ? "<h1>Another heading at the top</h1>" + page.Content : page.Content
         });
 
         // 33 characters, 184 px: too short.
@@ -116,7 +142,15 @@ public sealed partial class SyntheticSite
         Page("description-copy-b", "Shared description B", ["description-duplicate"], page => page with { Description = SHARED_DESCRIPTION });
 
         Page("h1-missing", "Missing H1", ["h1-missing"], page => page with { H1 = null, Content = "<h2>Missing H1</h2>" + page.Content });
-        Page("h1-multiple", "Two H1s", ["h1-multiple"], page => page with { Content = "<h1>A second H1 on the page</h1>" + page.Content });
+        if (revised)
+        {
+            Page("h1-multiple", "Two H1s", []);
+        }
+        else
+        {
+            Page("h1-multiple", "Two H1s", ["h1-multiple"], page => page with { Content = "<h1>A second H1 on the page</h1>" + page.Content });
+        }
+
         Page("h1-copy-a", "Shared heading A", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
         Page("h1-copy-b", "Shared heading B", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
 
@@ -205,7 +239,8 @@ public sealed partial class SyntheticSite
         {
             Content = page.Content + "<img src=\"/img/missing.jpg\" alt=\"A photo that is missing\" width=\"400\" height=\"300\">"
         });
-        Page("image-large", "Large image", ["image-too-large"], page => page with
+        // Revision 1 serves a photo of a normal size at the large one's address.
+        Page("image-large", "Large image", revised ? [] : ["image-too-large"], page => page with
         {
             Content = page.Content + "<img src=\"/img/large.jpg\" alt=\"A very large photo\" width=\"400\" height=\"300\">"
         });
@@ -287,8 +322,17 @@ public sealed partial class SyntheticSite
             Robots = "noindex", Canonical = $"{_base}{PLANTS_PATH}hreflang-lonely"
         }, inSitemap: false);
         Page("nofollow", "Nofollow page", ["nofollow-page"], page => page with { Robots = "nofollow" });
-        Page("robots-spaces", "Robots directives without commas", ["noindex-page", "nofollow-page"], page => page with { Robots = "noindex nofollow" },
-            inSitemap: false);
+        // Revision 1 drops its noindex, and lists it in the sitemap, as a page that can be indexed belongs there.
+        if (revised)
+        {
+            Page("robots-spaces", "Robots directives without commas", ["nofollow-page"], page => page with { Robots = "nofollow" });
+        }
+        else
+        {
+            Page("robots-spaces", "Robots directives without commas", ["noindex-page", "nofollow-page"], page => page with { Robots = "noindex nofollow" },
+                inSitemap: false);
+        }
+
 
         // Gallery lightboxes: nofollow on links to image files is harmless, both for a file that was fetched (it's also
         // shown) and for one that wasn't (the full-size version), unlike the nofollow links to /hidden/ pages on products.
@@ -480,12 +524,15 @@ public sealed partial class SyntheticSite
         var pair = Hreflang(("en", "hreflang-en"), ("fr", "hreflang-fr"), ("x-default", "hreflang-en"));
         Page("hreflang-en", "Hreflang English", [], page => page with { ExtraHead = pair });
         Page("hreflang-fr", "Hreflang French", [], page => page with { ExtraHead = pair });
-        Page("hreflang-lonely", "Hreflang alternate", []);
+        // Revision 1 gives the lonely alternate the set its partner names, so it links back.
+        Page("hreflang-lonely", "Hreflang alternate", [], page => revised
+            ? page with { ExtraHead = Hreflang(("en", "hreflang-no-return"), ("de", "hreflang-lonely"), ("x-default", "hreflang-no-return")) }
+            : page);
 
         // A canonicalised variant repeating its canonical's set is what Google recommends, so only the canonical counts.
         Page("hreflang-variant", "Hreflang variant", ["canonicalised-page"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}hreflang-en", ExtraHead = pair }, inSitemap: false);
-        Page("hreflang-no-return", "Hreflang without return", ["hreflang-missing-return"], page => page with
+        Page("hreflang-no-return", "Hreflang without return", revised ? [] : ["hreflang-missing-return"], page => page with
         {
             ExtraHead = Hreflang(("en", "hreflang-no-return"), ("de", "hreflang-lonely"), ("x-default", "hreflang-no-return"))
         });
@@ -639,10 +686,18 @@ public sealed partial class SyntheticSite
         Other("loop-b", 301, linked: false, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-a"));
         Other("redirect-broken", 301, linked: true, ["redirect-broken"], () => Redirect(301, PLANTS_PATH + "gone-redirect"));
 
-        // A chain is reported where visitors enter it, chain-a, which the hub links, and not again at chain-b.
-        Other("chain-a", 301, linked: true, ["redirect-chain"], () => Redirect(301, PLANTS_PATH + "chain-b"));
-        Other("chain-b", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "chain-c"));
-        Other("chain-c", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+        // A chain is reported where visitors enter it, chain-a, which the hub links, and not again at chain-b. Revision 1
+        // sends chain-a straight to its end.
+        if (revised)
+        {
+            Other("chain-a", 301, linked: true, [], () => Redirect(301, PLANTS_PATH + "thin"));
+        }
+        else
+        {
+            Other("chain-a", 301, linked: true, ["redirect-chain"], () => Redirect(301, PLANTS_PATH + "chain-b"));
+            Other("chain-b", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "chain-c"));
+            Other("chain-c", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+        }
 
         // A very long chain is a chain, not a loop: no URL repeats. Browsers give up after 20 hops, so the hub's link to it is broken.
         for (var hop = 0; hop < LONG_CHAIN_HOPS; hop++)

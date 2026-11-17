@@ -62,6 +62,42 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The site "after the fixes", for the fix loop: revision 1 mends some planted problems, leaves the rest and plants a
+    /// few new ones, and a crawl of it finds exactly what it plants, as one of revision 0 does.
+    /// </summary>
+    [Fact]
+    public async Task FindsEveryPlantedIssueAfterTheFixes()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = PAGES, Revision = 1 });
+        Assert.Equal(1, server.Revision);
+        await AssertFindsExactlyThePlantsAsync(server, Options(server));
+    }
+
+    /// <summary>Over HTTPS, revision 1 also mends its plain-HTTP side: robots.txt answers there, and its home page redirects.</summary>
+    [Fact]
+    public async Task FindsEveryPlantedIssueOverHttpsAfterTheFixes()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, Https = true, Revision = 1 });
+        await AssertFindsExactlyThePlantsAsync(server, Options(server) with { TrustedCertificate = server.Certificate });
+    }
+
+    /// <summary>
+    /// A running site switched to its next revision, as its owner would publish fixes between two crawls: the URLs and
+    /// ports stay, and the second crawl finds exactly what revision 1 plants, where the first found revision 0's.
+    /// </summary>
+    [Fact]
+    public async Task ASiteSwitchedToItsNextRevisionIsCrawledAsThatRevision()
+    {
+        await AssertFindsExactlyThePlantsAsync(_server, Options());
+        var before = _server.BaseUri;
+
+        _server.Revision = 1;
+
+        Assert.Equal((1, before), (_server.Site.Revision, _server.BaseUri));
+        await AssertFindsExactlyThePlantsAsync(_server, Options());
+    }
+
+    /// <summary>
     /// The site links its https:// version, which doesn't answer: the URL asked for is unreachable, and those the crawler
     /// came to only once it had written the twin off weren't checked, so nothing is said about them, in the issues, the
     /// stats or the URL summary.

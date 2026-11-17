@@ -974,6 +974,7 @@ internal static class ReportDocument
         Add(SkipReason.ExternalsDisabled, count => $"{Plural(count, "address", "addresses")} on other websites, which this check was set to leave");
         Add(SkipReason.ResourcesDisabled, count => $"{Plural(count, "image or file", "images and files")}, which this check was set to leave");
         Add(SkipReason.NotFollowedByOption, count => $"{Plural(count, "address", "addresses")} of a kind this check was set not to follow");
+        Add(SkipReason.Recheck, count => $"{Plural(count, "address", "addresses")} a recheck found and didn’t follow, which checking the site again reads");
         Add(SkipReason.None, count => $"{Plural(count, "address", "addresses")} found and not read");
         if (model.BlockedByRobots > 0)
         {
