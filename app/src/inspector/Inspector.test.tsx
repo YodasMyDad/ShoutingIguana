@@ -1350,7 +1350,7 @@ describe('loading, failing and not there', () => {
       // The frame is there meanwhile: the actions, and the tabs.
       expect(within(inspector).getByRole('button', { name: 'Close the inspector' })).toBeEnabled();
       expect(within(inspector).getByRole('button', { name: 'Copy the URL' })).toBeDisabled();
-      expect(within(inspector).getAllByRole('tab')).toHaveLength(9);
+      expect(within(inspector).getAllByRole('tab')).toHaveLength(10);
     } finally {
       vi.useRealTimers();
     }
