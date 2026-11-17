@@ -590,8 +590,8 @@ here as the file has it, as its token: `{limit:largeImageBytes}` reads "200 KB" 
 
 - Title: Pages that name another page as the main version
 - What: These pages tell search engines that another page is the main version of them (a "canonical" link). Google
-  then shows that other page instead, which is right for copies, such as page 2 of a list or a print version. It's
-  a problem only if the page has its own content and should appear in search itself.
+  then shows that other page instead, which is right for true copies, such as a sorted list or a print version. It's
+  a problem when the page has its own content, as page 2 of a list does: each page of a list should name itself.
 - Fix: (1) Look at each page and the page it points to, and decide whether they're really the same thing. (2) If
   they are, there's nothing to do. (3) If this page should appear in search on its own, ask your developer to
   point its canonical link at its own address.

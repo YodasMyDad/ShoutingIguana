@@ -157,7 +157,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition BROKEN_EXTERNAL_LINKS = new("broken-external-links", IssueCategory.Links, IssueSeverity.Warning,
         "Links to broken external URLs",
-        """The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count.""",
+        """The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count, and nor do links that the other site's bot protection (such as Cloudflare) refused, or that its robots.txt kept the crawler from checking.""",
         "Update each link to the resource's current address or an archived copy, or remove it.")
     {
         Why = """Visitors who click hit a dead end, which makes the page look neglected and its references unreliable. Google doesn't document broken outbound links as a ranking factor, so this is about visitors. Some sites refuse crawlers in other ways, so open a few in a browser before editing.""",
@@ -461,7 +461,7 @@ public static class IssueCatalog
         """This indexable page isn't in any sitemap the crawl read. It's only checked when the crawl finished and every declared sitemap could be read.""",
         """Add the page to your XML sitemap, ideally by making sure the generator includes every indexable page type.""")
     {
-        Why = """Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate.""",
+        Why = """Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate. Login, account and basket pages don't belong in a sitemap: they're better kept out of search with noindex.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None
@@ -678,7 +678,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition NEAR_DUPLICATE_CONTENT = new("near-duplicate-content", IssueCategory.Content, IssueSeverity.Notice,
         "Near-duplicate content",
-        """Another indexable page has almost the same main content, roughly 96% or more alike: at most 24 of the 256 bits of their content fingerprints differ (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.""",
+        """Another indexable page has almost the same main content, roughly 96% or more alike (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.""",
         """Give each page main content that is clearly its own, canonicalise the variants to one version, or merge them into one page with options.""")
     {
         Why = """Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That's fine for variants you don't need to rank separately. Pages that should rank on their own need differences that are, in Google's words, clear and significant.""",
@@ -919,7 +919,7 @@ public static class IssueCatalog
         """The home page's response lacks one or more of Strict-Transport-Security (checked on HTTPS only), X-Content-Type-Options, Content-Security-Policy, X-Frame-Options (or a CSP frame-ancestors rule) and Referrer-Policy. The detail lists which.""",
         """Add the missing headers in the server, CDN or framework configuration, starting with X-Content-Type-Options and Referrer-Policy, which rarely break anything. Roll out CSP in report-only mode first, and enable HSTS only once HTTPS works everywhere on the site.""")
     {
-        Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites. Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
+        Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites (browsers already default to a safe policy, so it matters least). Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
         LearnMore = "https://web.dev/articles/security-headers",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,

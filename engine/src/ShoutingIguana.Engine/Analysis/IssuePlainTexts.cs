@@ -215,7 +215,8 @@ public static class IssuePlainTexts
             [
                 """Some of your pages link to an address on another website that doesn't work.""",
                 """Visitors who click one reach a dead end, which makes your page look out of date.""",
-                """Some websites turn away automatic checks but work for people, so try a link yourself before you change it."""
+                """Some websites turn away automatic checks but work for people, so try a link yourself before you change it.""",
+                """Links that another website's security or rules file kept the check from opening aren't counted."""
             ],
             [
                 """Click a few of the links in your browser to confirm they're really broken.""",
@@ -466,8 +467,8 @@ public static class IssuePlainTexts
             """Pages that name another page as the main version""",
             [
                 """These pages tell search engines that another page is the main version of them (a "canonical" link).""",
-                """Google then shows that other page instead, which is right for copies, such as page 2 of a list or a print version.""",
-                """It's a problem only if the page has its own content and should appear in search itself."""
+                """Google then shows that other page instead, which is right for true copies, such as a sorted list or a print version.""",
+                """It's a problem when the page has its own content, as page 2 of a list does: each page of a list should name itself."""
             ],
             [
                 """Look at each page and the page it points to, and decide whether they're really the same thing.""",
@@ -654,7 +655,7 @@ public static class IssuePlainTexts
                 """These pages can appear in search, but aren't in your sitemap: the file that lists your pages for search engines.""",
                 """Search engines can still find them through links, which is enough on a small site.""",
                 """On a big or fast-changing site, a full sitemap helps new pages get found sooner.""",
-                """Leaving out some kinds of page on purpose is fine, and then there's nothing to do."""
+                """Leaving pages out on purpose is fine, and login, basket and account pages are better kept out of search altogether."""
             ],
             [
                 """Look down the list for pages you want found quickly, such as new products or articles.""",
@@ -694,7 +695,7 @@ public static class IssuePlainTexts
             [
                 """Look in your site's SEO settings or plugin: most can create a sitemap with one switch.""",
                 """Ask your developer to add its address to the site's rules file for search engines (its "robots.txt"), so they all find it.""",
-                """Check the site again: two more checks can then run."""
+                """Check the site again: it can then also find pages missing from your sitemap, and pages in it that nothing links to."""
             ],
             IssueFixer.Either,
             """A sitemap was found, or the site names one""")
@@ -749,7 +750,7 @@ public static class IssuePlainTexts
             """No page has more than one title"""),
 
         ["title-too-long"] = new(
-            """Titles too long to show in full""",
+            """Titles that may be cut off in search results""",
             [
                 """These pages have a title of more than {limit:titleMaxLength}.""",
                 """Search results cut a long title off to fit the screen, so the last words may not show.""",
@@ -761,7 +762,7 @@ public static class IssuePlainTexts
                 """Cut repeated words and long endings, such as a slogan after your site's name."""
             ],
             IssueFixer.You,
-            """No title is too long to show in full"""),
+            """No title is likely to be cut off in search results"""),
 
         ["title-too-short"] = new(
             """Very short titles""",
@@ -773,7 +774,8 @@ public static class IssuePlainTexts
             [
                 """Open the page in your site's editor and find its title.""",
                 """Say what the page is about, and add your site's name if there's room.""",
-                """Leave the titles that already say it all."""
+                """Leave the titles that already say it all.""",
+                """Skip pages nobody searches for, such as login and basket pages."""
             ],
             IssueFixer.You,
             """No title is very short"""),
@@ -823,7 +825,7 @@ public static class IssuePlainTexts
             """No page has more than one search description"""),
 
         ["description-too-long"] = new(
-            """Search descriptions too long to show in full""",
+            """Search descriptions that may be cut off""",
             [
                 """These pages have a search description, the text under their title in search results, of more than {limit:descriptionMaxLength}.""",
                 """Search results cut off the end of a long description (a "meta description").""",
@@ -835,7 +837,7 @@ public static class IssuePlainTexts
                 """Trim the rest to about {limit:descriptionMaxLength}, or leave it if the opening already works."""
             ],
             IssueFixer.You,
-            """No search description is too long to show in full"""),
+            """No search description is likely to be cut off"""),
 
         ["description-too-short"] = new(
             """Very short search descriptions""",

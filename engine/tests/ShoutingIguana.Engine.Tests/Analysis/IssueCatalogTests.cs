@@ -110,7 +110,27 @@ public sealed class IssueCatalogTests
 
             // One threshold, named as the default once.
             () => Assert.Single(Regex.Matches(IssueCatalog.NEAR_DUPLICATE_CONTENT.Description, "default")),
-            () => Assert.Contains("24 of the 256 bits", IssueCatalog.NEAR_DUPLICATE_CONTENT.Description),
+            () => Assert.Contains("roughly 96% or more alike (the default", IssueCatalog.NEAR_DUPLICATE_CONTENT.Description),
+            () => Assert.DoesNotContain("bits", IssueCatalog.NEAR_DUPLICATE_CONTENT.Description),
+
+            // A URL that refused the crawler isn't judged (the real-site audit, docs/v2-check-audit.md).
+            () => Assert.DoesNotContain("firewall).", IssueCatalog.HREFLANG_TO_NON_INDEXABLE.Description),
+            () => Assert.Contains("refused the crawler", IssueCatalog.HREFLANG_TO_NON_INDEXABLE.Description),
+            () => Assert.DoesNotContain("or a firewall.", IssueCatalog.CANONICAL_TO_NON_INDEXABLE.Description),
+            () => Assert.Contains("refused the crawler", IssueCatalog.CANONICAL_TO_NON_INDEXABLE.Description),
+
+            // Temporary redirects: links to them aren't counted, and those to other sites aren't flagged.
+            () => Assert.Contains("Links to temporary redirects (302, 303 or 307)", IssueCatalog.LINKS_TO_REDIRECTS.Description),
+            () => Assert.Contains("Temporary redirects to other sites", IssueCatalog.REDIRECT_TEMPORARY.Description),
+
+            // A logo linking its own page counts; a link written as a fragment doesn't.
+            () => Assert.Contains("A link to the page itself counts too", IssueCatalog.EMPTY_ANCHOR_TEXT.Description),
+
+            // Orphans are skipped once 1 in 20 of the pages couldn't be read.
+            () => Assert.Contains("1 in 20", IssueCatalog.ORPHAN_PAGE.Description),
+
+            // A meta tag counts within the first 1024 bytes only.
+            () => Assert.Contains("within the first 1024 bytes", IssueCatalog.CHARSET_MISSING.Description),
 
             // A URL is also refused when robots.txt itself couldn't be read, and the check doesn't run on a crawl that ignored robots.txt.
             () => Assert.StartsWith("The crawler didn't fetch this internal URL", IssueCatalog.BLOCKED_BY_ROBOTS.Description),
