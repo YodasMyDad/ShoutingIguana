@@ -62,7 +62,7 @@ test('inspect a URL: walk an inlink, then an outlink; back and forward retrace i
   // The summary: how it answered, and whether it can be indexed, with the four tests.
   await expect(inspector.getByRole('heading', { name: 'Indexable', exact: true })).toBeVisible();
   await expect(inspector.getByRole('list', { name: 'Indexability tests' }).getByRole('listitem')).toHaveCount(4);
-  await expect(inspector.getByRole('meter', { name: 'Title length' })).toBeVisible();
+  await expect(inspector.getByRole('meter', { name: 'Title width' })).toBeVisible();
 
   // Its inlinks are links themselves: Enter on a row walks to it, a new place in history.
   await showTab(inspector, /^Inlinks/);

@@ -98,7 +98,13 @@ const PAGE = testUrlDetail({
       related: null,
       group: { detail: '404 Not Found', relatedUrlId: null },
     },
-    { checkId: 'title-too-long', severity: 'notice', detail: '61 characters', related: null, group: null },
+    {
+      checkId: 'title-too-long',
+      severity: 'notice',
+      detail: '597 px, over 580 (61 characters)',
+      related: null,
+      group: null,
+    },
     {
       checkId: 'empty-anchor-text',
       severity: 'notice',
@@ -347,11 +353,17 @@ export const LongValues: Story = {
             urlLength: LONG_URL.length,
             content: {
               ...PAGE.content!,
-              titles: [{ text: LONG_TEXT, length: LONG_TEXT.length }],
-              descriptions: [{ text: LONG_TEXT.repeat(2), length: LONG_TEXT.length * 2 }],
+              titles: [{ text: LONG_TEXT, length: LONG_TEXT.length, width: Math.round(LONG_TEXT.length * 9.4) }],
+              descriptions: [
+                {
+                  text: LONG_TEXT.repeat(2),
+                  length: LONG_TEXT.length * 2,
+                  width: Math.round(LONG_TEXT.length * 2 * 6.2),
+                },
+              ],
               h1s: [
-                { text: LONG_TEXT, length: LONG_TEXT.length },
-                { text: 'A second H1', length: 11 },
+                { text: LONG_TEXT, length: LONG_TEXT.length, width: null },
+                { text: 'A second H1', length: 11, width: null },
               ],
               wordCount: 48_211,
             },
@@ -360,7 +372,7 @@ export const LongValues: Story = {
               {
                 checkId: 'title-too-long',
                 severity: 'notice',
-                detail: `${LONG_TEXT.length} characters`,
+                detail: `${Math.round(LONG_TEXT.length * 9.4)} px, over 580 (${LONG_TEXT.length} characters)`,
                 related: null,
               },
               {
@@ -426,8 +438,8 @@ export const HugeSource: Story = {
 const WIDE_TITLE = '庭の家具とパティオセットの専門店'.repeat(3);
 
 /**
- * Full-width characters: a title of 48 Japanese characters takes the room of 96 in a search result, which is what
- * the limit counts. Its length says both, as the check's own detail does, never "96 characters".
+ * Full-width characters: a title of 48 Japanese characters, each an em wide, is 960 px in a search result, which is
+ * what the limit judges; under it, its 48 characters as a reader counts them.
  */
 export const WideCharacters: Story = {
   loaders: [
@@ -438,15 +450,15 @@ export const WideCharacters: Story = {
             url: 'https://example.com/ja/garden/',
             content: {
               ...PAGE.content!,
-              titles: [{ text: WIDE_TITLE, length: 96 }],
-              descriptions: [{ text: '屋外用の金属製パティオソファセット。', length: 36 }],
+              titles: [{ text: WIDE_TITLE, length: 48, width: 960 }],
+              descriptions: [{ text: '屋外用の金属製パティオソファセット。', length: 18, width: 252 }],
               language: 'ja',
             },
             issues: [
               {
                 checkId: 'title-too-long',
                 severity: 'notice',
-                detail: '48 characters (96 counting full-width characters as two)',
+                detail: '960 px, over 580 (48 characters)',
                 related: null,
                 group: null,
               },

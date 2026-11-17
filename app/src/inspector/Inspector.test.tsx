@@ -62,7 +62,7 @@ const URLS = `/crawls/${TEST_CRAWL_ID}/urls`;
 const HOME = testUrlDetail({ id: 1, url: 'https://example.com/', issues: [] });
 const PAGE = testUrlDetail({
   issues: [
-    { checkId: 'title-too-long', severity: 'notice', detail: '61 characters', related: null },
+    { checkId: 'title-too-long', severity: 'notice', detail: '597 px, over 580 (61 characters)', related: null },
     {
       checkId: 'empty-anchor-text',
       severity: 'notice',
@@ -159,11 +159,17 @@ describe('the summary', () => {
     ]);
   });
 
-  it('draws the title’s length on the analysis’s range, and names the check it trips', async () => {
+  it('draws the title’s width in px on the analysis’s range, its characters under it, and names the check it trips', async () => {
     const { inspector } = await open(`${URLS}?inspect=2`);
-    const meter = await within(inspector).findByRole('meter', { name: 'Title length' });
-    expect(meter).toHaveAttribute('aria-valuetext', '61 characters, 30 to 60 characters, over the limit');
-    expect(within(inspector).getByText('1 over the 60 limit')).toBeVisible();
+    const meter = await within(inspector).findByRole('meter', { name: 'Title width' });
+    expect(meter).toHaveAttribute('aria-valuetext', '597 px, 200 to 580 px, over the limit');
+    expect(within(inspector).getByText('17 over the 580 limit')).toBeVisible();
+    expect(within(inspector).getByText('61 characters')).toBeVisible();
+    expect(within(inspector).getByRole('meter', { name: 'Meta description width' })).toHaveAttribute(
+      'aria-valuetext',
+      '638 px, 400 to 985 px, within the range',
+    );
+    expect(within(inspector).getByText('103 characters')).toBeVisible();
     // The check's title comes from the catalog, and leads to it on Issues.
     const links = within(inspector).getAllByRole('link', { name: 'Title too long' });
     expect(links[0]).toHaveAttribute('href', `/crawls/${TEST_CRAWL_ID}/issues/title-too-long`);
@@ -183,28 +189,19 @@ describe('the summary', () => {
     expect(within(inspector).getByText('15 over the 115 limit')).toBeVisible();
   });
 
-  it('says a title of full-width characters in characters and in the width the limit counts', async () => {
+  it('says a title of full-width characters by its width, each an em wide, and its characters as a reader counts them', async () => {
     const title = '庭の家具とパティオセットの専門店'.repeat(3);
     const wide = testUrlDetail({
-      content: { ...testUrlDetail().content!, titles: [{ text: title, length: 96 }] },
+      content: { ...testUrlDetail().content!, titles: [{ text: title, length: 48, width: 960 }] },
       issues: [
-        {
-          checkId: 'title-too-long',
-          severity: 'notice',
-          detail: '48 characters (96 counting full-width characters as two)',
-          related: null,
-        },
+        { checkId: 'title-too-long', severity: 'notice', detail: '960 px, over 580 (48 characters)', related: null },
       ],
     });
     const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: wide } });
-    const meter = await within(inspector).findByRole('meter', { name: 'Title length' });
-    // 48 characters to a reader, as the check's own detail says: never "96 characters".
-    expect(meter).toHaveAttribute(
-      'aria-valuetext',
-      '48 characters (96 counting full-width characters as two), 30 to 60 characters, over the limit',
-    );
-    expect(within(inspector).getByText('36 over the 60 limit')).toBeVisible();
-    expect(within(inspector).queryByText(/^96 characters/)).toBeNull();
+    const meter = await within(inspector).findByRole('meter', { name: 'Title width' });
+    expect(meter).toHaveAttribute('aria-valuetext', '960 px, 200 to 580 px, over the limit');
+    expect(within(inspector).getByText('380 over the 580 limit')).toBeVisible();
+    expect(within(inspector).getByText('48 characters')).toBeVisible();
   });
 
   it('writes a response time just over its limit exactly, never as the limit itself', async () => {
@@ -222,7 +219,7 @@ describe('the summary', () => {
   it('doesn’t name a check the analysis didn’t flag the URL with, only how far out the value is', async () => {
     const quiet = testUrlDetail({ issues: [] });
     const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: quiet } });
-    expect(await within(inspector).findByText('1 over the 60 limit')).toBeVisible();
+    expect(await within(inspector).findByText('17 over the 580 limit')).toBeVisible();
     expect(within(inspector).queryByRole('link', { name: 'Title too long' })).toBeNull();
     expect(within(inspector).getByRole('heading', { name: 'No issues' })).toBeVisible();
   });

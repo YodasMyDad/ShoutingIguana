@@ -14,10 +14,10 @@ import type {
 import { json, problem, type FakeRoute } from './fakeSidecar';
 
 export const TEST_LIMITS: ContentLimits = {
-  titleMin: 30,
-  titleMax: 60,
-  descriptionMin: 70,
-  descriptionMax: 155,
+  titleMinPixels: 200,
+  titleMaxPixels: 580,
+  descriptionMinPixels: 400,
+  descriptionMaxPixels: 985,
   minWords: 200,
   slowResponseMs: 1_000,
   largePageBytes: 1_048_576,
@@ -77,14 +77,15 @@ export function testUrlDetail(overrides: Partial<UrlDetail> = {}): UrlDetail {
       ],
     },
     content: {
-      titles: [{ text: 'Harpswell Grey Outdoor Metal Patio Sofa Set With Coffee Table', length: 61 }],
+      titles: [{ text: 'Harpswell Grey Outdoor Metal Patio Sofa Set With Coffee Table', length: 61, width: 597 }],
       descriptions: [
         {
           text: 'Harpswell garden patio set features a loveseat, two chairs & coffee table with a ripple glass tabletop.',
           length: 103,
+          width: 638,
         },
       ],
-      h1s: [{ text: 'Harpswell Metal Patio Set', length: 25 }],
+      h1s: [{ text: 'Harpswell Metal Patio Set', length: 25, width: null }],
       headings: [1, 4, 9, 0, 0, 0],
       wordCount: 701,
       language: 'en-GB',
@@ -117,7 +118,9 @@ export function testUrlDetail(overrides: Partial<UrlDetail> = {}): UrlDetail {
       },
     ],
     hreflang: [],
-    issues: [{ checkId: 'title-too-long', severity: 'notice', detail: '61 characters', related: null }],
+    issues: [
+      { checkId: 'title-too-long', severity: 'notice', detail: '597 px, over 580 (61 characters)', related: null },
+    ],
     namedBy: { total: 0, checks: [] },
     summary: { available: true, reason: null },
     source: { stored: true },

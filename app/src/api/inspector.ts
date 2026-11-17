@@ -149,10 +149,16 @@ export interface Indexability {
   tests: IndexabilityTest[];
 }
 
-/** A title, description or H1, with the room it takes in results as the checks measure it. */
+/** A title, description or H1, as the checks measure it. */
 export interface MeasuredText {
   text: string;
+  /** Its characters, as a reader counts them (an emoji or an accented letter once), white space run together. */
   length: number;
+  /**
+   * For a title or meta description, how wide it is in Google's desktop results, in pixels: what the length checks
+   * judge. Null for an H1, which no result shows.
+   */
+  width: number | null;
 }
 
 export interface PageContent {
@@ -172,10 +178,12 @@ export interface PageContent {
 
 /** What the analysis judged the URL against: its stored settings, or the engine's defaults before the first one. */
 export interface ContentLimits {
-  titleMin: number;
-  titleMax: number;
-  descriptionMin: number;
-  descriptionMax: number;
+  /** A title narrower than this, in pixels, is too short (`title-too-short`). */
+  titleMinPixels: number;
+  /** A title wider than this, in pixels, is too long (`title-too-long`). */
+  titleMaxPixels: number;
+  descriptionMinPixels: number;
+  descriptionMaxPixels: number;
   minWords: number;
   slowResponseMs: number;
   largePageBytes: number;

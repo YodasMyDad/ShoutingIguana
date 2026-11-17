@@ -111,14 +111,14 @@ export const NumbersAndTimes: Story = {
   ),
 };
 
-/** Every value on its scale: title length against 30–60, response time against 1,000 ms. Out of range glows. */
+/** Every value on its scale: title width against 200–580 px, response time against 1,000 ms. Out of range glows. */
 export const Meters: Story = {
   render: () => (
     <StoryFrame sheet>
       <div className="grid max-w-(--inspector-width) gap-6">
-        <Meter label="Title length" value={48} min={30} max={60} valueText="48 characters" />
-        <Meter label="Title length" value={72} min={30} max={60} valueText="72 characters" />
-        <Meter label="Title length" value={12} min={30} max={60} valueText="12 characters" severity="notice" />
+        <Meter label="Title width" value={450} min={200} max={580} valueText="450 px" />
+        <Meter label="Title width" value={612} min={200} max={580} valueText="612 px" />
+        <Meter label="Title width" value={150} min={200} max={580} valueText="150 px" severity="notice" />
         <Meter
           label="Response time"
           value={312}

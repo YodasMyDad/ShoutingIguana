@@ -319,6 +319,7 @@ function ScaleMeter({ measure, detail }: { measure: Measure; detail: UrlDetail }
         severity={flagged?.severity ?? 'notice'}
         formatTick={measure.formatTick}
       />
+      {measure.aside ? <p className="figures mt-1 text-12 text-text-muted">{measure.aside}</p> : null}
       {measure.note ? (
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-12 text-text-muted">
           {flagged ? (
@@ -356,7 +357,7 @@ function MeasuredTexts({
   name: string;
   none: string;
   texts: readonly MeasuredText[];
-  measures: readonly Measure[];
+  measures: readonly (Measure | null)[];
   detail: UrlDetail;
 }) {
   if (texts.length === 0) {

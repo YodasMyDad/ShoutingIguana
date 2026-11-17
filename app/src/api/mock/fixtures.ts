@@ -366,7 +366,16 @@ export function adaptInspector(raw: Raw, idOf: IdOf): UrlDetail {
   ] as const satisfies readonly IndexabilityReason[]);
   const canonical = ref(summary.canonicalUrl);
   const canonicalUrl = string(summary.canonicalUrl);
-  const length = (text: string, measured: unknown) => ({ text, length: number(measured) ?? text.length });
+  // The fixtures were captured before the engine measured pixels: a width is about as wide as that many ordinary
+  // characters (9.4 px each in a title, 6.2 in a description), and an H1 has none.
+  const length = (text: string, measured: unknown, pixelsPerCharacter: number | null = null) => {
+    const characters = number(measured) ?? text.length;
+    return {
+      text,
+      length: characters,
+      width: pixelsPerCharacter === null ? null : Math.round(characters * pixelsPerCharacter),
+    };
+  };
   const titles = list(page?.titles).length > 0 ? (page?.titles as string[]) : [];
   const descriptions = (page?.metaDescriptions as string[] | undefined) ?? [];
   const headings = list(page?.headings);
@@ -437,9 +446,9 @@ export function adaptInspector(raw: Raw, idOf: IdOf): UrlDetail {
     },
     content: page
       ? {
-          titles: titles.map((text, index) => length(text, index === 0 ? summary.titleLength : undefined)),
+          titles: titles.map((text, index) => length(text, index === 0 ? summary.titleLength : undefined, 9.4)),
           descriptions: descriptions.map((text, index) =>
-            length(text, index === 0 ? summary.metaDescriptionLength : undefined),
+            length(text, index === 0 ? summary.metaDescriptionLength : undefined, 6.2),
           ),
           h1s: headings
             .filter((heading) => heading.level === 1)
@@ -455,10 +464,10 @@ export function adaptInspector(raw: Raw, idOf: IdOf): UrlDetail {
         }
       : null,
     limits: {
-      titleMin: 30,
-      titleMax: 60,
-      descriptionMin: 70,
-      descriptionMax: 155,
+      titleMinPixels: 200,
+      titleMaxPixels: 580,
+      descriptionMinPixels: 400,
+      descriptionMaxPixels: 985,
       minWords: 200,
       slowResponseMs: 1000,
       largePageBytes: 1_048_576,

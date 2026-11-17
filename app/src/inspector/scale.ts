@@ -1,7 +1,7 @@
-// Every value on its scale (docs/v2-ui-design.md): a title's length, a description's, the word count, the response
+// Every value on its scale (docs/v2-ui-design.md): a title's width, a description's, the word count, the response
 // time, the HTML's size and an image's, each read against the limit the analysis used (`limits` of `/urls/inspect`). The limits
 // are the engine's, and so are the comparisons: over is past the maximum, under is short of the minimum, and a value
-// on a limit is within it, as the checks judge (`length > titleMax`, `wordCount < minWords`).
+// on a limit is within it, as the checks judge (`width > titleMaxPixels`, `wordCount < minWords`).
 import type { ContentLimits, UrlDetail } from '../api/inspector';
 import { formatBytes, formatCount, formatCountOf, formatMilliseconds } from '../lib/format';
 
@@ -30,15 +30,17 @@ export type MeasureId = 'title' | 'description' | 'words' | 'response' | 'htmlSi
 /** A value drawn on its scale, with its words. */
 export interface Measure extends ScaleRange, ScaleReading {
   id: MeasureId;
-  /** What's measured, for the meter's name: "Title length". */
+  /** What's measured, for the meter's name: "Title width". */
   label: string;
   value: number;
-  /** "61 characters", "117 ms". */
+  /** "612 px", "117 ms". */
   valueText: string;
-  /** The limit in a few words: "30 to 60 characters", "Limit 1 s", "Minimum 200". */
+  /** The limit in a few words: "200 to 580 px", "Limit 1 s", "Minimum 200". */
   limitText: string;
-  /** How far out, in words: "1 over the 60 limit", "12 under the 30 minimum". Null within the range. */
+  /** How far out, in words: "32 over the 580 limit", "12 under the 200 minimum". Null within the range. */
   note: string | null;
+  /** What else is known of the value, under the meter: a title's characters under its width, "64 characters". */
+  aside: string | null;
   /** The check a value out of range trips, to find its severity and title. Null within the range. */
   checkId: string | null;
   /** How the limits read under the scale. */
@@ -52,13 +54,14 @@ interface MeasureSpec {
   max?: number | undefined;
   /** The value with its unit. */
   format: (value: number) => string;
-  /** A bare number in the value's unit, for "1 over the 60 limit". */
+  /** A bare number in the value's unit, for "32 over the 580 limit". */
   formatAmount: (value: number) => string;
   /** The value to its last unit, where `format` rounds: "1,015 ms". */
   formatExact?: (value: number) => string;
   limitText: string;
   over?: string;
   under?: string;
+  aside?: string | null;
 }
 
 /**
@@ -89,6 +92,7 @@ function measure(spec: MeasureSpec, value: number): Measure {
     valueText: valueWords(spec, value, reading),
     limitText: spec.limitText,
     note,
+    aside: spec.aside ?? null,
     checkId: reading.state === 'over' ? (spec.over ?? null) : reading.state === 'under' ? (spec.under ?? null) : null,
     formatTick: spec.formatAmount,
   };
@@ -97,64 +101,46 @@ function measure(spec: MeasureSpec, value: number): Measure {
 const characters = (value: number) => formatCountOf(value, 'character');
 const words = (value: number) => formatCountOf(value, 'word');
 
-/**
- * The characters a reader counts in a text, as the engine counts them: an emoji or an accented letter once, the
- * ends trimmed.
- */
-export function characterCount(text: string): number {
-  const trimmed = text.trim();
-  if (typeof Intl.Segmenter !== 'function') return Array.from(trimmed).length;
-  let count = 0;
-  for (const _ of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)) count++;
-  return count;
-}
+const pixels = (value: number) => `${formatCount(value)} px`;
 
 /**
- * A title's or description's length as it reads. The engine's `length` is the room the text takes in a search
- * result: a full-width character (Chinese, Japanese, Korean, an emoji) counts as two. So it's "characters" only when
- * it is the text's count of them; else it's said as the engine's own issue details say it: "48 characters (96
- * counting full-width characters as two)". The limits, and how far out the value is, are in that same measure.
+ * A title's width in Google's desktop results, in pixels, against the range the analysis used: what the checks judge.
+ * `length`: its characters, said under the meter ("64 characters"), as a width alone says little to a reader.
  */
-function lengthWords(length: number, text: string | undefined): string {
-  const count = text === undefined ? length : characterCount(text);
-  return length > count
-    ? `${characters(count)} (${formatCount(length)} counting full-width characters as two)`
-    : characters(length);
-}
-
-/** A title's length against the range the analysis used. `text`: the title itself, for what its length counts. */
-export function titleMeasure(length: number, limits: ContentLimits, text?: string): Measure {
+export function titleMeasure(width: number, limits: ContentLimits, length?: number): Measure {
   return measure(
     {
       id: 'title',
-      label: 'Title length',
-      min: limits.titleMin,
-      max: limits.titleMax,
-      format: (value) => lengthWords(value, text),
+      label: 'Title width',
+      min: limits.titleMinPixels,
+      max: limits.titleMaxPixels,
+      format: pixels,
       formatAmount: formatCount,
-      limitText: `${formatCount(limits.titleMin)} to ${formatCount(limits.titleMax)} characters`,
+      limitText: `${formatCount(limits.titleMinPixels)} to ${formatCount(limits.titleMaxPixels)} px`,
       over: 'title-too-long',
       under: 'title-too-short',
+      aside: length === undefined ? null : characters(length),
     },
-    length,
+    width,
   );
 }
 
-/** A meta description's length against the range the analysis used. `text`: as for a title. */
-export function descriptionMeasure(length: number, limits: ContentLimits, text?: string): Measure {
+/** A meta description's width against the range the analysis used. `length`: as for a title. */
+export function descriptionMeasure(width: number, limits: ContentLimits, length?: number): Measure {
   return measure(
     {
       id: 'description',
-      label: 'Meta description length',
-      min: limits.descriptionMin,
-      max: limits.descriptionMax,
-      format: (value) => lengthWords(value, text),
+      label: 'Meta description width',
+      min: limits.descriptionMinPixels,
+      max: limits.descriptionMaxPixels,
+      format: pixels,
       formatAmount: formatCount,
-      limitText: `${formatCount(limits.descriptionMin)} to ${formatCount(limits.descriptionMax)} characters`,
+      limitText: `${formatCount(limits.descriptionMinPixels)} to ${formatCount(limits.descriptionMaxPixels)} px`,
       over: 'description-too-long',
       under: 'description-too-short',
+      aside: length === undefined ? null : characters(length),
     },
-    length,
+    width,
   );
 }
 
@@ -248,9 +234,9 @@ export function urlLengthMeasure(length: number, limits: ContentLimits): Measure
 }
 
 export interface UrlMeasures {
-  /** One per title on the page, in page order. */
-  titles: Measure[];
-  descriptions: Measure[];
+  /** One per title on the page, in page order: null for one the engine gave no width. */
+  titles: (Measure | null)[];
+  descriptions: (Measure | null)[];
   words: Measure | null;
   response: Measure | null;
   htmlSize: Measure | null;
@@ -272,9 +258,12 @@ export function measuresOf(
   const sizeBytes = number(response?.sizeBytes);
   const image = detail.type === 'image' && response?.outcome === 'success';
   return {
-    titles: (content?.titles ?? []).map((title) => titleMeasure(title.length, limits, title.text)),
+    // A width the engine didn't give has no meter, never one of 0.
+    titles: (content?.titles ?? []).map((title) =>
+      typeof title.width === 'number' ? titleMeasure(title.width, limits, title.length) : null,
+    ),
     descriptions: (content?.descriptions ?? []).map((description) =>
-      descriptionMeasure(description.length, limits, description.text),
+      typeof description.width === 'number' ? descriptionMeasure(description.width, limits, description.length) : null,
     ),
     words: content ? wordsMeasure(content.wordCount, limits) : null,
     response: responseMs === null ? null : responseMeasure(responseMs, limits),
