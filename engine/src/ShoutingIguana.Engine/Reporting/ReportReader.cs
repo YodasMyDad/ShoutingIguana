@@ -58,17 +58,27 @@ internal static class ReportReader
             cancellationToken.ThrowIfCancellationRequested();
             var check = IssueCatalog.Find(id)!;
             var listed = examples(check.Severity);
-            var rows = listed > 0 ? IssueReader.ReadIssues(crawlPath, id, listed) : [];
+            var rows = listed > 0 ? ReportRows.Read(crawlPath, check, listed, export, cancellationToken) : [];
             var (foundOn, targets) = References(crawlPath, check, rows, export, cancellationToken);
             var group = check.Grouping == IssueGrouping.None ? null : IssueGroupReader.ReadGroups(crawlPath, id, 0, 1, export.Cache, cancellationToken)?.Groups.FirstOrDefault();
+            var oneFix = group is { LikelyTemplate: true } ? new ReportOneFix(group.Pages, group.RelatedUrl, group.Detail)
+                : IssueGroupReader.IsLikelyTemplateCheck(check, counts[id], pages) ? new ReportOneFix(counts[id], null, null, NearlyEveryPage: true)
+                : null;
             problems.Add(new ReportProblem(
                 problems.Count + 1,
                 check,
                 ReportSources.Words(check, settings),
                 counts[id],
                 score?.Lines.FirstOrDefault(line => line.CheckId == id),
-                [.. rows.Select(row => new ReportExample(row.Url, row.Detail, row.RelatedUrl, foundOn.GetValueOrDefault(row.UrlId), targets.TryGetValue(row.UrlId, out var named) ? named : null))],
-                group is { LikelyTemplate: true } ? new ReportOneFix(group.Pages, group.RelatedUrl, group.Detail) : null));
+                [
+                    .. rows.Select(row => new ReportExample(row.Url, row.Detail, row.RelatedUrl, foundOn.GetValueOrDefault(row.UrlId),
+                        targets.TryGetValue(row.UrlId, out var named) ? named.Total : null)
+                    {
+                        Evidence = row.Evidence,
+                        Named = targets.TryGetValue(row.UrlId, out var listedTargets) ? listedTargets.Targets : []
+                    })
+                ],
+                oneFix));
         }
 
         // Whatever was read above is one analysis's only if that analysis is still the last.
@@ -130,22 +140,22 @@ internal static class ReportReader
     /// (the first pages linking to it, and the sitemaps listing it); for one whose pages hold the bad references, how many
     /// URLs each names. Nothing for other checks, or none listed.
     /// </summary>
-    private static (IReadOnlyDictionary<int, Storage.Models.UrlFoundOn> FoundOn, IReadOnlyDictionary<int, long> Targets) References(string crawlPath,
-        IssueDefinition check, IReadOnlyList<Storage.Models.IssueRow> rows, ExportSettings export, CancellationToken cancellationToken)
+    private static (IReadOnlyDictionary<int, Storage.Models.UrlFoundOn> FoundOn, IReadOnlyDictionary<int, Storage.Models.IssueTargetsOfUrl> Targets) References(
+        string crawlPath, IssueDefinition check, IReadOnlyList<ReportRow> rows, ExportSettings export, CancellationToken cancellationToken)
     {
         List<int> ids = [.. rows.Select(row => row.UrlId).Distinct().Take(FoundOnReader.MAX_URLS)];
         if (ids.Count == 0)
         {
-            return (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, long>());
+            return (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, Storage.Models.IssueTargetsOfUrl>());
         }
 
         return check.References switch
         {
             IssueReferences.Sources => (FoundOnReader.ReadFoundOn(crawlPath, ids, LISTED_SOURCES, export.Cache, cancellationToken).ToDictionary(url => url.UrlId),
-                new Dictionary<int, long>()),
+                new Dictionary<int, Storage.Models.IssueTargetsOfUrl>()),
             IssueReferences.Targets => (new Dictionary<int, Storage.Models.UrlFoundOn>(),
-                (FoundOnReader.ReadTargets(crawlPath, check.Id, ids, 0, export.Cache, cancellationToken) ?? []).ToDictionary(url => url.UrlId, url => url.Total)),
-            _ => (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, long>())
+                (FoundOnReader.ReadTargets(crawlPath, check.Id, ids, LISTED_SOURCES, export.Cache, cancellationToken) ?? []).ToDictionary(url => url.UrlId)),
+            _ => (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, Storage.Models.IssueTargetsOfUrl>())
         };
     }
 

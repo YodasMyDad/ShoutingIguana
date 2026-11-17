@@ -19,5 +19,11 @@ internal enum ColumnSource
     Issues,
 
     /// <summary>The stored page details, decoded per row: shown only.</summary>
-    Details
+    Details,
+
+    /// <summary>
+    /// Worked out for the rows of the page read, after its SQL (<see cref="UrlComputedColumns"/>): a redirect's hops, the
+    /// robots.txt rule that refused a URL, an image's pixels where the file has them. Shown only.
+    /// </summary>
+    Computed
 }

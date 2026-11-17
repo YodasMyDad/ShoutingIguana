@@ -34,7 +34,7 @@ internal sealed record UrlColumnDefinition(string Id, UrlColumnType Type)
     public bool IsIssueColumn => Source == ColumnSource.Issues;
 
     /// <summary>It reads the URL summary, so has no values without one.</summary>
-    public bool NeedsAnalysis => CrawlSql is null && Source != ColumnSource.Details;
+    public bool NeedsAnalysis => CrawlSql is null && Source is not (ColumnSource.Details or ColumnSource.Computed);
 
     /// <summary>The SQL that gives its value in the mode asked for, or null when it has none there.</summary>
     public string? Sql(GridMode mode) => mode == GridMode.Summary ? SummarySql ?? CrawlSql : CrawlSql;

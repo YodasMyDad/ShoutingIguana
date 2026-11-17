@@ -56,7 +56,7 @@ internal sealed class GridReference
             command.CommandText = """
                 SELECT u.id, u.url, u.is_internal, u.source, u.depth, r.url_id IS NOT NULL, r.error, r.outcome, r.status_code, r.content_type, r.title,
                        r.meta_description, r.h1, r.h1_count, r.word_count, r.size_bytes, r.response_ms, r.ttfb_ms, r.is_noindex, r.is_nofollow,
-                       r.redirect_url_id, r.canonical_url_id, r.outlink_count
+                       r.redirect_url_id, r.canonical_url_id, r.outlink_count, r.pixel_width, r.pixel_height
                 FROM urls u LEFT JOIN responses r ON r.url_id = u.id
                 """;
             using var reader = command.ExecuteReader();
@@ -111,6 +111,9 @@ internal sealed class GridReference
                     ["wordCount"] = fetched ? Number(14) : null,
                     ["outlinks"] = read ? Number(22) : null,
                     ["sizeBytes"] = fetched ? Number(15) : null,
+                    ["pixelWidth"] = Number(23),
+                    ["pixelHeight"] = Number(24),
+                    ["fetchError"] = fetched && outcome != FetchOutcome.Success ? Text(6) : null,
                     ["responseMs"] = requested ? Number(16) : null,
                     ["ttfbMs"] = requested ? Number(17) : null,
                     ["titleLength"] = fetched && Text(10) is { } title ? (long)DisplayWidth.Measure(title).Width : null,
@@ -122,6 +125,7 @@ internal sealed class GridReference
                     ["followedInlinks"] = (long)s.FollowedInlinks,
                     ["nofollowInlinks"] = (long)s.NofollowInlinks,
                     ["linkingPages"] = (long)s.LinkingPages,
+                    ["usedOn"] = (long)s.UsedOn,
                     ["issues"] = (long)s.Issues,
                     ["errors"] = (long)s.Errors,
                     ["warnings"] = (long)s.Warnings,

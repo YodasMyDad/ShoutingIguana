@@ -157,6 +157,10 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             var rows = IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Limit = 1 })?.Page?.Matching ?? 0;
             Paged($"Rows of {biggest}, by inlinks", "rows", "check", rows,
                 offset => IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Columns = [.. COLUMNS, "detail"], Sort = [new UrlSort("inlinks", true)], Offset = offset }));
+
+            // With no order asked for, the rows come by importance: the links to each, clicks from the start, the URL.
+            Paged($"Rows of {biggest}, by importance", "rows", "check", rows,
+                offset => IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Columns = [.. COLUMNS, "detail"], Offset = offset }));
         }
 
         Timed("Facets of every URL", "facets", "facets", all.Total, () => UrlGridReader.Facets(path, new UrlFacetQuery()));

@@ -137,6 +137,16 @@ internal sealed class GridReadContext : IDisposable
     /// <summary>The links have the index by target and kind an analysis adds (<see cref="CrawlSchema.LINK_KINDS_INDEX"/>).</summary>
     public bool HasLinkKindIndex { get; private set; }
 
+    /// <summary>
+    /// The responses have the columns for an image's size in pixels (<see cref="CrawlSchema.PIXEL_COLUMNS"/>), which the
+    /// writer adds when it opens a file: a crawl made before them, and not continued since, has none. Looked at once a read.
+    /// </summary>
+    public bool HasPixelSizes => _hasPixelSizes ??=
+        Scalar($"SELECT COUNT(*) FROM pragma_table_info('responses') WHERE name IN ({string.Join(", ", CrawlSchema.PIXEL_COLUMNS.Select(column => $"'{column.Name}'"))})", [])
+        == CrawlSchema.PIXEL_COLUMNS.Length;
+
+    private bool? _hasPixelSizes;
+
     /// <summary>The crawl's indexability reason in crawl SQL: the analysis's where it judged a URL differently.</summary>
     public string Reason => HasEffectiveIndexability ? "COALESCE(e.indexability_reason, r.indexability_reason)" : "r.indexability_reason";
 

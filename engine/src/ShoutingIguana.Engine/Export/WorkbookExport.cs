@@ -73,9 +73,16 @@ internal static class WorkbookExport
     /// <summary>A problem's sheet, before it's cut to what a sheet's name holds: its number, then its title.</summary>
     internal static string SheetTitle(int number, string title) => $"{number} {title}";
 
-    private static void WriteSheet(ExportRun run, ITableWriter table, string name, string checkId) =>
-        GridExport.WriteGrid(run, table, name, [.. CHECK_COLUMNS.Select(id => COLUMNS[id])], links: false, checkId, sitemapId: null, CHECK_TITLES,
-            query: new UrlQuery(), extra: WhereFoundColumns.For(run, checkId));
+    /// <summary>
+    /// A check's sheet: its own four columns, then its evidence (each under its title, but the page's title, which is there
+    /// already), then where to fix it. Its rows come by importance, as the check's grid gives them.
+    /// </summary>
+    private static void WriteSheet(ExportRun run, ITableWriter table, string name, string checkId)
+    {
+        var evidence = (IssueCatalog.Find(checkId)?.Evidence ?? []).Where(id => !CHECK_COLUMNS.Contains(id) && COLUMNS.ContainsKey(id)).Select(id => COLUMNS[id]).ToList();
+        GridExport.WriteGrid(run, table, name, [.. CHECK_COLUMNS.Select(id => COLUMNS[id]), .. evidence], links: false, checkId, sitemapId: null,
+            [.. CHECK_TITLES, .. evidence.Select(GridExport.Title)], query: new UrlQuery(), extra: WhereFoundColumns.For(run, checkId));
+    }
 
     private static void WriteSummary(XlsxWriter workbook, string name, ReportModel model, IReadOnlyList<string> sheets)
     {

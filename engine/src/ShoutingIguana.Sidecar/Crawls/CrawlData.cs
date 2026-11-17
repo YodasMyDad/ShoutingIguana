@@ -58,7 +58,11 @@ internal sealed class CrawlData(CrawlManager crawls)
         var outOfDate = results.OutOfDate(crawls.AnalysisSettings);
 
         // In catalog order. A check from a newer engine, which this one doesn't know, still counts, after the rest.
-        List<CheckCountDto> ran = [.. IssueCatalog.All.Where(check => counts.ContainsKey(check.Id)).Select(check => new CheckCountDto(check.Id, counts[check.Id]))];
+        List<CheckCountDto> ran =
+        [
+            .. IssueCatalog.All.Where(check => counts.ContainsKey(check.Id))
+                .Select(check => new CheckCountDto(check.Id, counts[check.Id], IssueGroupReader.IsLikelyTemplateCheck(check, counts[check.Id], analysis.PagesAnalyzed)))
+        ];
         ran.AddRange(counts.Keys.Where(checkId => IssueCatalog.Find(checkId) is null).Order(StringComparer.Ordinal)
             .Select(checkId => new CheckCountDto(checkId, counts[checkId])));
 

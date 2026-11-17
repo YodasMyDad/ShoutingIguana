@@ -16,4 +16,20 @@ public sealed record IssueTarget(
     UrlOutcome? Outcome,
     LinkKind? Kind,
     string? Text,
-    LinkPosition? Position);
+    LinkPosition? Position)
+{
+    /// <summary>What the URL is: the response it ends at, where its redirects end, whether it can be indexed. Null only for a target read without them.</summary>
+    public UrlFacts? Facts { get; init; }
+
+    /// <summary>The page's link to it: its <c>#fragment</c> as written after the <c>#</c>, or null.</summary>
+    public string? Fragment { get; init; }
+
+    /// <summary>The page's link to it: its flags (nofollow, an image link, from an HTTP header…).</summary>
+    public LinkFlags Flags { get; init; }
+
+    /// <summary>How many links of any kind the page has to it: a nav link and a footer link to the same 404 are 2.</summary>
+    public int Links { get; init; }
+
+    /// <summary>For a target the page shows as an image, the first &lt;img&gt; with its URL as the page writes it; null otherwise.</summary>
+    public ImageOnPage? Img { get; init; }
+}

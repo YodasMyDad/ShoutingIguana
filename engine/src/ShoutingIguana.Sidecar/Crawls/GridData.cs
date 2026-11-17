@@ -235,7 +235,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
             throw Problems.CheckNotFound(checkId);
         }
 
-        return new IssueTargetsDto(checkId, urls);
+        return new IssueTargetsDto(checkId, [.. urls.Select(IssueTargetsOfUrlDto.From)]);
     }
 
     /// <summary>The URL ids a request names (an id no URL can have is left out) and how many of each to list.</summary>
@@ -298,7 +298,8 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
     public async Task<IssueGroupPageDto> GroupsAsync(string id, string checkId, GroupsRequest? request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
-        var page = await ReadAsync(token => IssueGroupReader.ReadGroups(path, checkId, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
+        var sort = GridRequests.GroupSort(request?.Sort);
+        var page = await ReadAsync(token => IssueGroupReader.ReadGroups(path, checkId, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, sort, cache, token),
                        cancellationToken).ConfigureAwait(false)
                    ?? throw Problems.NotAnalyzed();
         if (page.Total is null && IssueCatalog.Find(checkId) is null)
@@ -306,7 +307,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
             throw Problems.CheckNotFound(checkId);
         }
 
-        return new IssueGroupPageDto(page.CheckId, GridRequests.Grouping(page.Grouping), page.Total, page.GroupCount, page.Offset, page.Groups);
+        return new IssueGroupPageDto(page.CheckId, GridRequests.Grouping(page.Grouping), page.Total, page.GroupCount, page.Offset, page.Groups)
+        {
+            Sort = page.Sort == IssueGroupSort.Size ? "size" : "pages",
+            LikelyTemplate = page.LikelyTemplate
+        };
     }
 
     public async Task<UrlPageDto> RowsAsync(string id, string checkId, GridQueryRequest? request, CancellationToken cancellationToken)

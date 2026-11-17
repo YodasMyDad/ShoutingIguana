@@ -59,6 +59,12 @@ internal static class ColumnWords
         ["followedInlinks"] = "Followed inlinks",
         ["nofollowInlinks"] = "Nofollow inlinks",
         ["linkingPages"] = "Linking pages",
+        ["usedOn"] = "Used on pages",
+        ["pixelWidth"] = "Image width",
+        ["pixelHeight"] = "Image height",
+        ["fetchError"] = "Fetch error",
+        ["redirectChain"] = "Redirect chain",
+        ["robotsRule"] = "robots.txt rule",
         ["issues"] = "Issues",
         ["errors"] = "Errors",
         ["warnings"] = "Warnings",
@@ -88,7 +94,9 @@ internal static class ColumnWords
     {
         ["sizeBytes"] = "bytes",
         ["responseMs"] = "ms",
-        ["ttfbMs"] = "ms"
+        ["ttfbMs"] = "ms",
+        ["pixelWidth"] = "px",
+        ["pixelHeight"] = "px"
     };
 
     private static readonly Dictionary<string, Dictionary<string, string>> VALUES = new(StringComparer.Ordinal)
@@ -194,6 +202,14 @@ internal static class ColumnWords
     {
         var worded = Url(column);
         return worded with { Title = $"{(target ? TARGET : SOURCE)} {MidPhrase(worded.Title)}" };
+    }
+
+    /// <summary>What became of a request, as the outcome column's cells say it: "Timed out", "Blocked by robots.txt".</summary>
+    public static string OutcomeTitle(UrlOutcome outcome)
+    {
+        var name = outcome.ToString();
+        var value = char.ToLowerInvariant(name[0]) + name[1..];
+        return VALUES["outcome"].GetValueOrDefault(value) ?? FromId(value);
     }
 
     /// <summary>An enum's values in words, each value that has none standing for itself.</summary>
