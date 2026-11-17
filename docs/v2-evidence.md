@@ -298,3 +298,37 @@ and is in the group without a related URL.
   is in its inspector.
 - **Whether `canonical-invalid` is in the HTML or a Link header**: a detail prefix would change the fault it's grouped
   by; left for the accuracy pass.
+
+## As built
+
+What Stage B built differs from the contract above only where this says so; the shapes are as
+[the sidecar API](v2-sidecar-api.md) gives them.
+
+- **An image is named by its URL, looked up.** Each image at fault is resolved to the crawl's URL by its address,
+  normalised as the crawler normalised the link it stored for the same `<img>`, and looked up (`AnalysisReader.ReadUrlId`):
+  never by its place among the page's links. Only images at fault are looked up, once a page each. The same image shown
+  twice on a page counts twice in the detail and is named once. On the step 3b audit's three real crawls (analysed as
+  copies), every image at fault resolved, and each to the URL of the page's own image link to it:
+
+  | Crawl | Images at fault | Resolved to a URL | With the page's own image link | Unresolved |
+  | --- | --- | --- | --- | --- |
+  | jitsunami.com | 63 | 63 (100%) | 63 (100%) | 0 |
+  | www.aptitude.co.uk | 135 | 135 (100%) | 135 (100%) | 0 |
+  | www.gardenfurnituresets.co.uk | 4,153 | 4,153 (100%) | 4,153 (100%) | 0 |
+
+  Analysed with this engine, none of their image checks' issues fell in the group naming no image (garden: 4,151
+  page-image pairs of `image-missing-dimensions` in 3,661 groups, the reviews logo on 195 pages one group). The synthetic
+  site's images are named the same way (`EvidenceDetailTests`, `EvidenceReadTests`).
+- **`pixelWidth` and `pixelHeight` are shown only.** They don't sort or filter: a crawl made before them has no column to
+  read, so their values are read for the rows of a page, as `redirectChain` and `robotsRule` are.
+- **`fetchError`** is the error the crawl recorded for any outcome other than success (a timeout, a connection that
+  failed, robots.txt that couldn't be read), and null for a success.
+- **The synthetic site's images say their size**: their files are JPEGs whose frame header says 640×480, and the planted
+  large image's 4,000×3,000, so a crawl of it has pixel sizes to show and test.
+- **Details as built, where the table shows one form**: one oversized image says its size, `1 image over 200 KB: 293 KB`;
+  text that ended a head says so without a line, which the parser doesn't give for text (`Text "Welcome" ended the head
+  early`); a page with one hreflang entry says `Its one entry doesn't name this URL`. A quoted text is cut at 40
+  characters, a soft 404's at 60, and every detail at 120, each with "…".
+- **Rows by importance keep the URL as their last key**: on the 100k benchmark crawl, the biggest check's rows
+  (`title-duplicate`, 5,152) read by importance in 18.1 ms at p95 (by inlinks alone, 14.3 ms), its groups in 16.1 ms,
+  against the 75 ms gate of a check's reads; no fallback to crawl order was needed.

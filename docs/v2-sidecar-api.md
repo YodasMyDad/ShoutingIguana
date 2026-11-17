@@ -1263,8 +1263,8 @@ inspector chains do.
 | `inlinks`, `followedInlinks`, `nofollowInlinks`, `linkingPages` | number | Yes | Hyperlinks to the URL on the pages audited, each counted, a page's links to itself left out: all, those followed, the nofollow ones, and the pages they're on |
 | `issues`, `errors`, `warnings`, `notices` | number | Yes | Checks that flagged the URL, in all and by severity |
 | `usedOn` (evidence) | number | Yes | The pages audited that refer to the URL by any kind of link (hyperlink, image, script, stylesheet, iframe, canonical, hreflang…), each page once, a page's links to itself left out: where an image, a script or a stylesheet is used, which `inlinks` (hyperlinks only) reads as 0 |
-| `pixelWidth`, `pixelHeight` (evidence) | number | | An image's own size in pixels, read from the first bytes of its file as the crawl fetched it: PNG, GIF, JPEG, WebP, and AVIF where its header says. Null for anything else (an SVG included), an image whose header couldn't be read, and every URL of a crawl made before the crawler read them |
-| `fetchError` (evidence) | text | | What went wrong when the URL gave no HTTP answer, as the crawl recorded it ("No response within 20 seconds", "Name not resolved"). Null for a URL that answered |
+| `pixelWidth`, `pixelHeight` (evidence) | number | | An image's own size in pixels, read from the first bytes of its file as the crawl fetched it: PNG, GIF, JPEG, WebP, and AVIF where its header says. Null for anything else (an SVG included), an image whose header couldn't be read, and every URL of a crawl made before the crawler read them. Shown only: they neither sort nor filter, as a crawl made before them has no column to read |
+| `fetchError` (evidence) | text | | What went wrong when the request didn't succeed, as the crawl recorded it ("No response within 20 seconds", "Name not resolved", "robots.txt couldn't be read"). Null for a URL that answered with success, and for an error the crawl recorded no words for. Filters; doesn't sort |
 | `redirectChain` (evidence) | object | | The URL's redirects hop by hop, to where they end, come back on themselves, or stop: exactly the inspector's `redirects`, `{ hops: [{ id, url, statusCode, outcome, via }], final: { id, url, statusCode, outcome }, loop, tooLong }`. Null for a URL that doesn't redirect |
 | `robotsRule` (evidence) | object | | For a URL robots.txt refused, why, as the inspector's `robotsTxt` test says it: `{ origin, reason, line, rule }`, `reason` being `rule` (with the stored file's `line` and its text as `rule`), `unreachable` or `unknown`. Null for a URL robots.txt didn't refuse |
 
@@ -3944,8 +3944,8 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
 
 ## Engine changes evidence makes
 
-Step 3b's evidence work ([the per-check table](v2-evidence.md)). This is the plan the API above is written to; what
-was built and measured is added here when it's done.
+Step 3b's evidence work ([the per-check table](v2-evidence.md), whose "As built" says where the build differs from
+it). Built on `ui/3b-evidence` (775c6a4, 48d6576, 439dbba): the API above is what it serves.
 
 - **The catalog.** `IssueDefinition.Evidence` (URL column ids) and `IssueDefinition.TargetFacts` (target field
   names), served as `evidence` and `targetFacts` on `GET /api/checks` (`CheckDto`). Neither is stored with an
@@ -3953,9 +3953,11 @@ was built and measured is added here when it's done.
   URL column `/rows` serves and every target fact a field of a target. `References`: `http-page`, `url-uppercase`,
   `url-underscores` become `Sources`; `image-missing-alt`, `image-alt-too-long`, `image-missing-dimensions` become
   `Targets` with `Grouping = RelatedUrl`. No id changes, no text of What, Why or Fix changes.
-- **The rules.** `ImageRules` names the images at fault as its issues' targets (each `ImageFact` with a URL to the id
-  of the page's image link to it: one link an `<img>`, written in the same order, so the n-th image link is the n-th
-  image with a URL); `FragmentRules` keeps the first missing fragments of each page; `HreflangRules` and
+- **The rules.** `ImageRules` names the images at fault as its issues' targets: each `ImageFact`'s URL, normalised as
+  the crawler normalised the link it stored for the same `<img>` (`OutLinkFactory`), is looked up among the crawl's URLs
+  (`AnalysisReader.ReadUrlId`, one prepared statement), only for an image at fault and once a page; the same image shown
+  twice on a page is counted twice and named once. On the three real crawls of the step 3b audit, every image at fault
+  resolved, each to the URL of the page's own image link to it (63 of 63, 135 of 135, 4,153 of 4,153). `FragmentRules` keeps the first missing fragments of each page; `HreflangRules` and
   `CanonicalRules` name what they count (and the element that ended the head); the measurement rules give the limit.
   `HREFLANG_DUPLICATE_CODE` gets a `FaultOf` (the codes before each ": "), so its groups stay what they were. Shared
   wording in `RuleText`: a quote cut with "…", a detail fitted to 120 characters, "over" or "under" a limit.
@@ -4015,3 +4017,13 @@ was built and measured is added here when it's done.
 - **The bench.** `verify-engine.sh`: build, tests, `si bench --pages 100000` (every planted page and issue, nothing
   else, memory flat) and the readbench gate, with a new case "Rows of the biggest check, by importance" in the
   `check` class (75 ms at p95).
+- **Measured** (`verify-engine.sh` on 5d4c3f0, 32 cores): the engine's 1,542 tests, the sidecar's 286 and the CLI's 28
+  pass (the CLI's check-file header test was updated in 5d4c3f0, after the run's test step, and passes). `si bench
+  --pages 100000`: completed, every planted issue found; 101,114 pages, 110,268 URLs, 5,054,148 links in 62.1 s
+  (1,628 pages/s); peak 199 MB working set, flat (199 MB at 10-30% to 177 MB at 70-100%); analysis 20.0 s, 32,413
+  issues, peak 253 MB. Readbench: the new "Rows of title-duplicate, by importance" (5,152 rows) 18.1 ms at p95
+  (gate 75), its groups 16.1 ms. Two full gate runs each missed a few reads in classes this work doesn't touch, by
+  different reads each time (run 1: the link pass without its summary by target URL, one 8.4 s outlier at p95 with
+  p50 1.9 s; the crawl's facets of pages 258 ms against 245; run 2: three URL-grid filters at 117-182 ms against 110,
+  the facets 246 ms), while another program's `si.exe` was running on the machine; each of those reads run alone
+  passes its gate (1,352 ms against 2,500; 12, 27 and 23 ms against 110; 135 ms against 245).
