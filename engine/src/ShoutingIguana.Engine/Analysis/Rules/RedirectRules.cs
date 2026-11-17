@@ -47,7 +47,9 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
                 continue;
             }
 
-            if (url.StatusCode is 302 or 303 or 307)
+            // A temporary redirect to another site is a hand-off, such as to a shop's hosted login or checkout, not a move
+            // whose address search engines should switch to.
+            if (url.StatusCode is 302 or 303 or 307 && urls[url.RedirectTargetId].IsInternal)
             {
                 yield return new IssueHit(IssueCatalog.REDIRECT_TEMPORARY, id, HttpStatusNames.Describe(url.StatusCode), url.RedirectTargetId);
             }

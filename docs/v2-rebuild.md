@@ -1015,8 +1015,9 @@ Everything below is public in `ShoutingIguana.Engine`.
   a bound, so a near copy in one could be missed (`engine/README.md`, Near duplicates). Crawls made by engines before
   the 256-bit fingerprint skip the check until crawled again.
 - Links are capped at 10,000 per page, so pages linked only from a huge HTML sitemap can look orphaned.
-- Some crawls skip the orphan check: stopped, depth-limited, URL-limited, folder-scoped, or with sitemaps off or none
-  read. A declared sitemap that failed (other than with 404/410) skips the not-in-sitemap check. The analysis notes
+- Some crawls skip the orphan check: stopped, depth-limited, URL-limited, folder-scoped, with sitemaps off or none
+  read, or with 1 in 20 or more of the pages it tried to read refusing the crawler or not answering. Below that share,
+  a page linked only from a page that refused the crawler is still reported as an orphan. A declared sitemap that failed (other than with 404/410) skips the not-in-sitemap check. The analysis notes
   say why, and `si analyze` and `si issues` print them.
 - A redirect chain is reported once, where it's entered. But if it ends at a broken URL, every hop is flagged
   `redirect-broken`.
@@ -1042,9 +1043,6 @@ Everything below is public in `ShoutingIguana.Engine`.
   not a pixel measurement.
 - A version of the site that answers 200 is flagged `duplicate-site-version` even if its page has a canonical or an
   instant meta refresh pointing to the main site, because probes aren't parsed.
-- `charset-missing` doesn't treat a byte-order mark as a charset declaration. W3C says a BOM wins over every other
-  declaration, but the crawl stores decoded text and `PageFacts` doesn't record that a BOM was there. The check
-  doesn't re-parse the HTML to look for one.
 - Hreflang script subtags aren't checked against ISO 15924: any four letters pass. Rare enough that it wasn't added.
 - A sitemap URL on a different protocol from the sitemap (an http URL in an https sitemap) isn't reported.
   sitemaps.org drops it; the check only compares hosts. Left on the backlog.

@@ -158,7 +158,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(expected.HtmlPages, stats.HtmlPageCount);
         Assert.Equal(expected.Orphans, stats.UnlinkedPageCount);
         Assert.Equal(expected.Redirects, stats.Outcomes.GetValueOrDefault(FetchOutcome.Redirect));
-        Assert.Equal(expected.RobotsDisallowed, stats.Outcomes.GetValueOrDefault(FetchOutcome.RobotsDisallowed));
+        Assert.Equal(expected.RobotsDisallowed + expected.PartnerRobotsDisallowed, stats.Outcomes.GetValueOrDefault(FetchOutcome.RobotsDisallowed));
         Assert.Equal(expected.BrokenUrls + expected.ExternalMissing, stats.StatusCodes.GetValueOrDefault(404));
         Assert.Equal(expected.ServerErrorUrls, stats.StatusCodes.GetValueOrDefault(500));
         Assert.Equal(expected.NofollowOnly, stats.SkipReasons.GetValueOrDefault(SkipReason.NoFollow));

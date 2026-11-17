@@ -55,5 +55,8 @@ public sealed class UrlNormalizerTests
     {
         Assert.Equal("reviews", UrlNormalizer.GetFragment(new Uri("https://example.com/p#reviews")));
         Assert.Null(UrlNormalizer.GetFragment(new Uri("https://example.com/p")));
+
+        // A link written "#" has a fragment, an empty one: it isn't a link to the page's own address.
+        Assert.Equal("", UrlNormalizer.GetFragment(new Uri(new Uri("https://example.com/p"), "#")));
     }
 }

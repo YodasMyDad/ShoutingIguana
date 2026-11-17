@@ -104,6 +104,35 @@ internal sealed class UrlTable
     /// </summary>
     public int CountCrawled() => _statuses.Count(status => status.Fetched);
 
+    /// <summary>
+    /// The site's pages the crawl tried to read: <see cref="Unread"/>, the site's URLs other than images and files that
+    /// refused the crawler (a firewall, a bot challenge, a rate limit) or gave no answer, so their links are unknown; and
+    /// <see cref="Read"/>, its HTML pages that were. The crawler's probes of the site's other versions aren't counted, nor
+    /// URLs robots.txt kept it from, which search engines can't read either.
+    /// </summary>
+    public (int Read, int Unread) CountPagesRead()
+    {
+        int read = 0, unread = 0;
+        foreach (var status in _statuses)
+        {
+            if (status is not { IsInternal: true, Fetched: true, IsSiteVersionProbe: false })
+            {
+                continue;
+            }
+
+            if (status.IsPage)
+            {
+                read++;
+            }
+            else if (!status.IsResource && status.Outcome is FetchOutcome.Blocked or FetchOutcome.Timeout or FetchOutcome.NetworkError)
+            {
+                unread++;
+            }
+        }
+
+        return (read, unread);
+    }
+
     /// <summary>The site's URLs robots.txt kept the crawler out of, as the blocked-by-robots check flags them.</summary>
     public int CountBlockedByRobots() =>
         _statuses.Count(status => status is { IsInternal: true, Fetched: true, Outcome: FetchOutcome.RobotsDisallowed, IsSiteVersionProbe: false });

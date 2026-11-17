@@ -407,6 +407,10 @@ number and in the breakdown: "The score covers all 265 pages and 82 of 86 checks
 
 Fixing the first five in "Fix first" order leaves `slow-response`: 98.
 
+Since the check audit of 2026-11-17 ([v2-check-audit.md](v2-check-audit.md)) `description-duplicate` is a Notice, so
+the same crawl now scores 87, and fixing the first five leaves 100. The engine's test keeps the example above with
+another warning on 8 pages in its place.
+
 **A nearly clean site (invented): 98, Very good.** 48 pages. One problem worth fixing, images with no description
 on 3 of 48 pages ("some", 2 points), and 6 things worth a look.
 
@@ -439,7 +443,7 @@ on 3 of 48 pages ("some", 2 points), and 6 things worth a look.
 | Five problems worth fixing, each on some pages | 90 |
 | One serious problem on a few pages (98 before the ceiling) | 89 |
 | One serious problem on every page | 89 |
-| The garden crawl's mix: 2 serious (a few, some), 4 worth fixing (many, some, some, some) | 85 |
+| The garden crawl's mix before the check audit: 2 serious (a few, some), 4 worth fixing (many, some, some, some) | 85 |
 | Three serious on many pages, and five worth fixing on many | 64 |
 | One site-wide serious fault and nothing else | 40 |
 | Two site-wide serious faults | 0 |
@@ -586,8 +590,8 @@ here as the file has it, as its token: `{limit:largeImageBytes}` reads "200 KB" 
 
 - Title: Pages that name another page as the main version
 - What: These pages tell search engines that another page is the main version of them (a "canonical" link). Google
-  then shows that other page instead, which is right for copies, such as page 2 of a list or a print version. It's
-  a problem only if the page has its own content and should appear in search itself.
+  then shows that other page instead, which is right for true copies, such as a sorted list or a print version. It's
+  a problem when the page has its own content, as page 2 of a list does: each page of a list should name itself.
 - Fix: (1) Look at each page and the page it points to, and decide whether they're really the same thing. (2) If
   they are, there's nothing to do. (3) If this page should appear in search on its own, ask your developer to
   point its canonical link at its own address.

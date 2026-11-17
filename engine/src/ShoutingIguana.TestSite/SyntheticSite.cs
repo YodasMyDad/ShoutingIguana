@@ -111,6 +111,12 @@ public sealed partial class SyntheticSite
                 return partnerPlant.Respond();
             }
 
+            // Its rules keep crawlers out of one area, as many sites' do.
+            if (path == "/robots.txt")
+            {
+                return new SyntheticResponse(200, "text/plain; charset=utf-8", "User-agent: *\nDisallow: /ext-private/\n", null, null);
+            }
+
             if (path.StartsWith("/ext/img/", StringComparison.Ordinal))
             {
                 return new SyntheticResponse(200, "image/jpeg", null, IMAGE_BYTES, null);
@@ -278,12 +284,12 @@ public sealed partial class SyntheticSite
                 }
                 else if (href.StartsWith("/r2/", StringComparison.Ordinal))
                 {
-                    // A 302 to a 301: a chain, and a temporary redirect.
+                    // A 302 to a 301: a chain, and a temporary redirect. The link to it isn't a link to a redirect: the
+                    // temporary one keeps its URL the one to use.
                     redirects.Add(href);
                     redirects.Add("/r/" + href[4..]);
                     Flag("redirect-chain", href);
                     Flag("redirect-temporary", href);
-                    Flag("links-to-redirects", path);
                 }
                 else if (href.StartsWith("/private/", StringComparison.Ordinal))
                 {
@@ -437,7 +443,7 @@ public sealed partial class SyntheticSite
             BrokenUrls: broken.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: false }),
             ServerErrorUrls: errors.Count,
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
-            RobotsDisallowed: disallowed.Count + _plants.Count(plant => plant.Status == Plant.REFUSED),
+            RobotsDisallowed: disallowed.Count + _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: false }),
             NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
             ExternalOk: externalOk.Count,
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
@@ -450,6 +456,7 @@ public sealed partial class SyntheticSite
             IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal))
         {
             NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length,
+            PartnerRobotsDisallowed = _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: true }),
             Unreachable = _plants.Count(plant => plant is { Status: 0, OnPartnerSite: false }),
             NotChecked = _options is { DeadTwin: true, Sitemaps: true } ? DEAD_TWIN_UNCHECKED : 0,
             SkippedChecks = _options.Sitemaps

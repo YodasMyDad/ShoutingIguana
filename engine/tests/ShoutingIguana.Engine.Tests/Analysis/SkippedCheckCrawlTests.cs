@@ -87,6 +87,61 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A shop that rate-limits the crawler on its product pages leaves their links unknown, so the collection only they
+    /// link to would look orphaned. With the refused pages 1 in 20 or more of those the crawl tried to read, the orphan
+    /// check is skipped, saying why; one refusal among 22 pages doesn't stop it, and the collection is then reported.
+    /// </summary>
+    /// <param name="others">Pages besides the products that the home page links to, which answer.</param>
+    [Theory]
+    [InlineData(2, 0, true)]
+    [InlineData(1, 19, false)]
+    public async Task OrphansArentCheckedWhenTheSiteRefusedManyOfThePagesTheCrawlTriedToRead(int refused, int others, bool skipped)
+    {
+        await using var site = await LoopbackServer.StartAsync(context =>
+        {
+            var origin = $"{context.Request.Scheme}://{context.Request.Host}";
+            var path = context.Request.Path.Value!;
+            if (path.StartsWith("/products/", StringComparison.Ordinal))
+            {
+                context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                return Write(context, "text/html; charset=utf-8", "<!doctype html><title>Too many requests</title>");
+            }
+
+            return path switch
+            {
+                "/robots.txt" => Write(context, "text/plain", $"User-agent: *\nAllow: /\nSitemap: {origin}/sitemap.xml"),
+                "/sitemap.xml" => Write(context, "application/xml",
+                    $"<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>{origin}/</loc></url><url><loc>{origin}/collection</loc></url></urlset>"),
+                "/" => Write(context, "text/html; charset=utf-8", Page("Home",
+                    string.Concat(Enumerable.Range(1, refused).Select(product => $"<a href=\"/products/{product}\">Product {product}</a>")) +
+                    string.Concat(Enumerable.Range(1, others).Select(page => $"<a href=\"/pages/{page}\">Page {page}</a>")))),
+                _ => Write(context, "text/html; charset=utf-8", Page(path, "<a href=\"/\">Home</a>"))
+            };
+        });
+
+        var analysis = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0 });
+
+        // Read: the home page, the collection (from the sitemap) and the others.
+        var reason = $"{refused} of the {refused + others + 2} pages the crawl tried to read refused it or didn't answer, and pages linked only from them would look orphaned.";
+        if (skipped)
+        {
+            Assert.Equal([new SkippedCheck(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.PAGES_UNREAD, reason)], analysis.Skipped);
+            Assert.Contains($"Orphan pages weren't checked: {reason}", analysis.Notes);
+            Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id));
+        }
+        else
+        {
+            Assert.Empty(analysis.Skipped);
+            Assert.Equal([site.BaseUri + "collection"], IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id).Select(row => row.Url));
+        }
+
+        Assert.Equal(refused, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.INTERNAL_BLOCKED).Count);
+
+        static string Page(string title, string body) =>
+            $"<!doctype html><html lang=\"en\"><head><title>{title}</title></head><body><p>Text</p>{body}</body></html>";
+    }
+
+    /// <summary>
     /// A crawl told to ignore robots.txt asks for every URL, so none is refused, and the check of what robots.txt blocks has
     /// nothing to find. That isn't finding that nothing is blocked: the check is skipped, saying why, and has no count,
     /// where the same site crawled by its rules has its blocked URLs flagged.

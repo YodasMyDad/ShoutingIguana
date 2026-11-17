@@ -5,7 +5,7 @@ namespace ShoutingIguana.TestSite.Models;
 /// <param name="AnalysedPages">HTML pages the analysis audits: all of them except Cloudflare-style /cdn-cgi/ endpoints.</param>
 /// <param name="BrokenUrls">Distinct internal URLs that return 404.</param>
 /// <param name="Redirects">Distinct redirecting URLs (single hops, both hops of each chain, and the redirect plants).</param>
-/// <param name="RobotsDisallowed">Distinct URLs blocked by robots.txt.</param>
+/// <param name="RobotsDisallowed">Distinct URLs of the site blocked by its robots.txt (<see cref="PartnerRobotsDisallowed"/> are the partner site's).</param>
 /// <param name="NofollowOnly">Distinct URLs reachable only through nofollow links, so never fetched.</param>
 /// <param name="DuplicateTitlePages">Indexable pages whose title is shared with another indexable page.</param>
 /// <param name="IssueUrls">
@@ -37,6 +37,9 @@ public sealed record SyntheticSiteExpectations(
 
     /// <summary>Of <see cref="NofollowOnly"/>, the URLs that are files (images) rather than HTML pages.</summary>
     public int NofollowOnlyFiles { get; init; }
+
+    /// <summary>The partner site's URLs its own robots.txt keeps the crawler from: robots-disallowed, but not the site's.</summary>
+    public int PartnerRobotsDisallowed { get; init; }
 
     /// <summary>The site's own URLs that got no answer: the crawler's probes of the site's other versions aren't among them.</summary>
     public int Unreachable { get; init; }

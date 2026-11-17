@@ -16,7 +16,7 @@ internal static class ExpectationCheck
         Check(mismatches, "HTML pages", expected.HtmlPages, stats.HtmlPageCount);
         Check(mismatches, "Sitemap-only pages", expected.Orphans, stats.UnlinkedPageCount);
         Check(mismatches, "Redirects", expected.Redirects, Get(stats.Outcomes, FetchOutcome.Redirect));
-        Check(mismatches, "Robots-disallowed URLs", expected.RobotsDisallowed, Get(stats.Outcomes, FetchOutcome.RobotsDisallowed));
+        Check(mismatches, "Robots-disallowed URLs", expected.RobotsDisallowed + expected.PartnerRobotsDisallowed, Get(stats.Outcomes, FetchOutcome.RobotsDisallowed));
         Check(mismatches, "404 responses", expected.BrokenUrls + expected.ExternalMissing, Get(stats.StatusCodes, 404));
         Check(mismatches, "500 responses", expected.ServerErrorUrls, Get(stats.StatusCodes, 500));
         Check(mismatches, "Nofollow-only URLs", expected.NofollowOnly, Get(stats.SkipReasons, SkipReason.NoFollow));

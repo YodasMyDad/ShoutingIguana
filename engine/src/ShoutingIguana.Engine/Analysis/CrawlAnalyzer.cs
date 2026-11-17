@@ -26,6 +26,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
     private const string RULE_FAILED_TEXT = "The check failed during the analysis, so it has no results. The log says why.";
 
+    /// <summary>The orphan check is skipped once 1 in this many of the pages the crawl tried to read couldn't be read (<see cref="SkippedCheckReasons.PAGES_UNREAD"/>).</summary>
+    private const int UNREAD_PAGES_ONE_IN = 20;
+
     private readonly ILogger _logger = loggerFactory.CreateLogger<CrawlAnalyzer>();
 
     /// <summary>Tests only: called with each site rule just before it reports, where its failure is caught, so a test can make one fail.</summary>
@@ -95,7 +98,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             // Orphans and sitemap coverage need every page and sitemap; a stopped crawl can't tell missing from not yet seen.
             var crawlComplete = status == CrawlStatus.Completed && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
             var limitSkips = reader.ReadLimitSkips();
-            var linksComplete = crawlComplete && SeesEveryLinkingPage(limitSkips, scope, notes, skipped);
+            var linksComplete = crawlComplete && SeesEveryLinkingPage(limitSkips, scope, urls, notes, skipped);
             incomplete = WhyIncomplete(status, limitSkips);
             if (!options.DiscoverSitemaps)
             {
@@ -380,9 +383,12 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
     /// <summary>
     /// Whether the crawl saw every page that could link to a sitemap page, which the orphan check needs. A depth or
-    /// URL limit leaves pages out, and a crawl kept to a folder never reads the links on the rest of the site.
+    /// URL limit leaves pages out, and a crawl kept to a folder never reads the links on the rest of the site. Nor are
+    /// the links known on pages that refused the crawler or didn't answer: once they are 1 in
+    /// <see cref="UNREAD_PAGES_ONE_IN"/> of the pages it tried to read, as when a shop rate-limits every product page, the
+    /// check is skipped. A few stray failures don't stop it, or it would hardly ever run on a large site.
     /// </summary>
-    private bool SeesEveryLinkingPage(Dictionary<SkipReason, long> limitSkips, CrawlScope scope, List<string> notes,
+    private bool SeesEveryLinkingPage(Dictionary<SkipReason, long> limitSkips, CrawlScope scope, UrlTable urls, List<string> notes,
         Dictionary<IssueDefinition, SkippedCheck> skipped)
     {
         var complete = true;
@@ -406,6 +412,15 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             Skip(notes, skipped, $"Orphan pages weren't checked: the crawl stayed in {scope.StartFolder}, so links from the rest of the site weren't read.",
                 SkippedCheckReasons.START_FOLDER, $"The crawl stayed in {scope.StartFolder}, so links from the rest of the site weren't read.",
                 IssueCatalog.ORPHAN_PAGE);
+            complete = false;
+        }
+
+        var (read, unread) = urls.CountPagesRead();
+        if (unread > 0 && (long)unread * UNREAD_PAGES_ONE_IN >= read + unread)
+        {
+            var why = string.Create(CultureInfo.InvariantCulture,
+                $"{unread:N0} of the {read + unread:N0} pages the crawl tried to read refused it or didn't answer, and pages linked only from them would look orphaned.");
+            Skip(notes, skipped, $"Orphan pages weren't checked: {why}", SkippedCheckReasons.PAGES_UNREAD, why, IssueCatalog.ORPHAN_PAGE);
             complete = false;
         }
 

@@ -21,6 +21,9 @@ public sealed partial class SyntheticSite
 
     private static readonly string[] HINDI_WORDS = ["नमस्ते", "दुनिया", "किताब", "पानी", "घर", "बच्चे"];
 
+    /// <summary>A page on the partner site its robots.txt disallows: the crawler never asks for it.</summary>
+    private const string PARTNER_DISALLOWED = "/ext-private/alternate";
+
     /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
     private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
 
@@ -176,6 +179,11 @@ public sealed partial class SyntheticSite
         Page("canonical-noindex", "Canonical to a noindex page", ["canonicalised-page", "canonical-to-non-indexable"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}noindex" }, inSitemap: false);
 
+        // A canonical to a URL that refused the crawler (a bot challenge here, a rate limit on a real shop) is unverified,
+        // not non-indexable: the refusal says nothing about search engines, and the blocked URL is reported on its own.
+        Page("canonical-blocked", "Canonical to a blocked URL", ["canonicalised-page"],
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}blocked" }, inSitemap: false);
+
         Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);
         Page("noindex-canonical", "Noindex with a canonical elsewhere", ["noindex-page", "noindex-with-canonical"], page => page with
         {
@@ -234,6 +242,14 @@ public sealed partial class SyntheticSite
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
         {
             Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\"></a></p>"
+        });
+
+        // A logo linking its own page has nothing to read all the same, as on a home page. Links written as a fragment
+        // (a script's "#", a "back to top" arrow) are jumps within the page, not links to read.
+        Page("empty-self-link", "Image link to its own page", ["empty-anchor-text"], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}empty-self-link\"><img src=\"/img/3.jpg\" alt=\"\" width=\"400\" height=\"300\"></a> " +
+                      "<a href=\"#\" class=\"menu-toggle\"><svg><path d=\"M0 0\"/></svg></a> <a href=\"#top\"><svg><path d=\"M0 0\"/></svg></a></p>"
         });
 
         // Icon links named the ways screen readers name them (a labelled SVG, a title behind an empty aria-label, a label
@@ -328,6 +344,18 @@ public sealed partial class SyntheticSite
         {
             ExtraHead = Hreflang(("en", "hreflang-noindex"), ("fr", "noindex"), ("x-default", "hreflang-noindex"))
         });
+        // Alternates the crawler couldn't judge aren't non-indexable: one that refused it, and one on another site whose
+        // robots.txt disallows it, which says nothing about whether search engines may read it. Alternates are checked when
+        // something else links them, as the language switcher here does (crawling hreflang is off by default).
+        Page("hreflang-unverified", "Unverified hreflang", [], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-unverified"), ("fr", "blocked"), ("x-default", "hreflang-unverified")) +
+                        $"<link rel=\"alternate\" hreflang=\"de\" href=\"{_external}{PARTNER_DISALLOWED}\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}blocked\">Français</a> <a href=\"{_external}{PARTNER_DISALLOWED}\">Deutsch</a></p>"
+        });
+        plants.Add(new Plant(PARTNER_DISALLOWED, Plant.REFUSED, Linked: false, InSitemap: false, [],
+            () => Html(RenderSimple("Partner private page", "The partner site's robots.txt disallows this area.", PARTNER_DISALLOWED)),
+            IsPage: false, OnPartnerSite: true));
         Page("hreflang-body", "Hreflang in the body", ["hreflang-outside-head"], page => page with
         {
             Content = page.Content + Hreflang(("en", "hreflang-body"), ("x-default", "hreflang-body"))
@@ -346,6 +374,12 @@ public sealed partial class SyntheticSite
             JsonLd = """{"@context":"https://schema.org","@type":"Product","name":"Incomplete product"}"""
         });
 
+        // A schema.org subtype is held to its parent's requirements: a Restaurant is a LocalBusiness, a MusicEvent an Event.
+        Page("jsonld-subtypes", "Incomplete subtype markup", ["structured-data-missing-required"], page => page with
+        {
+            JsonLd = """[{"@context":"https://schema.org","@type":"Restaurant","name":"Planted bistro"},{"@context":"https://schema.org","@type":"MusicEvent","name":"Planted concert","startDate":"2026-12-01T19:00"}]"""
+        });
+
         Page("large", "Large HTML", ["large-page"], page => page with { Content = page.Content + $"<!-- {new string('x', 1_100_000)} -->" });
         // Past Googlebot's 2 MB uncompressed HTML limit, and also over the 1 MB large-page threshold.
         Page("html-past-crawl-limit", "Huge HTML", ["large-page", "html-past-crawl-limit"],
@@ -353,6 +387,14 @@ public sealed partial class SyntheticSite
         Page("no-viewport", "Missing viewport", ["viewport-missing"], page => page with { Viewport = false });
         Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
+
+        // With no charset in the header, a meta tag declares the encoding only within the first 1024 bytes, where browsers
+        // look for it: first in the head it does, after the head's inline styles it doesn't.
+        Page("charset-meta", "Charset in a meta tag", [], contentType: "text/html");
+        Page("charset-late", "Charset declared too late", ["charset-missing"], page => page with
+        {
+            Charset = false, ExtraHead = "<meta charset=\"utf-8\">"
+        }, contentType: "text/html");
 
         // A byte-order mark at the start of the file declares the encoding, with no meta tag and no charset in the
         // header: neither page is missing its character encoding.
@@ -392,6 +434,17 @@ public sealed partial class SyntheticSite
             Other($"long-chain-{hop}", 301, linked: hop == 0, hop == 0 ? ["redirect-chain"] : [], () => Redirect(301, next));
         }
         Other("moved", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+
+        // A link to a temporary redirect is right as it is: the linked URL stays the one to use, as with a shop's sign-in
+        // link, which sends visitors on to its hosted login with a one-off token. A temporary redirect to another site is
+        // such a hand-off, not a move, so only the one within the site is flagged (and, over HTTPS, the hand-off to the
+        // plain-HTTP partner site is a downgrade).
+        Page("temporary-links", "Links to temporary redirects", [], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}account-login\">Sign in</a> <a href=\"{PLANTS_PATH}sale\">This week's sale</a></p>"
+        });
+        Other("account-login", 302, linked: false, IsHttps ? ["redirect-downgrade"] : [], () => Redirect(302, $"{_external}/ext/account/login"));
+        Other("sale", 302, linked: false, ["redirect-temporary"], () => Redirect(302, PLANTS_PATH + "thin"));
         Other("gone", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone"));
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
         plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));

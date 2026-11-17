@@ -18,7 +18,8 @@ public sealed class FixFirstOrderTests
             ["title-too-long"] = 86,
             ["empty-anchor-text"] = 265,
             ["title-duplicate"] = 86,
-            ["description-duplicate"] = 86,
+            // description-duplicate was this case's meta description until the check audit made it a notice.
+            ["description-multiple"] = 86,
             ["broken-internal-links"] = 5,
             ["internal-client-error"] = 9
         };
@@ -27,7 +28,7 @@ public sealed class FixFirstOrderTests
         [
             "internal-client-error", "broken-internal-links",
             // Level on severity and count: catalog order, titles before meta descriptions.
-            "title-duplicate", "description-duplicate",
+            "title-duplicate", "description-multiple",
             "empty-anchor-text", "title-too-long"
         ], FixFirstOrder.Of(counts));
     }

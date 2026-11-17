@@ -9,7 +9,8 @@ namespace ShoutingIguana.Engine.Fetching;
 /// </summary>
 internal static partial class CharsetDecoder
 {
-    private const int PRESCAN_BYTES = 1024;
+    /// <summary>How far into the bytes browsers look for a meta tag that declares the encoding.</summary>
+    public const int PRESCAN_BYTES = 1024;
 
     static CharsetDecoder() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -50,6 +51,12 @@ internal static partial class CharsetDecoder
 
         return bytes.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xFE]) ? UTF_16LE : null;
     }
+
+    /// <summary>
+    /// How many bytes the text takes in the encoding the label names (UTF-8 for none, or one that can't be used), to
+    /// say how far into a page's bytes a tag in its decoded text ends.
+    /// </summary>
+    public static int ByteCount(ReadOnlySpan<char> text, string? label) => (Resolve(label) ?? Encoding.UTF8).GetByteCount(text);
 
     private static string? Prescan(ReadOnlySpan<byte> bytes)
     {

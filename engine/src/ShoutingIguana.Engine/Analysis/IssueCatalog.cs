@@ -108,7 +108,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition REDIRECT_TEMPORARY = new("redirect-temporary", IssueCategory.Redirects, IssueSeverity.Notice,
         "Temporary redirect",
-        "This internal URL redirects with a temporary status code: 302, 303 or 307.",
+        """This internal URL redirects to another URL on the site with a temporary status code: 302, 303 or 307. Temporary redirects to other sites, such as a shop's hosted login or checkout, don't count: they hand visitors over rather than move the page.""",
         "If the move is permanent, change the redirect to 301 or 308; if it's temporary, leave it.")
     {
         Why = """Google doesn't treat a temporary redirect as a sign that the target should replace the old URL (at most it's a weak signal), so the old URL can stay in search results. That's correct when the move really is temporary, such as a short-term campaign page or a login redirect. For a permanent move it delays the switch to the new URL.""",
@@ -157,7 +157,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition BROKEN_EXTERNAL_LINKS = new("broken-external-links", IssueCategory.Links, IssueSeverity.Warning,
         "Links to broken external URLs",
-        """The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count.""",
+        """The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count, and nor do links that the other site's bot protection (such as Cloudflare) refused, or that its robots.txt kept the crawler from checking.""",
         "Update each link to the resource's current address or an archived copy, or remove it.")
     {
         Why = """Visitors who click hit a dead end, which makes the page look neglected and its references unreliable. Google doesn't document broken outbound links as a ranking factor, so this is about visitors. Some sites refuse crawlers in other ways, so open a few in a browser before editing.""",
@@ -169,7 +169,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition LINKS_TO_REDIRECTS = new("links-to-redirects", IssueCategory.Links, IssueSeverity.Notice,
         "Links to internal redirects",
-        """The page links to internal URLs that redirect (by HTTP or an instant meta refresh) to a working page.""",
+        """The page links to internal URLs that redirect permanently (301 or 308, or an instant meta refresh) to a working page. Links to temporary redirects (302, 303 or 307), such as a sign-in link that sends visitors on to a login page, don't count: the linked URL is still the one to use.""",
         """Change the links to point straight at the final URL. Keep the redirects for bookmarks and other sites' links.""")
     {
         Why = """Each click costs visitors an extra round trip before the page starts to load, and each crawl costs search engines an extra request. Google's advice is to link to the canonical URL within your site, which a redirecting URL isn't. A few are harmless; it's worth fixing in templates, where the same link repeats on every page.""",
@@ -193,7 +193,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition EMPTY_ANCHOR_TEXT = new("empty-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
         "Internal links without anchor text",
-        """The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. Links in the <head>, such as rel="amphtml", don't count.""",
+        """The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. A link to the page itself counts too, as a logo on the home page is; links written as a fragment (#, #top) and links in the <head>, such as rel="amphtml", don't.""",
         """Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.""")
     {
         Why = """Screen readers announce these as just "link" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.""",
@@ -217,7 +217,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ORPHAN_PAGE = new("orphan-page", IssueCategory.Links, IssueSeverity.Warning,
         "Orphan page in a sitemap",
-        """This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished.""",
+        """This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished, and not when 1 in 20 or more of the pages it tried to read refused the crawler or didn't answer, as their links are unknown.""",
         """If the page matters, link to it from relevant pages and from its section's listing. If it doesn't, remove it from the sitemap, then redirect or remove the page.""")
     {
         Why = """Visitors can't reach it by browsing, and search engines only know it from the sitemap. Google uses links to find pages and judge their relevance, and says every page you care about should have a link from at least one other page on your site. Often it's an old page left in the sitemap, or one linked only from places a crawler can't follow, such as forms or scripts.""",
@@ -387,7 +387,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CANONICAL_TO_NON_INDEXABLE = new("canonical-to-non-indexable", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Canonical points to a non-indexable page",
-        """The page's canonical names another URL on the site that can't be indexed itself: it's noindex, canonicalised to yet another URL, or blocked by robots.txt or a firewall.""",
+        """The page's canonical names another URL on the site that can't be indexed itself: it's noindex, canonicalised to yet another URL, or blocked by robots.txt. A URL that refused the crawler (a firewall, a bot challenge or a rate limit) isn't judged, as that says nothing about search engines; it's reported as blocked itself.""",
         """Point the canonical at the final, indexable URL. If the target isn't meant to be indexed, this page probably shouldn't name it as canonical.""")
     {
         Why = """A canonical asks search engines to index the named URL instead of this one, so if that URL is noindex, blocked or points elsewhere in turn, the signals contradict each other and the outcome is up to Google. Google's own checklist includes making sure the canonical target isn't noindex. Canonical chains (A to B to C) usually come from content that moved more than once.""",
@@ -461,13 +461,13 @@ public static class IssueCatalog
         """This indexable page isn't in any sitemap the crawl read. It's only checked when the crawl finished and every declared sitemap could be read.""",
         """Add the page to your XML sitemap, ideally by making sure the generator includes every indexable page type.""")
     {
-        Why = """Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate.""",
+        Why = """Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate. Login, account and basket pages don't belong in a sitemap: they're better kept out of search with noindex.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None
     };
 
-    public static readonly IssueDefinition SITEMAP_ERROR = new("sitemap-error", IssueCategory.Sitemaps, IssueSeverity.Error,
+    public static readonly IssueDefinition SITEMAP_ERROR = new("sitemap-error", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Sitemap can't be read",
         """A sitemap listed in robots.txt, a sitemap index or the crawl settings returned an error (including 404), didn't respond, or isn't valid sitemap XML. Reported on the home page; the detail lists up to three, with their errors.""",
         """Open the sitemap URL to see the error, then fix the file or the server: it must be valid XML, at most 50 MB uncompressed and 50,000 URLs. If the sitemap no longer exists, remove its reference from robots.txt or the sitemap index.""")
@@ -606,7 +606,7 @@ public static class IssueCatalog
         Grouping = IssueGrouping.None
     };
 
-    public static readonly IssueDefinition DESCRIPTION_DUPLICATE = new("description-duplicate", IssueCategory.MetaDescriptions, IssueSeverity.Warning,
+    public static readonly IssueDefinition DESCRIPTION_DUPLICATE = new("description-duplicate", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
         "Duplicate meta description",
         """Another indexable page has the same meta description, ignoring case and spacing. The detail says how many other pages share it.""",
         "Write a page-specific description, or generate one from each page's own data.")
@@ -678,7 +678,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition NEAR_DUPLICATE_CONTENT = new("near-duplicate-content", IssueCategory.Content, IssueSeverity.Notice,
         "Near-duplicate content",
-        """Another indexable page has almost the same main content, roughly 96% or more alike: at most 24 of the 256 bits of their content fingerprints differ (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.""",
+        """Another indexable page has almost the same main content, roughly 96% or more alike (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.""",
         """Give each page main content that is clearly its own, canonicalise the variants to one version, or merge them into one page with options.""")
     {
         Why = """Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That's fine for variants you don't need to rank separately. Pages that should rank on their own need differences that are, in Google's words, clear and significant.""",
@@ -809,7 +809,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HREFLANG_TO_NON_INDEXABLE = new("hreflang-to-non-indexable", IssueCategory.Hreflang, IssueSeverity.Warning,
         "Hreflang points to a non-indexable URL",
-        """This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by robots.txt (or, on this site, by a firewall).""",
+        """This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by your robots.txt. Alternates that refused the crawler (a firewall, a bot challenge or a rate limit), and ones on other sites whose robots.txt kept the crawler out, aren't judged: neither says whether search engines can index them.""",
         """Replace each entry with the alternate's final, canonical, indexable URL, and keep the list identical on every page in the set.""")
     {
         Why = """Google generally shows each version's canonical, indexable URL in results, so hreflang should name exactly those URLs. An alternate that redirects or is canonicalised elsewhere isn't the URL that gets indexed, and one that's noindex or blocked can't be shown at all, so the entry for that language is unreliable. Google specifically warns against listing HTTP URLs in hreflang when the pages are on HTTPS.""",
@@ -854,7 +854,7 @@ public static class IssueCatalog
 
 
     // Structured data
-    public static readonly IssueDefinition STRUCTURED_DATA_INVALID = new("structured-data-invalid", IssueCategory.StructuredData, IssueSeverity.Error,
+    public static readonly IssueDefinition STRUCTURED_DATA_INVALID = new("structured-data-invalid", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Invalid JSON-LD",
         """A JSON-LD block (<script type="application/ld+json">) on the page isn't valid JSON. The detail shows the parser's first error.""",
         """Fix the syntax where the detail points (often an unescaped quote, a trailing or missing comma, or a comment left in by a template), then test the page with Google's Rich Results Test.""")
@@ -867,7 +867,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition STRUCTURED_DATA_MISSING_REQUIRED = new("structured-data-missing-required", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Structured data missing required properties",
-        """A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. The detail names the type and the missing properties.""",
+        """A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.""",
         """Add the missing properties with values that match what's visible on the page, then test it with the Rich Results Test.""")
     {
         Why = """Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties aren't checked, since they don't affect eligibility. FAQPage isn't checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.""",
@@ -919,7 +919,7 @@ public static class IssueCatalog
         """The home page's response lacks one or more of Strict-Transport-Security (checked on HTTPS only), X-Content-Type-Options, Content-Security-Policy, X-Frame-Options (or a CSP frame-ancestors rule) and Referrer-Policy. The detail lists which.""",
         """Add the missing headers in the server, CDN or framework configuration, starting with X-Content-Type-Options and Referrer-Policy, which rarely break anything. Roll out CSP in report-only mode first, and enable HSTS only once HTTPS works everywhere on the site.""")
     {
-        Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites. Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
+        Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites (browsers already default to a safe policy, so it matters least). Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
         LearnMore = "https://web.dev/articles/security-headers",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
@@ -1022,10 +1022,10 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CHARSET_MISSING = new("charset-missing", IssueCategory.Html, IssueSeverity.Notice,
         "Missing character encoding",
-        """Nothing declares the page's character encoding: no byte-order mark at the start of the file, no meta tag (<meta charset> or http-equiv Content-Type) and no charset in the Content-Type header.""",
+        """Nothing declares the page's character encoding where browsers look for it: no byte-order mark at the start of the file, no charset in the Content-Type header, and no meta tag (<meta charset> or http-equiv Content-Type) within the first 1024 bytes. The detail says where a meta tag further in ends.""",
         """Add <meta charset="utf-8"> as the first element in the <head>, within the first 1024 bytes of the file, or send Content-Type: text/html; charset=utf-8 from the server.""")
     {
-        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again.""",
+        Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again. Likewise a crawl made before the crawler recorded where the meta tag ends passes one past the first 1024 bytes.""",
         LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None

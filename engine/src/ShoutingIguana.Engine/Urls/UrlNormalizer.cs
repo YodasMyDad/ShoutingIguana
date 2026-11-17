@@ -71,7 +71,11 @@ public static class UrlNormalizer
         return true;
     }
 
-    public static string? GetFragment(Uri uri) => uri.Fragment.Length > 1 ? uri.Fragment[1..] : null;
+    /// <summary>
+    /// The fragment without its '#'; empty for a bare '#', so a link written "#" (a script's handle, or a jump to the top)
+    /// can be told from one to the page's own address; null with none.
+    /// </summary>
+    public static string? GetFragment(Uri uri) => uri.Fragment.Length > 0 ? uri.Fragment[1..] : null;
 
     /// <summary>Lowercase ASCII host; IPv6 literals keep their brackets.</summary>
     public static string GetHost(Uri uri) =>

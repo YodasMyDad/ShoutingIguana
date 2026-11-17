@@ -313,9 +313,11 @@ public sealed class RuleConditionTests
         Assert.Equal("The canonical URL is noindex", rules.Check(pages["noindex"]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_NON_INDEXABLE).Detail);
         Assert.Equal([IssueCatalog.CANONICAL_TO_NON_INDEXABLE], Targets("canonicalised"));
         Assert.Equal([IssueCatalog.CANONICAL_TO_NON_INDEXABLE], Targets("disallowed"));
-        Assert.Equal([IssueCatalog.CANONICAL_TO_NON_INDEXABLE], Targets("blocked"));
 
-        // Another site blocking the crawler says nothing about Google, and an unchecked URL says nothing at all.
+        // A site refusing the crawler (a firewall, a rate limit) says nothing about Google, on this site or another: the URL
+        // is unverified, as the sitemap checks take it (the real-site audit's jitsunami, rate-limited on every product).
+        // Nor does another site's robots.txt, and an unchecked URL says nothing at all.
+        Assert.Empty(Targets("blocked"));
         Assert.Empty(Targets("external blocked"));
         Assert.Empty(Targets("external disallowed"));
         Assert.Empty(Targets("unchecked"));

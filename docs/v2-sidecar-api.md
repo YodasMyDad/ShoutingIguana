@@ -908,6 +908,7 @@ one moment is never set against a total from another, and the app, the report an
 | `sitemaps-not-read` | Sitemaps were left unread at the crawler's limits |
 | `depth-limit`, `url-limit` | The limit kept internal URLs out of the crawl, so pages linked only from them would look orphaned |
 | `start-folder` | The crawl stayed in its start folder, so links from the rest of the site weren't read |
+| `pages-unread` | 1 in 20 or more of the site's pages the crawl tried to read refused it (a firewall, a bot challenge, a rate limit) or didn't answer, so their links are unknown and pages linked only from them would look orphaned (`orphan-page`) |
 | `start-not-root` | The crawl didn't start at the site's root (its start URL has a path other than `/`), so its first page isn't known to be the site's home page: `site-hidden-from-search` can't be judged |
 | `external-links-off` | The crawl was told not to check links to other sites |
 | `resources-off` | The crawl was told not to fetch images and other files |
