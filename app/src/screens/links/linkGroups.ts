@@ -109,6 +109,8 @@ export function imageFileLine(group: Pick<LinkGroup, 'target'>): string {
 
 /** "Show all 265 links to this target": the row under an open target that lists its links one a row. */
 export function showAllLinksWords(links: number, images: boolean): string {
+  if (links === 1)
+    return images ? 'Show the one use of this image, as a row' : 'Show the one link to this target, as a row';
   return images
     ? `Show all ${formatCount(links)} uses of this image, one a row`
     : `Show all ${formatCount(links)} links to this target, one a row`;

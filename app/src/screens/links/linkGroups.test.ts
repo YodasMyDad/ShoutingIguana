@@ -80,6 +80,8 @@ describe('a grouped row in words', () => {
     expect(imageFileLine({ target: { ...FACTS, sizeBytes: null, pixelHeight: null } })).toBe('');
     expect(showAllLinksWords(265, false)).toBe('Show all 265 links to this target, one a row');
     expect(showAllLinksWords(3, true)).toBe('Show all 3 uses of this image, one a row');
+    expect(showAllLinksWords(1, false)).toBe('Show the one link to this target, as a row');
+    expect(showAllLinksWords(1, true)).toBe('Show the one use of this image, as a row');
     expect(groupedReadWords(5_053_909)).toBe(
       'Reading all 5,053,909 links to group them by target: each one is read once.',
     );
