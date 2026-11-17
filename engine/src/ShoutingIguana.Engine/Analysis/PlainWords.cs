@@ -55,6 +55,10 @@ public static class PlainWords
             """This site check started from a page inside your site, not from its home page, so it can't judge the site as a whole.""",
             """Start the check from your home page, then check the site again."""),
 
+        [SkippedCheckReasons.PAGES_UNREAD] = new(
+            """Your site turned the check away from many of its pages, or they didn't answer, so the links on those pages weren't read.""",
+            """Check the site again at the "Polite" speed, so it asks for pages more slowly."""),
+
         [SkippedCheckReasons.EXTERNAL_LINKS_OFF] = new(
             """This site check was set not to try links to other websites.""",
             """Check the site again, with "Links to other websites" ticked."""),

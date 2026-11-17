@@ -1457,6 +1457,10 @@
       "plainText": "The site check was kept to one section of the site, so links from the rest of it weren't read.",
       "plainAction": "Start the check from your home page, so it reads the whole site."
     },
+    "pages-unread": {
+      "plainText": "Your site turned the check away from many of its pages, or they didn't answer, so the links on those pages weren't read.",
+      "plainAction": "Check the site again at the \"Polite\" speed, so it asks for pages more slowly."
+    },
     "start-not-root": {
       "plainText": "This site check started from a page inside your site, not from its home page, so it can't judge the site as a whole.",
       "plainAction": "Start the check from your home page, then check the site again."

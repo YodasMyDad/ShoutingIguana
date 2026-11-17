@@ -39,6 +39,12 @@ public static class SkippedCheckReasons
     /// </summary>
     public const string START_NOT_ROOT = "start-not-root";
 
+    /// <summary>
+    /// At least 1 in 20 of the site's pages the crawl tried to read refused it (a firewall, a bot challenge, a rate limit)
+    /// or gave no answer, so their links are unknown, and pages linked only from them would look orphaned.
+    /// </summary>
+    public const string PAGES_UNREAD = "pages-unread";
+
     /// <summary>The crawl was told not to check links to other sites.</summary>
     public const string EXTERNAL_LINKS_OFF = "external-links-off";
 
