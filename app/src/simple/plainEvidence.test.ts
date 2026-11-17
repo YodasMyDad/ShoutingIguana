@@ -74,6 +74,14 @@ describe('what a cause is, in plain words', () => {
     expect(plainRelated(FILE, broken, ORIGIN)).toBeNull();
   });
 
+  it('says how long a page elsewhere took to open', () => {
+    const slow = { id: 'slow-external-links', targetFacts: ['statusCode', 'responseMs', 'text', 'position'] };
+    expect(plainRelated({ ...FILE, responseMs: 7_400 }, slow, ORIGIN)).toBe(
+      'It took 7.4 seconds to open when it was checked.',
+    );
+    expect(plainRelated(FILE, slow, ORIGIN)).toBeNull();
+  });
+
   it('says why a main address can’t appear in search results', () => {
     const canonical = { id: 'canonical-to-non-indexable', targetFacts: ['statusCode', 'indexability', 'canonical'] };
     expect(plainRelated({ ...FILE, indexability: 'noindex' }, canonical, ORIGIN)).toBe(

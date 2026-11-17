@@ -10,7 +10,7 @@ public sealed class EvidenceCatalogTests
     /// <summary>The fields of a target (and of a group's related URL) a check can name, as the API gives them.</summary>
     private static readonly string[] TARGET_FIELDS =
     [
-        "statusCode", "final", "indexability", "canonical", "sizeBytes", "contentType", "pixelWidth", "pixelHeight", "img",
+        "statusCode", "final", "indexability", "canonical", "sizeBytes", "contentType", "pixelWidth", "pixelHeight", "responseMs", "img",
         "kind", "text", "position", "fragment", "flags", "links"
     ];
 

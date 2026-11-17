@@ -1,6 +1,7 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -29,6 +30,18 @@ public sealed class EvidenceReadTests(GridCrawl crawl)
         Assert.Null(target.Facts.Final);
         Assert.Equal((LinkKind.Image, 1), (target.Kind, target.Links));
         Assert.Equal(new ImageOnPage("400", "300", "A very large photo", HasAlt: true, AltLength: 18, Srcset: false, Loading: null), target.Img);
+    }
+
+    [Fact]
+    public void ASlowExternalLinkSaysHowLongThePageItLeadsToTookToAnswer()
+    {
+        var check = IssueCatalog.SLOW_EXTERNAL_LINKS;
+        var target = FoundOnReader.ReadTargets(crawl.Path, check.Id, [Id("/plants/slow-external")])!.Single().Targets.Single();
+
+        Assert.EndsWith("/ext/slow", target.Url, StringComparison.Ordinal);
+        Assert.InRange(target.Facts!.ResponseMs ?? 0, 3_000, 60_000);
+        Assert.Equal(["statusCode", "responseMs", "text", "position"], check.TargetFacts);
+        Assert.Matches(@"^200; answered in 3\.[0-9] s; ", WhereFoundColumns.TargetFacts(check, target));
     }
 
     [Fact]

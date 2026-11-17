@@ -231,6 +231,9 @@ export function targetFactParts(
       case 'canonical':
         if (target.canonical) parts.push(canonicalWords(target.canonical, siteOrigin));
         break;
+      case 'responseMs':
+        if (typeof target.responseMs === 'number') parts.push(`answered in ${answerTime(target.responseMs)}`);
+        break;
       case 'img':
         if (target.img) parts.push(...imgParts(target.img, checkId));
         break;
@@ -291,12 +294,18 @@ export function relatedFactParts(
     sizeBytes: related.sizeBytes,
     pixelWidth: related.pixelWidth,
     pixelHeight: related.pixelHeight,
+    responseMs: related.responseMs ?? null,
     final: related.final,
     indexability: related.indexability,
     canonical: related.canonical,
   };
   const own = facts.filter((fact) => !LINK_FACTS.has(fact));
   return targetFactParts(asTarget, own, siteOrigin);
+}
+
+/** How long an answer took, as a slow link's detail says it: "7.4 s", "850 ms". */
+function answerTime(ms: number): string {
+  return ms < 1000 ? formatMilliseconds(ms) : `${(ms / 1000).toFixed(1)} s`;
 }
 
 /** A target's facts that are the page's link to it, not the URL itself: a group's related URL has none of them. */

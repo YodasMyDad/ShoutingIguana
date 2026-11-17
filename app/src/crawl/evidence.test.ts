@@ -157,6 +157,34 @@ describe('what a URL a page names is', () => {
     ]);
   });
 
+  it('says how long a slow link’s page took to answer, then where the link is and what it says', () => {
+    const slow = target({
+      url: 'https://elsewhere.example/slow',
+      kind: 'hyperlink',
+      text: 'Report',
+      position: 'content',
+      responseMs: 7_400,
+    });
+    expect(
+      targetFactParts(slow, ['statusCode', 'responseMs', 'text', 'position'], SITE, 'slow-external-links'),
+    ).toEqual(['answered in 7.4 s', 'in the content', '“Report”']);
+    // A group's related URL says it too; an older sidecar's, without it, says nothing of it.
+    const page: RelatedFacts = {
+      statusCode: 200,
+      outcome: 'success',
+      contentType: 'text/html',
+      sizeBytes: 20_000,
+      pixelWidth: null,
+      pixelHeight: null,
+      final: null,
+      indexability: null,
+      canonical: null,
+    };
+    const facts = ['statusCode', 'responseMs', 'text', 'position'];
+    expect(relatedFactParts({ ...page, responseMs: 3_200 }, facts, SITE)).toEqual(['answered in 3.2 s']);
+    expect(relatedFactParts(page, facts, SITE)).toEqual([]);
+  });
+
   it('names a missing section and a nofollow link, and an image link without alt text', () => {
     expect(
       targetFactParts(

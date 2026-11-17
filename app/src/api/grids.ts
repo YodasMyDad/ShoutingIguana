@@ -392,6 +392,8 @@ export interface RelatedFacts {
   sizeBytes: number | null;
   pixelWidth: number | null;
   pixelHeight: number | null;
+  /** How long its own answer took; left out by a sidecar from before it. */
+  responseMs?: number | null;
   /** Where its redirects end; null when it doesn't redirect. */
   final: TargetEnd | null;
   indexability: IndexabilityReason | null;

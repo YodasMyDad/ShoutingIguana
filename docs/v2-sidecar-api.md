@@ -1735,7 +1735,7 @@ the page without opening anything:
 ```json
 {"checkId":"image-too-large","urls":[{"urlId":31,"total":2,
   "targets":[{"id":812,"url":"https://www.example.com/img/hero.jpg","statusCode":200,"fetched":true,"outcome":"success",
-              "contentType":"image/jpeg","sizeBytes":1887436,"pixelWidth":4000,"pixelHeight":3000,
+              "contentType":"image/jpeg","sizeBytes":1887436,"pixelWidth":4000,"pixelHeight":3000,"responseMs":240,
               "final":null,"indexability":"none","canonical":null,
               "kind":"image","text":"Garden sofa","position":"content","fragment":null,"flags":[],"links":1,
               "img":{"width":"400","height":"300","alt":"Garden sofa","hasAlt":true,"altLength":11,"srcset":true,"loading":"lazy"}}]}]}
@@ -1744,7 +1744,7 @@ the page without opening anything:
 ```json
 {"checkId":"links-to-redirects","urls":[{"urlId":31,"total":1,
   "targets":[{"id":90,"url":"https://www.example.com/old","statusCode":301,"fetched":true,"outcome":"redirect",
-              "contentType":"text/html; charset=utf-8","sizeBytes":18011,"pixelWidth":null,"pixelHeight":null,
+              "contentType":"text/html; charset=utf-8","sizeBytes":18011,"pixelWidth":null,"pixelHeight":null,"responseMs":95,
               "final":{"id":91,"url":"https://www.example.com/new/","statusCode":200,"outcome":"success","hops":1,"loop":false},
               "indexability":"redirected","canonical":null,
               "kind":"hyperlink","text":"Shop","position":"content","fragment":null,"flags":[],"links":2,"img":null}]}]}
@@ -1754,6 +1754,8 @@ the page without opening anything:
   - `contentType`, `sizeBytes`, `pixelWidth` and `pixelHeight` are the response the URL ends at, through its redirects
     if it has any (what a browser gets: an image that redirects is judged by its end, as `image-too-large` judges it),
     as the URL grid's columns of those names have them;
+  - `responseMs` is how long the URL's own answer took (not its redirects' end's: a slow redirect is slow), as the URL
+    grid's column; null when it wasn't fetched. `slow-external-links` names it;
   - `final` is where its redirects end, `{ id, url, statusCode, outcome, hops, loop }`, null when it doesn't
     redirect: `hops` the redirects followed, `loop` true when they come back on themselves (then `final` is the URL
     the loop returns to). Meta refreshes count, as the analysis counts them;

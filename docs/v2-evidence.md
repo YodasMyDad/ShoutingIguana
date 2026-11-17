@@ -69,7 +69,7 @@ and is in the group without a related URL.
   `descriptionWidth`, `titleInResults` and `descriptionInResults`. "–" is none: the row's URL and detail say it all.
 - **Target facts** are fields of a target (`/targets`) and of a group's `related` URL: `statusCode` (with `outcome`),
   `final` (where its redirects end), `indexability`, `canonical` (where it's canonicalised to), `sizeBytes`,
-  `contentType`, `pixelWidth`, `pixelHeight` (the file), `img` (the `<img>` as the page writes it: `width`, `height`,
+  `contentType`, `pixelWidth`, `pixelHeight` (the file), `responseMs` (its own answer's time), `img` (the `<img>` as the page writes it: `width`, `height`,
   `alt`, `hasAlt`, `altLength`, `srcset`, `loading`), and the page's link to it: `kind`, `text` (anchor, alt or
   hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it). For a `sources` check
   they describe the group's related URL only (its rows' sources are the found-on read, which already has the linking
@@ -124,7 +124,7 @@ and is in the group without a related URL.
 | 106 | `non-indexable-inlinks-only` (new) | P/N/S | `inlinks`, `linkingPages` | – | `Linked from 3 pages, none of them indexable` | imp · – |
 | 107 | `deep-page` (new) | P/N/– | `depth`, `inlinks` | – | `6 clicks from the start, over 4` (the crawl's recorded depth) | imp · – |
 | 108 | `too-many-links` (new) | P/N/– | `outlinks` | – | `1,240 internal links, over 1,000` (and/or `140 links to other sites, over 100`) | imp · – |
-| 109 | `slow-external-links` (new) | P/RU/T | – | `statusCode`, `text`, `position` (the specification's `responseMs` target fact isn't built: the detail gives the slowest) | `2 slow links, the slowest 7.4 s` | imp · pages |
+| 109 | `slow-external-links` (new) | P/RU/T | – | `statusCode`, `responseMs`, `text`, `position` | `2 slow links, the slowest 7.4 s` | imp · pages |
 | 110 | `pagination-not-linked` (new) | P/RU/T | – | `statusCode`, `indexability` | `rel="next" https://x/list/page/2/ has no link` | imp · pages |
 | 111 | `pagination-broken` (new) | P/RU/T | – | `statusCode`, `final` | `rel="next" returns 404 Not Found`, `rel="prev" redirects (301 Moved Permanently)` | imp · pages |
 | 112 | `pagination-to-non-indexable` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical` | `rel="next" is noindex` | imp · pages |

@@ -382,7 +382,7 @@ public static class IssueCatalog
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.RelatedUrl,
-        TargetFacts = ["statusCode", "text", "position"]
+        TargetFacts = ["statusCode", "responseMs", "text", "position"]
     };
 
     public static readonly IssueDefinition PAGINATION_NOT_LINKED = new("pagination-not-linked", IssueCategory.Links, IssueSeverity.Notice,
