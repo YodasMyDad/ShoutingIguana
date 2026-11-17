@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using ShoutingIguana.Cli.Benchmarking;
@@ -38,10 +39,15 @@ internal static class BenchCommand
                           "The reads' memory is this process's, so leave the memory limits off."
         };
         var maxLog = new Option<double>("--max-log-mb") { Description = "With --read-links: fail if the write-ahead log passes this (0 = no check)." };
+        var revisions = new Option<bool>("--revisions")
+        {
+            Description = "Then switch the site to revision 1 (after the fixes), crawl it again into a second file, and hold the comparison of the two to what the site planted. " +
+                          "With --db, the second file is kept beside the first, as <name>.revision1.sicrawl."
+        };
 
         var command = new Command("bench", "Benchmark the crawler against a generated site.")
         {
-            pages, concurrency, maxPeak, maxGrowth, maxGrowthPerUrl, minRate, json, keep, database, readLinks, maxLog
+            pages, concurrency, maxPeak, maxGrowth, maxGrowthPerUrl, minRate, json, keep, database, readLinks, maxLog, revisions
         };
 
         command.SetAction(async (parse, cancellationToken) =>
@@ -49,6 +55,7 @@ internal static class BenchCommand
             var pageCount = parse.GetValue(pages);
             var workers = parse.GetValue(concurrency);
             var named = parse.GetValue(database);
+            var compareRevisions = parse.GetValue(revisions);
             if (parse.GetValue(maxLog) > 0 && !parse.GetValue(readLinks))
             {
                 Console.Error.WriteLine("--max-log-mb holds the log to a size while the links grid is read: give --read-links with it.");
@@ -56,10 +63,14 @@ internal static class BenchCommand
             }
 
             var databasePath = named is null ? Path.Combine(Path.GetTempPath(), $"si-bench-{Guid.NewGuid():N}.sicrawl") : Path.GetFullPath(named);
-            if (named is not null && File.Exists(databasePath))
+            var revisionPath = compareRevisions ? RevisionPath(databasePath) : null;
+            foreach (var path in new[] { databasePath, revisionPath }.OfType<string>().Where(_ => named is not null))
             {
-                Console.Error.WriteLine($"There's already a file at {databasePath}: name a new one.");
-                return 2;
+                if (File.Exists(path))
+                {
+                    Console.Error.WriteLine($"There's already a file at {path}: name a new one.");
+                    return 2;
+                }
             }
 
             Console.WriteLine($"Starting a synthetic site with {pageCount:N0} pages...");
@@ -69,16 +80,16 @@ internal static class BenchCommand
             using var loggerFactory = Logging.Create(verbose: false);
             var observer = new ConsoleCrawlObserver(quiet: false);
 
-            var keepCrawl = parse.GetValue(keep) || named is not null;
-            try
+            // Crawls the site into a file and analyses it, sampling memory throughout.
+            async Task<BenchRun> RunAsync(string path)
             {
                 CrawlSummary summary;
                 IReadOnlyList<MemorySample> samples;
                 LinkReads? linkReads = null;
-                await using (var job = new CrawlEngine(loggerFactory).Start(new CrawlRequest(options, databasePath), observer))
+                await using (var job = new CrawlEngine(loggerFactory).Start(new CrawlRequest(options, path), observer))
                 {
                     var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => job.Progress.Fetched);
-                    linkReads = parse.GetValue(readLinks) ? new LinkReads(databasePath) : null;
+                    linkReads = parse.GetValue(readLinks) ? new LinkReads(path) : null;
                     await using var stopOnCancel = cancellationToken.Register(() => job.StopAsync());
                     try
                     {
@@ -105,7 +116,7 @@ internal static class BenchCommand
                     var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => 0);
                     try
                     {
-                        analysis = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(databasePath, cancellationToken: cancellationToken);
+                        analysis = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(path, cancellationToken: cancellationToken);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
@@ -116,6 +127,17 @@ internal static class BenchCommand
                     analysisSamples = sampler.Samples;
                 }
 
+                return new BenchRun(summary, samples, linkReads, analysis, analysisSamples);
+            }
+
+            BenchResult Evaluated(BenchRun run, string path, int revision) => Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(maxGrowthPerUrl),
+                parse.GetValue(minRate), pageCount, workers, site, revision, run.Summary, run.Samples, run.Analysis, run.AnalysisSamples, path, run.LinkReads, parse.GetValue(maxLog));
+
+            var keepCrawl = parse.GetValue(keep) || named is not null;
+            try
+            {
+                var run = await RunAsync(databasePath);
+
                 // A stopped run measured nothing worth reporting, and says so the way si crawl does.
                 if (cancellationToken.IsCancellationRequested)
                 {
@@ -123,9 +145,28 @@ internal static class BenchCommand
                     return 130;
                 }
 
-                var result = Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(maxGrowthPerUrl), parse.GetValue(minRate),
-                    pageCount, workers, site, summary, samples, analysis, analysisSamples, databasePath, linkReads, parse.GetValue(maxLog));
-                Print(result);
+                var result = Evaluated(run, databasePath, revision: 0);
+                if (revisionPath is not null)
+                {
+                    Print(result);
+                    Console.WriteLine();
+                    Console.WriteLine("Switching the site to revision 1, after the fixes...");
+                    await site.SetRevisionAsync(1, cancellationToken);
+                    var fixedRun = await RunAsync(revisionPath);
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        Console.Error.WriteLine("Stopped before the benchmark finished.");
+                        return 130;
+                    }
+
+                    var afterFixes = Evaluated(fixedRun, revisionPath, revision: 1);
+                    Print(afterFixes);
+                    result = await ComparedAsync(result, afterFixes, revisionPath, databasePath, site, pageCount, parse.GetValue(maxPeak));
+                }
+                else
+                {
+                    Print(result);
+                }
 
                 if (parse.GetValue(json) is { } jsonPath)
                 {
@@ -135,6 +176,10 @@ internal static class BenchCommand
                 if (keepCrawl)
                 {
                     Console.WriteLine($"Crawl kept at {databasePath}");
+                    if (revisionPath is not null)
+                    {
+                        Console.WriteLine($"Crawl of revision 1 kept at {revisionPath}");
+                    }
                 }
 
                 return result.Failures.Count == 0 ? 0 : 1;
@@ -144,7 +189,7 @@ internal static class BenchCommand
                 // Also when the run fails or is cancelled part-way: at 100k pages the crawl is about 400 MB.
                 if (!keepCrawl)
                 {
-                    foreach (var file in new[] { databasePath, databasePath + "-wal", databasePath + "-shm", databasePath + "-lock" })
+                    foreach (var file in new[] { databasePath, revisionPath }.OfType<string>().SelectMany(path => new[] { path, path + "-wal", path + "-shm", path + "-lock" }))
                     {
                         File.Delete(file);
                     }
@@ -155,12 +200,57 @@ internal static class BenchCommand
         return command;
     }
 
+    /// <summary>Where the crawl of revision 1 goes, beside the first: <c>name.revision1.sicrawl</c>.</summary>
+    private static string RevisionPath(string databasePath) =>
+        Path.Combine(Path.GetDirectoryName(databasePath)!, $"{Path.GetFileNameWithoutExtension(databasePath)}.revision1{Path.GetExtension(databasePath)}");
+
+    /// <summary>
+    /// The crawl of revision 1 compared with the crawl of revision 0, held exactly to what the site planted, its memory
+    /// sampled as the analysis's is: the benchmark's result gains the second crawl's and the comparison's, and fails with either.
+    /// </summary>
+    private static async Task<BenchResult> ComparedAsync(BenchResult result, BenchResult afterFixes, string now, string then, ChildSiteProcess site, int pageCount, double maxPeakMb)
+    {
+        Console.WriteLine("Comparing revision 1 with revision 0...");
+        var sampler = new MemorySampler(TimeSpan.FromMilliseconds(100), () => 0);
+        var clock = Stopwatch.StartNew();
+        var mismatches = RevisionCheck.Compare(now, then, Site(pageCount, site, revision: 0), out var rows);
+        var seconds = Math.Round(clock.Elapsed.TotalSeconds, 1);
+        await sampler.DisposeAsync();
+        var peak = Format.Megabytes(PeakWorkingSet(sampler.Samples));
+
+        List<string> failures = [.. result.Failures, .. afterFixes.Failures.Select(failure => $"Revision 1: {failure}"), .. mismatches.Select(mismatch => $"Comparison: {mismatch}")];
+        if (maxPeakMb > 0 && peak > maxPeakMb)
+        {
+            failures.Add($"Peak working set during the comparison {peak} MB is over the {maxPeakMb} MB limit");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  Comparison   revision 1 with revision 0: {(mismatches.Count == 0 ? "exactly what the site planted" : "MISMATCHES")}, {rows:N0} rows in {seconds:N1} s, peak {peak:N0} MB working set");
+        foreach (var mismatch in mismatches)
+        {
+            Console.WriteLine($"  Mismatch     {mismatch}");
+        }
+
+        foreach (var failure in failures.Where(failure => failure.StartsWith("Peak working set during the comparison", StringComparison.Ordinal)))
+        {
+            Console.WriteLine($"  FAILED       {failure}");
+        }
+
+        return result with
+        {
+            Failures = failures, AfterFixes = afterFixes, ComparedRows = rows, ComparisonSeconds = seconds, ComparisonPeakWorkingSetMb = peak, ComparisonMismatches = mismatches
+        };
+    }
+
+    /// <summary>The site the child serves: with a dead twin, so the comparison covers URLs that weren't checked.</summary>
+    private static SyntheticSite Site(int pageCount, ChildSiteProcess site, int revision) =>
+        new(new SyntheticSiteOptions { PageCount = pageCount, DeadTwin = true, Revision = revision }, site.BaseUri, site.ExternalBaseUri);
+
     private static BenchResult Evaluate(double maxPeakMb, double maxGrowthMb, double maxGrowthBytesPerUrl, double minPagesPerSecond, int pageCount,
-        int concurrency, ChildSiteProcess site, CrawlSummary summary, IReadOnlyList<MemorySample> samples,
+        int concurrency, ChildSiteProcess site, int revision, CrawlSummary summary, IReadOnlyList<MemorySample> samples,
         AnalysisSummary? analysis, IReadOnlyList<MemorySample> analysisSamples, string databasePath, LinkReads? linkReads, double maxLogMb)
     {
-        // The site the child serves: with a dead twin, so the comparison covers URLs that weren't checked.
-        var expected = new SyntheticSite(new SyntheticSiteOptions { PageCount = pageCount, DeadTwin = true }, site.BaseUri, site.ExternalBaseUri).GetExpectations();
+        var expected = Site(pageCount, site, revision).GetExpectations();
         var stats = CrawlStatsReader.Read(databasePath);
         var mismatches = ExpectationCheck.Compare(stats, expected);
         if (analysis is not null)

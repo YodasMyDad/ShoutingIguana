@@ -14,6 +14,7 @@ internal static class CliApp
         ExportCommand.Create(),
         ExportCommand.CreateReport(),
         ScoreCommand.Create(),
+        CompareCommand.Create(),
         StatsCommand.Create(),
         TestSiteCommand.Create(),
         BenchCommand.Create(),
