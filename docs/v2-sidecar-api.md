@@ -896,9 +896,12 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   the check's groups as [Issue groups](#issue-groups-e3a) gives them: a group that shares a cause (one related URL, such
   as a broken link's target or a large image) or is `likelyTemplate` is one thing; every other flagged URL is one of
   its own. A check that doesn't group is one thing (in the template) when its `likelyTemplate` is true, else a thing a
-  URL; so is a check grouped by how each URL answered (`internal-client-error`: two 404s are two fixes). So the logo link
-  without text on 264 pages is 1, 40 titles too long are 40. The UI says "about 40 things to change, 3 of them in the
-  site's template". **Null** for a check this engine doesn't know, for a check that found nothing, and when another
+  URL; so is a check grouped by how each URL answered (`internal-client-error`: two 404s are two fixes). **Never more
+  than the URLs it flagged**: a page naming 30 images without dimensions is one page's markup to change at most (the
+  garden crawl's 230 pages name 3,811 such images, mostly from shared templates no group can see), and a page linking
+  to several broken URLs has them counted by the check of those URLs. So the logo link without text on 264 pages is 1,
+  40 titles too long are 40. The UI says "about 40 things to change, 3 of them in the site's template", leaving out a
+  check that another's fix clears entirely (`clears[].all`), as that's the same job. **Null** for a check this engine doesn't know, for a check that found nothing, and when another
   analysis finished while this one was read (read again). Kept with the grid reads' counts while the file stands still.
 - **`counts[].clears`** (step 3b, related checks) is what a fix of the check also clears: for each check its catalog
   `clears` names that also found something, **`pages`**, the pages it flagged whose every target is a URL this check

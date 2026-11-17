@@ -50,6 +50,9 @@ public sealed class IssueCauseReaderTests(GridCrawl crawl)
             }
         }
 
+        // No check comes to more things than it flagged URLs, even one whose pages each name several targets.
+        Assert.All(Checks(), check => Assert.InRange(causes[check].Causes, 1, Flagged(check).Count));
+
         // Every kind of grouping was met, and some checks come to fewer things than URLs. The synthetic site's template has
         // no fault the checks flag on half their pages: the next test plants one.
         Assert.Equal(Enum.GetValues<IssueGrouping>(), seen.Order());
@@ -135,14 +138,17 @@ public sealed class IssueCauseReaderTests(GridCrawl crawl)
         Assert.Same(first, IssueCauseReader.Read(crawl.Path, cache));
     }
 
-    /// <summary>A grouped check's things to change from its groups as the Issues screen shows them: one for a shared cause.</summary>
+    /// <summary>
+    /// A grouped check's things to change from its groups as the Issues screen shows them: one for a shared cause, never
+    /// more than the URLs it flagged.
+    /// </summary>
     private (long Causes, long InTemplate) Grouped(string check)
     {
         var groups = IssueGroupReader.ReadGroups(crawl.Path, check, 0, 1_000, IssueGroupSort.Pages)!;
         Assert.True(groups.GroupCount <= 1_000, $"{check} has more groups than one page reads");
         var shares = check == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id;
-        return (groups.Groups.Sum(group => group.LikelyTemplate || group.RelatedUrlId is not null || shares ? 1 : group.Pages),
-            groups.Groups.Count(group => group.LikelyTemplate));
+        var things = Math.Min(groups.Groups.Sum(group => group.LikelyTemplate || group.RelatedUrlId is not null || shares ? 1 : group.Pages), groups.Total!.Value);
+        return (things, Math.Min(groups.Groups.Count(group => group.LikelyTemplate), things));
     }
 
     private List<string> Checks()

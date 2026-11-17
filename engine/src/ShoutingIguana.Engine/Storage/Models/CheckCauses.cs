@@ -7,7 +7,8 @@ namespace ShoutingIguana.Engine.Storage.Models;
 /// <param name="Causes">
 /// The separate things to change: a group that shares a cause (one other URL, as a broken link's target; or a fault in the
 /// site's template) is one, and every other flagged URL is one of its own. So 264 pages with the same logo link without
-/// text are one; 40 titles too long are 40. Never more than the check's groups and flagged URLs allow.
+/// text are one; 40 titles too long are 40. Never more than the URLs the check flagged: a page that names 30 images without
+/// dimensions is one page's markup to change at most.
 /// </param>
 /// <param name="InTemplate">Of <see cref="Causes"/>, those that are likely a fault in the site's template: one fix each.</param>
 /// <param name="Clears">

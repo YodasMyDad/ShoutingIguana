@@ -50,7 +50,8 @@ public static class IssueCauseReader
     /// that doesn't group is one thing when it flagged nearly every page (<see cref="IssueGroupReader.IsLikelyTemplateCheck"/>),
     /// else a thing a URL; so is a check grouped by how each URL answered, as two 404s are two fixes. A grouped check's
     /// group is one thing when its URLs share a cause (the other URL each names, or a template fault,
-    /// <see cref="IssueGroupReader.IsLikelyTemplate"/>), and a thing a URL when they don't.
+    /// <see cref="IssueGroupReader.IsLikelyTemplate"/>), and a thing a URL when they don't; never more than the URLs it
+    /// flagged, as a page in several groups (each image it names, each broken URL) is one page to change at most.
     /// </summary>
     private static (long Causes, long InTemplate) Causes(GridReadContext context, IssueDefinition check, long flagged)
     {
@@ -73,7 +74,16 @@ public static class IssueCauseReader
                   FROM (SELECT pages, {shares} AS shares FROM ({IssueGroupReader.Counted(context, check, check.Grouping)})))
             """, [new("$check", check.Id), new("$total", flagged)]);
         using var reader = command.ExecuteReader();
-        return reader.Read() ? (reader.GetInt64(0), reader.GetInt64(1)) : (flagged, 0);
+        if (!reader.Read())
+        {
+            return (flagged, 0);
+        }
+
+        // Never more things than URLs flagged: a page naming many images without dimensions is one page's markup to
+        // change, and its images' templates are often one, which no group shows; a page linking to many broken URLs has
+        // them counted by the check of those URLs.
+        var things = Math.Min(reader.GetInt64(0), flagged);
+        return (things, Math.Min(reader.GetInt64(1), things));
     }
 
     /// <summary>
