@@ -67,12 +67,18 @@ public static class IssueReader
     {
         using var connection = CrawlDatabase.OpenReader(databasePath);
         using var snapshot = connection.BeginTransaction(deferred: true);
+        return ReadResults(connection, snapshot, () => SnapshotTaken?.Invoke(databasePath));
+    }
+
+    /// <summary>What <see cref="ReadResults(string)"/> returns, read through a snapshot another reader holds open.</summary>
+    internal static AnalysisResults? ReadResults(SqliteConnection connection, SqliteTransaction snapshot, Action? analysisRead = null)
+    {
         if (ReadAnalysis(connection, snapshot) is not { } analysis)
         {
             return null;
         }
 
-        SnapshotTaken?.Invoke(databasePath);
+        analysisRead?.Invoke();
         return new AnalysisResults(
             analysis,
             ReadCrawlUpdatedAt(connection, snapshot),

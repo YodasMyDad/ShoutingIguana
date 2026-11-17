@@ -100,5 +100,5 @@ public static class AnalysisFreshness
     /// new <see cref="VERSION"/>, so such an analysis is out of date anyway; one that doesn't leaves it standing, unless
     /// the threshold is set away from its default now.
     /// </summary>
-    private static string Canonical(AnalysisSettings settings) => JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings);
+    internal static string Canonical(AnalysisSettings settings) => JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings);
 }

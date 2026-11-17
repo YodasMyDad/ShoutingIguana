@@ -653,14 +653,14 @@ public sealed class CliTests : IAsyncLifetime
         return await RunAsync(stop.Token, args);
     }
 
-    private static void AssertFails((int ExitCode, string Output, string Error) result, string message)
+    internal static void AssertFails((int ExitCode, string Output, string Error) result, string message)
     {
         Assert.Equal(2, result.ExitCode);
         Assert.Contains(message, result.Error);
         Assert.DoesNotContain("   at ", result.Error);
     }
 
-    private static Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] args) => RunAsync(CancellationToken.None, args);
+    internal static Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] args) => RunAsync(CancellationToken.None, args);
 
     /// <param name="cancellationToken">Cancelling it is Ctrl+C.</param>
     private static async Task<(int ExitCode, string Output, string Error)> RunAsync(CancellationToken cancellationToken, params string[] args)

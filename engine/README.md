@@ -9,7 +9,7 @@ Analytics / Ads integrations later.
 | Project | What it is |
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `compare`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
 | `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
@@ -31,12 +31,31 @@ dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind url
 dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind workbook --out all.xlsx # a sheet for each check
 dotnet run --project src/ShoutingIguana.Cli -- report example.sicrawl --out report.html           # the report
 dotnet run --project src/ShoutingIguana.Cli -- analyze example.sicrawl                          # re-run the checks
+dotnet run --project src/ShoutingIguana.Cli -- compare example.sicrawl before.sicrawl           # since an earlier crawl: fixed, new, not checked
+dotnet run --project src/ShoutingIguana.Cli -- compare example.sicrawl before.sicrawl --check title-too-long   # one check's URLs and causes
 dotnet run --project src/ShoutingIguana.Cli -- stats example.sicrawl
 dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl              # after Ctrl+C
 dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000
 dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000 --db bench.sicrawl              # keeps the crawl
 dotnet run --project src/ShoutingIguana.Cli -c Release -- readbench bench.sicrawl --max-p95-ms 300            # the grids' reads
+dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000 --revisions --db bench.sicrawl  # and revision 1, compared
+dotnet run --project src/ShoutingIguana.Cli -c Release -- readbench bench.revision1.sicrawl --compare-with bench.sicrawl --gate
 ```
+
+`si compare <crawl> <other>` compares a crawl with another crawl of the site (the fix loop): how far the two can be
+compared and what differs (`comparable`: full, partial, or counts only when the start URL's scheme or host differs or the
+other crawl's analysis was made by other rules, which `si analyze <other>` mends), the score then and now, and a line for
+each check that moved, with how its URLs did: fixed, gone (no longer found), not checked this time (never counted as
+fixed), still there, new, on a new URL, or not compared then. `--check <id>` lists one check's URLs now and then, each
+with its state (and why one wasn't checked), and its causes then and now; `--json` writes either for scripts and agents,
+camelCase as the sidecar serves it. A missing file, one never analysed, or an unknown check is a one-line error, exit 2.
+
+`si bench --revisions` crawls the synthetic site, switches it to revision 1 ("after the fixes") through its control
+route, crawls it again into a second file (`<name>.revision1.sicrawl` beside `--db`), analyses both, and fails unless
+their comparison is exactly what the site planted (`SyntheticSite.GetChanges`), each crawl held to its own revision's
+issues and to the memory limits as the bench holds one. `si readbench --compare-with <other>` adds the class `compare`:
+the comparison's summary, the first page of the biggest check's rows and of a grouped check's groups with the other crawl,
+and the first page of what the biggest check no longer flags, each held to 300 ms at p95 with `--gate`.
 
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),

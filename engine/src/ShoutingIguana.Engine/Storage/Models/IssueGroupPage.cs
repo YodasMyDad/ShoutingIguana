@@ -16,4 +16,10 @@ public sealed record IssueGroupPage(string CheckId, IssueGrouping Grouping, long
     /// so it's probably the site's template. False for a grouped check, whose groups say it each.
     /// </summary>
     public bool LikelyTemplate { get; init; }
+
+    /// <summary>
+    /// With another crawl to compare with, how far the two can be compared and how many causes then have no URL now; each
+    /// group then has its <see cref="IssueGroup.Change"/>. Null without one, and when the other crawl was never analysed.
+    /// </summary>
+    public PageComparison? Compared { get; init; }
 }
