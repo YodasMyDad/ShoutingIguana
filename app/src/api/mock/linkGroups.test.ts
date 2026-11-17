@@ -70,8 +70,10 @@ describe('the mock’s links grouped by target', () => {
       total: 1,
       links: 1,
       rows: [expect.objectContaining({ id: 5, links: 1, text: 'Logo', positions: ['header'] })],
+      // The test crawl's image has no pixel size: as a crawl made before they were read.
+      pixelSizes: false,
     });
     expect(answerPageImages(links, 2).rows).toEqual([expect.objectContaining({ id: 5, text: null })]);
-    expect(answerPageImages(links, 4)).toEqual({ urlId: 4, total: 0, links: 0, rows: [] });
+    expect(answerPageImages(links, 4)).toEqual({ urlId: 4, total: 0, links: 0, rows: [], pixelSizes: false });
   });
 });
