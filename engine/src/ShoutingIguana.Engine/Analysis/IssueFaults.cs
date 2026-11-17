@@ -48,6 +48,15 @@ internal static partial class IssueFaults
             : "Malformed URL";
     }
 
+    /// <summary>
+    /// The language codes a page points at more than one URL, without the URLs: "en-gb: /uk/ · /gb/; de: /de/ · /at/" is
+    /// "en-gb, de". A template that lists the same conflicting codes on every page is one group, though each cluster of
+    /// pages names its own URLs. A part cut short by the detail's length still gives its code, where it got that far.
+    /// </summary>
+    public static string HreflangCodes(string detail) =>
+        string.Join(", ", detail.Split("; ").Select(part => (part.IndexOf(": ", StringComparison.Ordinal) is var colon and >= 0 ? part[..colon] : part).TrimEnd('…'))
+            .Where(code => code.Length > 0));
+
     /// <summary>Where System.Text.Json says a document failed: " LineNumber: 0 | BytePositionInLine: 54.", with the JSON path before it if any.</summary>
     [GeneratedRegex(@"\s*(?:Path: .*? \| )?LineNumber: \d+ \| BytePositionInLine: \d+\.?\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex Position();

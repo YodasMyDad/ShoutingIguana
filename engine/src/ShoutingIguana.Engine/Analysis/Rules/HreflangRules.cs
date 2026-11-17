@@ -26,7 +26,9 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
         var honoured = all.Where(hreflang => hreflang.InHead || hreflang.FromHttpHeader).ToList();
         if (honoured.Count < all.Count)
         {
-            yield return new IssueHit(IssueCatalog.HREFLANG_OUTSIDE_HEAD, page.UrlId);
+            var outside = RuleText.Count(all.Count - honoured.Count, "entry", "entries") + " in the body";
+            yield return new IssueHit(IssueCatalog.HREFLANG_OUTSIDE_HEAD, page.UrlId,
+                RuleText.HeadEnded(page.Facts.HeadEnd) is { } ended ? RuleText.Fit($"{outside}: {char.ToLowerInvariant(ended[0])}{ended[1..]}") : outside);
         }
 
         if (honoured.Count == 0)
@@ -43,17 +45,19 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
 
         if (!honoured.Any(hreflang => hreflang.Url == page.Url))
         {
-            yield return new IssueHit(IssueCatalog.HREFLANG_MISSING_SELF, page.UrlId);
+            yield return new IssueHit(IssueCatalog.HREFLANG_MISSING_SELF, page.UrlId, MissingSelf(page.Url, honoured));
         }
 
         var conflicting = honoured.Where(hreflang => hreflang.Url is not null)
             .GroupBy(hreflang => hreflang.Language, StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Select(hreflang => hreflang.Url).Distinct(StringComparer.Ordinal).Count() > 1)
-            .Select(group => group.Key)
+            .Select(group => (Code: group.Key, Urls: group.Select(hreflang => hreflang.Url!).Distinct(StringComparer.Ordinal).ToList()))
+            .Where(group => group.Urls.Count > 1)
             .ToList();
         if (conflicting.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.HREFLANG_DUPLICATE_CODE, page.UrlId, string.Join(", ", conflicting));
+            // Each code with the URLs it names, the codes first: grouped by them alone (IssueFaults.HreflangCodes).
+            yield return new IssueHit(IssueCatalog.HREFLANG_DUPLICATE_CODE, page.UrlId, RuleText.Fit(string.Join("; ",
+                conflicting.Select(group => $"{group.Code}: {string.Join(" · ", group.Urls.Select(url => RuleText.Near(url, page.Url)))}"))));
         }
 
         if (!honoured.Any(hreflang => hreflang.Language.Equals("x-default", StringComparison.OrdinalIgnoreCase)))
@@ -136,6 +140,28 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
 
             start = end;
         }
+    }
+
+    /// <summary>
+    /// How many entries the page lists, none of them it, and the one that nearly is (another scheme, www or not, a trailing
+    /// slash, letters' case), which is the usual slip: "None of its 4 entries names this URL; "en" names http://www.x.com/en".
+    /// </summary>
+    private static string MissingSelf(string pageUrl, IReadOnlyList<HreflangFact> honoured)
+    {
+        var none = honoured.Count == 1 ? "Its one entry doesn't name this URL" : $"None of its {RuleText.Count(honoured.Count, "entry", "entries")} names this URL";
+        var self = Loosely(pageUrl);
+        return honoured.FirstOrDefault(hreflang => hreflang.Url is { } url && Loosely(url) == self) is { } near
+            ? RuleText.Fit($"{none}; \"{near.Language}\" names {near.Url}")
+            : none;
+    }
+
+    /// <summary>A URL without its scheme, a leading www., a trailing slash or letters' case.</summary>
+    private static string Loosely(string url)
+    {
+        var rest = url.ToLowerInvariant();
+        rest = rest[(rest.IndexOf("://", StringComparison.Ordinal) is var scheme and >= 0 ? scheme + 3 : 0)..];
+        rest = rest.StartsWith("www.", StringComparison.Ordinal) ? rest[4..] : rest;
+        return rest.TrimEnd('/');
     }
 
     private static long Pair(int page, int target) => ((long)page << 32) | (uint)target;

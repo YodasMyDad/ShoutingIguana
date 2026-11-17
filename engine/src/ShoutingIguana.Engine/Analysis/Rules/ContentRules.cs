@@ -19,14 +19,20 @@ internal sealed partial class ContentRules(AnalysisSettings settings) : IPageRul
         var facts = page.Facts;
         if (facts.WordCount < settings.MinWordCount)
         {
-            yield return new IssueHit(IssueCatalog.LOW_WORD_COUNT, page.UrlId, RuleText.Count(facts.WordCount, "word", "words"));
+            yield return new IssueHit(IssueCatalog.LOW_WORD_COUNT, page.UrlId, RuleText.Under(RuleText.Count(facts.WordCount, "word", "words"), settings.MinWordCount));
         }
 
         var h1 = facts.Headings.FirstOrDefault(heading => heading.Level == 1)?.Text;
-        if (facts.WordCount < SOFT_404_MAX_WORDS &&
-            ((facts.Titles.Count > 0 && NotFoundPhrase().IsMatch(facts.Titles[0])) || (h1 is not null && NotFoundPhrase().IsMatch(h1))))
+        if (facts.WordCount < SOFT_404_MAX_WORDS)
         {
-            yield return new IssueHit(IssueCatalog.SOFT_404, page.UrlId, "The title or H1 says the page wasn't found");
+            var (field, text) = facts.Titles.Count > 0 && NotFoundPhrase().IsMatch(facts.Titles[0]) ? ("title", facts.Titles[0])
+                : h1 is not null && NotFoundPhrase().IsMatch(h1) ? ("H1", h1)
+                : (null, null);
+            if (field is not null)
+            {
+                yield return new IssueHit(IssueCatalog.SOFT_404, page.UrlId, RuleText.Fit(
+                    $"The {field} reads as an error: {RuleText.Quote(text!, 60)} · {RuleText.Under(RuleText.Count(facts.WordCount, "word", "words"), SOFT_404_MAX_WORDS)}"));
+            }
         }
     }
 
