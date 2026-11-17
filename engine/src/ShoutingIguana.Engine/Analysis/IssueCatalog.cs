@@ -387,7 +387,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CANONICAL_TO_NON_INDEXABLE = new("canonical-to-non-indexable", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Canonical points to a non-indexable page",
-        """The page's canonical names another URL on the site that can't be indexed itself: it's noindex, canonicalised to yet another URL, or blocked by robots.txt or a firewall.""",
+        """The page's canonical names another URL on the site that can't be indexed itself: it's noindex, canonicalised to yet another URL, or blocked by robots.txt. A URL that refused the crawler (a firewall, a bot challenge or a rate limit) isn't judged, as that says nothing about search engines; it's reported as blocked itself.""",
         """Point the canonical at the final, indexable URL. If the target isn't meant to be indexed, this page probably shouldn't name it as canonical.""")
     {
         Why = """A canonical asks search engines to index the named URL instead of this one, so if that URL is noindex, blocked or points elsewhere in turn, the signals contradict each other and the outcome is up to Google. Google's own checklist includes making sure the canonical target isn't noindex. Canonical chains (A to B to C) usually come from content that moved more than once.""",
@@ -809,7 +809,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HREFLANG_TO_NON_INDEXABLE = new("hreflang-to-non-indexable", IssueCategory.Hreflang, IssueSeverity.Warning,
         "Hreflang points to a non-indexable URL",
-        """This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by robots.txt (or, on this site, by a firewall).""",
+        """This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by your robots.txt. Alternates that refused the crawler (a firewall, a bot challenge or a rate limit), and ones on other sites whose robots.txt kept the crawler out, aren't judged: neither says whether search engines can index them.""",
         """Replace each entry with the alternate's final, canonical, indexable URL, and keep the list identical on every page in the set.""")
     {
         Why = """Google generally shows each version's canonical, indexable URL in results, so hreflang should name exactly those URLs. An alternate that redirects or is canonicalised elsewhere isn't the URL that gets indexed, and one that's noindex or blocked can't be shown at all, so the entry for that language is unreliable. Google specifically warns against listing HTTP URLs in hreflang when the pages are on HTTPS.""",

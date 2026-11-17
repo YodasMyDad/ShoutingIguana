@@ -21,6 +21,9 @@ public sealed partial class SyntheticSite
 
     private static readonly string[] HINDI_WORDS = ["नमस्ते", "दुनिया", "किताब", "पानी", "घर", "बच्चे"];
 
+    /// <summary>A page on the partner site its robots.txt disallows: the crawler never asks for it.</summary>
+    private const string PARTNER_DISALLOWED = "/ext-private/alternate";
+
     /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
     private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
 
@@ -176,6 +179,11 @@ public sealed partial class SyntheticSite
         Page("canonical-noindex", "Canonical to a noindex page", ["canonicalised-page", "canonical-to-non-indexable"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}noindex" }, inSitemap: false);
 
+        // A canonical to a URL that refused the crawler (a bot challenge here, a rate limit on a real shop) is unverified,
+        // not non-indexable: the refusal says nothing about search engines, and the blocked URL is reported on its own.
+        Page("canonical-blocked", "Canonical to a blocked URL", ["canonicalised-page"],
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}blocked" }, inSitemap: false);
+
         Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);
         Page("noindex-canonical", "Noindex with a canonical elsewhere", ["noindex-page", "noindex-with-canonical"], page => page with
         {
@@ -328,6 +336,18 @@ public sealed partial class SyntheticSite
         {
             ExtraHead = Hreflang(("en", "hreflang-noindex"), ("fr", "noindex"), ("x-default", "hreflang-noindex"))
         });
+        // Alternates the crawler couldn't judge aren't non-indexable: one that refused it, and one on another site whose
+        // robots.txt disallows it, which says nothing about whether search engines may read it. Alternates are checked when
+        // something else links them, as the language switcher here does (crawling hreflang is off by default).
+        Page("hreflang-unverified", "Unverified hreflang", [], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-unverified"), ("fr", "blocked"), ("x-default", "hreflang-unverified")) +
+                        $"<link rel=\"alternate\" hreflang=\"de\" href=\"{_external}{PARTNER_DISALLOWED}\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}blocked\">Français</a> <a href=\"{_external}{PARTNER_DISALLOWED}\">Deutsch</a></p>"
+        });
+        plants.Add(new Plant(PARTNER_DISALLOWED, Plant.REFUSED, Linked: false, InSitemap: false, [],
+            () => Html(RenderSimple("Partner private page", "The partner site's robots.txt disallows this area.", PARTNER_DISALLOWED)),
+            IsPage: false, OnPartnerSite: true));
         Page("hreflang-body", "Hreflang in the body", ["hreflang-outside-head"], page => page with
         {
             Content = page.Content + Hreflang(("en", "hreflang-body"), ("x-default", "hreflang-body"))

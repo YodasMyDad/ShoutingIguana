@@ -624,9 +624,12 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     {
         var covers = IssueReader.ReadResults(crawl.Path)!.Score!.Covers;
         Assert.True(covers.BlockedByRobots > 1);
+        // The partner site's robots.txt already keeps the crawler out of one of its pages; three more of its URLs are made so here.
+        var others = CrawlStatsReader.Read(crawl.Path).Outcomes[FetchOutcome.RobotsDisallowed] - covers.BlockedByRobots;
+        Assert.Equal(1, others);
         var copy = crawl.Copy();
         Change(copy, $"UPDATE responses SET outcome = {(int)FetchOutcome.RobotsDisallowed} WHERE url_id IN (SELECT url_id FROM responses JOIN urls ON urls.id = url_id WHERE is_internal = 0 AND outcome = 0 LIMIT 3)");
-        Assert.Equal(covers.BlockedByRobots + 3, CrawlStatsReader.Read(copy).Outcomes[FetchOutcome.RobotsDisallowed]);
+        Assert.Equal(covers.BlockedByRobots + others + 3, CrawlStatsReader.Read(copy).Outcomes[FetchOutcome.RobotsDisallowed]);
 
         var document = Parse(ReportExport.Build(copy, settings: SETTINGS));
         var notRead = document.QuerySelectorAll(".facts dt").Single(term => term.TextContent == "Not read").NextElementSibling!.TextContent;

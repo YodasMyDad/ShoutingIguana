@@ -217,12 +217,15 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
     [Fact]
     public void RobotsTxtIsShownWithTheLineThatBlockedEachUrl()
     {
-        var blocked = crawl.Reference.Rows.Where(row => (string?)row.Value["outcome"] == "robotsDisallowed").Select(row => row.Key).Order().ToList();
-        Assert.Equal(Planted.GetExpectations().RobotsDisallowed, blocked.Count);
+        // The site's own robots.txt refuses its private area; the partner site's refuses one of its own pages.
+        var refused = crawl.Reference.Rows.Where(row => (string?)row.Value["outcome"] == "robotsDisallowed").ToList();
+        var blocked = refused.Where(row => (bool)row.Value["isInternal"]!).Select(row => row.Key).Order().ToList();
+        var elsewhere = refused.Where(row => !(bool)row.Value["isInternal"]!).Select(row => row.Key).ToList();
+        Assert.Equal((Planted.GetExpectations().RobotsDisallowed, Planted.GetExpectations().PartnerRobotsDisallowed), (blocked.Count, elsewhere.Count));
         Assert.True(blocked.Count > 2);
 
         var origins = RobotsReader.ReadOrigins(crawl.Path);
-        Assert.Equal((TestCrawls.Count(crawl.Path, "SELECT COUNT(*) FROM robots"), 0, true, "ShoutingIguana", blocked.Count),
+        Assert.Equal((TestCrawls.Count(crawl.Path, "SELECT COUNT(*) FROM robots"), 0, true, "ShoutingIguana", blocked.Count + elsewhere.Count),
             (origins.Total, origins.Offset, origins.Respected, origins.UserAgent, origins.Blocked));
         var site = origins.Origins[0];
         var content = TestCrawls.Rows(crawl.Path, $"SELECT content FROM robots WHERE origin = '{Site}'").Single();
@@ -236,9 +239,11 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         Assert.Equal(("https" + Site[4..], true, RobotsState.Unanswered, null, null, 0), (twin.Origin, twin.IsInternal, twin.State, twin.StatusCode, twin.Bytes, twin.Blocked));
         Assert.False(string.IsNullOrEmpty(twin.Error));
 
-        // The partner site's answers 404: no rules, and nothing of it blocked. The list pages.
+        // The partner site's is read, and blocked its one page. The list pages.
         var partner = Assert.Single(origins.Origins, origin => !origin.IsInternal);
-        Assert.Equal((RobotsState.Missing, 404, null, 0), (partner.State, partner.StatusCode, partner.Bytes, partner.Blocked));
+        var partnerContent = TestCrawls.Rows(crawl.Path, $"SELECT content FROM robots WHERE origin = '{partner.Origin}'").Single();
+        Assert.Equal((RobotsState.Read, 200, System.Text.Encoding.UTF8.GetByteCount(partnerContent), (long)elsewhere.Count),
+            (partner.State, partner.StatusCode, partner.Bytes, partner.Blocked));
         Assert.Equal([partner], RobotsReader.ReadOrigins(crawl.Path, offset: 1, limit: 5).Origins.Where(origin => !origin.IsInternal));
         Assert.Equal(site, Assert.Single(RobotsReader.ReadOrigins(crawl.Path, limit: 1).Origins));
         Assert.Contains("limit", Assert.Throws<UrlQueryException>(() => RobotsReader.ReadOrigins(crawl.Path, limit: 0)).Errors.Keys);
@@ -264,7 +269,7 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         Assert.Equal((blocked.Count, 0), (RobotsReader.ReadBlocked(crawl.Path, Site, line: 1)!.Total, RobotsReader.ReadBlocked(crawl.Path, Site, line: 1)!.Matching));
         Assert.Empty(RobotsReader.ReadBlocked(crawl.Path, Site, reason: RobotsBlockReason.Unknown)!.Rows);
         Assert.Equal(all.Rows.Skip(1).Take(2), RobotsReader.ReadBlocked(crawl.Path, Site, offset: 1, limit: 2)!.Rows);
-        Assert.Empty(RobotsReader.ReadBlocked(crawl.Path, partner.Origin)!.Rows);
+        Assert.Equal(elsewhere, RobotsReader.ReadBlocked(crawl.Path, partner.Origin)!.Rows.Select(row => row.Id));
 
         Assert.Null(RobotsReader.ReadFile(crawl.Path, "https://elsewhere.example"));
         Assert.Null(RobotsReader.ReadBlocked(crawl.Path, "https://elsewhere.example"));
@@ -284,8 +289,9 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         var twin = "https" + Site[4..];
         var partner = RobotsReader.ReadOrigins(crawl.Path).Origins.Single(origin => !origin.IsInternal).Origin;
 
-        // Other sites, some with a robots.txt of their own, and URLs the crawl was kept from on some of them: here, five of
-        // the site's pages stored as theirs, and as refused.
+        // Other sites, some with a robots.txt of their own, and URLs the crawl was kept from on some of them: the partner
+        // site's own robots.txt keeps it from one of its pages, and here five of the site's pages are stored as others', and
+        // as refused.
         var moved = TestCrawls.Rows(copy, $"SELECT u.id FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.url LIKE '{Site}/p/1%' ORDER BY u.id LIMIT 5").Select(int.Parse).ToList();
         Assert.Equal(5, moved.Count);
         string[] theirs = ["https://m.example", "https://m.example", "https://m.example", "https://z.example", "https://b.example"];
@@ -303,11 +309,11 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         var origins = RobotsReader.ReadOrigins(copy);
         Assert.Equal(
         [
-            (Site, true, site), (twin, true, 0), ("https://m.example", false, 3), ("https://b.example", false, 1), ("https://z.example", false, 1),
-            (partner, false, 0), ("https://a.example", false, 0), ("https://c.example", false, 0)
+            (Site, true, site), (twin, true, 0), ("https://m.example", false, 3), (partner, false, 1), ("https://b.example", false, 1),
+            ("https://z.example", false, 1), ("https://a.example", false, 0), ("https://c.example", false, 0)
         ], origins.Origins.Select(origin => (origin.Origin, origin.IsInternal, origin.Blocked)));
-        Assert.Equal((8L, site + 5), (origins.Total, origins.Blocked));
-        Assert.Equal([RobotsState.Read, RobotsState.Unanswered, null, RobotsState.Read, null, RobotsState.Missing, RobotsState.Unreachable, RobotsState.Missing], origins.Origins.Select(origin => origin.State));
+        Assert.Equal((8L, site + 6), (origins.Total, origins.Blocked));
+        Assert.Equal([RobotsState.Read, RobotsState.Unanswered, null, RobotsState.Read, RobotsState.Read, null, RobotsState.Unreachable, RobotsState.Missing], origins.Origins.Select(origin => origin.State));
 
         // And paged in that order.
         Assert.Equal(origins.Origins.Skip(2).Take(3), RobotsReader.ReadOrigins(copy, offset: 2, limit: 3).Origins);
@@ -433,19 +439,20 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         var all = RobotsReader.ReadOrigins(copy);
         Assert.Equal(8, all.Total);
         var blocking = all.Origins.Where(origin => origin.Blocked > 0).ToList();
-        Assert.Equal([Site, "https://m.example", "https://b.example", "https://z.example"], blocking.Select(origin => origin.Origin));
+        var partner = all.Origins.Single(origin => origin is { IsInternal: false, Blocked: 1 } && !origin.Origin.EndsWith(".example", StringComparison.Ordinal)).Origin;
+        Assert.Equal([Site, "https://m.example", partner, "https://b.example", "https://z.example"], blocking.Select(origin => origin.Origin));
 
         // With nothing asked, every origin matches, and the counts are the crawl's.
-        Assert.Equal((8L, new RobotsOriginCounts(8, 4, 4)), (all.Matching, all.Counts));
+        Assert.Equal((8L, new RobotsOriginCounts(8, 5, 3)), (all.Matching, all.Counts));
 
         // Those that blocked something, and those that blocked nothing: the list's order, and what's left of it.
         RobotsOriginPage Read(RobotsOriginQuery query) => RobotsReader.ReadOrigins(copy, query);
         var blocked = Read(new RobotsOriginQuery { Blocked = true });
         Assert.Equal(blocking, blocked.Origins);
-        Assert.Equal((8L, 4L, all.Blocked, new RobotsOriginCounts(8, 4, 4)), (blocked.Total, blocked.Matching, blocked.Blocked, blocked.Counts));
+        Assert.Equal((8L, 5L, all.Blocked, new RobotsOriginCounts(8, 5, 3)), (blocked.Total, blocked.Matching, blocked.Blocked, blocked.Counts));
         var clear = Read(new RobotsOriginQuery { Blocked = false });
         Assert.Equal(all.Origins.Except(blocking), clear.Origins);
-        Assert.Equal((4L, new RobotsOriginCounts(8, 4, 4)), (clear.Matching, clear.Counts));
+        Assert.Equal((3L, new RobotsOriginCounts(8, 5, 3)), (clear.Matching, clear.Counts));
 
         // Found by a text in the name, whatever its case: the counts are then of the origins the text finds, so each is
         // the rows its filter gives under the same text.

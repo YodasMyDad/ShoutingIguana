@@ -74,8 +74,9 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
             {
                 broken.Add(target);
             }
-            else if (status.Outcome is FetchOutcome.Redirect or FetchOutcome.RobotsDisallowed ||
-                     (status.Outcome == FetchOutcome.Blocked && status.IsInternal) ||
+            // As with canonicals: another site's robots.txt disallowing the crawler says nothing about whether Google can
+            // see the page, and a site refusing the crawler (a firewall, a rate limit) leaves the URL unverified.
+            else if (status.Outcome == FetchOutcome.Redirect || (status.Outcome == FetchOutcome.RobotsDisallowed && status.IsInternal) ||
                      status is { IsPage: true, IsIndexablePage: false })
             {
                 nonIndexable.Add(target);

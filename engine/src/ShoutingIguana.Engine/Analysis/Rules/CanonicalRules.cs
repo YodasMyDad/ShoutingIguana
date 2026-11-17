@@ -84,9 +84,10 @@ internal sealed class CanonicalRules(UrlTable urls, Func<int, string?> readUrl) 
                 : $"The canonical URL {RuleText.Status(target)}{EndsAt(trace)}";
             yield return new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, page.UrlId, detail, targetId);
         }
-        // Another site blocking or disallowing the crawler says nothing about whether Google can see the page.
-        else if ((target.IsInternal && target.Outcome is FetchOutcome.RobotsDisallowed or FetchOutcome.Blocked) ||
-                 target is { IsPage: true, IsIndexablePage: false })
+        // Another site disallowing the crawler says nothing about whether Google can see the page. Nor does any site
+        // refusing it (a firewall, a bot challenge, a rate limit): the URL is unverified, as the sitemap checks treat it,
+        // and internal-blocked reports it.
+        else if ((target.IsInternal && target.Outcome == FetchOutcome.RobotsDisallowed) || target is { IsPage: true, IsIndexablePage: false })
         {
             yield return new IssueHit(IssueCatalog.CANONICAL_TO_NON_INDEXABLE, page.UrlId, $"The canonical URL {RuleText.Status(target)}", targetId);
         }

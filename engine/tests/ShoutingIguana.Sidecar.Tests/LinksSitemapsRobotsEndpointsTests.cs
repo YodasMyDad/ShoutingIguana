@@ -261,21 +261,24 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
     [Fact]
     public async Task RobotsTxtIsListedShownAndSaysWhatItBlocked()
     {
-        // The site's sitemap lists one URL robots.txt refuses: the only one this small crawl comes to.
+        // The site's sitemap lists one URL robots.txt refuses: the only one of the site's this small crawl comes to. The
+        // partner site's own robots.txt refuses one of its pages, which a planted page links.
         var id = grid.Id;
         var site = grid.Url(string.Empty);
 
         var origins = await PostOkAsync($"api/crawls/{id}/robots");
         Assert.Equal(["total", "offset", "respected", "userAgent", "blocked", "origins", "matching", "counts"], origins.AsObject().Select(property => property.Key));
+        var partner = (string?)Assert.Single(origins["origins"]!.AsArray(), origin => !(bool)origin!["isInternal"]! && (long)origin["blocked"]! > 0)!["origin"];
 
         // With nothing asked every origin matches; the counts are what a filter bar shows, each the rows its filter gives.
         Assert.Equal((long)origins["total"]!, (long)origins["matching"]!);
-        Assert.Equal($$"""{"all":{{(long)origins["total"]!}},"blocked":1,"notBlocked":{{(long)origins["total"]! - 1}}}""", origins["counts"]!.ToJsonString());
+        Assert.Equal($$"""{"all":{{(long)origins["total"]!}},"blocked":2,"notBlocked":{{(long)origins["total"]! - 2}}}""", origins["counts"]!.ToJsonString());
         var blocking = await PostOkAsync($"api/crawls/{id}/robots", JsonNode.Parse("""{"blocked":true}"""));
-        Assert.Equal((site, 1L, (long)origins["total"]!, origins["counts"]!.ToJsonString()),
-            ((string?)Assert.Single(blocking["origins"]!.AsArray())!["origin"], (long)blocking["matching"]!, (long)blocking["total"]!, blocking["counts"]!.ToJsonString()));
+        Assert.Equal([site, partner], blocking["origins"]!.AsArray().Select(origin => (string?)origin!["origin"]));
+        Assert.Equal((2L, (long)origins["total"]!, origins["counts"]!.ToJsonString()),
+            ((long)blocking["matching"]!, (long)blocking["total"]!, blocking["counts"]!.ToJsonString()));
         var clear = await PostOkAsync($"api/crawls/{id}/robots", JsonNode.Parse("""{"blocked":false}"""));
-        Assert.Equal((long)origins["total"]! - 1, (long)clear["matching"]!);
+        Assert.Equal((long)origins["total"]! - 2, (long)clear["matching"]!);
         Assert.DoesNotContain(clear["origins"]!.AsArray(), origin => (string?)origin!["origin"] == site);
 
         // Found by a text in the name, whatever its case; the counts are then of what the text finds.
@@ -292,12 +295,17 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{id}/robots", JsonNode.Parse("""{"blocked":"yes"}""")), HttpStatusCode.BadRequest, "bad-request");
         TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{id}/robots", JsonNode.Parse("""{"search":7}""")), HttpStatusCode.BadRequest, "bad-request");
         TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{id}/robots", JsonNode.Parse("""{"filter":"blocked"}""")), HttpStatusCode.BadRequest, "bad-request");
-        Assert.Equal((true, "ShoutingIguana", 1L, 0), ((bool)origins["respected"]!, (string?)origins["userAgent"], (long)origins["blocked"]!, (int)origins["offset"]!));
+        Assert.Equal((true, "ShoutingIguana", 2L, 0), ((bool)origins["respected"]!, (string?)origins["userAgent"], (long)origins["blocked"]!, (int)origins["offset"]!));
         var first = origins["origins"]![0]!;
         Assert.Equal(["origin", "isInternal", "state", "statusCode", "fetchedAt", "error", "bytes", "blocked"], first.AsObject().Select(property => property.Key));
         Assert.Equal((site, true, "read", 200, 1L), ((string?)first["origin"], (bool)first["isInternal"]!, (string?)first["state"], (int)first["statusCode"]!, (long)first["blocked"]!));
         Assert.EndsWith("Z", (string?)first["fetchedAt"]);
-        Assert.Contains(origins["origins"]!.AsArray(), origin => (string?)origin!["state"] == "missing" && !(bool)origin["isInternal"]!);
+        Assert.Contains(origins["origins"]!.AsArray(), origin => (string?)origin!["origin"] == partner && (string?)origin["state"] == "read" && !(bool)origin["isInternal"]!);
+
+        // Another site's robots.txt that answers 404 is missing.
+        var missing = grid.Copy(copy => Change(copy, $"UPDATE robots SET status_code = 404, content = NULL WHERE origin = '{partner}'"));
+        Assert.Contains((await PostOkAsync($"api/crawls/{missing}/robots"))["origins"]!.AsArray(),
+            origin => (string?)origin!["origin"] == partner && (string?)origin["state"] == "missing" && !(bool)origin["isInternal"]!);
 
         // The site's https twin never answered, and isn't the start URL's origin: the crawl gave no verdict and went ahead.
         var twin = Assert.Single(origins["origins"]!.AsArray(), origin => (string?)origin!["origin"] == "https" + site[4..])!;

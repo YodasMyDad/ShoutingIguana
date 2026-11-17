@@ -1137,7 +1137,7 @@ public static class IssuePlainTexts
             """Language versions that search engines can't show""",
             [
                 """These pages list a version in another language at an address that can't itself appear in search results.""",
-                """That address forwards elsewhere, is told to stay out of search, or names another page as its main version.""",
+                """That address forwards elsewhere, is kept out of search, names another page as its main version, or is blocked by your rules file ("robots.txt").""",
                 """Search engines can't show it, so the entry for that language (an "hreflang" link) can't be relied on."""
             ],
             [
