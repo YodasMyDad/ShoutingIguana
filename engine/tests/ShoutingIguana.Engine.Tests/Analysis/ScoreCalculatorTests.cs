@@ -14,12 +14,16 @@ public sealed class ScoreCalculatorTests
     private const int PAGES = 1_000;
     private const int URLS = 5_000;
 
-    /// <summary>"The garden crawl: 85, Good", line for line, and what fixing the first five leaves.</summary>
+    /// <summary>
+    /// "The garden crawl: 85, Good", line for line, and what fixing the first five leaves. The design worked it out when
+    /// duplicate descriptions were worth fixing; the check audit made them a notice, so another warning of the same count
+    /// stands in for them here (<see cref="TheGardenCrawlScores87NowThatDuplicateDescriptionsAreANotice"/> scores the crawl as it is now).
+    /// </summary>
     [Fact]
     public void TheGardenCrawlScores85AndFixingItsFirstFiveLeaves98()
     {
         var score = Score(265, 4_521,
-            ("internal-client-error", 9), ("broken-internal-links", 5), ("image-too-large", 61), ("description-duplicate", 8), ("title-duplicate", 6),
+            ("internal-client-error", 9), ("broken-internal-links", 5), ("image-too-large", 61), ("description-multiple", 8), ("title-duplicate", 6),
             ("slow-response", 3), ("empty-anchor-text", 265), ("image-missing-dimensions", 230), ("description-too-long", 210), ("title-too-long", 86),
             ("open-graph-missing", 11), ("description-missing", 11), ("title-too-short", 9), ("canonical-missing", 8), ("low-word-count", 7),
             ("canonicalised-page", 1), ("security-headers-missing", 1), ("sitemap-missing", 1), ("h1-missing", 1));
@@ -30,7 +34,7 @@ public sealed class ScoreCalculatorTests
             new ScoreLine("internal-client-error", IssueSeverity.Error, 9, 4_521, ScoreUnit.Urls, ScoreExtent.Few, 2),
             new ScoreLine("broken-internal-links", IssueSeverity.Error, 5, 265, ScoreUnit.Pages, ScoreExtent.Some, 4),
             new ScoreLine("image-too-large", IssueSeverity.Warning, 61, 265, ScoreUnit.Pages, ScoreExtent.Many, 3),
-            new ScoreLine("description-duplicate", IssueSeverity.Warning, 8, 265, ScoreUnit.Pages, ScoreExtent.Some, 2),
+            new ScoreLine("description-multiple", IssueSeverity.Warning, 8, 265, ScoreUnit.Pages, ScoreExtent.Some, 2),
             new ScoreLine("title-duplicate", IssueSeverity.Warning, 6, 265, ScoreUnit.Pages, ScoreExtent.Some, 2),
             new ScoreLine("slow-response", IssueSeverity.Warning, 3, 265, ScoreUnit.Pages, ScoreExtent.Some, 2)
         ], score.Lines.Take(6));
@@ -40,8 +44,28 @@ public sealed class ScoreCalculatorTests
         Assert.All(score.Lines.Skip(6), line => Assert.Equal((IssueSeverity.Notice, 0), (line.Severity, line.Points)));
 
         // "Fixing the first five in "Fix first" order leaves slow-response: 98."
-        Assert.Equal(["internal-client-error", "broken-internal-links", "image-too-large", "description-duplicate", "title-duplicate"], score.IfFixed.CheckIds);
+        Assert.Equal(["internal-client-error", "broken-internal-links", "image-too-large", "description-multiple", "title-duplicate"], score.IfFixed.CheckIds);
         Assert.Equal(98, score.IfFixed.Value);
+    }
+
+    /// <summary>
+    /// The same crawl now that duplicate descriptions are a notice (the check audit, docs/v2-check-audit.md): their 2 points
+    /// are no longer lost, so it scores 87, and the five to fix first are then all that cost points, so fixing them leaves 100.
+    /// </summary>
+    [Fact]
+    public void TheGardenCrawlScores87NowThatDuplicateDescriptionsAreANotice()
+    {
+        var score = Score(265, 4_521,
+            ("internal-client-error", 9), ("broken-internal-links", 5), ("image-too-large", 61), ("description-duplicate", 8), ("title-duplicate", 6),
+            ("slow-response", 3), ("empty-anchor-text", 265), ("image-missing-dimensions", 230), ("description-too-long", 210), ("title-too-long", 86),
+            ("open-graph-missing", 11), ("description-missing", 11), ("title-too-short", 9), ("canonical-missing", 8), ("low-word-count", 7),
+            ("canonicalised-page", 1), ("security-headers-missing", 1), ("sitemap-missing", 1), ("h1-missing", 1));
+
+        Assert.Equal((87, ScoreBand.Good, 13, 87, false), (score.Value, score.Band, score.Lost, score.BeforeCeiling, score.HeldBySerious));
+        Assert.Equal(["internal-client-error", "broken-internal-links", "image-too-large", "title-duplicate", "slow-response"], score.Lines.Take(5).Select(line => line.CheckId));
+        Assert.Contains(new ScoreLine("description-duplicate", IssueSeverity.Notice, 8, 265, ScoreUnit.Pages, ScoreExtent.Some, 0), score.Lines);
+        Assert.Equal(["internal-client-error", "broken-internal-links", "image-too-large", "title-duplicate", "slow-response"], score.IfFixed.CheckIds);
+        Assert.Equal(100, score.IfFixed.Value);
     }
 
     /// <summary>"A nearly clean site (invented): 98, Very good."</summary>
@@ -97,7 +121,8 @@ public sealed class ScoreCalculatorTests
         Assert.Equal(96, Score(PAGES, URLS, ("viewport-missing", 1_000)).Value);
 
         // Five problems worth fixing, each on some pages.
-        Assert.Equal(90, Score(PAGES, URLS, ("title-duplicate", 50), ("description-duplicate", 40), ("image-too-large", 30), ("slow-response", 20),
+        // (The design's mixes named description-duplicate among the warnings until the check audit made it a notice: duplicate-content stands in.)
+        Assert.Equal(90, Score(PAGES, URLS, ("title-duplicate", 50), ("duplicate-content", 40), ("image-too-large", 30), ("slow-response", 20),
             ("image-missing-alt", 10)).Value);
 
         // One serious problem on a few pages (98 before the ceiling), and on every page.
@@ -108,7 +133,7 @@ public sealed class ScoreCalculatorTests
 
         // Three serious on many pages, and five worth fixing on many.
         Assert.Equal(64, Score(PAGES, URLS, ("broken-internal-links", 200), ("title-missing", 150), ("image-broken", 100), ("title-duplicate", 400),
-            ("description-duplicate", 300), ("image-too-large", 250), ("slow-response", 200), ("image-missing-alt", 100)).Value);
+            ("duplicate-content", 300), ("image-too-large", 250), ("slow-response", 200), ("image-missing-alt", 100)).Value);
 
         // One site-wide serious fault and nothing else, and two of them.
         Assert.Equal((40, ScoreBand.Poor), (Score(PAGES, URLS, ("no-https", 1)).Value, Score(PAGES, URLS, ("no-https", 1)).Band));

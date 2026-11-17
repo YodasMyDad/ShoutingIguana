@@ -467,7 +467,7 @@ public static class IssueCatalog
         Grouping = IssueGrouping.None
     };
 
-    public static readonly IssueDefinition SITEMAP_ERROR = new("sitemap-error", IssueCategory.Sitemaps, IssueSeverity.Error,
+    public static readonly IssueDefinition SITEMAP_ERROR = new("sitemap-error", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Sitemap can't be read",
         """A sitemap listed in robots.txt, a sitemap index or the crawl settings returned an error (including 404), didn't respond, or isn't valid sitemap XML. Reported on the home page; the detail lists up to three, with their errors.""",
         """Open the sitemap URL to see the error, then fix the file or the server: it must be valid XML, at most 50 MB uncompressed and 50,000 URLs. If the sitemap no longer exists, remove its reference from robots.txt or the sitemap index.""")
@@ -606,7 +606,7 @@ public static class IssueCatalog
         Grouping = IssueGrouping.None
     };
 
-    public static readonly IssueDefinition DESCRIPTION_DUPLICATE = new("description-duplicate", IssueCategory.MetaDescriptions, IssueSeverity.Warning,
+    public static readonly IssueDefinition DESCRIPTION_DUPLICATE = new("description-duplicate", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
         "Duplicate meta description",
         """Another indexable page has the same meta description, ignoring case and spacing. The detail says how many other pages share it.""",
         "Write a page-specific description, or generate one from each page's own data.")
@@ -854,7 +854,7 @@ public static class IssueCatalog
 
 
     // Structured data
-    public static readonly IssueDefinition STRUCTURED_DATA_INVALID = new("structured-data-invalid", IssueCategory.StructuredData, IssueSeverity.Error,
+    public static readonly IssueDefinition STRUCTURED_DATA_INVALID = new("structured-data-invalid", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Invalid JSON-LD",
         """A JSON-LD block (<script type="application/ld+json">) on the page isn't valid JSON. The detail shows the parser's first error.""",
         """Fix the syntax where the detail points (often an unescaped quote, a trailing or missing comma, or a comment left in by a template), then test the page with Google's Rich Results Test.""")
