@@ -307,7 +307,7 @@
       "plainPassed": "No address forwards more than once",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["redirectChain"],
+      "evidence": ["redirectChain", "redirectKind"],
       "targetFacts": ["statusCode", "indexability"]
     },
     {
@@ -371,7 +371,7 @@
       "plainPassed": "No address forwards to a dead end",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["redirectChain"],
+      "evidence": ["redirectChain", "redirectKind"],
       "targetFacts": ["statusCode"]
     },
     {
@@ -404,7 +404,7 @@
       "plainPassed": "No forwarding is marked as temporary",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["redirectChain"],
+      "evidence": ["redirectChain", "redirectKind"],
       "targetFacts": ["statusCode"]
     },
     {
@@ -434,7 +434,7 @@
       "plainPassed": "No temporary forwarding is remembered for days",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["redirectChain"],
+      "evidence": ["redirectChain", "redirectKind"],
       "targetFacts": []
     },
     {
@@ -598,7 +598,7 @@
       "plainOneFix": "That's almost certainly a link in your menu, footer or page design, which every page shares.",
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "final", "text", "position", "links"]
+      "targetFacts": ["statusCode", "final", "redirectKind", "text", "position", "links"]
     },
     {
       "id": "internal-nofollow-links",
@@ -2251,7 +2251,7 @@
       "category": "sitemaps",
       "severity": "warning",
       "title": "Sitemap lists a URL on another host",
-      "description": "A sitemap lists this URL, but it's on a different host from the sitemap: another site, or another of this site's hosts, such as www in a sitemap on the bare domain. The detail says how the URL answered.",
+      "description": "A sitemap lists this URL, but it's on a different host from the sitemap: another site, or another of this site's hosts, such as www in a sitemap on the bare domain; or on another scheme, such as an http:// URL in an https:// sitemap. The detail says how the URL answered, or which schemes differ.",
       "fix": "List the URL as it is on the sitemap's own host now (usually where it redirects), or remove the entry. For a sitemap that deliberately covers several hosts, set up cross-submission through Search Console or robots.txt.",
       "why": "The sitemaps protocol only accepts URLs on the sitemap's own host and drops the rest, so the page it was meant for isn't submitted. Google makes an exception for cross-submission: when every site involved is verified in Search Console and the sitemap is submitted there, or the other host's robots.txt references the sitemap. It's common after a move to or from www.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#cross-submit",
@@ -2277,6 +2277,193 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["finalUrl"],
+      "targetFacts": []
+    },
+    {
+      "id": "robots-txt-no-sitemap",
+      "category": "sitemaps",
+      "severity": "notice",
+      "title": "robots.txt doesn't name the sitemap",
+      "description": "The site's robots.txt has no Sitemap: line, though the crawl found a sitemap anyway: at /sitemap.xml, where crawlers look by convention, or in the crawl settings. Reported once, on the home page, when sitemaps were read and robots.txt answered. The detail names the robots.txt and where the sitemap was found.",
+      "fix": "Add a line such as Sitemap: https://www.example.com/sitemap.xml to robots.txt, with the sitemap's full URL. It can go anywhere in the file, and there can be one for each sitemap.",
+      "why": "Search engines read robots.txt before anything else, and its Sitemap: line is how all of them learn where the sitemap is, not only the ones it was submitted to. A sitemap at /sitemap.xml is usually found without it; one anywhere else may not be.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#addsitemap",
+      "grouping": "none",
+      "subject": "url",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "Your rules file doesn't say where your sitemap is",
+      "plainWhat": [
+        "Your site's rules file for search engines (its \"robots.txt\") doesn't give your sitemap's address.",
+        "The check found the sitemap anyway, where search engines look first, so most will find it too.",
+        "Naming it in the rules file makes sure every search engine does, wherever the sitemap is."
+      ],
+      "plainFix": [
+        "Look in your site's SEO settings or plugin for an option to add the sitemap to the \"robots.txt\" file.",
+        "Ask your developer to add a line to the \"robots.txt\" file that names your sitemap's full address, if there's no such option."
+      ],
+      "fixer": "either",
+      "plainPassed": "Your rules file for search engines names your sitemap",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "sitemap-over-limit",
+      "category": "sitemaps",
+      "severity": "warning",
+      "title": "Sitemap over 50,000 URLs or 50 MB",
+      "description": "A sitemap lists more than 50,000 URLs, a sitemap index lists more than 50,000 sitemaps, or a sitemap file is bigger than 50 MB uncompressed: the limits Google and the sitemaps protocol set for one file. Reported once, on the home page; the detail lists up to three, with what each is over.",
+      "fix": "Split the file into sitemaps of at most 50,000 URLs and 50 MB each, and list them in a sitemap index; an index over 50,000 sitemaps needs splitting into several indexes. Most CMS sitemap plugins can be set to fewer URLs per file.",
+      "why": "Search engines don't read past a sitemap's limits, and Search Console reports such a file as an error, so the URLs past the limit, or all of the file's, may not reach them through the sitemap.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#sitemap-best-practices",
+      "grouping": "none",
+      "subject": "url",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "A sitemap too big for Google to read",
+      "plainWhat": [
+        "A sitemap on your site lists more than 50,000 addresses, or is bigger than 50 MB.",
+        "That's more than one sitemap file may hold, and search engines may not read the addresses past the limit.",
+        "Those pages then aren't put forward to search engines by the sitemap."
+      ],
+      "plainFix": [
+        "Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.",
+        "Ask your developer to split the sitemap into several smaller ones, listed in one sitemap of sitemaps, if there's no such setting."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap is too big for search engines to read",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "sitemap-near-limit",
+      "category": "sitemaps",
+      "severity": "notice",
+      "title": "Sitemap near the 50,000-URL or 50 MB limit",
+      "description": "A sitemap lists 45,000 to 50,000 URLs, a sitemap index 45,000 to 50,000 sitemaps, or a file is between 45 and 50 MB uncompressed: within a tenth of what one file can hold. Reported once, on the home page; the detail lists up to three.",
+      "fix": "Split the file before it grows past the limit: several sitemaps, listed in a sitemap index. Most CMS sitemap plugins can be set to fewer URLs per file.",
+      "why": "Nothing is lost yet, but a site that keeps adding pages will pass the limit, and the URLs past it may then not reach search engines through the sitemap.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#sitemap-best-practices",
+      "grouping": "none",
+      "subject": "url",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "A sitemap close to the size Google can read",
+      "plainWhat": [
+        "A sitemap on your site lists between 45,000 and 50,000 addresses, or is nearly 50 MB.",
+        "That's close to what one sitemap file may hold, and nothing is lost yet.",
+        "As you add pages it will pass the limit, and search engines may then not read the addresses past it."
+      ],
+      "plainFix": [
+        "Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.",
+        "Ask your developer to split the sitemap into several smaller ones before it grows, if there's no such setting."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap is close to the size search engines can read",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "sitemap-empty",
+      "category": "sitemaps",
+      "severity": "notice",
+      "title": "Empty sitemap",
+      "description": "A sitemap that loaded without an error lists no URLs and no sitemaps. Reported once, on the home page; the detail lists up to three.",
+      "fix": "Find out why it's empty: a sitemap plugin set to include nothing, a section with no pages yet, or a file left behind. If it isn't needed, remove it and its reference in robots.txt or the sitemap index.",
+      "why": "An empty sitemap does no harm by itself, but it usually means a sitemap that should list pages doesn't, or one left over that search engines keep fetching for nothing.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+      "grouping": "none",
+      "subject": "url",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "A sitemap with nothing in it",
+      "plainWhat": [
+        "A sitemap on your site loads without an error but lists no pages.",
+        "That does no harm by itself, but it usually means a sitemap that should list pages doesn't.",
+        "Or it's an old one left behind, which search engines keep fetching for nothing."
+      ],
+      "plainFix": [
+        "Open the sitemap's address from the list in your browser, to see what's in it.",
+        "Check your site's SEO settings or plugin, in case that part of the sitemap is switched off.",
+        "If the sitemap isn't needed, ask your developer to remove it and the line that names it."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap is empty",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "sitemap-url-repeated",
+      "category": "sitemaps",
+      "severity": "notice",
+      "title": "URL listed in more than one sitemap",
+      "description": "More than one of the site's sitemap files lists this URL. The detail says how many; where it's found lists them.",
+      "fix": "Keep each URL in one sitemap, usually the one for its kind of page. Repeats often come from two sitemap plugins at once, or a page listed under two sections.",
+      "why": "The sitemaps protocol allows it and search engines cope, so this is housekeeping: repeated entries make sitemaps bigger and harder to keep right, and can give one URL two different lastmod dates.",
+      "learnMore": "https://www.sitemaps.org/protocol.html",
+      "grouping": "none",
+      "subject": "url",
+      "references": "sources",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Addresses listed in more than one sitemap",
+      "plainWhat": [
+        "These pages are listed in more than one of your sitemaps.",
+        "Search engines cope with that, so this is tidying rather than a problem.",
+        "Repeats make sitemaps bigger, and the copies can disagree about when a page last changed."
+      ],
+      "plainFix": [
+        "Look for two SEO plugins or settings that both make a sitemap, and switch one off.",
+        "Otherwise keep each page in the one sitemap for its kind of page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page is listed in more than one sitemap",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "sitemap-lastmod-invalid",
+      "category": "sitemaps",
+      "severity": "notice",
+      "title": "Sitemap lastmod invalid or in the future",
+      "description": "Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind and names the sitemaps. A crawl made before the crawler read lastmod isn't checked.",
+      "fix": "Have the sitemap give each URL's real last change in W3C Datetime, as most CMS sitemap plugins do when left to themselves. Don't set every entry to today's date, or any to a date in the future.",
+      "why": "Google uses lastmod only when it's consistently and verifiably accurate. Dates it can't read, or that haven't happened yet, show it they aren't, so it may ignore the sitemap's dates and find changed pages later.",
+      "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#additional-notes-about-xml-sitemaps",
+      "grouping": "none",
+      "subject": "url",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": true,
+      "plainTitle": "Sitemap dates that are wrong",
+      "plainWhat": [
+        "Your sitemap gives some pages a last-changed date that isn't a date, or that hasn't happened yet.",
+        "Google uses these dates only when they're accurate, so it may ignore them all.",
+        "Pages you change may then show up changed in search later."
+      ],
+      "plainFix": [
+        "Check your site's SEO settings or plugin: most fill in each page's real last-changed date when left to themselves.",
+        "Ask your developer to correct the dates, if your sitemap is made some other way."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every sitemap date is a real date in the past",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
       "targetFacts": []
     },
     {
@@ -2998,6 +3185,185 @@
       ]
     },
     {
+      "id": "image-missing-src",
+      "category": "images",
+      "severity": "warning",
+      "title": "Image without a source",
+      "description": "The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them. A crawl made before the crawler told data: images apart isn't checked.",
+      "fix": "Give each image its file in src. If a lazy-loading script fills it in, check that it uses a standard attribute such as data-src or loading=\"lazy\", and that the image shows without the script.",
+      "why": "An image with no source never shows, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/google-images#use-html-image-elements",
+      "grouping": "none",
+      "subject": "page",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Images with no picture file named",
+      "plainWhat": [
+        "These pages have image spaces that don't say which picture to show.",
+        "Nothing appears there, for visitors or in Google's image search.",
+        "It's usually an empty slot in a page design, or code that fills pictures in a way that isn't standard."
+      ],
+      "plainFix": [
+        "Open each page and find the empty picture space.",
+        "Choose a picture for it in your site's editor, or remove the empty space.",
+        "Ask your developer to check how pictures are loaded, if every page has the problem."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every image names its picture file",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "image-no-srcset",
+      "category": "images",
+      "severity": "notice",
+      "title": "Large image without srcset",
+      "description": "The page shows image files at least 800 pixels wide (the default, which can be changed in the analysis settings) with no srcset and not in a <picture> with other sources, so phones download the whole file. It needs the files' pixel sizes, read when the crawl fetched them, so it isn't checked when images weren't fetched. The detail counts them and gives the widest.",
+      "fix": "Offer smaller versions with srcset and sizes, such as 480, 800 and 1200 pixels wide, or a <picture> with sources; most CMSs do this for images uploaded through them.",
+      "why": "A phone shows a 2,000-pixel image at a few hundred pixels: without other sizes to choose from, it downloads all of it, which costs visitors time and data and slows the page's largest paint. Google Images reads srcset and <picture> too.",
+      "learnMore": "https://web.dev/learn/design/responsive-images",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "references": "targets",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Big images sent to phones at full size",
+      "plainWhat": [
+        "These pages show pictures at least 800 pixels wide, with no smaller versions for small screens.",
+        "Phones then download the whole picture, which makes the page slower and uses visitors' data."
+      ],
+      "plainFix": [
+        "Upload these pictures through your site's media library, which usually makes smaller versions for phones.",
+        "Ask your developer to offer smaller versions of each picture, if your site doesn't."
+      ],
+      "fixer": "either",
+      "plainPassed": "Big images come in smaller versions for phones",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": ["img", "pixelWidth", "pixelHeight", "sizeBytes"]
+    },
+    {
+      "id": "image-legacy-format",
+      "category": "images",
+      "severity": "notice",
+      "title": "Image in an older format",
+      "description": "The page shows JPEG, PNG, GIF or BMP files of 50 KB or more (the default, which can be changed in the analysis settings), as transferred. WebP or AVIF would usually make them smaller. It isn't checked when images weren't fetched. The detail counts them and gives the largest.",
+      "fix": "Serve these images as WebP or AVIF: most CMSs and image CDNs can convert them, keeping the old format as a fallback in a <picture> if you need it.",
+      "why": "WebP and AVIF usually make photos a quarter to a half smaller at the same quality, and every browser in use shows them, as Google Images does. Smaller images load sooner, above all on phones. 50 KB is about where the newer formats save a noticeable amount.",
+      "learnMore": "https://developer.chrome.com/docs/lighthouse/performance/uses-webp-images",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "references": "targets",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Images that could be smaller in a newer format",
+      "plainWhat": [
+        "These pages show pictures of 50 KB or more saved in an older format, such as JPEG or PNG.",
+        "Newer formats (WebP or AVIF) usually make the same picture a quarter to a half smaller, so pages load faster."
+      ],
+      "plainFix": [
+        "Look for an image optimisation setting or plugin that converts pictures to WebP.",
+        "Or save the pictures as WebP before you upload them."
+      ],
+      "fixer": "either",
+      "plainPassed": "No large image is in an older format",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": ["contentType", "sizeBytes", "pixelWidth", "pixelHeight"]
+    },
+    {
+      "id": "image-alt-unhelpful",
+      "category": "images",
+      "severity": "notice",
+      "title": "Alt text that's a file name or too short",
+      "description": "The page has images whose alt text describes nothing: one or two characters (in an alphabet; in Chinese or Japanese that can be a word), no letter or digit at all, an image file name such as photo.jpg, a camera's or upload's name such as IMG_1234 or image-3, or the image file's own name. An empty alt is right for a decorative image and isn't counted. The detail counts them.",
+      "fix": "Write alt text that says what the image shows or does, in a few words, as you'd describe it to someone who can't see it. Leave alt empty for an image that's only decoration.",
+      "why": "Screen readers read the alt text aloud, and a file name or a stray character tells their users nothing. Google Images uses alt text to understand an image, so a file name is a chance missed.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/google-images#use-descriptive-alt-text",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "references": "targets",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Image descriptions that don't describe anything",
+      "plainWhat": [
+        "These pages have pictures whose descriptions are a file name, a camera's number such as \"IMG_1234\", or a stray letter.",
+        "People using screen readers hear that instead of what the picture shows, and Google learns nothing from it."
+      ],
+      "plainFix": [
+        "Edit each picture in your site's media library and describe what it shows in a few words.",
+        "Leave the description empty for a picture that's only decoration."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every image description says something",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": ["img", "position"]
+    },
+    {
+      "id": "image-hotlinked",
+      "category": "images",
+      "severity": "notice",
+      "title": "Image loaded from another website",
+      "description": "The page shows images straight from another website: not the site's own host or domain, nor an image CDN sites serve their own images from (Shopify's, CloudFront, Cloudinary, imgix, WordPress's i0.wp.com and others). On a crawl started at a private address, other private addresses aren't counted. The detail counts the images and the sites.",
+      "fix": "Copy the images you have the right to use onto your own site, or a CDN of yours, and show them from there.",
+      "why": "An image shown from someone else's server can vanish or change whenever they move or block it, and it uses their bandwidth, which many sites refuse. Google Images credits the image to the site it's on, not to yours.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/google-images",
+      "grouping": "relatedUrl",
+      "subject": "page",
+      "references": "targets",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Images shown straight from other websites",
+      "plainWhat": [
+        "These pages show pictures that are stored on other websites, not on yours.",
+        "They can disappear or change whenever the other site moves them, and use that site's resources."
+      ],
+      "plainFix": [
+        "Check you're allowed to use each picture.",
+        "Download the ones you may use and upload them to your own site, then show them from there."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every image is shown from your own site",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": ["statusCode", "img", "position"]
+    },
+    {
+      "id": "image-inline-large",
+      "category": "images",
+      "severity": "notice",
+      "title": "Large inline (data:) image",
+      "description": "The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest.",
+      "fix": "Save each as an image file and show it with an ordinary src, so browsers can cache it and download it alongside the page.",
+      "why": "An inline image comes with the page every time, can't be cached on its own, and in base64 is a third bigger than the file. A small icon is fine; a photo makes every view of the page slower.",
+      "learnMore": "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data",
+      "grouping": "none",
+      "subject": "page",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Pictures built into the page that slow it down",
+      "plainWhat": [
+        "These pages have pictures of more than 10 KB written into the page itself, not kept as separate files.",
+        "They come with the page on every visit and can't be saved by the browser, so every view is slower."
+      ],
+      "plainFix": ["Ask your developer to save these pictures as ordinary image files and link to them instead."],
+      "fixer": "developer",
+      "plainPassed": "No large picture is built into a page",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
       "id": "hreflang-invalid-code",
       "category": "hreflang",
       "severity": "error",
@@ -3289,9 +3655,9 @@
       "category": "structuredData",
       "severity": "warning",
       "title": "Structured data missing required properties",
-      "description": "A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.",
+      "description": "A top-level schema.org item on this indexable page, in JSON-LD or Microdata, lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.",
       "fix": "Add the missing properties with values that match what's visible on the page, then test it with the Rich Results Test.",
-      "why": "Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties aren't checked, since they don't affect eligibility. FAQPage isn't checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.",
+      "why": "Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties don't affect eligibility, so they're another check's (Structured data missing recommended properties). FAQPage isn't checked: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.",
       "learnMore": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#completeness",
       "grouping": "detail",
       "subject": "page",
@@ -3314,6 +3680,101 @@
       "plainOneFix": "That's almost certainly your page design, which leaves the same detail out of every page of one kind.",
       "plainLooksFor": null,
       "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "structured-data-schema-errors",
+      "category": "structuredData",
+      "severity": "warning",
+      "title": "Structured data that isn't valid schema.org",
+      "description": "A JSON-LD block or Microdata item on the page has no @context or one that isn't schema.org, a @type schema.org doesn't have, a property schema.org doesn't define for that type or the types it descends from, a date property whose value isn't an ISO 8601 date, or a priceCurrency that isn't an ISO 4217 code. Types and properties written in another vocabulary aren't judged. The detail gives the first three faults.",
+      "fix": "Correct each fault the detail names: the type's or property's spelling as schema.org writes it (Organization, not Organisation), dates as 2026-11-17 or 2026-11-17T09:30:00+00:00, and currencies as three-letter codes such as GBP. Then test the page with the Schema Markup Validator.",
+      "why": "Search engines read structured data by schema.org's vocabulary: a type or property they don't know, or a date or currency they can't read, is ignored without a word, so the markup may do nothing for the page. Google's Rich Results Test only reports what its own features use, so these faults often go unnoticed.",
+      "learnMore": "https://validator.schema.org/",
+      "grouping": "detail",
+      "subject": "page",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Product or business details Google can't use",
+      "plainWhat": [
+        "These pages describe a product, article or business for search engines in words that code doesn't have.",
+        "Search engines quietly ignore what they can't read, so those details may do nothing for the page.",
+        "A misspelt name such as \"Organisation\", or a date or currency written the wrong way, is the usual cause."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it gives the first few mistakes on each page.",
+        "If a plugin writes these details, check its settings for dates and currencies, or update it."
+      ],
+      "fixer": "developer",
+      "plainPassed": "All product and business details use words Google knows",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "structured-data-missing-recommended",
+      "category": "structuredData",
+      "severity": "notice",
+      "title": "Structured data missing recommended properties",
+      "description": "A top-level item on this indexable page lacks properties Google recommends for its type: an Article, NewsArticle or BlogPosting its headline, image, datePublished or author; an Organization its url or logo; a Product its image, or its Offer a priceCurrency or availability. The detail names the type and what it lacks.",
+      "fix": "Add the properties the detail names, with values that match what's visible on the page. Most SEO and shop plugins have a setting for each, such as the article's featured image or the product's stock status.",
+      "why": "The markup works without them, but Google uses them for richer results: an article's image and date, a product's price and stock in merchant listings, an organization's logo in knowledge panels. A product needs an image to appear in merchant listings at all.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/structured-data/article#structured-data-type-definitions",
+      "grouping": "detail",
+      "subject": "page",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Product or article details that could be fuller",
+      "plainWhat": [
+        "These pages describe a product, an article or your business for search engines, but leave out details Google asks for.",
+        "Nothing is broken, but Google uses them to show more in search, such as an article's picture or a product's price and stock.",
+        "A product needs a picture to be shown in Google's shopping results at all."
+      ],
+      "plainFix": [
+        "Check the list: it says what each page leaves out.",
+        "Fill in the missing details in your site's SEO or shop settings, such as an article's featured image or a product's stock.",
+        "Ask your developer to add them, if your site has no such settings."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every product and article gives the details Google asks for",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": [],
+      "targetFacts": []
+    },
+    {
+      "id": "structured-data-on-noindex",
+      "category": "structuredData",
+      "severity": "notice",
+      "title": "Structured data on a noindex page",
+      "description": "The page tells search engines not to index it (noindex, in a meta tag or the X-Robots-Tag header) yet has structured data of a type with rich results, such as a Product, Article, Organization or BreadcrumbList, in JSON-LD or Microdata. The detail names the types.",
+      "fix": "If the page should be in search results, remove the noindex. If it shouldn't, the structured data does nothing there and can stay or go; make sure the indexable page it describes has it instead.",
+      "why": "Google can't show a rich result for a page it doesn't index, so the markup can't do anything there. It's harmless, but it often means the noindex is a mistake on a page meant to rank.",
+      "learnMore": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#technical-guidelines",
+      "grouping": "detail",
+      "subject": "page",
+      "references": "none",
+      "siteWide": false,
+      "reportedOnce": false,
+      "plainTitle": "Product or article details on pages hidden from Google",
+      "plainWhat": [
+        "These pages describe a product or an article for search engines, but also ask not to be shown in search.",
+        "Google can't show those details for a page it leaves out, so they do nothing here.",
+        "It's harmless, but often a sign that a page meant to be found is hidden by mistake."
+      ],
+      "plainFix": [
+        "Check whether each page should appear in search results.",
+        "If it should, switch off \"hide from search engines\" for it in your site's settings.",
+        "If it shouldn't, there's nothing to do."
+      ],
+      "fixer": "you",
+      "plainPassed": "No hidden page carries product or article details",
+      "plainOneFix": null,
+      "plainLooksFor": null,
+      "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": []
     },
     {
