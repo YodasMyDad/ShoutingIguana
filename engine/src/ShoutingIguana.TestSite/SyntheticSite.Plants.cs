@@ -244,6 +244,14 @@ public sealed partial class SyntheticSite
             Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\"></a></p>"
         });
 
+        // A logo linking its own page has nothing to read all the same, as on a home page. Links written as a fragment
+        // (a script's "#", a "back to top" arrow) are jumps within the page, not links to read.
+        Page("empty-self-link", "Image link to its own page", ["empty-anchor-text"], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}empty-self-link\"><img src=\"/img/3.jpg\" alt=\"\" width=\"400\" height=\"300\"></a> " +
+                      "<a href=\"#\" class=\"menu-toggle\"><svg><path d=\"M0 0\"/></svg></a> <a href=\"#top\"><svg><path d=\"M0 0\"/></svg></a></p>"
+        });
+
         // Icon links named the ways screen readers name them (a labelled SVG, a title behind an empty aria-label, a label
         // elsewhere on the page) have text, so none is flagged.
         Page("icon-links", "Icon links with names", [], page => page with

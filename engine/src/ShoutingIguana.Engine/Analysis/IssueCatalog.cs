@@ -193,7 +193,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition EMPTY_ANCHOR_TEXT = new("empty-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
         "Internal links without anchor text",
-        """The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. Links in the <head>, such as rel="amphtml", don't count.""",
+        """The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. A link to the page itself counts too, as a logo on the home page is; links written as a fragment (#, #top) and links in the <head>, such as rel="amphtml", don't.""",
         """Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.""")
     {
         Why = """Screen readers announce these as just "link" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.""",

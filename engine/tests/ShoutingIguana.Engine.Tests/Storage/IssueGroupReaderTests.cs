@@ -83,7 +83,13 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                 else if (issue.Related is { } related)
                 {
                     Assert.Contains(related, targets);
-                    Assert.DoesNotContain(issue.Url, targets);
+
+                    // A page's empty link to itself (a logo on the home page) names the page itself, as the same logo on
+                    // every other page names it: the page is in its own group then.
+                    if (check != "empty-anchor-text")
+                    {
+                        Assert.DoesNotContain(issue.Url, targets);
+                    }
                 }
                 else
                 {

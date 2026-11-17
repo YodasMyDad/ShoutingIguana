@@ -16,8 +16,20 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
         TargetSet brokenInternal = new(), brokenExternal = new(), redirects = new(), nofollow = new(), withoutText = new();
         foreach (var link in page.Links)
         {
-            if (link.Kind != LinkKind.Hyperlink || link.ToId == page.UrlId || link.Flags.HasFlag(LinkFlags.SamePage))
+            if (link.Kind != LinkKind.Hyperlink)
             {
+                continue;
+            }
+
+            // A link to the page itself goes nowhere new, but it still needs a name, as the logo on the home page does.
+            // One written as a fragment (#, #top) is a jump within the page or a script's handle, not a link to read.
+            if (link.ToId == page.UrlId || link.Flags.HasFlag(LinkFlags.SamePage))
+            {
+                if (link.Fragment is null && link.Position != LinkPosition.Head && string.IsNullOrWhiteSpace(link.Text))
+                {
+                    withoutText.Add(link.ToId);
+                }
+
                 continue;
             }
 
