@@ -412,6 +412,8 @@ export function evidenceValueWords(column: string, value: EvidenceValue, siteOri
       return `meta robots “${value}”`;
     case 'xRobotsTag':
       return `X-Robots-Tag “${value}”`;
+    case 'language':
+      return `lang “${value}”`;
     case 'canonicalUrl':
       return `canonical → ${shown(value, siteOrigin)}`;
     case 'finalUrl':

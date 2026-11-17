@@ -66,7 +66,7 @@ and is in the group without a related URL.
   references (– none, S sources, T targets), as they will be. A change from today is in bold.
 - **Evidence columns** are [URL column](v2-sidecar-api.md#urls-e3a) ids. New ones: `redirectChain`, `robotsRule`,
   `usedOn`, `pixelWidth`, `pixelHeight` and `fetchError`; since [pixel widths](v2-pixel-widths.md), `titleWidth`,
-  `descriptionWidth`, `titleInResults` and `descriptionInResults`. "–" is none: the row's URL and detail say it all.
+  `descriptionWidth`, `titleInResults` and `descriptionInResults`; since the [new checks](v2-new-checks.md), `language`. "–" is none: the row's URL and detail say it all.
 - **Target facts** are fields of a target (`/targets`) and of a group's `related` URL: `statusCode` (with `outcome`),
   `final` (where its redirects end), `indexability`, `canonical` (where it's canonicalised to), `sizeBytes`,
   `contentType`, `pixelWidth`, `pixelHeight` (the file), `responseMs` (its own answer's time), `img` (the `<img>` as the page writes it: `width`, `height`,
@@ -286,7 +286,7 @@ and is in the group without a related URL.
 | 118 | `html-structure-errors` (new) | P/PD/– | – | – | `2 <head> tags; 2 <body> tags`, `<html> after content`, `<head> after content` | imp · pages |
 | 119 | `viewport-invalid` (new) | P/PD/– | – | – | `user-scalable=no; maximum-scale=1`, `no width or initial-scale`, `2 viewport tags that differ` | imp · pages |
 | 120 | `charset-invalid` (new) | P/PD/– | – | – | `Declares windows-1252, not UTF-8`, `The header says iso-8859-1; the page says utf-8`, `2 declarations: utf-8, iso-8859-1` (a late `<meta charset>` with the header declaring isn't flagged: the real-site audit found it on every page of two of three sites, to no effect) | imp · pages |
-| 121 | `lang-invalid` (new) | P/PD/– | – | – | The value: `english` (the specification's `language` URL column isn't built: the detail is the value) | imp · pages |
+| 121 | `lang-invalid` (new) | P/PD/– | `language` | – | The value: `english` | imp · pages |
 | 122 | `mobile-alternate` (new) | P/N/– | – | – | `Mobile version: https://m.example.com/x` | imp · – |
 
 **New checks (step 3b, [v2-new-checks.md](v2-new-checks.md)):** rows 88 on, marked "(new)", each in its category's

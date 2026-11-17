@@ -198,6 +198,8 @@ export interface UrlRow {
   description?: string | null;
   h1?: string | null;
   h1Count?: number | null;
+  /** `<html lang>` as the page writes it. */
+  language?: string | null;
   wordCount?: number | null;
   outlinks?: number | null;
   sizeBytes?: number | null;

@@ -173,6 +173,17 @@ public sealed class EvidenceReadTests(GridCrawl crawl)
     }
 
     [Fact]
+    public void APageWithAnInvalidLangShowsTheValueItWroteInItsOwnColumn()
+    {
+        Assert.Equal(["language"], IssueCatalog.LANG_INVALID.Evidence);
+        var rows = IssueGroupReader.ReadRows(crawl.Path, IssueCatalog.LANG_INVALID.Id, new UrlQuery { Columns = ["language"], Limit = 10 })!.Page!;
+
+        Assert.Equal("english", Assert.Single(rows.Rows).Values[1]);
+        var hub = UrlGridReader.Query(crawl.Path, new UrlQuery { Columns = ["language"], Filters = [GridQueries.Text("url", FilterOperator.Eq, Url(Id("/plants/")))] });
+        Assert.Equal("en", hub.Rows.Single().Values[1]);
+    }
+
+    [Fact]
     public void AUrlThatGaveNoAnswerSaysWhatWentWrong()
     {
         var rows = IssueGroupReader.ReadRows(crawl.Path, IssueCatalog.INTERNAL_UNREACHABLE.Id, new UrlQuery { Columns = ["fetchError"], Limit = 100 })!.Page!;

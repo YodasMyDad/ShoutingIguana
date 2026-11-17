@@ -56,7 +56,7 @@ internal sealed class GridReference
             command.CommandText = """
                 SELECT u.id, u.url, u.is_internal, u.source, u.depth, r.url_id IS NOT NULL, r.error, r.outcome, r.status_code, r.content_type, r.title,
                        r.meta_description, r.h1, r.h1_count, r.word_count, r.size_bytes, r.response_ms, r.ttfb_ms, r.is_noindex, r.is_nofollow,
-                       r.redirect_url_id, r.canonical_url_id, r.outlink_count, r.pixel_width, r.pixel_height
+                       r.redirect_url_id, r.canonical_url_id, r.outlink_count, r.pixel_width, r.pixel_height, r.language
                 FROM urls u LEFT JOIN responses r ON r.url_id = u.id
                 """;
             using var reader = command.ExecuteReader();
@@ -108,6 +108,7 @@ internal sealed class GridReference
                     ["description"] = Text(11),
                     ["h1"] = Text(12),
                     ["h1Count"] = read ? Number(13) : null,
+                    ["language"] = Text(25),
                     ["wordCount"] = fetched ? Number(14) : null,
                     ["outlinks"] = read ? Number(22) : null,
                     ["sizeBytes"] = fetched ? Number(15) : null,

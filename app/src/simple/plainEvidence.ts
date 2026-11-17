@@ -316,6 +316,8 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
       return `The page says “${value}”`;
     case 'xRobotsTag':
       return `The server says “${value}”`;
+    case 'language':
+      return `The page gives its language as “${value}”`;
     case 'canonicalUrl':
       return `Main address: ${plainAddress(value, origin)}`;
     case 'finalUrl':

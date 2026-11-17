@@ -158,6 +158,7 @@ internal static class UrlColumns
         {
             Source = ColumnSource.Responses, CrawlSql = "CASE WHEN r.word_count IS NOT NULL THEN r.h1_count END", Sortable = false
         },
+        new("language", UrlColumnType.Text) { Source = ColumnSource.Responses, CrawlSql = "r.language", Sortable = false },
         new("wordCount", UrlColumnType.Number) { SummarySql = "s.word_count", CrawlSql = $"CASE WHEN {FETCHED} THEN r.word_count END", Indexed = true },
         new("outlinks", UrlColumnType.Number)
         {

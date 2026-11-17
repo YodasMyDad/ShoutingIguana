@@ -338,6 +338,7 @@ describe('a row’s evidence as facts', () => {
     expect(evidenceValueWords('titleWidth', 742, null)).toBe('742 px');
     expect(evidenceValueWords('descriptionWidth', 1_204, null)).toBe('1,204 px');
     expect(evidenceValueWords('titleLength', 80, null)).toBe('80 characters');
+    expect(evidenceValueWords('language', 'english', null)).toBe('lang “english”');
     expect(
       evidenceValueWords('titleInResults', 'Garden sofas and chairs for every season, delivered free…', null),
     ).toBe('in results “Garden sofas and chairs for every season, delivered free…”');

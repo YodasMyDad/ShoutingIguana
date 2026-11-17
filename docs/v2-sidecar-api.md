@@ -1284,6 +1284,7 @@ inspector chains do.
 | `contentType` | text | | The `Content-Type` header |
 | `title`, `description`, `h1` | text | | The first title, meta description and H1. Null for anything that isn't a parsed page |
 | `h1Count` | number | | H1s on the page |
+| `language` (evidence) | text | | The page's `<html lang>` as it writes it (`en-GB`, `english`), what `lang-invalid` judges. Null for anything that isn't a parsed page, and for a page without one. Filters; doesn't sort |
 | `wordCount` | number | | Main-content words, for a page whose HTML was read |
 | `outlinks` | number | | Hyperlinks on a page whose HTML was read |
 | `sizeBytes` | number | | Bytes on the wire |

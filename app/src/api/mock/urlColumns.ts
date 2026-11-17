@@ -80,6 +80,7 @@ export const URL_COLUMNS: readonly UrlColumn[] = [
   column('description', 'text'),
   column('h1', 'text'),
   column('h1Count', 'number', { sortable: false }),
+  column('language', 'text', { sortable: false }),
   column('wordCount', 'number'),
   column('outlinks', 'number'),
   column('sizeBytes', 'number'),

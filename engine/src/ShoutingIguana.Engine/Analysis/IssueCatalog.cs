@@ -1510,7 +1510,8 @@ public static class IssueCatalog
         Why = """Screen readers use lang to choose the voice and pronunciation, and browsers for hyphenation and spelling; a value they can't read is as good as none. Google detects a page's language from its content, so this is about accessibility, not search.""",
         LearnMore = "https://www.w3.org/International/questions/qa-choosing-language-tags",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["language"]
     };
 
     public static readonly IssueDefinition MOBILE_ALTERNATE = new("mobile-alternate", IssueCategory.Html, IssueSeverity.Notice,

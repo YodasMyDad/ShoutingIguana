@@ -206,6 +206,7 @@ describe('a page’s own evidence, in plain words', () => {
     ).toBe('The rules file says “Disallow: /cart/”, on line 12');
     expect(plainEvidence('h1', 'Sofas', ORIGIN)).toBe('Main heading: “Sofas”');
     expect(plainEvidence('metaRobots', 'noindex, follow', ORIGIN)).toBe('The page says “noindex, follow”');
+    expect(plainEvidence('language', 'en_GB', ORIGIN)).toBe('The page gives its language as “en_GB”');
     expect(plainEvidence('indexability', 'canonicalised', ORIGIN)).toBe(
       'It can’t appear in search results: it names another address as its main address',
     );
