@@ -187,18 +187,18 @@
     {
       "id": "internal-blocked",
       "category": "responseCodes",
-      "severity": "warning",
-      "title": "Internal URL blocked by a firewall",
-      "description": "A firewall, bot protection service (such as Cloudflare, Akamai, AWS WAF, DataDome or Imperva) or a rate limit (HTTP 429) refused the crawler on this internal URL. The detail names the protection when it's recognised.",
+      "severity": "notice",
+      "title": "Internal URL refused the crawler",
+      "description": "A firewall or bot protection service (such as Cloudflare, Akamai, AWS WAF, DataDome or Imperva) refused the crawler on this internal URL with a block page or a challenge. The detail names the protection when it's recognised.",
       "fix": "Allowlist the crawler in the firewall or bot protection (by user agent, IP address or a secret header), or crawl at a slower speed preset. Make sure the same rules let verified search engine crawlers through: verify Googlebot by reverse DNS or Google's published IP ranges rather than by user agent, which anyone can fake.",
-      "why": "Nothing on this URL could be checked, so other checks can't see its problems. If the same rules challenge search engine crawlers, they can't crawl it either, and Google slows its crawling of sites that answer with 429. Many protections only challenge automated traffic, so visitors are usually unaffected.",
+      "why": "Nothing on this URL could be checked, so other checks can't see its problems. If the same rules challenge search engine crawlers, they can't crawl it either. Many protections only challenge automated traffic, so visitors are usually unaffected.",
       "learnMore": "https://developers.google.com/crawling/docs/crawlers-fetchers/verify-google-requests",
       "grouping": "detail",
       "subject": "url",
       "references": "sources",
       "siteWide": false,
       "reportedOnce": false,
-      "plainTitle": "Pages or files your site's security wouldn't show",
+      "plainTitle": "Pages or files that refused the check",
       "plainWhat": [
         "Your site's firewall or security service turned the check away from some addresses, so they couldn't be read.",
         "Any problems on those addresses are missing from these results.",
@@ -207,11 +207,10 @@
       "plainFix": [
         "Open one of the addresses in your browser to see that it loads for you.",
         "Ask your hosting company, or whoever runs the firewall, to let Shouting Iguana through, then check the site again.",
-        "Ask them to make sure Google and other search engines aren't turned away by the same rules.",
-        "Check again at the \"Polite\" speed if the list shows \"too many requests\" (a 429): the check was asking too fast."
+        "Ask them to make sure Google and other search engines aren't turned away by the same rules."
       ],
       "fixer": "developer",
-      "plainPassed": "No page or file was refused by the site's security",
+      "plainPassed": "No page or file refused the check",
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["type"],
