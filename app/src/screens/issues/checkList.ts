@@ -1,9 +1,10 @@
-// The Issues screen's checks list, built from the catalog and the last analysis (docs/v2-ui-ia.md, Issues): checks by
-// category in catalog order, each with its severity and the pages or URLs it flags. Pure, so every rule is tested:
+// The Issues screen's checks list, built from the catalog and the last analysis (docs/v2-ui-ia.md, Issues): checks in the
+// order to fix them, by count, by points, by severity, or by category in catalog order, each with its severity and the
+// pages or URLs it flags. Pure, so every rule is tested:
 // - skipped checks are always listed, in their category, with their reason: hiding them would read as clean;
 // - checks that passed are listed only when asked for, and each category says how many passed;
 // - the severity and text filters narrow what's listed, and hidden checks stay out unless shown.
-import type { Analysis, Check, CheckCategory, Checks, Severity } from '../../api/types';
+import type { Analysis, Check, CheckCategory, Checks, ClearedCheck, Severity } from '../../api/types';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { SEVERITIES, type CheckOutcome } from '../../ui/severity';
 
@@ -18,15 +19,50 @@ export interface CheckEntry {
   skipReason: string | null;
   /** The user hid it from the list. */
   hidden: boolean;
+  /**
+   * The separate things to change its issues come to (the analysis's `causes`): null for a check that found nothing, and
+   * for an analysis read from a sidecar that doesn't count them.
+   */
+  causes: number | null;
+  /** Of `causes`, those likely in the site's template; null as `causes` is. */
+  templateCauses: number | null;
+  /** The checks a fix of it also clears, with the pages it clears there (the analysis's `clears`). */
+  clears: ClearedCheck[];
 }
 
 export interface CheckCategoryEntry {
   id: string;
   title: string;
-  /** Checks in the category that passed, hidden ones left out: "4 passed". */
+  /** Checks in the category that passed, hidden ones left out: "4 passed". 0 for a part of a sorted list. */
   passed: number;
-  /** What the list shows, in catalog order. */
+  /** What the list shows, in the list's order. */
   entries: CheckEntry[];
+}
+
+/**
+ * The order the checks list is in: the engine's order to fix them (the default, as Overview's Fix first), the most URLs
+ * flagged, the most points off the score, by severity, or by category in catalog order (the list as it first was).
+ */
+export type CheckSort = 'fixFirst' | 'count' | 'points' | 'severity' | 'category';
+
+/** The orders Simple's What to fix offers within each of its parts, which are the severities already. */
+export type PlainCheckSort = 'fixFirst' | 'points' | 'count';
+
+export const CHECK_SORTS: readonly { value: CheckSort; label: string }[] = [
+  { value: 'fixFirst', label: 'Fix first' },
+  { value: 'count', label: 'Most URLs' },
+  { value: 'points', label: 'Most points' },
+  { value: 'severity', label: 'Severity' },
+  { value: 'category', label: 'Category' },
+];
+
+/** How the list is ordered, and what the order goes by. */
+export interface CheckListOrder {
+  sort: CheckSort;
+  /** The analysis's `fixFirst`: the engine's order. Absent from an earlier engine's analysis: then the app's own. */
+  fixFirst?: readonly string[] | null | undefined;
+  /** Points off the score by check id (the score's lines); a check without a line takes none. */
+  points?: ReadonlyMap<string, number> | undefined;
 }
 
 export interface CheckListFilters {
@@ -80,6 +116,14 @@ export interface AnalysisTotals {
   issues: number;
   passed: number;
   skipped: number;
+  /**
+   * The separate things to change the found checks' issues come to (their `causes` added up); null when a found check
+   * has none (an analysis from a sidecar that doesn't count them), so a sum is never short. Left out where only the
+   * counts are known.
+   */
+  causes?: number | null;
+  /** Of `causes`, those likely in the site's template. */
+  templateCauses?: number;
 }
 
 /** What each check came to on this crawl, in catalog order. */
@@ -88,26 +132,33 @@ export function checkEntries(
   analysis: Analysis,
   hidden: ReadonlySet<string> = new Set(),
 ): CheckEntry[] {
-  const counts = new Map(analysis.counts.map((entry) => [entry.checkId, entry.count]));
+  const counts = new Map(analysis.counts.map((entry) => [entry.checkId, entry]));
   const skipped = new Map(analysis.skipped.map((entry) => [entry.checkId, entry.reason]));
   return checks.checks.map((check) => {
-    const count = counts.get(check.id);
+    const ran = counts.get(check.id);
     // A check the analysis doesn't mention ran under an engine that didn't have it: it's skipped, never clean.
-    if (count === undefined || skipped.has(check.id)) {
+    if (ran === undefined || skipped.has(check.id)) {
       return {
         check,
         outcome: 'skipped',
         count: null,
         skipReason: skipped.get(check.id)?.text ?? null,
         hidden: hidden.has(check.id),
+        causes: null,
+        templateCauses: null,
+        clears: [],
       };
     }
+    const found = ran.count > 0;
     return {
       check,
-      outcome: count > 0 ? check.severity : 'passed',
-      count,
+      outcome: found ? check.severity : 'passed',
+      count: ran.count,
       skipReason: null,
       hidden: hidden.has(check.id),
+      causes: found ? (ran.causes ?? null) : null,
+      templateCauses: found ? (ran.templateCauses ?? null) : null,
+      clears: found ? (ran.clears ?? []) : [],
     };
   });
 }
@@ -165,25 +216,44 @@ export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
   let issues = 0;
   let passed = 0;
   let skipped = 0;
+  let causes: number | null = 0;
+  let templateCauses = 0;
   for (const entry of entries) {
     if (entry.outcome === 'skipped') skipped++;
     else if (entry.outcome === 'passed') passed++;
     else {
       found++;
       issues += entry.count ?? 0;
+      causes = causes === null || entry.causes === null ? null : causes + entry.causes;
+      templateCauses += entry.templateCauses ?? 0;
     }
   }
-  return { found, issues, passed, skipped };
+  return { found, issues, passed, skipped, causes, templateCauses };
 }
 
 /**
- * The header's answer, from counts only: "19 checks found 933 issues on this crawl. 63 passed and 3 were skipped."
+ * The work in a phrase, from the things to change and how many of them are in the template: "about 40 things to change,
+ * 3 of them in the site’s template", "1 thing to change, in the site’s template". "About", as which issues share a
+ * cause is the engine's judgement from how they group; never for one.
  */
-export function answerSentence({ found, issues, passed, skipped }: AnalysisTotals): string {
+export function causeWords(causes: number, templateCauses: number): string {
+  const things = causes === 1 ? '1 thing to change' : `about ${formatCount(causes)} things to change`;
+  if (templateCauses <= 0) return things;
+  if (causes === 1) return `${things}, in the site’s template`;
+  return `${things}, ${templateCauses === causes ? 'all' : formatCount(templateCauses)} of them in the site’s template`;
+}
+
+/**
+ * The header's answer, from counts only, leading with the work when the analysis counts it: "About 40 things to change,
+ * 3 of them in the site’s template: 19 checks found 933 issues on this crawl. 63 passed and 3 were skipped." Without
+ * it (an earlier sidecar's analysis): "19 checks found 933 issues on this crawl. 63 passed and 3 were skipped."
+ */
+export function answerSentence({ found, issues, passed, skipped, causes, templateCauses }: AnalysisTotals): string {
+  const work = found > 0 && causes !== null && causes !== undefined ? causeWords(causes, templateCauses ?? 0) : null;
   const first =
     found === 0
       ? 'No check found an issue on this crawl.'
-      : `${formatCountOf(found, 'check')} found ${formatCountOf(issues, 'issue')} on this crawl.`;
+      : `${work ? `${work.charAt(0).toUpperCase()}${work.slice(1)}: ` : ''}${formatCountOf(found, 'check')} found ${formatCountOf(issues, 'issue')} on this crawl.`;
   const were = (count: number) => (count === 1 ? 'was' : 'were');
   const second =
     passed > 0 && skipped > 0
@@ -276,10 +346,80 @@ function matchesText(entry: CheckEntry, category: string, words: readonly string
 }
 
 /**
- * The list as it shows: categories in catalog order, each with the checks the filters keep. A category the catalog
- * doesn't name (a newer engine's) is listed last, as "Other checks", rather than under its id.
+ * The checks that found issues in `order`'s order, the rest after them as they came (a stable sort, so checks level on
+ * every key keep catalog order):
+ * - `fixFirst`: the engine's order (the analysis's `fixFirst`), a check it doesn't rank after, by the app's own order
+ *   (`rankChecksToFix`): the most severe, then the most URLs;
+ * - `count`: the most URLs flagged, then fix-first;
+ * - `points`: the most points off the score, then fix-first, so notices (no points) come last;
+ * - `severity`: the most severe, then fix-first;
+ * - `category`: as they came.
  */
-export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], filters: CheckListFilters): CheckList {
+export function sortChecks(entries: readonly CheckEntry[], order: CheckListOrder): CheckEntry[] {
+  if (order.sort === 'category') return [...entries];
+  const found = (entry: CheckEntry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped';
+  const place = order.fixFirst ? new Map(order.fixFirst.map((checkId, index) => [checkId, index])) : null;
+  const severity = (entry: CheckEntry) => SEVERITY_RANK[entry.check.severity];
+  const fixFirst = (a: CheckEntry, b: CheckEntry) => {
+    const [first, second] = [place?.get(a.check.id), place?.get(b.check.id)];
+    if (first !== undefined && second !== undefined) return first - second;
+    if (first !== undefined || second !== undefined) return first !== undefined ? -1 : 1;
+    return severity(a) - severity(b) || (b.count ?? 0) - (a.count ?? 0);
+  };
+  const points = (entry: CheckEntry) => order.points?.get(entry.check.id) ?? 0;
+  const compare: Record<Exclude<CheckSort, 'category'>, (a: CheckEntry, b: CheckEntry) => number> = {
+    fixFirst,
+    count: (a, b) => (b.count ?? 0) - (a.count ?? 0) || fixFirst(a, b),
+    points: (a, b) => points(b) - points(a) || fixFirst(a, b),
+    severity: (a, b) => severity(a) - severity(b) || fixFirst(a, b),
+  };
+  return [...entries.filter(found).sort(compare[order.sort]), ...entries.filter((entry) => !found(entry))];
+}
+
+const SORTED_PARTS: Record<CheckOutcome, string> = {
+  error: 'Errors',
+  warning: 'Warnings',
+  notice: 'Notices',
+  skipped: 'Skipped',
+  passed: 'Passed',
+};
+
+/**
+ * A sorted list's parts: one of the checks that found issues, in the order asked for, or one a severity when sorted by
+ * severity; then the skipped checks and the ones that passed, each in catalog order.
+ */
+function sortedParts(listed: readonly CheckEntry[], order: CheckListOrder): CheckCategoryEntry[] {
+  const parts = new Map<string, CheckCategoryEntry>();
+  for (const entry of sortChecks(listed, order)) {
+    const found = entry.outcome !== 'passed' && entry.outcome !== 'skipped';
+    const key = found && order.sort !== 'severity' ? 'found' : entry.outcome;
+    let part = parts.get(key);
+    if (!part) {
+      part = {
+        id: `sorted-${key}`,
+        title: key === 'found' ? 'Found issues' : SORTED_PARTS[entry.outcome],
+        passed: 0,
+        entries: [],
+      };
+      parts.set(key, part);
+    }
+    part.entries.push(entry);
+  }
+  const rank = ['found', 'error', 'warning', 'notice', 'skipped', 'passed'];
+  return [...parts.entries()].sort(([a], [b]) => rank.indexOf(a) - rank.indexOf(b)).map(([, part]) => part);
+}
+
+/**
+ * The list as it shows: by category in catalog order, each with the checks the filters keep, or, sorted (`view`),
+ * the checks that found issues in that order, then the skipped and passed ones. A category the catalog doesn't name (a
+ * newer engine's) is listed last, as "Other checks", rather than under its id.
+ */
+export function buildCheckList(
+  checks: Checks,
+  entries: readonly CheckEntry[],
+  filters: CheckListFilters,
+  view: CheckListOrder = { sort: 'category' },
+): CheckList {
   const words = filters.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const severities = new Set<Severity>(filters.severity.length > 0 ? filters.severity : SEVERITIES);
   const categories = new Map<string, CheckCategoryEntry>();
@@ -327,7 +467,14 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
     entries,
     (entry) => inCategory(entry) && matchesText(entry, categories.get(entry.check.category)?.title ?? '', words),
   );
-  const shown = [...categories.values()].filter((category) => category.entries.length > 0);
+  const byCategory = [...categories.values()].filter((category) => category.entries.length > 0);
+  const shown =
+    view.sort === 'category'
+      ? byCategory
+      : sortedParts(
+          byCategory.flatMap((category) => category.entries),
+          view,
+        );
   const visible = shown.flatMap((category) => category.entries);
   return {
     categories: shown,
@@ -345,4 +492,44 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
 /** The category's title for a check, for its header ("Links"). */
 export function categoryTitle(checks: Checks, check: Check): string {
   return categoryNamed(checks, check.category).title;
+}
+
+/** A check related to another by a fix (the catalog's `clears`), as it came out on this crawl. */
+export interface RelatedCheck {
+  entry: CheckEntry;
+  /** The pages the fix clears there. */
+  pages: number;
+  /** They are every page it flagged. */
+  all: boolean;
+  /** Its points off the score, when the fix clears all of it and it takes some; null otherwise. */
+  points: number | null;
+}
+
+/**
+ * The checks related to one by a fix, on this crawl (docs/v2-sidecar-api.md, Analysis: `counts[].clears`): those a fix of
+ * it also clears, and those whose fix clears some of its own pages. Only checks that found issues, as the analysis
+ * counts them; a hidden one too, as hiding it doesn't change what a fix does.
+ */
+export function relatedChecks(
+  entries: readonly CheckEntry[],
+  entry: CheckEntry,
+  points?: ReadonlyMap<string, number>,
+): { clears: RelatedCheck[]; clearedBy: RelatedCheck[] } {
+  const byId = new Map(entries.map((candidate) => [candidate.check.id, candidate]));
+  const pointsOf = (id: string, all: boolean) => {
+    const value = all ? (points?.get(id) ?? 0) : 0;
+    return value > 0 ? value : null;
+  };
+  const clears = entry.clears.flatMap((cleared) => {
+    const other = byId.get(cleared.checkId);
+    return other
+      ? [{ entry: other, pages: cleared.pages, all: cleared.all, points: pointsOf(cleared.checkId, cleared.all) }]
+      : [];
+  });
+  const clearedBy = entries.flatMap((other) =>
+    other.clears
+      .filter((cleared) => cleared.checkId === entry.check.id)
+      .map((cleared) => ({ entry: other, pages: cleared.pages, all: cleared.all, points: null })),
+  );
+  return { clears, clearedBy };
 }

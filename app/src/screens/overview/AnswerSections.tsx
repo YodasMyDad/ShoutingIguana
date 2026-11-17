@@ -10,12 +10,14 @@ import { SeverityMark } from '../../ui/SeverityMark';
 import { Stat, StatLink, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
 import { outcomeWord } from '../../ui/severity';
-import type { AnalysisTotals, CheckEntry } from '../issues/checkList';
+import { causeWords, type AnalysisTotals, type CheckEntry } from '../issues/checkList';
 import { CountWithReach } from '../issues/CountWithReach';
 import { categoryFigures, fixFirst, severityFigures, skippedGroups } from './answer';
 import { linkProps } from './overviewLinks';
 
 const SEVERITY_LABELS = { error: 'Errors', warning: 'Warnings', notice: 'Notices' } as const;
+
+const capitalised = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /**
  * Issues by severity: the checks that found issues, and their issues, each opening Issues at that severity; then what
@@ -47,7 +49,11 @@ export function SeverityFigures({
             }
             value={<Num value={figure.checks} noun="check" />}
             context={
-              figure.checks === 0 ? 'None found an issue' : `${formatCountOf(figure.issues, 'issue')} between them`
+              figure.checks === 0
+                ? 'None found an issue'
+                : figure.causes === null
+                  ? `${formatCountOf(figure.issues, 'issue')} between them`
+                  : `${capitalised(causeWords(figure.causes, figure.templateCauses))}, from ${formatCountOf(figure.issues, 'issue')}`
             }
           />
         ))}

@@ -11,6 +11,9 @@ import {
   hiddenWords,
   isInCategory,
   rankChecksToFix,
+  sortChecks,
+  causeWords,
+  relatedChecks,
   type CheckListFilters,
 } from './checkList';
 
@@ -84,7 +87,15 @@ describe('what each check came to', () => {
   });
 
   it('counts for the answer: checks that found issues, the issues, and those that passed or were skipped', () => {
-    expect(analysisTotals(checkEntries(CHECKS, ANALYSIS))).toEqual({ found: 4, issues: 365, passed: 2, skipped: 2 });
+    // An analysis that doesn't count the things to change (an earlier sidecar's) has none to add up: null, never short.
+    expect(analysisTotals(checkEntries(CHECKS, ANALYSIS))).toEqual({
+      found: 4,
+      issues: 365,
+      passed: 2,
+      skipped: 2,
+      causes: null,
+      templateCauses: 0,
+    });
   });
 });
 
@@ -100,7 +111,14 @@ describe('hidden checks', () => {
       'title-too-long',
       'future-check',
     ]);
-    expect(analysisTotals(countedEntries(entries))).toEqual({ found: 2, issues: 91, passed: 1, skipped: 2 });
+    expect(analysisTotals(countedEntries(entries))).toEqual({
+      found: 2,
+      issues: 91,
+      passed: 1,
+      skipped: 2,
+      causes: null,
+      templateCauses: 0,
+    });
     expect(hiddenTotals(entries)).toEqual({ checks: 3, found: 2, issues: 274 });
     expect(hiddenTotals(checkEntries(CHECKS, ANALYSIS))).toBeNull();
   });
@@ -363,5 +381,208 @@ describe('the list', () => {
     expect(build({ severity: ['error'] }, hidden).hiddenCount).toBe(0);
     const shown = build({ showHidden: true }, hidden);
     expect(shown.visible.find((entry) => entry.check.id === 'empty-anchor-text')).toMatchObject({ hidden: true });
+  });
+});
+
+/** The analysis as the step 3b sidecar gives it: each check's things to change, and what a fix of it clears. */
+const COUNTED: Analysis = {
+  ...ANALYSIS,
+  counts: [
+    {
+      checkId: 'internal-client-error',
+      count: 9,
+      causes: 9,
+      templateCauses: 0,
+      clears: [{ checkId: 'broken-internal-links', pages: 5, all: true }],
+    },
+    { checkId: 'internal-server-error', count: 0, causes: null, templateCauses: null, clears: [] },
+    { checkId: 'broken-internal-links', count: 5, causes: 3, templateCauses: 0, clears: [] },
+    { checkId: 'empty-anchor-text', count: 265, causes: 2, templateCauses: 1, clears: [] },
+    { checkId: 'title-too-long', count: 86, causes: 86, templateCauses: 0, clears: [] },
+    { checkId: 'title-duplicate', count: 0, causes: null, templateCauses: null, clears: [] },
+  ],
+};
+
+describe('things to change', () => {
+  it('come with each check that found issues, with what a fix of it clears', () => {
+    const byId = new Map(checkEntries(CHECKS, COUNTED).map((entry) => [entry.check.id, entry]));
+    expect(byId.get('internal-client-error')).toMatchObject({
+      causes: 9,
+      templateCauses: 0,
+      clears: [{ checkId: 'broken-internal-links', pages: 5, all: true }],
+    });
+    // A check that passed or was skipped has none, whatever the analysis says.
+    expect(byId.get('internal-server-error')).toMatchObject({ causes: null, templateCauses: null, clears: [] });
+    expect(byId.get('orphan-page')).toMatchObject({ causes: null, templateCauses: null, clears: [] });
+    // An earlier sidecar's analysis says nothing of them.
+    expect(checkEntries(CHECKS, ANALYSIS)[0]).toMatchObject({ causes: null, templateCauses: null, clears: [] });
+  });
+
+  it('add up for the answer, with those in the template', () => {
+    expect(analysisTotals(checkEntries(CHECKS, COUNTED))).toEqual({
+      found: 4,
+      issues: 365,
+      passed: 2,
+      skipped: 2,
+      causes: 100,
+      templateCauses: 1,
+    });
+  });
+
+  it('lead the answer when the analysis counts them', () => {
+    expect(answerSentence({ found: 19, issues: 933, passed: 63, skipped: 3, causes: 40, templateCauses: 3 })).toBe(
+      'About 40 things to change, 3 of them in the site’s template: 19 checks found 933 issues on this crawl. 63 passed and 3 were skipped.',
+    );
+    expect(answerSentence({ found: 2, issues: 14, passed: 80, skipped: 0, causes: 14, templateCauses: 0 })).toBe(
+      'About 14 things to change: 2 checks found 14 issues on this crawl. 80 passed.',
+    );
+    expect(answerSentence({ found: 1, issues: 264, passed: 80, skipped: 0, causes: 1, templateCauses: 1 })).toBe(
+      '1 thing to change, in the site’s template: 1 check found 264 issues on this crawl. 80 passed.',
+    );
+    // Nothing found: nothing to change, as before.
+    expect(answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0, causes: 0, templateCauses: 0 })).toBe(
+      answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0 }),
+    );
+  });
+
+  it('are worded with "about" for more than one, and "all" when every one is in the template', () => {
+    expect(causeWords(1, 0)).toBe('1 thing to change');
+    expect(causeWords(12, 0)).toBe('about 12 things to change');
+    expect(causeWords(1_204, 2)).toBe('about 1,204 things to change, 2 of them in the site’s template');
+    expect(causeWords(2, 2)).toBe('about 2 things to change, all of them in the site’s template');
+    expect(causeWords(1, 1)).toBe('1 thing to change, in the site’s template');
+  });
+});
+
+describe('the list sorted', () => {
+  // The engine's order puts broken-internal-links first, though it flagged fewer URLs than the 4xx: a site-wide
+  // reason, say; the app takes the engine's order as it is.
+  const FIX_FIRST = ['broken-internal-links', 'internal-client-error', 'empty-anchor-text', 'title-too-long'];
+  const POINTS = new Map([
+    ['internal-client-error', 2],
+    ['broken-internal-links', 4],
+  ]);
+  const entries = checkEntries(CHECKS, COUNTED);
+  const SHOWN: CheckListFilters = { ...FILTERS, showPassed: true };
+
+  it('by fix first takes the engine’s order, then lists the skipped and the passed checks', () => {
+    const list = buildCheckList(CHECKS, entries, SHOWN, { sort: 'fixFirst', fixFirst: FIX_FIRST });
+    expect(list.categories.map((part) => [part.title, ids(part.entries)])).toEqual([
+      ['Found issues', ['broken-internal-links', 'internal-client-error', 'empty-anchor-text', 'title-too-long']],
+      ['Skipped', ['orphan-page', 'future-check']],
+      ['Passed', ['internal-server-error', 'title-duplicate']],
+    ]);
+    expect(ids(list.visible)).toEqual(list.categories.flatMap((part) => ids(part.entries)));
+  });
+
+  it('without the engine’s order, by the app’s: the most severe, then the most URLs', () => {
+    expect(ids(sortChecks(entries, { sort: 'fixFirst' })).slice(0, 4)).toEqual([
+      'internal-client-error',
+      'broken-internal-links',
+      'empty-anchor-text',
+      'title-too-long',
+    ]);
+  });
+
+  it('by count, by points and by severity', () => {
+    const found = (sort: 'count' | 'points' | 'severity') =>
+      ids(
+        buildCheckList(CHECKS, entries, FILTERS, { sort, fixFirst: FIX_FIRST, points: POINTS }).categories[0]!.entries,
+      );
+    expect(found('count')).toEqual([
+      'empty-anchor-text',
+      'title-too-long',
+      'internal-client-error',
+      'broken-internal-links',
+    ]);
+    // Notices take no points: they come after, in fix-first order.
+    expect(found('points')).toEqual([
+      'broken-internal-links',
+      'internal-client-error',
+      'empty-anchor-text',
+      'title-too-long',
+    ]);
+    const bySeverity = buildCheckList(CHECKS, entries, FILTERS, { sort: 'severity', fixFirst: FIX_FIRST });
+    expect(bySeverity.categories.map((part) => [part.title, ids(part.entries)])).toEqual([
+      ['Errors', ['broken-internal-links', 'internal-client-error']],
+      ['Notices', ['empty-anchor-text', 'title-too-long']],
+      ['Skipped', ['orphan-page', 'future-check']],
+    ]);
+  });
+
+  it('by category is the list by category in catalog order, as before', () => {
+    const list = buildCheckList(CHECKS, entries, FILTERS, { sort: 'category', fixFirst: FIX_FIRST });
+    expect(list.categories.map((category) => category.title)).toEqual([
+      'Response codes',
+      'Links',
+      'Titles',
+      'Other checks',
+    ]);
+    expect(buildCheckList(CHECKS, entries, FILTERS)).toEqual(list);
+  });
+
+  it('keeps the filters: a severity, the text, and hidden checks out unless shown', () => {
+    const hidden = new Set(['internal-client-error']);
+    const withHidden = checkEntries(CHECKS, COUNTED, hidden);
+    const errors = buildCheckList(
+      CHECKS,
+      withHidden,
+      { ...FILTERS, severity: ['error'], hidden },
+      { sort: 'fixFirst', fixFirst: FIX_FIRST },
+    );
+    expect(ids(errors.visible)).toEqual(['broken-internal-links']);
+    expect(errors.hiddenCount).toBe(1);
+    const shown = buildCheckList(
+      CHECKS,
+      withHidden,
+      { ...FILTERS, severity: ['error'], hidden, showHidden: true },
+      { sort: 'fixFirst', fixFirst: FIX_FIRST },
+    );
+    expect(ids(shown.visible)).toEqual(['broken-internal-links', 'internal-client-error']);
+    const text = buildCheckList(CHECKS, entries, { ...FILTERS, q: 'title' }, { sort: 'count' });
+    expect(ids(text.visible)).toEqual(['title-too-long']);
+  });
+});
+
+describe('related checks', () => {
+  const entries = checkEntries(CHECKS, COUNTED);
+  const entry = (id: string) => entries.find((candidate) => candidate.check.id === id)!;
+  const POINTS = new Map([['broken-internal-links', 4]]);
+
+  it('says what a fix of a check also clears, with the points when it clears all of it', () => {
+    const related = relatedChecks(entries, entry('internal-client-error'), POINTS);
+    expect(
+      related.clears.map((cleared) => [cleared.entry.check.id, cleared.pages, cleared.all, cleared.points]),
+    ).toEqual([['broken-internal-links', 5, true, 4]]);
+    expect(related.clearedBy).toEqual([]);
+  });
+
+  it('says which fix clears a check’s pages, from the other side', () => {
+    const related = relatedChecks(entries, entry('broken-internal-links'), POINTS);
+    expect(related.clears).toEqual([]);
+    expect(related.clearedBy.map((by) => [by.entry.check.id, by.pages, by.all])).toEqual([
+      ['internal-client-error', 5, true],
+    ]);
+  });
+
+  it('claims no points for a part, and leaves out a check this catalog doesn’t have', () => {
+    const partial = checkEntries(CHECKS, {
+      ...COUNTED,
+      counts: COUNTED.counts.map((count) =>
+        count.checkId === 'internal-client-error'
+          ? {
+              ...count,
+              clears: [
+                { checkId: 'broken-internal-links', pages: 3, all: false },
+                { checkId: 'no-such-check', pages: 2, all: true },
+              ],
+            }
+          : count,
+      ),
+    });
+    const related = relatedChecks(partial, partial[0]!, POINTS);
+    expect(related.clears.map((cleared) => [cleared.entry.check.id, cleared.pages, cleared.points])).toEqual([
+      ['broken-internal-links', 3, null],
+    ]);
   });
 });
