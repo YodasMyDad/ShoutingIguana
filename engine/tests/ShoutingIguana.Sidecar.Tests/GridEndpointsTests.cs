@@ -47,7 +47,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Contains(cleared, entry => (string?)entry!["checkId"] == "broken-internal-links" && (long)entry["pages"]! > 0);
 
         var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
-        Assert.Equal("""["links-to-redirects"]""", checks.Single(check => (string?)check!["id"] == "redirect-chain")!["clears"]!.ToJsonString());
+        Assert.Equal("""["links-to-redirects","pagination-broken"]""", checks.Single(check => (string?)check!["id"] == "redirect-chain")!["clears"]!.ToJsonString());
         Assert.Equal("[]", checks.Single(check => (string?)check!["id"] == "title-too-long")!["clears"]!.ToJsonString());
     }
 

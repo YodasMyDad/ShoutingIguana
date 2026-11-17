@@ -217,7 +217,8 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         var first = await PostOkAsync($"api/crawls/{grid.Id}/links/groups", view);
         Assert.Equal(["total", "links", "pages", "offset", "sort", "rows", "summary"], first.AsObject().Select(property => property.Key));
         Assert.Equal(["id", "url", "links", "pages", "text", "texts", "positions", "likelyTemplate", "target"], first["rows"]![0]!.AsObject().Select(property => property.Key));
-        Assert.Equal(["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical"],
+        // A target says what any URL's facts say, its response time among them since slow-external-links (new checks).
+        Assert.Equal(["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical", "responseMs"],
             first["rows"]![0]!["target"]!.AsObject().Select(property => property.Key));
         Assert.Equal(((long)ends["total"]!, links, (long)sources["total"]!, 0, """{"column":"pages","desc":true}""", """{"available":true,"reason":null}"""),
             ((long)first["total"]!, (long)first["links"]!, (long)first["pages"]!, (int)first["offset"]!, first["sort"]!.ToJsonString(), first["summary"]!.ToJsonString()));
