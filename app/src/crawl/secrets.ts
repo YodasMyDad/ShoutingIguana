@@ -1,11 +1,16 @@
 // The secrets a crawl is given (its proxy's user name and password, the values of its headers, such as a site login's
-// Authorization), kept in the operating system's credential store by the shell (src-tauri/src/secrets.rs), never in a
-// settings file or a crawl file (docs/v2-ui-architecture.md, "Secrets"). The engine keeps neither: it stores the
-// proxy without its password and the headers without their values. So a crawl started with them is continued with
-// them, without asking again, and the crawl defaults' proxy keeps its password between runs of the app.
+// Authorization), never in a settings file or a crawl file (docs/v2-ui-architecture.md, "Secrets"). The engine keeps
+// neither: it stores the proxy without its password and the headers without their values.
+//
+// Kept only with the user's consent (step 3b): where they tick "Remember in Windows Credential Manager", the shell keeps
+// them in the operating system's credential store (src-tauri/src/secrets.rs), so a crawl started with them is
+// continued with them after a restart, without asking again, and the crawl defaults' proxy keeps its password between
+// runs of the app. Unticked, they last for this session only, in this page's memory: Continue works until the app is
+// closed, and asks again after. Unticking takes out what was remembered. What an earlier version remembered without
+// asking counts as remembered (the option shows ticked), until it's unticked.
 //
 // In a browser (development, the end-to-end tests) there's no credential store: secrets live only while the page
-// does, as before.
+// does, ticked or not.
 import type { ContinueCrawlRequest, CrawlOptions } from '../api/types';
 import { isTauri } from '../lib/platform';
 
@@ -37,9 +42,17 @@ const shellStore: SecretsStore = {
 
 let store: SecretsStore | null = isTauri ? shellStore : null;
 
-/** Tests and stories give their own store; null is a browser's, which keeps nothing. */
+/** The secrets kept for this session only (not remembered), by what they're for: gone when the app closes. */
+const session = new Map<SecretsKey, CrawlSecrets>();
+
+/** Tests and stories give their own store; null is a browser's, which keeps nothing past the session. */
 export function setSecretsStore(next: SecretsStore | null): void {
   store = next;
+}
+
+/** A restart, for tests: this session's secrets are gone. */
+export function resetSessionSecretsForTests(): void {
+  session.clear();
 }
 
 const credentialsIn = (proxyUrl: string | null | undefined): boolean => {
@@ -65,18 +78,46 @@ export function secretsOf(options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders
 
 const isEmpty = (secrets: CrawlSecrets) => !secrets.proxyUrl && !secrets.headers;
 
-/** Keeps the secrets for `key`, or forgets what was kept when there are none. Never throws: a store that refuses is logged. */
-export async function keepSecrets(key: SecretsKey, secrets: CrawlSecrets): Promise<void> {
+/**
+ * Keeps the secrets for `key`, or forgets what was kept when there are none. `remember`, the user's consent: in the
+ * credential store, else for this session only, and what the store had for `key` is taken out. Never throws: a store
+ * that refuses is logged.
+ */
+export async function keepSecrets(
+  key: SecretsKey,
+  secrets: CrawlSecrets,
+  { remember }: { remember: boolean },
+): Promise<void> {
+  if (isEmpty(secrets)) session.delete(key);
+  else session.set(key, secrets);
   if (!store) return;
   try {
-    await store.write(key, isEmpty(secrets) ? null : JSON.stringify(secrets));
+    await store.write(key, remember && !isEmpty(secrets) ? JSON.stringify(secrets) : null);
   } catch (error) {
     console.warn(`The credential store didn't keep the secrets for ${key}`, error);
   }
 }
 
-/** The secrets kept for `key`, or null. */
+/** Whether the credential store remembers secrets for `key`: the option to remember them shows ticked. */
+export async function isRemembered(key: SecretsKey): Promise<boolean> {
+  if (!store) return false;
+  try {
+    return (await store.read(key)) !== null;
+  } catch (error) {
+    console.warn(`The credential store couldn't say whether it keeps secrets for ${key}`, error);
+    return false;
+  }
+}
+
+/** Whether `key`'s secrets are remembered, as a query: the option to remember them starts from it. */
+export function rememberedSecretsQuery(key: SecretsKey) {
+  return { queryKey: ['secrets', 'remembered', key] as const, queryFn: () => isRemembered(key), staleTime: 0 };
+}
+
+/** The secrets kept for `key`, this session's first, then the credential store's; or null. */
 export async function keptSecrets(key: SecretsKey): Promise<CrawlSecrets | null> {
+  const kept = session.get(key);
+  if (kept) return kept;
   if (!store) return null;
   try {
     const text = await store.read(key);
@@ -148,10 +189,19 @@ export function continueWithSecrets(request: ContinueCrawlRequest, secrets: Craw
   return next;
 }
 
-/** After a crawl starts: keeps what it was given, for Continue. */
-export function keepCrawlSecrets(crawlId: string, options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders'>): void {
+/**
+ * After a crawl starts or continues: keeps what it was given, for Continue. `remember` is the user's consent; left out
+ * (a Continue), the secrets go where the crawl's already were: remembered when the store has some for it.
+ */
+export async function keepCrawlSecrets(
+  crawlId: string,
+  options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders'>,
+  remember?: boolean,
+): Promise<void> {
   const secrets = secretsOf(options);
-  if (!isEmpty(secrets)) void keepSecrets(`crawl:${crawlId}`, secrets);
+  if (isEmpty(secrets)) return;
+  const key: SecretsKey = `crawl:${crawlId}`;
+  await keepSecrets(key, secrets, { remember: remember ?? (await isRemembered(key)) });
 }
 
 /**
@@ -161,6 +211,6 @@ export function keepCrawlSecrets(crawlId: string, options: Pick<CrawlOptions, 'p
 export async function forgetCrawlSecrets(crawlId: string): Promise<CrawlSecrets | null> {
   const key: SecretsKey = `crawl:${crawlId}`;
   const kept = await keptSecrets(key);
-  if (kept) await keepSecrets(key, {});
+  if (kept) await keepSecrets(key, {}, { remember: false });
   return kept;
 }

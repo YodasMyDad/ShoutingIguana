@@ -3,6 +3,8 @@ import type { SpeedPreset } from '../../api/types';
 import { ENGINE_DEFAULTS } from './engineDefaults';
 import {
   changedFields,
+  formHasSecrets,
+  missingSecrets,
   formFromOptions,
   headerRow,
   hiddenChanges,
@@ -146,5 +148,25 @@ describe('what reaches the engine (the review’s findings 8 and 11)', () => {
     expect(sectionSummary('limits', formFromOptions({ ...ENGINE_DEFAULTS, maxHtmlBytes: 1_000_000 }))).toBe(
       'No URL limit, any depth, HTML up to 0.95 MB',
     );
+  });
+});
+
+describe('the secrets in the form', () => {
+  it('has secrets when the proxy has a login or a header has a value', () => {
+    const form = formFromOptions(ENGINE_DEFAULTS);
+    expect(formHasSecrets(form)).toBe(false);
+    expect(formHasSecrets({ ...form, proxyUrl: 'socks5://me:pw@proxy.example.com:1080' })).toBe(true);
+    expect(formHasSecrets({ ...form, proxyUrl: 'http://proxy.example.com:8080' })).toBe(false);
+    expect(formHasSecrets({ ...form, headers: [headerRow('X-Allow', '')] })).toBe(false);
+    expect(formHasSecrets({ ...form, headers: [headerRow('X-Allow', 's3cret')] })).toBe(true);
+  });
+
+  it('says a crawl’s secrets must be given again only when its options came back without them', () => {
+    expect(missingSecrets({ extraHeaders: { 'X-Allow': '' } })).toBe(true);
+    expect(missingSecrets({ proxyUrl: 'http://***@proxy:8080', hasRedactedProxyCredentials: true })).toBe(true);
+    // Kept for the session or remembered: the values are back in, and nothing is asked for again.
+    expect(missingSecrets({ extraHeaders: { 'X-Allow': 's3cret' } })).toBe(false);
+    expect(missingSecrets({ proxyUrl: 'http://me:pw@proxy:8080', hasRedactedProxyCredentials: false })).toBe(false);
+    expect(missingSecrets({})).toBe(false);
   });
 });

@@ -9,6 +9,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { ENGINE_DEFAULTS } from '../crawl/options/engineDefaults';
+import { setSecretsStore } from '../crawl/secrets';
 import type { Mode } from '../mode/mode';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
 import { fakeSidecar, json, standardRoutes } from '../test/fakeSidecar';
@@ -260,6 +261,46 @@ describe('Settings, Crawl defaults', () => {
       expect(saved.startUrl).toBe('');
       expect(await screen.findByText('Saved')).toBeVisible();
       expect(getSettings().mode).toBe(mode);
+    },
+  );
+
+  it.each(['simple', 'advanced'] as const)(
+    'remembers the proxy password in Windows Credential Manager only once ticked, and forgets it when unticked, in %s',
+    async (mode) => {
+      const kept = new Map<string, string>();
+      setSecretsStore({
+        read: (key) => Promise.resolve(kept.get(key) ?? null),
+        write: (key, secrets) => {
+          if (secrets === null) kept.delete(key);
+          else kept.set(key, secrets);
+          return Promise.resolve();
+        },
+      });
+      try {
+        const transport = sidecar();
+        await open('/settings/crawl-defaults', mode);
+        fireEvent.click(await screen.findByRole('button', { name: /^Headers and network/ }));
+        const remember = screen.getByRole('checkbox', { name: 'Remember in Windows Credential Manager' });
+        expect(remember).not.toBeChecked();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Proxy' }), {
+          target: { value: 'socks5://me:pw@proxy.example.com:1080' },
+        });
+        await waitFor(() => expect(transport.requests.some((request) => request.method === 'PUT')).toBe(true), {
+          timeout: SAVE_DELAY_MS + 1_000,
+        });
+        // Saved, but not remembered: the engine has the proxy without its login, and the store has nothing.
+        expect(
+          JSON.stringify(transport.requests.filter((request) => request.method === 'PUT').at(-1)?.body),
+        ).not.toContain('me:pw');
+        expect(kept.size).toBe(0);
+        fireEvent.click(remember);
+        await waitFor(() => expect(kept.get('defaults')).toBeDefined(), { timeout: SAVE_DELAY_MS + 1_000 });
+        expect(JSON.parse(kept.get('defaults') ?? '{}')).toEqual({ proxyUrl: 'socks5://me:pw@proxy.example.com:1080' });
+        fireEvent.click(remember);
+        await waitFor(() => expect(kept.has('defaults')).toBe(false), { timeout: SAVE_DELAY_MS + 1_000 });
+      } finally {
+        setSecretsStore(null);
+      }
     },
   );
 });
