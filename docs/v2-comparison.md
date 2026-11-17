@@ -49,6 +49,9 @@ Step 3 (to round 5, 2026-11-14) has built, of what this page found missing or to
   workbook takes the view's filters, and the inspector's link lists export (round 5).
 - **The platform**: a signed in-app updater, a proxy test, credentials in the OS's store, a data folder that can be
   changed, licences in About and a log folder a click away (round 5).
+- **Pixel widths** (step 3b): the four title and description length checks measure pixels, as their four pixel
+  filters do: over 580 px (theirs 561) and under 200 px for titles, over 985 px and under 400 px for descriptions
+  ([pixel widths](v2-pixel-widths.md)). So those four are covered, no longer in part.
 
 Still later, and in [the IA's room for what comes later](v2-ui-ia.md#room-for-what-comes-later): the SERP snippet,
 the duplicates diff and Insight.
@@ -61,7 +64,7 @@ the duplicates diff and Insight.
 | --- | --- | --- |
 | JavaScript rendering | "Text Only" is the default. "JavaScript" mode renders in headless Chrome. With it: rendered screenshots, stored rendered HTML, JavaScript errors, 16 JavaScript issues | **step 4** |
 | List mode | Checks a list of URLs: pasted, or from .txt, .xls, .xlsx, .csv or .xml, so a sitemap can be crawled on its own. Since v22 also a Google Sheet or several sitemaps | **step 4**. Ours reads sitemaps only as part of a crawl |
-| SERP mode | Upload titles and descriptions to measure pixel widths. No crawl | **not doing**: a preview tool, not an audit. Pixel widths are in the check audit |
+| SERP mode | Upload titles and descriptions to measure pixel widths. No crawl | **not doing**: a preview tool, not an audit. Pixel widths are measured since step 3b ([pixel widths](v2-pixel-widths.md)) |
 | Compare mode | Two stored crawls: URLs "Added", "New", "Removed" and "Missing" for every tab and filter. Change detection for titles, descriptions, h1s, word count, depth, links, structured data. URL mapping for staging against live. Since v24, scheduled crawls compare themselves with the last one. Needs a licence and database storage | **later**: already planned as Overview's "Compare with…" |
 | APIs mode | Pulls API data for uploaded URLs without crawling | **not doing** |
 | robots.txt tester | "Custom robots.txt": download, edit and test a file, and see what it blocks. Also a setting to ignore robots.txt "but report status" | **later**. Our robots.txt screen (built, not merged) shows each file, the blocked URLs and the rule that matched |
@@ -152,8 +155,12 @@ Their issues library lists **348 issues** in 25 groups, each with a type (Issue,
 
 **In part (7).** "Internal Redirection (3XX)": we flag temporary redirects and links to redirects, not every
 redirect. Page Titles "Over 561 Pixels" and "Below 200 Pixels", Meta Description "Over 985 Pixels" and "Below 400
-Pixels": we estimate width from characters. Canonicals "Multiple": we flag only canonicals that conflict. Social
+Pixels": we estimated width from characters. Canonicals "Multiple": we flag only canonicals that conflict. Social
 "Incomplete OG Tags": `open-graph-missing` covers it, with our own list of three tags.
+
+Since step 3b the four pixel filters are covered: our checks measure pixels, over 580 px for titles where theirs is
+561 (Google's measured cut, not 17 px before it), and at their 200, 985 and 400 px otherwise
+([pixel widths](v2-pixel-widths.md)). Counted again, we cover 75 and 3 in part.
 
 ### Theirs we lack: from the HTML and headers we already fetch (100)
 
@@ -220,6 +227,8 @@ structure and the "Outside \<head>" family (10), Hreflang (5), Canonicals (3), S
 
 - **Thresholds.** The same as theirs for titles (60 and 30), descriptions (155 and 70), URL length (115) and thin
   content (200 words). Different for image size (theirs 100 kb, ours 200 KB) and alt text (100 characters, ours 125).
+  Since step 3b, titles and descriptions are judged in pixels, as their pixel filters: titles over 580 px (theirs
+  561) and under 200 px, descriptions over 985 px and under 400 px, the same.
 - **Severity.** Theirs is harsher on several: "Canonicalised", "Noindex" and "Internal Blocked by Robots.txt" are
   Warning and High (ours are Notices), "Exact Duplicates" is Issue and High (ours a Warning), H1 "Missing" is Issue
   and Medium (ours a Notice). Ours is harsher on images without alt (their Issue and Low, our Warning). Each is a
