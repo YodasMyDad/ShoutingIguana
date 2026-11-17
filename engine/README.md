@@ -707,7 +707,9 @@ result as a record in the file ("rechecked 5 pages on 17 Nov: 4 fixed"). The des
 - **Settled once.** The analysis after a recheck settles it in its own commit (`RecheckSettlement`): each URL it judged
   is fixed (read again in a way the check can judge, or let go, and not flagged), still flagged, not checked (an error, a
   block or a redirect in place of what the check needs: `CheckJudging`, the comparison's own line), or not rechecked (past
-  the cap, or not reached); URLs in its scope flagged now and not before are new; with the score after. A recheck whose
+  the cap, or not reached); URLs in its scope flagged now and not before are new; with the score after. A recheck never
+  says fixed where a full crawl says still: a duplicate is fixed only when its own text changed (every stored page of its
+  cluster is fetched too), else not checked, as a page the recheck didn't fetch may share the text now. A recheck whose
   process died is settled as interrupted, with what it fetched. Later analyses never work it out again: it records what
   that recheck found, and the crawl's issues say what's true now. `RecheckReader` reads the rechecks and a recheck's URLs.
 - **Time.** A recheck's run is a run in `run_time`, listed by `CrawlRunReader` as one (`CrawlRun.IsRecheck`), and its
