@@ -540,3 +540,58 @@ export function robotsOriginsOffer(args: {
   };
   return { ...base(args.item, 'Export robots.txt', args.crawling), choices: [view] };
 }
+
+// ------------------------------------------------------------------------------ Links grouped by target (step 3b)
+
+/** The words of a grouped view's order: what the dialog says the file is sorted by. */
+function groupOrderWords(sort: GridSort): string {
+  if (sort.column === 'pages' && sort.desc) return 'the most linked from pages first';
+  return 'by this sort';
+}
+
+/**
+ * The Links screen grouped by target: what's shown, one row a target (the engine's `linkGroups` export), with the view's
+ * filters, search and order; its columns are the grouped view's own.
+ */
+export function linkGroupsOffer(args: {
+  item: CrawlListItem;
+  crawling: boolean;
+  filters: readonly GridFilter[];
+  /** The grouped view's order, as it reads by. */
+  sort: GridSort;
+  search: string | undefined;
+  /** The targets the view holds now, when known. */
+  targets: number | null;
+  /** The preset the view is on, for the file's name; null for a view of the user's own making. */
+  viewName: string | null;
+  /** The view's links are images alone: the rows are images. */
+  images?: boolean | undefined;
+}): ExportOffer {
+  const [one, many] = args.images ? ['image', 'images'] : ['target', 'targets'];
+  const parts = [
+    args.filters.length > 0
+      ? args.filters.length === 1
+        ? 'this filter'
+        : `these ${formatCount(args.filters.length)} filters`
+      : null,
+    args.search ? 'this search' : null,
+    groupOrderWords(args.sort),
+  ].filter((part): part is string => part !== null);
+  const counted = args.targets === null ? `The ${many}` : formatCountOf(args.targets, one, many);
+  const view: ExportChoice = {
+    id: 'view',
+    title: 'This view',
+    description: `${counted}, one row ${args.images ? 'an image' : 'a target'}: ${parts.join(', ')}`,
+    formats: ['csv', 'xlsx'],
+    fileView: args.viewName ? `${args.viewName} by target` : args.images ? 'images' : 'links by target',
+    build: ({ format, path }) => ({
+      kind: 'linkGroups',
+      format: format === 'xlsx' ? 'xlsx' : 'csv',
+      path,
+      filters: [...args.filters],
+      ...(args.search ? { search: args.search } : {}),
+      sort: [{ ...args.sort }],
+    }),
+  };
+  return { ...base(args.item, 'Export links by target', args.crawling), choices: [view] };
+}

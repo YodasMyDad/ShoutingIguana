@@ -16,7 +16,7 @@ import type {
 } from '../grids';
 import type { PageImages } from '../inspector';
 import { invalidQuery } from './gridQuery';
-import { LINK_COLUMNS, LINK_POSITION_VALUES, answerLinkQuery } from './linkGrid';
+import { LINK_COLUMNS, LINK_POSITION_VALUES, answerLinkQuery, pixelsMeasured } from './linkGrid';
 
 export type LinkAnswer<T> = { ok: true; page: T } | { ok: false; problem: ProblemBody };
 
@@ -196,6 +196,7 @@ export function answerLinkGroups(
       sort,
       rows: groups.slice(offset, offset + limit).map(({ first: _first, ...group }) => group),
       summary,
+      pixelSizes: pixelsMeasured(links),
     },
   };
 }
@@ -237,5 +238,11 @@ export function answerPageImages(links: readonly LinkRow[], urlId: number, limit
     if (left === null || right === null) return left === right ? a.index - b.index : left === null ? 1 : -1;
     return right - left || a.index - b.index;
   });
-  return { urlId, total: images.length, links: own.length, rows: images.slice(0, limit).map((entry) => entry.image) };
+  return {
+    urlId,
+    total: images.length,
+    links: own.length,
+    rows: images.slice(0, limit).map((entry) => entry.image),
+    pixelSizes: pixelsMeasured(links),
+  };
 }

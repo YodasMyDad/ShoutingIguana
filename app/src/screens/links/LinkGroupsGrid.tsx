@@ -276,9 +276,19 @@ export function LinkGroupsGrid({
   );
 
   const [measure, width] = useElementWidth();
+  // A crawl made before images' pixel sizes were read has none: no column of dashes, one line that says so.
+  const unmeasured = images && first?.pixelSizes === false;
   const shownColumns = useMemo(
-    () => ['target', 'status', ...(images ? ['size', 'pixels'] : []), 'pages', 'links', 'text', 'where'],
-    [images],
+    () => [
+      'target',
+      'status',
+      ...(images ? ['size', ...(unmeasured ? [] : ['pixels'])] : []),
+      'pages',
+      'links',
+      'text',
+      'where',
+    ],
+    [images, unmeasured],
   );
   const widths = images ? IMAGE_WIDTHS : WIDTHS;
   const targetWidth = Math.max(
@@ -483,6 +493,9 @@ export function LinkGroupsGrid({
   if (failed) return <>{errorState(groups.error, groups.refetch)}</>;
   return (
     <div ref={measure} className="flex min-h-0 flex-1 flex-col">
+      {unmeasured ? (
+        <p className="mb-2 text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
+      ) : null}
       <GridCore<GroupTreeRow>
         key={view}
         label={images ? 'Images, one row an image' : 'Links grouped by target'}

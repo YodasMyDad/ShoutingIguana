@@ -45,9 +45,11 @@ export function ImagesSection() {
   const limit = useQuery(urlDetailQuery(crawlId, urlId)).data?.limits.largeImageBytes;
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
+  // A crawl made before images' pixel sizes were read has none: no column of dashes, one line that says so.
+  const unmeasured = images.data?.pixelSizes === false;
   const urlWidth = Math.max(
     MIN_URL_WIDTH,
-    (width ?? 0) - SIZE_WIDTH - PIXELS_WIDTH - ALT_WIDTH - SHOWN_WIDTH - FRAME_SLACK,
+    (width ?? 0) - SIZE_WIDTH - (unmeasured ? 0 : PIXELS_WIDTH) - ALT_WIDTH - SHOWN_WIDTH - FRAME_SLACK,
   );
   const columns = useMemo<GridColumn<PageImage>[]>(
     () => [
@@ -123,7 +125,11 @@ export function ImagesSection() {
     ],
     [urlWidth, siteOrigin, walk, limit],
   );
-  const laid = useColumnLayout('inspector.images', columns);
+  const visible = useMemo(
+    () => (unmeasured ? columns.filter((column) => column.id !== 'pixels') : columns),
+    [columns, unmeasured],
+  );
+  const laid = useColumnLayout('inspector.images', visible);
 
   if (images.isError && !images.data) {
     return <SectionError error={images.error} onRetry={() => void images.refetch()} what="The images" />;
@@ -148,6 +154,9 @@ export function ImagesSection() {
               : imagesSummaryWords(page, limit)}
           {page.total > page.rows.length ? `, the largest ${formatCount(page.rows.length)} listed` : ''}
         </p>
+        {page.pixelSizes === false && page.total > 0 ? (
+          <p className="text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
+        ) : null}
         {crawling ? <LiveBadge /> : null}
         {page.total > 0 ? (
           // The same images in the Links grid, one row an image link, the largest first: to filter, sort and copy.

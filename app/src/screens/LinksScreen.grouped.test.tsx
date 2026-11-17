@@ -153,6 +153,15 @@ describe('the Links grid grouped by target', () => {
     expect((router.state.location.search as { inspect?: number }).inspect).toBeUndefined();
   });
 
+  it('exports what’s shown, one row a target, while grouped', async () => {
+    sidecar();
+    const { user } = await open(`${LINKS}?by=target`);
+    await counted('8 targets · 13 links on 3 pages');
+    await user.click(screen.getByRole('button', { name: 'Export' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Export links by target' });
+    expect(within(dialog).getByText(/8 targets, one row a target: the most linked from pages first/)).toBeVisible();
+  });
+
   it('sorts the targets by a header, and back to the most linked from pages first', async () => {
     const { transport } = sidecar();
     const { router, user } = await open(`${LINKS}?by=target`);
@@ -218,5 +227,24 @@ describe('the Images preset', () => {
     expect(logo).toHaveTextContent('1.8 MB');
     expect(logo).toHaveTextContent('4000×3000 px');
     expect(logo).toHaveTextContent('Logo');
+  });
+
+  it('leaves out the pixel size, and says so once, for a crawl that didn’t measure it', async () => {
+    // The crawl's image has no pixel size: the crawl was made before they were read.
+    sidecar();
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Images' }));
+    await counted('2 of 13 links');
+    const grid = await screen.findByRole('grid', { name: 'Links' });
+    await waitFor(() => expect(within(grid).getAllByRole('row')).toHaveLength(3));
+    expect(within(grid).queryByRole('columnheader', { name: /Pixel size/ })).toBeNull();
+    expect(screen.getByText('Image dimensions weren’t measured in this crawl.')).toBeVisible();
+    // Grouped, the same.
+    await user.click(screen.getByRole('button', { name: 'Group by target' }));
+    const tree = await screen.findByRole('treegrid', { name: 'Images, one row an image' });
+    await within(tree).findByRole('row', { name: /logo\.png/ });
+    expect(within(tree).queryByRole('columnheader', { name: /Pixel size/ })).toBeNull();
+    expect(screen.getByText('Image dimensions weren’t measured in this crawl.')).toBeVisible();
   });
 });

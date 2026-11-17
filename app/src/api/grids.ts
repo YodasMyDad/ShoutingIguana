@@ -141,6 +141,12 @@ export interface GridPage<Row> {
   summary: SummaryState;
   /** Columns asked for that have no values now: left out of `columns` and of every row (not sent as null). */
   unavailable: string[];
+  /**
+   * Step 3b, round 2: whether the crawl measured images' pixel sizes. False for a crawl made before they were read, whose
+   * images' widths and heights are all unknown: the app leaves out its pixel size columns and says so. Left out by a
+   * sidecar from before it, and by every grid but the links grid.
+   */
+  pixelSizes?: boolean;
 }
 
 export type StatusClass = '2xx' | '3xx' | '4xx' | '5xx' | 'other' | 'noResponse';
@@ -590,6 +596,12 @@ export interface LinkGroupsPage {
   sort: GridSort;
   rows: LinkGroup[];
   summary: SummaryState;
+  /**
+   * Step 3b, round 2: whether the crawl measured images' pixel sizes. False for a crawl made before they were read, whose
+   * images' widths and heights are all unknown: the app leaves out its pixel size columns and says so. Left out by a
+   * sidecar from before it, and by every grid but the links grid.
+   */
+  pixelSizes?: boolean;
 }
 
 // --------------------------------------------------------------------------------------------------- Sitemaps (E3b)

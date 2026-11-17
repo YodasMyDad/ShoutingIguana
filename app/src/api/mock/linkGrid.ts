@@ -161,7 +161,14 @@ export function answerLinkQuery(
   query: GridQuery,
   summary: SummaryState,
 ): GridAnswer<Partial<LinkRow> & { id: number }> {
-  return answerGridQuery<LinkRow>(rows, query, summary, { shape: LINK_SHAPE });
+  const answer = answerGridQuery<LinkRow>(rows, query, summary, { shape: LINK_SHAPE });
+  // Whether the crawl measured images' pixel sizes, as the sidecar says it: here, whether any target has one.
+  return answer.ok ? { ok: true, page: { ...answer.page, pixelSizes: pixelsMeasured(rows) } } : answer;
+}
+
+/** Whether a crawl's links show it measured images' pixel sizes: some target has a width. */
+export function pixelsMeasured(rows: readonly LinkRow[]): boolean {
+  return rows.some((row) => typeof row['to.pixelWidth'] === 'number');
 }
 
 export const LINK_FACETS: readonly LinkFacetId[] = ['kind', 'position', 'follow', 'to.statusClass', 'to.isInternal'];

@@ -115,4 +115,19 @@ describe('the inspector’s Images', () => {
     expect(await within(panel).findByText('No images')).toBeVisible();
     expect(within(inspector).getByRole('tab', { name: /^Images/ })).toHaveTextContent(/^Images$/);
   });
+
+  it('leaves out the pixel size, and says so, for a crawl that didn’t measure it', async () => {
+    const unmeasured = [testPageImage({}, { pixelWidth: null, pixelHeight: null })];
+    setTransport(
+      fakeSidecar([
+        ...inspectorRoutes({ urls: { 2: testUrlDetail() }, images: { 2: unmeasured } }),
+        ...standardRoutes(),
+      ]),
+    );
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Images/ }));
+    const panel = await screen.findByRole('tabpanel', { name: /^Images/ });
+    expect(await within(panel).findByText('Image dimensions weren’t measured in this crawl.')).toBeVisible();
+    expect(within(panel).queryByRole('columnheader', { name: /Pixel size/ })).toBeNull();
+  });
 });

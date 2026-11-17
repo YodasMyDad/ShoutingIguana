@@ -469,4 +469,10 @@ export interface PageImages {
   /** Its image links: an image shown twice is two. */
   links: number;
   rows: PageImage[];
+  /**
+   * Step 3b, round 2: whether the crawl measured images' pixel sizes. False for a crawl made before they were read, whose
+   * images' widths and heights are all unknown: the app leaves out its pixel size columns and says so. Left out by a
+   * sidecar from before it, and by every grid but the links grid.
+   */
+  pixelSizes?: boolean;
 }
