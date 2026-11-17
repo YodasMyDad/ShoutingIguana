@@ -28,6 +28,7 @@ public static class ExportFields
         ["origin"] = BLOCKED,
         ["line"] = BLOCKED,
         ["reason"] = BLOCKED,
+        ["conflict"] = BLOCKED,
         ["checkId"] = [ExportKind.IssueRows, ExportKind.Check],
         ["cut"] = REPORT,
         ["examples"] = REPORT,

@@ -329,17 +329,38 @@ public sealed class GridExportTests : IDisposable
                 url.Reason switch { RobotsBlockReason.Rule => "A rule", RobotsBlockReason.Unreachable => "robots.txt couldn’t be read", _ => "No rule kept" },
                 url.Line is { } line ? (long)line : null,
                 url.Rule,
-                url.Error
+                url.Error,
+                url.LinkingPages,
+                url.InSitemap is { } listed ? listed ? "Yes" : "No" : null,
+                url.Sitemap?.Url,
+                url.InMenu is { } menu ? menu ? "Yes" : "No" : null,
+                url.Conflict != true
+                    ? null
+                    : (url.InSitemap == true, url.InMenu == true) switch
+                    {
+                        (true, true) => "In your sitemap and menu but blocked",
+                        (true, false) => "In your sitemap but blocked",
+                        _ => "In your menu but blocked"
+                    }
             })
         ];
+        Assert.Contains(expected, row => row[9] is "In your sitemap but blocked" && row[7] is string);
+        Assert.Contains(expected, row => (long?)row[5] > 0);
 
         foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
         {
             var (result, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.RobotsBlocked, Format = format, Origin = origin.Origin }, "Blocked URLs");
-            Assert.Equal(["Blocked URL", "Blocked by", "Line", "Rule", "Error"], rows[0]);
+            Assert.Equal(["Blocked URL", "Blocked by", "Line", "Rule", "Error", "Linked from (pages)", "In a sitemap", "Sitemap", "In a menu", "Conflict"], rows[0]);
             AssertSameCells(expected, rows, format);
             Assert.Equal(origin.Blocked, result.Rows);
         }
+
+        // The conflicts alone, as the list narrows to them; a crawl changed since its analysis has no such columns' values.
+        var (_, conflicts) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.RobotsBlocked, Format = ExportFormat.Csv, Origin = origin.Origin, Conflict = true }, "c");
+        Assert.Equal(expected.Where(row => row[9] is not null).Select(row => (string?)row[0]), conflicts.Skip(1).Select(row => (string?)row[0]));
+        var (_, changed) = Export(_crawl.Changed, new ExportRequest { Kind = ExportKind.RobotsBlocked, Format = ExportFormat.Csv, Origin = origin.Origin }, "d");
+        Assert.Equal(expected.Count, changed.Count - 1);
+        Assert.All(changed.Skip(1), row => Assert.All(row.Skip(5), cell => Assert.True(cell is null or "")));
 
         // Narrowed to one line's, as the list narrows.
         var first = blocked.Rows.First(url => url.Line is not null);
