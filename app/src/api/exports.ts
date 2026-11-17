@@ -15,7 +15,9 @@ export type ExportKind =
   | 'workbook'
   | 'report'
   | 'sitemaps'
-  | 'robotsOrigins';
+  | 'robotsOrigins'
+  /** Step 3b: the links grouped by target, one row a target. */
+  | 'linkGroups';
 
 /** The grids write `csv` or `xlsx`; `check` either; `workbook` is `xlsx` and `report` is `html`. */
 export type ExportFormat = 'csv' | 'xlsx' | 'html';
@@ -162,6 +164,7 @@ const EXPORT_KINDS: readonly ExportKind[] = [
   'report',
   'sitemaps',
   'robotsOrigins',
+  'linkGroups',
 ];
 const EXPORT_FORMATS: readonly ExportFormat[] = ['csv', 'xlsx', 'html'];
 const EXPORT_STATUSES: readonly ExportStatus[] = ['running', 'done', 'cancelled', 'failed'];

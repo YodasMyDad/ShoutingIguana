@@ -83,6 +83,8 @@ export function rowNoun(kind: ExportKind, simple = false): { one: string; many: 
       return { one: 'sitemap', many: 'sitemaps' };
     case 'robotsOrigins':
       return { one: 'origin', many: 'origins' };
+    case 'linkGroups':
+      return { one: 'target', many: 'targets' };
   }
 }
 
@@ -109,6 +111,8 @@ export function kindTitle(kind: ExportKind, simple = false): string {
       return 'The list of sitemaps';
     case 'robotsOrigins':
       return 'The robots.txt origins';
+    case 'linkGroups':
+      return 'Links by target';
   }
 }
 
