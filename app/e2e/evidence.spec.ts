@@ -49,7 +49,7 @@ test('Advanced names an oversized image by its file and size, largest first, and
   const size = group.related?.sizeBytes;
   expect(typeof size).toBe('number');
   await page.goto(`/crawls/${crawl.id}/issues/image-too-large`);
-  const tree = page.getByRole('treegrid', { name: /Images over/ });
+  const tree = page.getByRole('treegrid', { name: /Large images/ });
   await expect(tree.getByRole('columnheader', { name: 'Image' })).toBeVisible();
   await expect(tree.getByRole('columnheader', { name: /File size/ })).toBeVisible();
   const row = tree.getByRole('row').nth(1);
