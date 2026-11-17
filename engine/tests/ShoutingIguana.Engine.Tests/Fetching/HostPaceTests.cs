@@ -207,7 +207,7 @@ public sealed class HostPaceTests
     }
 
     [Fact]
-    public void RepeatedTripsHalveItAgainDownToOneRequestEveryTenSeconds()
+    public void RepeatedTripsHalveItAgainDownToOneRequestEveryFiveSeconds()
     {
         var pace = AtFullSpeed(maxConcurrency: 4, maxRate: 10);
         var now = T0;
@@ -218,7 +218,7 @@ public sealed class HostPaceTests
         }
 
         Assert.Equal(HostPace.MIN_RATE, pace.Rate);
-        Assert.Equal(TimeSpan.FromSeconds(10), pace.Interval);
+        Assert.Equal(TimeSpan.FromSeconds(5), pace.Interval);
     }
 
     [Fact]

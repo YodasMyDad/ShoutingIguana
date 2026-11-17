@@ -28,8 +28,11 @@ internal sealed class HostPace
     /// <summary>Requests a second at the start of a crawl, and the floor of a pace slowed by failures.</summary>
     public const double START_RATE = 1;
 
-    /// <summary>The slowest pace a host is ever asked at: one request every ten seconds.</summary>
-    public const double MIN_RATE = 0.1;
+    /// <summary>
+    /// The slowest pace a host is ever asked at: one request every five seconds. A host that wants less pauses the crawl
+    /// with each 429 it sends, and the URLs it refused are asked again at the end.
+    /// </summary>
+    public const double MIN_RATE = 0.2;
 
     /// <summary>A learned pace above this many requests a second, with no rate set, is no limit at all.</summary>
     private const double UNCAPPED_ABOVE = 256;
@@ -108,7 +111,7 @@ internal sealed class HostPace
     /// </summary>
     public TimeSpan? SlowedTo => !_slowStart && _rate is { } rate && (_maxRate is not { } max || rate < max) ? Interval : null;
 
-    /// <summary>A pace in words: "2 requests a second", "0.5 requests a second", "one request every 10 seconds".</summary>
+    /// <summary>A pace in words: "2 requests a second", "0.5 requests a second", "one request every 5 seconds".</summary>
     public static string DescribePace(TimeSpan interval)
     {
         var perSecond = 1 / interval.TotalSeconds;

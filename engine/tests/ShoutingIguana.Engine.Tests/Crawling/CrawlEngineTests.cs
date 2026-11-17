@@ -101,8 +101,28 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// One that never lets the crawler through: its product pages are asked for once, then once more at the end of the crawl,
-    /// and stored as not checked because the site asked the crawler to slow down. That is no fault of the site's pages, so
+    /// One whose limit lets one product page through every two seconds and renews its penalty with every other, like the
+    /// real shop's (about one a minute): the crawl's single last try lost pages to it, as on the real site; three, each
+    /// after the pause the site asked for, get them all.
+    /// </summary>
+    [Fact]
+    public async Task ASiteThatLetsOnePageThroughAtATimeIsCrawledWhole()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
+        {
+            PageCount = 6,
+            RateLimit = new SyntheticRateLimit(MaxRequests: 1, Window: TimeSpan.FromSeconds(2), Penalty: TimeSpan.FromSeconds(2))
+        });
+
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
+
+        Assert.True(server.RateLimited > 0, "The crawl should have tripped the rate limit.");
+        Assert.Equal(0, Count(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"));
+    }
+
+    /// <summary>
+    /// One that never lets the crawler through: its product pages are asked for once, then three more times at the end of
+    /// the crawl, and stored as not checked because the site asked the crawler to slow down. That is no fault of the site's pages, so
     /// no check flags them, the analysis says why they weren't judged, and a notice says what to do.
     /// </summary>
     [Fact]
@@ -110,7 +130,8 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions
         {
-            PageCount = 6,
+            // Two product pages, each asked four times at the pace a site that keeps asking teaches: one every five seconds.
+            PageCount = 3,
             RateLimit = new SyntheticRateLimit(MaxRequests: 1, Window: TimeSpan.FromSeconds(1), Penalty: TimeSpan.FromSeconds(1), NeverRelents: true)
         });
         var path = NewDatabasePath();
@@ -124,9 +145,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         const string PRODUCTS = "FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1 AND u.url LIKE '%/p/%'";
         var products = Count(path, $"SELECT COUNT(*) {PRODUCTS}");
-        Assert.True(products >= 5, $"{products} product URLs");
+        Assert.True(products >= 2, $"{products} product URLs");
         Assert.Equal(products, Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests)'"));
-        Assert.Equal(2 * products, server.RateLimited);
+        Assert.Equal(4 * products, server.RateLimited);
         Assert.Equal(products, CrawlStatsReader.Read(path).NotCheckedCount);
 
         var slowDown = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited");

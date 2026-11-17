@@ -110,10 +110,10 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      sitemaps and the icon.
    - Slow start: one request at a time at one a second. Each healthy answer doubles the rate and allows one more at
      once, so a healthy site is at full speed within about a second (the 100k bench barely notices). Answers that come
-     back much slower than the host's first ones hold the pace where it is.
+     back much slower than the host's first ones hold the pace where it is, for eight answers at most.
    - A host that asks to slow down (429, or 503 with Retry-After) is paused, all of it, for its Retry-After (or 10 s,
      doubling while it keeps asking, up to two minutes), then resumes one request at a time at half the pace that
-     tripped it, so nothing queued bursts out after the pause. 429s to requests sent before that slowdown don't slow
+     tripped it (never below one every five seconds), so nothing queued bursts out after the pause. 429s to requests sent before that slowdown don't slow
      it again. Two failures in a row (502, 504, a 503 without Retry-After) slow it the same way without a pause, at
      most once every 30 s and never below one a second. A firewall's block page says nothing about pace, and nor does
      no answer at all: whether an origin is down is judged per origin (below), so a dead www twin never slows the
@@ -135,7 +135,7 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      with one-minute pauses and a notice, never written off, and after ten minutes down (time paused aside) the
      crawl stops, to be resumed.
    - The site's URLs that got no response, or were asked to slow down (429, 503), are tried once more when nothing
-     else can be claimed (at most 10,000 are held back for it), handed to the workers as they have room, at the pace
+     else can be claimed (one answered 429 again, up to three times, each after the pause the host asked for) (at most 10,000 are held back for it), handed to the workers as they have room, at the pace
      the host has taught (which doesn't recover during those last tries, so it never probes upward into the limit
      again) and after any pause it asked for. A 429 or 503 isn't retried on the spot: that would renew a
      rate limit's penalty. That comes before the URLs only sitemaps list. URLs refused because robots.txt couldn't be

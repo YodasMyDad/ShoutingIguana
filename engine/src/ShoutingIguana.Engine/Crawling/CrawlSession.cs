@@ -36,6 +36,12 @@ internal sealed class CrawlSession
     /// <summary>At most this many URLs are held back for a second try, so memory stays flat when a site goes down.</summary>
     private const int MAX_DEFERRED = 10_000;
 
+    /// <summary>
+    /// Tries at the end of the crawl for a URL the site keeps answering 429, each after the pause the host asked for: a
+    /// limit that lets one page through a minute lets them all through one by one, where a single try lost them.
+    /// </summary>
+    private const int MAX_RATE_LIMITED_TRIES = 3;
+
     private static readonly TimeSpan IDLE_DELAY = TimeSpan.FromMilliseconds(20);
     private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromMilliseconds(500);
 
@@ -71,6 +77,9 @@ internal sealed class CrawlSession
     // Held back with how they ended, which is what gets recorded if their origin is written off before their one more try.
     private readonly ConcurrentQueue<PageRecord> _deferred = new();
     private readonly ConcurrentDictionary<int, PageRecord> _retried = new();
+
+    // The end-of-crawl tries each URL answered 429 has had.
+    private readonly ConcurrentDictionary<int, int> _rateLimitedTries = new();
     private readonly Lock _pauseSync = new();
     private volatile CrawlStatus _status = CrawlStatus.Running;
     private volatile CrawlPhase _phase = CrawlPhase.Starting;
@@ -399,7 +408,7 @@ internal sealed class CrawlSession
         var host = Volatile.Read(ref _rateLimitedHost) ?? _scope.HostName(UrlNormalizer.GetHost(_startUri));
         var urls = count == 1 ? "1 URL wasn't" : $"{count:N0} URLs weren't";
         _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "rate-limited-unchecked",
-            $"{urls} checked because {host} kept asking the crawler to slow down ({HttpStatusNames.Describe(429)}), even when they were asked for again at the end. Check the site again later, or at the Polite speed.")
+            $"{urls} checked because {host} kept asking the crawler to slow down ({HttpStatusNames.Describe(429)}), even when they were asked for again at the end, three times, each after the pause it asked for. Check the site again later, or at the Polite speed.")
         {
             Data = new CrawlNoticeData(Host: host, Reason: HttpStatusNames.Describe(429), Count: count)
         });
@@ -622,9 +631,10 @@ internal sealed class CrawlSession
     /// <summary>
     /// The site's own URLs that got no response, were asked to slow down (429, or 503), or were refused because robots.txt
     /// couldn't be read, are held back (unrecorded) for one more try at the end of the crawl, when a site that was briefly
-    /// down is usually back, and one that asked for less has had its pause. URLs failed without a request ("Not checked")
-    /// aren't: their origin is gone, and one more try would fail the same way. Nor are probes of the site's other
-    /// versions, which never hold up a crawl: one that got no answer is dead.
+    /// down is usually back, and one that asked for less has had its pause; one answered 429 again gets up to
+    /// <see cref="MAX_RATE_LIMITED_TRIES"/>. URLs failed without a request ("Not checked") aren't: their origin is gone,
+    /// and one more try would fail the same way. Nor are probes of the site's other versions, which never hold up a
+    /// crawl: one that got no answer is dead.
     /// </summary>
     private bool Defer(PageRecord record)
     {
@@ -636,7 +646,7 @@ internal sealed class CrawlSession
                             response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) != true;
         var throttled = IsRateLimited(response) || response is { Outcome: FetchOutcome.ServerError, StatusCode: 503 };
         if (!item.IsInternal || item.Source == DiscoverySource.SiteVersion || !(gotNoResponse || refusedByRobots || throttled) ||
-            _retried.ContainsKey(item.Id) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
+            _retried.ContainsKey(item.Id) && !HasRateLimitedTriesLeft(item.Id, response) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
         {
             return false;
         }
@@ -660,6 +670,10 @@ internal sealed class CrawlSession
         retried.Response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) == true && !IsRateLimited(retried.Response)
             ? heldBack
             : retried;
+
+    /// <summary>A URL answered 429 at an end-of-crawl try, with tries left: this one is counted.</summary>
+    private bool HasRateLimitedTriesLeft(int id, ResponseRow response) =>
+        IsRateLimited(response) && _rateLimitedTries.AddOrUpdate(id, 1, static (_, tries) => tries + 1) < MAX_RATE_LIMITED_TRIES;
 
     /// <summary>Stored as not checked because the site answered 429 Too Many Requests.</summary>
     private static bool IsRateLimited(ResponseRow response) =>
