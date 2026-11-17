@@ -38,7 +38,12 @@ public static partial class PlainLimits
         [Name(nameof(AnalysisSettings.LargeImageBytes))] = (settings => settings.LargeImageBytes, LimitUnit.Bytes),
         [Name(nameof(AnalysisSettings.LargePageBytes))] = (settings => settings.LargePageBytes, LimitUnit.Bytes),
         [Name(nameof(AnalysisSettings.SlowResponseMs))] = (settings => settings.SlowResponseMs, LimitUnit.Milliseconds),
-        [Name(nameof(AnalysisSettings.MaxUrlLength))] = (settings => settings.MaxUrlLength, LimitUnit.Characters)
+        [Name(nameof(AnalysisSettings.MaxUrlLength))] = (settings => settings.MaxUrlLength, LimitUnit.Characters),
+        [Name(nameof(AnalysisSettings.MinInternalOutlinks))] = (settings => settings.MinInternalOutlinks, LimitUnit.Links),
+        [Name(nameof(AnalysisSettings.MaxClickDepth))] = (settings => settings.MaxClickDepth, LimitUnit.Clicks),
+        [Name(nameof(AnalysisSettings.MaxInternalLinks))] = (settings => settings.MaxInternalLinks, LimitUnit.Links),
+        [Name(nameof(AnalysisSettings.MaxExternalLinks))] = (settings => settings.MaxExternalLinks, LimitUnit.Links),
+        [Name(nameof(AnalysisSettings.SlowExternalLinkMs))] = (settings => settings.SlowExternalLinkMs, LimitUnit.Milliseconds)
     };
 
     /// <summary>What a limit is counted in, which says how a sentence gives it.</summary>
@@ -54,7 +59,9 @@ public static partial class PlainLimits
         Words,
         Bits,
         Bytes,
-        Milliseconds
+        Milliseconds,
+        Links,
+        Clicks
     }
 
     /// <summary>The names a plain text can hold in <c>{limit:name}</c>: every numeric threshold of the analysis settings, as their JSON names it.</summary>
@@ -103,6 +110,8 @@ public static partial class PlainLimits
             LimitUnit.Words => Count(limit.Value(settings), "word", "words"),
             LimitUnit.Bits => Count(limit.Value(settings), "bit", "bits"),
             LimitUnit.Bytes => Size(limit.Value(settings)),
+            LimitUnit.Links => Count(limit.Value(settings), "link", "links"),
+            LimitUnit.Clicks => Count(limit.Value(settings), "click", "clicks"),
             _ => Seconds(limit.Value(settings))
         }
         : throw new ArgumentException($"No analysis setting is named '{name}'. A plain text can hold {{limit:name}} for: {string.Join(", ", LIMITS.Keys)}.", nameof(name));

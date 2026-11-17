@@ -318,6 +318,7 @@ public sealed class PageRuleTests
     /// <summary>
     /// A byte-order mark at the start of the file declares the encoding, and beats a meta tag and the header: a page with
     /// one, UTF-8 or UTF-16, isn't missing its character encoding, though it has no meta tag and no charset in its header.
+    /// UTF-16 is declared, but not the UTF-8 the HTML standard requires: that's the encoding declared wrongly instead.
     /// </summary>
     [Theory]
     [InlineData("utf-8")]
@@ -332,7 +333,8 @@ public sealed class PageRuleTests
         var marked = Issues(rules, site.Page($"{site.Site}/marked", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html")], byteOrderMark: byteOrderMark));
         var unmarked = Issues(rules, site.Page($"{site.Site}/unmarked", html, IndexabilityReason.Noindex, [new ResponseHeader("content-type", "text/html")]));
 
-        Assert.Empty(marked);
+        IssueDefinition[] declaredWrongly = byteOrderMark == "utf-8" ? [] : [IssueCatalog.CHARSET_INVALID];
+        Assert.Equal(declaredWrongly, marked);
         Assert.Equal([IssueCatalog.CHARSET_MISSING], unmarked);
     }
 

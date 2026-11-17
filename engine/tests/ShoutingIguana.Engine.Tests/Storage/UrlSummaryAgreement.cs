@@ -106,7 +106,8 @@ internal static class UrlSummaryAgreement
         Assert.All(flagged[IssueCatalog.CANONICALISED_PAGE.Id], row => Assert.Equal(IndexabilityReason.Canonicalised, row.IndexabilityReason));
         Assert.All(flagged[IssueCatalog.SITEMAP_NON_INDEXABLE.Id], row => Assert.True(row is { InSitemap: true, IsIndexable: false }));
         Assert.All(flagged[IssueCatalog.NOT_IN_SITEMAP.Id], row => Assert.True(row is { InSitemap: false, ResourceType: ResourceType.Page }));
-        Assert.All(flagged[IssueCatalog.ORPHAN_PAGE.Id], row => Assert.True(row is { InSitemap: true, LinkingPages: 0 }));
+        // An orphan has no followed link: none at all, or only nofollow ones.
+        Assert.All(flagged[IssueCatalog.ORPHAN_PAGE.Id], row => Assert.True(row is { InSitemap: true, FollowedInlinks: 0 }));
 
         // The reverse: what the summary calls an indexable page had its HTML read, so a page that was only status-checked
         // never passes for one, and each of the site's was audited by the analysis, apart from Cloudflare's endpoints, which

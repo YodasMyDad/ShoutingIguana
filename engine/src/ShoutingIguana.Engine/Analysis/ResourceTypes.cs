@@ -9,6 +9,22 @@ namespace ShoutingIguana.Engine.Analysis;
 /// </summary>
 internal static class ResourceTypes
 {
+    /// <summary>The JavaScript media types browsers run a script sent as (the HTML standard's, less the legacy oddities).</summary>
+    private static readonly HashSet<string> SCRIPT_TYPES = new(
+        ["text/javascript", "application/javascript", "application/x-javascript", "application/ecmascript", "text/ecmascript"], StringComparer.Ordinal);
+
+    /// <summary>What a successful response's media type (as stored, lowercase, without parameters) says it is.</summary>
+    public static ContentClass ClassOf(string? mediaType) => mediaType switch
+    {
+        null or "" => ContentClass.Missing,
+        _ when mediaType.IndexOf('/') <= 0 || mediaType.EndsWith('/') => ContentClass.Invalid,
+        "text/html" or "application/xhtml+xml" => ContentClass.Html,
+        "text/css" => ContentClass.Stylesheet,
+        _ when SCRIPT_TYPES.Contains(mediaType) => ContentClass.Script,
+        _ when mediaType.StartsWith("image/", StringComparison.Ordinal) => ContentClass.Image,
+        _ => ContentClass.Other
+    };
+
     private static readonly Dictionary<string, ResourceType> EXTENSIONS = new(StringComparer.OrdinalIgnoreCase)
     {
         ["jpg"] = ResourceType.Image, ["jpeg"] = ResourceType.Image, ["png"] = ResourceType.Image, ["gif"] = ResourceType.Image,

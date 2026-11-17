@@ -21,6 +21,9 @@ public sealed partial class SyntheticSite
     public const int DEAD_TWIN_UNCHECKED = 5;
 
     private const int PRODUCTS_PER_LISTING = 50;
+
+    /// <summary>The analysis's default deepest a page may be, in clicks from the start (AnalysisSettings.MaxClickDepth).</summary>
+    private const int MAX_CLICK_DEPTH = 4;
     private const int PARAGRAPHS = 8;
     private const int WORDS_PER_PARAGRAPH = 60;
     private const int DESCRIPTION_WORDS = 14;
@@ -278,6 +281,8 @@ public sealed partial class SyntheticSite
     public SyntheticSiteExpectations GetExpectations()
     {
         HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [], restored = [];
+        var depths = ProductDepths();
+        var linkedBy = ProductInlinks();
         Dictionary<string, HashSet<string>> issues = new(StringComparer.Ordinal);
 
         // Paths are on this site; links to the external site are already absolute.
@@ -357,6 +362,12 @@ public sealed partial class SyntheticSite
             {
                 Flag("noindex-page", path);
 
+                // A noindex product one or two clicks from home, as every product a listing shows is.
+                if (depths[product] <= 2)
+                {
+                    Flag("noindex-near-home", path);
+                }
+
                 // noindex decides the page, so a canonical elsewhere is a mixed signal rather than a canonicalised page.
                 if (IsCanonicalised(product))
                 {
@@ -366,6 +377,16 @@ public sealed partial class SyntheticSite
             else if (IsCanonicalised(product))
             {
                 Flag("canonicalised-page", path);
+            }
+
+            if (IsIndexable(product) && depths[product] is > MAX_CLICK_DEPTH and < int.MaxValue)
+            {
+                Flag("deep-page", path);
+            }
+
+            if (IsIndexable(product) && linkedBy[product] is (true, false))
+            {
+                Flag("non-indexable-inlinks-only", path);
             }
 
             // Every product is in a sitemap, so each non-indexable one is a sitemap issue.
@@ -465,10 +486,11 @@ public sealed partial class SyntheticSite
             Flag("sitemap-missing", "/");
         }
 
-        // A plant's sitemap issues come from its sitemap entry, which a site without sitemaps doesn't have.
+        // A plant's sitemap issues come from its sitemap entry, which a site without sitemaps doesn't have, and without
+        // one no page can be missing from them.
         foreach (var plant in _plants)
         {
-            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !issue.StartsWith("sitemap-", StringComparison.Ordinal)))
+            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !(issue.StartsWith("sitemap-", StringComparison.Ordinal) || issue is "not-in-sitemap" or "orphan-page")))
             {
                 Flag(issue, PlantUrl(plant));
             }
@@ -489,7 +511,7 @@ public sealed partial class SyntheticSite
         // canonical names its own page on another version of the site, so every one of them is out. Only a site with
         // HiddenFromSearch gets there: one with NoindexProducts has as many noindex pages less one, and a home page
         // that can be indexed.
-        if (IsHomeNoindex && Count(issues, "noindex-page") * 2 > analysedPages - Count(issues, "canonicalised-page"))
+        if (IsHomeNoindex && Count(issues, "noindex-page") * 2 > analysedPages - Canonicalised(issues))
         {
             Flag("site-hidden-from-search", "/");
         }
@@ -509,7 +531,7 @@ public sealed partial class SyntheticSite
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
             Noindex: Count(issues, "noindex-page"),
-            Canonicalised: Count(issues, "canonicalised-page"),
+            Canonicalised: Canonicalised(issues),
             DuplicateTitlePages: Count(issues, "title-duplicate") - _plants.Count(plant => plant.Issues.Contains("title-duplicate")),
             MissingDescriptions: Count(issues, "description-missing") - _plants.Count(plant => plant.Issues.Contains("description-missing")),
             ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
@@ -527,6 +549,13 @@ public sealed partial class SyntheticSite
 
     private static int Count(Dictionary<string, HashSet<string>> issues, string issue) =>
         issues.TryGetValue(issue, out var urls) ? urls.Count : 0;
+
+    /// <summary>
+    /// The pages canonicalised to another URL: those reported as such, and those whose canonical is reported as a fault of
+    /// its own instead, to another site or from a later page of a series to its first.
+    /// </summary>
+    private static int Canonicalised(Dictionary<string, HashSet<string>> issues) =>
+        Count(issues, "canonicalised-page") + Count(issues, "canonical-other-domain") + Count(issues, "canonical-to-first-page");
 
     /// <summary>The absolute URL a plant is served, linked and listed at.</summary>
     private string PlantUrl(Plant plant) => plant.Url ?? (plant.OnPartnerSite ? _external : _base) + plant.Path;
@@ -665,10 +694,114 @@ public sealed partial class SyntheticSite
         });
     }
 
+    /// <summary>The products the home page lists.</summary>
+    private IEnumerable<int> HomeProducts() => Enumerable.Range(1, Math.Min(PRODUCTS_PER_LISTING, PageCount - 1));
+
+    /// <summary>The products a category page lists: every twentieth from its number, up to a listing's worth.</summary>
+    private IEnumerable<int> CategoryProducts(int category)
+    {
+        for (int product = category, listed = 0; product < PageCount && listed < PRODUCTS_PER_LISTING; product += CATEGORY_COUNT)
+        {
+            if (product < 1)
+            {
+                continue;
+            }
+
+            yield return product;
+            listed++;
+        }
+    }
+
+    /// <summary>
+    /// Each product's depth as the crawl records it: the fewest links from the home page, any kind of link counting and a
+    /// redirect counting as none, so a product a redirect leads to is as deep as the link to the redirect. The home page
+    /// lists the first products, the categories (one click away) a listing's worth each, and each product links others.
+    /// </summary>
+    private int[] ProductDepths()
+    {
+        var depths = new int[PageCount];
+        Array.Fill(depths, int.MaxValue);
+        List<int> level = [.. HomeProducts()];
+        level.ForEach(product => depths[product] = 1);
+        for (var depth = 1; level.Count > 0; depth++)
+        {
+            List<int> next = [];
+            void Reach(int product)
+            {
+                if (depths[product] > depth + 1)
+                {
+                    depths[product] = depth + 1;
+                    next.Add(product);
+                }
+            }
+
+            if (depth == 1)
+            {
+                Enumerable.Range(0, CATEGORY_COUNT).SelectMany(CategoryProducts).ToList().ForEach(Reach);
+            }
+
+            foreach (var product in level)
+            {
+                foreach (var (href, _, _) in ContentLinks(product))
+                {
+                    if (TryNumber(href, "/p/", string.Empty, out var target) || TryNumber(href, "/r/", string.Empty, out target) ||
+                        TryNumber(href, "/r2/", string.Empty, out target))
+                    {
+                        Reach(target);
+                    }
+                }
+
+                if (IsCanonicalised(product) && product > 1)
+                {
+                    Reach(product - 1);
+                }
+            }
+
+            level = next;
+        }
+
+        return depths;
+    }
+
+    /// <summary>
+    /// For each product, whether any page links to it with a followed link, and whether an indexable one does, crediting a
+    /// link to a redirect to where it ends, as the analysis counts them: the home page and its categories list products, and
+    /// products link each other, directly and through /r/ and /r2/.
+    /// </summary>
+    private (bool Any, bool Indexable)[] ProductInlinks()
+    {
+        var linked = new (bool Any, bool Indexable)[PageCount];
+        void Link(int product, bool fromIndexable) => linked[product] = (true, linked[product].Indexable || fromIndexable);
+
+        foreach (var product in HomeProducts())
+        {
+            Link(product, !IsHomeNoindex);
+        }
+
+        foreach (var product in Enumerable.Range(0, CATEGORY_COUNT).SelectMany(CategoryProducts))
+        {
+            Link(product, true);
+        }
+
+        for (var product = 1; product < PageCount; product++)
+        {
+            foreach (var (href, noFollow, _) in ContentLinks(product))
+            {
+                if (!noFollow && (TryNumber(href, "/p/", string.Empty, out var target) || TryNumber(href, "/r/", string.Empty, out target) ||
+                                  TryNumber(href, "/r2/", string.Empty, out target)) && target != product)
+                {
+                    Link(target, IsIndexable(product));
+                }
+            }
+        }
+
+        return linked;
+    }
+
     private string RenderHome()
     {
         var list = new StringBuilder();
-        for (var product = 1; product <= Math.Min(PRODUCTS_PER_LISTING, PageCount - 1); product++)
+        foreach (var product in HomeProducts())
         {
             list.Append("<li><a href=\"/p/").Append(product).Append("\">Product ").Append(product).Append("</a></li>");
         }
@@ -687,15 +820,9 @@ public sealed partial class SyntheticSite
     private string RenderCategory(int category)
     {
         var list = new StringBuilder();
-        for (int product = category, listed = 0; product < PageCount && listed < PRODUCTS_PER_LISTING; product += CATEGORY_COUNT)
+        foreach (var product in CategoryProducts(category))
         {
-            if (product < 1)
-            {
-                continue;
-            }
-
             list.Append("<li><a href=\"/p/").Append(product).Append("\">Product ").Append(product).Append("</a></li>");
-            listed++;
         }
 
         // The plants hub hangs off the first category, two clicks from home, so depth-limited crawls stay unchanged.
@@ -722,7 +849,7 @@ public sealed partial class SyntheticSite
     private string Render(PageSpec page)
     {
         var html = new StringBuilder(32 * 1024);
-        html.Append("<!DOCTYPE html><html").Append(page.Lang ? " lang=\"en\"" : string.Empty).Append("><head>");
+        html.Append("<!DOCTYPE html><html").Append(page.Lang ? $" lang=\"{page.LangValue}\"" : string.Empty).Append("><head>");
         if (page.Charset)
         {
             html.Append("<meta charset=\"utf-8\">");
@@ -743,7 +870,7 @@ public sealed partial class SyntheticSite
 
         if (page.Viewport)
         {
-            html.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            html.Append("<meta name=\"viewport\" content=\"").Append(page.ViewportContent).Append("\">");
         }
 
         if (page.Canonical is not null)
@@ -771,26 +898,38 @@ public sealed partial class SyntheticSite
         }
 
         html.Append(page.ExtraHead);
-        html.Append("</head><body><header class=\"site-header\"><a href=\"/\" class=\"logo\">Synthetic Store</a></header>");
-        html.Append("<nav><ul><li><a href=\"/\">Home</a></li>");
-        for (var category = 0; category < CATEGORY_COUNT; category++)
+        html.Append("</head><body>");
+        if (page.Chrome)
         {
-            html.Append("<li><a href=\"/c/").Append(category).Append("\">Category ").Append(category).Append("</a></li>");
+            html.Append("<header class=\"site-header\"><a href=\"/\" class=\"logo\">Synthetic Store</a></header>");
+            html.Append("<nav><ul><li><a href=\"/\">Home</a></li>");
+            for (var category = 0; category < CATEGORY_COUNT; category++)
+            {
+                html.Append("<li><a href=\"/c/").Append(category).Append("\">Category ").Append(category).Append("</a></li>");
+            }
+
+            html.Append("</ul></nav>");
         }
 
-        html.Append("</ul></nav><main>");
+        html.Append("<main>");
         if (page.H1 is not null)
         {
             html.Append("<h1>").Append(page.H1).Append("</h1>");
         }
 
-        html.Append(page.Content).Append("</main><footer><ul>");
-        foreach (var staticPage in STATIC_PAGES)
+        html.Append(page.Content).Append("</main>");
+        if (page.Chrome)
         {
-            html.Append("<li><a href=\"/").Append(staticPage).Append("\">").Append(staticPage).Append("</a></li>");
+            html.Append("<footer><ul>");
+            foreach (var staticPage in STATIC_PAGES)
+            {
+                html.Append("<li><a href=\"/").Append(staticPage).Append("\">").Append(staticPage).Append("</a></li>");
+            }
+
+            html.Append("</ul><p>&copy; Synthetic Store</p></footer>");
         }
 
-        html.Append("</ul><p>&copy; Synthetic Store</p></footer></body></html>");
+        html.Append("</body></html>");
         return html.ToString();
     }
 

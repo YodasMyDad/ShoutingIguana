@@ -46,10 +46,12 @@ public sealed class RecheckKindsTests(RecheckCrawls crawls, RecheckKindsTests.Ht
     public async Task NotInSitemapIsRecheckedWithTheSitemapsReadAgain()
     {
         var path = crawls.Copy(crawls.Then);
+        var before = (int)IssueReader.ReadCounts(path)["not-in-sitemap"];
+        Assert.True(before >= SyntheticSite.CATEGORY_COUNT);
 
         var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("not-in-sitemap"));
 
-        Assert.Equal((SyntheticSite.CATEGORY_COUNT, 1, SyntheticSite.CATEGORY_COUNT - 1, 0), (recheck.Judged, recheck.Result!.Fixed, recheck.Result.Still, recheck.Result.NotChecked));
+        Assert.Equal((before, 1, before - 1, 0), (recheck.Judged, recheck.Result!.Fixed, recheck.Result.Still, recheck.Result.NotChecked));
         var first = $"{crawls.Server.BaseUri}c/0";
         Assert.Equal(1, TestCrawls.Count(path, $"SELECT COUNT(*) FROM sitemap_urls su JOIN urls u ON u.id = su.url_id WHERE u.url = '{first}'"));
         Assert.Equal($"{(int)UrlState.Skipped} | {(int)SkipReason.Recheck} | 0", Assert.Single(TestCrawls.Rows(path, $"""

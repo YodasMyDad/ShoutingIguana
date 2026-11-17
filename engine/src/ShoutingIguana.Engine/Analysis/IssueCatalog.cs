@@ -67,6 +67,20 @@ public static class IssueCatalog
         Evidence = ["type"]
     };
 
+    public static readonly IssueDefinition CONTENT_TYPE_MISMATCH = new("content-type-mismatch", IssueCategory.ResponseCodes, IssueSeverity.Warning,
+        "File served with the wrong content type",
+        """A page uses this internal URL as a script, a stylesheet or an image, but the server sends it with a Content-Type that isn't one (a script not sent as JavaScript, a stylesheet not as text/css, an image not as image/*), or with none or a malformed one. A URL used two ways is judged for each. The detail says how it's used and what it's sent as.""",
+        """Configure the server or CDN to send the right Content-Type for the file's type, such as text/javascript for .js and text/css for .css. If the URL answers with a page instead, such as an error or login page sent with 200, fix or replace the link to the file.""")
+    {
+        Why = """With X-Content-Type-Options: nosniff, as most sites send, browsers refuse to run a script or apply a stylesheet sent as the wrong type, so the page can break for visitors and for Google's rendering. An "image" that answers with a web page is usually an error page in disguise.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["type", "contentType"]
+    };
+
     public static readonly IssueDefinition SOFT_404 = new("soft-404", IssueCategory.ResponseCodes, IssueSeverity.Warning,
         "Soft 404",
         """This indexable page returns 200 OK, but its title or H1 reads like an error message (such as "Page not found" or "no longer available") and it has fewer than 300 words.""",
@@ -156,9 +170,23 @@ public static class IssueCatalog
         TargetFacts = ["statusCode", "final"]
     };
 
+    public static readonly IssueDefinition REDIRECT_TEMPORARY_CACHED = new("redirect-temporary-cached", IssueCategory.Redirects, IssueSeverity.Notice,
+        "Temporary redirect cached for long",
+        """This internal URL redirects to another URL on the site with a temporary status code (302, 303 or 307), but its response lets browsers and proxies keep the redirect for more than a day: a Cache-Control max-age or s-maxage over 86,400 seconds, or an Expires more than a day after its Date, without no-store or no-cache. The detail gives how long.""",
+        """If the move is permanent, make it a 301 or 308. If it really is temporary, send the redirect with Cache-Control: no-store, or a max-age of an hour or so, so visitors' browsers ask again once it ends.""")
+    {
+        Why = """A temporary redirect is meant to be checked again each time, but a long cache lifetime lets each visitor's browser keep sending them to the old target for days or weeks after you change or remove it. Search engines treat it as temporary all the same, which is a separate signal to fix if the move is for good.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.ResponseDetail,
+        Evidence = ["redirectChain"]
+    };
+
     public static readonly IssueDefinition META_REFRESH = new("meta-refresh", IssueCategory.Redirects, IssueSeverity.Warning,
         "Meta refresh",
-        """The page has a <meta http-equiv="refresh"> tag that sends visitors to another URL or reloads the page, at once or after a delay. The detail gives the target and the delay.""",
+        """The page has a <meta http-equiv="refresh"> tag, or its response a Refresh header, that sends visitors to another URL or reloads the page, at once or after a delay. The detail gives the target and the delay, and says when it's the header.""",
         """Replace it with a 301 redirect on the server (or 302 if the move is temporary). If the page reloads itself to show new content, update it with script instead, or let visitors refresh.""")
     {
         Why = """Google treats an instant meta refresh as a permanent redirect and a delayed one as temporary, but recommends a server-side redirect wherever you can set one up; that's faster too, as the browser doesn't load the page first. A timed redirect or reload also moves content away while people are reading, which WCAG counts as a failure. A refresh on old URLs where the server can't redirect is an acceptable fallback.""",
@@ -256,7 +284,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition ORPHAN_PAGE = new("orphan-page", IssueCategory.Links, IssueSeverity.Warning,
         "Orphan page in a sitemap",
-        """This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished, and not when 1 in 20 or more of the pages it tried to read refused the crawler or didn't answer, as their links are unknown.""",
+        """This indexable page is listed in a sitemap, but no crawled page links to it with a followed link, even through a redirect. The detail says whether only nofollow links lead to it, or nothing. It's only checked when the crawl finished, and not when 1 in 20 or more of the pages it tried to read refused the crawler or didn't answer, as their links are unknown.""",
         """If the page matters, link to it from relevant pages and from its section's listing. If it doesn't, remove it from the sitemap, then redirect or remove the page.""")
     {
         Why = """Visitors can't reach it by browsing, and search engines only know it from the sitemap. Google uses links to find pages and judge their relevance, and says every page you care about should have a link from at least one other page on your site. Often it's an old page left in the sitemap, or one linked only from places a crawler can't follow, such as forms or scripts.""",
@@ -267,6 +295,178 @@ public static class IssueCatalog
         Grouping = IssueGrouping.None
     };
 
+
+    public static readonly IssueDefinition UNCRAWLABLE_LINKS = new("uncrawlable-links", IssueCategory.Links, IssueSeverity.Warning,
+        "Links search engines can't follow",
+        """The page has links that lead to another page in a way a search engine can't follow: an <a> whose href is a javascript: URL that navigates, an <a> that navigates only through onclick or a routerLink, or another element, such as a <span> or <div>, given an href with a URL. Script that leads nowhere, such as a menu toggle or javascript:void(0), an empty href (the page itself) and a named anchor don't count. The detail gives up to three, with what makes each one uncrawlable. A crawl made before the crawler noted them isn't checked.""",
+        """Make each one an <a> element with a real URL in its href, and keep any script on top of it, so search engines, and browsers without the script, can follow it. A control that only opens something on the page belongs in a <button>.""")
+    {
+        Why = """Google follows only <a> elements with an href it can resolve, so a page reached only through such links isn't found by crawling and gets no credit from them. Menus, "load more" controls and single-page-app routers are the usual cause.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition BROKEN_RESOURCES = new("broken-resources", IssueCategory.Links, IssueSeverity.Warning,
+        "Page uses a broken file",
+        """The page loads a script, stylesheet, iframe, video or audio file whose URL returns a 4xx or 5xx error or doesn't respond, directly or at the end of its redirects. Images are the broken image check's. On another site, statuses often sent only to crawlers (401, 403, 429, 503) don't count. The detail gives the count, and where the first goes wrong.""",
+        """Restore each missing file, or correct the URL that loads it in the page or its template; remove references to anything no longer used, such as an old tracking script.""")
+    {
+        Why = """A missing stylesheet or script can leave the page unstyled or broken for visitors, and for Google, which renders pages with their files to see what visitors see. A broken third-party tag often changes nothing anyone sees, which is why this is a warning, not an error like a broken image.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "kind", "position", "links"]
+    };
+
+    public static readonly IssueDefinition LINKS_TO_LOCALHOST = new("links-to-localhost", IssueCategory.Links, IssueSeverity.Warning,
+        "Links to localhost or a private address",
+        """The page links to, or loads something from, localhost, a .localhost name, or a loopback or private network address (127.x, ::1, 10.x, 172.16 to 172.31, 192.168.x, fc00::/7). On a crawl that started at such an address, as a development copy does, that machine's own addresses aren't counted. The detail gives the count and the first.""",
+        """Replace each with the live site's URL, or remove it. They usually come from content or settings copied over from a development or staging copy of the site.""")
+    {
+        Why = """Such an address points at the visitor's own computer or network, so a link to one is dead for everyone, and a file loaded from one is missing. Browsers may also warn about, or block, a public page reaching into a private network.""",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "text", "position"]
+    };
+
+    public static readonly IssueDefinition FEW_INTERNAL_OUTLINKS = new("few-internal-outlinks", IssueCategory.Links, IssueSeverity.Notice,
+        "Page with few or no internal links",
+        """This indexable page links with <a href> to fewer than 3 other URLs on the site (the default, which can be changed in the analysis settings), followed or not. Links to the page itself, and to sections of it, don't count.""",
+        """Link the page to related pages and to its section, or give it the site's usual header, menu and footer if it's missing them.""")
+    {
+        Why = """A page with nowhere else to go is a dead end for visitors, and gives search engines no path onward from it. It's common on landing pages built without the site's template. The page itself is fine; only the links from it are missing.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["outlinks"]
+    };
+
+    public static readonly IssueDefinition GENERIC_ANCHOR_TEXT = new("generic-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
+        "Links with generic text",
+        """The page has internal links whose whole text is generic, such as "click here", "read more", "learn more", "here" or "more", rather than saying where they go. Image links aren't counted. The detail gives each text, and how often.""",
+        """Rewrite each link's text to name what's at the other end, such as "Read the delivery policy" instead of "Read more".""")
+    {
+        Why = """Google uses link text to understand the page linked to, and calls texts like "click here" and "read more" too generic. Screen reader users often list a page's links on their own, where "read more" says nothing; WCAG accepts it only where the text around the link makes its purpose clear.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        TargetFacts = ["text", "position", "statusCode"]
+    };
+
+    public static readonly IssueDefinition NON_INDEXABLE_INLINKS_ONLY = new("non-indexable-inlinks-only", IssueCategory.Links, IssueSeverity.Notice,
+        "Linked only from non-indexable pages",
+        """Every page that links to this indexable page with a followed link is itself not indexable: noindex, canonicalised to another URL, or a redirect by an instant meta refresh. Links reaching it through a redirect count. The start and home pages aren't reported, and it's only checked when the crawl read every page that could link to it.""",
+        """Link to the page from at least one indexable page where it belongs, such as its category or a related page.""")
+    {
+        Why = """Search engines find and value pages largely through links from pages they index. Links only from pages they're told to drop, or to treat as copies, still let them reach this page but count for little, and if those pages go the page is left with no links. It's often a page linked only from tag, filter or paginated pages that are noindex.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [],
+        Grouping = IssueGrouping.None,
+        Evidence = ["inlinks", "linkingPages"]
+    };
+
+    public static readonly IssueDefinition DEEP_PAGE = new("deep-page", IssueCategory.Links, IssueSeverity.Notice,
+        "Page many clicks from the home page",
+        """This indexable page is more than 4 clicks from where the crawl started by the shortest path of links (the default, which can be changed in the analysis settings), as the crawl recorded it. Pages found only through a sitemap aren't measured: the orphan page check covers them.""",
+        """Link to the page from higher up: its category, a hub page, the home page or the menu; or add levels of navigation, such as subcategories, so lists don't run deep.""")
+    {
+        Why = """The further a page is from the home page, the less often search engines tend to crawl it and the less weight they give it, and visitors rarely click that far. No standard sets a depth; 4 is a common rule of thumb. Large shops have deep pages by design, so look at which pages are deep rather than how many.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        Subject = IssueSubject.Page,
+        Recheck = [],
+        Grouping = IssueGrouping.None,
+        Evidence = ["depth", "inlinks"]
+    };
+
+    public static readonly IssueDefinition TOO_MANY_LINKS = new("too-many-links", IssueCategory.Links, IssueSeverity.Notice,
+        "Page with a very high number of links",
+        """This indexable page has more than 1,000 internal links or more than 100 links to other sites (the defaults, which can be changed in the analysis settings), counting every <a href>, repeats included. A page's links are read up to 10,000.""",
+        """Cut the links down to the ones visitors use: trim mega-menus and footers, split long lists into pages, and drop repeated links to the same page.""")
+    {
+        Why = """Each link's share of the page's weight shrinks as links are added, and huge lists of links are hard for visitors to use. Google no longer sets a limit, so treat this as a prompt to look, not a fault in itself.""",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["outlinks"]
+    };
+
+    public static readonly IssueDefinition SLOW_EXTERNAL_LINKS = new("slow-external-links", IssueCategory.Links, IssueSeverity.Notice,
+        "Links to slow external pages",
+        """The page links to pages on other sites that took more than 3 seconds to answer when the crawl checked them (the default, which can be changed in the analysis settings), whether they returned a page or a redirect. It isn't checked when links to other sites weren't. The detail gives the count and the slowest time.""",
+        """Open the slowest links to see whether they're slow for you too; replace a link to a site that stays slow with a better source, or remove it.""")
+    {
+        Why = """Visitors who follow the link wait, and may blame your site for it. The other site's server isn't yours to fix, only the link, and one slow answer during a crawl can be a blip, so check before changing anything.""",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "responseMs", "text", "position"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_NOT_LINKED = new("pagination-not-linked", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination URL not linked with an <a>",
+        """The page has a rel="next" or rel="prev" link to another of the site's pages but no ordinary <a href> link to it. The detail names the first.""",
+        """Link each page of the series to the next and previous ones with ordinary <a href> links, such as "Next" and page numbers, as well as or instead of rel="next" and rel="prev".""")
+    {
+        Why = """Google no longer uses rel="next" and rel="prev", and finds later pages of a series only through ordinary links, so pages reached only through these tags may never be crawled. Other search engines and browsers may still read them, so they do no harm beside real links.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_BROKEN = new("pagination-broken", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination URL broken or redirected",
+        """A rel="next" or rel="prev" link of the page names a URL that returns an error, doesn't respond, or redirects. The detail says which and how.""",
+        """Point rel="next" and rel="prev" at the working, final URLs of the series' pages, or remove the ones that lead nowhere.""")
+    {
+        Why = """Browsers and search engines that read these links expect them to name the series' pages themselves. One that fails or redirects usually means the series' URLs changed and the template didn't follow.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_TO_NON_INDEXABLE = new("pagination-to-non-indexable", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination URL not indexable",
+        """A rel="next" or rel="prev" link of the page names a page that isn't indexable: noindex, or canonicalised to another URL. The detail says which.""",
+        """Make the series' pages indexable, each with a canonical to itself, or point rel="next" and rel="prev" at the pages that are.""")
+    {
+        Why = """The pages of a series list what's on the site; if they're noindex or canonicalised away, what's listed only on them is found only through pages search engines are told to drop. It's right for filtered or sorted copies of a list, not for the list's own pages.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading#use-urls-correctly",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "canonical"]
+    };
+
+    public static readonly IssueDefinition PAGINATION_SEQUENCE_ERROR = new("pagination-sequence-error", IssueCategory.Links, IssueSeverity.Notice,
+        "Pagination sequence error",
+        """The page's rel="next" and rel="prev" links don't make a sequence: it has more than one of either, one names the page itself, the page its rel="next" names doesn't name it back with rel="prev", or following rel="next" comes back to a page already passed. The detail says which.""",
+        """Give each page of the series one rel="next" to the page after it and one rel="prev" to the page before it, and none on the last and first pages respectively.""")
+    {
+        Why = """Tools and browsers that read these links follow them as a chain, and a chain that branches, loops or doesn't link back is usually a template bug that also shows in the series' visible links. Google no longer uses them, so this is about tidiness more than search.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.PaginationFault
+    };
 
     // Indexability
     public static readonly IssueDefinition NOINDEX_PAGE = new("noindex-page", IssueCategory.Indexability, IssueSeverity.Notice,
@@ -378,6 +578,84 @@ public static class IssueCatalog
         Evidence = ["metaRobots", "xRobotsTag"]
     };
 
+
+    public static readonly IssueDefinition ROBOTS_DIRECTIVES_CONFLICT = new("robots-directives-conflict", IssueCategory.Indexability, IssueSeverity.Warning,
+        "Meta robots and X-Robots-Tag disagree",
+        """The page's robots meta tags and its X-Robots-Tag header give opposite rules: one says noindex (or none) where the other says index (or all), or one says nofollow where the other says follow. Only rules for all crawlers, Googlebot and this crawler count. The detail quotes both.""",
+        """Decide which rule the page should have, then make both say it, or remove one. The meta tag comes from the page's template or SEO plugin; the header from the server, CDN or CMS.""")
+    {
+        Why = """Search engines combine the two, and where their rules conflict Google applies the more restrictive one, so a page whose HTML says index is dropped from search if its header says noindex. It usually means two systems each set robots rules, and whoever checks only one of them sees the wrong answer. A rule only one of them mentions isn't a conflict.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#combining-robots-meta-tag-directives",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition NOINDEX_NEAR_HOME = new("noindex-near-home", IssueCategory.Indexability, IssueSeverity.Warning,
+        "Noindex page close to the home page",
+        """This noindex page is one or two clicks from where the crawl started, where a site's important sections usually are. The home page isn't reported, nor a page whose address names a private area: cart, basket, checkout, account, login, register, logout, wishlist, search, thank-you, order-received or password pages. The page is in the noindex check too.""",
+        """If the page should be in search, remove the noindex from its robots meta tag or X-Robots-Tag header. If it's meant to stay out, such as a members' or legal page, leave it: this is a prompt to check.""")
+    {
+        Why = """Pages linked from the home page or its menus are usually ones a site wants found, so a noindex there is more often a leftover from a launch, a staging setting or a plugin than a choice. Google drops noindex pages from its results entirely. Sites do keep a few such pages out of search on purpose, which is fine.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag", "depth", "inlinks"]
+    };
+
+    public static readonly IssueDefinition UNAVAILABLE_AFTER_PASSED = new("unavailable-after-passed", IssueCategory.Indexability, IssueSeverity.Warning,
+        "unavailable_after date has passed",
+        """The page's robots meta tag or X-Robots-Tag header has an unavailable_after rule whose date was already past when the crawl fetched the page. A date in a format search engines can't read is ignored, as Google ignores it, and a page that's noindex anyway isn't reported.""",
+        """If the page should stay in search, remove the unavailable_after rule or move its date on. If the content really has expired, redirect the page to its replacement or let it return 404 or 410.""")
+    {
+        Why = """Google stops showing a page in its results after its unavailable_after date, as if it were noindex. The rule is meant for event and offer pages, and its date is easily forgotten when the page is reused or kept. Ignore this if the page was meant to drop out.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#unavailable_after",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition MEDIA_PREVIEW_BLOCKED = new("media-preview-blocked", IssueCategory.Indexability, IssueSeverity.Notice,
+        "Image or video previews blocked",
+        """This indexable page has a robots rule that keeps its images or video out of search: noimageindex, max-image-preview:none or max-video-preview:0. The detail names the rules found.""",
+        """Remove the rule if the page's pictures or video should appear in search; max-image-preview:large allows the largest previews. If they're meant to stay out, leave it.""")
+    {
+        Why = """Google won't show the page's images in its results or image search, or a preview of its video, so the result stands out less. That's often deliberate, for photos licensed for one use or private media, but some plugins set it for a whole site without anyone noticing.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#max-image-preview",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition TRANSLATION_BLOCKED = new("translation-blocked", IssueCategory.Indexability, IssueSeverity.Notice,
+        "Translation blocked (notranslate)",
+        """This indexable page has a notranslate robots rule, so Google won't offer a translation of it in search results.""",
+        """Remove notranslate if people searching in other languages should be offered the page; leave it where a translation could mislead, such as on legal text.""")
+    {
+        Why = """Without it, Google can show the result's title and snippet in the searcher's language and link to a machine translation of the page, which reaches visitors the page couldn't otherwise. It's a choice, not a fault, but it's sometimes left in a template by mistake.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#notranslate",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition INDEXIFEMBEDDED_WITHOUT_NOINDEX = new("indexifembedded-without-noindex", IssueCategory.Indexability, IssueSeverity.Notice,
+        "indexifembedded without noindex",
+        """The page's robots rules include indexifembedded but not noindex, so the rule does nothing.""",
+        """If the page's content should be indexed only where other pages embed it in an iframe, add noindex beside indexifembedded. If not, remove indexifembedded.""")
+    {
+        Why = """indexifembedded lets Google index a page's content where another page embeds it, though the page itself is noindex; without noindex it has no effect. It harms nothing, but it shows the robots rules aren't doing what someone meant.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#indexifembedded",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
 
     // Canonicals
     public static readonly IssueDefinition CANONICALISED_PAGE = new("canonicalised-page", IssueCategory.Canonicals, IssueSeverity.Notice,
@@ -511,6 +789,100 @@ public static class IssueCatalog
         TargetFacts = ["statusCode", "indexability", "flags"]
     };
 
+
+    public static readonly IssueDefinition CANONICAL_TO_FIRST_PAGE = new("canonical-to-first-page", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Paginated page canonicalised to page 1",
+        """This later page of a paginated series, page 2 onward by its rel="prev" link or a page number in its URL (?page=2, ?p=2, /page/2/), names the series' first page as its canonical. It isn't reported as canonicalised too.""",
+        """Give each page of the series a canonical to itself, and keep ordinary links between the pages so every one can be reached.""")
+    {
+        Why = """The canonical asks search engines to treat page 2 as a copy of page 1, which it isn't. What's listed only on later pages is then found only through pages that ask to be dropped, so it may be crawled less, or not at all. Google's pagination guidance says not to use the first page as the canonical; it's a common setting in SEO plugins and shop themes.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading#use-urls-correctly",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "canonical", "flags"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_OTHER_DOMAIN = new("canonical-other-domain", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Canonical points to another site",
+        """The page's canonical names a URL on another host, outside the crawl, so the page asks to be treated as a copy of a page on another site. It isn't reported as canonicalised too. The detail names the host.""",
+        """If this page is a copy of an article first published elsewhere, that's right: leave it. Otherwise point the canonical at this site's own URL for the page; a staging, old or development host in it usually comes from a template or a setting.""")
+    {
+        Why = """Search engines may index the other site's page instead of this one and fold this page's signals into it, so it can disappear from search. That's correct for content republished from another site, and a disaster when a template or a migration leaves every canonical pointing at a staging host or the old domain.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "indexability", "canonical"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_LOOP = new("canonical-loop", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Canonical loop",
+        """Following this page's canonical, page to page and through any redirects, comes back to this page: two or more pages name each other as their canonical. The detail lists the loop. Its pages aren't reported as canonicalised to a non-indexable page too.""",
+        """Choose the one page of the loop that should be indexed, give it a canonical to itself, and point the others' canonicals at it.""")
+    {
+        Why = """Each page asks to be dropped for another that asks the same, so the canonicals cancel out and Google picks a page itself, which may not be the one you meant. It usually comes from two pages each set to the other by hand, or from one rule that rewrites canonicals undoing another.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "canonical"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_ON_REDIRECT = new("canonical-on-redirect", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical header on a redirect",
+        """This internal URL redirects, and its response also has a Link header naming, as canonical, a different URL from the one its redirects end at. The detail gives both.""",
+        """Remove the Link header from the redirect, or make it name the redirect's final URL. It usually comes from a server or CDN rule that adds the header to every response.""")
+    {
+        Why = """Search engines follow the redirect and ignore the rest of the response, so the header has no effect on search. It misleads only people and tools that read the headers, but it can show that a rule meant for pages is applied to every response.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-header-method",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["redirectChain"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_FRAGMENT = new("canonical-fragment", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical contains a fragment (#)",
+        """A canonical in the <head> or an HTTP Link header has a fragment, a part after # such as #reviews. The detail gives the fragment.""",
+        "Remove the # part from the canonical, so it's the page's plain URL.")
+    {
+        Why = """Google says not to use a fragment in a canonical, as it generally doesn't support them: it drops the fragment, so the canonical usually works as meant all the same. The markup is still wrong, and a fragment can be a sign the canonical is built from the browser's address rather than set on purpose.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition CANONICAL_INVALID_ATTRIBUTE = new("canonical-invalid-attribute", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical link with hreflang, lang, media or type",
+        """A canonical <link> in the <head> also has an hreflang, lang, media or type attribute. The detail names them. A crawl made before the crawler noted these attributes isn't checked.""",
+        """Remove those attributes from the canonical link. To point at another language or a mobile version, add a separate <link rel="alternate"> with hreflang or media instead.""")
+    {
+        Why = """Those attributes describe an alternate version of a page, not the page's own preferred URL, so search engines may not take the link as a canonical at all. The usual cause is an alternate link written as rel="canonical" by mistake. No Google page says such a canonical is ignored, so treat this as tidying up.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition CANONICAL_UNLINKED = new("canonical-unlinked", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical URL that no page links to",
+        """Another page names this indexable page as its canonical, but no crawled page links to it, not even with a nofollow link or through a redirect, and no sitemap lists it (a sitemap page nothing links to is an orphan page). It's only checked when the crawl read every page that could link to it.""",
+        """Link to this page wherever its duplicates are linked, such as menus and listings, or change those links to point here. If it shouldn't be the canonical, point the other pages' canonicals at one that is linked.""")
+    {
+        Why = """A canonical tells search engines which URL to index, and links tell them it matters: a canonical page nothing links to sends mixed signals, and Google may choose a linked duplicate instead. Visitors browsing the site only ever reach the duplicates.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [],
+        Grouping = IssueGrouping.None,
+        Evidence = ["inlinks", "linkingPages"]
+    };
 
     // Sitemaps
     public static readonly IssueDefinition SITEMAP_NON_INDEXABLE = new("sitemap-non-indexable", IssueCategory.Sitemaps, IssueSeverity.Warning,
@@ -1139,6 +1511,20 @@ public static class IssueCatalog
     };
 
 
+    public static readonly IssueDefinition RESOURCE_PAST_CRAWL_LIMIT = new("resource-past-crawl-limit", IssueCategory.Performance, IssueSeverity.Warning,
+        "Script or stylesheet over 2 MB",
+        """A page uses this script or stylesheet, here or on another site, and it's larger than 2 MB, as far as Googlebot reads a file. It's measured as the crawl received it, compressed if the server compressed it, so a compressed file over the limit is larger still once decompressed, and one just under it may be over. The limit is Google's, not an analysis setting.""",
+        """Split the file, or remove what pages don't use (unused code, inlined data, source maps), and compress it on the server; load what isn't needed at first later.""")
+    {
+        Why = """Google fetches each script and stylesheet a page uses separately, with the same 2 MB limit as the page, and ignores the rest of a larger one, so the page as Google renders it can be missing styles or behaviour, or break. A file that size also slows the page down for visitors on mobile.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["sizeBytes", "contentType"]
+    };
+
     // HTML
     public static readonly IssueDefinition VIEWPORT_MISSING = new("viewport-missing", IssueCategory.Html, IssueSeverity.Warning,
         "Missing viewport",
@@ -1188,17 +1574,97 @@ public static class IssueCatalog
         Grouping = IssueGrouping.PageDetail
     };
 
+    public static readonly IssueDefinition HEAD_TAGS_IN_BODY = new("head-tags-in-body", IssueCategory.Html, IssueSeverity.Warning,
+        "Head tags in the body",
+        """Tags that belong in the <head> are in the <body> as browsers and Google parse the page: the <title>; a meta description, robots, viewport or the like; Open Graph or X tags; or a <link rel="alternate"> without hreflang. Usually an element that can't be in a head, such as a <div>, an <img> or stray text, ended the head early and pushed every tag after it into the body; the detail names what's out and what ended the head. Canonical and hreflang links have their own checks. A crawl made before the crawler noted these isn't checked.""",
+        """Move the element that ended the head early into the body, or remove it; tags written in the body by mistake belong in the <head>. A plugin or tag manager that injects an element high in the head is the usual cause.""")
+    {
+        Why = """Search engines and social sites may ignore page settings that aren't in the head: Google says so of canonicals, and treats the rest as it can. One stray element moves every tag after it, so a whole template's titles, descriptions and robots rules can be out at once.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/valid-page-metadata",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.HeadEndCause
+    };
+
+    public static readonly IssueDefinition HTML_STRUCTURE_ERRORS = new("html-structure-errors", IssueCategory.Html, IssueSeverity.Notice,
+        "HTML document structure errors",
+        """The page's HTML has a second <head> or <body> start tag, an <html> tag after content, or a <head> after the body has begun, which the HTML standard counts as errors. A missing <head> or <body> tag isn't one: both are optional. The detail says which. A crawl made before the crawler noted them isn't checked.""",
+        """Fix the template so the page has one <html>, one <head> and one <body>, in that order, with nothing before the <html>. Content printed before the page starts, such as a server warning, is a common cause.""")
+    {
+        Why = """Browsers recover from these the same way every time, merging or dropping the extra tags, so visitors rarely notice. But the attributes on the second tag are lost, and the same fault can move tags out of the head.""",
+        LearnMore = "https://html.spec.whatwg.org/multipage/parsing.html#parse-errors",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition VIEWPORT_INVALID = new("viewport-invalid", IssueCategory.Html, IssueSeverity.Warning,
+        "Viewport that disables zoom or sets no width",
+        """The page's viewport meta tag stops visitors zooming (user-scalable=no or 0, or a maximum-scale under 2), sets neither width nor initial-scale, or the page has two viewport tags that differ. The detail lists the faults.""",
+        """Use <meta name="viewport" content="width=device-width, initial-scale=1"> and nothing that limits zoom; keep one viewport tag.""")
+    {
+        Why = """Stopping zoom fails people who need larger text, which WCAG requires to work up to 200%, and some browsers ignore it anyway. A viewport with no width lays the page out at desktop width on phones, as a missing one does.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition CHARSET_INVALID = new("charset-invalid", IssueCategory.Html, IssueSeverity.Notice,
+        "Character encoding declared wrongly",
+        """The page's character encoding, as a byte-order mark, the Content-Type header or the meta tag declares it, isn't UTF-8; or the header and the meta tag name different encodings (the header wins); or the page has two meta declarations that differ. A meta tag after the first 1024 bytes declares nothing: with the header declaring the encoding it changes nothing, and without it that's a missing encoding. The detail says which.""",
+        """Save and serve the page as UTF-8: send Content-Type: text/html; charset=utf-8, and put one <meta charset="utf-8"> first in the <head>.""")
+    {
+        Why = """The HTML standard requires UTF-8. A page in another encoding usually shows right, but a declaration that's wrong or contradicts another makes browsers guess, and a wrong guess garbles accented letters, currency symbols and quotes.""",
+        LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition LANG_INVALID = new("lang-invalid", IssueCategory.Html, IssueSeverity.Notice,
+        "Invalid lang attribute",
+        """The page's <html lang> isn't a well-formed language tag: a 2-letter ISO 639-1 language (or a 3-letter one), then optionally a 4-letter script and a 2-letter region or 3-digit area, all separated by hyphens, such as en, en-GB or zh-Hant-TW. en_GB, english and uk-en aren't. The detail gives the value.""",
+        """Set lang to the page's language code, such as en or en-GB, with a hyphen, not an underscore, and the language before the region.""")
+    {
+        Why = """Screen readers use lang to choose the voice and pronunciation, and browsers for hyphenation and spelling; a value they can't read is as good as none. Google detects a page's language from its content, so this is about accessibility, not search.""",
+        LearnMore = "https://www.w3.org/International/questions/qa-choosing-language-tags",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["language"]
+    };
+
+    public static readonly IssueDefinition MOBILE_ALTERNATE = new("mobile-alternate", IssueCategory.Html, IssueSeverity.Notice,
+        "Separate mobile URL",
+        """The page names a separate mobile version with <link rel="alternate" media="…"> (without hreflang). The detail gives its URL. A crawl made before the crawler noted these isn't checked.""",
+        """If the site has a separate mobile site, make sure each mobile page has a rel="canonical" back to its desktop page and the same content; consider moving to one responsive page per URL.""")
+    {
+        Why = """Google indexes the mobile version of pages, and still supports separate mobile URLs if the alternate and canonical links pair them up, but recommends responsive design: one URL is simpler to keep right, and a mobile site that has less content than the desktop one loses it in search.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/mobile/mobile-sites-mobile-first-indexing",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
     public static IReadOnlyList<IssueDefinition> All { get; } =
     [
-        INTERNAL_CLIENT_ERROR, INTERNAL_SERVER_ERROR, INTERNAL_UNREACHABLE, INTERNAL_BLOCKED, SOFT_404,
-        REDIRECT_CHAIN, REDIRECT_LOOP, REDIRECT_BROKEN, REDIRECT_TEMPORARY, REDIRECT_DOWNGRADE, META_REFRESH,
+        INTERNAL_CLIENT_ERROR, INTERNAL_SERVER_ERROR, INTERNAL_UNREACHABLE, INTERNAL_BLOCKED, CONTENT_TYPE_MISMATCH, SOFT_404,
+        REDIRECT_CHAIN, REDIRECT_LOOP, REDIRECT_BROKEN, REDIRECT_TEMPORARY, REDIRECT_TEMPORARY_CACHED, REDIRECT_DOWNGRADE, META_REFRESH,
         BROKEN_INTERNAL_LINKS, BROKEN_EXTERNAL_LINKS, LINKS_TO_REDIRECTS, INTERNAL_NOFOLLOW_LINKS, EMPTY_ANCHOR_TEXT,
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
+        UNCRAWLABLE_LINKS, BROKEN_RESOURCES, LINKS_TO_LOCALHOST, FEW_INTERNAL_OUTLINKS, GENERIC_ANCHOR_TEXT, NON_INDEXABLE_INLINKS_ONLY,
+        DEEP_PAGE, TOO_MANY_LINKS, SLOW_EXTERNAL_LINKS, PAGINATION_NOT_LINKED, PAGINATION_BROKEN, PAGINATION_TO_NON_INDEXABLE,
+        PAGINATION_SEQUENCE_ERROR,
         NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE,
         ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, ROBOTS_TXT_MISSING, SITE_HIDDEN_FROM_SEARCH,
+        ROBOTS_DIRECTIVES_CONFLICT, NOINDEX_NEAR_HOME, UNAVAILABLE_AFTER_PASSED, MEDIA_PREVIEW_BLOCKED, TRANSLATION_BLOCKED,
+        INDEXIFEMBEDDED_WITHOUT_NOINDEX,
         CANONICALISED_PAGE, CANONICAL_MISSING, CANONICAL_MULTIPLE, CANONICAL_BROKEN, CANONICAL_TO_REDIRECT,
         CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID,
         NOINDEX_WITH_CANONICAL,
+        CANONICAL_TO_FIRST_PAGE, CANONICAL_OTHER_DOMAIN, CANONICAL_LOOP, CANONICAL_ON_REDIRECT, CANONICAL_FRAGMENT,
+        CANONICAL_INVALID_ATTRIBUTE, CANONICAL_UNLINKED,
         SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
@@ -1210,8 +1676,9 @@ public static class IssueCatalog
         STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED,
         NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING,
         URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG,
-        SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT,
-        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING
+        SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT, RESOURCE_PAST_CRAWL_LIMIT,
+        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING,
+        HEAD_TAGS_IN_BODY, HTML_STRUCTURE_ERRORS, VIEWPORT_INVALID, CHARSET_INVALID, LANG_INVALID, MOBILE_ALTERNATE
     ];
 
     private static readonly Dictionary<string, IssueDefinition> BY_ID = All.ToDictionary(issue => issue.Id, StringComparer.Ordinal);

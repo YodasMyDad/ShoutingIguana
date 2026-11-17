@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Urls;
@@ -12,7 +13,7 @@ namespace ShoutingIguana.Engine.Parsing;
 /// </summary>
 /// <param name="pageUri">The page's own URL, for telling links to the same page from links to the base URL.</param>
 /// <param name="baseUri">What relative URLs resolve against: the first base href, or the page URL.</param>
-internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, TextAccumulator text)
+internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, TextAccumulator text)
 {
     private const int MAX_DEPTH = 512;
     private const int MAX_LABEL_CHARS = 200;
@@ -27,6 +28,11 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     private const int MAX_ICON_ATTRIBUTE_CHARS = 100;
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
+    private const int MAX_PAGINATION_LINKS = 20;
+    private const int MAX_UNCRAWLABLE_EXAMPLES = 3;
+    private const int MAX_UNCRAWLABLE_TEXT = 60;
+    private const int MAX_HEAD_TAGS_IN_BODY = 20;
+    private const int MAX_CHARSET_DECLARATIONS = 5;
 
     /// <summary>Raw text read for a heading or link label, before whitespace is collapsed and the result capped.</summary>
     private const int MAX_RAW_LABEL_CHARS = 16 * MAX_HEADING_CHARS;
@@ -51,6 +57,9 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         ("sidebar", LinkPosition.Sidebar)
     ];
 
+    /// <summary>Attributes that make a <c>&lt;link rel="canonical"&gt;</c> an alternate's rather than the page's own, in the order a detail names them.</summary>
+    private static readonly string[] CANONICAL_QUALIFIERS = ["hreflang", "lang", "media", "type"];
+
     /// <summary>Attributes lazy-loading scripts keep the real image URL in, in the order they're tried.</summary>
     private static readonly string[] LAZY_SOURCES = ["data-src", "data-lazy-src", "data-original", "data-lazy"];
 
@@ -62,12 +71,27 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     public List<string> RobotsMetaContents { get; } = [];
     public List<CanonicalFact> Canonicals { get; } = [];
     public List<HreflangFact> Hreflangs { get; } = [];
+    public List<PaginationFact> Pagination { get; } = [];
     public List<HeadingFact> Headings { get; } = [];
     public List<ImageFact> Images { get; } = [];
     public List<string> JsonLd { get; } = [];
     public List<string> AnchorIds { get; } = [];
     public List<ExtractedLink> Links { get; } = [];
     public List<IconFact> Icons { get; } = [];
+    public List<UncrawlableLinkFact> UncrawlableExamples { get; } = [];
+
+    /// <summary>Head-only tags met in the body (<see cref="PageFacts.HeadTagsInBody"/>).</summary>
+    public List<string> HeadTagsInBody { get; } = [];
+
+    /// <summary>Every charset the page declares, in order (<see cref="PageFacts.CharsetDeclarations"/>).</summary>
+    public List<string> CharsetDeclarations { get; } = [];
+
+    /// <summary>The first separate mobile version the page names (<see cref="PageFacts.MobileAlternate"/>).</summary>
+    public string? MobileAlternate { get; private set; }
+
+    /// <summary>Link-like elements with no address search engines follow, all of them; <see cref="UncrawlableExamples"/> holds the first few.</summary>
+    public int UncrawlableCount { get; private set; }
+
     public MetaRefreshFact? MetaRefresh { get; private set; }
     public string? Language { get; private set; }
     public string? DeclaredCharset { get; private set; }
@@ -148,6 +172,14 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         var name = element.LocalName;
+
+        // Only <a>, <area>, <link> and <base> take an href: on a <span> or <div>, one that leads somewhere is a link search
+        // engines can't follow (a widget's href="javascript:void(0)" or "#reviews" leads nowhere they could go).
+        if (name is not ("a" or "area" or "link" or "base") && LeadsSomewhere(element.GetAttribute("href")))
+        {
+            AddUncrawlable(element, $"<{name} href>");
+        }
+
         var childContext = context;
         switch (name)
         {
@@ -162,9 +194,10 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
                 break;
             case "title":
                 Titles.Add(Clean(element.TextContent, MAX_TITLE_CHARS));
+                InBody(context, "title");
                 return;
             case "meta":
-                AddMeta(element);
+                AddMeta(element, context);
                 return;
             case "link":
                 AddLinkElement(element, context);
@@ -341,7 +374,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         return null;
     }
 
-    /// <summary>The first declaration counts, as in browsers.</summary>
+    /// <summary>The first declaration counts, as in browsers; every one is kept, for a page that declares two.</summary>
     private void DeclareCharset(string charset, IElement element)
     {
         if (DeclaredCharset is null)
@@ -349,9 +382,23 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             DeclaredCharset = charset;
             CharsetElement = element;
         }
+
+        if (CharsetDeclarations.Count < MAX_CHARSET_DECLARATIONS)
+        {
+            CharsetDeclarations.Add(charset);
+        }
     }
 
-    private void AddMeta(IElement element)
+    /// <summary>Notes a head-only tag the parser put in the body, which search engines may ignore there.</summary>
+    private void InBody(WalkContext context, string tag)
+    {
+        if (!context.InHead && HeadTagsInBody.Count < MAX_HEAD_TAGS_IN_BODY)
+        {
+            HeadTagsInBody.Add(tag);
+        }
+    }
+
+    private void AddMeta(IElement element, WalkContext context)
     {
         var content = element.GetAttribute("content");
         if (NullIfBlank(element.GetAttribute("charset")) is { } charset)
@@ -360,6 +407,11 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         var httpEquiv = element.GetAttribute("http-equiv")?.Trim().ToLowerInvariant();
+        if (httpEquiv is "refresh" or "content-type")
+        {
+            InBody(context, $"meta {httpEquiv}");
+        }
+
         if (httpEquiv == "refresh" && content is not null)
         {
             if (MetaRefresh is null)
@@ -388,6 +440,16 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         if ((name is null && property is null) || content is null)
         {
             return;
+        }
+
+        if (name is "description" or "robots" or "googlebot" or "viewport" || (name is not null && RobotsMetaParser.AppliesToMetaName(name, robotsToken)))
+        {
+            InBody(context, $"meta {name}");
+        }
+        else if (new[] { property, name }.FirstOrDefault(tag => tag is not null && (tag.StartsWith("og:", StringComparison.Ordinal) ||
+                                                                                   tag.StartsWith("twitter:", StringComparison.Ordinal))) is { } social)
+        {
+            InBody(context, social);
         }
 
         var cleaned = Clean(content, MAX_META_CHARS);
@@ -434,7 +496,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             var token = tokens[range];
             if (token.Equals("canonical", StringComparison.OrdinalIgnoreCase))
             {
-                Canonicals.Add(new CanonicalFact(href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false));
+                Canonicals.Add(new CanonicalFact(href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false) { Attributes = CanonicalQualifiers(element) });
                 AddLink(href, LinkKind.Canonical, flags, position, null);
             }
             else if (token.Equals("alternate", StringComparison.OrdinalIgnoreCase) &&
@@ -444,10 +506,25 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
                 Hreflangs.Add(new HreflangFact(code, href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false));
                 AddLink(href, LinkKind.Hreflang, flags, position, code);
             }
+            else if (token.Equals("alternate", StringComparison.OrdinalIgnoreCase))
+            {
+                // A media query names a separate version for some screens: a mobile site's.
+                if (element.HasAttribute("media"))
+                {
+                    MobileAlternate ??= NormalizeOrNull(href);
+                }
+
+                InBody(context, "link alternate");
+            }
             else if (token.Equals("next", StringComparison.OrdinalIgnoreCase) ||
                      token.Equals("prev", StringComparison.OrdinalIgnoreCase) ||
                      token.Equals("previous", StringComparison.OrdinalIgnoreCase))
             {
+                if (Pagination.Count < MAX_PAGINATION_LINKS)
+                {
+                    Pagination.Add(new PaginationFact(token.Equals("next", StringComparison.OrdinalIgnoreCase), NormalizeOrNull(href)));
+                }
+
                 AddLink(href, LinkKind.Pagination, flags, position, null);
             }
             else if (token.Equals("stylesheet", StringComparison.OrdinalIgnoreCase))
@@ -468,8 +545,16 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             else if (token.Equals("amphtml", StringComparison.OrdinalIgnoreCase))
             {
                 AddLink(href, LinkKind.Hyperlink, LinkFlags.None, position, null);
+                InBody(context, "link amphtml");
             }
         }
+    }
+
+    /// <summary>The canonical's attributes that qualify it (<see cref="CANONICAL_QUALIFIERS"/>), comma-separated, or null with none.</summary>
+    private static string? CanonicalQualifiers(IElement element)
+    {
+        var present = CANONICAL_QUALIFIERS.Where(element.HasAttribute).ToList();
+        return present.Count == 0 ? null : string.Join(", ", present);
     }
 
     /// <summary>What an icon's link says of it, trimmed and cut short: a size or a media type is a few characters.</summary>
@@ -501,6 +586,11 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         var href = element.GetAttribute("href");
+        if (element.LocalName == "a" && UncrawlableBy(element, href) is { } why)
+        {
+            AddUncrawlable(element, why);
+        }
+
         if (href is null)
         {
             return;
@@ -533,6 +623,54 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         }
 
         AddLink(target, LinkKind.Hyperlink, flags, context.Position, label.Length == 0 ? null : label);
+    }
+
+    /// <summary>
+    /// What keeps search engines from following an <c>&lt;a&gt;</c> that leads somewhere, as Google's "Make your links
+    /// crawlable" lists them: a <c>javascript:</c> href whose script navigates; no href, an empty one or a bare <c>#</c>, and
+    /// an onclick that navigates; no href and a routerLink. Null for one it can follow, for a named anchor, and for script
+    /// that goes nowhere (a menu toggle, <c>javascript:void(0)</c>): there's no page behind it to miss. An empty href
+    /// alone is a link to the page itself.
+    /// </summary>
+    private static string? UncrawlableBy(IElement anchor, string? href)
+    {
+        var written = href?.Trim();
+        var onclickNavigates = Navigates(anchor.GetAttribute("onclick"));
+        return written switch
+        {
+            null or "" or "#" when onclickNavigates => "onclick",
+            null when anchor.HasAttribute("routerlink") => "routerLink",
+            null => null,
+            _ when written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) && Navigates(written["javascript:".Length..]) => "javascript:",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// An href on an element that can't take one (a <c>&lt;span&gt;</c>, a <c>&lt;div&gt;</c>) leads somewhere: a URL, or
+    /// script that navigates. Not an empty one, a fragment, or script that goes nowhere.
+    /// </summary>
+    private static bool LeadsSomewhere(string? href) => href?.Trim() is { Length: > 0 } written && written[0] != '#' &&
+        (!written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) || Navigates(written["javascript:".Length..]));
+
+    /// <summary>
+    /// Script that takes the visitor to another page, as far as its text shows: it sets the location or an href, opens a
+    /// window, calls something named navigate or goto, or quotes a path or URL. A toggle, <c>void(0)</c> or <c>next()</c> doesn't.
+    /// </summary>
+    private static bool Navigates(string? script) => script is not null && NavigatingScript().IsMatch(script);
+
+    [GeneratedRegex("""\blocation\b|\.href\b|\bwindow\.open\b|\bnavigate\w*|\bgo_?to\b|['"](?:/|https?://|\.\.?/)""",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex NavigatingScript();
+
+    private void AddUncrawlable(IElement element, string why)
+    {
+        UncrawlableCount++;
+        if (UncrawlableExamples.Count < MAX_UNCRAWLABLE_EXAMPLES)
+        {
+            var text = ReadableText(element, MAX_UNCRAWLABLE_TEXT);
+            UncrawlableExamples.Add(new UncrawlableLinkFact(text.Length > 0 ? text : NameWithoutText(element), why));
+        }
     }
 
     private void AddImage(IElement element, WalkContext context)
@@ -613,7 +751,8 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     private string? NormalizeOrNull(string href) =>
         UrlNormalizer.TryResolve(baseUri, href, out var target) ? UrlNormalizer.Normalize(target) : null;
 
-    private static MetaRefreshFact ParseRefresh(string content)
+    /// <summary>A refresh's delay and URL, as a meta tag's content or a <c>Refresh</c> header writes them: <c>5; url=/next</c>.</summary>
+    internal static MetaRefreshFact ParseRefresh(string content)
     {
         var separator = content.IndexOfAny([';', ',']);
         var delayText = (separator < 0 ? content : content[..separator]).Trim();

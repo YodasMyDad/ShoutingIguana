@@ -27,9 +27,9 @@ const ids = (entries: readonly { check: Check }[]) => entries.map((entry) => ent
 describe('Simple’s results on the garden crawl', () => {
   const results = plainResults(SIMPLE_CHECKS, GARDEN_ANALYSIS, NONE);
 
-  it('counts the garden’s problems: 2 serious, 3 worth fixing, 14 worth a look, 4 couldn’t run', () => {
-    expect(results.counts).toEqual({ error: 2, warning: 3, notice: 14 });
-    expect(results.skippedCount).toBe(4);
+  it('counts the garden’s problems: 2 serious, 4 worth fixing, 14 worth a look, 13 couldn’t run', () => {
+    expect(results.counts).toEqual({ error: 2, warning: 4, notice: 14 });
+    expect(results.skippedCount).toBe(13);
     expect(results.passed.length + results.counts.error + results.counts.warning + results.counts.notice).toBe(
       results.ran,
     );
@@ -43,20 +43,21 @@ describe('Simple’s results on the garden crawl', () => {
       'title-duplicate',
       'slow-response',
     ]);
-    expect(results.ifFixed).toBe(100);
+    expect(results.ifFixed).toBe(99);
   });
 
   it('says nothing of the five fixed when a hidden check is among the engine’s five', () => {
     const hidden = plainResults(SIMPLE_CHECKS, GARDEN_ANALYSIS, new Set(['image-too-large']));
-    // Only four of the engine's order are serious or worth fixing once it's hidden: the rest are worth a look.
+    // The next of the engine's order that's serious or worth fixing takes its place, so its five aren't these five.
     expect(ids(hidden.fixFirst)).toEqual([
       'internal-client-error',
       'broken-internal-links',
       'title-duplicate',
       'slow-response',
+      'canonical-to-first-page',
     ]);
     expect(hidden.ifFixed).toBeNull();
-    expect(hidden.counts.warning).toBe(2);
+    expect(hidden.counts.warning).toBe(3);
     expect(ids(hidden.hidden)).toEqual(['image-too-large']);
   });
 
@@ -66,7 +67,21 @@ describe('Simple’s results on the garden crawl', () => {
       expect.arrayContaining([
         ['site-versions-unchecked', ['duplicate-site-version']],
         ['no-sitemap', ['orphan-page', 'not-in-sitemap']],
-        ['earlier-version', ['near-duplicate-content']],
+        [
+          'earlier-version',
+          [
+            'uncrawlable-links',
+            'pagination-not-linked',
+            'pagination-broken',
+            'pagination-to-non-indexable',
+            'pagination-sequence-error',
+            'canonical-invalid-attribute',
+            'near-duplicate-content',
+            'head-tags-in-body',
+            'html-structure-errors',
+            'mobile-alternate',
+          ],
+        ],
       ]),
     );
     expect(results.skipped.find((group) => group.code === 'no-sitemap')?.reason?.plainAction).toMatch(/Add a sitemap/);
@@ -81,11 +96,11 @@ describe('Simple’s results on the garden crawl', () => {
     const score = GARDEN_ANALYSIS.score!;
     expect(bandWord(score.band)).toBe('Good');
     expect(summarySentence({ band: score.band, partial: false, counts: results.counts, siteWideSerious: null })).toBe(
-      'Your site is in good shape. There are 2 serious problems and 3 problems worth fixing.',
+      'Your site is in good shape. There are 2 serious problems and 4 problems worth fixing.',
     );
     expect(coverageSentences(score.covers)).toEqual([
-      'The score covers all 265 pages and 83 of 87 checks.',
-      '4 checks couldn’t run.',
+      'The score covers all 265 pages and 109 of 122 checks.',
+      '13 checks couldn’t run.',
     ]);
     expect(ifFixedLead(5)).toBe('Fixing these five takes the score from');
   });
@@ -156,11 +171,11 @@ describe('the Summary’s sentence in every state', () => {
   it('stopped early: of the pages read so far, and a partial word', () => {
     const results = plainResults(SIMPLE_CHECKS, STOPPED_ANALYSIS, NONE);
     expect(summarySentence({ band: 'good', partial: true, counts: results.counts, siteWideSerious: null })).toBe(
-      'On the pages read so far there are 2 serious problems and 3 problems worth fixing.',
+      'On the pages read so far there are 2 serious problems and 4 problems worth fixing.',
     );
     expect(bandWord('good', true)).toBe('Good so far');
     expect(coverageSentences(STOPPED_ANALYSIS.score!.covers)[0]).toBe(
-      'The score covers the 265 pages read before the check was stopped, and 83 of 87 checks.',
+      'The score covers the 265 pages read before the check was stopped, and 109 of 122 checks.',
     );
   });
 

@@ -31,6 +31,7 @@ const COLUMNS: Record<string, string> = {
   description: 'Description',
   h1: 'H1',
   h1Count: 'H1s',
+  language: 'Language',
   outlinks: 'Outlinks',
   sizeBytes: 'Size',
   responseMs: 'Response time',

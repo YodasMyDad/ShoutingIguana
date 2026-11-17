@@ -25,7 +25,7 @@ public sealed class PlainLimitsTests
         var numeric = stored.Where(property => property.Value is JsonValue value && value.GetValueKind() == JsonValueKind.Number).Select(property => property.Key);
 
         Assert.Equal(numeric.Order(StringComparer.Ordinal), PlainLimits.Names.Order(StringComparer.Ordinal));
-        Assert.Equal(12, PlainLimits.Names.Count);
+        Assert.Equal(17, PlainLimits.Names.Count);
     }
 
     /// <summary>Each threshold at its default, with its unit, as a sentence gives it.</summary>
@@ -42,6 +42,11 @@ public sealed class PlainLimitsTests
     [InlineData("largePageBytes", "1 MB")]
     [InlineData("slowResponseMs", "1 second")]
     [InlineData("maxUrlLength", "115 characters")]
+    [InlineData("minInternalOutlinks", "3 links")]
+    [InlineData("maxClickDepth", "4 clicks")]
+    [InlineData("maxInternalLinks", "1,000 links")]
+    [InlineData("maxExternalLinks", "100 links")]
+    [InlineData("slowExternalLinkMs", "3 seconds")]
     public void ALimitIsItsValueWithItsUnit(string name, string described) => Assert.Equal(described, PlainLimits.Describe(name, DEFAULTS));
 
     /// <summary>The value is the settings', whatever they are: one of something is singular, sizes and times take the unit that reads best.</summary>

@@ -944,6 +944,10 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   renamed duplicate cluster, which kept its title while product 186, which the recheck didn't fetch, took it. Duplicates
   are now judged as section 3 says (every stored page of their clusters fetched; fixed only when the page's own text
   changed, else not checked), with the text before kept in `recheck_urls.text_before`.
+- **The new checks** (batches 1 to 3, merged from `ui/step-3`): every one reads its URLs again but three a recheck can't
+  settle, whose `recheck` is `[]` as `orphan-page`'s is: `canonical-unlinked` and `non-indexable-inlinks-only` (what links
+  to a page is known only from a full crawl) and `deep-page` (a page's depth is the whole site's shortest path to it). The
+  checks lane's table agreed on all 35. The invariant test holds the new checks too.
 - **Let go** (`RecheckLetGo`) never lets go a URL still queued (a stopped crawl's frontier is untouched), and roots
   include the probes of the site's versions.
 - **The kinds.** `sitemaps` replaces each sitemap's entries as it's read again and drops, once every sitemap is read,

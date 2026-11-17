@@ -10,7 +10,7 @@ namespace ShoutingIguana.Engine.Storage;
 /// </summary>
 internal static class UrlFactsReader
 {
-    private static readonly string[] COLUMNS = ["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "indexability"];
+    private static readonly string[] COLUMNS = ["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "indexability", "responseMs"];
 
     public static Dictionary<int, UrlFacts> Read(GridReadContext context, IReadOnlyCollection<int> ids)
     {
@@ -45,7 +45,8 @@ internal static class UrlFactsReader
                 Int(response?[5]),
                 end,
                 Enum<IndexabilityReason>(row?[6] as string),
-                Canonical(context, id));
+                Canonical(context, id),
+                Int(row?[7]));
         }
 
         return facts;

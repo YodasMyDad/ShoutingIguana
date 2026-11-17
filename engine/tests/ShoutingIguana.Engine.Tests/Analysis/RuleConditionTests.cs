@@ -312,7 +312,8 @@ public sealed class RuleConditionTests
             ["fine"] = Page("/h", $"{site.Site}/fine")
         };
         var rules = new CanonicalRules(site.Table(), site.UrlOf);
-        List<IssueDefinition> Targets(string name) => Issues(rules, pages[name]).Where(issue => issue != IssueCatalog.CANONICALISED_PAGE).ToList();
+        List<IssueDefinition> Targets(string name) =>
+            Issues(rules, pages[name]).Where(issue => issue != IssueCatalog.CANONICALISED_PAGE && issue != IssueCatalog.CANONICAL_OTHER_DOMAIN).ToList();
 
         Assert.Equal("The canonical URL is noindex", rules.Check(pages["noindex"]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_NON_INDEXABLE).Detail);
         Assert.Equal([IssueCatalog.CANONICAL_TO_NON_INDEXABLE], Targets("canonicalised"));
@@ -322,6 +323,7 @@ public sealed class RuleConditionTests
         // is unverified, as the sitemap checks take it (the real-site audit's jitsunami, rate-limited on every product).
         // Nor does another site's robots.txt, and an unchecked URL says nothing at all.
         Assert.Empty(Targets("blocked"));
+        Assert.Contains(IssueCatalog.CANONICAL_OTHER_DOMAIN, Issues(rules, pages["external blocked"]));
         Assert.Empty(Targets("external blocked"));
         Assert.Empty(Targets("external disallowed"));
         Assert.Empty(Targets("unchecked"));

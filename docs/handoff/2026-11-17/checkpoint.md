@@ -189,3 +189,21 @@ Crawls done: garden 4,360 URLs / 260 pages (22 checks fired); jitsunami 75 URLs 
   (titleMaxLength->titleMaxPixels etc.) OK as data-field renames needed for correctness (no function renames);
   approximations OK. Land before ui/3b-newchecks batches. Stray empty folders "UsersLeeMessenger...c67f90ea...qfixmeasures..."
   at ui-step-3 root: untracked/ignored, old session, harmless, left alone.
+- ROUND DONE 2026-11-17 ~14:45: integration 2 GREEN on 35d4888 (engine 1,648/286/28; bench; readbench; unit 3,965;
+  stories 544x2x3; e2e 259; filled 31; smoke:shell 19+9; check:orphans; linux docker). Status doc + handoff folder
+  docs/handoff/2026-11-17/ committed 50b2338 on ui/step-3. NSIS installer built from 35d4888 (46.1 MB unsigned),
+  smoke:tauri PASS; owner's install upgraded with /S (app was closed): sidecar hash matches; shell differs by 3 bytes
+  (Tauri's bundle-type stamp). Memory updated.
+- PIXELS STAGE B agent started (brief audit3b/pixels-build-brief.md; worktree .claude/worktrees/3b-pixels, branch
+  ui/3b-pixels off 50b2338; logs scratchpad/pixels/). Old stage-A agent was not resumable. On its report: review,
+  merge --no-ff into ui/step-3, verify, then P3 view UX + settings fixes.
+
+## 2026-11-17 ~17:10 PARALLEL LANES (owner: "Can we do this any faster?")
+- Pixels agent (resumed via SendMessage) finishing readbench -> verify-app -> e2e:filled -> report. 21 commits on ui/3b-pixels (head 510e6fe).
+  Real-site counts (chars->px): garden TL 84->69, TS 10->8, DL 203->163, DS 0->0; aptitude 14->11, 3->2, 0->0, 1->0; jitsunami 0->0, 6->3, 2->2, 1->1.
+- Three lanes launched off ui/3b-pixels; briefs in audit3b/: lanes-common.md, lane-views-brief.md (ui/3b-views, ports 51100/51106),
+  lane-fixloop-brief.md (ui/3b-fixloop-engine, E1-E4, 51200/51206), lane-checks-brief.md (ui/3b-checks, batches 1-3, 51300/51306).
+- Lanes HOLD builds until audit3b/GO-BUILD exists: create it when pixels readbench finishes (bg wait bptzqzkea).
+- Merge plan: pixels -> ui/step-3 first; then lanes as they report; renumber AnalysisFreshness at merge (lanes set 13);
+  add IssueDefinition.Recheck to new checks from scratchpad/checks/recheck-kinds.md; long gates (readbench, full e2e, e2e:filled, installer) once per merged round on a quiet machine.
+- Next after lanes: fixloop S1/S2 then U1||U2 then V; checks batches 4-9; Jitsunami re-audit (owner's call on a 3rd crawl); gallery 7.

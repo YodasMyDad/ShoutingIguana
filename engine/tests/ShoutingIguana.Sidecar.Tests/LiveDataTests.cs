@@ -197,6 +197,9 @@ public sealed class LiveDataTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
         await events.CrawlStatusAsync(id, "stopped");
+        // Stopped by the user, its results so far are worked out before it can be continued (Continue is busy till then).
+        await events.CrawlStatusAsync(id, "analyzing");
+        await events.CrawlStatusAsync(id, "stopped");
         var firstRun = Count(path, "SELECT COUNT(*) FROM responses");
 
         // One of its URLs as a host that had stopped answering leaves one: stored, and never asked. The crawl is done with

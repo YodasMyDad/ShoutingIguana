@@ -46,6 +46,7 @@ internal static class ColumnWords
         ["description"] = "Description",
         ["h1"] = "H1",
         ["h1Count"] = "H1s",
+        ["language"] = "Language",
         ["wordCount"] = "Word count",
         ["outlinks"] = "Outlinks",
         ["sizeBytes"] = "Size",

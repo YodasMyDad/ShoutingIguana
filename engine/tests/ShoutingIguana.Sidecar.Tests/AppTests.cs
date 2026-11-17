@@ -69,7 +69,7 @@ public sealed class AppTests : IAsyncLifetime
     {
         var listed = (await _sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
 
-        Assert.Equal(87, listed.Count);
+        Assert.Equal(122, listed.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             listed.Where(check => (bool)check!["siteWide"]!).Select(check => (string)check!["id"]!).Order(StringComparer.Ordinal));
         Assert.Equal(
@@ -117,10 +117,10 @@ public sealed class AppTests : IAsyncLifetime
             Assert.All(check["plainWhat"]!.AsArray().Concat(check["plainFix"]!.AsArray()), text => Assert.DoesNotContain("{", (string)text!));
         });
 
-        // Every one of the 87 has its words.
+        // Every one of the 122 has its words.
         var withWords = listed.Where(check => check!["plainTitle"] is not null).Select(check => (string)check!["id"]!).ToList();
         Assert.Equal(IssuePlainTexts.All.Keys.Order(StringComparer.Ordinal), withWords.Order(StringComparer.Ordinal));
-        Assert.Equal(87, withWords.Count);
+        Assert.Equal(122, withWords.Count);
         var broken = listed.Single(check => (string?)check!["id"] == "broken-internal-links")!;
         Assert.Equal(("Links that lead to broken pages", "you", "Every link between your pages leads to a working page", 3, 3),
             ((string)broken["plainTitle"]!, (string)broken["fixer"]!, (string)broken["plainPassed"]!, broken["plainWhat"]!.AsArray().Count, broken["plainFix"]!.AsArray().Count));
@@ -131,7 +131,7 @@ public sealed class AppTests : IAsyncLifetime
         var unreachable = listed.Single(check => (string?)check!["id"] == "robots-txt-unreachable")!;
         Assert.Equal(("A rules file that search engines can't read", (string?)null), ((string?)unreachable["plainLooksFor"], (string?)unreachable["plainOneFix"]));
         Assert.Equal(12, listed.Count(check => check!["plainLooksFor"] is not null));
-        Assert.Equal(26, listed.Count(check => check!["plainOneFix"] is not null));
+        Assert.Equal(32, listed.Count(check => check!["plainOneFix"] is not null));
 
         // A check with no words says null in every part.
         IssueDefinition unwritten = new("check-of-a-later-catalog", IssueCategory.Links, IssueSeverity.Warning, "A later check", "What it is.", "How to fix it.")

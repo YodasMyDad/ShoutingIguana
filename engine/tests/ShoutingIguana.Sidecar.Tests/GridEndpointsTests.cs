@@ -467,7 +467,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal(ids, named["urls"]!.AsArray().Select(page => (int)page!["urlId"]!));
         var target = named["urls"]![0]!["targets"]![0]!;
         Assert.Equal(
-            ["id", "url", "statusCode", "fetched", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical",
+            ["id", "url", "statusCode", "fetched", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "responseMs", "final", "indexability", "canonical",
              "kind", "text", "position", "fragment", "flags", "links", "img"],
             target.AsObject().Select(property => property.Key));
         Assert.True((int?)target["statusCode"] >= 400);
