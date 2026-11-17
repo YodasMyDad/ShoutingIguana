@@ -56,16 +56,16 @@ describe('a check’s flat rows', () => {
     const { rows } = sidecar();
     const { queryClient, user } = await open(`${ISSUES}/title-too-long`);
     const grid = await screen.findByRole('grid', { name: /Title too long/ });
-    await within(grid).findByText('78 characters');
+    await within(grid).findByText('742 px, over 580 (78 characters)');
     act(() => grid.focus());
     await user.keyboard('{ArrowDown}');
     expect(cursorRowText(grid)).toMatch(/64 characters/);
     rows['title-too-long'] = [
-      { id: 15, url: 'https://example.com/0/', detail: '99 characters' },
+      { id: 15, url: 'https://example.com/0/', detail: '930 px, over 580 (99 characters)' },
       ...rows['title-too-long']!,
     ];
     await act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
-    await within(grid).findByText('99 characters');
+    await within(grid).findByText('930 px, over 580 (99 characters)');
     expect(cursorRowText(grid)).toMatch(/64 characters/);
   });
 
@@ -73,7 +73,7 @@ describe('a check’s flat rows', () => {
     sidecar();
     const { router, user } = await open(`${ISSUES}/title-too-long`);
     const grid = await screen.findByRole('grid', { name: /Title too long/ });
-    await within(grid).findByText('78 characters');
+    await within(grid).findByText('742 px, over 580 (78 characters)');
     act(() => grid.focus());
     await user.keyboard('{ArrowDown}{Shift>}{F10}{/Shift}');
     const menu = await screen.findByRole('menu', { name: 'Menu for /b/' });

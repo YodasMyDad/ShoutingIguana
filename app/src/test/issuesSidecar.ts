@@ -131,9 +131,9 @@ export const ISSUE_ROWS: Record<string, (IssueRow & { group?: number })[]> = {
     { id: 11, url: 'https://example.com/gone/', detail: '404 Not Found' },
   ],
   'title-too-long': [
-    { id: 12, url: 'https://example.com/a/', detail: '78 characters' },
-    { id: 13, url: 'https://example.com/b/', detail: '64 characters' },
-    { id: 14, url: 'https://example.com/c/', detail: '91 characters' },
+    { id: 12, url: 'https://example.com/a/', detail: '742 px, over 580 (78 characters)' },
+    { id: 13, url: 'https://example.com/b/', detail: '612 px, over 580 (64 characters)' },
+    { id: 14, url: 'https://example.com/c/', detail: '851 px, over 580 (91 characters)' },
   ],
 };
 
