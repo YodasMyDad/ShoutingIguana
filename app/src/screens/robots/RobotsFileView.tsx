@@ -728,10 +728,11 @@ function BlockedUrls({
         )}
       </div>
       {(unmatched && (unmatched.unreachable > 0 || unmatched.unknown > 0)) || showConflicts ? (
-        <ul className="flex flex-col gap-1 px-4 pb-2 text-12">
+        <ul className="flex flex-col px-4 pb-2 text-12">
+          {/* Each row a whole target high, as the links stack (WCAG 2.2, 2.5.8). */}
           {showConflicts ? (
             // The blocked URLs the site asks for (a sitemap lists them, a menu links to them): the ones to decide on.
-            <li className="flex items-center gap-1.5">
+            <li className="flex min-h-(--target-min) items-center gap-1.5">
               {conflicts > 0 ? (
                 <>
                   <SeverityMark severity="warning" size="sm" decorative />
@@ -753,7 +754,7 @@ function BlockedUrls({
           ) : null}
           {(['unreachable', 'unknown'] as const).map((reason) =>
             unmatched && unmatched[reason] > 0 ? (
-              <li key={reason}>
+              <li key={reason} className="flex min-h-(--target-min) items-center">
                 <TextLink
                   to={ROUTE}
                   params={{ crawl: crawlId, origin }}
