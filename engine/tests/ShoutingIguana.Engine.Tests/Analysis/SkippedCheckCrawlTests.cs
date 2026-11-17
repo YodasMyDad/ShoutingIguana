@@ -160,7 +160,9 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         // Obeying robots.txt: both origins' files were read, and both are listed.
         var obeying = await CrawlAndAnalyseAsync(options);
         Assert.Empty(OfRobots(obeying));
-        Assert.Equal($"{plainOrigin}/robots.txt (404 Not Found), {origin}/robots.txt (404 Not Found)", Missing());
+        // In the order they were read, which the crawl's pace decides.
+        Assert.Equal([$"{plainOrigin}/robots.txt (404 Not Found)", $"{origin}/robots.txt (404 Not Found)"],
+            Missing()!.Split(", ").Order(StringComparer.Ordinal));
 
         // Ignoring it, sitemaps on: the start origin's was read for its Sitemap lines, and is judged; the other origin's wasn't.
         DeleteCrawl();

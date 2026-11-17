@@ -12,7 +12,7 @@ internal static class SpeedPresets
     [
         new("polite", 2, 2),
 
-        // The engine's defaults: no cap, with its automatic backoff.
+        // The engine's defaults: no cap. Each host still starts slowly and slows down when it asks.
         new("standard", ENGINE.Concurrency, ENGINE.MaxRequestsPerSecond),
         new("fast", 16, 0)
     ];

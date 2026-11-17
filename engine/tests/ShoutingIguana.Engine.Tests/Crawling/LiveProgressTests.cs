@@ -135,7 +135,9 @@ public sealed class LiveProgressTests : IAsyncLifetime
         var time = new FakeTimeProvider();
 
         await using var job = Start(Options(_server), time);
-        var progress = await ProgressAsync(job, progress => progress.Waits.Any(wait => wait.Reason == CrawlWaitReason.HeldBack));
+
+        // The clock moves on as the crawl's slow start spaces its first requests, a second at most.
+        var progress = await ProgressAsync(job, progress => progress.Waits.Any(wait => wait.Reason == CrawlWaitReason.HeldBack), time);
 
         var held = Assert.Single(progress.Waits, wait => wait.Reason == CrawlWaitReason.HeldBack);
         Assert.Equal("127.0.0.1", held.Host);
@@ -459,11 +461,13 @@ public sealed class LiveProgressTests : IAsyncLifetime
             return progress.Phase == phase;
         });
 
-    private static async Task<CrawlProgress> ProgressAsync(CrawlJob job, Func<CrawlProgress, bool> condition)
+    /// <param name="pump">A fake clock to move on 50 ms at each look, for a crawl whose requests are spaced on it.</param>
+    private static async Task<CrawlProgress> ProgressAsync(CrawlJob job, Func<CrawlProgress, bool> condition, FakeTimeProvider? pump = null)
     {
         var deadline = DateTime.UtcNow + WAIT;
         while (true)
         {
+            pump?.Advance(TimeSpan.FromMilliseconds(50));
             var progress = job.Progress;
             if (condition(progress))
             {

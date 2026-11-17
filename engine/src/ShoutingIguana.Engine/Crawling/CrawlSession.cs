@@ -247,9 +247,9 @@ internal sealed class CrawlSession
                 waits.Add(new CrawlWait(CrawlWaitReason.CrawlDelay, host, Duration: delay));
             }
 
-            if (state.Backoff > TimeSpan.Zero)
+            if (state.SlowedTo is { } slowedTo)
             {
-                waits.Add(new CrawlWait(CrawlWaitReason.Backoff, host, Duration: state.Backoff));
+                waits.Add(new CrawlWait(CrawlWaitReason.Backoff, host, Duration: slowedTo));
             }
 
             if (state.HeldFor > TimeSpan.Zero)

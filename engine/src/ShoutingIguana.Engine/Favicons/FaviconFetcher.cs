@@ -143,6 +143,7 @@ internal sealed class FaviconFetcher(
                 timeout.CancelAfter(TimeSpan.FromSeconds(options.RequestTimeoutSeconds));
                 using var response = await fetcher.SendAsync(uri, timeout.Token).ConfigureAwait(false);
                 var status = (int)response.StatusCode;
+                lease.ReportStatus(status, fetcher.GetRetryAfter(response));
                 if (status is >= 300 and < 400)
                 {
                     if (response.Headers.Location is not { } location || !Uri.TryCreate(uri, location, out var next) || !UrlNormalizer.IsHttp(next))

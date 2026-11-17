@@ -246,9 +246,10 @@ public sealed class RobotsCacheTests : IAsyncLifetime
 
         await harness.GetAsync(_server.BaseUri);
 
+        // The gate keeps to the pace the site's answers teach it, never the ten seconds robots.txt asked for.
         var gate = harness.Gates.For(_server.BaseUri);
-        (await gate.AcquireAsync(CancellationToken.None)).Dispose();
-        Assert.True(gate.AcquireAsync(CancellationToken.None).AsTask().IsCompletedSuccessfully);
+        Assert.Null(gate.ReadState().CrawlDelay);
+        Assert.InRange(gate.PaceInterval, TimeSpan.Zero, TimeSpan.FromSeconds(1));
     }
 
     private RobotsCacheHarness Harness(Func<CrawlOptions, CrawlOptions>? configure = null) =>

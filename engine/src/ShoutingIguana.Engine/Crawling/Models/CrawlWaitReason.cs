@@ -13,8 +13,9 @@ public enum CrawlWaitReason
     CrawlDelay,
 
     /// <summary>
-    /// The site asked the crawler to slow down (429, 503, a block page) or keeps failing, so requests are spaced further
-    /// apart, easing off by half every half second. Host. Duration: the extra spacing now.
+    /// The site asked the crawler to slow down (429, or 503 with Retry-After) or kept failing, so the crawler learned a
+    /// slower pace for it, one request at a time, which rises slowly while the site answers well. Listed while it is slower
+    /// than the crawl's settings. Host. Duration: the time between requests now (one over the requests a second).
     /// </summary>
     Backoff,
 

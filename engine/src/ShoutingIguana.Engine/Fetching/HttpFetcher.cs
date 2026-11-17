@@ -313,7 +313,8 @@ internal sealed class HttpFetcher : IDisposable
         return UrlNormalizer.IsHttp(absolute) ? absolute : null;
     }
 
-    private TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    /// <summary>The response's Retry-After as a wait from now, for the fetches beside this one (sitemaps, the icon) too.</summary>
+    internal TimeSpan? GetRetryAfter(HttpResponseMessage response)
     {
         var retryAfter = response.Headers.RetryAfter;
         if (retryAfter?.Delta is { } delta)

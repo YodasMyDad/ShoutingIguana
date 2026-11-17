@@ -19,8 +19,8 @@ internal static class CrawlCommand
         var resume = new Option<bool>("--resume") { Description = "Continue the crawl stored in --db." };
         var maxUrls = new Option<int?>("--max-urls") { Description = "Stop after this many internal URLs (0 = no limit)." };
         var maxDepth = new Option<int?>("--max-depth") { Description = "Maximum link depth from the start URL (0 = no limit)." };
-        var concurrency = new Option<int?>("--concurrency", "-c") { Description = "Parallel requests to the site (default 5)." };
-        var rate = new Option<double?>("--rate") { Description = "Maximum requests per second to the site (default: no cap)." };
+        var concurrency = new Option<int?>("--concurrency", "-c") { Description = "Most parallel requests to the site (default 5). Each host starts at one and speeds up while it answers well." };
+        var rate = new Option<double?>("--rate") { Description = "Most requests per second to the site (default: no cap). Each host starts at one a second, and slows down when it asks." };
         var userAgent = new Option<UserAgentPreset?>("--user-agent") { Description = "ShoutingIguana, ChromeDesktop, ChromeMobile, GooglebotSmartphone, GooglebotDesktop or Bingbot." };
         var userAgentString = new Option<string?>("--user-agent-string") { Description = "Send this exact User-Agent instead of a preset." };
         var headers = new Option<string[]>("--header") { Description = "Extra request header, e.g. \"X-Crawler-Key: secret\". Repeatable." };

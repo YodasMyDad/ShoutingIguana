@@ -158,6 +158,7 @@ internal sealed class SitemapDiscoverer(
             using var disposeResponse = response;
             uri = location;
             statusCode = (int)response.StatusCode;
+            lease.ReportStatus(statusCode.Value, fetcher.GetRetryAfter(response));
             if (statusCode is < 200 or >= 300)
             {
                 // The status by its name, as an issue's detail names it: "404 Not Found" ("HTTP 520" for one with none).

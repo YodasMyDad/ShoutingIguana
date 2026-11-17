@@ -6,12 +6,48 @@ namespace ShoutingIguana.Engine.Tests.Fetching;
 
 /// <summary>
 /// Every wait is checked from both sides on the fake clock: still waiting a millisecond before it should end, and
-/// acquired once it has.
+/// acquired once it has. <see cref="HostPaceTests"/> has the pace's arithmetic; these are the gate keeping to it.
 /// </summary>
 public sealed class HostGateTests
 {
     private static readonly TimeSpan GRACE = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan TICK = TimeSpan.FromMilliseconds(1);
+
+    [Fact]
+    public async Task StartsOneRequestAtATimeAtOneASecond()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, time);
+
+        var first = AcquiredAtOnce(gate);
+        var second = Acquire(gate);
+        time.Advance(TimeSpan.FromSeconds(5));
+        await AssertStillWaitingAsync(second);
+
+        // Its turn comes when the first is over, a second after the first started: here, at once.
+        first.Dispose();
+        (await second.WaitAsync(GRACE)).Dispose();
+        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>The 100k benchmark's site answers in about a millisecond: the slow start must cost it about a second at most.</summary>
+    [Fact]
+    public async Task AHealthyHostIsAtFullSpeedWithinASecond()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 16, TimeSpan.Zero, time);
+        var started = time.GetUtcNow();
+
+        while (gate.PaceInterval > TimeSpan.Zero || gate.Window < 16)
+        {
+            await AnswerAsync(gate, time, HostSignal.Success);
+        }
+
+        // About a second of waits (half, a quarter, an eighth...), and the clock's 5 ms steps.
+        Assert.InRange(time.GetUtcNow() - started, TimeSpan.Zero, TimeSpan.FromSeconds(1.25));
+        var leases = Enumerable.Range(0, 16).Select(_ => AcquiredAtOnce(gate)).ToList();
+        leases.ForEach(lease => lease.Dispose());
+    }
 
     [Fact]
     public async Task SpacesRequestsByTheInterval()
@@ -25,16 +61,20 @@ public sealed class HostGateTests
     }
 
     [Fact]
-    public async Task CapsConcurrency()
+    public async Task CapsConcurrencyAtTheCrawlsSetting()
     {
-        var gate = new HostGate(maxConcurrency: 1, TimeSpan.Zero, new FakeTimeProvider());
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 2, TimeSpan.Zero, time);
+        await RampAsync(gate, time);
 
         var first = AcquiredAtOnce(gate);
-        var second = Acquire(gate);
-        await AssertStillWaitingAsync(second);
+        var second = AcquiredAtOnce(gate);
+        var third = Acquire(gate);
+        await AssertStillWaitingAsync(third);
 
         first.Dispose();
-        (await second.WaitAsync(GRACE)).Dispose();
+        (await third.WaitAsync(GRACE)).Dispose();
+        second.Dispose();
     }
 
     [Fact]
@@ -74,96 +114,147 @@ public sealed class HostGateTests
         await AssertWaitsAsync(time, waiting, TimeSpan.FromSeconds(29));
     }
 
+    /// <summary>
+    /// The burst that kept a real rate limit's penalty going: after the host's pause, the requests queued behind it go one
+    /// at a time at half the pace that tripped it, not all at once.
+    /// </summary>
     [Fact]
-    public async Task ThrottlingWidensTheSpacingAndSuccessNarrowsItAgain()
+    public async Task AfterAPauseTheQueuedRequestsGoOneAtATimeAtHalfThePace()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.FromMilliseconds(125), time);
+        await RampAsync(gate, time);
+        await SendEveryAsync(gate, time, TimeSpan.FromMilliseconds(125), 32);
+
+        gate.Report(HostSignal.Throttled, TimeSpan.FromSeconds(30));
+        var queued = Enumerable.Range(0, 4).Select(_ => Acquire(gate)).ToList();
+
+        time.Advance(TimeSpan.FromSeconds(30) - TICK);
+        await AssertStillWaitingAsync(queued[0]);
+        time.Advance(TICK);
+        var first = await queued[0].WaitAsync(GRACE);
+
+        // One at a time: the next waits for the first to be over, however long that takes.
+        time.Advance(TimeSpan.FromSeconds(2));
+        await AssertStillWaitingAsync(queued[1]);
+        first.Dispose();
+        gate.Report(HostSignal.Success, startedAt: first.StartedAt);
+        (await queued[1].WaitAsync(GRACE)).Dispose();
+
+        // At half the pace: 4 a second, 250 ms apart.
+        await AssertWaitsAsync(time, queued[2], TimeSpan.FromMilliseconds(250));
+        await AssertWaitsAsync(time, queued[3], TimeSpan.FromMilliseconds(250));
+    }
+
+    [Fact]
+    public async Task A429WithoutRetryAfterPausesTheHostForTenSeconds()
     {
         var time = new FakeTimeProvider();
         var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, time);
+        await RampAsync(gate, time);
 
         gate.Report(HostSignal.Throttled);
-        gate.Report(HostSignal.Throttled);
-        Assert.Equal(TimeSpan.FromMilliseconds(500), gate.CurrentBackoff);
-        AcquiredAtOnce(gate).Dispose();
-        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMilliseconds(500));
+
+        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>A healthy answer to a request sent before the host asked for a pause doesn't end it.</summary>
+    [Fact]
+    public async Task AnAnswerToARequestSentBeforeAPauseDoesNotEndIt()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, time);
+        await RampAsync(gate, time);
+        var outBefore = AcquiredAtOnce(gate);
+
+        gate.Report(HostSignal.Throttled, TimeSpan.FromSeconds(20));
+        outBefore.Dispose();
+        gate.Report(HostSignal.Success, startedAt: outBefore.StartedAt);
+
+        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromSeconds(20));
+    }
+
+    [Fact]
+    public async Task HealthyAnswersRightAfterAThrottleDoNotBringBackFullSpeed()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.FromMilliseconds(125), time);
+        await RampAsync(gate, time);
+        await SendEveryAsync(gate, time, TimeSpan.FromMilliseconds(125), 32);
+        gate.Report(HostSignal.Throttled, TimeSpan.FromSeconds(1));
+        time.Advance(TimeSpan.FromSeconds(1));
 
         for (var success = 0; success < 40; success++)
         {
             gate.Report(HostSignal.Success);
         }
 
-        // The spacing is worked out at each start, so once the backoff is gone, requests go back to back at once.
-        Assert.Equal(TimeSpan.Zero, gate.CurrentBackoff);
         AcquiredAtOnce(gate).Dispose();
-        AcquiredAtOnce(gate).Dispose();
+        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMilliseconds(250));
+        Assert.Equal(1, gate.Window);
     }
 
     [Fact]
-    public async Task FailuresWidenTheSpacing()
+    public async Task TheWindowShrinksWhileRequestsAreOutAndNoMoreThanItAllowsGoAtOnce()
     {
         var time = new FakeTimeProvider();
         var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, time);
+        await RampAsync(gate, time);
+        var out4 = Enumerable.Range(0, 4).Select(_ => AcquiredAtOnce(gate)).ToList();
 
-        gate.Report(HostSignal.Failed);
-        gate.Report(HostSignal.Failed);
-        AcquiredAtOnce(gate).Dispose();
+        gate.Report(HostSignal.Throttled, TimeSpan.FromSeconds(1), out4[0].StartedAt);
+        var waiting = Enumerable.Range(0, 2).Select(_ => Acquire(gate)).ToList();
+        time.Advance(TimeSpan.FromMinutes(1));
 
-        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMilliseconds(125));
-    }
-
-    [Fact]
-    public void ASingleFailureAmongSuccessesDoesNotSlowTheSite()
-    {
-        var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, new FakeTimeProvider());
-
-        gate.Report(HostSignal.Success);
-        gate.Report(HostSignal.Failed);
-        gate.Report(HostSignal.Success);
-        gate.Report(HostSignal.Failed);
-
-        Assert.Equal(TimeSpan.Zero, gate.CurrentBackoff);
-        AcquiredAtOnce(gate).Dispose();
-        AcquiredAtOnce(gate).Dispose();
-    }
-
-    [Fact]
-    public void ABackoffEasesWithTime()
-    {
-        var time = new FakeTimeProvider();
-        var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, time);
-
-        gate.Report(HostSignal.Throttled);
-        time.Advance(TimeSpan.FromMilliseconds(500));
-        Assert.Equal(TimeSpan.FromMilliseconds(125), gate.CurrentBackoff);
-
-        time.Advance(TimeSpan.FromSeconds(2));
-        Assert.Equal(TimeSpan.Zero, gate.CurrentBackoff);
-    }
-
-    /// <summary>
-    /// Requests queued behind a backoff start as it eases: each start is spaced by the backoff as it stands then, not as
-    /// it stood when the request joined the queue. Fifteen starts 250 ms apart would take 3.75 s.
-    /// </summary>
-    [Fact]
-    public async Task RequestsQueuedBehindABackoffStartAsItEases()
-    {
-        var time = new FakeTimeProvider();
-        var gate = new HostGate(maxConcurrency: 16, TimeSpan.Zero, time);
-        gate.Report(HostSignal.Throttled);
-        AcquiredAtOnce(gate).Dispose();
-        var queued = Enumerable.Range(0, 15).Select(_ => Acquire(gate)).ToList();
-        var started = time.GetUtcNow();
-
-        while (queued.Any(acquire => !acquire.IsCompleted) && time.GetUtcNow() - started < TimeSpan.FromSeconds(10))
+        // Three of the four slots that come back are kept, so nothing goes until the last is in.
+        foreach (var lease in out4.Take(3))
         {
-            time.Advance(TimeSpan.FromMilliseconds(10));
-            await Task.Delay(1);
+            lease.Dispose();
         }
 
-        Assert.InRange(time.GetUtcNow() - started, TimeSpan.Zero, TimeSpan.FromSeconds(2.5));
-        foreach (var acquire in queued)
-        {
-            (await acquire).Dispose();
-        }
+        await AssertStillWaitingAsync(waiting[0]);
+        out4[3].Dispose();
+        var next = await waiting[0].WaitAsync(GRACE);
+        await AssertStillWaitingAsync(waiting[1]);
+        next.Dispose();
+        time.Advance(TimeSpan.FromMinutes(1));
+        (await waiting[1].WaitAsync(GRACE)).Dispose();
+    }
+
+    [Fact]
+    public async Task ItRecoversSlowlyWhileTheHostAnswersWell()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.FromMilliseconds(125), time);
+        await RampAsync(gate, time);
+        await SendEveryAsync(gate, time, TimeSpan.FromMilliseconds(125), 32);
+        gate.Report(HostSignal.Throttled, TimeSpan.FromSeconds(1));
+        Assert.Equal(TimeSpan.FromMilliseconds(250), gate.PaceInterval);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), gate.ReadState().SlowedTo);
+
+        // Thirty seconds after the pause, a tenth of the pace that tripped it back, and one more request at once.
+        time.Advance(TimeSpan.FromSeconds(1) + HostPace.RECOVERY_STEP);
+        gate.Report(HostSignal.Success);
+
+        Assert.Equal(1 / 4.8, gate.PaceInterval.TotalSeconds, precision: 6);
+        Assert.Equal(2, gate.Window);
+    }
+
+    [Fact]
+    public async Task FailuresInARowSlowTheHostWithoutPausingIt()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.FromMilliseconds(125), time);
+        await RampAsync(gate, time);
+        await SendEveryAsync(gate, time, TimeSpan.FromMilliseconds(125), 32);
+
+        gate.Report(HostSignal.Failed);
+        gate.Report(HostSignal.Failed);
+
+        Assert.Equal(TimeSpan.Zero, gate.ReadState().HeldFor);
+        Assert.Equal(1, gate.Window);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), gate.PaceInterval);
+        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMilliseconds(250));
     }
 
     [Fact]
@@ -190,6 +281,8 @@ public sealed class HostGateTests
 
         gate.RaiseMinimumInterval(TimeSpan.FromMilliseconds(500));
         await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromSeconds(5));
+        Assert.Equal(TimeSpan.FromSeconds(5), gate.ReadState().CrawlDelay);
+        Assert.Null(gate.ReadState().SlowedTo);
     }
 
     private static Task<HostGateLease> Acquire(HostGate gate) => gate.AcquireAsync(CancellationToken.None).AsTask();
@@ -201,9 +294,49 @@ public sealed class HostGateTests
         return acquire.Result;
     }
 
-    /// <summary>Advances the clock to a millisecond short of <paramref name="wait"/> (still waiting), then to it (acquired).</summary>
+    /// <summary>A request through the gate, the clock moved on in small steps until it goes, then its answer.</summary>
+    private static async Task AnswerAsync(HostGate gate, FakeTimeProvider time, HostSignal signal)
+    {
+        var acquire = Acquire(gate);
+        for (var step = 0; !acquire.IsCompleted && step < 10_000; step++)
+        {
+            time.Advance(TimeSpan.FromMilliseconds(5));
+            await Task.WhenAny(acquire, Task.Delay(1));
+        }
+
+        var lease = await acquire.WaitAsync(GRACE);
+        lease.Dispose();
+        gate.Report(signal, startedAt: lease.StartedAt);
+    }
+
+    /// <summary>Healthy answers through the slow start, to the crawl's own settings.</summary>
+    private static async Task RampAsync(HostGate gate, FakeTimeProvider time)
+    {
+        for (var answer = 0; answer < 12; answer++)
+        {
+            await AnswerAsync(gate, time, HostSignal.Success);
+        }
+    }
+
+    /// <summary>Requests sent <paramref name="interval"/> apart, answered well: the pace a throttle then halves.</summary>
+    private static async Task SendEveryAsync(HostGate gate, FakeTimeProvider time, TimeSpan interval, int count)
+    {
+        for (var request = 0; request < count; request++)
+        {
+            time.Advance(interval);
+            var lease = await Acquire(gate).WaitAsync(GRACE);
+            lease.Dispose();
+            gate.Report(HostSignal.Success, startedAt: lease.StartedAt);
+        }
+    }
+
+    /// <summary>
+    /// Advances the clock to a millisecond short of <paramref name="wait"/> (still waiting), then to it (acquired). It is
+    /// first seen waiting, so a request just handed a slot has worked out its wait before the clock moves.
+    /// </summary>
     private static async Task AssertWaitsAsync(FakeTimeProvider time, Task<HostGateLease> acquire, TimeSpan wait)
     {
+        await AssertStillWaitingAsync(acquire);
         time.Advance(wait - TICK);
         await AssertStillWaitingAsync(acquire);
 
