@@ -22,11 +22,13 @@ import { IMAGES_LISTED, imageUsesFilters, imagesSummaryWords, isLargeImage, show
 import { useInspectorContext } from './inspectorContext';
 import { SectionError, SectionSkeleton } from './parts';
 
-const SIZE_WIDTH = 120;
-const PIXELS_WIDTH = 120;
-const ALT_WIDTH = 200;
-const SHOWN_WIDTH = 168;
-const MIN_URL_WIDTH = 220;
+// What a file's size, pixels and alt text need, so a sheet of the inspector's own width shows the image, its size and
+// its pixels before it scrolls: those are what make an image large.
+const SIZE_WIDTH = 96;
+const PIXELS_WIDTH = 112;
+const ALT_WIDTH = 192;
+const SHOWN_WIDTH = 160;
+const MIN_URL_WIDTH = 176;
 const FRAME_SLACK = 24;
 
 /**

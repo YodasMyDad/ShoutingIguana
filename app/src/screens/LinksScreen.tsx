@@ -76,7 +76,7 @@ import {
   linkExportShown,
 } from './links/linkColumns';
 import { LinkGroupsGrid } from './links/LinkGroupsGrid';
-import { groupedReadWords, groupedTotalsWords, isImageView, sortForMode } from './links/linkGroups';
+import { GROUP_KEY_HINTS, groupedReadWords, groupedTotalsWords, isImageView, sortForMode } from './links/linkGroups';
 import { FOLLOW_COLUMN, endColumn, linkColumnName, linkFilterWords, namesCheck, urlIdsNamed } from './links/linkWords';
 import { LINK_PRESETS, activePreset, presetSearch, sortShown } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
@@ -900,7 +900,7 @@ export function LinksScreen() {
             onCounted={onGroupsCounted}
             onCopy={onCopy}
             minRows={GRID_SCREEN_MIN_ROWS}
-            keyHints={short ? undefined : GRID_KEY_HINTS}
+            keyHints={short ? undefined : GROUP_KEY_HINTS}
             loadingNote={waiting ? slowWords : undefined}
             errorState={(error, retry) =>
               isProblem(error, 'needs-analysis') ? (

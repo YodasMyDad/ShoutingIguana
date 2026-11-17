@@ -69,9 +69,14 @@ const WIDTHS: Record<string, number> = {
   pixels: 120,
   pages: 112,
   links: 96,
-  text: 200,
-  where: 200,
+  text: 216,
+  where: 256,
 };
+/**
+ * An image view has two columns more (its size and pixels) and a short "Where" (an image sits in the content, mostly):
+ * its columns give the image's address the room.
+ */
+const IMAGE_WIDTHS: Record<string, number> = { ...WIDTHS, status: 96, pages: 96, links: 80, text: 200, where: 152 };
 
 const muted = (text: string) => <span className="text-text-muted">{text}</span>;
 
@@ -268,9 +273,10 @@ export function LinkGroupsGrid({
     () => ['target', 'status', ...(images ? ['size', 'pixels'] : []), 'pages', 'links', 'text', 'where'],
     [images],
   );
+  const widths = images ? IMAGE_WIDTHS : WIDTHS;
   const targetWidth = Math.max(
     TARGET_MIN_WIDTH,
-    (width ?? 1000) - FRAME_SLACK - shownColumns.slice(1).reduce((sum, id) => sum + (WIDTHS[id] ?? 120), 0),
+    (width ?? 1000) - FRAME_SLACK - shownColumns.slice(1).reduce((sum, id) => sum + (widths[id] ?? 120), 0),
   );
   const columns = useMemo<GridColumn<GroupTreeRow>[]>(() => {
     const group = (row: GroupTreeRow) => (row.kind === 'group' ? row.group : null);
@@ -283,7 +289,7 @@ export function LinkGroupsGrid({
       return {
         id,
         header,
-        width: id === 'target' ? targetWidth : (WIDTHS[id] ?? 120),
+        width: id === 'target' ? targetWidth : (widths[id] ?? 120),
         ...(key
           ? {
               sortable: true,
@@ -421,7 +427,7 @@ export function LinkGroupsGrid({
       }),
     };
     return shownColumns.flatMap((id) => all[id] ?? []);
-  }, [shownColumns, images, order, siteOrigin, onInspect, targetWidth]);
+  }, [shownColumns, images, order, siteOrigin, onInspect, targetWidth, widths]);
 
   // An open target's links span the row: the page each is on, what it says, where it sits, whether it's followed.
   const spanRow = useCallback(

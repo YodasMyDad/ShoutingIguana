@@ -67,8 +67,9 @@ describe('a grouped row in words', () => {
     expect(otherTextsWords({ text: 'Shop now', texts: 1 })).toBeNull();
     expect(otherTextsWords({ text: 'Shop now', texts: 3 })).toBe('+2 other texts');
     expect(otherTextsWords({ text: 'Shop now', texts: 2 })).toBe('+1 other text');
-    // No text is one of the texts counted: with none shown, every one counted is another.
-    expect(otherTextsWords({ text: null, texts: 1 })).toBe('+1 other text');
+    // None shown means none of its links has a text: "no text" is all they have, never another text.
+    expect(otherTextsWords({ text: null, texts: 1 })).toBeNull();
+    expect(groupTextLine({ text: null, texts: 1 })).toBe('None');
     expect(groupTextLine({ text: 'Shop now', texts: 3 })).toBe('Shop now +2 other texts');
     expect(groupTextLine({ text: null, texts: 0 })).toBe('None');
   });

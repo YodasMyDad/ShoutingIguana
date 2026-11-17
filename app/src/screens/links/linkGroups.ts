@@ -1,6 +1,7 @@
 // The Links screen grouped by target (step 3b): one row a target, the engine's `/links/groups`. What the route's sort
 // means in each mode, what a grouped row says in words, and which views are of images. Pure, so each is unit-tested.
 import type { GridFilter, GridPage, GridSort, LinkGroup, LinkGroupsPage, LinkPosition } from '../../api/grids';
+import type { GridKeyHint } from '../../grid/gridFoot';
 import { pixelsWords } from '../../crawl/evidence';
 import { POSITION_WORDS } from '../../inspector/words';
 import { formatBytes, formatCount, formatCountOf } from '../../lib/format';
@@ -81,8 +82,9 @@ export function positionsWords(positions: readonly LinkPosition[]): string {
 
 /** The other texts a target's links have, beside the one shown: "+2 other texts", or null when there are none. */
 export function otherTextsWords(group: Pick<LinkGroup, 'text' | 'texts'>): string | null {
-  // `texts` counts no text as one of them: the text shown is one, and only its others are said.
-  const others = group.texts - (group.text === null ? 0 : 1);
+  // `texts` counts no text as one of them: the text shown is one, and only its others are said (no text among them).
+  // None shown means none of its links has one: no text is all they have, and there's no other.
+  const others = group.text === null ? 0 : group.texts - 1;
   return others > 0 ? `+${formatCountOf(others, 'other text', 'other texts')}` : null;
 }
 
@@ -155,3 +157,11 @@ export function groupsAsGridPage(page: LinkGroupsPage): LinkGroupsGridPage {
     pages: page.pages,
   };
 }
+
+/** The grouped grid's footer: Enter and Right open a target to its links, Left closes it; Enter on a link inspects its page. */
+export const GROUP_KEY_HINTS: readonly GridKeyHint[] = [
+  { chord: 'arrowup arrowdown', words: 'Move' },
+  { chord: 'arrowright arrowleft', words: 'Open or close' },
+  { chord: 'space', words: 'Select' },
+  { chord: 'mod+c', words: 'Copy for Excel' },
+];

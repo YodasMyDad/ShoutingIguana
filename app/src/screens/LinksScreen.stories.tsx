@@ -520,13 +520,18 @@ export const GroupedTargetOpen: Story = {
   render: () => <LinksApp path={`${LINKS}?by=target`} />,
   play: async ({ canvasElement }) => {
     const document = canvasElement.ownerDocument;
-    const cell = await waitForCell(() =>
-      document.querySelector<HTMLElement>('[role="treegrid"] [role="row"][aria-rowindex="4"] [role="gridcell"]'),
-    );
-    cell.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
-    const grid = document.querySelector<HTMLElement>('[role="treegrid"]');
-    grid?.focus();
-    grid?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    const grid = await waitForCell(() => document.querySelector<HTMLElement>('[role="treegrid"]'));
+    await waitForCell(() => grid.querySelector<HTMLElement>('[role="row"][aria-rowindex="4"]'));
+    // The cursor onto /gone (the third target), then Right opens it, as a user does; again until the grid has taken it.
+    for (let tries = 0; tries < 20; tries++) {
+      const row = grid.querySelector<HTMLElement>('[role="row"][aria-rowindex="4"]');
+      if (row?.getAttribute('aria-expanded') === 'true') return;
+      grid.focus();
+      for (const key of ['Home', 'ArrowDown', 'ArrowDown', 'ArrowRight']) {
+        grid.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+    }
   },
 };
 
