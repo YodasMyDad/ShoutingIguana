@@ -253,6 +253,7 @@ public sealed partial class SyntheticSite
     public SyntheticSiteExpectations GetExpectations()
     {
         HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [];
+        var depths = ProductDepths();
         Dictionary<string, HashSet<string>> issues = new(StringComparer.Ordinal);
 
         // Paths are on this site; links to the external site are already absolute.
@@ -326,6 +327,12 @@ public sealed partial class SyntheticSite
             if (IsNoindex(product))
             {
                 Flag("noindex-page", path);
+
+                // A noindex product one or two clicks from home, as every product a listing shows is.
+                if (depths[product] <= 2)
+                {
+                    Flag("noindex-near-home", path);
+                }
 
                 // noindex decides the page, so a canonical elsewhere is a mixed signal rather than a canonicalised page.
                 if (IsCanonicalised(product))
@@ -414,10 +421,11 @@ public sealed partial class SyntheticSite
             Flag("sitemap-missing", "/");
         }
 
-        // A plant's sitemap issues come from its sitemap entry, which a site without sitemaps doesn't have.
+        // A plant's sitemap issues come from its sitemap entry, which a site without sitemaps doesn't have, and without
+        // one no page can be missing from them.
         foreach (var plant in _plants)
         {
-            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !issue.StartsWith("sitemap-", StringComparison.Ordinal)))
+            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !(issue.StartsWith("sitemap-", StringComparison.Ordinal) || issue == "not-in-sitemap")))
             {
                 Flag(issue, PlantUrl(plant));
             }
@@ -436,7 +444,7 @@ public sealed partial class SyntheticSite
         // canonical names its own page on another version of the site, so every one of them is out. Only a site with
         // HiddenFromSearch gets there: one with NoindexProducts has as many noindex pages less one, and a home page
         // that can be indexed.
-        if (IsHomeNoindex && Count(issues, "noindex-page") * 2 > analysedPages - Count(issues, "canonicalised-page"))
+        if (IsHomeNoindex && Count(issues, "noindex-page") * 2 > analysedPages - Canonicalised(issues))
         {
             Flag("site-hidden-from-search", "/");
         }
@@ -455,7 +463,7 @@ public sealed partial class SyntheticSite
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
             Noindex: Count(issues, "noindex-page"),
-            Canonicalised: Count(issues, "canonicalised-page"),
+            Canonicalised: Canonicalised(issues),
             DuplicateTitlePages: Count(issues, "title-duplicate") - _plants.Count(plant => plant.Issues.Contains("title-duplicate")),
             MissingDescriptions: Count(issues, "description-missing") - _plants.Count(plant => plant.Issues.Contains("description-missing")),
             ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
@@ -473,6 +481,13 @@ public sealed partial class SyntheticSite
 
     private static int Count(Dictionary<string, HashSet<string>> issues, string issue) =>
         issues.TryGetValue(issue, out var urls) ? urls.Count : 0;
+
+    /// <summary>
+    /// The pages canonicalised to another URL: those reported as such, and those whose canonical is reported as a fault of
+    /// its own instead, to another site or from a later page of a series to its first.
+    /// </summary>
+    private static int Canonicalised(Dictionary<string, HashSet<string>> issues) =>
+        Count(issues, "canonicalised-page") + Count(issues, "canonical-other-domain") + Count(issues, "canonical-to-first-page");
 
     /// <summary>The absolute URL a plant is served, linked and listed at.</summary>
     private string PlantUrl(Plant plant) => plant.Url ?? (plant.OnPartnerSite ? _external : _base) + plant.Path;
@@ -601,10 +616,79 @@ public sealed partial class SyntheticSite
         });
     }
 
+    /// <summary>The products the home page lists.</summary>
+    private IEnumerable<int> HomeProducts() => Enumerable.Range(1, Math.Min(PRODUCTS_PER_LISTING, PageCount - 1));
+
+    /// <summary>The products a category page lists: every twentieth from its number, up to a listing's worth.</summary>
+    private IEnumerable<int> CategoryProducts(int category)
+    {
+        for (int product = category, listed = 0; product < PageCount && listed < PRODUCTS_PER_LISTING; product += CATEGORY_COUNT)
+        {
+            if (product < 1)
+            {
+                continue;
+            }
+
+            yield return product;
+            listed++;
+        }
+    }
+
+    /// <summary>
+    /// Each product's depth as the crawl records it: the fewest links from the home page, any kind of link counting and a
+    /// redirect counting as none, so a product a redirect leads to is as deep as the link to the redirect. The home page
+    /// lists the first products, the categories (one click away) a listing's worth each, and each product links others.
+    /// </summary>
+    private int[] ProductDepths()
+    {
+        var depths = new int[PageCount];
+        Array.Fill(depths, int.MaxValue);
+        List<int> level = [.. HomeProducts()];
+        level.ForEach(product => depths[product] = 1);
+        for (var depth = 1; level.Count > 0; depth++)
+        {
+            List<int> next = [];
+            void Reach(int product)
+            {
+                if (depths[product] > depth + 1)
+                {
+                    depths[product] = depth + 1;
+                    next.Add(product);
+                }
+            }
+
+            if (depth == 1)
+            {
+                Enumerable.Range(0, CATEGORY_COUNT).SelectMany(CategoryProducts).ToList().ForEach(Reach);
+            }
+
+            foreach (var product in level)
+            {
+                foreach (var (href, _, _) in ContentLinks(product))
+                {
+                    if (TryNumber(href, "/p/", string.Empty, out var target) || TryNumber(href, "/r/", string.Empty, out target) ||
+                        TryNumber(href, "/r2/", string.Empty, out target))
+                    {
+                        Reach(target);
+                    }
+                }
+
+                if (IsCanonicalised(product) && product > 1)
+                {
+                    Reach(product - 1);
+                }
+            }
+
+            level = next;
+        }
+
+        return depths;
+    }
+
     private string RenderHome()
     {
         var list = new StringBuilder();
-        for (var product = 1; product <= Math.Min(PRODUCTS_PER_LISTING, PageCount - 1); product++)
+        foreach (var product in HomeProducts())
         {
             list.Append("<li><a href=\"/p/").Append(product).Append("\">Product ").Append(product).Append("</a></li>");
         }
@@ -623,15 +707,9 @@ public sealed partial class SyntheticSite
     private string RenderCategory(int category)
     {
         var list = new StringBuilder();
-        for (int product = category, listed = 0; product < PageCount && listed < PRODUCTS_PER_LISTING; product += CATEGORY_COUNT)
+        foreach (var product in CategoryProducts(category))
         {
-            if (product < 1)
-            {
-                continue;
-            }
-
             list.Append("<li><a href=\"/p/").Append(product).Append("\">Product ").Append(product).Append("</a></li>");
-            listed++;
         }
 
         // The plants hub hangs off the first category, two clicks from home, so depth-limited crawls stay unchanged.

@@ -22,6 +22,9 @@ internal static class RobotsMetaParser
         "notranslate", "indexifembedded", "noodp", "noydir", .. VALUED_DIRECTIVES
     ], StringComparer.Ordinal);
 
+    /// <summary>A rule that takes a value after a colon (<c>max-snippet:50</c>), given lowercase: not a crawler's name.</summary>
+    public static bool IsValuedDirective(string name) => VALUED_DIRECTIVES.Contains(name);
+
     public static bool AppliesToMetaName(string metaName, string robotsToken) =>
         metaName == "robots" || metaName == GOOGLEBOT || metaName.Equals(robotsToken, StringComparison.OrdinalIgnoreCase);
 
@@ -72,13 +75,14 @@ internal static class RobotsMetaParser
 
     /// <summary>
     /// Adds one comma-separated part. Directives separated only by spaces ("noindex nofollow") count separately when
-    /// every word is a known directive; anything else stays as written.
+    /// every word is a known directive; anything else stays as written. A rule written with a space after its colon
+    /// (<c>max-image-preview: none</c>) is one rule, not a valued rule and <c>none</c>.
     /// </summary>
     private static void AddDirectives(List<string> directives, string part)
     {
         var lower = part.ToLowerInvariant();
         var words = lower.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        var spaced = words.Length > 1 && words.All(word => KNOWN_DIRECTIVES.Contains(word.Split(':')[0]));
+        var spaced = words.Length > 1 && words.All(word => KNOWN_DIRECTIVES.Contains(word.Split(':')[0]) && !word.EndsWith(':'));
         foreach (var directive in spaced ? words : [lower])
         {
             if (!directives.Contains(directive))

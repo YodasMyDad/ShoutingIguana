@@ -8,11 +8,27 @@ namespace ShoutingIguana.Engine.Parsing.Models;
 /// </summary>
 public sealed record PageFacts
 {
+    /// <summary>
+    /// What <see cref="CollectedVersion"/> the parser writes now. 1 is the new checks' (step 3b): the canonical's other
+    /// attributes, the page's next and prev links, a <c>Refresh</c> header.
+    /// </summary>
+    public const int CURRENT_COLLECTION = 1;
+
+    /// <summary>
+    /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed
+    /// before the facts were versioned. A check that needs a fact a page's collection didn't have is skipped, rather than
+    /// reading the fact's absence as the page's (<c>Analysis.CollectedFacts</c>).
+    /// </summary>
+    public int CollectedVersion { get; init; }
+
     public IReadOnlyList<string> Titles { get; init; } = [];
     public IReadOnlyList<string> MetaDescriptions { get; init; } = [];
     public IReadOnlyList<MetaTagFact> MetaTags { get; init; } = [];
     public IReadOnlyList<CanonicalFact> Canonicals { get; init; } = [];
     public IReadOnlyList<HreflangFact> Hreflangs { get; init; } = [];
+
+    /// <summary>The page's <c>rel="next"</c> and <c>rel="prev"</c> links, in page order. Empty for a page crawled before they were noted.</summary>
+    public IReadOnlyList<PaginationFact> Pagination { get; init; } = [];
     public IReadOnlyList<HeadingFact> Headings { get; init; } = [];
     public IReadOnlyList<ImageFact> Images { get; init; } = [];
     public IReadOnlyList<string> JsonLd { get; init; } = [];

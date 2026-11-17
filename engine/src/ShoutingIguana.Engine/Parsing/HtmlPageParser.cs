@@ -82,19 +82,22 @@ public static class HtmlPageParser
 
         var signals = ReadHeaderSignals(headers, pageUri);
         var fingerprint = ContentFingerprint.Compute(text.AsSpan());
+        var (refresh, refreshLink) = RefreshOf(headers, baseUri, walker.MetaRefresh);
         var facts = new PageFacts
         {
+            CollectedVersion = PageFacts.CURRENT_COLLECTION,
             Titles = walker.Titles,
             MetaDescriptions = walker.MetaDescriptions,
             MetaTags = walker.MetaTags,
             Canonicals = [.. walker.Canonicals, .. signals.Canonicals],
             Hreflangs = [.. walker.Hreflangs, .. signals.Hreflangs],
+            Pagination = walker.Pagination,
             Headings = walker.Headings,
             Images = walker.Images,
             JsonLd = walker.JsonLd,
             AnchorIds = walker.AnchorIds,
             Icons = walker.Icons,
-            MetaRefresh = walker.MetaRefresh,
+            MetaRefresh = refresh,
             Robots = RobotsMetaParser.Parse(walker.RobotsMetaContents, signals.RobotsTagValues, robotsToken),
             Language = walker.Language,
             DeclaredCharset = walker.DeclaredCharset,
@@ -112,7 +115,27 @@ public static class HtmlPageParser
             SimHashLanes = fingerprint.Lanes
         };
 
-        return new ParsedPage(facts, [.. walker.Links, .. signals.Links]);
+        // A refresh the header made the page's leaves the meta tag's link out: it never runs.
+        IEnumerable<ExtractedLink> links = refresh is { FromHttpHeader: true } ? walker.Links.Where(link => link.Kind != LinkKind.MetaRefresh) : walker.Links;
+        return new ParsedPage(facts, [.. links, .. signals.Links, .. refreshLink]);
+    }
+
+    /// <summary>
+    /// The page's refresh: a <c>Refresh</c> response header's, which browsers act on as they create the document and so
+    /// before any meta tag (a document refreshes once, HTML's "shared declarative refresh steps"), else the meta tag's. The
+    /// header's URL is a link of the page's, as the meta tag's is, so an instant one makes the page a redirect.
+    /// </summary>
+    private static (MetaRefreshFact? Refresh, ExtractedLink[] Link) RefreshOf(IReadOnlyList<ResponseHeader> headers, Uri baseUri, MetaRefreshFact? meta)
+    {
+        if (headers.FirstOrDefault(header => header.Name == "refresh").Value is not { } value || string.IsNullOrWhiteSpace(value))
+        {
+            return (meta, []);
+        }
+
+        var refresh = PageWalker.ParseRefresh(value) with { FromHttpHeader = true };
+        return refresh.Url is { } url && UrlNormalizer.TryResolve(baseUri, url, out var target)
+            ? (refresh, [new ExtractedLink(target, LinkKind.MetaRefresh, LinkFlags.FromHttpHeader, LinkPosition.Head, null)])
+            : (refresh, []);
     }
 
     /// <summary>The parser reports a new element's position one-based, at its opening '&lt;'.</summary>

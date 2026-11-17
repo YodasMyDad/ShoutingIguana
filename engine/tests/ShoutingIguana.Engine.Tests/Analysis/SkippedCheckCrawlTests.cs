@@ -140,7 +140,11 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         var reason = $"{refused} of the {refused + others + 2} pages the crawl tried to read refused it or didn't answer, and pages linked only from them would look orphaned.";
         if (skipped)
         {
-            Assert.Equal([new SkippedCheck(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.PAGES_UNREAD, reason)], analysis.Skipped);
+            Assert.Equal(
+                [
+                    new SkippedCheck(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
+                    new SkippedCheck(IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason)
+                ], analysis.Skipped);
             Assert.Contains($"Orphan pages weren't checked: {reason}", analysis.Notes);
             Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id));
         }

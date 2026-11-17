@@ -462,6 +462,98 @@ public static class IssuePlainTexts
             LooksFor = """A site that hides its home page and most pages from search"""
         },
 
+        ["robots-directives-conflict"] = new(
+            """Pages that tell search engines two different things""",
+            [
+                """These pages tell search engines two opposite things about showing the page in search, or about following its links.""",
+                """One instruction is in the page itself, and the other is sent by the server along with the page.""",
+                """Google follows the stricter of the two, so a page meant to appear in search can be left out."""
+            ],
+            [
+                """Decide which instruction each page should have: the list quotes both.""",
+                """Ask your developer to make the page and the server say the same thing, or to remove the server's (the "X-Robots-Tag")."""
+            ],
+            IssueFixer.Developer,
+            """No page tells search engines two different things""")
+        {
+            OneFix = """The same two settings most likely apply to every page listed: one in your page design, one on the server."""
+        },
+
+        ["noindex-near-home"] = new(
+            """Important pages kept out of Google""",
+            [
+                """These pages are one or two clicks from your home page, yet they tell search engines to keep them out of search results.""",
+                """Pages that close to the home page are usually ones you want found, so the instruction ("noindex") is often a leftover.""",
+                """Basket, account, login and similar pages aren't listed, as they're meant to stay out."""
+            ],
+            [
+                """Look down the list for any page you want people to find in search.""",
+                """Open that page in your site's editor and turn off a setting such as "Hide this page from search engines".""",
+                """If a page is meant to stay out of search, leave it."""
+            ],
+            IssueFixer.Either,
+            """No page near the home page is kept out of Google"""),
+
+        ["unavailable-after-passed"] = new(
+            """Pages set to drop out of Google on a date that has passed""",
+            [
+                """These pages tell Google to stop showing them in search after a date, and that date has passed.""",
+                """Google then drops them from its results, as if they were hidden from search.""",
+                """The setting is meant for events and offers, and is easily forgotten when a page is kept or reused."""
+            ],
+            [
+                """Check each page: the list shows the date it gives.""",
+                """If the page should still appear in search, ask your developer to remove the date setting ("unavailable_after") or move the date on.""",
+                """If the page really has expired, leave it, or forward it to its replacement."""
+            ],
+            IssueFixer.Developer,
+            """No page has passed a date to drop out of Google"""),
+
+        ["media-preview-blocked"] = new(
+            """Pages that keep their pictures or videos out of Google""",
+            [
+                """These pages tell Google not to show their pictures, or a preview of their videos, in search results.""",
+                """Their results then stand out less, and the pictures can't be found in image search.""",
+                """That's often deliberate, for photos you may only use in one place, and then there's nothing to do."""
+            ],
+            [
+                """Decide whether each page's pictures or videos should appear in Google: the list names the setting each page uses.""",
+                """If they should, ask your developer to remove that setting, such as "noimageindex" or "max-image-preview:none"."""
+            ],
+            IssueFixer.Developer,
+            """No page keeps its pictures or videos out of Google""")
+        {
+            OneFix = """These pages most likely get it from one setting, in your page design or SEO plugin."""
+        },
+
+        ["translation-blocked"] = new(
+            """Pages Google won't offer to translate""",
+            [
+                """These pages tell Google not to offer a translation of them to people searching in other languages.""",
+                """Without that setting, Google can show the result in the searcher's language and link to a translated page.""",
+                """It's a choice, not a fault: keep it where a machine translation could mislead, such as on legal text."""
+            ],
+            [
+                """Decide whether people searching in other languages should be offered these pages.""",
+                """If they should, ask your developer to remove the "notranslate" setting from them."""
+            ],
+            IssueFixer.Developer,
+            """No page asks Google not to offer a translation"""),
+
+        ["indexifembedded-without-noindex"] = new(
+            """Pages with a search setting that does nothing on its own""",
+            [
+                """These pages have a search setting ("indexifembedded") that works only alongside another, which they don't have.""",
+                """It lets Google show a page's content where another page shows it inside its own, while the page itself stays out of search.""",
+                """On its own it does nothing, and harms nothing."""
+            ],
+            [
+                """Ask your developer what the setting was meant to do.""",
+                """If the pages should appear in search only inside other pages, add the missing "noindex"; otherwise remove "indexifembedded"."""
+            ],
+            IssueFixer.Developer,
+            """No page has a search setting that does nothing alone"""),
+
         ["canonicalised-page"] = new(
             """Pages that name another page as the main version""",
             [
@@ -631,6 +723,109 @@ public static class IssuePlainTexts
         {
             OneFix = """That's almost certainly one setting in your page design or SEO plugin, which names the same address on every page."""
         },
+
+        ["canonical-to-first-page"] = new(
+            """Later pages of a list that point Google at the first page""",
+            [
+                """These are page 2 onward of a list, such as a category, and each names the list's first page as its main version.""",
+                """Google may then treat them as copies of the first page and visit them less, so what's listed only further on can go unfound.""",
+                """Google's advice is for each page of a list to name itself."""
+            ],
+            [
+                """Ask your developer to make each page of the list name its own address as its main version (its "canonical" link).""",
+                """Keep the ordinary links between the pages, such as "Next" and the page numbers."""
+            ],
+            IssueFixer.Developer,
+            """No later page of a list points Google at the first""")
+        {
+            OneFix = """That's almost certainly one setting in your shop or SEO plugin, which every list shares."""
+        },
+
+        ["canonical-other-domain"] = new(
+            """Pages that tell Google another website has the real copy""",
+            [
+                """These pages name a page on another website as their main version.""",
+                """Google may then show that website's page instead, and drop yours from its results.""",
+                """That's right for an article first published elsewhere, but a mistake when it names an old domain or a test copy of your site."""
+            ],
+            [
+                """Look at the website each page names: the list shows it.""",
+                """If it's your own old address or a test site, ask your developer to point each page's "canonical" link at its own address.""",
+                """If the page really is a copy of another website's article, leave it."""
+            ],
+            IssueFixer.Developer,
+            """No page names another website as its main version"""),
+
+        ["canonical-loop"] = new(
+            """Pages that point Google at each other in a circle""",
+            [
+                """These pages each name another as their main version, and following those leads back round to where it started.""",
+                """The instructions cancel out, so Google picks one of the pages itself, which may not be the one you want."""
+            ],
+            [
+                """Choose which page of each circle should appear in search: the list shows the circle.""",
+                """Ask your developer to make that page name itself as its main version, and the others name it (their "canonical" links)."""
+            ],
+            IssueFixer.Developer,
+            """No pages point Google at each other in a circle"""),
+
+        ["canonical-on-redirect"] = new(
+            """Forwarded addresses that also name a different main address""",
+            [
+                """These addresses forward visitors to another page, and also name a different page as the main version.""",
+                """Search engines follow the forwarding and ignore the rest, so this changes nothing in search.""",
+                """It can only mislead people who check the address with a tool, so it isn't urgent."""
+            ],
+            [
+                """Send the list to your developer when they next work on the site.""",
+                """Ask them to remove the "canonical" link the server sends with these addresses, or make it name where they lead."""
+            ],
+            IssueFixer.Developer,
+            """No forwarded address names a different main address"""),
+
+        ["canonical-fragment"] = new(
+            """Main addresses with a # part that Google ignores""",
+            [
+                """These pages give their main address with a # part at the end, such as #reviews.""",
+                """Google ignores everything from the # on, so the main address usually still works.""",
+                """It's still a mistake, and it can mean the address was copied from the browser rather than set on purpose."""
+            ],
+            [
+                """Send the list to your developer when they next work on the site: it isn't urgent.""",
+                """Ask them to remove the # part from each page's main address (its "canonical" link)."""
+            ],
+            IssueFixer.Developer,
+            """No main address has a # part""")
+        {
+            OneFix = """That's almost certainly how your page design or SEO plugin writes the main address on every page."""
+        },
+
+        ["canonical-invalid-attribute"] = new(
+            """Main addresses written in a way Google may ignore""",
+            [
+                """These pages name their main address with extra details, such as a language or a screen size, that belong on other links.""",
+                """Search engines may then not treat it as the page's main address at all.""",
+                """It's usually a link to a translated or mobile version, written as the main address by mistake."""
+            ],
+            [
+                """Ask your developer to remove the extra details ("hreflang", "lang", "media" or "type") from each page's "canonical" link.""",
+                """If the link was meant to point at another version of the page, ask for it to be written as a separate link."""
+            ],
+            IssueFixer.Developer,
+            """No main address is written in a way Google may ignore"""),
+
+        ["canonical-unlinked"] = new(
+            """Main versions of pages that nothing links to""",
+            [
+                """Other pages name these pages as their main version, but no page on your site links to them.""",
+                """Visitors browsing your site only ever reach the other versions, and Google may choose one of those instead."""
+            ],
+            [
+                """Link to each of these pages wherever its other versions are linked, such as in menus and lists.""",
+                """If a page shouldn't be the main version, ask your developer to point the others' "canonical" links at one that is linked."""
+            ],
+            IssueFixer.Either,
+            """Every main version of a page has links to it"""),
 
         ["sitemap-non-indexable"] = new(
             """Sitemap addresses that can't appear in search""",

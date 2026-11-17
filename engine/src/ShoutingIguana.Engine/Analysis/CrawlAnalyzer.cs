@@ -4,8 +4,10 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Analysis.Rules;
+using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -97,9 +99,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var scope = new CrawlScope(new Uri(startUrl), options.IncludeSubdomains, options.StayInStartFolder);
 
             // Orphans and sitemap coverage need every page and sitemap; a stopped crawl can't tell missing from not yet seen.
-            var crawlComplete = status == CrawlStatus.Completed && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
+            // An unlinked canonical needs every page that could link to it, sitemaps or not.
+            var finished = status == CrawlStatus.Completed;
+            var crawlComplete = finished && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
             var limitSkips = reader.ReadLimitSkips();
-            var linksComplete = crawlComplete && SeesEveryLinkingPage(limitSkips, scope, urls, notes, skipped);
+            var everyLinkingPage = finished && SeesEveryLinkingPage(limitSkips, scope, urls, notes, skipped, orphansJudged: crawlComplete);
+            var linksComplete = crawlComplete && everyLinkingPage;
+            if (!finished)
+            {
+                Skip(notes, skipped, note: null, SkippedCheckReasons.CRAWL_UNFINISHED, "The crawl didn't finish.", IssueCatalog.CANONICAL_UNLINKED);
+            }
             incomplete = WhyIncomplete(status, limitSkips);
             if (!options.DiscoverSitemaps)
             {
@@ -109,7 +118,6 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
             else if (!crawlComplete)
             {
-                var finished = status == CrawlStatus.Completed;
                 Skip(notes, skipped, finished
                         ? "Not every sitemap was read, so orphan pages and sitemap coverage weren't checked."
                         : "The crawl didn't finish, so orphan pages and sitemap coverage weren't checked.",
@@ -232,12 +240,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
             var hreflang = new HreflangRules(urls);
             var indexability = new IndexabilityRules();
+            var robotsToken = UserAgents.Resolve(options.UserAgent, options.CustomUserAgent).RobotsToken;
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls, reader.ReadUrlId), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl), indexability, hreflang,
-                new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings),
-                new HtmlRules()
+                new ImageRules(settings, urls, reader.ReadUrlId), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
+                new DirectiveRules(urls, robotsToken), hreflang, new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings),
+                new PerformanceRules(settings), new HtmlRules()
             ];
 
             // An instant meta refresh makes the page a redirect: nobody sees it, so only the refresh itself is reported.
@@ -245,12 +254,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var duplicates = new DuplicateRules(settings);
             ISiteRule[] siteRules =
             [
-                new InlinkRules(urls, linksComplete), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks, reader.ReadUrl), hreflang,
+                new InlinkRules(urls, linksComplete, everyLinkingPage), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks, reader.ReadUrl), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls, reader.ReadUrl),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
                 new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
-                new SiteVisibilityRules(urls)
+                new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl)
             ];
+
+            // Pages parsed before each collection of facts that a check needs (CollectedFacts), counted as they're read.
+            var collections = CollectedFacts.Needs.Values.Distinct().Order().ToArray();
+            var parsedBefore = new long[collections.Length];
 
             writer.AddIndexability(urls.IndexabilityChanges);
             progress.Finish();
@@ -259,6 +272,14 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 progress.Advance(++pages);
+                for (var collection = 0; collection < collections.Length; collection++)
+                {
+                    if (page.Facts.CollectedVersion < collections[collection])
+                    {
+                        parsedBefore[collection]++;
+                    }
+                }
+
                 foreach (var rule in page.IsRedirect ? redirectRules : pageRules)
                 {
                     // Hits are collected first, so a rule that fails halfway through a page adds nothing for it.
@@ -302,6 +323,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     SkippedCheckReasons.EARLIER_VERSION, $"{char.ToUpperInvariant(why[0])}{why[1..]}, which didn't record what this check needs. Crawl again to check it.",
                     IssueCatalog.NEAR_DUPLICATE_CONTENT);
             }
+
+            SkipChecksNeedingNewerFacts(writer, notes, skipped, collections, parsedBefore, pages);
 
             progress.Start(AnalysisPhase.SiteRules, siteRules.Length);
             var rulesDone = 0;
@@ -385,6 +408,43 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     }
 
     /// <summary>
+    /// Skips each check that needs a fact some pages were parsed without (<see cref="CollectedFacts"/>), as near duplicates
+    /// are skipped on pages without every lane of their fingerprint, and takes back what its rule found on the other pages:
+    /// a result for some pages only would read as the whole crawl's.
+    /// </summary>
+    /// <param name="collections">Each collection a check needs, in order.</param>
+    /// <param name="parsedBefore">For each, how many of the pages read were parsed before it.</param>
+    private void SkipChecksNeedingNewerFacts(IssueWriter writer, List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, int[] collections,
+        long[] parsedBefore, long pages)
+    {
+        for (var collection = 0; collection < collections.Length; collection++)
+        {
+            if (parsedBefore[collection] == 0)
+            {
+                continue;
+            }
+
+            var checks = CollectedFacts.Needs.Where(need => need.Value == collections[collection] && !skipped.ContainsKey(need.Key))
+                .Select(need => need.Key).OrderBy(check => check.Id, StringComparer.Ordinal).ToArray();
+            if (checks.Length == 0)
+            {
+                continue;
+            }
+
+            var older = (int)Math.Min(parsedBefore[collection], int.MaxValue);
+            var why = older == pages
+                ? "this crawl was made by an earlier version"
+                : $"{RuleText.Count(older, "page", "pages")} in this crawl {(older == 1 ? "was" : "were")} fetched by an earlier version";
+            var note = checks.Length == 1
+                ? $"{checks[0].Title} wasn't checked: {why}, which didn't record what the check needs. Crawl again to check it."
+                : $"{checks.Length} checks weren't run: {why}, which didn't record what they need. Crawl again to run them.";
+            Skip(notes, skipped, note, SkippedCheckReasons.EARLIER_VERSION,
+                $"{char.ToUpperInvariant(why[0])}{why[1..]}, which didn't record what this check needs. Crawl again to check it.", checks);
+            writer.Discard(checks);
+        }
+    }
+
+    /// <summary>
     /// Why the crawl didn't read all of the site, for the score to say it is of what was read so far: it was stopped or
     /// failed, or it finished with a limit keeping internal URLs out. Null when it read all it set out to. A crawl kept to
     /// its start folder did: that is its scope, not a part of it.
@@ -405,10 +465,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     /// <see cref="UNREAD_PAGES_ONE_IN"/> of the pages it tried to read, as when a shop rate-limits every product page, the
     /// check is skipped. A few stray failures don't stop it, or it would hardly ever run on a large site.
     /// </summary>
+    /// <param name="orphansJudged">
+    /// Orphans would be checked, every sitemap having been read: they're skipped with a note for what keeps pages out. When
+    /// they aren't, they already have their reason, and only unlinked canonicals are skipped here.
+    /// </param>
     private bool SeesEveryLinkingPage(Dictionary<SkipReason, long> limitSkips, CrawlScope scope, UrlTable urls, List<string> notes,
-        Dictionary<IssueDefinition, SkippedCheck> skipped)
+        Dictionary<IssueDefinition, SkippedCheck> skipped, bool orphansJudged)
     {
         var complete = true;
+        IssueDefinition[] checks = orphansJudged ? [IssueCatalog.ORPHAN_PAGE, IssueCatalog.CANONICAL_UNLINKED] : [IssueCatalog.CANONICAL_UNLINKED];
+        string? Note(string note) => orphansJudged ? note : null;
         foreach (var (reason, limit, code) in new[]
                  {
                      (SkipReason.DepthLimit, "depth limit", SkippedCheckReasons.DEPTH_LIMIT), (SkipReason.UrlLimit, "URL limit", SkippedCheckReasons.URL_LIMIT)
@@ -417,18 +483,18 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             if (limitSkips.GetValueOrDefault(reason) is > 0 and var count)
             {
                 var left = string.Create(CultureInfo.InvariantCulture, $"{count:N0} internal URL{(count == 1 ? string.Empty : "s")}");
-                Skip(notes, skipped, $"Orphan pages weren't checked: the {limit} kept {left} out of the crawl, and pages linked only from them would look orphaned.",
+                Skip(notes, skipped, Note($"Orphan pages weren't checked: the {limit} kept {left} out of the crawl, and pages linked only from them would look orphaned."),
                     code, $"The {limit} kept {left} out of the crawl, and pages linked only from them would look orphaned.",
-                    IssueCatalog.ORPHAN_PAGE);
+                    checks);
                 complete = false;
             }
         }
 
         if (scope.StartFolder != "/")
         {
-            Skip(notes, skipped, $"Orphan pages weren't checked: the crawl stayed in {scope.StartFolder}, so links from the rest of the site weren't read.",
+            Skip(notes, skipped, Note($"Orphan pages weren't checked: the crawl stayed in {scope.StartFolder}, so links from the rest of the site weren't read."),
                 SkippedCheckReasons.START_FOLDER, $"The crawl stayed in {scope.StartFolder}, so links from the rest of the site weren't read.",
-                IssueCatalog.ORPHAN_PAGE);
+                checks);
             complete = false;
         }
 
@@ -437,7 +503,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         {
             var why = string.Create(CultureInfo.InvariantCulture,
                 $"{unread:N0} of the {read + unread:N0} pages the crawl tried to read refused it or didn't answer, and pages linked only from them would look orphaned.");
-            Skip(notes, skipped, $"Orphan pages weren't checked: {why}", SkippedCheckReasons.PAGES_UNREAD, why, IssueCatalog.ORPHAN_PAGE);
+            Skip(notes, skipped, Note($"Orphan pages weren't checked: {why}"), SkippedCheckReasons.PAGES_UNREAD, why, checks);
             complete = false;
         }
 

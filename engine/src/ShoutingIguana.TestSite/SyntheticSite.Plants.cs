@@ -40,15 +40,17 @@ public sealed partial class SyntheticSite
     {
         List<Plant> plants = [];
 
-        // With an encoding, the page is sent as bytes in it, after its byte-order mark (the encoding's preamble).
+        // With an encoding, the page is sent as bytes in it, after its byte-order mark (the encoding's preamble). Headers
+        // are sent beside the security headers every page has.
         void Page(string slug, string name, string[] issues, Func<PageSpec, PageSpec>? change = null, bool inSitemap = true,
-            string contentType = HTML, bool linked = true, Encoding? markedAs = null)
+            string contentType = HTML, bool linked = true, Encoding? markedAs = null, Dictionary<string, string>? headers = null)
         {
             var page = PlantPage(slug, name);
             page = change?.Invoke(page) ?? page;
+            var sent = headers is null ? SECURITY_HEADERS : new Dictionary<string, string>(SECURITY_HEADERS.Concat(headers), StringComparer.OrdinalIgnoreCase);
             plants.Add(new Plant(page.Path, 200, linked, inSitemap, issues, () => markedAs is null
-                ? new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)
-                : new SyntheticResponse(200, contentType, null, [.. markedAs.GetPreamble(), .. markedAs.GetBytes(Render(page))], null, SECURITY_HEADERS)));
+                ? new SyntheticResponse(200, contentType, Render(page), null, null, sent)
+                : new SyntheticResponse(200, contentType, null, [.. markedAs.GetPreamble(), .. markedAs.GetBytes(Render(page))], null, sent)));
         }
 
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
@@ -217,6 +219,36 @@ public sealed partial class SyntheticSite
         Page("canonical-blocked", "Canonical to a blocked URL", ["canonicalised-page"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}blocked" }, inSitemap: false);
 
+        // Page 2 of a list names page 1 as its canonical: a fault of its own, not just a canonicalised page.
+        Page("paginated-list/", "Paginated list, first page", [], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}paginated-list/page/2/\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}paginated-list/page/2/\">Next page</a></p>"
+        });
+        Page("paginated-list/page/2/", "Paginated list, second page", ["canonical-to-first-page"], page => page with
+        {
+            Canonical = $"{_base}{PLANTS_PATH}paginated-list/", ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}paginated-list/\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}paginated-list/\">Previous page</a></p>"
+        }, inSitemap: false, linked: false);
+
+        // A canonical on the partner site, two pages naming each other, and a canonical to a page nothing links to.
+        Page("canonical-elsewhere", "Canonical to another site", ["canonical-other-domain"], page => page with { Canonical = $"{_external}/ext/canonical-target" },
+            inSitemap: false);
+        Page("canonical-loop-a", "Canonical loop A", ["canonicalised-page", "canonical-loop"], page => page with { Canonical = $"{_base}{PLANTS_PATH}canonical-loop-b" },
+            inSitemap: false);
+        Page("canonical-loop-b", "Canonical loop B", ["canonicalised-page", "canonical-loop"], page => page with { Canonical = $"{_base}{PLANTS_PATH}canonical-loop-a" },
+            inSitemap: false);
+        Page("canonical-to-unlinked", "Canonical to an unlinked page", ["canonicalised-page"], page => page with { Canonical = $"{_base}{PLANTS_PATH}unlinked-target" },
+            inSitemap: false);
+        Page("unlinked-target", "Canonical page nothing links to", ["canonical-unlinked", "not-in-sitemap"], inSitemap: false, linked: false);
+
+        // A canonical to the page itself with a fragment, and one with a media query: still the page's own, but written wrong.
+        Page("canonical-fragment", "Canonical with a fragment", ["canonical-fragment"], page => page with { Canonical = $"{_base}{page.Path}#top" });
+        Page("canonical-media", "Canonical with a media query", ["canonical-invalid-attribute"], page => page with
+        {
+            Canonical = null, ExtraHead = $"<link rel=\"canonical\" media=\"only screen and (max-width: 640px)\" href=\"{_base}{page.Path}\">"
+        });
+
         Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);
         Page("noindex-canonical", "Noindex with a canonical elsewhere", ["noindex-page", "noindex-with-canonical"], page => page with
         {
@@ -235,6 +267,17 @@ public sealed partial class SyntheticSite
                       "<a href=\"/img/6.jpg\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/img/6.jpg\" alt=\"Another gallery photo\" width=\"400\" height=\"300\"></a></p>"
         });
         Page("nosnippet", "No snippet", ["snippet-blocked"], page => page with { Robots = "nosnippet" });
+
+        // The HTML says index, the server's header noindex: the stricter wins, and the two disagree.
+        Page("robots-conflict", "Robots rules that disagree", ["noindex-page", "robots-directives-conflict"], page => page with { Robots = "index, follow" },
+            inSitemap: false, headers: new() { ["X-Robots-Tag"] = "noindex" });
+
+        // A date to drop out of search that has passed is flagged; one still to come isn't.
+        Page("unavailable-after", "Date to leave search passed", ["unavailable-after-passed"], page => page with { Robots = "unavailable_after: 2020-01-01" });
+        Page("unavailable-later", "Date to leave search to come", [], page => page with { Robots = "unavailable_after: 2099-01-01" });
+        Page("image-preview-none", "Image previews blocked", ["media-preview-blocked"], page => page with { Robots = "max-image-preview:none" });
+        Page("notranslate", "Translation blocked", ["translation-blocked"], page => page with { Robots = "notranslate" });
+        Page("indexifembedded", "Embedding rule on its own", ["indexifembedded-without-noindex"], page => page with { Robots = "indexifembedded" });
         Page("meta-refresh", "Meta refresh", ["meta-refresh"], page => page with
         {
             ExtraHead = $"<meta http-equiv=\"refresh\" content=\"30; url={PLANTS_PATH}thin\">"
@@ -249,6 +292,9 @@ public sealed partial class SyntheticSite
             ExtraHead = $"<meta http-equiv=\"refresh\" content=\"0; url={PLANTS_PATH}refresh-target\">"
         }, inSitemap: false);
         Page("refresh-target", "Meta refresh target", [], linked: false);
+
+        // A Refresh header works as the meta tag does: an instant one makes the page a redirect.
+        Page("refresh-header", "Refresh header", ["meta-refresh"], inSitemap: false, headers: new() { ["Refresh"] = $"0; url={PLANTS_PATH}thin" });
 
         // A link, a partner-site link and an image that only fail once their redirects are followed are broken, not just
         // redirects. The redirecting image is an internal redirect to a 404 itself.
@@ -468,6 +514,12 @@ public sealed partial class SyntheticSite
             Other($"long-chain-{hop}", 301, linked: hop == 0, hop == 0 ? ["redirect-chain"] : [], () => Redirect(301, next));
         }
         Other("moved", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+
+        // A redirect whose Link header names another URL as canonical than the one it leads to.
+        Other("redirect-with-canonical", 301, linked: true, ["canonical-on-redirect"], () => Redirect(301, PLANTS_PATH + "thin") with
+        {
+            Headers = new Dictionary<string, string> { ["Link"] = $"<{_base}{PLANTS_PATH}trailing/>; rel=\"canonical\"" }
+        });
 
         // A link to a temporary redirect is right as it is: the linked URL stays the one to use, as with a shop's sign-in
         // link, which sends visitors on to its hosted login with a one-off token. A temporary redirect to another site is

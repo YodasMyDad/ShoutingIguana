@@ -27,6 +27,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     private const int MAX_ICON_ATTRIBUTE_CHARS = 100;
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
+    private const int MAX_PAGINATION_LINKS = 20;
 
     /// <summary>Raw text read for a heading or link label, before whitespace is collapsed and the result capped.</summary>
     private const int MAX_RAW_LABEL_CHARS = 16 * MAX_HEADING_CHARS;
@@ -51,6 +52,9 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         ("sidebar", LinkPosition.Sidebar)
     ];
 
+    /// <summary>Attributes that make a <c>&lt;link rel="canonical"&gt;</c> an alternate's rather than the page's own, in the order a detail names them.</summary>
+    private static readonly string[] CANONICAL_QUALIFIERS = ["hreflang", "lang", "media", "type"];
+
     /// <summary>Attributes lazy-loading scripts keep the real image URL in, in the order they're tried.</summary>
     private static readonly string[] LAZY_SOURCES = ["data-src", "data-lazy-src", "data-original", "data-lazy"];
 
@@ -62,6 +66,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     public List<string> RobotsMetaContents { get; } = [];
     public List<CanonicalFact> Canonicals { get; } = [];
     public List<HreflangFact> Hreflangs { get; } = [];
+    public List<PaginationFact> Pagination { get; } = [];
     public List<HeadingFact> Headings { get; } = [];
     public List<ImageFact> Images { get; } = [];
     public List<string> JsonLd { get; } = [];
@@ -434,7 +439,7 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
             var token = tokens[range];
             if (token.Equals("canonical", StringComparison.OrdinalIgnoreCase))
             {
-                Canonicals.Add(new CanonicalFact(href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false));
+                Canonicals.Add(new CanonicalFact(href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false) { Attributes = CanonicalQualifiers(element) });
                 AddLink(href, LinkKind.Canonical, flags, position, null);
             }
             else if (token.Equals("alternate", StringComparison.OrdinalIgnoreCase) &&
@@ -448,6 +453,11 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
                      token.Equals("prev", StringComparison.OrdinalIgnoreCase) ||
                      token.Equals("previous", StringComparison.OrdinalIgnoreCase))
             {
+                if (Pagination.Count < MAX_PAGINATION_LINKS)
+                {
+                    Pagination.Add(new PaginationFact(token.Equals("next", StringComparison.OrdinalIgnoreCase), NormalizeOrNull(href)));
+                }
+
                 AddLink(href, LinkKind.Pagination, flags, position, null);
             }
             else if (token.Equals("stylesheet", StringComparison.OrdinalIgnoreCase))
@@ -470,6 +480,13 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
                 AddLink(href, LinkKind.Hyperlink, LinkFlags.None, position, null);
             }
         }
+    }
+
+    /// <summary>The canonical's attributes that qualify it (<see cref="CANONICAL_QUALIFIERS"/>), comma-separated, or null with none.</summary>
+    private static string? CanonicalQualifiers(IElement element)
+    {
+        var present = CANONICAL_QUALIFIERS.Where(element.HasAttribute).ToList();
+        return present.Count == 0 ? null : string.Join(", ", present);
     }
 
     /// <summary>What an icon's link says of it, trimmed and cut short: a size or a media type is a few characters.</summary>
@@ -613,7 +630,8 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
     private string? NormalizeOrNull(string href) =>
         UrlNormalizer.TryResolve(baseUri, href, out var target) ? UrlNormalizer.Normalize(target) : null;
 
-    private static MetaRefreshFact ParseRefresh(string content)
+    /// <summary>A refresh's delay and URL, as a meta tag's content or a <c>Refresh</c> header writes them: <c>5; url=/next</c>.</summary>
+    internal static MetaRefreshFact ParseRefresh(string content)
     {
         var separator = content.IndexOfAny([';', ',']);
         var delayText = (separator < 0 ? content : content[..separator]).Trim();

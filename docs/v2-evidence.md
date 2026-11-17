@@ -127,6 +127,12 @@ and is in the group without a related URL.
 | 24 | `robots-txt-unreachable-other-origin` | U/N/– | – | – | Same | once |
 | 25 | `robots-txt-missing` | U/N/– | – | – | Same | once |
 | 26 | `site-hidden-from-search` | P/N/– | `metaRobots`, `xRobotsTag` (the home page's) | – | Same ("212 of 240 pages are noindex") | once |
+| 88 | `robots-directives-conflict` (new) | P/PD/– | `metaRobots`, `xRobotsTag` | – | `The HTML says "index, follow"; the X-Robots-Tag header says "noindex"` (grouped by it: a template's conflict is one group) | imp · pages |
+| 89 | `noindex-near-home` (new) | P/N/– | `metaRobots`, `xRobotsTag`, `depth`, `inlinks` | – | `2 clicks from the start` | imp · – |
+| 90 | `unavailable-after-passed` (new) | P/N/– | `metaRobots`, `xRobotsTag` | – | `unavailable_after: 2025-06-30, passed` (the date as written) | imp · – |
+| 91 | `media-preview-blocked` (new) | P/PD/– | `metaRobots`, `xRobotsTag` | – | The rules found: `noimageindex, max-video-preview:0` | imp · pages |
+| 92 | `translation-blocked` (new) | P/N/– | `metaRobots`, `xRobotsTag` | – | None | imp · – |
+| 93 | `indexifembedded-without-noindex` (new) | P/N/– | `metaRobots`, `xRobotsTag` | – | None | imp · – |
 
 ### Canonicals
 
@@ -142,6 +148,13 @@ and is in the group without a related URL.
 | 34 | `canonical-relative` | P/PD/– | – | – | Same (the href; grouped by its form) | imp · pages |
 | 35 | `canonical-invalid` | P/PD/– | – | – | Same (the href; grouped by what's wrong) | imp · pages |
 | 36 | `noindex-with-canonical` | P/RU/T | `metaRobots`, `xRobotsTag` | `statusCode`, `indexability`, `flags` | Same (none) | imp · pages |
+| 94 | `canonical-to-first-page` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical`, `flags` | `Page 2 names page 1 as its canonical` (or "A later page …" when only its rel="prev" says so); grouped by the first page, so a series is one group | imp · pages |
+| 95 | `canonical-other-domain` (new) | P/RU/T | – | `statusCode`, `final`, `indexability`, `canonical` | `On another host: staging.example.com` | imp · pages |
+| 96 | `canonical-loop` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical` | `A loop of 2: /a/ → /b/ → back to /a/` (paths on the page's own host) | imp · pages |
+| 97 | `canonical-on-redirect` (new) | U/N/S | `redirectChain` | – | `Redirects to https://x/c/; its canonical header names https://x/b/` | use · – |
+| 98 | `canonical-fragment` (new) | P/PD/– | – | – | The fragment: `#reviews` | imp · pages |
+| 99 | `canonical-invalid-attribute` (new) | P/PD/– | – | – | The attributes: `media`, `hreflang, type` | imp · pages |
+| 100 | `canonical-unlinked` (new) | P/N/S | `inlinks`, `linkingPages` | – | `Only canonicals lead here`; its found-on lists the pages whose canonical names it | imp · – |
 
 ### Sitemaps
 
@@ -253,6 +266,12 @@ and is in the group without a related URL.
 | 85 | `lang-missing` | P/N/– | – | – | Same (none). Template hint | imp · – |
 | 86 | `charset-missing` | P/N/– | – | – | None → none, but a meta tag past the first 1024 bytes says where it ends (the check audit's): `A meta tag declares it, but ends at byte 1,180, past the first 1,024 bytes browsers read`. Template hint | imp · – |
 | 87 | `open-graph-missing` | P/PD/– | – | – | Same ("Missing og:image; empty og:description") | imp · pages |
+
+**New checks (step 3b, [v2-new-checks.md](v2-new-checks.md)):** rows 88 on, marked "(new)", each in its category's
+table. `canonical-unlinked` is P where the specification said U: it flags only indexable pages, as `orphan-page` does.
+`canonicalised-page` (27) no longer flags a page `canonical-to-first-page` or `canonical-other-domain` flags, and
+`canonical-to-non-indexable` (32) no page of a canonical loop. `meta-refresh` (11) also reads a `Refresh` response header:
+`The Refresh header moves to https://x/ after 5 seconds`.
 
 **In all:** 27 checks get evidence columns; 24 get target facts (the 20 `targets` checks, and the related URL of 4
 `sources` checks' groups: 6, 8, 9 and 10); 21 details change (22 with `charset-missing`'s, which the check audit added); 6 checks change how they're shown (3 image checks become

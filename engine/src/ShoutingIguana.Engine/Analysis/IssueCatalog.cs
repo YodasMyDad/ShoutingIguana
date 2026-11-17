@@ -148,7 +148,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition META_REFRESH = new("meta-refresh", IssueCategory.Redirects, IssueSeverity.Warning,
         "Meta refresh",
-        """The page has a <meta http-equiv="refresh"> tag that sends visitors to another URL or reloads the page, at once or after a delay. The detail gives the target and the delay.""",
+        """The page has a <meta http-equiv="refresh"> tag, or its response a Refresh header, that sends visitors to another URL or reloads the page, at once or after a delay. The detail gives the target and the delay, and says when it's the header.""",
         """Replace it with a 301 redirect on the server (or 302 if the move is temporary). If the page reloads itself to show new content, update it with script instead, or let visitors refresh.""")
     {
         Why = """Google treats an instant meta refresh as a permanent redirect and a delayed one as temporary, but recommends a server-side redirect wherever you can set one up; that's faster too, as the browser doesn't load the page first. A timed redirect or reload also moves content away while people are reading, which WCAG counts as a failure. A refresh on old URLs where the server can't redirect is an acceptable fallback.""",
@@ -353,6 +353,78 @@ public static class IssueCatalog
     };
 
 
+    public static readonly IssueDefinition ROBOTS_DIRECTIVES_CONFLICT = new("robots-directives-conflict", IssueCategory.Indexability, IssueSeverity.Warning,
+        "Meta robots and X-Robots-Tag disagree",
+        """The page's robots meta tags and its X-Robots-Tag header give opposite rules: one says noindex (or none) where the other says index (or all), or one says nofollow where the other says follow. Only rules for all crawlers, Googlebot and this crawler count. The detail quotes both.""",
+        """Decide which rule the page should have, then make both say it, or remove one. The meta tag comes from the page's template or SEO plugin; the header from the server, CDN or CMS.""")
+    {
+        Why = """Search engines combine the two, and where their rules conflict Google applies the more restrictive one, so a page whose HTML says index is dropped from search if its header says noindex. It usually means two systems each set robots rules, and whoever checks only one of them sees the wrong answer. A rule only one of them mentions isn't a conflict.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#combining-robots-meta-tag-directives",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition NOINDEX_NEAR_HOME = new("noindex-near-home", IssueCategory.Indexability, IssueSeverity.Warning,
+        "Noindex page close to the home page",
+        """This noindex page is one or two clicks from where the crawl started, where a site's important sections usually are. The home page isn't reported, nor a page whose address names a private area: cart, basket, checkout, account, login, register, logout, wishlist, search, thank-you, order-received or password pages. The page is in the noindex check too.""",
+        """If the page should be in search, remove the noindex from its robots meta tag or X-Robots-Tag header. If it's meant to stay out, such as a members' or legal page, leave it: this is a prompt to check.""")
+    {
+        Why = """Pages linked from the home page or its menus are usually ones a site wants found, so a noindex there is more often a leftover from a launch, a staging setting or a plugin than a choice. Google drops noindex pages from its results entirely. Sites do keep a few such pages out of search on purpose, which is fine.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag", "depth", "inlinks"]
+    };
+
+    public static readonly IssueDefinition UNAVAILABLE_AFTER_PASSED = new("unavailable-after-passed", IssueCategory.Indexability, IssueSeverity.Warning,
+        "unavailable_after date has passed",
+        """The page's robots meta tag or X-Robots-Tag header has an unavailable_after rule whose date was already past when the crawl fetched the page. A date in a format search engines can't read is ignored, as Google ignores it, and a page that's noindex anyway isn't reported.""",
+        """If the page should stay in search, remove the unavailable_after rule or move its date on. If the content really has expired, redirect the page to its replacement or let it return 404 or 410.""")
+    {
+        Why = """Google stops showing a page in its results after its unavailable_after date, as if it were noindex. The rule is meant for event and offer pages, and its date is easily forgotten when the page is reused or kept. Ignore this if the page was meant to drop out.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#unavailable_after",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition MEDIA_PREVIEW_BLOCKED = new("media-preview-blocked", IssueCategory.Indexability, IssueSeverity.Notice,
+        "Image or video previews blocked",
+        """This indexable page has a robots rule that keeps its images or video out of search: noimageindex, max-image-preview:none or max-video-preview:0. The detail names the rules found.""",
+        """Remove the rule if the page's pictures or video should appear in search; max-image-preview:large allows the largest previews. If they're meant to stay out, leave it.""")
+    {
+        Why = """Google won't show the page's images in its results or image search, or a preview of its video, so the result stands out less. That's often deliberate, for photos licensed for one use or private media, but some plugins set it for a whole site without anyone noticing.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#max-image-preview",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition TRANSLATION_BLOCKED = new("translation-blocked", IssueCategory.Indexability, IssueSeverity.Notice,
+        "Translation blocked (notranslate)",
+        """This indexable page has a notranslate robots rule, so Google won't offer a translation of it in search results.""",
+        """Remove notranslate if people searching in other languages should be offered the page; leave it where a translation could mislead, such as on legal text.""")
+    {
+        Why = """Without it, Google can show the result's title and snippet in the searcher's language and link to a machine translation of the page, which reaches visitors the page couldn't otherwise. It's a choice, not a fault, but it's sometimes left in a template by mistake.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#notranslate",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
+    public static readonly IssueDefinition INDEXIFEMBEDDED_WITHOUT_NOINDEX = new("indexifembedded-without-noindex", IssueCategory.Indexability, IssueSeverity.Notice,
+        "indexifembedded without noindex",
+        """The page's robots rules include indexifembedded but not noindex, so the rule does nothing.""",
+        """If the page's content should be indexed only where other pages embed it in an iframe, add noindex beside indexifembedded. If not, remove indexifembedded.""")
+    {
+        Why = """indexifembedded lets Google index a page's content where another page embeds it, though the page itself is noindex; without noindex it has no effect. It harms nothing, but it shows the robots rules aren't doing what someone meant.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#indexifembedded",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["metaRobots", "xRobotsTag"]
+    };
+
     // Canonicals
     public static readonly IssueDefinition CANONICALISED_PAGE = new("canonicalised-page", IssueCategory.Canonicals, IssueSeverity.Notice,
         "Canonicalised page",
@@ -475,6 +547,93 @@ public static class IssueCatalog
         TargetFacts = ["statusCode", "indexability", "flags"]
     };
 
+
+    public static readonly IssueDefinition CANONICAL_TO_FIRST_PAGE = new("canonical-to-first-page", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Paginated page canonicalised to page 1",
+        """This later page of a paginated series, page 2 onward by its rel="prev" link or a page number in its URL (?page=2, ?p=2, /page/2/), names the series' first page as its canonical. It isn't reported as canonicalised too.""",
+        """Give each page of the series a canonical to itself, and keep ordinary links between the pages so every one can be reached.""")
+    {
+        Why = """The canonical asks search engines to treat page 2 as a copy of page 1, which it isn't. What's listed only on later pages is then found only through pages that ask to be dropped, so it may be crawled less, or not at all. Google's pagination guidance says not to use the first page as the canonical; it's a common setting in SEO plugins and shop themes.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading#use-urls-correctly",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "canonical", "flags"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_OTHER_DOMAIN = new("canonical-other-domain", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Canonical points to another site",
+        """The page's canonical names a URL on another host, outside the crawl, so the page asks to be treated as a copy of a page on another site. It isn't reported as canonicalised too. The detail names the host.""",
+        """If this page is a copy of an article first published elsewhere, that's right: leave it. Otherwise point the canonical at this site's own URL for the page; a staging, old or development host in it usually comes from a template or a setting.""")
+    {
+        Why = """Search engines may index the other site's page instead of this one and fold this page's signals into it, so it can disappear from search. That's correct for content republished from another site, and a disaster when a template or a migration leaves every canonical pointing at a staging host or the old domain.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "final", "indexability", "canonical"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_LOOP = new("canonical-loop", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Canonical loop",
+        """Following this page's canonical, page to page and through any redirects, comes back to this page: two or more pages name each other as their canonical. The detail lists the loop. Its pages aren't reported as canonicalised to a non-indexable page too.""",
+        """Choose the one page of the loop that should be indexed, give it a canonical to itself, and point the others' canonicals at it.""")
+    {
+        Why = """Each page asks to be dropped for another that asks the same, so the canonicals cancel out and Google picks a page itself, which may not be the one you meant. It usually comes from two pages each set to the other by hand, or from one rule that rewrites canonicals undoing another.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "indexability", "canonical"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_ON_REDIRECT = new("canonical-on-redirect", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical header on a redirect",
+        """This internal URL redirects, and its response also has a Link header naming, as canonical, a different URL from the one its redirects end at. The detail gives both.""",
+        """Remove the Link header from the redirect, or make it name the redirect's final URL. It usually comes from a server or CDN rule that adds the header to every response.""")
+    {
+        Why = """Search engines follow the redirect and ignore the rest of the response, so the header has no effect on search. It misleads only people and tools that read the headers, but it can show that a rule meant for pages is applied to every response.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-header-method",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Grouping = IssueGrouping.None,
+        Evidence = ["redirectChain"]
+    };
+
+    public static readonly IssueDefinition CANONICAL_FRAGMENT = new("canonical-fragment", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical contains a fragment (#)",
+        """A canonical in the <head> or an HTTP Link header has a fragment, a part after # such as #reviews. The detail gives the fragment.""",
+        "Remove the # part from the canonical, so it's the page's plain URL.")
+    {
+        Why = """Google says not to use a fragment in a canonical, as it generally doesn't support them: it drops the fragment, so the canonical usually works as meant all the same. The markup is still wrong, and a fragment can be a sign the canonical is built from the browser's address rather than set on purpose.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition CANONICAL_INVALID_ATTRIBUTE = new("canonical-invalid-attribute", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical link with hreflang, lang, media or type",
+        """A canonical <link> in the <head> also has an hreflang, lang, media or type attribute. The detail names them. A crawl made before the crawler noted these attributes isn't checked.""",
+        """Remove those attributes from the canonical link. To point at another language or a mobile version, add a separate <link rel="alternate"> with hreflang or media instead.""")
+    {
+        Why = """Those attributes describe an alternate version of a page, not the page's own preferred URL, so search engines may not take the link as a canonical at all. The usual cause is an alternate link written as rel="canonical" by mistake. No Google page says such a canonical is ignored, so treat this as tidying up.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition CANONICAL_UNLINKED = new("canonical-unlinked", IssueCategory.Canonicals, IssueSeverity.Notice,
+        "Canonical URL that no page links to",
+        """Another page names this indexable page as its canonical, but no crawled page links to it, not even with a nofollow link or through a redirect, and no sitemap lists it (a sitemap page nothing links to is an orphan page). It's only checked when the crawl read every page that could link to it.""",
+        """Link to this page wherever its duplicates are linked, such as menus and listings, or change those links to point here. If it shouldn't be the canonical, point the other pages' canonicals at one that is linked.""")
+    {
+        Why = """A canonical tells search engines which URL to index, and links tell them it matters: a canonical page nothing links to sends mixed signals, and Google may choose a linked duplicate instead. Visitors browsing the site only ever reach the duplicates.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Grouping = IssueGrouping.None,
+        Evidence = ["inlinks", "linkingPages"]
+    };
 
     // Sitemaps
     public static readonly IssueDefinition SITEMAP_NON_INDEXABLE = new("sitemap-non-indexable", IssueCategory.Sitemaps, IssueSeverity.Warning,
@@ -1109,9 +1268,13 @@ public static class IssueCatalog
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
         NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE,
         ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, ROBOTS_TXT_MISSING, SITE_HIDDEN_FROM_SEARCH,
+        ROBOTS_DIRECTIVES_CONFLICT, NOINDEX_NEAR_HOME, UNAVAILABLE_AFTER_PASSED, MEDIA_PREVIEW_BLOCKED, TRANSLATION_BLOCKED,
+        INDEXIFEMBEDDED_WITHOUT_NOINDEX,
         CANONICALISED_PAGE, CANONICAL_MISSING, CANONICAL_MULTIPLE, CANONICAL_BROKEN, CANONICAL_TO_REDIRECT,
         CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID,
         NOINDEX_WITH_CANONICAL,
+        CANONICAL_TO_FIRST_PAGE, CANONICAL_OTHER_DOMAIN, CANONICAL_LOOP, CANONICAL_ON_REDIRECT, CANONICAL_FRAGMENT,
+        CANONICAL_INVALID_ATTRIBUTE, CANONICAL_UNLINKED,
         SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,

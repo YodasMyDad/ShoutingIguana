@@ -38,9 +38,19 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisThatCountedCharactersIsOutOfDate()
     {
-        Assert.Equal(12, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 11 }, CRAWLED, new AnalysisSettings()));
         Assert.False((Current() with { AnalysisVersion = 11 }).HasUrlSummary);
+    }
+
+    /// <summary>
+    /// Version 13 is the new checks': a Refresh header refreshes as the meta tag does, and canonicals to another site, from a
+    /// later page to the first, and round a loop are reported as such, not as canonicalised. An analysis 12 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
+    {
+        Assert.Equal(13, AnalysisFreshness.VERSION);
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

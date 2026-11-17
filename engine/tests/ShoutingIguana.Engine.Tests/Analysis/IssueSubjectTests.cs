@@ -98,6 +98,8 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         [
             .. new ResponseCodeRules(urls, new Dictionary<int, string> { [blocked] = "Cloudflare challenge" }).Finish(),
             .. new RedirectRules(urls, site.UrlOf).Finish(),
+            .. new RedirectHeaderRules(urls, () => [(site.Find($"{site.Site}/promo"), [new ResponseHeader("link", "<https://example.com/elsewhere>; rel=\"canonical\"")])],
+                site.UrlOf).Finish(),
             .. new RobotsTxtRules(urls, [new("https://example.com", 503, null, null, 0), new("http://example.com", null, null, "Timed out", 0)], scope,
                 new HashSet<string> { "https://example.com" }).Finish(),
             .. new RobotsTxtRules(urls, [new("https://example.com", 404, null, null, 0)], scope, new HashSet<string> { "https://example.com" }).Finish(),

@@ -26,14 +26,15 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         [
             "internal-client-error", "internal-server-error", "internal-unreachable", "internal-blocked", "redirect-chain", "redirect-loop",
             "redirect-broken", "redirect-temporary", "redirect-downgrade", "orphan-page", "blocked-by-robots", "sitemap-non-indexable",
-            "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores"
+            "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores", "canonical-on-redirect", "canonical-unlinked"
         ];
         string[] targets =
         [
             "broken-internal-links", "broken-external-links", "links-to-redirects", "internal-nofollow-links", "empty-anchor-text",
             "broken-fragment-links", "canonicalised-page", "canonical-broken", "canonical-to-redirect", "canonical-to-non-indexable",
             "noindex-with-canonical", "image-broken", "image-too-large", "hreflang-missing-return", "hreflang-broken-target",
-            "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions"
+            "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions",
+            "canonical-to-first-page", "canonical-other-domain", "canonical-loop"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
