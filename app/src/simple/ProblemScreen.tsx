@@ -14,9 +14,10 @@ import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { useOpensAtTop } from './scrollPlace';
 import { useCommands } from '../keyboard/registry';
+import { formatCount } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { switchMode } from '../mode/switchMode';
-import { checkEntries, type CheckEntry } from '../screens/issues/checkList';
+import { checkEntries, relatedChecks, type CheckEntry, type RelatedCheck } from '../screens/issues/checkList';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { Button } from '../ui/Button';
 import { Callout } from '../ui/Callout';
@@ -68,6 +69,12 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
         : null,
     [checks.data, analysis.data, check],
   );
+  // The problems related to this one by a fix (related checks), with the points the fix gives back.
+  const related = useMemo(() => {
+    if (!checks.data || !analysis.data || !entry) return null;
+    const points = new Map((analysis.data.score?.lines ?? []).map((line) => [line.checkId, line.points]));
+    return relatedChecks(checkEntries(checks.data, analysis.data), entry, points);
+  }, [checks.data, analysis.data, entry]);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => titleRef.current);
@@ -132,6 +139,7 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
         check={check}
         entry={entry}
         analysis={analysis.data}
+        related={related}
       />
     );
   }
@@ -189,11 +197,14 @@ function ProblemHead({
   outcome,
   title,
   facts,
+  after,
 }: {
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   outcome: CheckEntry['outcome'];
   title: string;
   facts?: ReactNode;
+  /** Under the facts: what a fix of it also fixes. */
+  after?: ReactNode;
 }) {
   return (
     <header className="mb-5">
@@ -205,7 +216,51 @@ function ProblemHead({
         {title}
       </h1>
       {facts ? <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-14 text-text-secondary">{facts}</ul> : null}
+      {after}
     </header>
+  );
+}
+
+/**
+ * Related problems, in plain words (the UX audit, X5): what fixing this one also fixes ("Fixing this also fixes Links
+ * that lead to broken pages: all 5 pages, 4 more points back"), and which problem's fix fixes this one's pages. Each
+ * names the other problem as a link to it.
+ */
+function AlsoFixes({
+  crawlId,
+  related,
+}: {
+  crawlId: string;
+  related: { clears: readonly RelatedCheck[]; clearedBy: readonly RelatedCheck[] };
+}) {
+  if (related.clears.length === 0 && related.clearedBy.length === 0) return null;
+  const problem = (other: RelatedCheck) => (
+    <Link
+      to="/crawls/$crawl/issues/{-$check}"
+      params={{ crawl: crawlId, check: other.entry.check.id }}
+      className="si-link si-link--inline font-semibold"
+    >
+      {plainTitle(other.entry.check)}
+    </Link>
+  );
+  const pages = (count: number) => (count === 1 ? '1 page' : `${formatCount(count)} pages`);
+  return (
+    <ul aria-label="Fixed along with it" className="mt-3 flex flex-col gap-1 text-16 text-text-secondary">
+      {related.clears.map((other) => (
+        <li key={`clears-${other.entry.check.id}`}>
+          Fixing this also fixes {problem(other)}
+          {other.all
+            ? `: ${other.pages === 1 ? 'its 1 page' : `all ${pages(other.pages)}`}`
+            : ` on ${formatCount(other.pages)} of its ${pages(other.entry.count ?? other.pages)}`}
+          {other.points ? `, ${formatCount(other.points)} more ${other.points === 1 ? 'point' : 'points'} back` : ''}.
+        </li>
+      ))}
+      {related.clearedBy.map((other) => (
+        <li key={`by-${other.entry.check.id}`}>
+          Fixing {problem(other)} fixes {other.all ? 'this too' : `${pages(other.pages)} of these too`}.
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -240,6 +295,7 @@ function FoundProblem({
   check,
   entry,
   analysis,
+  related,
 }: {
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   crawlId: string;
@@ -247,6 +303,8 @@ function FoundProblem({
   check: Check;
   entry: CheckEntry;
   analysis: Analysis;
+  /** The problems related to this one by a fix: what fixing it also fixes, and what fixing another fixes here. */
+  related: { clears: readonly RelatedCheck[]; clearedBy: readonly RelatedCheck[] } | null;
 }) {
   const wholes = wholesOf(analysis);
   const count = entry.count ?? 0;
@@ -323,6 +381,7 @@ function FoundProblem({
             {fixer ? <Fact icon={UserRound}>{fixer}</Fact> : null}
           </>
         }
+        after={related ? <AlsoFixes crawlId={crawlId} related={related} /> : null}
       />
       <Card className="si-explain2 @max-split:grid-cols-1">
         <section aria-labelledby="problem-what" className="si-explain2__col">
