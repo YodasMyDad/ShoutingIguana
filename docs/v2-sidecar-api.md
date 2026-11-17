@@ -269,9 +269,12 @@ Built in stages:
 - **`clears`** (step 3b, related checks) is the checks a fix of this one also clears, by id, as the catalog declares
   them: this check's `references` is `sources` (it flags URLs others refer to) and each check named is a `targets` check
   of pages, grouped by `relatedUrl` (it flags the pages that refer to them). `internal-client-error`,
-  `internal-server-error` and `internal-unreachable` clear `broken-internal-links`, `image-broken`, `canonical-broken`
-  and `hreflang-broken-target`; `redirect-chain` clears `links-to-redirects`; `redirect-loop` clears
-  `broken-internal-links` and `canonical-broken`; `redirect-broken` those two and `image-broken`. Empty for the rest.
+  `internal-server-error` and `internal-unreachable` clear `broken-internal-links`, `image-broken`, `broken-resources`,
+  `canonical-broken`, `hreflang-broken-target` and `pagination-broken`; `redirect-chain` clears `links-to-redirects` and
+  `pagination-broken`; `redirect-loop` clears `broken-internal-links` and `canonical-broken`; `redirect-broken`
+  `broken-internal-links`, `image-broken`, `broken-resources` and `canonical-broken`. Empty for the rest: a canonical
+  loop's pages aren't also reported as canonicalised to a non-indexable page, and a canonical header on a redirect is
+  the redirect's own fault.
   What a fix clears **on a crawl** is counted, never assumed: the analysis's `counts[].clears`. Only how a check is
   shown: not stored with an analysis, nor in the checks' fingerprint.
 - **`evidence`** (evidence) is the URL columns that show what the check found, in the order to show them, beside each

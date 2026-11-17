@@ -245,8 +245,18 @@ public sealed class IssueCatalogTests
             }
         }
 
-        Assert.Equal(["links-to-redirects"], IssueCatalog.REDIRECT_CHAIN.Clears);
-        Assert.Contains("broken-internal-links", IssueCatalog.INTERNAL_CLIENT_ERROR.Clears);
+        Assert.Equal(["links-to-redirects", "pagination-broken"], IssueCatalog.REDIRECT_CHAIN.Clears);
+        Assert.Equal(
+            ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken"],
+            IssueCatalog.INTERNAL_CLIENT_ERROR.Clears);
+        Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_SERVER_ERROR.Clears);
+        Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_UNREACHABLE.Clears);
+        Assert.Equal(["broken-internal-links", "image-broken", "broken-resources", "canonical-broken"], IssueCatalog.REDIRECT_BROKEN.Clears);
+
+        // A canonical loop's pages aren't reported as canonicalised to a non-indexable page too, and a canonical header on a
+        // redirect is the redirect's own fault: neither clears another check, so neither names one.
+        Assert.Empty(IssueCatalog.Find("canonical-loop")!.Clears);
+        Assert.Empty(IssueCatalog.Find("canonical-on-redirect")!.Clears);
     }
 
     /// <summary>

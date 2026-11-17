@@ -8,9 +8,11 @@ namespace ShoutingIguana.Engine.Analysis;
 /// </summary>
 public static class IssueCatalog
 {
-    // What restoring a URL that doesn't work clears: the links, images, canonicals and hreflang entries naming it. Ids,
-    // not the definitions, which are made in the order written and so would be null here. First, as the checks use it.
-    private static readonly string[] BROKEN_TARGETS = ["broken-internal-links", "image-broken", "canonical-broken", "hreflang-broken-target"];
+    // What restoring a URL that doesn't work clears: the links, images, files, canonicals, hreflang entries and pagination
+    // links naming it. Ids, not the definitions, which are made in the order written and so would be null here. First, as
+    // the checks use it.
+    private static readonly string[] BROKEN_TARGETS =
+        ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken"];
 
     // Response codes
     public static readonly IssueDefinition INTERNAL_CLIENT_ERROR = new("internal-client-error", IssueCategory.ResponseCodes, IssueSeverity.Error,
@@ -116,7 +118,7 @@ public static class IssueCatalog
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["redirectChain"],
         TargetFacts = ["statusCode", "indexability"],
-        Clears = ["links-to-redirects"]
+        Clears = ["links-to-redirects", "pagination-broken"]
     };
 
     public static readonly IssueDefinition REDIRECT_LOOP = new("redirect-loop", IssueCategory.Redirects, IssueSeverity.Error,
@@ -147,7 +149,7 @@ public static class IssueCatalog
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["redirectChain"],
         TargetFacts = ["statusCode"],
-        Clears = ["broken-internal-links", "image-broken", "canonical-broken"]
+        Clears = ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken"]
     };
 
     public static readonly IssueDefinition REDIRECT_TEMPORARY = new("redirect-temporary", IssueCategory.Redirects, IssueSeverity.Notice,
