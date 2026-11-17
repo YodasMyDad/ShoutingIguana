@@ -1486,9 +1486,9 @@
       "category": "titles",
       "severity": "notice",
       "title": "Title too long",
-      "description": "The page's title is longer than 60 characters (the default, which can be changed in the analysis settings), counting full-width characters such as Chinese, Japanese and Korean, and emoji, as two.",
+      "description": "The page's title is wider than 580 pixels (the default, which can be changed in the analysis settings), about 60 characters of ordinary text, measured as Google's desktop results show titles: Arial at 20 px, with full-width characters such as Chinese, Japanese and Korean, and emoji, one em wide.",
       "fix": "Shorten the title or move the important words to the front; cut repeated words and long brand suffixes.",
-      "why": "Google sets no length limit for titles, but truncates title links to fit the device width, so the end of a long title may not show; 60 characters is a rough guide to what fits, not a rule. Google may also rewrite titles that are long-winded or stuffed with keywords. With the important words first, a cut-off rarely matters.",
+      "why": "Google sets no length limit for titles, but truncates title links to fit the device width, so the end of a long title may not show. Width depends on the letters (\"WWW\" is more than four times as wide as \"iii\"), so pixels predict the cut better than characters: 580 px is about where Google's desktop results cut a title, after the last whole word that fits, and a rough guide, not a rule. Google may also rewrite titles that are long-winded or stuffed with keywords. With the important words first, a cut-off rarely matters.",
       "learnMore": "https://developers.google.com/search/docs/appearance/title-link#page-titles",
       "grouping": "none",
       "subject": "page",
@@ -1497,7 +1497,7 @@
       "reportedOnce": false,
       "plainTitle": "Titles that may be cut off in search results",
       "plainWhat": [
-        "These pages have a title of more than 60 characters.",
+        "These pages have a title too long to show in full in search results, where there's room for about 60 characters.",
         "Search results cut a long title off to fit the screen, so the last words may not show.",
         "That's harmless when the important words come first, and then there's nothing to do."
       ],
@@ -1510,7 +1510,7 @@
       "plainPassed": "No title is likely to be cut off in search results",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["title", "titleLength"],
+      "evidence": ["title", "titleInResults", "titleWidth", "titleLength"],
       "targetFacts": []
     },
     {
@@ -1518,7 +1518,7 @@
       "category": "titles",
       "severity": "notice",
       "title": "Title too short",
-      "description": "The page's title is shorter than 30 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.",
+      "description": "The page's title is narrower than 200 pixels (the default, which can be changed in the analysis settings), about 20 characters of ordinary text, measured as Google's desktop results show titles: Arial at 20 px, with full-width characters and emoji one em wide.",
       "fix": "Describe the page in the title: add the specific topic, product or place and, if you like, the site name.",
       "why": "Short isn't wrong: a brand or product name can be exactly right. But very short titles are often vague, such as \"Home\", \"Products\" or \"Page 2\", which Google's guidance warns against because they don't tell searchers what the page is or set it apart from similar pages.",
       "learnMore": "https://developers.google.com/search/docs/appearance/title-link#page-titles",
@@ -1529,7 +1529,7 @@
       "reportedOnce": false,
       "plainTitle": "Very short titles",
       "plainWhat": [
-        "These pages have a title of fewer than 30 characters.",
+        "These pages have a title shorter than about 20 characters.",
         "Titles like \"Login\" or \"Products\" don't tell a searcher what the page is, or whose.",
         "A short title can be exactly right, such as a product name, and then there's nothing to do."
       ],
@@ -1543,7 +1543,7 @@
       "plainPassed": "No title is very short",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["title", "titleLength"],
+      "evidence": ["title", "titleWidth", "titleLength"],
       "targetFacts": []
     },
     {
@@ -1646,9 +1646,9 @@
       "category": "metaDescriptions",
       "severity": "notice",
       "title": "Meta description too long",
-      "description": "The page's meta description is longer than 155 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.",
+      "description": "The page's meta description is wider than 985 pixels (the default, which can be changed in the analysis settings), about 160 characters of ordinary text, measured as Google's desktop results show snippets: Arial at 14 px, with full-width characters and emoji one em wide.",
       "fix": "Put what matters in the first sentence and trim the rest, so the description still works if it's cut.",
-      "why": "There's no length limit, but Google truncates snippets to fit the device width, so the end of a long description may not show, and it often builds the snippet from page text anyway. With the key point first, the cut rarely matters.",
+      "why": "There's no length limit, but Google truncates snippets to fit the device width, about two lines on a desktop, so the end of a long description may not show, and it often builds the snippet from page text anyway. Width depends on the letters, so pixels predict the cut better than characters; 985 px is Screaming Frog's default. With the key point first, the cut rarely matters.",
       "learnMore": "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
       "grouping": "none",
       "subject": "page",
@@ -1657,20 +1657,20 @@
       "reportedOnce": false,
       "plainTitle": "Search descriptions that may be cut off",
       "plainWhat": [
-        "These pages have a search description, the text under their title in search results, of more than 155 characters.",
-        "Search results cut off the end of a long description (a \"meta description\").",
+        "These pages have a search description, the text under their title in search results, too long to show in full.",
+        "Search results have room for about 160 characters, and cut off the end of a longer description (a \"meta description\").",
         "That's harmless when the important words come first, so only pages where the cut loses the point need changing."
       ],
       "plainFix": [
         "Open the page in your site's editor and find its description, often under \"SEO\".",
         "Put what matters in the first sentence.",
-        "Trim the rest to about 155 characters, or leave it if the opening already works."
+        "Trim the rest to about 160 characters, or leave it if the opening already works."
       ],
       "fixer": "you",
       "plainPassed": "No search description is likely to be cut off",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["description", "descriptionLength"],
+      "evidence": ["description", "descriptionInResults", "descriptionWidth", "descriptionLength"],
       "targetFacts": []
     },
     {
@@ -1678,7 +1678,7 @@
       "category": "metaDescriptions",
       "severity": "notice",
       "title": "Meta description too short",
-      "description": "The page's meta description is shorter than 70 characters (the default, which can be changed in the analysis settings), counting full-width characters and emoji as two.",
+      "description": "The page's meta description is narrower than 400 pixels (the default, which can be changed in the analysis settings), about 65 characters of ordinary text, measured as Google's desktop results show snippets: Arial at 14 px, with full-width characters and emoji one em wide.",
       "fix": "Expand it into a specific one- or two-sentence summary of what the page offers and for whom.",
       "why": "There's no minimum, but a very short description rarely summarises the page, and Google uses the meta description only when it describes the page better than the page's own text. A short one is fine if it says everything that matters.",
       "learnMore": "https://developers.google.com/search/docs/appearance/snippet#use-quality-descriptions",
@@ -1689,7 +1689,7 @@
       "reportedOnce": false,
       "plainTitle": "Very short search descriptions",
       "plainWhat": [
-        "These pages have a search description, the text under their title in search results, of fewer than 70 characters.",
+        "These pages have a search description, the text under their title in search results, shorter than about 65 characters.",
         "One that short (a \"meta description\") rarely says enough, so Google often shows text from the page instead.",
         "A short one that says everything that matters is fine, and then there's nothing to do."
       ],
@@ -1701,7 +1701,7 @@
       "plainPassed": "No search description is very short",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": ["description", "descriptionLength"],
+      "evidence": ["description", "descriptionWidth", "descriptionLength"],
       "targetFacts": []
     },
     {
