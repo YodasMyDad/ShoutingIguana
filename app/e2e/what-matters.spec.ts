@@ -128,16 +128,24 @@ test.describe('Simple', () => {
     const { crawl, related, byId } = await facts();
     await page.goto(`/crawls/${crawl.id}/issues`);
     await expect(page.getByRole('heading', { level: 1, name: 'What to fix' })).toBeVisible();
-    // Each fold the analysis says, within a part: the folded problem's row comes right after the one it's under.
+    // Each fold the analysis says, within a part: the folded problem's row is among the rows folded right after the
+    // one it's under.
     for (const { fixer, cleared } of related.filter(
       ({ fixer, cleared }) => cleared.all && byId.get(fixer.checkId)?.severity === byId.get(cleared.checkId)?.severity,
     )) {
       const under = page.getByRole('main').locator(`a[href$="/issues/${fixer.checkId}"]`);
       const folded = page.getByRole('main').locator(`li.si-plain-list__nested a[href$="/issues/${cleared.checkId}"]`);
       await expect(folded).toContainText('Fixed along with the problem above.');
-      expect(
-        await under.evaluate((row) => row.closest('li')?.nextElementSibling?.querySelector('a')?.getAttribute('href')),
-      ).toMatch(new RegExp(`/issues/${cleared.checkId}$`));
+      const foldedUnder = await under.evaluate((row) => {
+        const hrefs: string[] = [];
+        let next = row.closest('li')?.nextElementSibling;
+        while (next?.classList.contains('si-plain-list__nested')) {
+          hrefs.push(next.querySelector('a')?.getAttribute('href') ?? '');
+          next = next.nextElementSibling;
+        }
+        return hrefs;
+      });
+      expect(foldedUnder.some((href) => href.endsWith(`/issues/${cleared.checkId}`))).toBe(true);
     }
 
     await page.getByRole('button', { name: 'Order: Fix first' }).click();
