@@ -65,7 +65,8 @@ and is in the group without a related URL.
 - **S/G/R**: subject (P page, U URL) / grouping (N none, PD page detail, RD response detail, RU related URL) /
   references (– none, S sources, T targets), as they will be. A change from today is in bold.
 - **Evidence columns** are [URL column](v2-sidecar-api.md#urls-e3a) ids. New ones: `redirectChain`, `robotsRule`,
-  `usedOn`, `pixelWidth`, `pixelHeight` and `fetchError`. "–" is none: the row's URL and detail say it all.
+  `usedOn`, `pixelWidth`, `pixelHeight` and `fetchError`; since [pixel widths](v2-pixel-widths.md), `titleWidth`,
+  `descriptionWidth`, `titleInResults` and `descriptionInResults`. "–" is none: the row's URL and detail say it all.
 - **Target facts** are fields of a target (`/targets`) and of a group's `related` URL: `statusCode` (with `outcome`),
   `final` (where its redirects end), `indexability`, `canonical` (where it's canonicalised to), `sizeBytes`,
   `contentType`, `pixelWidth`, `pixelHeight` (the file), `img` (the `<img>` as the page writes it: `width`, `height`,
@@ -73,8 +74,9 @@ and is in the group without a related URL.
   hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it). For a `sources` check
   they describe the group's related URL only (its rows' sources are the found-on read, which already has the linking
   page, kind, text, position and flags).
-- **Detail**: before → after. "Same" is unchanged. A limit is shown at its default ("over 60"); a detail names the
-  limit the analysis ran with, from its stored settings.
+- **Detail**: before → after. "Same" is unchanged. A limit is shown at its default ("over 115"); a detail names the
+  limit the analysis ran with, from its stored settings. The four title and description length checks changed again
+  after evidence: they measure pixels ([pixel widths](v2-pixel-widths.md)), so their rows give both forms.
 - **Rows**: `imp` = inlinks ↓, depth, URL; `use` = usedOn ↓, depth, URL; `once` = reported once, one row.
   **Groups**: `pages` = largest first; `size` = largest file first; "–" = the check doesn't group.
 
@@ -157,8 +159,8 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 42 | `title-missing` | P/N/– | – | – | Same (none) | imp · – |
 | 43 | `title-multiple` | P/N/– | – | – | "2 titles" → `2 titles: "Sofas \| Example" · "Example"` | imp · – |
-| 44 | `title-too-long` | P/N/– | `title`, `titleLength` | – | "78 characters" → `78 characters, over 60` | imp · – |
-| 45 | `title-too-short` | P/N/– | `title`, `titleLength` | – | "12 characters" → `12 characters, under 30` | imp · – |
+| 44 | `title-too-long` | P/N/– | `title`, `titleInResults`, `titleWidth`, `titleLength` | – | "78 characters" → `78 characters, over 60`, and since [pixel widths](v2-pixel-widths.md) `780 px, over 580 (78 characters)` | imp · – |
+| 45 | `title-too-short` | P/N/– | `title`, `titleWidth`, `titleLength` | – | "10 characters" → `10 characters, under 30`, and since pixel widths `98 px, under 200 (10 characters)` | imp · – |
 | 46 | `title-duplicate` | P/RU/– | `title` | – | Same ("2 other pages"). The group is named by its `sharedText`, the title | imp · pages |
 
 ### Meta descriptions
@@ -167,8 +169,8 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 47 | `description-missing` | P/N/– | – | – | Same (none) | imp · – |
 | 48 | `description-multiple` | P/N/– | – | – | "2 meta descriptions" → `2 meta descriptions: "Garden sofas for…" · "Shop online"` | imp · – |
-| 49 | `description-too-long` | P/N/– | `description`, `descriptionLength` | – | "180 characters" → `180 characters, over 155` | imp · – |
-| 50 | `description-too-short` | P/N/– | `description`, `descriptionLength` | – | "40 characters" → `40 characters, under 70` | imp · – |
+| 49 | `description-too-long` | P/N/– | `description`, `descriptionInResults`, `descriptionWidth`, `descriptionLength` | – | "183 characters" → `183 characters, over 155`, and since pixel widths `1,084 px, over 985 (183 characters)` | imp · – |
+| 50 | `description-too-short` | P/N/– | `description`, `descriptionWidth`, `descriptionLength` | – | "10 characters" → `10 characters, under 70`, and since pixel widths `63 px, under 400 (10 characters)` | imp · – |
 | 51 | `description-duplicate` | P/RU/– | `description` | – | Same. The group is named by its `sharedText` | imp · pages |
 
 ### Headings
@@ -277,7 +279,10 @@ and is in the group without a related URL.
 - **A check's rows exported** (`kind: 'issueRows'`) without `columns` have `url`, `detail`, the check's evidence
   columns, then `relatedUrl`; without `sort`, by importance.
 - **The HTML report**: each problem's examples come by importance; "What was found" gives the detail and the evidence
-  ("78 characters, over 60 · “Garden sofas and chairs for every…”"); "Where to fix it" is given for `targets` checks
+  ("780 px, over 580 (78 characters) · “Garden sofas and chairs for every…” · Title in results: Garden sofas…"; in
+  plain words the four title and description length checks say where Google will likely cut instead, "Google will
+  likely cut this title off after “…every season, delivered free”", or "Only 10 characters long", as Simple does: see
+  [pixel widths](v2-pixel-widths.md#8-the-report-and-simples-words)); "Where to fix it" is given for `targets` checks
   too ("Image /img/hero.jpg (1.8 MB, 4000×3000 px, shown at 400×300) and 1 other"), and for `sources` checks names
   where on the linking page the link is, and its text ("/garden/ (footer, “Old range”)"). A check that doesn't group
   and has the template hint gets the "One fix" line.
