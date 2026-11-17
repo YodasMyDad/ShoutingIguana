@@ -36,6 +36,31 @@ public sealed class CliTests : IAsyncLifetime
         Directory.Delete(_folder, recursive: true);
     }
 
+    /// <summary>
+    /// si recheck fetches a check's URLs again into the crawl, after the site's owner fixed some (revision 1 of the synthetic
+    /// site), analyses it and says how many are fixed: of the three long titles, one shortened, one a page that's now an
+    /// error, which couldn't be checked, and one left. A check a recheck can't settle, or none named, is a one-line error.
+    /// </summary>
+    [Fact]
+    public async Task RechecksAProblemsUrlsAndSaysHowManyAreFixed()
+    {
+        var crawl = await CrawlAsync();
+        _server.Revision = 1;
+
+        var recheck = await RunAsync("recheck", crawl, "--check", "title-too-long");
+
+        Assert.True(recheck.ExitCode == 0, recheck.Error);
+        Assert.Contains("Rechecking 3 URLs.", recheck.Output);
+        Assert.Contains("1 of 3 fixed. 1 still has it.", recheck.Output);
+        Assert.Contains("1 URL couldn't be checked", recheck.Output);
+        Assert.Contains("Other pages are as the crawl found them.", recheck.Output);
+
+        AssertFails(await RunAsync("recheck", crawl), "Name the check to recheck with --check");
+        AssertFails(await RunAsync("recheck", crawl, "--check", "orphan-page"), "Only checking the whole site again");
+        AssertFails(await RunAsync("recheck", crawl, "--check", "no-such-check"), "Unknown check 'no-such-check'");
+        AssertFails(await RunAsync("recheck", crawl, "--urls", Path.Combine(_folder, "missing.txt")), "missing.txt");
+    }
+
     [Fact]
     public async Task CrawlsAnalysesAndReportsTheIssues()
     {
@@ -498,6 +523,9 @@ public sealed class CliTests : IAsyncLifetime
         var resumed = await RunAsync("crawl", "--resume", "--db", crawl, "-q", "--no-analyze");
         Assert.Equal(0, resumed.ExitCode);
         Assert.Contains("X-Crawler-Key", resumed.Error);
+
+        // A recheck asks the site as the crawl did, so it refuses to run without the header's value.
+        AssertFails(await RunAsync("recheck", crawl, "--check", "title-too-long"), "header X-Crawler-Key, whose values crawl files don't store");
     }
 
     /// <summary>

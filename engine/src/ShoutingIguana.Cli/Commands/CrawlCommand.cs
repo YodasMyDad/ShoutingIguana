@@ -178,7 +178,7 @@ internal static class CrawlCommand
         return command;
     }
 
-    private static bool TryParseHeaders(string[] values, out Dictionary<string, string> headers, out string error)
+    internal static bool TryParseHeaders(string[] values, out Dictionary<string, string> headers, out string error)
     {
         headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         error = string.Empty;
