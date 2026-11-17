@@ -5,7 +5,6 @@ import {
   foundOnRows,
   foundOnSummary,
   linkPlaceWords,
-  linkedFromWords,
   referencesOf,
   sharedSource,
   targetRows,
@@ -159,24 +158,6 @@ describe('where a URL is found, in words', () => {
       ],
     });
     expect(many.map(whereRowText)).toEqual([`${ORIGIN}/x/ (404)`, 'All 9 in the inspector']);
-  });
-
-  it('says where to fix it in plain words, the first few then how many more', () => {
-    const sources = [link(1, '/garden/'), link(2, '/sofas/'), link(3, '/blog/'), link(4, '/x/')];
-    expect(linkedFromWords(found({ links: 8, pages: 8, sources }), ORIGIN)).toBe(
-      'Linked from /garden/, /sofas/, /blog/ and 5 more',
-    );
-    expect(linkedFromWords(found({ links: 2, pages: 2, sources: sources.slice(0, 2) }), ORIGIN)).toBe(
-      'Linked from /garden/ and /sofas/',
-    );
-    expect(linkedFromWords(found({ links: 1, pages: 1, sources: sources.slice(0, 1) }), ORIGIN)).toBe(
-      'Linked from /garden/',
-    );
-    expect(linkedFromWords(found({ sitemaps: { total: 1, sitemaps: [{ id: 1, url: 'x' }] } }), ORIGIN)).toBe(
-      'Listed in your sitemap',
-    );
-    expect(linkedFromWords(found({ start: true }), ORIGIN)).toBe('It’s the address the check started from');
-    expect(linkedFromWords(found(), ORIGIN)).toBeNull();
   });
 
   it('finds the one page most of the URLs are linked from, with where on it when they share it', () => {

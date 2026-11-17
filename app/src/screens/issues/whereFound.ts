@@ -199,29 +199,6 @@ export function whereRowText(row: WhereRow): string {
 }
 
 /**
- * Where to fix a broken or redirected URL, in plain words, for Simple's problem page: "Linked from /garden/, /sofas/
- * and 3 more", "Listed in your sitemap", "It's the address you asked to check". Null when nothing crawled refers to it.
- */
-export function linkedFromWords(found: UrlFoundOn, siteOrigin: string | null, few = 3): string | null {
-  const pages = sourcePages(found).slice(0, few);
-  if (found.pages > 0 && pages.length > 0) {
-    const named = pages.map((page) => shown(page.url, siteOrigin));
-    const more = found.pages - pages.length;
-    const list =
-      more > 0
-        ? `${named.join(', ')} and ${formatCount(more)}${found.pagesExact ? '' : '+'} more`
-        : named.length > 1
-          ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
-          : named[0];
-    return `Linked from ${list}`;
-  }
-  if (found.sitemaps.total > 0)
-    return found.sitemaps.total === 1 ? 'Listed in your sitemap' : 'Listed in your sitemaps';
-  if (found.start) return 'It’s the address the check started from';
-  return null;
-}
-
-/**
  * The one page most of a check's listed URLs are linked from, when there is one: a menu or footer link on every page
  * shows as one page linking to most of them only when the site's other pages weren't read, so it's "one page", in plain
  * words, with where on it the links are when they share it. Null unless one page links to at least half of them, and

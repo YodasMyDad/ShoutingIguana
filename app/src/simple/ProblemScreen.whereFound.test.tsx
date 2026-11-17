@@ -46,9 +46,14 @@ describe.skipIf(TABLE_STUBBED)('where to fix a broken address, in Simple', () =>
   it('says under each broken address which pages link to it, the first few then how many more', async () => {
     const sidecar = await open(`${FIX}/internal-client-error`);
     const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('Linked from /garden-furniture/')).toBeVisible();
-    expect(await where.findByText('Linked from /garden-furniture/ and /sofas/')).toBeVisible();
-    expect(await where.findByText('Linked from /garden-furniture/, /sofas/ and /blog/')).toBeVisible();
+    // The first page with where on it the link is and what it says: the place to fix it.
+    expect(await where.findByText('Linked from /garden-furniture/ (in the footer: “Our range”)')).toBeVisible();
+    expect(
+      await where.findByText('Linked from /garden-furniture/ (in the footer: “Our range”) and /sofas/'),
+    ).toBeVisible();
+    expect(
+      await where.findByText('Linked from /garden-furniture/ (in the footer: “Our range”), /sofas/ and /blog/'),
+    ).toBeVisible();
     expect(where.getByText(/And 1 more\./)).toBeVisible();
     // The addresses shown, and the first ones the One fix looks at, in as few reads as the moment allows: never one an address.
     const reads = sidecar.requests.filter((request) => request.path.endsWith('/urls/found-on'));

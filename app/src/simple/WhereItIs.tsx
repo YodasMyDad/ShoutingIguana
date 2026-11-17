@@ -13,7 +13,10 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { OneFixTag } from '../ui/PlainCheckRow';
+import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
+import { plainEvidence, plainRelated } from './plainEvidence';
+import { TargetWords } from './TargetWords';
 import { pathOrigin, shownWords } from './whereWords';
 
 /** Causes (or pages, for a check that doesn't group) shown at a time. */
@@ -25,6 +28,11 @@ const FIRST_PAGES = 3;
 
 const ROW_COLUMNS = ['url', 'title', 'detail', 'relatedUrl', 'relatedStatusCode'];
 
+/** What a check's rows carry here: the page's name and address, the detail, the other URL, and the check's evidence. */
+function rowColumns(check: Pick<Check, 'evidence'>): string[] {
+  return [...ROW_COLUMNS, ...evidenceOf(check).filter((id) => !ROW_COLUMNS.includes(id))];
+}
+
 const groupsQuery = (crawlId: string, checkId: string, limit: number) => ({
   queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-groups', limit] as const,
   queryFn: ({ signal }: { signal: AbortSignal }): Promise<IssueGroupPage> =>
@@ -32,17 +40,39 @@ const groupsQuery = (crawlId: string, checkId: string, limit: number) => ({
   staleTime: Infinity,
 });
 
-const rowsQuery = (crawlId: string, checkId: string, group: CheckGroupRef | null, limit: number) => ({
-  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-rows', group, limit] as const,
+const rowsQuery = (crawlId: string, check: Check, group: CheckGroupRef | null, limit: number) => ({
+  // The check's evidence decides the columns: its id and its evidence are the key.
+  queryKey: [...queryKeys.crawl(crawlId), 'issues', check.id, 'simple-rows', group, limit, rowColumns(check)] as const,
   queryFn: ({ signal }: { signal: AbortSignal }): Promise<GridPage<IssueRow>> =>
     api.issueRows(
       crawlId,
-      checkId,
-      { columns: ROW_COLUMNS, filters: [], sort: [], offset: 0, limit, ...(group ? { group } : {}) },
+      check.id,
+      { columns: rowColumns(check), filters: [], sort: [], offset: 0, limit, ...(group ? { group } : {}) },
       signal,
     ),
   staleTime: Infinity,
 });
+
+/**
+ * A page's evidence in plain words, a line each, muted under what it's about: "The rules file says “Disallow:
+ * /cart/”, on line 12", "Forwards to /b/, then /new/, which works". Nothing for a check without evidence.
+ */
+function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; origin: string | null }) {
+  const values = row as unknown as Record<string, unknown>;
+  const lines = evidenceOf(check)
+    .map((column) => plainEvidence(column, values[column], origin))
+    .filter((line): line is string => line !== null);
+  if (lines.length === 0) return null;
+  return (
+    <span className="si-evidence-lines mt-0.5 block text-13 text-text-secondary">
+      {lines.map((line) => (
+        <span key={line} className="block">
+          {line}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 /** An address as Where it is shows it: its path on the site's own origin, else in full; the full one is read. */
 function Address({ url, origin, small = false }: { url: string; origin: string | null; small?: boolean }) {
@@ -108,12 +138,12 @@ export function WhereItIs({
     placeholderData: keepPreviousData,
   });
   const rows = useQuery({
-    ...rowsQuery(crawlId, check.id, null, limit),
+    ...rowsQuery(crawlId, check, null, limit),
     enabled: !grouped,
     placeholderData: keepPreviousData,
   });
   // The first address the list holds says which of the site's origins its pages are on (www. or not).
-  const sample = useQuery({ ...rowsQuery(crawlId, check.id, null, 1), enabled: grouped });
+  const sample = useQuery({ ...rowsQuery(crawlId, check, null, 1), enabled: grouped });
   const firstUrl = grouped
     ? (sample.data?.rows[0]?.url ?? groups.data?.groups[0]?.relatedUrl)
     : rows.data?.rows[0]?.url;
@@ -177,7 +207,10 @@ export function WhereItIs({
                       <PageLine row={row} origin={origin} />
                       <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                     </td>
-                    <td className="text-text-secondary">{row.detail ?? ''}</td>
+                    <td className="text-text-secondary">
+                      {row.detail ?? ''}
+                      <EvidenceLines row={row} check={check} origin={origin} />
+                    </td>
                   </tr>
                 ))}
           </tbody>
@@ -234,22 +267,46 @@ function GroupRow({
   const [open, setOpen] = useState(false);
   const count = group.urls ?? group.pages;
   const ref: CheckGroupRef = { detail: group.detail, relatedUrlId: group.relatedUrlId };
-  const first = useQuery(rowsQuery(crawlId, check.id, ref, open ? WHERE_MAX : FIRST_PAGES));
+  const first = useQuery(rowsQuery(crawlId, check, ref, open ? WHERE_MAX : FIRST_PAGES));
   const rows = first.data?.rows ?? [];
   const status = rows[0]?.relatedStatusCode ?? null;
   const many = count > FIRST_PAGES;
-  // Broken or redirected addresses say where each is linked from: the first few are listed, not run together.
-  const whereFound = (check.references ?? 'none') === 'sources';
+  // Broken or redirected addresses say where each is linked from, and a page holding the cause how it has it (the
+  // link's place and words, the size it shows the image at), and a page with evidence its own: the first few are
+  // listed, not run together.
+  const references = check.references ?? 'none';
+  const perPage =
+    references === 'sources' ||
+    (references === 'targets' && (check.targetFacts ?? []).length > 0) ||
+    evidenceOf(check).some((column) => column !== 'title');
+  // What the cause is, in plain words: the image's file, where a forwarding address ends, how it answered.
+  const about = plainRelated(group.related, check, origin);
+  // Each page's own facts in plain words: the engine's detail is Advanced's words, so these lines say it instead.
+  const pageLines = (row: IssueRow) => (
+    <>
+      <PageLine row={row} origin={origin} />
+      <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
+      <TargetWords crawlId={crawlId} check={check} urlId={row.id} cause={group.relatedUrlId} />
+      <EvidenceLines row={row} check={check} origin={origin} />
+    </>
+  );
   return (
     <tr>
       <td>
-        {group.relatedUrl ? (
+        {group.sharedText ? (
+          // What the pages share is the site's own words.
+          <span className="block font-medium" data-site-text>
+            “{group.sharedText}”
+          </span>
+        ) : group.relatedUrl ? (
           <>
             {origin && (group.relatedUrl === origin || group.relatedUrl === `${origin}/`) ? (
               <span className="block font-medium">Your home page</span>
             ) : null}
             <Address url={group.relatedUrl} origin={origin} small={group.relatedUrl === `${origin ?? ''}/`} />
-            {status !== null && status >= 400 ? (
+            {about ? (
+              <span className="si-cause-facts mt-1 block text-13 text-text-secondary">{about}</span>
+            ) : status !== null && status >= 400 ? (
               <span className="mt-1 block text-12 text-text-muted">
                 {status} {reasonPhrase(status) ?? ''}
               </span>
@@ -266,14 +323,11 @@ function GroupRow({
             {group.likelyTemplate ? <OneFixTag /> : null}
           </span>
         ) : null}
-        {many && !open && whereFound ? (
+        {many && !open && perPage ? (
           <>
             <ul className="flex flex-col gap-2">
               {rows.slice(0, FIRST_PAGES).map((row) => (
-                <li key={row.id}>
-                  <PageLine row={row} origin={origin} />
-                  <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
-                </li>
+                <li key={row.id}>{pageLines(row)}</li>
               ))}
             </ul>
             <span className="mt-2 block text-text-secondary">
@@ -297,10 +351,7 @@ function GroupRow({
         ) : (
           <ul className="flex flex-col gap-2">
             {rows.map((row) => (
-              <li key={row.id}>
-                <PageLine row={row} origin={origin} />
-                <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
-              </li>
+              <li key={row.id}>{pageLines(row)}</li>
             ))}
           </ul>
         )}

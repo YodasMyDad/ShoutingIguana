@@ -3,6 +3,7 @@ import { Link, useRouter } from '@tanstack/react-router';
 import { ArrowLeft, ArrowUpRight, FileText, Gauge, RefreshCw, UserRound } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
+import type { IssueGroup } from '../api/grids';
 import type { LinkPosition } from '../api/inspector';
 import { isCrawling, type Analysis, type Check, type CrawlListItem, type SkipReason } from '../api/types';
 import { crawlName, effectiveStatus } from '../crawl/status';
@@ -32,6 +33,7 @@ import {
   wholesOf,
   type ShareWords,
 } from './plainWords';
+import { plainRelated } from './plainEvidence';
 import { WhereItIs } from './WhereItIs';
 import { useSharedSource } from './useSharedSource';
 import { pathOrigin } from './whereWords';
@@ -252,6 +254,10 @@ function FoundProblem({
   const fixer = fixerWords(check.fixer);
   const first = useQuery({ ...firstGroupQuery(crawlId, check.id), enabled: check.grouping !== 'none' });
   const template = first.data?.groups[0]?.likelyTemplate ? first.data.groups[0] : null;
+  // A check that doesn't group, on nearly every page checked: the engine says it's probably the template's.
+  const flatTemplate =
+    check.grouping === 'none' &&
+    analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;
   // Where the one fix is: the link every page shares (a check of pages holding it), or the one page linking to most
   // of the broken addresses (a check of the addresses).
   const templateLink = templateLinkWords(useTemplateLink(crawlId, check, template));
@@ -349,6 +355,13 @@ function FoundProblem({
               {templateLink}, to <span className="font-mono text-14">{pathOf(template.relatedUrl, item)}</span>.
             </>
           ) : null}
+          {template.relatedUrl ? <TemplateFacts check={check} item={item} group={template} /> : null}
+        </Callout>
+      ) : flatTemplate ? (
+        <Callout className="mt-4" title={`One fix clears all ${count.toLocaleString('en-GB')} of these ${noun}`}>
+          {check.plainOneFix ??
+            'They share one cause, in the part of the site every page shares, so one change there clears them.'}{' '}
+          It’s on {count.toLocaleString('en-GB')} of the {analysis.pagesAnalyzed.toLocaleString('en-GB')} pages checked.
         </Callout>
       ) : shared ? (
         <Callout
@@ -377,6 +390,20 @@ function FoundProblem({
       </Card>
     </>
   );
+}
+
+/** What the one fix's address is, in plain words: "The image file is 1.8 MB, 4000×3000 pixels." */
+function TemplateFacts({
+  check,
+  item,
+  group,
+}: {
+  check: Check;
+  item: CrawlListItem;
+  group: Pick<IssueGroup, 'related' | 'relatedUrl'>;
+}) {
+  const about = plainRelated(group.related, check, group.relatedUrl ? pathOrigin(group.relatedUrl, item) : null);
+  return about ? <> {about}</> : null;
 }
 
 /** "/garden-furniture/ links to most of them, from its footer. Fix or remove the links there first." */
