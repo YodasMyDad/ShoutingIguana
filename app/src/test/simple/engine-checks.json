@@ -736,7 +736,7 @@
       "category": "links",
       "severity": "warning",
       "title": "Links search engines can't follow",
-      "description": "The page has link-like elements with no address a search engine can follow: an <a> whose href is a javascript: URL or empty, an <a> that works only through onclick or a routerLink, or another element, such as a <span> or <div>, given an href. An <a> with neither href nor onclick is a named anchor and doesn't count. The detail gives up to three, with what makes each one uncrawlable. A crawl made before the crawler noted them isn't checked.",
+      "description": "The page has links that lead to another page in a way a search engine can't follow: an <a> whose href is a javascript: URL that navigates, an <a> that navigates only through onclick or a routerLink, or another element, such as a <span> or <div>, given an href with a URL. Script that leads nowhere, such as a menu toggle or javascript:void(0), an empty href (the page itself) and a named anchor don't count. The detail gives up to three, with what makes each one uncrawlable. A crawl made before the crawler noted them isn't checked.",
       "fix": "Make each one an <a> element with a real URL in its href, and keep any script on top of it, so search engines, and browsers without the script, can follow it. A control that only opens something on the page belongs in a <button>.",
       "why": "Google follows only <a> elements with an href it can resolve, so a page reached only through such links isn't found by crawling and gets no credit from them. Menus, \"load more\" controls and single-page-app routers are the usual cause.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
@@ -1006,7 +1006,7 @@
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": [],
-      "targetFacts": ["statusCode", "text", "position"]
+      "targetFacts": ["statusCode", "responseMs", "text", "position"]
     },
     {
       "id": "pagination-not-linked",
@@ -3893,7 +3893,7 @@
       "category": "html",
       "severity": "notice",
       "title": "Character encoding declared wrongly",
-      "description": "The page's character encoding, as a byte-order mark, the Content-Type header or the meta tag declares it, isn't UTF-8; or the header and the meta tag name different encodings (the header wins); or the page has two meta declarations that differ; or its meta declaration comes after the first 1024 bytes while the header or a byte-order mark declares it too (without them, that's a missing encoding). The detail says which.",
+      "description": "The page's character encoding, as a byte-order mark, the Content-Type header or the meta tag declares it, isn't UTF-8; or the header and the meta tag name different encodings (the header wins); or the page has two meta declarations that differ. A meta tag after the first 1024 bytes declares nothing: with the header declaring the encoding it changes nothing, and without it that's a missing encoding. The detail says which.",
       "fix": "Save and serve the page as UTF-8: send Content-Type: text/html; charset=utf-8, and put one <meta charset=\"utf-8\"> first in the <head>.",
       "why": "The HTML standard requires UTF-8. A page in another encoding usually shows right, but a declaration that's wrong or contradicts another makes browsers guess, and a wrong guess garbles accented letters, currency symbols and quotes.",
       "learnMore": "https://www.w3.org/International/questions/qa-html-encoding-declarations",
@@ -3943,7 +3943,7 @@
       "plainPassed": "Every page names its language correctly",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": [],
+      "evidence": ["language"],
       "targetFacts": []
     },
     {
