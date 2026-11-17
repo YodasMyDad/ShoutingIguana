@@ -22,6 +22,13 @@ public sealed record PageFacts
     /// </summary>
     public int CollectedVersion { get; init; }
 
+    // The lists the new checks added read as empty for a page an earlier version stored without them: the generated
+    // deserialiser sets an init-only property it finds no value for to null, past its initialiser.
+    private readonly IReadOnlyList<PaginationFact>? _pagination;
+    private readonly IReadOnlyList<string>? _headTagsInBody;
+    private readonly IReadOnlyList<string>? _structureErrors;
+    private readonly IReadOnlyList<string>? _charsetDeclarations;
+
     public IReadOnlyList<string> Titles { get; init; } = [];
     public IReadOnlyList<string> MetaDescriptions { get; init; } = [];
     public IReadOnlyList<MetaTagFact> MetaTags { get; init; } = [];
@@ -29,7 +36,7 @@ public sealed record PageFacts
     public IReadOnlyList<HreflangFact> Hreflangs { get; init; } = [];
 
     /// <summary>The page's <c>rel="next"</c> and <c>rel="prev"</c> links, in page order. Empty for a page crawled before they were noted.</summary>
-    public IReadOnlyList<PaginationFact> Pagination { get; init; } = [];
+    public IReadOnlyList<PaginationFact> Pagination { get => _pagination ?? []; init => _pagination = value; }
 
     /// <summary>The page's links search engines can't follow, or null with none, and for a page crawled before they were noted.</summary>
     public UncrawlableLinksFact? UncrawlableLinks { get; init; }
@@ -40,20 +47,20 @@ public sealed record PageFacts
     /// property (<c>og:title</c>), <c>link alternate</c>, <c>link amphtml</c>. Canonical and hreflang links aren't listed:
     /// their own checks report them. Empty for a page crawled before they were noted.
     /// </summary>
-    public IReadOnlyList<string> HeadTagsInBody { get; init; } = [];
+    public IReadOnlyList<string> HeadTagsInBody { get => _headTagsInBody ?? []; init => _headTagsInBody = value; }
 
     /// <summary>
     /// The document's structure errors as the parser met them, each described: <c>2 &lt;head&gt; tags</c>, <c>2 &lt;body&gt;
     /// tags</c>, <c>&lt;html&gt; after content</c>. A body the parser made up for a stray element in the head, then the page's
     /// own &lt;body&gt; tag, is one body. Empty with none, and for a page crawled before they were noted.
     /// </summary>
-    public IReadOnlyList<string> StructureErrors { get; init; } = [];
+    public IReadOnlyList<string> StructureErrors { get => _structureErrors ?? []; init => _structureErrors = value; }
 
     /// <summary>
     /// Every meta charset and http-equiv Content-Type charset the page declares, in page order, at most 5: the first is
     /// <see cref="DeclaredCharset"/>. Empty for a page crawled before they were noted.
     /// </summary>
-    public IReadOnlyList<string> CharsetDeclarations { get; init; } = [];
+    public IReadOnlyList<string> CharsetDeclarations { get => _charsetDeclarations ?? []; init => _charsetDeclarations = value; }
 
     /// <summary>The first <c>&lt;link rel="alternate" media="…"&gt;</c> without hreflang, resolved: a separate mobile version. Null with none.</summary>
     public string? MobileAlternate { get; init; }

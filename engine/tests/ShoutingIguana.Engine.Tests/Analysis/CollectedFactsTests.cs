@@ -77,6 +77,26 @@ public sealed class CollectedFactsTests : IAsyncLifetime
         Assert.Single(IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_FRAGMENT.Id));
     }
 
+    /// <summary>
+    /// A page's facts as an earlier version stored them, without the lists the new checks added: they read as empty, never
+    /// null, so every rule can read them (the garden crawl of 31 October failed two rules on every page before).
+    /// </summary>
+    [Fact]
+    public void FactsAnEarlierVersionStoredReadTheNewListsAsEmpty()
+    {
+        var stored = System.Text.Encoding.UTF8.GetBytes("""{"headers":[],"page":{"titles":["A page"],"wordCount":3}}""");
+
+        var facts = BlobCodec.DecodeDetails(BlobCodec.Compress(stored)).Page!;
+
+        Assert.Equal((0, "A page"), (facts.CollectedVersion, facts.Titles.Single()));
+        Assert.Empty(facts.Pagination);
+        Assert.Empty(facts.HeadTagsInBody);
+        Assert.Empty(facts.StructureErrors);
+        Assert.Empty(facts.CharsetDeclarations);
+        Assert.Null(facts.UncrawlableLinks);
+        Assert.Null(facts.MobileAlternate);
+    }
+
     /// <summary>Stores a page's facts as they'd read had an earlier version parsed it: with no collection.</summary>
     private void ParsedBefore(string url)
     {
