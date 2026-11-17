@@ -479,12 +479,16 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         }
     }
 
-    /// <summary>The quote is the last whole words shown, up to 30 characters, with "…" only when more comes before them.</summary>
+    /// <summary>
+    /// The quote is the last whole words shown, up to 30 characters, with "…" only when more comes before them, and never
+    /// opens on a separator left from the words before ("…| Phone").
+    /// </summary>
     [Theory]
     [InlineData("title", "Garden Sofa Set…", "Google will likely cut this title off after “Garden Sofa Set”")]
     [InlineData("title", "Brisbane Wooden Garden Storage Tool Shed With Sloped…", "Google will likely cut this title off after “…Storage Tool Shed With Sloped”")]
     [InlineData("description", "Supercalifragilisticexpialidocious-and-then-some-more…",
         "Google will likely cut this description off after “…ialidocious-and-then-some-more”")]
+    [InlineData("title", "Contact Us - GardenFurnitureSets | Phone, Email or Contract…", "Google will likely cut this title off after “…Phone, Email or Contract”")]
     [InlineData("title", "Garden Sofa Set", null)]
     [InlineData("title", null, null)]
     public void WhereGoogleWillLikelyCutIsQuotedByItsLastWords(string what, string? inResults, string? said) =>

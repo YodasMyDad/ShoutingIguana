@@ -1,5 +1,6 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Reporting.Models;
 using ShoutingIguana.Engine.Storage;
 
@@ -94,8 +95,8 @@ internal static class ReportWords
     /// <summary>
     /// Where Google will likely cut a page's title or description, as Simple says it (the app's plainEvidence words it the
     /// same): "Google will likely cut this title off after “…Garden Sofa”". The quote is the last whole words that show, up
-    /// to <see cref="CUT_QUOTE_MAX"/> characters, opening with "…" when more comes before them; a single word longer than
-    /// that is quoted by its end. Null when nothing is cut.
+    /// to <see cref="CUT_QUOTE_MAX"/> characters, opening with "…" when more comes before them, and never on a separator
+    /// ("…| Phone"); a single word longer than that is quoted by its end. Null when nothing is cut.
     /// </summary>
     /// <param name="what">"title" or "description".</param>
     /// <param name="inResults">The text as results show it: the <c>titleInResults</c> column, ending "…" where it's cut.</param>
@@ -111,11 +112,19 @@ internal static class ReportWords
         if (new StringInfo(shown).LengthInTextElements > CUT_QUOTE_MAX)
         {
             var words = shown.Split(' ');
-            tail = words[^1];
-            for (var index = words.Length - 2; index >= 0 && new StringInfo($"{words[index]} {tail}").LengthInTextElements <= CUT_QUOTE_MAX; index--)
+            var first = words.Length - 1;
+            while (first > 0 && new StringInfo(string.Join(' ', words[(first - 1)..])).LengthInTextElements <= CUT_QUOTE_MAX)
             {
-                tail = $"{words[index]} {tail}";
+                first--;
             }
+
+            // Not "…| Phone, Email": a separator left from the words before isn't quoted.
+            if (first < words.Length - 1 && words[first] is [var separator] && SearchResultWidth.DANGLING.Contains(separator, StringComparison.Ordinal))
+            {
+                first++;
+            }
+
+            tail = string.Join(' ', words[first..]);
 
             var characters = new StringInfo(tail);
             if (characters.LengthInTextElements > CUT_QUOTE_MAX)

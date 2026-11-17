@@ -336,6 +336,9 @@ const CUT_MARK = '…';
 /** The most characters of a title or description quoted before where Google will likely cut it. */
 const CUT_QUOTE_MAX = 30;
 
+/** Separators a quote doesn't open on, as the engine's cut doesn't end on them (`SearchResultWidth.DANGLING`). */
+const SEPARATORS: ReadonlySet<string> = new Set(['|', '-', '\u2013', '\u2014', '\u00b7', ':', ',', '&', '/']);
+
 /** A text's characters as a reader counts them: an emoji or an accented letter once, as the engine counts them. */
 function graphemes(text: string): string[] {
   if (typeof Intl.Segmenter !== 'function') return Array.from(text);
@@ -345,7 +348,7 @@ function graphemes(text: string): string[] {
 /**
  * Where Google will likely cut a page's title or description: "Google will likely cut this title off after “…Garden
  * Sofa”". The quote is the last whole words that show, up to 30 characters, opening with "…" when more comes before
- * them; a single word longer than that is quoted by its end. Null when nothing is cut (`inResults` doesn't end "…").
+ * them, and never on a separator ("…| Phone"); a single word longer than that is quoted by its end. Null when nothing is cut (`inResults` doesn't end "…").
  * The engine's report says it the same (`ReportWords.CutOff`).
  */
 export function plainCutOff(what: 'title' | 'description', inResults: unknown): string | null {
@@ -354,12 +357,11 @@ export function plainCutOff(what: 'title' | 'description', inResults: unknown): 
   let tail = shown;
   if (graphemes(shown).length > CUT_QUOTE_MAX) {
     const words = shown.split(' ');
-    tail = words.at(-1) ?? '';
-    for (let index = words.length - 2; index >= 0; index--) {
-      const longer = `${words[index] ?? ''} ${tail}`;
-      if (graphemes(longer).length > CUT_QUOTE_MAX) break;
-      tail = longer;
-    }
+    let first = words.length - 1;
+    while (first > 0 && graphemes(words.slice(first - 1).join(' ')).length <= CUT_QUOTE_MAX) first--;
+    // Not "…| Phone, Email": a separator left from the words before isn't quoted.
+    if (first < words.length - 1 && SEPARATORS.has(words[first] ?? '')) first++;
+    tail = words.slice(first).join(' ');
     const characters = graphemes(tail);
     if (characters.length > CUT_QUOTE_MAX) tail = characters.slice(-CUT_QUOTE_MAX).join('');
   }

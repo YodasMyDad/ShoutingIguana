@@ -31,7 +31,7 @@ internal static class SearchResultWidth
     private const int FALLBACK_UNITS = 1139;
 
     /// <summary>Separators a cut doesn't end on: "…Chair Set", not "…Chair Set &amp;".</summary>
-    private const string DANGLING = "|-\u2013\u2014\u00B7:,&/";
+    internal const string DANGLING = "|-\u2013\u2014\u00B7:,&/";
 
     /// <summary>The text's characters and its width in whole pixels, after runs of white space become one space and the ends are trimmed.</summary>
     public static SearchResultMeasure Measure(string text, SearchResultText kind)

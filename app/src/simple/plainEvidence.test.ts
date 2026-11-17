@@ -218,6 +218,11 @@ describe('a page’s own evidence, in plain words', () => {
 });
 
 describe('where Google will likely cut a title or description, in plain words', () => {
+  it('never opens the quote on a separator left from the words before it', () => {
+    expect(plainCutOff('title', 'Contact Us - GardenFurnitureSets | Phone, Email or Contract…')).toBe(
+      'Google will likely cut this title off after “…Phone, Email or Contract”',
+    );
+  });
   const CUT = '…';
 
   it('quotes the last whole words that show, up to 30 characters, opening with “…” where more comes before', () => {
