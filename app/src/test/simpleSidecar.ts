@@ -11,7 +11,7 @@ import gardenAnalysis from './simple/garden-analysis.json';
 /** The catalog of 87 checks with their plain words, as `GET /api/checks` answers. */
 export const SIMPLE_CHECKS = engineChecks as Checks;
 
-/** The garden crawl's analysis: 85, Good; 2 serious, 4 worth fixing, 13 worth a look; 4 skipped. */
+/** The garden crawl's analysis: 87, Good; 2 serious, 3 worth fixing, 14 worth a look; 4 skipped. */
 export const GARDEN_ANALYSIS = gardenAnalysis as Analysis;
 
 /** The garden crawl's library item, as the Summary reads it. */
@@ -27,8 +27,8 @@ export function gardenItem(overrides: Partial<CrawlListItem> = {}): CrawlListIte
     pageCount: 265,
     fetchedUrlCount: 4_521,
     crawledUrlCount: 4_521,
-    issues: { error: 2, warning: 4, notice: 13 },
-    score: { value: 85, band: 'good', partial: false },
+    issues: { error: 2, warning: 3, notice: 14 },
+    score: { value: 87, band: 'good', partial: false },
     outOfDate: false,
     ...overrides,
   });

@@ -84,10 +84,10 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
   it('says the score, its word, its sentence and what it covers, as the design’s garden crawl', async () => {
     await open(GARDEN_ANALYSIS);
     await site();
-    expect(main().getByRole('img', { name: 'Score 85 out of 100, Good' })).toBeVisible();
+    expect(main().getByRole('img', { name: 'Score 87 out of 100, Good' })).toBeVisible();
     expect(main().getByRole('heading', { level: 2, name: 'Good' })).toBeVisible();
     expect(
-      main().getByText('Your site is in good shape. There are 2 serious problems and 4 problems worth fixing.'),
+      main().getByText('Your site is in good shape. There are 2 serious problems and 3 problems worth fixing.'),
     ).toBeVisible();
     expect(
       main().getByText(/The score covers all 265 pages and 83 of 87 checks\. 4 checks couldn’t run\./),
@@ -131,19 +131,15 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     const rows = list.getAllByRole('link').filter((link) => link.getAttribute('href')?.includes('/issues/'));
     expect(rows.map((row) => row.getAttribute('href'))).toEqual(
-      [
-        'internal-client-error',
-        'broken-internal-links',
-        'image-too-large',
-        'description-duplicate',
-        'title-duplicate',
-      ].map((id) => `${FIX}/${id}`),
+      ['internal-client-error', 'broken-internal-links', 'image-too-large', 'title-duplicate', 'slow-response'].map(
+        (id) => `${FIX}/${id}`,
+      ),
     );
     expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 of 4,521 addresses$/);
     expect(list.getByText(/Fixing these five takes the score from/)).toHaveTextContent(
-      'Fixing these five takes the score from 85 to 98.',
+      'Fixing these five takes the score from 87 to 100.',
     );
-    expect(list.getByRole('link', { name: 'See all 6 problems and 13 things worth a look' })).toHaveAttribute(
+    expect(list.getByRole('link', { name: 'See all 5 problems and 14 things worth a look' })).toHaveAttribute(
       'href',
       FIX,
     );
@@ -168,8 +164,8 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(
       dialog.getByRole('row', { name: /Pages or files that can't be found 9 of 4,521 addresses: a few −2/ }),
     ).toBeVisible();
-    expect(dialog.getByRole('row', { name: '13 things worth a look They don’t change the score 0' })).toBeVisible();
-    expect(dialog.getByRole('row', { name: 'Score 100 − 15 85' })).toBeVisible();
+    expect(dialog.getByRole('row', { name: '14 things worth a look They don’t change the score 0' })).toBeVisible();
+    expect(dialog.getByRole('row', { name: 'Score 100 − 13 87' })).toBeVisible();
     expect(dialog.getByText('Score version 1')).toBeVisible();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -227,7 +223,6 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
         'internal-client-error',
         'broken-internal-links',
         'title-duplicate',
-        'description-duplicate',
         'image-too-large',
         'slow-response',
       ],
@@ -239,12 +234,12 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await site();
     expect(
       main().getByText(
-        'Nothing needs fixing among the checks you show. 13 things are worth a look when you have a moment. 6 checks are hidden.',
+        'Nothing needs fixing among the checks you show. 14 things are worth a look when you have a moment. 5 checks are hidden.',
       ),
     ).toBeVisible();
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     expect(list.getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
-    expect(list.getByText(/6 checks are hidden\./)).toBeVisible();
+    expect(list.getByText(/5 checks are hidden\./)).toBeVisible();
   });
 
   it('leaves hidden checks out of the counts, and says nothing of five fixed that aren’t the engine’s five', async () => {
@@ -256,7 +251,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     render(<App router={router} queryClient={queryClient} />);
     await act(() => router.load());
     await site();
-    expect(main().getByRole('link', { name: '3 Problems worth fixing' })).toBeVisible();
+    expect(main().getByRole('link', { name: '2 Problems worth fixing' })).toBeVisible();
     expect(main().queryByText(/takes the score from/)).toBeNull();
   });
 });
@@ -292,7 +287,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
       ),
     ).toBeVisible();
     expect(main().getByRole('button', { name: /Continue checking/ })).toBeVisible();
-    expect(main().getByRole('img', { name: 'Score 85 out of 100 so far, Good so far' })).toBeVisible();
+    expect(main().getByRole('img', { name: 'Score 87 out of 100 so far, Good so far' })).toBeVisible();
     expect(main().getByText(/On the pages read so far there are 2 serious problems/)).toBeVisible();
   });
 
@@ -381,7 +376,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     await site();
     expect(main().getByText(/Shouting Iguana’s checks have been updated since these results\./)).toBeVisible();
     expect(main().getByRole('button', { name: 'Update the results' })).toBeVisible();
-    expect(main().getByRole('img', { name: 'Score 85 out of 100, Good' })).toBeVisible();
+    expect(main().getByRole('img', { name: 'Score 87 out of 100, Good' })).toBeVisible();
   });
 
   // The closing audit's gaps 2 and 14: no report to open without results; Save as PDF beside Open the report.

@@ -49,7 +49,7 @@ const scored = (changes: Partial<Score>, analysis: Analysis = GARDEN_ANALYSIS): 
 
 // ---------------------------------------------------------------------------------------------------- The Summary
 
-/** The garden crawl, as today's engine scores it: 85, Good; 2 serious, 4 worth fixing, 13 worth a look. */
+/** The garden crawl, as today's engine scores it: 87, Good; 2 serious, 3 worth fixing, 14 worth a look. */
 export const Summary: Story = story(SUMMARY, GARDEN_ANALYSIS);
 
 /** First load: the skeleton in the screen's shape (the ring's outline, three lines, five rows) after 150 ms. */
@@ -299,7 +299,6 @@ const EVERY_PROBLEM = [
   'internal-client-error',
   'broken-internal-links',
   'title-duplicate',
-  'description-duplicate',
   'image-too-large',
   'slow-response',
 ];

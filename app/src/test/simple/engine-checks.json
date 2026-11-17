@@ -349,7 +349,7 @@
       "category": "redirects",
       "severity": "notice",
       "title": "Temporary redirect",
-      "description": "This internal URL redirects with a temporary status code: 302, 303 or 307.",
+      "description": "This internal URL redirects to another URL on the site with a temporary status code: 302, 303 or 307. Temporary redirects to other sites, such as a shop's hosted login or checkout, don't count: they hand visitors over rather than move the page.",
       "fix": "If the move is permanent, change the redirect to 301 or 308; if it's temporary, leave it.",
       "why": "Google doesn't treat a temporary redirect as a sign that the target should replace the old URL (at most it's a weak signal), so the old URL can stay in search results. That's correct when the move really is temporary, such as a short-term campaign page or a login redirect. For a permanent move it delays the switch to the new URL.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/301-redirects#overview-of-redirect-types",
@@ -360,9 +360,10 @@
       "reportedOnce": false,
       "plainTitle": "Forwarding marked as temporary",
       "plainWhat": [
-        "Some addresses forward visitors on with a signal that the move is only temporary.",
+        "Some addresses forward visitors to another of your pages with a signal that the move is only temporary.",
         "Google may then keep the old address in its results, which delays the switch when the move is really for good.",
-        "That's right for a short-term move, such as a sale page or a login step, and then there's nothing to do."
+        "That's right for a short-term move, such as a sale page, and then there's nothing to do.",
+        "Forwarding to another website, such as a hosted checkout, isn't listed."
       ],
       "plainFix": [
         "Look at each address in the list and decide whether its move is for good.",
@@ -478,7 +479,7 @@
       "category": "links",
       "severity": "warning",
       "title": "Links to broken external URLs",
-      "description": "The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count.",
+      "description": "The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count, and nor do links that the other site's bot protection (such as Cloudflare) refused, or that its robots.txt kept the crawler from checking.",
       "fix": "Update each link to the resource's current address or an archived copy, or remove it.",
       "why": "Visitors who click hit a dead end, which makes the page look neglected and its references unreliable. Google doesn't document broken outbound links as a ranking factor, so this is about visitors. Some sites refuse crawlers in other ways, so open a few in a browser before editing.",
       "learnMore": null,
@@ -491,7 +492,8 @@
       "plainWhat": [
         "Some of your pages link to an address on another website that doesn't work.",
         "Visitors who click one reach a dead end, which makes your page look out of date.",
-        "Some websites turn away automatic checks but work for people, so try a link yourself before you change it."
+        "Some websites turn away automatic checks but work for people, so try a link yourself before you change it.",
+        "Links that another website's security or rules file kept the check from opening aren't counted."
       ],
       "plainFix": [
         "Click a few of the links in your browser to confirm they're really broken.",
@@ -510,7 +512,7 @@
       "category": "links",
       "severity": "notice",
       "title": "Links to internal redirects",
-      "description": "The page links to internal URLs that redirect (by HTTP or an instant meta refresh) to a working page.",
+      "description": "The page links to internal URLs that redirect permanently (301 or 308, or an instant meta refresh) to a working page. Links to temporary redirects (302, 303 or 307), such as a sign-in link that sends visitors on to a login page, don't count: the linked URL is still the one to use.",
       "fix": "Change the links to point straight at the final URL. Keep the redirects for bookmarks and other sites' links.",
       "why": "Each click costs visitors an extra round trip before the page starts to load, and each crawl costs search engines an extra request. Google's advice is to link to the canonical URL within your site, which a redirecting URL isn't. A few are harmless; it's worth fixing in templates, where the same link repeats on every page.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#best-practices",
@@ -521,9 +523,10 @@
       "reportedOnce": false,
       "plainTitle": "Links that go through a forwarding address",
       "plainWhat": [
-        "Some links on your pages point at an address on your site that forwards visitors on to another one.",
-        "The link still works, but each click takes an extra step, and so does each visit from a search engine.",
-        "A few of these do no harm, so there's nothing to do unless the link is in a menu or footer that repeats on every page."
+        "Some links on your pages point at an address on your site that forwards visitors on for good.",
+        "The link still works, but each click takes an extra step, as does each search engine visit.",
+        "A few do no harm, so there's nothing to do unless the link is in a menu or footer on every page.",
+        "Forwarding that's only for now, such as a sign-in link's, isn't listed."
       ],
       "plainFix": [
         "Open a page from the list in your site's editor and find the link: the list shows the address it points at.",
@@ -575,7 +578,7 @@
       "category": "links",
       "severity": "notice",
       "title": "Internal links without anchor text",
-      "description": "The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. Links in the <head>, such as rel=\"amphtml\", don't count.",
+      "description": "The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. A link to the page itself counts too, as a logo on the home page is; links written as a fragment (#, #top) and links in the <head>, such as rel=\"amphtml\", don't.",
       "fix": "Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.",
       "why": "Screen readers announce these as just \"link\" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
@@ -641,7 +644,7 @@
       "category": "links",
       "severity": "warning",
       "title": "Orphan page in a sitemap",
-      "description": "This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished.",
+      "description": "This indexable page is listed in a sitemap, but no crawled page links to it, not even with a nofollow link or through a redirect. It's only checked when the crawl finished, and not when 1 in 20 or more of the pages it tried to read refused the crawler or didn't answer, as their links are unknown.",
       "fix": "If the page matters, link to it from relevant pages and from its section's listing. If it doesn't, remove it from the sitemap, then redirect or remove the page.",
       "why": "Visitors can't reach it by browsing, and search engines only know it from the sitemap. Google uses links to find pages and judge their relevance, and says every page you care about should have a link from at least one other page on your site. Often it's an old page left in the sitemap, or one linked only from places a crawler can't follow, such as forms or scripts.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
@@ -949,8 +952,8 @@
       "plainTitle": "Pages that name another page as the main version",
       "plainWhat": [
         "These pages tell search engines that another page is the main version of them (a \"canonical\" link).",
-        "Google then shows that other page instead, which is right for copies, such as page 2 of a list or a print version.",
-        "It's a problem only if the page has its own content and should appear in search itself."
+        "Google then shows that other page instead, which is right for true copies, such as a sorted list or a print version.",
+        "It's a problem when the page has its own content, as page 2 of a list does: each page of a list should name itself."
       ],
       "plainFix": [
         "Look at each page and the page it points to, and decide whether they're really the same thing.",
@@ -1096,7 +1099,7 @@
       "category": "canonicals",
       "severity": "warning",
       "title": "Canonical points to a non-indexable page",
-      "description": "The page's canonical names another URL on the site that can't be indexed itself: it's noindex, canonicalised to yet another URL, or blocked by robots.txt or a firewall.",
+      "description": "The page's canonical names another URL on the site that can't be indexed itself: it's noindex, canonicalised to yet another URL, or blocked by robots.txt. A URL that refused the crawler (a firewall, a bot challenge or a rate limit) isn't judged, as that says nothing about search engines; it's reported as blocked itself.",
       "fix": "Point the canonical at the final, indexable URL. If the target isn't meant to be indexed, this page probably shouldn't name it as canonical.",
       "why": "A canonical asks search engines to index the named URL instead of this one, so if that URL is noindex, blocked or points elsewhere in turn, the signals contradict each other and the outcome is up to Google. Google's own checklist includes making sure the canonical target isn't noindex. Canonical chains (A to B to C) usually come from content that moved more than once.",
       "learnMore": "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
@@ -1290,7 +1293,7 @@
       "title": "Indexable page not in a sitemap",
       "description": "This indexable page isn't in any sitemap the crawl read. It's only checked when the crawl finished and every declared sitemap could be read.",
       "fix": "Add the page to your XML sitemap, ideally by making sure the generator includes every indexable page type.",
-      "why": "Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate.",
+      "why": "Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate. Login, account and basket pages don't belong in a sitemap: they're better kept out of search with noindex.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
       "grouping": "none",
       "subject": "page",
@@ -1302,7 +1305,7 @@
         "These pages can appear in search, but aren't in your sitemap: the file that lists your pages for search engines.",
         "Search engines can still find them through links, which is enough on a small site.",
         "On a big or fast-changing site, a full sitemap helps new pages get found sooner.",
-        "Leaving out some kinds of page on purpose is fine, and then there's nothing to do."
+        "Leaving pages out on purpose is fine, and login, basket and account pages are better kept out of search altogether."
       ],
       "plainFix": [
         "Look down the list for pages you want found quickly, such as new products or articles.",
@@ -1319,7 +1322,7 @@
     {
       "id": "sitemap-error",
       "category": "sitemaps",
-      "severity": "error",
+      "severity": "warning",
       "title": "Sitemap can't be read",
       "description": "A sitemap listed in robots.txt, a sitemap index or the crawl settings returned an error (including 404), didn't respond, or isn't valid sitemap XML. Reported on the home page; the detail lists up to three, with their errors.",
       "fix": "Open the sitemap URL to see the error, then fix the file or the server: it must be valid XML, at most 50 MB uncompressed and 50,000 URLs. If the sitemap no longer exists, remove its reference from robots.txt or the sitemap index.",
@@ -1373,7 +1376,7 @@
       "plainFix": [
         "Look in your site's SEO settings or plugin: most can create a sitemap with one switch.",
         "Ask your developer to add its address to the site's rules file for search engines (its \"robots.txt\"), so they all find it.",
-        "Check the site again: two more checks can then run."
+        "Check the site again: it can then also find pages missing from your sitemap, and pages in it that nothing links to."
       ],
       "fixer": "either",
       "plainPassed": "A sitemap was found, or the site names one",
@@ -1493,7 +1496,7 @@
       "references": "none",
       "siteWide": false,
       "reportedOnce": false,
-      "plainTitle": "Titles too long to show in full",
+      "plainTitle": "Titles that may be cut off in search results",
       "plainWhat": [
         "These pages have a title of more than 60 characters.",
         "Search results cut a long title off to fit the screen, so the last words may not show.",
@@ -1505,7 +1508,7 @@
         "Cut repeated words and long endings, such as a slogan after your site's name."
       ],
       "fixer": "you",
-      "plainPassed": "No title is too long to show in full",
+      "plainPassed": "No title is likely to be cut off in search results",
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["title", "titleLength"],
@@ -1534,7 +1537,8 @@
       "plainFix": [
         "Open the page in your site's editor and find its title.",
         "Say what the page is about, and add your site's name if there's room.",
-        "Leave the titles that already say it all."
+        "Leave the titles that already say it all.",
+        "Skip pages nobody searches for, such as login and basket pages."
       ],
       "fixer": "you",
       "plainPassed": "No title is very short",
@@ -1652,7 +1656,7 @@
       "references": "none",
       "siteWide": false,
       "reportedOnce": false,
-      "plainTitle": "Search descriptions too long to show in full",
+      "plainTitle": "Search descriptions that may be cut off",
       "plainWhat": [
         "These pages have a search description, the text under their title in search results, of more than 155 characters.",
         "Search results cut off the end of a long description (a \"meta description\").",
@@ -1664,7 +1668,7 @@
         "Trim the rest to about 155 characters, or leave it if the opening already works."
       ],
       "fixer": "you",
-      "plainPassed": "No search description is too long to show in full",
+      "plainPassed": "No search description is likely to be cut off",
       "plainOneFix": null,
       "plainLooksFor": null,
       "evidence": ["description", "descriptionLength"],
@@ -1704,7 +1708,7 @@
     {
       "id": "description-duplicate",
       "category": "metaDescriptions",
-      "severity": "warning",
+      "severity": "notice",
       "title": "Duplicate meta description",
       "description": "Another indexable page has the same meta description, ignoring case and spacing. The detail says how many other pages share it.",
       "fix": "Write a page-specific description, or generate one from each page's own data.",
@@ -1900,7 +1904,7 @@
       "category": "content",
       "severity": "notice",
       "title": "Near-duplicate content",
-      "description": "Another indexable page has almost the same main content, roughly 96% or more alike: at most 24 of the 256 bits of their content fingerprints differ (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.",
+      "description": "Another indexable page has almost the same main content, roughly 96% or more alike (the default, which can be changed in the analysis settings). Exact copies are reported as duplicate content instead, and pages under that check's minimum word count aren't compared.",
       "fix": "Give each page main content that is clearly its own, canonicalise the variants to one version, or merge them into one page with options.",
       "why": "Pages that differ in only a few words, such as location pages with the town swapped or products that differ by size, may be grouped by Google as duplicates, with only one shown. That's fine for variants you don't need to rank separately. Pages that should rank on their own need differences that are, in Google's words, clear and significant.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/canonicalization-troubleshooting",
@@ -2265,7 +2269,7 @@
       "category": "hreflang",
       "severity": "warning",
       "title": "Hreflang points to a non-indexable URL",
-      "description": "This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by robots.txt (or, on this site, by a firewall).",
+      "description": "This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by your robots.txt. Alternates that refused the crawler (a firewall, a bot challenge or a rate limit), and ones on other sites whose robots.txt kept the crawler out, aren't judged: neither says whether search engines can index them.",
       "fix": "Replace each entry with the alternate's final, canonical, indexable URL, and keep the list identical on every page in the set.",
       "why": "Google generally shows each version's canonical, indexable URL in results, so hreflang should name exactly those URLs. An alternate that redirects or is canonicalised elsewhere isn't the URL that gets indexed, and one that's noindex or blocked can't be shown at all, so the entry for that language is unreliable. Google specifically warns against listing HTTP URLs in hreflang when the pages are on HTTPS.",
       "learnMore": "https://developers.google.com/search/docs/specialty/international/localized-versions",
@@ -2277,7 +2281,7 @@
       "plainTitle": "Language versions that search engines can't show",
       "plainWhat": [
         "These pages list a version in another language at an address that can't itself appear in search results.",
-        "That address forwards elsewhere, is told to stay out of search, or names another page as its main version.",
+        "That address forwards elsewhere, is kept out of search, names another page as its main version, or is blocked by your rules file (\"robots.txt\").",
         "Search engines can't show it, so the entry for that language (an \"hreflang\" link) can't be relied on."
       ],
       "plainFix": [
@@ -2390,7 +2394,7 @@
     {
       "id": "structured-data-invalid",
       "category": "structuredData",
-      "severity": "error",
+      "severity": "warning",
       "title": "Invalid JSON-LD",
       "description": "A JSON-LD block (<script type=\"application/ld+json\">) on the page isn't valid JSON. The detail shows the parser's first error.",
       "fix": "Fix the syntax where the detail points (often an unescaped quote, a trailing or missing comma, or a comment left in by a template), then test the page with Google's Rich Results Test.",
@@ -2424,7 +2428,7 @@
       "category": "structuredData",
       "severity": "warning",
       "title": "Structured data missing required properties",
-      "description": "A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. The detail names the type and the missing properties.",
+      "description": "A top-level schema.org item on this indexable page lacks a property Google requires for that type's rich result. A subtype is held to its parent type's requirements, as a Restaurant is to a LocalBusiness's and a MusicEvent to an Event's. The detail names the type and the missing properties.",
       "fix": "Add the missing properties with values that match what's visible on the page, then test it with the Rich Results Test.",
       "why": "Google says items missing required properties aren't eligible for rich results, so the markup does nothing for that feature. Recommended properties aren't checked, since they don't affect eligibility. FAQPage isn't checked either: Google stopped showing FAQ rich results in May 2026. Even complete markup only makes a rich result possible: Google decides whether to show one.",
       "learnMore": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#completeness",
@@ -2557,7 +2561,7 @@
       "title": "Security headers missing",
       "description": "The home page's response lacks one or more of Strict-Transport-Security (checked on HTTPS only), X-Content-Type-Options, Content-Security-Policy, X-Frame-Options (or a CSP frame-ancestors rule) and Referrer-Policy. The detail lists which.",
       "fix": "Add the missing headers in the server, CDN or framework configuration, starting with X-Content-Type-Options and Referrer-Policy, which rarely break anything. Roll out CSP in report-only mode first, and enable HSTS only once HTTPS works everywhere on the site.",
-      "why": "These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites. Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.",
+      "why": "These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites (browsers already default to a safe policy, so it matters least). Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.",
       "learnMore": "https://web.dev/articles/security-headers",
       "grouping": "none",
       "subject": "page",
@@ -2844,9 +2848,9 @@
       "category": "html",
       "severity": "notice",
       "title": "Missing character encoding",
-      "description": "Nothing declares the page's character encoding: no byte-order mark at the start of the file, no meta tag (<meta charset> or http-equiv Content-Type) and no charset in the Content-Type header.",
+      "description": "Nothing declares the page's character encoding where browsers look for it: no byte-order mark at the start of the file, no charset in the Content-Type header, and no meta tag (<meta charset> or http-equiv Content-Type) within the first 1024 bytes. The detail says where a meta tag further in ends.",
       "fix": "Add <meta charset=\"utf-8\"> as the first element in the <head>, within the first 1024 bytes of the file, or send Content-Type: text/html; charset=utf-8 from the server.",
-      "why": "Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again.",
+      "why": "Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again. Likewise a crawl made before the crawler recorded where the meta tag ends passes one past the first 1024 bytes.",
       "learnMore": "https://www.w3.org/International/questions/qa-html-encoding-declarations",
       "grouping": "none",
       "subject": "page",
@@ -2855,7 +2859,7 @@
       "reportedOnce": false,
       "plainTitle": "Pages at risk of showing garbled characters",
       "plainWhat": [
-        "These pages don't tell browsers how their letters and symbols were saved.",
+        "These pages don't tell browsers how their letters and symbols were saved, or tell them too far down the page.",
         "Browsers have to guess, and a wrong guess turns accents, £ signs and curly quotes into nonsense.",
         "Pages that look right today can wait, but the one-line fix removes the risk."
       ],
