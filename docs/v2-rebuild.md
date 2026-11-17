@@ -135,6 +135,142 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`. Since 2026-1
 the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not moved. This section is the place to
 resume. Merging to `master` or releasing still needs an explicit yes.
 
+**Step 3b, under way since 2026-11-17 (session `a539aa23`).** The owner asked for step 3b and, with it, a UX audit
+done as the site owner ("For every single view / UI it must be actually useful … easy to scan, understand and action"),
+plus a check that every setting of the old app is here. Every brief, finding and the orchestrator's checkpoint are in
+[`docs/handoff/2026-11-17/`](handoff/2026-11-17/) (`checkpoint.md` first). The owner's decisions that day:
+
+- **The fix loop: compare and recheck.** Every check, the score and every list compares with the site's previous crawl
+  (New, Fixed, Fewer, the score's change), and a problem offers "Recheck these N pages", which fetches only those pages
+  again ("4 of 5 fixed"). No manual "mark as fixed".
+- **New checks: all of them.** Every check in the old app's backlog, and every Screaming Frog check that needs only data
+  already fetched.
+- **Title and description lengths in pixels**, as Screaming Frog measures them: yes.
+- **Never trip a site's rate limit** as the first Jitsunami crawl did ("make sure this is smart enough we don't hit
+  things like this").
+
+The three real sites were crawled for the audit (`-c 2 --rate 2 --respect-crawl-delay --store-html`, at most 5,000
+URLs): aptitude.co.uk (33 pages), jitsunami.com (10 pages, the rest refused with 429s) and gardenfurnituresets.co.uk
+(4,360 URLs, 260 pages). The crawl files are in the session scratchpad's `audit3b/crawls*/`. Crawling any other real
+site still needs the owner's word, and so does a third Jitsunami crawl.
+
+**Merged into `ui/step-3` on 2026-11-17 (local only):**
+
+- **The check audit** (`ca10014` merges `ui/3b-accuracy`). All 87 checks were checked against the stored HTML of the
+  three sites; the verdict per check is in [v2-check-audit.md](v2-check-audit.md). The only wrong flags came from
+  Shopify's login redirect and from the 429s. The fixes:
+  - a canonical or hreflang target that refused the crawler is unverified, not non-indexable;
+  - links to redirects count only 301 and 308;
+  - `redirect-temporary` skips a redirect to another site (hosted login, checkout);
+  - `orphan-page` is skipped (reason `pages-unread`) when 1 in 20 or more pages couldn't be read;
+  - a page's empty link to itself (a logo) is flagged;
+  - schema.org subtypes inherit their parent's required properties;
+  - a `<meta charset>` counts only within the first 1,024 bytes.
+
+  Severities changed: `sitemap-error` and `structured-data-invalid` are now Warnings, and `description-duplicate` a
+  Notice. Words were rewritten throughout. Scores: Jitsunami 76 → 79, the garden site 83 → 85.
+- **The evidence** (`73a2674` merges `ui/3b-evidence-ui`, which holds `ui/3b-evidence`). Every check names its evidence
+  columns and target facts ([v2-evidence.md](v2-evidence.md)). New URL columns: redirect chain, robots.txt rule, used
+  on, pixel width and height, fetch error. Details name what they count ("78 characters, over 60"; "1 image over 200 KB:
+  293 KB"). The image checks are grouped by image, and rows are ordered by importance. The app shows it all in Advanced
+  and in Simple's words, with thumbnails. Image matching was 100% on the three real crawls. `c6a9b40` captures Simple's
+  fixtures again (the fixture garden crawl now scores 87).
+- **The polite crawl** (`9c1e8d2` merges `ui/3b-polite`):
+  - each host gets a slow start and a time-based ramp, its pace is halved when it asks to slow down (AIMD), and a
+    `Retry-After` pauses the whole host, with no burst afterwards;
+  - a 429 is put down to its folder, and only that section is paced (429s from three sections in ten minutes count as
+    the whole site);
+  - a 429'd URL is asked again at the end, with the gap doubling up to 20 minutes, else it is "Not checked: the site
+    asked the crawler to slow down";
+  - new notices `rate-limited` and `rate-limited-unchecked`, plus a section-limited wait;
+  - `internal-blocked` is now "Internal URL refused the crawler", a Notice, for a firewall's refusal only;
+  - a public site's crawl never fetches a private address (`PrivateNetworkGuard`).
+
+  The integration made a page the site kept rate-limiting count as unread for the orphan skip. `3721374` captures the
+  catalog fixture again, and `93bd1eb` and `35d4888` update five e2e expectations the slow start changed (the first
+  figures can say "1 URL so far"; a paused count settles a moment later).
+- `AnalysisFreshness.VERSION` is **11**: every older analysis reads as out of date.
+
+**Checks on the merged `35d4888`: all green.** The engine verify and the scripted app verify ran on `3721374`; the two
+later commits touch only `app/e2e`, and everything from the final e2e on ran on `35d4888`.
+
+| Check | Result |
+| --- | --- |
+| `verify-engine.sh` | Build passed; tests 1,648 + 286 + 28 passed. |
+| 100k bench | Every planted page and issue, nothing else; memory flat (−11 MB), peak 199 MB. |
+| Readbench gate | Passed (on a quiet machine). |
+| `verify-app.sh` | Every step exit 0 but unit, where one start-up test timed out under load; it passes alone and in the full rerun (3,965 passed). Stories 544 × 2 themes clean plain, forced and reduced. |
+| e2e | 259 passed, 3 skipped, after the five updated expectations above (each reproduced alone first). |
+| `e2e:filled` | 31 passed. |
+| Release app | `tauri build --no-bundle` passed; `smoke:shell` (19 + 9) and `check:orphans` passed. |
+| Linux in Docker | clippy clean; cargo test 136 + 3 passed. |
+
+**Designed, not built yet:**
+
+- **The fix loop:** [v2-fix-loop.md](v2-fix-loop.md) on `ui/3b-fixloop` (`5cf1c67`), API marked "(fix loop)" in its
+  copy of v2-sidecar-api.md. The orchestrator accepted all eight open decisions:
+  - a recheck updates the same crawl file (marked "rechecked N pages on" and the date) and analyses it again in full;
+  - the earlier crawl is analysed again with today's rules (Advanced asks first);
+  - URLs no longer linked get a new skip reason, and their rows are kept;
+  - new links found by a recheck are fetched one step deep;
+  - only the latest crawl can be rechecked, and not while the same site is crawling;
+  - rows match by exact URL, else only counts compare;
+  - "previous" is the newest earlier crawl of the same site with results, preferring the same start URL (a stopped crawl
+    compares as partial);
+  - a recheck takes at most 1,000 URLs, most important first; `orphan-page` and `no-https` need a full crawl.
+
+  Its stages, each sized for one agent: E1 test-site revisions, E2 the compare reader and `si compare`, E3 the recheck
+  engine, E4 robots.txt, site versions and sitemaps, S1 and S2 the sidecar, U1 Simple, U2 Advanced, V the verify.
+- **The new checks:** [v2-new-checks.md](v2-new-checks.md) on `ui/3b-newchecks` (`a91ae87`): 84 new checks (1 Error,
+  18 Warnings, 65 Notices), 8 changes to existing ones and 27 not built, in nine batches built one after another. The
+  orchestrator's rulings:
+  - `title-same-as-h1` is dropped (Google recommends they match);
+  - `sitemap-over-limit` is a Warning, not an Error;
+  - `readability-low` applies to English pages only, as a Notice;
+  - `deep-page` uses the crawl's recorded depth, and the bench's expected count is computed.
+
+  Batch 9 makes `og:image` a link kind, which moves the link-count tests.
+- **Pixel widths:** the design is [`handoff/2026-11-17/pixels-design.md`](handoff/2026-11-17/pixels-design.md). It
+  measures with Liberation Sans 2.1.5 widths (OFL, metric-compatible with Arial) at 20 px for titles and 14 px for
+  descriptions, with CJK and emoji at 1 em, and cuts at the last whole word. The orchestrator's rulings:
+  - titles: over **580 px** (the measured cut; Screaming Frog's 561 flags 97 garden titles to 69) and under 200 px;
+  - descriptions: over 985 px and under 400 px, as Screaming Frog;
+  - saved character limits are converted at 9.4 px (titles) and 6.2 px (descriptions) per character;
+  - the setting fields may be renamed (for example `titleMaxLength` → `titleMaxPixels`); no function is renamed.
+
+  Advanced says "612 px, over 580 (64 characters)". Simple says where Google will likely cut the title, without
+  pixels. The work goes on branch `ui/3b-pixels`, and `docs/v2-pixel-widths.md` lands there.
+
+**Settings against the old app:** every setting is here or was dropped on purpose (v2-ui-discovery.md, "Crawl
+settings"), proxy included: one address field for `http`, `https` or `socks5://user:pass@host:port`, with a Test
+button. Still to fix:
+
+- there is no consent step before a proxy or header secret is saved to Windows Credential Manager
+  (`client.ts:179-182`, `:238`; `secrets.ts:152-155`);
+- the words say credentials "aren't kept" (`words.ts:62`, the toast in `NewCrawlScreen.tsx:231`), but they are kept;
+- SOCKS5 with a login is untested.
+
+The defaults stay Standard with no rate cap, because the slow start and AIMD now protect the site.
+
+**Left in step 3b, in order:**
+
+1. The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is closed.
+2. Pixel widths (`ui/3b-pixels`, off `ui/step-3`), before the new checks.
+3. The view fixes from [`ux-views.md`](handoff/2026-11-17/ux-views.md):
+   - the Issues check list sorted by what matters;
+   - related checks ("fixing this also clears …");
+   - headline counts as things to fix;
+   - Links grouped by target, with an Images preset;
+   - the inspector's images with their sizes;
+   - the robots.txt-blocked list with "linked from" and "in a sitemap".
+
+   Also the settings fixes above.
+4. The fix loop, stages E1 to V (designed on `ui/3b-fixloop`).
+5. The new checks, batches 1 to 9 in order (specified on `ui/3b-newchecks`).
+6. Audit Jitsunami's product pages again once a crawl reads them (the 429s left them unchecked; a third real crawl is
+   the owner's call).
+7. Gallery 7, then tell the owner step 3b is finished. The release step follows at the owner's word.
+
 **Merged 2026-11-15: the framed workspace and where each URL was found** (`66f5c46` merges `ui/framed`, which holds
 `ui/framed-settings`; `ba72f75` merges `ui/found-on`; local only). All of it came from the owner's first use of the
 installed app:
@@ -223,7 +359,7 @@ Also done on 2026-11-16:
   a shell, every file fails with "Vitest failed to find the runner", because Vitest loads twice. `verify-app.sh` is
   safe, as it changes to the folder it is given.
 
-**Left, in order:**
+**Left, in order (as of 2026-11-16; step 3b's own list is above):**
 
 1. Step 3b: the check audit on the three real sites above, at the owner's word. It crawls real sites, which the agents'
    rules otherwise forbid.
