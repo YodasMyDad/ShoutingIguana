@@ -87,6 +87,11 @@ export const URL_COLUMNS: readonly UrlColumn[] = [
   column('ttfbMs', 'number', { sortable: false }),
   column('titleLength', 'number', analysed),
   column('descriptionLength', 'number', analysed),
+  column('titleWidth', 'number', analysed),
+  column('descriptionWidth', 'number', analysed),
+  // Worked out for the rows of a page from the title and the analysis's limit: shown only.
+  column('titleInResults', 'text', { sortable: false, filterable: false }),
+  column('descriptionInResults', 'text', { sortable: false, filterable: false }),
   column('finalUrl', 'text', analysed),
   column('finalStatusCode', 'number', analysed),
   column('inSitemap', 'boolean', analysed),

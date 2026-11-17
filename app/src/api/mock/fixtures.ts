@@ -209,6 +209,11 @@ export function adaptUrlRow(raw: Record<string, unknown>, severities: ReadonlyMa
     fetchError: null,
     redirectChain: null,
     robotsRule: null,
+    // Nor the widths in pixels, which came after them.
+    titleWidth: null,
+    descriptionWidth: null,
+    titleInResults: null,
+    descriptionInResults: null,
   };
 }
 

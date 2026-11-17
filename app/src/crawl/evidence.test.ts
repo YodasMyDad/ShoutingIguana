@@ -3,6 +3,7 @@ import type { RelatedFacts } from '../api/grids';
 import type { IssueTarget, RedirectChain } from '../api/inspector';
 import {
   altWords,
+  evidenceValueWords,
   fileTypeWords,
   finalWords,
   imageFileWords,
@@ -301,5 +302,17 @@ describe('the size pages show an image at', () => {
     expect(shownAtInsight({ ...shown, sampled: 10, pages: 10, varies: true }, file, 205)).toBe(
       'shown at up to 400×300 on the first 10 pages read; the file is 4000×3000 (10× wider)',
     );
+  });
+});
+
+describe('a row’s evidence as facts', () => {
+  it('says a title’s width in pixels, its length in characters and how results show it', () => {
+    expect(evidenceValueWords('titleWidth', 742, null)).toBe('742 px');
+    expect(evidenceValueWords('descriptionWidth', 1_204, null)).toBe('1,204 px');
+    expect(evidenceValueWords('titleLength', 80, null)).toBe('80 characters');
+    expect(
+      evidenceValueWords('titleInResults', 'Garden sofas and chairs for every season, delivered free…', null),
+    ).toBe('in results “Garden sofas and chairs for every season, delivered free…”');
+    expect(evidenceValueWords('descriptionInResults', null, null)).toBeNull();
   });
 });

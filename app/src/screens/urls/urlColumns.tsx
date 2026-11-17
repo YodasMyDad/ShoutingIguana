@@ -67,7 +67,18 @@ export const URL_PRESETS: readonly UrlPreset[] = [
     id: 'content',
     title: 'Content',
     hint: 'Titles, descriptions, headings and words',
-    columns: ['url', 'title', 'titleLength', 'h1', 'h1Count', 'wordCount', 'description', 'descriptionLength'],
+    columns: [
+      'url',
+      'title',
+      'titleLength',
+      'titleWidth',
+      'h1',
+      'h1Count',
+      'wordCount',
+      'description',
+      'descriptionLength',
+      'descriptionWidth',
+    ],
   },
   {
     id: 'performance',
@@ -212,8 +223,12 @@ const GROUP_OF: Record<string, UrlColumnGroup> = {
   robotsRule: 'indexing',
   title: 'content',
   titleLength: 'content',
+  titleWidth: 'content',
+  titleInResults: 'content',
   description: 'content',
   descriptionLength: 'content',
+  descriptionWidth: 'content',
+  descriptionInResults: 'content',
   h1: 'content',
   h1Count: 'content',
   wordCount: 'content',
@@ -274,8 +289,16 @@ const HINTS: Record<string, string> = {
     'What went wrong, as the crawl recorded it, for a URL that didn’t succeed: a timeout, a connection that failed, robots.txt that couldn’t be read',
   redirectChain: 'Each redirect from it, with the status there, to where they end',
   robotsRule: 'The robots.txt line that refused it, and where it is in the file',
-  titleLength: 'The room the title takes in search results: full-width characters and emoji count two',
-  descriptionLength: 'The room the meta description takes in search results: full-width characters and emoji count two',
+  titleLength: 'The title’s characters, as a reader counts them: an emoji or an accented letter once',
+  descriptionLength: 'The meta description’s characters, as a reader counts them: an emoji or an accented letter once',
+  titleWidth:
+    'How wide the title shows in Google’s desktop results, in pixels: what “Title too long” and “too short” judge',
+  descriptionWidth:
+    'How wide the meta description shows in Google’s desktop results, in pixels: what “Meta description too long” and “too short” judge',
+  titleInResults:
+    'The title as Google’s desktop results will likely show it: cut with “…” where it’s too wide. Shown only',
+  descriptionInResults:
+    'The meta description as Google’s desktop results will likely show it: cut with “…” where it’s too wide. Shown only',
   metaRobots: 'The robots meta tags’ content, as the page wrote it',
   xRobotsTag: 'The X-Robots-Tag header, as the server sent it',
 };
@@ -301,6 +324,8 @@ const KNOWN_TYPES: Record<string, UrlColumnType> = {
   ttfbMs: 'number',
   titleLength: 'number',
   descriptionLength: 'number',
+  titleWidth: 'number',
+  descriptionWidth: 'number',
   finalStatusCode: 'number',
   inlinks: 'number',
   followedInlinks: 'number',
@@ -381,7 +406,9 @@ const URL_TEXT: ReadonlySet<string> = new Set(['redirectTarget', 'canonicalUrl',
 function numberWords(column: string, value: number): string {
   if (column === 'responseMs' || column === 'ttfbMs') return formatMilliseconds(value);
   if (column === 'sizeBytes') return formatBytes(value);
-  if (column === 'pixelWidth' || column === 'pixelHeight') return `${formatCount(value)} px`;
+  if (column === 'pixelWidth' || column === 'pixelHeight' || column === 'titleWidth' || column === 'descriptionWidth') {
+    return `${formatCount(value)} px`;
+  }
   return formatCount(value);
 }
 
@@ -407,6 +434,10 @@ const WIDTHS: Record<string, number> = {
   wordCount: 104,
   titleLength: 112,
   descriptionLength: 160,
+  titleWidth: 112,
+  descriptionWidth: 160,
+  titleInResults: 320,
+  descriptionInResults: 360,
   inlinks: 80,
   followedInlinks: 136,
   nofollowInlinks: 136,

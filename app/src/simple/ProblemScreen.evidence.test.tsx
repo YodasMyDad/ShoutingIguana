@@ -105,7 +105,7 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
     );
     cleanup();
     await open('title-too-long');
-    expect(await where().findByText('78 characters, over 60')).toBeVisible();
+    expect(await where().findByText('742 px, over 580 (80 characters)')).toBeVisible();
     expect(screen.queryByText(/One fix clears/)).toBeNull();
   });
 });

@@ -112,6 +112,8 @@ describe('the URL grid’s columns', () => {
     expect(screen.getByRole('button', { name: 'Content' })).toHaveAttribute('aria-pressed', 'true');
     const after = await screen.findByRole('grid', { name: 'URLs' });
     await waitFor(() => expect(headers(after)).toContain('Title length'));
+    // The widths the title and description checks judge, beside the lengths.
+    expect(headers(after)).toEqual(expect.arrayContaining(['Title width', 'Description width']));
   });
 
   it('names the host once, in the URL column’s header, and shows the URLs whole with Show full URLs', async () => {

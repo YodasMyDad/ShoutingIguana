@@ -45,25 +45,39 @@ afterEach(() => {
 });
 
 describe('a flat check’s evidence', () => {
-  it('asks for the check’s evidence and the inlinks, and shows the title beside its length, most linked first', async () => {
+  it('asks for the check’s evidence and the inlinks, and shows the title with where it’s cut, its width and its length, most linked first', async () => {
     const requests = sidecar();
     await open(`${ISSUES}/title-too-long`);
     const grid = await screen.findByRole('grid', { name: /Title too long/ });
     const read = requests.find((request) => request.path.endsWith('/issues/title-too-long/rows'));
-    expect(read?.body).toMatchObject({ columns: ['url', 'detail', 'title', 'titleLength', 'inlinks'], sort: [] });
+    expect(read?.body).toMatchObject({
+      columns: ['url', 'detail', 'title', 'titleInResults', 'titleWidth', 'titleLength', 'inlinks'],
+      sort: [],
+    });
     // Once the engine's column list says it sorts, its header's tooltip says what it holds.
     await waitFor(() =>
-      expect(within(grid).getByRole('columnheader', { name: /Title length/ })).toHaveAttribute(
+      expect(within(grid).getByRole('columnheader', { name: /Title width/ })).toHaveAttribute(
         'title',
-        'The room the title takes in search results: full-width characters and emoji count two',
+        'How wide the title shows in Google’s desktop results, in pixels: what “Title too long” and “too short” judge',
       ),
     );
+    expect(within(grid).getByRole('columnheader', { name: /Title length/ })).toHaveAttribute(
+      'title',
+      'The title’s characters, as a reader counts them: an emoji or an accented letter once',
+    );
+    expect(within(grid).getByRole('columnheader', { name: /Title in results/ })).toBeInTheDocument();
     expect(within(grid).getByRole('columnheader', { name: /Inlinks/ })).toBeInTheDocument();
     const row = await within(grid).findByRole('row', { name: /\/a\// });
-    expect(row).toHaveTextContent('78 characters, over 60');
-    expect(row).toHaveTextContent('Garden sofas and chairs for every season');
-    expect(row).toHaveTextContent('78');
-    expect(row).toHaveTextContent('31');
+    expect(row).toHaveTextContent('742 px, over 580 (80 characters)');
+    expect(row).toHaveTextContent('Garden sofas and chairs for every season, delivered free across the UK | Example');
+    expect(row).toHaveTextContent('Garden sofas and chairs for every season, delivered free…');
+    // The width with its unit, the length a count.
+    const cells = within(row)
+      .getAllByRole('gridcell')
+      .map((cell) => cell.textContent);
+    expect(cells).toContain('742 px');
+    expect(cells).toContain('80');
+    expect(cells).toContain('31');
     expect(screen.getByText('3 pages, most linked first')).toBeVisible();
   });
 

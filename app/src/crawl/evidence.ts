@@ -357,7 +357,8 @@ type EvidenceValue = string | number | boolean | object | null | undefined;
 
 /**
  * One evidence column's value as a fact in a line, where its column header isn't beside it (a group's pages, the
- * expanded rows): the title quoted, "78 characters", "120 words", "12 inlinks", the chain hop by hop. Null for no value.
+ * expanded rows): the title quoted, "78 characters", "612 px", "120 words", "12 inlinks", the chain hop by hop. Null for
+ * no value.
  */
 export function evidenceValueWords(column: string, value: EvidenceValue, siteOrigin: string | null): string | null {
   if (value === null || value === undefined || value === '') return null;
@@ -367,6 +368,9 @@ export function evidenceValueWords(column: string, value: EvidenceValue, siteOri
       case 'titleLength':
       case 'descriptionLength':
         return `${formatCount(value)} characters`;
+      case 'titleWidth':
+      case 'descriptionWidth':
+        return `${formatCount(value)} px`;
       case 'wordCount':
         return value === 1 ? '1 word' : `${formatCount(value)} words`;
       case 'inlinks':
@@ -391,6 +395,10 @@ export function evidenceValueWords(column: string, value: EvidenceValue, siteOri
     case 'h1':
     case 'description':
       return quoted(value);
+    case 'titleInResults':
+    case 'descriptionInResults':
+      // Where results cut it is its point: kept whole as far as a description goes.
+      return `in results ${quoted(value, 160)}`;
     case 'metaRobots':
       return `meta robots “${value}”`;
     case 'xRobotsTag':
