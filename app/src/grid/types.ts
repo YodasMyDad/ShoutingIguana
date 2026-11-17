@@ -24,6 +24,8 @@ export interface GridColumn<Row> {
   sortOrder?: number;
   /** Words after the header's own, quieter: what the column's values have in common ("on example.com"). Not copied. */
   headerDetail?: string;
+  /** What the column holds, in a sentence: its header's tooltip (a column that can't sort says why instead). */
+  headerHint?: string;
   /** Its header is a button that sorts by it (the grid's `onSort`). */
   sortable?: boolean;
   /**

@@ -1,6 +1,7 @@
 // The grid queries (E3a in docs/v2-sidecar-api.md, "URLs", "Facets", "Lookup" and "Issue groups"): a POST with a JSON
 // body to one fixed URL per grid. The shapes are the sidecar's. A wrong JSON type on a field whose type is fixed is
 // `bad-request` (400); a filter's `value` and `values` are checked against the column, under `invalid-query` (422).
+import type { RedirectChain, TargetEnd, UrlTarget } from './inspector';
 
 export interface GridSort {
   column: string;
@@ -215,6 +216,33 @@ export interface UrlRow {
   errors?: number | null;
   warnings?: number | null;
   notices?: number | null;
+  /**
+   * Evidence: the pages audited that refer to the URL by any kind of link (an image, a script, a canonical...), each
+   * once: where a file is used, which `inlinks` (hyperlinks only) reads as 0. Needs the URL summary.
+   */
+  usedOn?: number | null;
+  /** Evidence: an image's own size in pixels, read from its file's header. Null for anything else, an SVG included. */
+  pixelWidth?: number | null;
+  pixelHeight?: number | null;
+  /** Evidence: what went wrong when the URL gave no HTTP answer ("No response within 20 seconds"). */
+  fetchError?: string | null;
+  /** Evidence: the URL's redirects hop by hop, as the inspector's `redirects`. Null for a URL that doesn't redirect. */
+  redirectChain?: RedirectChain | null;
+  /** Evidence: why robots.txt refused the URL. Null for a URL it didn't refuse. */
+  robotsRule?: RobotsRule | null;
+}
+
+/**
+ * Why robots.txt refused a URL, as the inspector's `robotsTxt` test says it: the rule and its line in the stored file
+ * (`reason` `rule`), or that the file couldn't be read (`unreachable`), or neither is known (`unknown`).
+ */
+export interface RobotsRule {
+  origin: string;
+  reason: 'rule' | 'unreachable' | 'unknown';
+  /** The file's line that refused it, from 1, for `rule`. */
+  line: number | null;
+  /** That line's text: "Disallow: /cart/". */
+  rule: string | null;
 }
 
 /** A row of a check's grid (`/issues/{checkId}/rows`): the URL's columns, and the issue's own. */
@@ -225,7 +253,11 @@ export interface IssueRow extends UrlRow {
   relatedStatusCode?: number | null;
 }
 
-export type UrlColumnType = 'number' | 'text' | 'enum' | 'boolean';
+/**
+ * `object` (evidence) is a value that is a list or a record (`redirectChain`, `robotsRule`): shown only, never sorted
+ * or filtered by.
+ */
+export type UrlColumnType = 'number' | 'text' | 'enum' | 'boolean' | 'object';
 
 /** `GET /api/url-columns`: the columns, for the column chooser and the filter bar. */
 export interface UrlColumn {
@@ -322,6 +354,42 @@ export interface IssueGroup {
   share: number;
   /** One fix probably clears it: it's in the site's template. */
   likelyTemplate: boolean;
+  /**
+   * Evidence: what the group's related URL is (its status, size, pixels, where its redirects end, why it isn't
+   * indexable), for every group that has one; null for one without. The check's `targetFacts` say which to show.
+   * Left out by a sidecar from before it.
+   */
+  related?: RelatedFacts | null;
+  /**
+   * Evidence: what a duplicate cluster's pages share (the title, the meta description, the H1), as its first page
+   * writes it. Null for every other group.
+   */
+  sharedText?: string | null;
+}
+
+/** Evidence: what a group's related URL is: a target's facts less the page's link to it, which is each page's own. */
+export interface RelatedFacts {
+  statusCode: number | null;
+  outcome: UrlOutcome | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+  pixelWidth: number | null;
+  pixelHeight: number | null;
+  /** Where its redirects end; null when it doesn't redirect. */
+  final: TargetEnd | null;
+  indexability: IndexabilityReason | null;
+  /** The URL it's canonicalised to; null when its canonical doesn't name another. */
+  canonical: UrlTarget | null;
+}
+
+/** How a check's groups are ordered: the most URLs first, or (evidence) the largest file first. */
+export type IssueGroupSort = 'pages' | 'size';
+
+/** `POST /issues/{checkId}/groups`: a page of the groups, in the order asked for (the check's own without `sort`). */
+export interface IssueGroupsQuery {
+  offset: number;
+  limit: number;
+  sort?: IssueGroupSort;
 }
 
 export interface IssueGroupPage {
@@ -333,6 +401,10 @@ export interface IssueGroupPage {
   groupCount: number | null;
   offset: number;
   groups: IssueGroup[];
+  /** Evidence: the order used: `size` for `image-too-large` unless asked otherwise. Left out by an earlier sidecar. */
+  sort?: IssueGroupSort;
+  /** Evidence: the check's `counts[].likelyTemplate`, for a check that doesn't group. */
+  likelyTemplate?: boolean;
 }
 
 /**

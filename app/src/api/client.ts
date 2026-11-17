@@ -21,6 +21,7 @@ import type {
   GridQuery,
   UrlGridQuery,
   IssueGroupPage,
+  IssueGroupsQuery,
   IssueRow,
   LinkColumn,
   LinkEndsPage,
@@ -319,7 +320,8 @@ export const api = {
   /** The stored HTML, streamed as one JSON object. `bytes` is null for a page over 512 MB. */
   urlSource: (id: string, urlId: number, signal?: Signal) =>
     post<HtmlSource>(`${crawl(id)}/urls/source`, { urlId }, signal),
-  issueGroups: (id: string, checkId: string, page: { offset: number; limit: number }, signal?: Signal) =>
+  /** A page of a check's groups; `sort` (evidence) asks for an order other than the check's own. */
+  issueGroups: (id: string, checkId: string, page: IssueGroupsQuery, signal?: Signal) =>
     post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
   /**
    * What each of up to 100 of a check's flagged pages names (its broken targets, its canonical), the first `limit` of

@@ -48,9 +48,9 @@ export const queryKeys = {
   /** A check's rows, sorted, as grid pages: the URLs of a check that doesn't group. */
   issueRowsGrid: (id: string, checkId: string, sort: readonly GridSort[]) =>
     ['grid', 'issueRows', id, checkId, { sort }] as const,
-  /** The first pages of one of a check's groups, shown under it when it's open. */
-  issueGroupRows: (id: string, checkId: string, group: CheckGroupRef, limit: number) =>
-    ['crawl', id, 'issues', checkId, 'group', group, limit] as const,
+  /** The first pages of one of a check's groups, shown under it when it's open, with the columns they carry. */
+  issueGroupRows: (id: string, checkId: string, group: CheckGroupRef, limit: number, columns: readonly string[]) =>
+    ['crawl', id, 'issues', checkId, 'group', group, limit, columns] as const,
   /** Where one of a check's groups is among its groups, to open it from the route. */
   issueGroupPlace: (id: string, checkId: string, group: CheckGroupRef) =>
     ['crawl', id, 'issues', checkId, 'place', group] as const,
@@ -309,17 +309,24 @@ export function groupsAsGridPage(page: IssueGroupPage): GridPage<IssueGroup> {
   };
 }
 
-/** The first rows of one of a check's groups, with what the tree shows of them. */
-export const issueGroupRowsQuery = (id: string, checkId: string, group: CheckGroupRef, limit: number) =>
+/** What a group's pages carry without a check's evidence: the URL, the detail and the other URL. */
+export const GROUP_ROW_COLUMNS: readonly string[] = ['url', 'detail', 'relatedUrl'];
+
+/**
+ * The first rows of one of a check's groups, with what the tree shows of them: by default the URL, the detail and the
+ * other URL; a check's evidence columns after them where it has some (screens/issues/evidenceColumns.ts).
+ */
+export const issueGroupRowsQuery = (
+  id: string,
+  checkId: string,
+  group: CheckGroupRef,
+  limit: number,
+  columns: readonly string[] = GROUP_ROW_COLUMNS,
+) =>
   queryOptions({
-    queryKey: queryKeys.issueGroupRows(id, checkId, group, limit),
+    queryKey: queryKeys.issueGroupRows(id, checkId, group, limit, columns),
     queryFn: ({ signal }): Promise<GridPage<IssueRow>> =>
-      api.issueRows(
-        id,
-        checkId,
-        { group, columns: ['url', 'detail', 'relatedUrl'], filters: [], sort: [], offset: 0, limit },
-        signal,
-      ),
+      api.issueRows(id, checkId, { group, columns: [...columns], filters: [], sort: [], offset: 0, limit }, signal),
     staleTime: Infinity,
   });
 

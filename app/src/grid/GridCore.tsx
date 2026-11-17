@@ -1101,7 +1101,7 @@ function GridCoreInner<Row>({
                 data-pinned={column.pinned ? true : undefined}
                 className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric', pinClass(col))}
                 style={pinStyle(col)}
-                title={sortable && !column.sortable ? column.sortHint : undefined}
+                title={sortable && !column.sortable && column.sortHint ? column.sortHint : column.headerHint}
                 {...(columnLayout
                   ? {
                       onPointerDown: (event: PointerEvent<HTMLDivElement>) => onHeaderPointerDown(event, col),

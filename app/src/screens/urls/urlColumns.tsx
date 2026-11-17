@@ -7,6 +7,7 @@ import type { ChooserGroup } from '../../grid/ColumnChooser';
 import type { FilterColumn, FilterGroup } from '../../grid/filterEditing';
 import type { GridColumn } from '../../grid/types';
 import { midPhrase, urlColumnWords } from '../../grid/urlFilterWords';
+import { objectCellWords } from '../../crawl/evidence';
 import { OUTCOME_WORDS } from '../../inspector/words';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
 import { StatusCode } from '../../ui/StatusCode';
@@ -71,18 +72,30 @@ export const URL_PRESETS: readonly UrlPreset[] = [
   {
     id: 'performance',
     title: 'Performance',
-    hint: 'How fast each URL answered, and how big it is',
-    columns: ['url', 'statusCode', 'type', 'responseMs', 'ttfbMs', 'sizeBytes', 'contentType', 'depth'],
+    hint: 'How fast each URL answered, and how big it is: an image’s file and its pixels',
+    columns: [
+      'url',
+      'statusCode',
+      'type',
+      'responseMs',
+      'ttfbMs',
+      'sizeBytes',
+      'pixelWidth',
+      'pixelHeight',
+      'contentType',
+      'depth',
+    ],
   },
   {
     id: 'links',
     title: 'Links',
-    hint: 'Links to each URL and from it, and where its redirects lead',
+    hint: 'Links to each URL and from it, the pages a file is used on, and where its redirects lead',
     columns: [
       'url',
       'statusCode',
       'depth',
       'inlinks',
+      'usedOn',
       'followedInlinks',
       'nofollowInlinks',
       'linkingPages',
@@ -184,6 +197,10 @@ const GROUP_OF: Record<string, UrlColumnGroup> = {
   responseMs: 'response',
   ttfbMs: 'response',
   sizeBytes: 'response',
+  pixelWidth: 'response',
+  pixelHeight: 'response',
+  fetchError: 'response',
+  redirectChain: 'response',
   indexable: 'indexing',
   indexability: 'indexing',
   noindex: 'indexing',
@@ -192,6 +209,7 @@ const GROUP_OF: Record<string, UrlColumnGroup> = {
   xRobotsTag: 'indexing',
   canonicalUrl: 'indexing',
   inSitemap: 'indexing',
+  robotsRule: 'indexing',
   title: 'content',
   titleLength: 'content',
   description: 'content',
@@ -203,6 +221,7 @@ const GROUP_OF: Record<string, UrlColumnGroup> = {
   followedInlinks: 'links',
   nofollowInlinks: 'links',
   linkingPages: 'links',
+  usedOn: 'links',
   outlinks: 'links',
   issues: 'issues',
   errors: 'issues',
@@ -242,6 +261,75 @@ const SHORT_HEADERS: Record<string, string> = {
 /** A column's header in the grid. */
 export function urlColumnHeader(id: string): string {
   return SHORT_HEADERS[id] ?? urlColumnName(id);
+}
+
+/** What a column holds, where its name alone doesn't say: its header's tooltip. */
+const HINTS: Record<string, string> = {
+  usedOn:
+    'The pages that use it, by any kind of link: an image, a script, a stylesheet, a canonical. Inlinks count hyperlinks only',
+  inlinks: 'Hyperlinks to it on the pages audited, each counted, a page’s links to itself left out',
+  pixelWidth: 'The image file’s own width in pixels, read from the file: not the size a page shows it at',
+  pixelHeight: 'The image file’s own height in pixels, read from the file: not the size a page shows it at',
+  fetchError: 'What went wrong when it gave no HTTP answer, as the crawl recorded it',
+  redirectChain: 'Each redirect from it, with the status there, to where they end',
+  robotsRule: 'The robots.txt line that refused it, and where it is in the file',
+  titleLength: 'The room the title takes in search results: full-width characters and emoji count two',
+  descriptionLength: 'The room the meta description takes in search results: full-width characters and emoji count two',
+  metaRobots: 'The robots meta tags’ content, as the page wrote it',
+  xRobotsTag: 'The X-Robots-Tag header, as the server sent it',
+};
+
+/** A column's header tooltip, where it has one. */
+export function urlColumnHint(id: string): string | undefined {
+  return HINTS[id];
+}
+
+/**
+ * Each column's type as this version knows it, for a grid drawn before the engine's list is read: a number is then
+ * right-aligned from the first row, never drawn as text first.
+ */
+const KNOWN_TYPES: Record<string, UrlColumnType> = {
+  depth: 'number',
+  statusCode: 'number',
+  redirectTargetStatusCode: 'number',
+  h1Count: 'number',
+  wordCount: 'number',
+  outlinks: 'number',
+  sizeBytes: 'number',
+  responseMs: 'number',
+  ttfbMs: 'number',
+  titleLength: 'number',
+  descriptionLength: 'number',
+  finalStatusCode: 'number',
+  inlinks: 'number',
+  followedInlinks: 'number',
+  nofollowInlinks: 'number',
+  linkingPages: 'number',
+  issues: 'number',
+  errors: 'number',
+  warnings: 'number',
+  notices: 'number',
+  usedOn: 'number',
+  pixelWidth: 'number',
+  pixelHeight: 'number',
+  indexability: 'enum',
+  type: 'enum',
+  source: 'enum',
+  statusClass: 'enum',
+  outcome: 'enum',
+  fetched: 'boolean',
+  isInternal: 'boolean',
+  indexable: 'boolean',
+  noindex: 'boolean',
+  nofollow: 'boolean',
+  inSitemap: 'boolean',
+  redirectChain: 'object',
+  robotsRule: 'object',
+};
+
+/** A column's type: the engine's, else this version's, else text. */
+export function urlColumnType(id: string, column: UrlColumn | undefined): UrlColumnType {
+  return column?.type ?? KNOWN_TYPES[id] ?? 'text';
 }
 
 /**
@@ -292,12 +380,13 @@ const URL_TEXT: ReadonlySet<string> = new Set(['redirectTarget', 'canonicalUrl',
 function numberWords(column: string, value: number): string {
   if (column === 'responseMs' || column === 'ttfbMs') return formatMilliseconds(value);
   if (column === 'sizeBytes') return formatBytes(value);
+  if (column === 'pixelWidth' || column === 'pixelHeight') return `${formatCount(value)} px`;
   return formatCount(value);
 }
 
 // ------------------------------------------------------------------------------------------------------- Widths
 
-const TYPE_WIDTHS: Record<UrlColumnType, number> = { number: 96, boolean: 96, enum: 136, text: 240 };
+const TYPE_WIDTHS: Record<UrlColumnType, number> = { number: 96, boolean: 96, enum: 136, text: 240, object: 320 };
 const WIDTHS: Record<string, number> = {
   statusCode: 104,
   statusClass: 96,
@@ -339,6 +428,12 @@ const WIDTHS: Record<string, number> = {
   canonicalUrl: 240,
   finalUrl: 240,
   finalStatusCode: 104,
+  usedOn: 88,
+  pixelWidth: 120,
+  pixelHeight: 120,
+  fetchError: 240,
+  redirectChain: 360,
+  robotsRule: 240,
 };
 /** The URL column's width before the grid's is known, and the least it's given where it is. */
 const URL_WIDTH = 360;
@@ -420,14 +515,16 @@ export function urlStatusWords(row: UrlRow, crawling: boolean): string {
 
 function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlColumnContext): GridColumn<UrlRow> {
   const name = urlColumnName(id);
-  const type: UrlColumnType = column?.type ?? 'text';
+  const type = urlColumnType(id, column);
   const at = context.sort.findIndex((key) => key.column === id);
   const sorted = at >= 0 ? context.sort[at] : undefined;
   const header = urlColumnHeader(id);
+  const hint = urlColumnHint(id);
   const base = {
     id,
     header,
     width: widthOf(id, type),
+    ...(hint ? { headerHint: hint } : {}),
     ...(column?.sortable
       ? {
           sortable: true,
@@ -498,6 +595,17 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
         ...base,
         cell: (row) => (words(row) ? <span title={words(row)}>{words(row)}</span> : muted('–')),
         text: words,
+      };
+    }
+    case 'object': {
+      // A redirect chain or a robots.txt rule, in one line: whole in its tooltip; copied with its URLs whole.
+      const origin = context.fullUrls ? null : context.siteOrigin;
+      const raw = (row: UrlRow) => (row as unknown as Record<string, unknown>)[id];
+      const words = (row: UrlRow) => objectCellWords(id, raw(row), origin);
+      return {
+        ...base,
+        cell: (row) => (words(row) ? <span title={words(row)}>{words(row)}</span> : muted('–')),
+        text: (row) => objectCellWords(id, raw(row), null),
       };
     }
     case 'text': {

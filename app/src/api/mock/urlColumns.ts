@@ -98,6 +98,13 @@ export const URL_COLUMNS: readonly UrlColumn[] = [
   column('errors', 'number', analysed),
   column('warnings', 'number', analysed),
   column('notices', 'number', analysed),
+  // Evidence (step 3b): where a file is used, an image's own pixels, why a URL gave no answer, and two shown only.
+  column('usedOn', 'number', analysed),
+  column('pixelWidth', 'number'),
+  column('pixelHeight', 'number'),
+  column('fetchError', 'text'),
+  column('redirectChain', 'object', { sortable: false, filterable: false }),
+  column('robotsRule', 'object', { sortable: false, filterable: false }),
   // A check's own columns: only its rows (`/issues/{checkId}/rows`) have them.
   column('detail', 'text', { sortable: true, issueRowsOnly: true }),
   column('relatedUrlId', 'number', { issueRowsOnly: true }),
@@ -111,6 +118,7 @@ export const OPS_BY_TYPE: Record<UrlColumnType, readonly GridFilterOp[]> = {
   enum: ['in', 'notIn', 'isEmpty', 'isNotEmpty'],
   text: ['contains', 'notContains', 'startsWith', 'endsWith', 'eq', 'ne', 'regex', 'notRegex', 'isEmpty', 'isNotEmpty'],
   boolean: ['is', 'isNot', 'isEmpty', 'isNotEmpty'],
+  object: [],
 };
 
 /** A column by its id: a check's own columns only for its rows. */

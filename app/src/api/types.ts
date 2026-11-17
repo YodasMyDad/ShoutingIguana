@@ -139,7 +139,27 @@ export interface Check {
    * title is a sentence about the site. Null for most checks: 12 have one.
    */
   plainLooksFor?: string | null;
+  /**
+   * Evidence (step 3b): the URL columns that show what the check found, in the order to show them, beside each row's
+   * `url` and `detail` (`["title", "titleLength"]` for `title-too-long`, `["redirectChain"]` for the redirect checks).
+   * Ask `/rows` for them as for any column. Empty for a check whose URL and detail say it all. Left out by a sidecar
+   * from before it, which reads as empty.
+   */
+  evidence?: string[];
+  /**
+   * Evidence: what to say about each URL the check's issues name, in the order to say it: field names of a target
+   * (`IssueTarget`) and of a group's `related` URL (`sizeBytes`, `img`, `final`, `text`, `position`...). Empty for a
+   * check that names no URL; left out by a sidecar from before it.
+   */
+  targetFacts?: TargetFact[];
 }
+
+/**
+ * A target's field a check's `targetFacts` names: what the URL is (`statusCode`, `final`, `indexability`, `canonical`,
+ * `sizeBytes`, `contentType`, `pixelWidth`, `pixelHeight`, `img`) and how the page links to it (`kind`, `text`,
+ * `position`, `fragment`, `flags`, `links`). A name this version doesn't know is left unsaid.
+ */
+export type TargetFact = string;
 
 /** How a check's flagged URLs stand to the links between URLs: where they're found, what they name, or neither. */
 export type CheckReferences = 'sources' | 'targets' | 'none';
@@ -338,6 +358,12 @@ export interface CheckCount {
   checkId: string;
   /** URLs the check flagged: 0 means it ran and found nothing. */
   count: number;
+  /**
+   * Evidence: a check that doesn't group (`grouping` `none`), of pages, not reported once, flagged at least 90% of the
+   * pages analysed and at least 10: probably the site's template, so one fix. False for every other check, whose groups
+   * say it instead. Left out by a sidecar from before it.
+   */
+  likelyTemplate?: boolean;
 }
 
 export interface SkipReason {
