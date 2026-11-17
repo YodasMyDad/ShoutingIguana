@@ -54,6 +54,9 @@ test('Advanced names an oversized image by its file and size, largest first, and
   await expect(tree.getByRole('columnheader', { name: /File size/ })).toBeVisible();
   const row = tree.getByRole('row').nth(1);
   await expect(row).toContainText(formatBytes(size));
+  // Its own pixels in a column of their own, and its thumbnail, drawn from the test site or its icon in its place.
+  await expect(tree.getByRole('columnheader', { name: 'Pixels' })).toBeVisible();
+  await expect(row.locator('.si-thumb')).toHaveAttribute('data-thumb', /^(loading|loaded|failed)$/);
   await expect(page.getByText(/by image, largest file first/)).toBeVisible();
 
   // Open it: its pages say the size they show it at, as the page writes it.
@@ -91,6 +94,7 @@ test.describe('Simple', () => {
     await expect(where.locator('.si-cause-facts').first()).toContainText(
       `The image file is ${formatBytes(group.related?.sizeBytes)}`,
     );
+    await expect(where.locator('.si-thumb').first()).toBeVisible();
     if (target?.img?.width && target.img.height) {
       await expect(where.locator('.si-target-words').first()).toContainText(
         `Shown at ${target.img.width}×${target.img.height} pixels`,

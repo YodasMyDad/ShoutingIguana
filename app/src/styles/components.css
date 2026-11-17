@@ -2286,6 +2286,55 @@
     object-fit: contain;
   }
 
+  /* ---------------------------------------------------------- Image thumbnails */
+  /* An image a check is about, drawn small from its own URL: a fixed box, so nothing moves when it arrives or fails,
+     and the image icon in its place while it loads, when it can't be read, or offline. */
+  .si-thumb {
+    position: relative;
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    overflow: hidden;
+    border-radius: var(--radius-xs);
+    background: var(--color-surface-sunken);
+    box-shadow: 0 0 0 var(--hairline) var(--color-border);
+    color: var(--color-text-muted);
+  }
+
+  .si-thumb--sm {
+    width: var(--thumb-sm);
+    height: var(--thumb-sm);
+  }
+
+  .si-thumb--lg {
+    width: var(--thumb-lg);
+    height: var(--thumb-lg);
+  }
+
+  .si-thumb__image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    opacity: 0;
+  }
+
+  .si-thumb[data-thumb='loaded'] .si-thumb__image {
+    opacity: 1;
+  }
+
+  .si-thumb[data-thumb='loaded'] .si-thumb__fallback {
+    visibility: hidden;
+  }
+
+  /* Forced colours drop the hairline shadow: the box keeps a border of the system's. */
+  @media (forced-colors: active) {
+    .si-thumb {
+      outline: var(--hairline) solid CanvasText;
+    }
+  }
+
   /* ----------------------------------------------------------------- Links */
   .si-link {
     border-radius: var(--radius-xs);

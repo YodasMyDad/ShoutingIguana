@@ -135,3 +135,14 @@ export function siteOriginOf(startUrl: string | null | undefined): string | null
 export function openLabel(url: string): string {
   return `Open ${url} in your browser`;
 }
+
+/** A file's name from its URL, as an image's alt text names it: "hero.jpg"; the URL itself where it has none. */
+export function fileNameOf(url: string): string {
+  try {
+    const path = new URL(url).pathname;
+    const name = decodeURIComponent(path.slice(path.lastIndexOf('/') + 1));
+    return name || url;
+  } catch {
+    return url;
+  }
+}

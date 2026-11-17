@@ -11,9 +11,13 @@ import {
   redirectChainWords,
   relatedFactParts,
   robotsRuleWords,
+  shownAtCellWords,
+  shownAtInsight,
+  shownAtOf,
   shownAtWords,
   statusWords,
   targetFactParts,
+  widerWords,
 } from './evidence';
 
 const SITE = 'https://www.example.com';
@@ -265,5 +269,37 @@ describe('a column whose value is an object', () => {
     );
     expect(objectCellWords('somethingNew', { a: 1 }, SITE)).toBe('{"a":1}');
     expect(objectCellWords('redirectChain', null, SITE)).toBe('');
+  });
+});
+
+describe('the size pages show an image at', () => {
+  const page = (width: string | null, height: string | null, id = 812) => ({
+    targets: [{ id, img: { width, height, alt: null, hasAlt: false, altLength: null, srcset: false, loading: null } }],
+  });
+
+  it('takes the largest size the pages read give in pixels, and says when they differ', () => {
+    expect(shownAtOf([page('400', '300'), page('400px', '300'), page('100%', null), null], 812)).toEqual({
+      width: 400,
+      height: 300,
+      pages: 2,
+      sampled: 3,
+      varies: false,
+    });
+    expect(shownAtOf([page('400', '300'), page('800', '600')], 812)).toMatchObject({ width: 800, varies: true });
+    expect(shownAtOf([page('100%', 'auto'), page('400', '300', 9)], 812)).toBeNull();
+  });
+
+  it('says how many times wider the file is, and the insight in words', () => {
+    expect(widerWords(4000, 400)).toBe('10');
+    expect(widerWords(1000, 400)).toBe('2.5');
+    expect(widerWords(410, 400)).toBeNull();
+    const shown = { width: 400, height: 300, pages: 12, sampled: 12, varies: false };
+    expect(shownAtCellWords(shown, 4000)).toBe('400×300 (10×)');
+    expect(shownAtCellWords({ ...shown, varies: true }, null)).toBe('≤400×300');
+    const file = { pixelWidth: 4000, pixelHeight: 3000 };
+    expect(shownAtInsight(shown, file, 12)).toBe('shown at 400×300 on 12 pages; the file is 4000×3000 (10× wider)');
+    expect(shownAtInsight({ ...shown, sampled: 10, pages: 10, varies: true }, file, 205)).toBe(
+      'shown at up to 400×300 on the first 10 pages read; the file is 4000×3000 (10× wider)',
+    );
   });
 });

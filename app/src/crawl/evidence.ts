@@ -405,3 +405,89 @@ export function evidenceValueWords(column: string, value: EvidenceValue, siteOri
       return value;
   }
 }
+
+// ------------------------------------------------------------------------------- The size pages show an image at
+
+/**
+ * The size a group's pages show its image at, from their `<img>` width and height as written: the largest of the
+ * pages read (by width), how many of them gave a size in pixels, how many were read, and whether they differ. What
+ * `image-too-large` is about: a file far wider than its pages show it is the fix to make.
+ */
+export interface ShownAt {
+  width: number;
+  height: number;
+  /** The pages read that gave a width and height in pixels. */
+  pages: number;
+  /** The pages read: those that show the image, whatever they gave. */
+  sampled: number;
+  /** The pages that gave a size don't all give this one: it's the largest. */
+  varies: boolean;
+}
+
+/** An attribute as pixels: "400" or "400px"; null for "100%", "auto" or none. */
+function pixelsOf(value: string | null | undefined): number | null {
+  const match = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i.exec(value ?? '');
+  const number = match ? Number(match[1]) : NaN;
+  return Number.isFinite(number) && number > 0 ? Math.round(number) : null;
+}
+
+/**
+ * The size the pages read show one image at, from what each page's issue names (`/targets`): null when none of them
+ * gives it a width and height in pixels, or none names it.
+ */
+export function shownAtOf(
+  named: readonly ({ targets: readonly Pick<IssueTarget, 'id' | 'img'>[] } | null | undefined)[],
+  imageId: number,
+): ShownAt | null {
+  const sizes: { width: number; height: number }[] = [];
+  let sampled = 0;
+  for (const page of named) {
+    const target = page?.targets.find((candidate) => candidate.id === imageId);
+    if (!target?.img) continue;
+    sampled++;
+    const width = pixelsOf(target.img.width);
+    const height = pixelsOf(target.img.height);
+    if (width !== null && height !== null) sizes.push({ width, height });
+  }
+  if (sizes.length === 0) return null;
+  const largest = sizes.reduce((best, size) => (size.width > best.width ? size : best));
+  const varies = sizes.some((size) => size.width !== largest.width || size.height !== largest.height);
+  return { ...largest, pages: sizes.length, sampled, varies };
+}
+
+/**
+ * How many times wider the file is than the pages show it: "10", "2.5"; null when it isn't wider by a tenth or more,
+ * or either width isn't known.
+ */
+export function widerWords(fileWidth: number | null | undefined, shownWidth: number | null | undefined): string | null {
+  if (typeof fileWidth !== 'number' || typeof shownWidth !== 'number' || shownWidth <= 0) return null;
+  const ratio = fileWidth / shownWidth;
+  if (ratio < 1.1) return null;
+  return ratio >= 10 ? formatCount(Math.round(ratio)) : String(Math.round(ratio * 10) / 10);
+}
+
+/** A group's "Shown at" cell: "400×300", "≤800×600" where the pages differ, and the file's "(10×)" wider. */
+export function shownAtCellWords(shownAt: ShownAt, fileWidth: number | null | undefined): string {
+  const wider = widerWords(fileWidth, shownAt.width);
+  return `${shownAt.varies ? '≤' : ''}${shownAt.width}×${shownAt.height}${wider ? ` (${wider}×)` : ''}`;
+}
+
+/**
+ * The insight, in a sentence's middle: "shown at 400×300 on 12 pages; the file is 4000×3000 (10× wider)", "shown at
+ * up to 800×600 on the first 10 pages read; …". `groupPages` is the group's count, to say whether all were read.
+ */
+export function shownAtInsight(
+  shownAt: ShownAt,
+  file: Pick<RelatedFacts, 'pixelWidth' | 'pixelHeight'> | null | undefined,
+  groupPages: number,
+): string {
+  const where =
+    shownAt.sampled >= groupPages
+      ? `on ${shownAt.pages === 1 ? '1 page' : `${formatCount(shownAt.pages)} pages`}`
+      : `on the first ${formatCount(shownAt.sampled)} pages read`;
+  const size = `${shownAt.varies ? 'up to ' : ''}${shownAt.width}×${shownAt.height}`;
+  const pixels = pixelsWords(file?.pixelWidth, file?.pixelHeight);
+  const wider = widerWords(file?.pixelWidth, shownAt.width);
+  const fileWords = pixels ? `; the file is ${pixels.replace(' px', '')}${wider ? ` (${wider}× wider)` : ''}` : '';
+  return `shown at ${size} ${where}${fileWords}`;
+}

@@ -92,13 +92,30 @@ describe('a group’s evidence', () => {
     expect(within(grid).getByRole('columnheader', { name: 'Image' })).toBeInTheDocument();
     expect(within(grid).getByRole('columnheader', { name: /File size/ })).toBeInTheDocument();
     const hero = await within(grid).findByRole('row', { name: /hero\.jpg/ });
-    // Its size in its own column; the rest of what the file is beside its address.
-    expect(hero).toHaveTextContent('JPEG · 4000×3000 px');
+    // Its figures in columns of their own, never cut: its pixels, the size its pages show it at (and how much wider
+    // the file is), its size; its type beside its address, and its thumbnail, the image icon until it loads.
+    expect(within(grid).getByRole('columnheader', { name: /Pixels/ })).toBeInTheDocument();
+    expect(within(grid).getByRole('columnheader', { name: /Shown at/ })).toBeInTheDocument();
+    expect(hero).toHaveTextContent('4000×3000');
     expect(hero).toHaveTextContent('1.8 MB');
+    // Its type in its tooltip, where the column hasn't the room to say it beside its address.
+    expect(hero.querySelector('[title*="JPEG"]')).not.toBeNull();
+    await waitFor(() => expect(hero).toHaveTextContent('400×300 (10×)'));
+    const thumb = within(hero).getByRole('img', { name: 'hero.jpg' });
+    expect(thumb).toHaveAttribute('loading', 'lazy');
+    expect(thumb).toHaveAttribute('referrerpolicy', 'no-referrer');
+    // Offline (as here), the image fails: the icon stays in its box, and nothing else moves.
+    fireEvent.error(thumb);
+    expect(within(hero).queryByRole('img', { name: 'hero.jpg' })).toBeNull();
+    expect(hero.querySelector('.si-thumb')).toHaveAttribute('data-thumb', 'failed');
     expect(hero).toHaveTextContent('12');
     expect(screen.getByText(/14 issues in 2 groups, by image, largest file first/)).toBeVisible();
     // The callout names the file with what it is.
     expect(screen.getByText(/The same URL, .*\(1\.8 MB · JPEG · 4000×3000 px\), on 12 of 14 pages/)).toBeVisible();
+    // The insight: the size its pages show it at, against the file's.
+    expect(
+      await screen.findByText(/shown at 400×300 on the first 10 pages read; the file is 4000×3000 \(10× wider\)\./),
+    ).toBeVisible();
     // Each page under it: how it shows the image, and the other image its issue names.
     expect(await within(grid).findByText('shown at 400×300 · lazy · in the content · +1 other URL')).toBeVisible();
     // The group's other first pages show it once each.

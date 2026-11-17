@@ -25,13 +25,23 @@ import type { RowWindowModel } from '../../grid/rowWindow';
 import type { GridColumn, GridRange, GridTree, RowFetcher } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
-import { FACT_GAP, evidenceValueWords, namesFileSize, quoted, relatedFactParts } from '../../crawl/evidence';
+import {
+  FACT_GAP,
+  evidenceValueWords,
+  namesFileSize,
+  pixelsWords,
+  quoted,
+  relatedFactParts,
+  shownAtCellWords,
+  shownAtInsight,
+} from '../../crawl/evidence';
 import { formatBytes, formatCount } from '../../lib/format';
 import { revealInScrollParent } from '../../lib/scroll';
 import { Badge } from '../../ui/Badge';
 import { Callout } from '../../ui/Callout';
 import { FilterChip } from '../../ui/FilterChip';
 import { Icon } from '../../ui/Icon';
+import { ImageThumb } from '../../ui/ImageThumb';
 import { ShareBar } from '../../ui/ShareBar';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
@@ -55,6 +65,7 @@ import {
 import { IssuePageMenu } from './IssuePageMenu';
 import { checkUrlsReader, copyUrls } from './copyUrls';
 import { evidenceOf, groupRowColumns } from './evidenceColumns';
+import { saysShownAt, useGroupShownAt } from './useShownAt';
 import { useTemplateLink, useWhereFoundOf } from './useWhereFound';
 import { WhereFoundLine } from './WhereFoundLine';
 import {
@@ -123,8 +134,21 @@ const NO_GROUP: CheckGroupRef = { detail: null, relatedUrlId: null };
 const PAGES_WIDTH = 88;
 const SHARE_WIDTH = 176;
 /** A group's file size, for a check of oversized files: "1.8 MB". */
-const SIZE_WIDTH = 104;
-/** A group's words narrower than this: its "Likely template" badge is its icon. */
+const SIZE_WIDTH = 88;
+/** An image's own pixels, "4000×3000", and the size its pages show it at, "400×300 (10×)": figures, never cut. */
+const PIXELS_WIDTH = 112;
+const SHOWN_AT_WIDTH = 124;
+/** Beside an image's figures, the count and the share bar take less, so the image's address keeps some room. */
+const IMAGE_PAGES_WIDTH = 68;
+const IMAGE_SHARE_WIDTH = 120;
+/**
+ * A grid of images narrower than this leaves out the share bar: the count beside it says as much, and the image's
+ * address and figures need the room (a 1280 px window at 150%).
+ */
+const IMAGE_SHARE_FROM = 760;
+/** An image's group's words narrower than this say its address alone: its type is in its tooltip and the callout. */
+const IMAGE_FACTS_ROOM = 280;
+/** A group's words narrower than this: its "Likely template" badge is said, not drawn (the callout shows it). */
 const NARROW_ROOM = 420;
 const MIN_TEXT_WIDTH = 200;
 /** The frame's edges and the room a scrollbar may take. */
@@ -159,12 +183,41 @@ function relatedFactsWords(
   group: IssueGroup,
   check: Check,
   siteOrigin: string | null,
-  /** The file's size has a column of its own: the line says the rest. */
-  sizeShown = false,
+  /** The facts that have columns of their own (the file's size, its pixels): the line says the rest. */
+  inColumns: readonly string[] = [],
 ): string {
   if (!group.related || !check.targetFacts?.length) return '';
-  const facts = sizeShown ? check.targetFacts.filter((fact) => fact !== 'sizeBytes') : check.targetFacts;
+  const facts = check.targetFacts.filter((fact) => !inColumns.includes(fact));
   return relatedFactParts(group.related, facts, siteOrigin).join(FACT_GAP);
+}
+
+/** Whether a check's groups are images (its related URL is the image at fault): they're drawn with a thumbnail. */
+function groupsAreImages(check: Check): boolean {
+  return check.grouping === 'relatedUrl' && check.id.startsWith('image-');
+}
+
+/** A group's image's thumbnail, not asked for where the image is known not to answer. */
+function GroupThumb({ group }: { group: IssueGroup }) {
+  if (!group.relatedUrl) return null;
+  const status = group.related?.statusCode;
+  const broken = typeof status === 'number' ? status >= 400 : Boolean(group.related?.outcome);
+  return <ImageThumb url={group.relatedUrl} broken={broken} className="me-2" />;
+}
+
+/** A group's "Shown at" cell: the largest size its first pages show its image at, and how much wider the file is. */
+function ShownAtCell({ crawlId, check, group }: { crawlId: string; check: Check; group: IssueGroup }) {
+  const shownAt = useGroupShownAt(crawlId, check, group);
+  if (shownAt === undefined) return <span className="text-text-muted">…</span>;
+  if (shownAt === null) return <span className="text-text-muted">–</span>;
+  const words = shownAtCellWords(shownAt, group.related?.pixelWidth);
+  // The size whole; how much wider the file is beside it, a size smaller.
+  const at = words.indexOf(' (');
+  return (
+    <span title={shownAtInsight(shownAt, group.related, group.pages)}>
+      {at < 0 ? words : words.slice(0, at)}
+      {at < 0 ? null : <span className="text-12 text-text-secondary">{words.slice(at)}</span>}
+    </span>
+  );
 }
 
 /**
@@ -498,11 +551,27 @@ export function IssueGroups({
     (groups.firstPage?.rows ?? []).some((group) => group.relatedUrl !== null || group.relatedUrlId !== null);
   // A duplicate cluster is named by what its pages share (the title), not by its first page.
   const shared = (groups.firstPage?.rows ?? []).some((group) => group.sharedText);
-  // A check of oversized files: each group's file size, the order its groups come in.
+  // A check of oversized files: each group's file size, the order its groups come in; an image's own pixels, and the
+  // size its pages show it at, each in a column of its own so no figure is ever cut.
   const showSize = grouping === 'relatedUrl' && namesFileSize(check.targetFacts);
+  const showPixels = grouping === 'relatedUrl' && (check.targetFacts ?? []).includes('pixelWidth');
+  const showShownAt = grouping === 'relatedUrl' && saysShownAt(check);
+  const images = groupsAreImages(check);
+  const pagesWidth = images ? IMAGE_PAGES_WIDTH : PAGES_WIDTH;
+  const shareWidth = images ? ((width ?? 720) < IMAGE_SHARE_FROM ? 0 : IMAGE_SHARE_WIDTH) : SHARE_WIDTH;
+  const inColumns = useMemo(
+    () => [...(showSize ? ['sizeBytes'] : []), ...(showPixels ? ['pixelWidth', 'pixelHeight'] : [])],
+    [showSize, showPixels],
+  );
   const room = Math.max(
-    MIN_TEXT_WIDTH,
-    (width ?? 720) - PAGES_WIDTH - SHARE_WIDTH - (showSize ? SIZE_WIDTH : 0) - FRAME_SLACK,
+    images ? MIN_TEXT_WIDTH - 60 : MIN_TEXT_WIDTH,
+    (width ?? 720) -
+      pagesWidth -
+      shareWidth -
+      (showSize ? SIZE_WIDTH : 0) -
+      (showPixels ? PIXELS_WIDTH : 0) -
+      (showShownAt ? SHOWN_AT_WIDTH : 0) -
+      FRAME_SLACK,
   );
   const columns = useMemo<GridColumn<TreeRow>[]>(() => {
     const text = (row: TreeRow) => (row.kind === 'group' ? row.group : null);
@@ -513,12 +582,15 @@ export function IssueGroups({
         </span>
         <span className="min-w-0 flex-1 truncate">{words}</span>
         {row.kind === 'group' && row.group.likelyTemplate ? (
-          // In a narrow column the badge is its icon, so the group's URL keeps the room: the words are its name.
-          <span className="ml-2 shrink-0" title={room < NARROW_ROOM ? 'Likely template' : undefined}>
-            <Badge variant="outline" icon={Layers}>
-              {room < NARROW_ROOM ? <span className="sr-only">Likely template</span> : 'Likely template'}
+          room < NARROW_ROOM ? (
+            // In a narrow column the badge gives its room to the group's URL: the callout above says it, and so does
+            // this, to a screen reader.
+            <span className="sr-only">Likely template</span>
+          ) : (
+            <Badge variant="outline" icon={Layers} className="ml-2 shrink-0">
+              Likely template
             </Badge>
-          </span>
+          )
         ) : null}
       </span>
     );
@@ -542,22 +614,31 @@ export function IssueGroups({
       }
       if (!group.relatedUrl) return <span className="text-text-muted">No other URL</span>;
       const status = relatedStatus(group, check);
-      const facts = relatedFactsWords(group, check, siteOrigin, showSize);
-      // The URL first, as much of it as fits in three fifths; what it is takes the rest, cut at its end.
+      const facts = images && room < IMAGE_FACTS_ROOM ? '' : relatedFactsWords(group, check, siteOrigin, inColumns);
+      // The URL first, as much of it as fits in three fifths; what it is takes the rest, cut at its end. An image's
+      // figures are columns of their own, so its address takes what's left, cut in its middle to keep the file name.
       return (
         <span className="flex min-w-0 items-center gap-2">
+          {images ? <GroupThumb group={group} /> : null}
           <Url
             url={group.relatedUrl}
             siteOrigin={siteOrigin}
             copyable={false}
             tabbable={false}
-            className={facts || status ? 'max-w-3/5 min-w-0 shrink-0' : 'min-w-0 flex-1'}
+            className={(facts || status) && !images ? 'max-w-3/5 min-w-0 shrink-0' : 'min-w-0 flex-1'}
           />
           {status ? (
             <StatusCode code={status.code} {...(status.reason ? { reason: status.reason } : {})} className="shrink-0" />
           ) : null}
           {facts ? (
-            <span className="si-group-facts min-w-0 flex-1 truncate text-text-muted" title={facts}>
+            <span
+              className={
+                images
+                  ? 'si-group-facts max-w-1/2 min-w-0 shrink-3 truncate text-text-muted'
+                  : 'si-group-facts min-w-0 flex-1 truncate text-text-muted'
+              }
+              title={facts}
+            >
               {facts}
             </span>
           ) : null}
@@ -568,7 +649,7 @@ export function IssueGroups({
       [
         group.sharedText ? quoted(group.sharedText, 120) : null,
         group.relatedUrl,
-        relatedFactsWords(group, check, siteOrigin, showSize),
+        relatedFactsWords(group, check, siteOrigin),
       ]
         .filter((part) => part)
         .join(FACT_GAP);
@@ -629,6 +710,43 @@ export function IssueGroups({
           ];
     return [
       ...first,
+      ...(showPixels
+        ? [
+            {
+              id: 'pixels',
+              header: 'Pixels',
+              width: PIXELS_WIDTH,
+              numeric: true,
+              headerHint: 'The image file’s own width and height, read from the file',
+              cell: (row: TreeRow) =>
+                row.kind === 'group'
+                  ? (pixelsWords(row.group.related?.pixelWidth, row.group.related?.pixelHeight)?.replace(' px', '') ?? (
+                      <span className="text-text-muted">–</span>
+                    ))
+                  : null,
+              text: (row: TreeRow) =>
+                row.kind === 'group'
+                  ? (pixelsWords(row.group.related?.pixelWidth, row.group.related?.pixelHeight)?.replace(' px', '') ??
+                    '')
+                  : '',
+            },
+          ]
+        : []),
+      ...(showShownAt
+        ? [
+            {
+              id: 'shownAt',
+              header: 'Shown at',
+              width: SHOWN_AT_WIDTH,
+              numeric: true,
+              headerHint:
+                'The largest size the group’s first pages show the image at, from their width and height attributes, and how many times wider the file is',
+              cell: (row: TreeRow) =>
+                row.kind === 'group' ? <ShownAtCell crawlId={crawlId} check={check} group={row.group} /> : null,
+              text: () => '',
+            },
+          ]
+        : []),
       ...(showSize
         ? [
             {
@@ -656,24 +774,50 @@ export function IssueGroups({
       {
         id: 'pages',
         header: words.column,
-        width: PAGES_WIDTH,
+        width: pagesWidth,
         numeric: true,
         cell: (row) => (row.kind === 'group' ? formatCount(row.group.pages) : null),
         text: (row) => (row.kind === 'group' ? String(row.group.pages) : ''),
       },
-      {
-        id: 'share',
-        header: 'Share of issues',
-        width: SHARE_WIDTH,
-        cell: (row) =>
-          row.kind === 'group' ? <ShareBar value={row.group.pages} total={total} label="Share of issues" /> : null,
-        text: (row) => (row.kind === 'group' ? String(row.group.share) : ''),
-      },
+      ...(shareWidth > 0
+        ? [
+            {
+              id: 'share',
+              header: 'Share of issues',
+              width: shareWidth,
+              cell: (row: TreeRow) =>
+                row.kind === 'group' ? (
+                  <ShareBar value={row.group.pages} total={total} label="Share of issues" />
+                ) : null,
+              text: (row: TreeRow) => (row.kind === 'group' ? String(row.group.share) : ''),
+            },
+          ]
+        : []),
     ];
-  }, [grouping, room, showRelated, showSize, shared, check, siteOrigin, total, words]);
+  }, [
+    grouping,
+    room,
+    showRelated,
+    showSize,
+    showPixels,
+    showShownAt,
+    images,
+    inColumns,
+    pagesWidth,
+    shareWidth,
+    shared,
+    check,
+    crawlId,
+    siteOrigin,
+    total,
+    words,
+  ]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.groups', columns);
 
+  // A page's issue names what's wrong with each URL in its line ("shown at 400×300 · +1 other URL"): its detail ("2
+  // images over 200 KB") says nothing more, so the line gets its room.
+  const linesSayDetail = grouping === 'relatedUrl' && references === 'targets' && (check.targetFacts ?? []).length > 0;
   const spanRow = useCallback(
     (row: TreeRow): ReactNode => {
       if (row.kind === 'group') return null;
@@ -708,7 +852,7 @@ export function IssueGroups({
                 className="max-w-1/2 shrink"
               />
             )}
-            {row.row.detail && row.row.detail !== row.group.detail ? (
+            {row.row.detail && row.row.detail !== row.group.detail && !linesSayDetail ? (
               // The detail gives way first: the where line beside it says what the page names.
               <span className="max-w-1/4 min-w-0 shrink-3 truncate text-text-muted" title={row.row.detail}>
                 {row.row.detail}
@@ -755,7 +899,7 @@ export function IssueGroups({
         </span>
       );
     },
-    [crawlId, check, grouping, siteOrigin, references],
+    [crawlId, check, grouping, siteOrigin, references, linesSayDetail],
   );
 
   // The insight: the open group when it's probably the template's, else the largest group that is.
@@ -987,6 +1131,8 @@ function TemplateCallout({
   // Where on the pages the shared link is, for a check whose pages hold it: "It’s a link in the footer."
   const place = templateLinkWords(useTemplateLink(crawlId, check, group));
   const facts = relatedFactsWords(group, check, siteOrigin);
+  // An oversized image: the size its pages show it at, against the file's.
+  const shownAt = useGroupShownAt(crawlId, check, group);
   return (
     <Callout tone="insight" title="Likely in the site’s template">
       {group.sharedText ? (
@@ -998,7 +1144,8 @@ function TemplateCallout({
         <>
           The same URL, <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>
           {facts ? ` (${facts})` : null}, on {share}, so it’s likely in the site’s template: one fix clears the group.
-          {place ? ` ${place}.` : null}
+          {place ? ` ${place}${shownAt ? `, ${shownAtInsight(shownAt, group.related, group.pages)}` : ''}.` : null}
+          {!place && shownAt ? ` It’s ${shownAtInsight(shownAt, group.related, group.pages)}.` : null}
         </>
       ) : grouping === 'relatedUrl' ? (
         <>

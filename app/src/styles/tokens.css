@@ -406,6 +406,8 @@
   --favicon-sm: 16px;
   --favicon-md: 20px;
   --favicon-lg: 28px;
+  --thumb-sm: 24px; /* an image's thumbnail in a grid's row */
+  --thumb-lg: 56px; /* an image's thumbnail beside what it's about, in Simple */
   --mark-size: 8px;
   --mark-radius: 2px;
   --bar-height: 8px;
