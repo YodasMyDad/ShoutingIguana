@@ -64,8 +64,14 @@ public sealed class SectionPaceTests
             section.Throttled(null, now, now);
         }
 
+        // 10, 20, 40, 80 and 160 seconds, then five minutes, twice: two 429s at the slowest pace so far, not yet three.
         Assert.Equal(SectionPace.MAX_INTERVAL, section.Interval);
         Assert.Equal("/", section.Path);
+        Assert.False(section.IsRefusingEverything(3));
+
+        now = section.NextDue;
+        Assert.True(section.TryStart(now));
+        section.Throttled(null, now, now);
         Assert.True(section.IsRefusingEverything(3));
     }
 

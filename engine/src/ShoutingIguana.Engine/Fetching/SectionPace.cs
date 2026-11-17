@@ -24,6 +24,9 @@ internal sealed class SectionPace(string folder)
     private DateTimeOffset? _lastTurn;
     private int _failuresInARow;
 
+    // 429s in a row for pages tried at the slowest pace already.
+    private int _failuresAtSlowest;
+
     /// <summary>The folder that names the section: "products" for /products/ and /collections/belts/products/.</summary>
     public string Folder => folder;
 
@@ -67,14 +70,14 @@ internal sealed class SectionPace(string folder)
     }
 
     /// <summary>
-    /// Several 429s in a row at the slowest pace: the section isn't letting anything through, and the pages still waiting
-    /// are given up on.
+    /// Several 429s in a row for pages tried at the slowest pace already: the section isn't letting anything through, and
+    /// the pages still waiting are given up on.
     /// </summary>
     public bool IsRefusingEverything(int failures)
     {
         lock (_sync)
         {
-            return _interval >= MAX_INTERVAL && _failuresInARow >= failures;
+            return _failuresAtSlowest >= failures;
         }
     }
 
@@ -111,6 +114,11 @@ internal sealed class SectionPace(string folder)
                 return;
             }
 
+            if (_interval >= MAX_INTERVAL)
+            {
+                _failuresAtSlowest++;
+            }
+
             var doubled = _interval == TimeSpan.Zero ? (asked > TimeSpan.Zero ? asked : DEFAULT_INTERVAL) : _interval * 2;
             _interval = doubled < MAX_INTERVAL ? doubled : MAX_INTERVAL;
             _failuresInARow++;
@@ -125,6 +133,7 @@ internal sealed class SectionPace(string folder)
         lock (_sync)
         {
             _failuresInARow = 0;
+            _failuresAtSlowest = 0;
             _interval *= FASTER;
         }
     }
