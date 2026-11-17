@@ -250,10 +250,11 @@ internal sealed class CrawlWriter : IAsyncDisposable
     public ValueTask DiscoverAsync(IReadOnlyList<OutLink> urls, DiscoverySource source, int? sitemapId, CancellationToken cancellationToken) =>
         _commands.Writer.WriteAsync(new DiscoverCommand(urls, source, sitemapId), cancellationToken);
 
-    public async Task<FrontierClaim> ClaimAsync(int internalCount, int externalCount, CancellationToken cancellationToken)
+    /// <param name="parkedLinked">Linked URLs in flight that won't be done for a long while, which sitemap-only URLs don't wait for.</param>
+    public async Task<FrontierClaim> ClaimAsync(int internalCount, int externalCount, CancellationToken cancellationToken, int parkedLinked = 0)
     {
         var reply = new TaskCompletionSource<FrontierClaim>(TaskCreationOptions.RunContinuationsAsynchronously);
-        await _commands.Writer.WriteAsync(new ClaimCommand(internalCount, externalCount, reply), cancellationToken).ConfigureAwait(false);
+        await _commands.Writer.WriteAsync(new ClaimCommand(internalCount, externalCount, reply, parkedLinked), cancellationToken).ConfigureAwait(false);
         return await reply.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -403,7 +404,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
                     ApplyDiscover(discover);
                     break;
                 case ClaimCommand claim:
-                    claim.Reply.TrySetResult(ApplyClaim(claim.InternalCount, claim.ExternalCount));
+                    claim.Reply.TrySetResult(ApplyClaim(claim.InternalCount, claim.ExternalCount, claim.ParkedLinked));
                     break;
                 case RecordRobotsCommand robots:
                     _statements.UpsertRobots(robots.Record);
@@ -568,9 +569,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
         PropagateDepths();
     }
 
-    private FrontierClaim ApplyClaim(int internalCount, int externalCount)
+    private FrontierClaim ApplyClaim(int internalCount, int externalCount, int parkedLinked)
     {
-        var internalItems = internalCount > 0 ? ClaimInternal(internalCount) : [];
+        var internalItems = internalCount > 0 ? ClaimInternal(internalCount, parkedLinked) : [];
         List<FrontierItem> externalItems = externalCount > 0 ? _statements.ClaimQueued(false, externalCount, 0, int.MaxValue) : [];
 
         foreach (var item in internalItems.Concat(externalItems))
@@ -587,13 +588,14 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// <summary>
     /// Claims the site's own URLs breadth-first. URLs only a sitemap lists wait until no linked URL is queued or in
     /// flight, so every link depth is settled first and they never take the place of a linked page. The URL limit is
-    /// spent here, in that order, rather than as URLs are discovered.
+    /// spent here, in that order, rather than as URLs are discovered. Linked URLs parked for a long while (a section the
+    /// site limits) don't hold them up: one they lead to that a sitemap lists is then already read, as only listed.
     /// </summary>
-    private List<FrontierItem> ClaimInternal(int count)
+    private List<FrontierItem> ClaimInternal(int count, int parkedLinked)
     {
         var limit = _options.MaxUrls > 0 && !_urlLimitReached ? Math.Min(count, _options.MaxUrls - _claimedInternal) : count;
         var items = _statements.ClaimQueued(true, limit, 0, CrawlDepth.UNLINKED);
-        if (items.Count == 0 && _linkedInFlight == 0)
+        if (items.Count == 0 && _linkedInFlight <= parkedLinked)
         {
             items = _statements.ClaimQueued(true, limit, CrawlDepth.UNLINKED, int.MaxValue);
         }

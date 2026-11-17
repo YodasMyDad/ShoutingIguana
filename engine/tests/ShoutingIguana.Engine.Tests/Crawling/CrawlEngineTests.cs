@@ -185,6 +185,10 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var productsDone = Count(path, $"SELECT MAX(r.fetched_at) {INTERNAL} AND u.url LIKE '%/p/%'");
         Assert.True(restEarly >= 80, $"{restEarly} of the rest of the site's URLs were read in the first ten seconds.");
         Assert.True(productsDone - start > 15_000, $"The product pages took {productsDone - start} ms.");
+
+        // Nor do the pages only its sitemaps list wait for the product pages, though product pages are linked ones.
+        var listedDone = Count(path, $"SELECT MAX(r.fetched_at) {INTERNAL} AND u.depth >= {CrawlDepth.UNLINKED} AND u.url NOT LIKE '%/p/%'");
+        Assert.True(listedDone > 0 && listedDone < productsDone - 5_000, $"The pages only sitemaps list were read at {listedDone - start} ms, the product pages by {productsDone - start} ms.");
     }
 
     [Fact]

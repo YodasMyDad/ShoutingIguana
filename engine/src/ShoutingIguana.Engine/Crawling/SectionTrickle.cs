@@ -36,10 +36,14 @@ internal sealed class SectionTrickle(
     private readonly Lock _sync = new();
     private readonly Dictionary<SectionPace, Line> _lines = [];
     private int _held;
+    private int _heldLinked;
     private DateTimeOffset? _restOverAt;
 
     /// <summary>URLs held back now, not counting one being asked.</summary>
     public int Held => Volatile.Read(ref _held);
+
+    /// <summary>Those of them that pages link to, as opposed to ones only sitemaps list: the URLs only sitemaps list don't wait for them.</summary>
+    public int HeldLinked => Volatile.Read(ref _heldLinked);
 
     /// <summary>
     /// Holds the item back when its URL is in a section its host limits: one of the site's own, not a probe. <paramref
@@ -69,7 +73,7 @@ internal sealed class SectionTrickle(
             }
 
             line.Waiting.AddLast((item, last));
-            Interlocked.Increment(ref _held);
+            Count(item, 1);
         }
 
         if (isNew)
@@ -154,7 +158,7 @@ internal sealed class SectionTrickle(
                 if (line.Waiting.First is { } first && section.TryStart(now))
                 {
                     line.Waiting.RemoveFirst();
-                    Interlocked.Decrement(ref _held);
+                    Count(first.Value.Item, -1);
                     return (section, first.Value.Item, first.Value.Last);
                 }
             }
@@ -168,7 +172,7 @@ internal sealed class SectionTrickle(
         lock (_sync)
         {
             _lines[section].Waiting.AddFirst((item, last));
-            Interlocked.Increment(ref _held);
+            Count(item, 1);
         }
     }
 
@@ -192,13 +196,13 @@ internal sealed class SectionTrickle(
                 logger.LogInformation("Giving up on {Count} URLs in {Section} of {Host}", line.Waiting.Count, section.Path, line.Host);
                 foreach (var (item, last) in line.Waiting)
                 {
+                    Count(item, -1);
                     givenUp.Add(last is not null && IsRateLimited(last)
                         ? last
                         : PageProcessor.Failed(item, now.ToUnixTimeMilliseconds(), FetchOutcome.NetworkError,
                             $"{RetryingFetcher.RATE_LIMITED_ERROR} ({HttpStatusNames.Describe(429)})"));
                 }
 
-                Interlocked.Add(ref _held, -line.Waiting.Count);
                 line.Waiting.Clear();
             }
         }
@@ -219,6 +223,15 @@ internal sealed class SectionTrickle(
 
             var wait = next - now;
             return wait <= TimeSpan.Zero ? TimeSpan.FromMilliseconds(1) : wait < LONGEST_SLEEP ? TimeSpan.FromMilliseconds(Math.Ceiling(wait.TotalMilliseconds)) : LONGEST_SLEEP;
+        }
+    }
+
+    private void Count(FrontierItem item, int change)
+    {
+        Interlocked.Add(ref _held, change);
+        if (item.Depth < CrawlDepth.UNLINKED)
+        {
+            Interlocked.Add(ref _heldLinked, change);
         }
     }
 

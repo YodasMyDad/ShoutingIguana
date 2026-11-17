@@ -526,7 +526,8 @@ internal sealed class CrawlSession
             // Read before claiming: sitemap batches are queued to the writer before the task completes,
             // so a claim issued after this point is guaranteed to see every sitemap URL.
             var producersDone = sitemaps.IsCompleted;
-            var claim = await _writer.ClaimAsync(Math.Max(0, wantInternal), Math.Max(0, wantExternal), cancellationToken).ConfigureAwait(false);
+            var claim = await _writer.ClaimAsync(Math.Max(0, wantInternal), Math.Max(0, wantExternal), cancellationToken, _trickle.HeldLinked)
+                .ConfigureAwait(false);
 
             // Said before the URLs are handed out, so none is fetched under the phase it ends.
             if (claim.Internal.Count + claim.External.Count > 0)
