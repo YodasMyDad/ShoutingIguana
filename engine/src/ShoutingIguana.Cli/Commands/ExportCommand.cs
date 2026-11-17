@@ -114,7 +114,8 @@ internal static class ExportCommand
                 Format = exportFormat,
                 Query = query with
                 {
-                    LinkEnds = ends, HiddenChecks = ExportFields.Grids.Contains(exportKind) ? Ids(parse.GetValue(hiddenChecks)) ?? [] : []
+                    LinkEnds = ends,
+                    HiddenChecks = ExportFields.Grids.Contains(exportKind) || exportKind == ExportKind.LinkGroups ? Ids(parse.GetValue(hiddenChecks)) ?? [] : []
                 },
                 Blocked = parse.GetValue(blocked),
                 SitemapId = parse.GetValue(sitemap),
@@ -315,7 +316,7 @@ internal static class ExportCommand
     /// <summary>A grid's query from the options; null, with why on stderr, when one of them can't be read.</summary>
     private static UrlQuery? Query(ExportKind kind, string? columns, string[] filters, string? search, string[] sorts)
     {
-        var known = kind == ExportKind.Links ? LinkGridReader.Columns : UrlGridReader.IssueRowColumns;
+        var known = kind is ExportKind.Links or ExportKind.LinkGroups ? LinkGridReader.Columns : UrlGridReader.IssueRowColumns;
         List<UrlFilter> parsed = [];
         foreach (var text in filters)
         {

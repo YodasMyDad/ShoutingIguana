@@ -100,7 +100,10 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var page = await ReadAsync(token => LinkGridReader.Query(path, query, cache, token), cancellationToken).ConfigureAwait(false);
-        return new LinkGridPageDto(page.Columns, new LinkRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable);
+        return new LinkGridPageDto(page.Columns, new LinkRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable)
+        {
+            PixelSizes = page.PixelSizes
+        };
     }
 
     /// <summary>
@@ -144,7 +147,10 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
             HiddenChecks = request?.HiddenChecks ?? []
         };
         var page = await ReadAsync(token => LinkGridReader.Groups(path, query, cache, token), cancellationToken).ConfigureAwait(false);
-        return new LinkGroupPageDto(page.Total, page.Links, page.Pages, page.Offset, new LinkGroupSortDto(page.Sort.Column, page.Sort.Descending), page.Rows, page.Summary);
+        return new LinkGroupPageDto(page.Total, page.Links, page.Pages, page.Offset, new LinkGroupSortDto(page.Sort.Column, page.Sort.Descending), page.Rows, page.Summary)
+        {
+            PixelSizes = page.PixelSizes
+        };
     }
 
     public async Task<FacetsDto> LinkFacetsAsync(string id, FacetsRequest? request, CancellationToken cancellationToken)

@@ -93,7 +93,8 @@ internal static class ExportRequests
         {
             Kind = kind,
             Format = format,
-            Query = GRIDS.Contains(kind)
+            // A grid's query, and the grouped links' (the links grid's filters, search, sort and hidden checks).
+            Query = GRIDS.Contains(kind) || kind == ExportKind.LinkGroups
                 ? GridRequests.Query(new GridQueryRequest
                 {
                     Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort, LinkEnds = body.LinkEnds, HiddenChecks = body.HiddenChecks

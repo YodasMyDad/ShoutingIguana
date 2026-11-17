@@ -88,6 +88,6 @@ public static class PageImagesReader
                 var (count, text, positions) = seen[image.Id];
                 return new PageImage(image.Id, image.Url, count, text, [.. POSITIONS.Where(position => (positions & (1 << (int)position)) != 0)], facts[image.Id]);
             })
-        ]);
+        ]) { PixelSizes = context.HasPixelSizes };
     }
 }

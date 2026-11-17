@@ -11,4 +11,8 @@ internal sealed record LinkGridPageDto(
     long Total,
     string? Next,
     SummaryState Summary,
-    IReadOnlyList<string> Unavailable);
+    IReadOnlyList<string> Unavailable)
+{
+    /// <summary>Whether the crawl measured images' pixel sizes: false for one made before they were read (step 3b).</summary>
+    public bool PixelSizes { get; init; } = true;
+}

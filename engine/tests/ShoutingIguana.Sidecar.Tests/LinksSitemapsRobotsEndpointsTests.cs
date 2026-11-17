@@ -29,7 +29,9 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
 
         // A page: one object a link, keyed by column, the link's id first; the URL grid's page around it.
         var all = await PostOkAsync($"api/crawls/{grid.Id}/links");
-        Assert.Equal(["columns", "rows", "offset", "matching", "total", "next", "summary", "unavailable"], all.AsObject().Select(property => property.Key));
+        // Step 3b: and whether the crawl measured images' pixel sizes.
+        Assert.Equal(["columns", "rows", "offset", "matching", "total", "next", "summary", "unavailable", "pixelSizes"], all.AsObject().Select(property => property.Key));
+        Assert.True((bool)all["pixelSizes"]!);
         Assert.Equal(["id", "from.url", "to.url", "kind", "text"], all["columns"]!.AsArray().Select(column => (string?)column));
         Assert.Equal(["id", "from.url", "to.url", "kind", "text"], all["rows"]![0]!.AsObject().Select(property => property.Key));
         Assert.Equal((100, 0), (all["rows"]!.AsArray().Count, (int)all["offset"]!));
@@ -215,7 +217,7 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         var sources = await PostOkAsync($"api/crawls/{grid.Id}/links/ends", With(view, "end", "from"));
 
         var first = await PostOkAsync($"api/crawls/{grid.Id}/links/groups", view);
-        Assert.Equal(["total", "links", "pages", "offset", "sort", "rows", "summary"], first.AsObject().Select(property => property.Key));
+        Assert.Equal(["total", "links", "pages", "offset", "sort", "rows", "summary", "pixelSizes"], first.AsObject().Select(property => property.Key));
         Assert.Equal(["id", "url", "links", "pages", "text", "texts", "positions", "likelyTemplate", "target"], first["rows"]![0]!.AsObject().Select(property => property.Key));
         Assert.Equal(["statusCode", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "final", "indexability", "canonical"],
             first["rows"]![0]!["target"]!.AsObject().Select(property => property.Key));
@@ -271,7 +273,7 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         var link = (await PostOkAsync($"api/crawls/{grid.Id}/links", JsonNode.Parse("""{"columns":["from.id"],"filters":[{"column":"kind","op":"in","values":["image"]}],"limit":1}""")))["rows"]![0]!;
         var page = (long)link["from.id"]!;
         var images = await PostOkAsync($"api/crawls/{grid.Id}/urls/images", new JsonObject { ["urlId"] = page });
-        Assert.Equal(["urlId", "total", "links", "rows"], images.AsObject().Select(property => property.Key));
+        Assert.Equal(["urlId", "total", "links", "rows", "pixelSizes"], images.AsObject().Select(property => property.Key));
         Assert.Equal(["id", "url", "links", "text", "positions", "target"], images["rows"]![0]!.AsObject().Select(property => property.Key));
         Assert.Equal(page, (long)images["urlId"]!);
         Assert.Equal((long)images["total"]!, images["rows"]!.AsArray().Count);
