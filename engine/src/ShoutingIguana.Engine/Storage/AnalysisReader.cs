@@ -396,6 +396,18 @@ internal sealed class AnalysisReader : IDisposable
         return sitemaps;
     }
 
+    /// <summary>
+    /// The internal URLs the crawl left unread because it doesn't follow their kind of link (canonical, hreflang or
+    /// pagination, each an option).
+    /// </summary>
+    public HashSet<int> ReadNotFollowedUrls()
+    {
+        HashSet<int> ids = [];
+        Rows($"SELECT id FROM urls WHERE is_internal = 1 AND state = {(int)UrlState.Skipped} AND skip_reason = {(int)SkipReason.NotFollowedByOption}",
+            reader => ids.Add(reader.GetInt32(0)));
+        return ids;
+    }
+
     /// <summary>Every internal URL the crawl has, with its id, in id order.</summary>
     public List<(int Id, string Url)> ReadInternalUrls()
     {

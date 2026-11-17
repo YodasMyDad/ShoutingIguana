@@ -28,7 +28,8 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "redirect-broken", "redirect-temporary", "redirect-downgrade", "orphan-page", "blocked-by-robots", "sitemap-non-indexable",
             "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores", "canonical-on-redirect", "canonical-unlinked",
             "non-indexable-inlinks-only", "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "sitemap-url-repeated",
-            "url-tracking-parameters", "url-multiple-slashes", "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search"
+            "url-tracking-parameters", "url-multiple-slashes", "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search",
+            "hreflang-unlinked"
         ];
         string[] targets =
         [
@@ -38,7 +39,7 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions",
             "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "broken-resources", "links-to-localhost", "generic-anchor-text",
             "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable",
-            "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked"
+            "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "hreflang-inconsistent-code"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());

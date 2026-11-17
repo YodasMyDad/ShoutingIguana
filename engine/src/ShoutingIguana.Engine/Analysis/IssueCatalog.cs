@@ -1197,6 +1197,56 @@ public static class IssueCatalog
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["h1"]
     };
+    public static readonly IssueDefinition HEADING_LEVELS_SKIPPED = new("heading-levels-skipped", IssueCategory.Headings, IssueSeverity.Notice,
+        "Heading levels skipped",
+        """On this indexable page, which has an H1, a heading is more than one level below the one before it (an H2, then an H4), or the first heading isn't the H1. Headings in menus and footers count, as screen readers list them all. The detail gives the first such step.""",
+        """Use the next level down for each subsection (H2 under the H1, H3 under an H2), and style a heading by CSS, not by picking a smaller level. A heading above the H1 in a header or menu is usually better as plain text.""")
+    {
+        Why = """Screen reader users move through a page by its headings, and a skipped level suggests a missing section. HTML asks for each heading to be at most one level below the one before. Search engines cope either way, so this is about structure and accessibility.""",
+        LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition H1_IMAGE_ONLY = new("h1-image-only", IssueCategory.Headings, IssueSeverity.Notice,
+        "H1 is an image",
+        """This indexable page's first H1 has no text of its own: its text is an image's alt, as with a logo in the H1. The detail quotes the alt. A crawl made before the crawler noted this isn't checked.""",
+        """Give the page a text H1 that says what this page is about, and keep the logo as an image outside it, or in it beside the text.""")
+    {
+        Why = """An H1 that's a logo says the same on every page, the site's name, not what this page is about. Search engines read the alt, but a heading in text is clearer to them and to screen reader users.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["h1"]
+    };
+
+    public static readonly IssueDefinition HEADING_TOO_LONG = new("heading-too-long", IssueCategory.Headings, IssueSeverity.Notice,
+        "H1 or H2 over 70 characters",
+        """This indexable page's first H1, or one of its H2s, is longer than 70 characters (the default, which can be changed in the analysis settings). The detail gives the first, its level and its length.""",
+        """Shorten the heading to what the section is about, and move the rest into the text below it.""")
+    {
+        Why = """A heading is read as a label: a long one is harder to scan, and on a phone it wraps over several lines. Search engines read it whole, so this is about readers, not ranking.""",
+        LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["h1"]
+    };
+
+    public static readonly IssueDefinition H2_MISSING = new("h2-missing", IssueCategory.Headings, IssueSeverity.Notice,
+        "Long page without an H2",
+        """This indexable page has 500 or more words of its own (the default, which can be changed in the analysis settings) and no H2 to divide them. A short page doesn't need one, so it isn't asked of one.""",
+        """Break the text into sections, each under an H2 that says what it covers.""")
+    {
+        Why = """Subheadings let readers scan a long page and jump to what they need, and they help search engines see what each part is about.""",
+        LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["wordCount"]
+    };
 
 
     // Content
@@ -1207,6 +1257,41 @@ public static class IssueCatalog
     {
         Why = """Google says content length alone doesn't matter for ranking: there's no minimum word count. Plenty of good pages are short, such as contact, product and category pages. Use this to find pages that are empty by mistake, such as an unfilled template, a placeholder or content that only appears with JavaScript, not as a reason to pad pages out.""",
         LearnMore = "https://developers.google.com/search/docs/fundamentals/seo-starter-guide#focusing",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+    public static readonly IssueDefinition PLACEHOLDER_TEXT = new("placeholder-text", IssueCategory.Content, IssueSeverity.Warning,
+        "Placeholder text (lorem ipsum)",
+        """This indexable page's text, title or meta description has the placeholder "lorem ipsum" in it. The detail quotes it. A crawl made before the crawler looked for it isn't checked.""",
+        """Replace the placeholder with the page's real text, or remove the block it's in, then check other pages made from the same template.""")
+    {
+        Why = """Every visitor sees it, and it reads as an unfinished site. Search engines index it as the page's text, and it can end up in the snippet under the page's title.""",
+        LearnMore = "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition READABILITY_LOW = new("readability-low", IssueCategory.Content, IssueSeverity.Notice,
+        "Text that's very hard to read",
+        """This indexable English page (its <html lang> is en or en-…) has a Flesch reading ease under 30 (the default, which can be changed in the analysis settings): long sentences of long words. Only prose is judged, 100 words and 5 sentences or more; menus and product grids without sentence ends aren't. A crawl made before the crawler counted sentences isn't checked.""",
+        """Shorten long sentences, split ones that carry several ideas, and prefer short everyday words to long ones where they say the same.""")
+    {
+        Why = """Text that's very hard to read loses readers before they reach the point, on phones above all. Flesch's scale puts under 30 at university level. Search engines don't score readability, so this is about the people reading.""",
+        LearnMore = "https://en.wikipedia.org/wiki/Flesch%E2%80%93Kincaid_readability_tests#Flesch_reading_ease",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition BOILERPLATE_HEAVY = new("boilerplate-heavy", IssueCategory.Content, IssueSeverity.Notice,
+        "Page mostly template text",
+        """Under a quarter of this indexable page's words are its own: the rest are menus, header, footer and sidebars. Pages with too few words of their own are another check's (low word count). The detail gives the page's own words of all its words. A crawl made before the crawler counted them isn't checked.""",
+        """Add text of the page's own, or trim menus and footers that repeat long lists of links on every page.""")
+    {
+        Why = """When most of a page is the same as every other page, search engines see little that's particular to it, and pages made from the template look alike to them.""",
+        LearnMore = "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
@@ -1503,6 +1588,72 @@ public static class IssueCatalog
     {
         Why = """Google requires hreflang <link> elements to be inside a well-formed <head>, so these entries don't count and the set is incomplete, which can also break return links from the other versions. Usually the tags are in the head in the source, but an element that doesn't belong there, such as an <img>, a <div> or stray text, ends the head early.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#html",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+    public static readonly IssueDefinition HREFLANG_INCONSISTENT_CODE = new("hreflang-inconsistent-code", IssueCategory.Hreflang, IssueSeverity.Warning,
+        "Hreflang return link uses another code",
+        """This indexable page names an alternate under one language code, and the alternate links back but calls itself by another (the page says fr, the alternate fr-ca). A missing return link is another check's. The detail names the first.""",
+        """Make every page in the set use the same code for each version: the one the version uses for itself.""")
+    {
+        Why = """Google asks every version to list itself and all the others; versions that disagree about which language each one is may be ignored, and the wrong version shown to searchers.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "text", "indexability"]
+    };
+
+    public static readonly IssueDefinition HREFLANG_HEADER_MISMATCH = new("hreflang-header-mismatch", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang in the HTML and the HTTP header disagree",
+        """This page gives its language versions both in its HTML and in a Link HTTP header, and the two name different sets. The detail counts each and names what only one has.""",
+        """Give the versions in one place, or keep both identical: usually the HTML, from your SEO plugin, with the header removed from the server.""")
+    {
+        Why = """Google reads both as the same declaration, so sets that differ leave it to guess which is right.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#methods-for-indicating-your-alternate-pages",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition HREFLANG_UNLINKED = new("hreflang-unlinked", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang URL that no page links to",
+        """A URL on the site an indexable page names as a language version, but that no crawled page links to with an ordinary link and no sitemap lists: an indexable page, or a URL the crawl didn't read because it doesn't follow hreflang links (an option, off by default), which a link or a sitemap entry would have led it to. It's only checked when the crawl read every page that could link to it. Where it's found lists the pages naming it.""",
+        """Link to each language version from the others, such as with a language switcher, and list them in the sitemap.""")
+    {
+        Why = """Hreflang says which version to show, not that a page matters: a version only hreflang leads to gets no link signals, and visitors can't reach it from the site.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
+        References = IssueReferences.Sources,
+        // A URL: one the crawl didn't read isn't known to be a page.
+        Subject = IssueSubject.Url,
+        // As an orphan: only a full crawl shows that something now links to it.
+        Recheck = [],
+        Grouping = IssueGrouping.None,
+        Evidence = ["inlinks", "linkingPages"]
+    };
+
+    public static readonly IssueDefinition HREFLANG_LANG_MISMATCH = new("hreflang-lang-mismatch", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang code and lang attribute differ",
+        """This indexable page's hreflang entry for itself and its <html lang> name different languages, both written correctly (en against fr; en-GB against en-US is the same language). x-default isn't compared. The detail gives both.""",
+        """Correct whichever is wrong: the lang attribute in the page's template, or the code your SEO plugin gives this version.""")
+    {
+        Why = """Google reads neither to decide a page's language, but screen readers use lang, and two that disagree usually mean one was copied from another version unchanged.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["language"]
+    };
+
+    public static readonly IssueDefinition HREFLANG_SELF_ONLY = new("hreflang-self-only", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang that names only the page itself",
+        """Every hreflang entry this indexable page has names the page itself (x-default included), so it lists no other language version.""",
+        """If the site has other language versions, list them all on every version. If it has none, the hreflang entries can go.""")
+    {
+        Why = """Hreflang only helps when it links versions of a page in other languages or regions; on its own it does nothing, and it often means the other versions were left out by mistake.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
@@ -2002,12 +2153,13 @@ public static class IssueCatalog
         ROBOTS_TXT_NO_SITEMAP, SITEMAP_OVER_LIMIT, SITEMAP_NEAR_LIMIT, SITEMAP_EMPTY, SITEMAP_URL_REPEATED, SITEMAP_LASTMOD_INVALID,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
-        H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,
-        LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT, DUPLICATE_SITE_VERSION,
+        H1_MISSING, H1_MULTIPLE, H1_DUPLICATE, HEADING_LEVELS_SKIPPED, H1_IMAGE_ONLY, HEADING_TOO_LONG, H2_MISSING,
+        LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT, DUPLICATE_SITE_VERSION, PLACEHOLDER_TEXT, READABILITY_LOW, BOILERPLATE_HEAVY,
         IMAGE_MISSING_ALT, IMAGE_ALT_TOO_LONG, IMAGE_MISSING_DIMENSIONS, IMAGE_BROKEN, IMAGE_TOO_LARGE,
         IMAGE_MISSING_SRC, IMAGE_NO_SRCSET, IMAGE_LEGACY_FORMAT, IMAGE_ALT_UNHELPFUL, IMAGE_HOTLINKED, IMAGE_INLINE_LARGE,
         HREFLANG_INVALID_CODE, HREFLANG_MISSING_SELF, HREFLANG_MISSING_RETURN, HREFLANG_BROKEN_TARGET,
         HREFLANG_TO_NON_INDEXABLE, HREFLANG_DUPLICATE_CODE, HREFLANG_MISSING_X_DEFAULT, HREFLANG_OUTSIDE_HEAD,
+        HREFLANG_INCONSISTENT_CODE, HREFLANG_HEADER_MISMATCH, HREFLANG_UNLINKED, HREFLANG_LANG_MISMATCH, HREFLANG_SELF_ONLY,
         STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED, STRUCTURED_DATA_SCHEMA_ERRORS, STRUCTURED_DATA_MISSING_RECOMMENDED,
         STRUCTURED_DATA_ON_NOINDEX,
         NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING, SECURITY_HEADERS_WEAK, COOKIES_INSECURE, FORM_NOT_SECURE,

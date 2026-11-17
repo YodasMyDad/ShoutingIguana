@@ -64,6 +64,13 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         return rule.Finish();
     }
 
+    private static IEnumerable<IssueHit> VersionsUnlinked(UrlTable urls, AnalyzedPage page, int unread)
+    {
+        var rule = new HreflangRules(urls, notFollowed: new HashSet<int> { unread });
+        rule.Observe(page);
+        return rule.Finish();
+    }
+
     [Fact]
     public void ACheckThatSaysAnyUrlCanFlagWhatIsNotAPage()
     {
@@ -101,6 +108,11 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         // A file linked with ad tracking parameters, and one at a path that repeats: URLs, not pages (batch 7).
         var tracked = site.Fetched($"{site.Site}/brochure.pdf?utm_source=news", FetchOutcome.Success, 200, contentType: "application/pdf");
         var repeated = site.Fetched($"{site.Site}/files/files/a.pdf", FetchOutcome.Success, 200, contentType: "application/pdf");
+
+        // A language version only hreflang names, which the crawl left unread as it doesn't follow hreflang (batch 8).
+        var versioned = site.Page($"{site.Site}/en", RuleHarness.Html(
+            $"<link rel=\"alternate\" hreflang=\"en\" href=\"{site.Site}/en\"><link rel=\"alternate\" hreflang=\"es\" href=\"{site.Site}/es\">"));
+        var unreadVersion = site.Id($"{site.Site}/es");
         var urls = site.Table();
         urls.CountInlinks(site.Page($"{site.Site}/links", RuleHarness.Html(body: "<a href=\"/brochure.pdf?utm_source=news\">Brochure</a>")));
         Assert.Equal(start, urls.HomeId);
@@ -135,7 +147,8 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
                 entries: new SitemapEntryFacts { Repeated = new Dictionary<int, int> { [blocked] = 2 }, Lastmods = [new($"{site.Site}/big.xml", 1, 0)] }).Finish(),
             .. new RobotsTxtRules(urls, [new("https://example.com", 200, string.Empty, null, 0)], scope, new HashSet<string> { "https://example.com" },
                 sitemaps: [new($"{site.Site}/sitemap.xml", 200, false, 2, null, IsProbe: true)]).Finish(),
-            .. new UrlTextRules(urls, [(tracked, $"{site.Site}/brochure.pdf?utm_source=news"), (repeated, $"{site.Site}/files/files/a.pdf")]).Finish()
+            .. new UrlTextRules(urls, [(tracked, $"{site.Site}/brochure.pdf?utm_source=news"), (repeated, $"{site.Site}/files/files/a.pdf")]).Finish(),
+            .. VersionsUnlinked(urls, versioned, unreadVersion)
         ];
 
         var onNonPages = hits.Where(hit => !urls[hit.UrlId].IsPage).Select(hit => hit.Issue).Distinct().ToList();

@@ -1411,6 +1411,56 @@ public static class IssuePlainTexts
             OneFix = """That's almost certainly one heading in your page design, such as your site's name, marked as the main heading of every page."""
         },
 
+        ["heading-levels-skipped"] = new(
+            """Headings that jump levels""",
+            [
+                """These pages have headings that jump a level, such as a main section heading followed by a sub-sub-heading.""",
+                """People who use screen readers move through a page by its headings, and a jump suggests a section is missing."""
+            ],
+            [
+                """Edit each page and use the next heading size down for each smaller section.""",
+                """Change how a heading looks with your site's styles, not by picking a smaller heading."""
+            ],
+            IssueFixer.Either,
+            """No page's headings jump a level"""),
+
+        ["h1-image-only"] = new(
+            """Main headings that are pictures""",
+            [
+                """These pages' main heading is a picture, such as your logo, with no words of its own.""",
+                """It says the same on every page, your site's name, rather than what the page is about."""
+            ],
+            [
+                """Give each page a main heading in words that says what the page is about.""",
+                """Keep the logo as a picture beside it, or elsewhere on the page."""
+            ],
+            IssueFixer.Either,
+            """Every main heading is in words"""),
+
+        ["heading-too-long"] = new(
+            """Headings that run on""",
+            [
+                """These pages have a main heading or section heading longer than {limit:headingMaxLength}.""",
+                """A long heading is harder to take in at a glance, and on a phone it wraps over several lines."""
+            ],
+            [
+                """Shorten each heading to what the section is about, and move the rest into the text below it."""
+            ],
+            IssueFixer.You,
+            """No heading runs on"""),
+
+        ["h2-missing"] = new(
+            """Long pages with no subheadings""",
+            [
+                """These long pages have no subheadings to break up their text.""",
+                """Readers find it hard to scan a long page without them, and to find the part they want."""
+            ],
+            [
+                """Divide each page's text into sections, each under a subheading that says what it covers."""
+            ],
+            IssueFixer.You,
+            """Every long page has subheadings"""),
+
         ["low-word-count"] = new(
             """Pages with very little text""",
             [
@@ -1475,6 +1525,44 @@ public static class IssuePlainTexts
         {
             LooksFor = """A site that answers at more than one address"""
         },
+
+        ["placeholder-text"] = new(
+            """Pages with dummy "lorem ipsum" text""",
+            [
+                """These pages have the dummy text "lorem ipsum" on them, which designers use until the real words are written.""",
+                """Every visitor sees it, and the site looks unfinished, and Google may show it under the page in search."""
+            ],
+            [
+                """Replace the dummy text with the page's real words, or remove the part it's in.""",
+                """Check other pages made from the same design for it too."""
+            ],
+            IssueFixer.You,
+            """No page has dummy text"""),
+
+        ["readability-low"] = new(
+            """Writing that's very hard to read""",
+            [
+                """These pages' English text uses long sentences of long words, which makes it very hard to read.""",
+                """Many readers give up before they reach the point, on phones above all."""
+            ],
+            [
+                """Shorten long sentences, split ones that say several things, and use everyday words where they mean the same."""
+            ],
+            IssueFixer.You,
+            """Every page's writing is readable"""),
+
+        ["boilerplate-heavy"] = new(
+            """Pages that are mostly menus and footers""",
+            [
+                """Less than a quarter of the words on these pages are their own: the rest are menus, footers and sidebars.""",
+                """Search engines see little on them that's different from your other pages."""
+            ],
+            [
+                """Add more of each page's own text about what it offers.""",
+                """Trim menus and footers that repeat long lists of links on every page."""
+            ],
+            IssueFixer.Either,
+            """Every page has enough words of its own"""),
 
         ["image-missing-alt"] = new(
             """Images with no description""",
@@ -1768,6 +1856,70 @@ public static class IssuePlainTexts
             ],
             IssueFixer.Developer,
             """No language version is written in the wrong part of the page"""),
+
+        ["hreflang-inconsistent-code"] = new(
+            """Language versions that disagree about their language""",
+            [
+                """These pages point to another language version of themselves, but name its language differently from it.""",
+                """Google may then ignore the language settings and show the wrong version."""
+            ],
+            [
+                """Send the list to your developer: it gives the two names each pair uses.""",
+                """Ask for every version to use the same language name for each page, the one the page uses for itself."""
+            ],
+            IssueFixer.Developer,
+            """Every language version agrees on its language"""),
+
+        ["hreflang-header-mismatch"] = new(
+            """Language versions listed two different ways""",
+            [
+                """These pages list their other language versions twice, in the page and in its server settings, and the two lists differ.""",
+                """Google can't tell which list is right."""
+            ],
+            [
+                """Ask your developer to list the language versions in one place only, or to make both lists the same."""
+            ],
+            IssueFixer.Developer,
+            """Language versions are listed one consistent way"""),
+
+        ["hreflang-unlinked"] = new(
+            """Language versions that nothing links to""",
+            [
+                """These pages are another page's version in another language, but no page on your site links to them.""",
+                """Visitors can't reach them, and search engines see them as less important."""
+            ],
+            [
+                """Add a language switcher, or links between each page's language versions.""",
+                """List these pages in your sitemap too."""
+            ],
+            IssueFixer.Either,
+            """Every language version has links to it"""),
+
+        ["hreflang-lang-mismatch"] = new(
+            """Pages that name two different languages""",
+            [
+                """These pages give one language in their settings for search engines and another in their page code.""",
+                """One of them is usually wrong, copied from another language version unchanged."""
+            ],
+            [
+                """Send the list to your developer: it gives the two languages each page names.""",
+                """Ask them to correct whichever one is wrong."""
+            ],
+            IssueFixer.Developer,
+            """Every page names one language"""),
+
+        ["hreflang-self-only"] = new(
+            """Language settings that list no other language""",
+            [
+                """These pages have language settings for search engines that list only the page itself.""",
+                """They do nothing on their own: they only help when they point to versions in other languages."""
+            ],
+            [
+                """If your site has other language versions, list them all on every version.""",
+                """If it has none, ask your developer to remove the language settings."""
+            ],
+            IssueFixer.Either,
+            """Every page's language settings list its other versions"""),
 
         ["structured-data-invalid"] = new(
             """Details for search engines that can't be read""",

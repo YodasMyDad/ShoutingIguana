@@ -48,7 +48,9 @@ public sealed class IssueCatalogTests
         "structured-data-schema-errors", "structured-data-missing-recommended", "structured-data-on-noindex",
         "image-missing-src", "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "image-inline-large",
         "security-headers-weak", "cookies-insecure", "form-not-secure", "protocol-relative-links", "url-tracking-parameters", "url-multiple-slashes",
-        "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search"
+        "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search",
+        "heading-levels-skipped", "h1-image-only", "heading-too-long", "h2-missing", "placeholder-text", "readability-low", "boilerplate-heavy",
+        "hreflang-inconsistent-code", "hreflang-header-mismatch", "hreflang-unlinked", "hreflang-lang-mismatch", "hreflang-self-only"
     ];
 
     [Fact]
@@ -201,7 +203,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(148, IssueCatalog.All.Count);
+        Assert.Equal(160, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(
@@ -241,7 +243,7 @@ public sealed class IssueCatalogTests
             .GroupBy(check => string.Join(",", check.Recheck), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(check => check.Id).Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
         Assert.Equal(["", "RobotsTxt", "RobotsTxt,Sitemaps", "SiteVersions", "Sitemaps", "Urls", "Urls,Sitemaps"], byKinds.Keys.Order(StringComparer.Ordinal));
-        Assert.Equal(["canonical-unlinked", "deep-page", "no-https", "non-indexable-inlinks-only", "orphan-page"], byKinds[""]);
+        Assert.Equal(["canonical-unlinked", "deep-page", "hreflang-unlinked", "no-https", "non-indexable-inlinks-only", "orphan-page"], byKinds[""]);
         Assert.Equal(["not-in-sitemap", "sitemap-non-indexable", "sitemap-url-other-host"], byKinds["Urls,Sitemaps"]);
         Assert.Equal(["sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing", "sitemap-near-limit", "sitemap-over-limit", "sitemap-url-repeated"],
             byKinds["Sitemaps"]);
@@ -250,7 +252,7 @@ public sealed class IssueCatalogTests
         Assert.Equal(["robots-txt-no-sitemap"], byKinds["RobotsTxt,Sitemaps"]);
         Assert.Equal(["robots-txt-missing", "robots-txt-unreachable", "robots-txt-unreachable-other-origin"], byKinds["RobotsTxt"]);
         Assert.Equal(["duplicate-site-version"], byKinds["SiteVersions"]);
-        Assert.Equal(IssueCatalog.All.Count - 20, byKinds["Urls"].Count);
+        Assert.Equal(IssueCatalog.All.Count - 21, byKinds["Urls"].Count);
     }
 
     /// <summary>Hosts show the titles as they are, so every category needs a plain name of its own, never its identifier.</summary>

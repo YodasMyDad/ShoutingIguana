@@ -14,9 +14,10 @@ public sealed record PageFacts
     /// tags in the body, the document's structure errors, every charset declaration and a separate mobile URL. 2 is batch
     /// 6's: whether an image is a data: URI and its size, and whether it's in a picture with other sources (and the page's
     /// Microdata, batch 5's, which only adds what an earlier page lacks). 3 is batch 7's: the page's forms, and its href
-    /// and src values written without a scheme.
+    /// and src values written without a scheme. 4 is batch 8's: whether a heading is an image's alt, the main text's
+    /// placeholder, sentences and syllables, and the whole body's words.
     /// </summary>
-    public const int CURRENT_COLLECTION = 3;
+    public const int CURRENT_COLLECTION = 4;
 
     /// <summary>
     /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed
@@ -84,6 +85,17 @@ public sealed record PageFacts
 
     /// <summary>The page's href and src values that start //, counted, with the first (collection 3); null for none.</summary>
     public ProtocolRelativeFact? ProtocolRelativeUrls { get; init; }
+
+    /// <summary>The first "lorem ipsum" in the main text, quoted from there and cut (collection 4); null for none.</summary>
+    public string? PlaceholderText { get; init; }
+
+    /// <summary>The main text's sentences and English syllables, for the Flesch reading ease (collection 4).</summary>
+    public int SentenceCount { get; init; }
+
+    public int SyllableCount { get; init; }
+
+    /// <summary>Words of the whole body, menus, header and footer included (collection 4); null for a page parsed before.</summary>
+    public int? TotalWordCount { get; init; }
 
     /// <summary>Element ids and named anchors, for checking <c>#fragment</c> links.</summary>
     public IReadOnlyList<string> AnchorIds { get; init; } = [];

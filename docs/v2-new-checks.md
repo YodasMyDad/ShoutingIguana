@@ -1117,10 +1117,13 @@ Hreflang · **Notice** · Low · U/N/S
 
 - **Simple:** "Language versions that nothing links to"
 - **Rule:** an indexable page an analysed page names as an hreflang alternate, with no `<a href>` inlinks and no sitemap
-  entry. Detail: `Only hreflang leads here`.
+  entry. Detail: `Only hreflang leads here`. *Built with one more case:* the crawl doesn't follow hreflang by default, so
+  such a version is usually never read; a URL left unread for that reason is flagged too
+  (`Only hreflang leads here; not read, as the crawl doesn't follow hreflang links`), as a link or a sitemap entry would
+  have led the crawl to it.
 - **Evidence:** columns `inlinks`, `linkingPages`; its found-on lists the hreflang entries naming it.
 - **Plant:** `hreflang-only-a` (linked) and `hreflang-only-b` (not linked, not in the sitemap; also `not-in-sitemap`),
-  naming each other. Expected **1**.
+  naming each other. Expected **1**. *As built:* b is never read in the default crawl, so it isn't `not-in-sitemap`'s.
 - **From:** Screaming Frog "Unlinked Hreflang URLs".
 
 #### 64. `hreflang-lang-mismatch`: Hreflang code and lang attribute differ

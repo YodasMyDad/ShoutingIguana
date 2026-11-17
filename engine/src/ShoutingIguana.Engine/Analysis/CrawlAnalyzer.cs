@@ -30,7 +30,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     private const string RULE_FAILED_TEXT = "The check failed during the analysis, so it has no results. The log says why.";
 
     /// <summary>Checks besides the orphans' that need every page that could link to a page, sitemaps aside: skipped as orphans are when the crawl didn't read them all.</summary>
-    private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY];
+    private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY, IssueCatalog.HREFLANG_UNLINKED];
 
     /// <summary>The orphan check is skipped once 1 in this many of the pages the crawl tried to read couldn't be read (<see cref="SkippedCheckReasons.PAGES_UNREAD"/>).</summary>
     private const int UNREAD_PAGES_ONE_IN = 20;
@@ -252,13 +252,14 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 }
             }
 
-            var hreflang = new HreflangRules(urls);
+            var hreflang = new HreflangRules(urls, reader.ReadUrl, reader.ReadNotFollowedUrls());
             var indexability = new IndexabilityRules();
             var robotsToken = UserAgents.Resolve(options.UserAgent, options.CustomUserAgent).RobotsToken;
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls, reader.ReadUrlId, scope, PrivateNetworkGuard.IsPrivateLiteral(new Uri(startUrl)), reader.ReadUrl), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
+                new ImageRules(settings, urls, reader.ReadUrlId, scope, PrivateNetworkGuard.IsPrivateLiteral(new Uri(startUrl)), reader.ReadUrl),
+                new TextStructureRules(settings), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
                 new DirectiveRules(urls, robotsToken), new LinkStructureRules(settings, urls, reader.ReadUrl, new Uri(startUrl)), hreflang, new StructuredDataRules(),
                 new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings), new HtmlRules()
             ];

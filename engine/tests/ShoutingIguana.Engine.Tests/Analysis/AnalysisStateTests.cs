@@ -56,6 +56,8 @@ public sealed class AnalysisStateTests : IAsyncLifetime
                 string.Create(CultureInfo.InvariantCulture, $"The depth limit kept {keptOut:N0} internal URLs out of the crawl, and pages linked only from them would look orphaned.")),
             [IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id] = (SkippedCheckReasons.DEPTH_LIMIT,
                 string.Create(CultureInfo.InvariantCulture, $"The depth limit kept {keptOut:N0} internal URLs out of the crawl, and pages linked only from them would look orphaned.")),
+            [IssueCatalog.HREFLANG_UNLINKED.Id] = (SkippedCheckReasons.DEPTH_LIMIT,
+                string.Create(CultureInfo.InvariantCulture, $"The depth limit kept {keptOut:N0} internal URLs out of the crawl, and pages linked only from them would look orphaned.")),
             [IssueCatalog.BROKEN_RESOURCES.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
             [IssueCatalog.CONTENT_TYPE_MISMATCH.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
             [IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl."),
@@ -134,7 +136,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.Equal(
             [
                 (IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.URL_LIMIT), (IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id, SkippedCheckReasons.URL_LIMIT),
-                (IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.URL_LIMIT)
+                (IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.URL_LIMIT), (IssueCatalog.HREFLANG_UNLINKED.Id, SkippedCheckReasons.URL_LIMIT)
             ],
             IssueReader.ReadSkippedChecks(path).Select(skip => (skip.CheckId, skip.Reason)));
     }

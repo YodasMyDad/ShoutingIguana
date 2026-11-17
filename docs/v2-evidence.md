@@ -216,6 +216,10 @@ and is in the group without a related URL.
 | 52 | `h1-missing` | P/PD/– | – | – | Same (none, or "The H1 has no text") | imp · pages |
 | 53 | `h1-multiple` | P/N/– | – | – | "3 H1s" → `3 H1s: "Sofas" · "Example" · "Sign up"` | imp · – |
 | 54 | `h1-duplicate` | P/RU/– | `h1` | – | Same. The group is named by its `sharedText` | imp · pages |
+| 149 | `heading-levels-skipped` (new) | P/PD/– | – | – | The first skip: `H1 → H3`, `An H3 before the H1` | imp · pages |
+| 150 | `h1-image-only` (new) | P/N/– | `h1` | – | `The H1 is an image: "Store logo"` | imp · – |
+| 151 | `heading-too-long` (new) | P/N/– | `h1` | – | The first: `H2 of 84 characters, over 70` | imp · – |
+| 152 | `h2-missing` (new) | P/N/– | `wordCount` | – | `620 words, no H2` | imp · – |
 
 ### Content
 
@@ -225,6 +229,9 @@ and is in the group without a related URL.
 | 56 | `duplicate-content` | P/RU/– | `indexability`, `canonicalUrl`, `inlinks` (which twin to keep) | – | Same ("2 other pages") | imp · pages |
 | 57 | `near-duplicate-content` | P/RU/– | `indexability`, `canonicalUrl`, `inlinks`, `wordCount` | – | Same ("2 similar pages") | imp · pages |
 | 58 | `duplicate-site-version` | U/RD/– | – | – | Same | once |
+| 153 | `placeholder-text` (new) | P/N/– | – | – | The first, quoted from there: `"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed…"` | imp · – |
+| 154 | `readability-low` (new) | P/N/– | – | – | `Reading ease 12, under 30 (very difficult)` | imp · – |
+| 155 | `boilerplate-heavy` (new) | P/N/– | – | – | `210 of 960 words are the page's own (22%)` | imp · – |
 
 ### Images
 
@@ -254,6 +261,11 @@ and is in the group without a related URL.
 | 69 | `hreflang-duplicate-code` | P/PD/– | – | – | "en-gb" → `en-gb: /uk/ · /gb/; de: /de/ · /at/`. Grouped by the codes alone (a new `FaultOf`: "en-gb, de", today's detail), so a template's conflict stays one group | imp · pages |
 | 70 | `hreflang-missing-x-default` | P/N/– | – | – | Same (none) | imp · – |
 | 71 | `hreflang-outside-head` | P/N/– | – | – | none → `2 entries in the body: <div id="gtm"> on line 12 ended the head early`; `2 entries in the body` for a page crawled before this was collected | imp · – |
+| 156 | `hreflang-inconsistent-code` (new) | P/RU/T | – | `statusCode`, `text` (the code this page gives it), `indexability` | The first: `Names /fr/ as "fr"; /fr/ calls itself "fr-CA"` | imp · pages |
+| 157 | `hreflang-header-mismatch` (new) | P/N/– | – | – | `The HTML names 3 versions, the header 2; only in the HTML: x-default` | imp · – |
+| 158 | `hreflang-unlinked` (new) | U/N/S | `inlinks`, `linkingPages` | – | `Only hreflang leads here`, or for a URL the crawl left unread because it doesn't follow hreflang (the default) `Only hreflang leads here; not read, as the crawl doesn't follow hreflang links`; its found-on lists the pages whose hreflang names it | use · – |
+| 159 | `hreflang-lang-mismatch` (new) | P/PD/– | `language` | – | `hreflang en, lang fr` | imp · pages |
+| 160 | `hreflang-self-only` (new) | P/N/– | – | – | – | imp · – |
 
 ### Structured data
 
@@ -319,6 +331,8 @@ and is in the group without a related URL.
 
 **New checks (step 3b, [v2-new-checks.md](v2-new-checks.md)):** rows 88 on, marked "(new)", each in its category's
 table. `canonical-unlinked` is P where the specification said U: it flags only indexable pages, as `orphan-page` does.
+`hreflang-unlinked` stays U, as specified: the crawl doesn't follow hreflang by default, so a version only hreflang leads
+to is left unread, and is flagged as a URL, which a link or a sitemap entry would have led the crawl to.
 `canonicalised-page` (27) no longer flags a page `canonical-to-first-page` or `canonical-other-domain` flags, and
 `canonical-to-non-indexable` (32) no page of a canonical loop. `meta-refresh` (11) also reads a `Refresh` response header:
 `The Refresh header moves to https://x/ after 5 seconds`.

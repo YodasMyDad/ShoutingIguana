@@ -72,6 +72,63 @@ public sealed partial class SyntheticSite
         void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
             plants.Add(new Plant(PLANTS_PATH + slug, status, linked, InSitemap: false, issues, respond));
 
+        // Headings: a level skipped, an H1 that's an image, an H1 that runs on, a long page with no H2.
+        Page("heading-skip", "Heading skip", ["heading-levels-skipped"], page => page with
+        {
+            Content = $"<h3>Straight to the third level</h3><p>{Text("plant-heading-skip", 220)}</p>"
+        });
+        Page("h1-image", "H1 image", ["h1-image-only"], page => page with
+        {
+            H1 = null,
+            Content = $"<h1><img src=\"/img/14.jpg\" alt=\"Synthetic Store logo\" width=\"200\" height=\"60\"></h1><p>{Text("plant-h1-image", 220)}</p>"
+        });
+        Page("heading-long", "Heading long", ["heading-too-long"], page => page with
+        {
+            H1 = "A very long main heading that goes on and on well past the seventy characters"
+        });
+        Page("no-subheadings", "No subheadings", ["h2-missing"], page => page with { Content = $"<p>{Text("plant-no-subheadings", 600)}</p>" });
+
+        // Content: placeholder text, prose that's very hard to read, and a page that's mostly its menu.
+        Page("lorem-ipsum", "Lorem ipsum", ["placeholder-text"], page => page with
+        {
+            Content = page.Content + "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.</p>"
+        });
+        Page("hard-to-read", "Hard to read", ["readability-low"], page => page with
+        {
+            Content = "<p>" + string.Concat(Enumerable.Repeat(
+                "Institutional organisations systematically underestimate the considerable organisational complexity inherent in multidimensional international regulatory infrastructure. ", 15)) + "</p>"
+        });
+        Page("boilerplate", "Boilerplate", ["boilerplate-heavy"], page => page with
+        {
+            Content = $"<p>{Text("plant-boilerplate", 210)}</p><nav><p>{Text("plant-boilerplate-nav", 750)}</p></nav>"
+        });
+
+        // Hreflang: an alternate calling itself by another code; the HTML and the Link header naming different sets; a
+        // version only hreflang leads to; a page whose own code and lang differ.
+        Page("hreflang-code-a", "Hreflang code A", ["hreflang-inconsistent-code"], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-code-a"), ("fr", "hreflang-code-b"), ("x-default", "hreflang-code-a"))
+        });
+        Page("hreflang-code-b", "Hreflang code B", [], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-code-a"), ("fr-CA", "hreflang-code-b"), ("x-default", "hreflang-code-a")), LangValue = "fr-CA"
+        });
+        var headerSet = Hreflang(("en", "hreflang-header-a"), ("de", "hreflang-header-b"), ("x-default", "hreflang-header-a"));
+        Page("hreflang-header-a", "Hreflang header A", ["hreflang-header-mismatch"], page => page with { ExtraHead = headerSet },
+            headers: new Dictionary<string, string>
+            {
+                ["Link"] = $"<{_base}{PLANTS_PATH}hreflang-header-a>; rel=\"alternate\"; hreflang=\"en\", <{_base}{PLANTS_PATH}hreflang-header-b>; rel=\"alternate\"; hreflang=\"de\""
+            });
+        Page("hreflang-header-b", "Hreflang header B", [], page => page with { ExtraHead = headerSet, LangValue = "de" });
+        var onlySet = Hreflang(("en", "hreflang-only-a"), ("es", "hreflang-only-b"), ("x-default", "hreflang-only-a"));
+        Page("hreflang-only-a", "Hreflang only A", [], page => page with { ExtraHead = onlySet });
+        // Only hreflang leads to b, which the crawler doesn't follow by default: b is never read, and that says it's unlinked.
+        plants.Add(new Plant(PLANTS_PATH + "hreflang-only-b", Plant.NOT_FOLLOWED, Linked: false, InSitemap: false, ["hreflang-unlinked"],
+            () => Html(Render(PlantPage("hreflang-only-b", "Hreflang only B") with { ExtraHead = onlySet, LangValue = "es" }))));
+        var langSet = Hreflang(("en", "hreflang-lang-a"), ("fr", "hreflang-lang-b"), ("x-default", "hreflang-lang-a"));
+        Page("hreflang-lang-a", "Hreflang lang A", ["hreflang-lang-mismatch"], page => page with { ExtraHead = langSet, LangValue = "fr" });
+        Page("hreflang-lang-b", "Hreflang lang B", [], page => page with { ExtraHead = langSet, LangValue = "fr" });
+
         // A page at a URL of its own: one with a query (the server routes by path), or with characters escaped in it.
         void PageAt(string slug, string name, string[] issues, string url, Func<PageSpec, PageSpec>? change = null)
         {
@@ -267,13 +324,14 @@ public sealed partial class SyntheticSite
         var near = WordArray(KeySeed("plant-content-near"), 0, 600);
         var nearCopy = (string[])near.Clone();
         nearCopy[300] = "ocean";
+        // 600 words each, so each has an H2 (h2-missing), the same one, as near copies.
         Page("content-near-a", "Near copy A", ["near-duplicate-content", "h1-duplicate"], page => page with
         {
-            H1 = "Nearly copied content", Content = $"<p>{string.Join(' ', near)}</p>"
+            H1 = "Nearly copied content", Content = $"<h2>The copied part</h2><p>{string.Join(' ', near)}</p>"
         });
         Page("content-near-b", "Near copy B", ["near-duplicate-content", "h1-duplicate"], page => page with
         {
-            H1 = "Nearly copied content", Content = $"<p>{string.Join(' ', nearCopy)}</p>"
+            H1 = "Nearly copied content", Content = $"<h2>The copied part</h2><p>{string.Join(' ', nearCopy)}</p>"
         });
 
         // Not near copies, though the first 64 bits of their fingerprints say so: text keys searched for (as about one
@@ -494,7 +552,7 @@ public sealed partial class SyntheticSite
         // More than a thousand links, and a link to a partner page that takes more than 3 seconds.
         Page("many-links", "Very many links", ["too-many-links"], page => page with
         {
-            Content = page.Content + $"<p>{string.Concat(Enumerable.Repeat($"<a href=\"{PLANTS_PATH}thin\">Thin page</a> ", 1_001))}</p>"
+            Content = page.Content + $"<h2>The links</h2><p>{string.Concat(Enumerable.Repeat($"<a href=\"{PLANTS_PATH}thin\">Thin page</a> ", 1_001))}</p>"
         });
         Page("slow-external", "Link to a slow page elsewhere", ["slow-external-links"], page => page with
         {
@@ -590,10 +648,10 @@ public sealed partial class SyntheticSite
         // A clean English/French pair, then one page per hreflang mistake.
         var pair = Hreflang(("en", "hreflang-en"), ("fr", "hreflang-fr"), ("x-default", "hreflang-en"));
         Page("hreflang-en", "Hreflang English", [], page => page with { ExtraHead = pair });
-        Page("hreflang-fr", "Hreflang French", [], page => page with { ExtraHead = pair });
+        Page("hreflang-fr", "Hreflang French", [], page => page with { ExtraHead = pair, LangValue = "fr" });
         // Revision 1 gives the lonely alternate the set its partner names, so it links back.
         Page("hreflang-lonely", "Hreflang alternate", [], page => revised
-            ? page with { ExtraHead = Hreflang(("en", "hreflang-no-return"), ("de", "hreflang-lonely"), ("x-default", "hreflang-no-return")) }
+            ? page with { ExtraHead = Hreflang(("en", "hreflang-no-return"), ("de", "hreflang-lonely"), ("x-default", "hreflang-no-return")), LangValue = "de" }
             : page);
 
         // A canonicalised variant repeating its canonical's set is what Google recommends, so only the canonical counts.
@@ -607,7 +665,7 @@ public sealed partial class SyntheticSite
         {
             ExtraHead = Hreflang(("en", "hreflang-en"), ("x-default", "hreflang-en"))
         });
-        Page("hreflang-bad-code", "Hreflang bad code", ["hreflang-invalid-code"], page => page with
+        Page("hreflang-bad-code", "Hreflang bad code", ["hreflang-invalid-code", "hreflang-self-only"], page => page with
         {
             ExtraHead = Hreflang(("en-UK", "hreflang-bad-code"), ("x-default", "hreflang-bad-code"))
         });
@@ -639,7 +697,7 @@ public sealed partial class SyntheticSite
         {
             Content = page.Content + Hreflang(("en", "hreflang-body"), ("x-default", "hreflang-body"))
         });
-        Page("hreflang-no-x-default", "Hreflang without x-default", ["hreflang-missing-x-default"], page => page with
+        Page("hreflang-no-x-default", "Hreflang without x-default", ["hreflang-missing-x-default", "hreflang-self-only"], page => page with
         {
             ExtraHead = Hreflang(("en", "hreflang-no-x-default"))
         });
@@ -857,7 +915,8 @@ public sealed partial class SyntheticSite
             Title = "Planted test pages | Synthetic Store, a shop for tests",
             Description = "Index of the planted test pages: each one carries a known SEO problem so the crawler's checks can be proven exactly.",
             H1 = "Planted test pages",
-            Content = $"<p>{Text("plants", INTRO_WORDS)}</p><ul>{links}</ul>"
+            // Its list runs to hundreds of words: a subheading over it keeps it out of h2-missing.
+            Content = $"<p>{Text("plants", INTRO_WORDS)}</p><h2>Every planted page</h2><ul>{links}</ul>"
         });
     }
 

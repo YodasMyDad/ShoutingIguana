@@ -147,7 +147,8 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
                 [
                     new SkippedCheck(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
                     new SkippedCheck(IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
-                    new SkippedCheck(IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason)
+                    new SkippedCheck(IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
+                    new SkippedCheck(IssueCatalog.HREFLANG_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason)
                 ], analysis.Skipped);
             Assert.Contains($"Orphan pages weren't checked: {reason}", analysis.Notes);
             Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id));

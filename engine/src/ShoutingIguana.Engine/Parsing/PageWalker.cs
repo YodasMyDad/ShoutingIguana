@@ -89,6 +89,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     /// <summary>Every charset the page declares, in order (<see cref="PageFacts.CharsetDeclarations"/>).</summary>
     public List<string> CharsetDeclarations { get; } = [];
 
+    /// <summary>Words in the body's text the content leaves out (navigation, header, footer, asides).</summary>
+    public int TemplateWordCount { get; private set; }
+
     /// <summary>The page's forms, up to <see cref="MAX_FORMS"/>.</summary>
     public List<FormFact> Forms { get; } = [];
 
@@ -162,6 +165,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             else if (child is IText textNode && !context.ExcludeText)
             {
                 text.Append(textNode.Data);
+            }
+            else if (child is IText templateNode && !context.InHead)
+            {
+                // Text the content leaves out (menus, header, footer): words of the page all the same.
+                TemplateWordCount += TextMeasures.Words(templateNode.Data);
             }
         }
     }
@@ -254,7 +262,8 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             case "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
                 if (Headings.Count < MAX_HEADINGS)
                 {
-                    Headings.Add(new HeadingFact(name[1] - '0', HeadingText(element)));
+                    var (headingText, fromImage) = HeadingText(element);
+                    Headings.Add(new HeadingFact(name[1] - '0', headingText) { FromImageAlt = fromImage });
                 }
 
                 break;
@@ -313,12 +322,12 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     }
 
     /// <summary>A heading's text, or for a logo heading (an image and no text) the image's alt, as screen readers announce it.</summary>
-    private static string HeadingText(IElement heading)
+    private static (string Text, bool FromImageAlt) HeadingText(IElement heading)
     {
         var text = ReadableText(heading, MAX_HEADING_CHARS);
         return text.Length == 0 && heading.QuerySelector("img[alt]")?.GetAttribute("alt") is { } alt
-            ? Clean(alt, MAX_HEADING_CHARS)
-            : text;
+            ? (Clean(alt, MAX_HEADING_CHARS), true)
+            : (text, false);
     }
 
     /// <summary>

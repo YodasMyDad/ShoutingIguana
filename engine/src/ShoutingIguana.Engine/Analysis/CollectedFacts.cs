@@ -26,6 +26,10 @@ internal static class CollectedFacts
         [IssueCatalog.IMAGE_NO_SRCSET] = 2,
         [IssueCatalog.IMAGE_INLINE_LARGE] = 2,
         [IssueCatalog.FORM_NOT_SECURE] = 3,
-        [IssueCatalog.PROTOCOL_RELATIVE_LINKS] = 3
+        [IssueCatalog.PROTOCOL_RELATIVE_LINKS] = 3,
+        [IssueCatalog.H1_IMAGE_ONLY] = 4,
+        [IssueCatalog.PLACEHOLDER_TEXT] = 4,
+        [IssueCatalog.READABILITY_LOW] = 4,
+        [IssueCatalog.BOILERPLATE_HEAVY] = 4
     };
 }

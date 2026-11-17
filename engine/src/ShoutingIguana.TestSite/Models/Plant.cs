@@ -2,8 +2,8 @@ namespace ShoutingIguana.TestSite.Models;
 
 /// <summary>A URL with known defects, and what a correct crawl and analysis report for it.</summary>
 /// <param name="Status">
-/// The status code it answers with, 0 when it drops the connection, or <see cref="REFUSED"/> when robots.txt keeps the
-/// crawler from asking.
+/// The status code it answers with, 0 when it drops the connection, <see cref="REFUSED"/> when robots.txt keeps the
+/// crawler from asking, or <see cref="NOT_FOLLOWED"/> when the crawler doesn't follow the only link to it.
 /// </param>
 /// <param name="Linked">Linked from the plants hub. Others are reached through a redirect, canonical, iframe or image.</param>
 /// <param name="InSitemap">
@@ -32,4 +32,10 @@ internal sealed record Plant(
 {
     /// <summary>The status of a URL robots.txt disallows: the crawler never asks for it, so it has none.</summary>
     public const int REFUSED = -1;
+
+    /// <summary>
+    /// The status of a page only a link the crawler doesn't follow by default leads to (hreflang): it never asks for it,
+    /// so it has none, though the site serves it to a crawl told to follow that kind.
+    /// </summary>
+    public const int NOT_FOLLOWED = -2;
 }

@@ -1331,6 +1331,56 @@
       "plainPassed": "No two pages share a main heading",
       "plainOneFix": "That's almost certainly one heading in your page design, such as your site's name, marked as the main heading of every page."
     },
+    "heading-levels-skipped": {
+      "plainTitle": "Headings that jump levels",
+      "plainWhat": [
+        "These pages have headings that jump a level, such as a main section heading followed by a sub-sub-heading.",
+        "People who use screen readers move through a page by its headings, and a jump suggests a section is missing."
+      ],
+      "plainFix": [
+        "Edit each page and use the next heading size down for each smaller section.",
+        "Change how a heading looks with your site's styles, not by picking a smaller heading."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page's headings jump a level"
+    },
+    "h1-image-only": {
+      "plainTitle": "Main headings that are pictures",
+      "plainWhat": [
+        "These pages' main heading is a picture, such as your logo, with no words of its own.",
+        "It says the same on every page, your site's name, rather than what the page is about."
+      ],
+      "plainFix": [
+        "Give each page a main heading in words that says what the page is about.",
+        "Keep the logo as a picture beside it, or elsewhere on the page."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every main heading is in words"
+    },
+    "heading-too-long": {
+      "plainTitle": "Headings that run on",
+      "plainWhat": [
+        "These pages have a main heading or section heading longer than {limit:headingMaxLength}.",
+        "A long heading is harder to take in at a glance, and on a phone it wraps over several lines."
+      ],
+      "plainFix": [
+        "Shorten each heading to what the section is about, and move the rest into the text below it."
+      ],
+      "fixer": "you",
+      "plainPassed": "No heading runs on"
+    },
+    "h2-missing": {
+      "plainTitle": "Long pages with no subheadings",
+      "plainWhat": [
+        "These long pages have no subheadings to break up their text.",
+        "Readers find it hard to scan a long page without them, and to find the part they want."
+      ],
+      "plainFix": [
+        "Divide each page's text into sections, each under a subheading that says what it covers."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every long page has subheadings"
+    },
     "low-word-count": {
       "plainTitle": "Pages with very little text",
       "plainWhat": [
@@ -1393,6 +1443,44 @@
       ],
       "fixer": "developer",
       "plainPassed": "The site answers at one address only"
+    },
+    "placeholder-text": {
+      "plainTitle": "Pages with dummy \"lorem ipsum\" text",
+      "plainWhat": [
+        "These pages have the dummy text \"lorem ipsum\" on them, which designers use until the real words are written.",
+        "Every visitor sees it, and the site looks unfinished, and Google may show it under the page in search."
+      ],
+      "plainFix": [
+        "Replace the dummy text with the page's real words, or remove the part it's in.",
+        "Check other pages made from the same design for it too."
+      ],
+      "fixer": "you",
+      "plainPassed": "No page has dummy text"
+    },
+    "readability-low": {
+      "plainTitle": "Writing that's very hard to read",
+      "plainWhat": [
+        "These pages' English text uses long sentences of long words, which makes it very hard to read.",
+        "Many readers give up before they reach the point, on phones above all."
+      ],
+      "plainFix": [
+        "Shorten long sentences, split ones that say several things, and use everyday words where they mean the same."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every page's writing is readable"
+    },
+    "boilerplate-heavy": {
+      "plainTitle": "Pages that are mostly menus and footers",
+      "plainWhat": [
+        "Less than a quarter of the words on these pages are their own: the rest are menus, footers and sidebars.",
+        "Search engines see little on them that's different from your other pages."
+      ],
+      "plainFix": [
+        "Add more of each page's own text about what it offers.",
+        "Trim menus and footers that repeat long lists of links on every page."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page has enough words of its own"
     },
     "image-missing-alt": {
       "plainTitle": "Images with no description",
@@ -1674,6 +1762,70 @@
       ],
       "fixer": "developer",
       "plainPassed": "No language version is written in the wrong part of the page"
+    },
+    "hreflang-inconsistent-code": {
+      "plainTitle": "Language versions that disagree about their language",
+      "plainWhat": [
+        "These pages point to another language version of themselves, but name its language differently from it.",
+        "Google may then ignore the language settings and show the wrong version."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it gives the two names each pair uses.",
+        "Ask for every version to use the same language name for each page, the one the page uses for itself."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every language version agrees on its language"
+    },
+    "hreflang-header-mismatch": {
+      "plainTitle": "Language versions listed two different ways",
+      "plainWhat": [
+        "These pages list their other language versions twice, in the page and in its server settings, and the two lists differ.",
+        "Google can't tell which list is right."
+      ],
+      "plainFix": [
+        "Ask your developer to list the language versions in one place only, or to make both lists the same."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Language versions are listed one consistent way"
+    },
+    "hreflang-unlinked": {
+      "plainTitle": "Language versions that nothing links to",
+      "plainWhat": [
+        "These pages are another page's version in another language, but no page on your site links to them.",
+        "Visitors can't reach them, and search engines see them as less important."
+      ],
+      "plainFix": [
+        "Add a language switcher, or links between each page's language versions.",
+        "List these pages in your sitemap too."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every language version has links to it"
+    },
+    "hreflang-lang-mismatch": {
+      "plainTitle": "Pages that name two different languages",
+      "plainWhat": [
+        "These pages give one language in their settings for search engines and another in their page code.",
+        "One of them is usually wrong, copied from another language version unchanged."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it gives the two languages each page names.",
+        "Ask them to correct whichever one is wrong."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every page names one language"
+    },
+    "hreflang-self-only": {
+      "plainTitle": "Language settings that list no other language",
+      "plainWhat": [
+        "These pages have language settings for search engines that list only the page itself.",
+        "They do nothing on their own: they only help when they point to versions in other languages."
+      ],
+      "plainFix": [
+        "If your site has other language versions, list them all on every version.",
+        "If it has none, ask your developer to remove the language settings."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page's language settings list its other versions"
     },
     "structured-data-invalid": {
       "plainTitle": "Details for search engines that can't be read",

@@ -62,6 +62,10 @@ public sealed class CollectedFactsTests : IAsyncLifetime
                 new SkippedCheck(IssueCatalog.PAGINATION_TO_NON_INDEXABLE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.PAGINATION_SEQUENCE_ERROR.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.H1_IMAGE_ONLY.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.PLACEHOLDER_TEXT.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.READABILITY_LOW.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.BOILERPLATE_HEAVY.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.IMAGE_MISSING_SRC.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.IMAGE_NO_SRCSET.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.IMAGE_INLINE_LARGE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
@@ -71,10 +75,12 @@ public sealed class CollectedFactsTests : IAsyncLifetime
                 new SkippedCheck(IssueCatalog.HTML_STRUCTURE_ERRORS.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.MOBILE_ALTERNATE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT)
             ], analysis.Skipped);
-        // One note for each collection the page predates: the new checks' first (1), the images' (2), the forms' (3).
+        // One note for each collection the page predates: the new checks' first (1), the images' (2), the forms' (3), the
+        // text measures' (4).
         Assert.Contains($"9 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
         Assert.Contains($"3 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
         Assert.Contains($"2 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
+        Assert.Contains($"4 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.UNCRAWLABLE_LINKS.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.PAGINATION_SEQUENCE_ERROR.Id));
