@@ -237,7 +237,8 @@ export interface UrlRow {
  * (`reason` `rule`), or that the file couldn't be read (`unreachable`), or neither is known (`unknown`).
  */
 export interface RobotsRule {
-  origin: string;
+  /** The origin whose robots.txt decides it; null where the crawl has none for it. */
+  origin: string | null;
   reason: 'rule' | 'unreachable' | 'unknown';
   /** The file's line that refused it, from 1, for `rule`. */
   line: number | null;
