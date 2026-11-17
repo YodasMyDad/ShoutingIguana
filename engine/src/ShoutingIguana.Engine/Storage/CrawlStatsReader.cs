@@ -20,6 +20,9 @@ public static class CrawlStatsReader
     /// <summary>What the numbers are kept under.</summary>
     private const string KEPT = "stats";
 
+    /// <summary>A URL a recheck let go (the fix loop): no longer found, so no part of the URLs found; its skip reason still counts it.</summary>
+    private static readonly string LET_GO = $"(state = {(int)UrlState.Skipped} AND skip_reason = {(int)SkipReason.NoLongerLinked})";
+
     public static CrawlStats Read(string databasePath) => Read(databasePath, cache: null);
 
     /// <summary>
@@ -64,7 +67,7 @@ public static class CrawlStatsReader
         // One pass over the URLs.
         long urls = 0, internalUrls = 0, queued = 0, largestId = 0;
         Rows(context, $"""
-            SELECT COUNT(*), COALESCE(SUM(is_internal), 0), COALESCE(SUM(state = 0), 0), COALESCE(MAX(id), 0),
+            SELECT COUNT(*) - COALESCE(SUM({LET_GO}), 0), COALESCE(SUM(CASE WHEN {LET_GO} THEN 0 ELSE is_internal END), 0), COALESCE(SUM(state = 0), 0), COALESCE(MAX(id), 0),
                    COUNT(CASE WHEN state = 3 THEN {ReaderFunctions.TALLY}({SKIP_REASONS}, skip_reason) END)
             FROM urls
             """, reader =>

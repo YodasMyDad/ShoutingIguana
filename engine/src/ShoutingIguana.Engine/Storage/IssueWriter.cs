@@ -293,6 +293,9 @@ internal sealed class IssueWriter : IDisposable
             }
         }
 
+        // The rechecks this analysis is the first to follow are settled from the issues it stores, in the same commit.
+        RecheckSettlement.Settle(_connection, _transaction, skipped.Select(check => check.CheckId), score?.Value);
+
         _transaction.Commit();
         IndexLinkKinds();
         return new CommittedAnalysis(counts, crawledUrls, score);

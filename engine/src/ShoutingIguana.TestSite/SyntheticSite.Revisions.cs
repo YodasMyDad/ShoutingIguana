@@ -173,6 +173,39 @@ public sealed partial class SyntheticSite
         return FateOf(Handle(path, external: false, plainHttp));
     }
 
+    /// <summary>
+    /// What fetching <paramref name="url"/> itself gives at this revision, whether or not anything leads to it: what a
+    /// recheck, which asks for URLs the crawl had, finds. A page this revision removed answers 404; robots.txt's refusals
+    /// stand. Throws for a URL it can't tell.
+    /// </summary>
+    public SyntheticUrlFate FetchFate(string url)
+    {
+        if (_plantsByUrl.TryGetValue(url, out var plant))
+        {
+            return FateOf(plant);
+        }
+
+        if (url.StartsWith(_external + "/", StringComparison.Ordinal))
+        {
+            return SyntheticUrlFate.Answered;
+        }
+
+        var plainHttpBase = IsHttps ? "http" + _base["https".Length..] : null;
+        var plainHttp = plainHttpBase is not null && url.StartsWith(plainHttpBase + "/", StringComparison.Ordinal);
+        if (!plainHttp && !url.StartsWith(_base + "/", StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"The synthetic site can't tell what fetching {url} gives.", nameof(url));
+        }
+
+        var path = url[(plainHttp ? plainHttpBase!.Length : _base.Length)..];
+        if (TryNumber(path, "/private/", string.Empty, out _))
+        {
+            return path == UNBLOCKED_PRIVATE && Revision >= 1 ? SyntheticUrlFate.Page : SyntheticUrlFate.NotRead;
+        }
+
+        return FateOf(Handle(path, external: false, plainHttp));
+    }
+
     private static bool Judges(SyntheticJudging judging, SyntheticUrlFate fate) => judging switch
     {
         SyntheticJudging.Responses => fate is SyntheticUrlFate.Page or SyntheticUrlFate.Answered or SyntheticUrlFate.Failed,

@@ -31,6 +31,7 @@ internal static class ColumnWords
         ["statusCode"] = "Status",
         ["statusClass"] = "Status class",
         ["outcome"] = "Outcome",
+        ["skipReason"] = "Why not read",
         ["redirectTarget"] = "Redirects to",
         ["redirectTargetStatusCode"] = "Redirect’s status",
         ["indexable"] = "Indexable",
@@ -146,6 +147,18 @@ internal static class ColumnWords
             ["networkError"] = "Network error",
             ["processingError"] = "Couldn’t be read",
             ["notChecked"] = "Not checked"
+        },
+        ["skipReason"] = new(StringComparer.Ordinal)
+        {
+            ["none"] = "Read",
+            ["noFollow"] = "Only nofollow links lead to it",
+            ["notFollowedByOption"] = "Links of its kind aren’t followed",
+            ["resourcesDisabled"] = "Resources aren’t checked",
+            ["externalsDisabled"] = "Other sites aren’t checked",
+            ["depthLimit"] = "Past the depth limit",
+            ["urlLimit"] = "Past the URL limit",
+            ["recheck"] = "Found by a recheck, not followed",
+            ["noLongerLinked"] = "No longer linked (a recheck let it go)"
         },
         ["indexability"] = new(StringComparer.Ordinal)
         {

@@ -39,6 +39,11 @@ public static class CrawlRunReader
             return null;
         }
 
+        // A recheck's run is listed with the crawl's, and its time isn't the crawl's.
+        var rechecks = RecheckReader.HasTables(connection, transaction)
+            ? "(SELECT run FROM rechecks WHERE typeof(run) = 'integer')"
+            : "(SELECT NULL WHERE 0)";
+
         // What must hold of every stretch for the total to be the crawl's: each is timed, credibly, and the last was
         // stored under the crawl row's stamp as it stands, so no run since went untimed.
         long stretches;
@@ -51,7 +56,7 @@ public static class CrawlRunReader
                        COALESCE(SUM(crawled_ms IS NULL OR typeof(crawled_ms) <> 'integer' OR crawled_ms < 0 OR crawled_ms > {MAX_CRAWLED_MS}
                                     OR typeof(started_at) <> 'integer' OR started_at < {MIN_UNIX_MILLISECONDS} OR started_at > {MAX_UNIX_MILLISECONDS - MAX_CRAWLED_MS}
                                     OR typeof(run) <> 'integer'), 0),
-                       TOTAL(crawled_ms),
+                       TOTAL(CASE WHEN run IN {rechecks} THEN 0 ELSE crawled_ms END),
                        (SELECT crawl_updated_at FROM run_time ORDER BY id DESC LIMIT 1) IS (SELECT updated_at FROM crawl WHERE id = 1)
                 FROM run_time
                 """;
@@ -83,17 +88,18 @@ public static class CrawlRunReader
         long? run = null;
         long runMs = 0;
         var ended = false;
+        var isRecheck = false;
         var earliest = DateTimeOffset.MinValue;
         using (var command = connection.CreateCommand())
         {
             command.Transaction = transaction;
-            command.CommandText = "SELECT run, started_at, crawled_ms, ended IS NOT NULL AND ended <> 0 FROM run_time ORDER BY id";
+            command.CommandText = $"SELECT run, started_at, crawled_ms, ended IS NOT NULL AND ended <> 0, run IN {rechecks} FROM run_time ORDER BY id";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 if (run is not null && reader.GetInt64(0) != run)
                 {
-                    runs.Add(RunOf(crawling, runMs, ended));
+                    runs.Add(RunOf(crawling, runMs, ended) with { IsRecheck = isRecheck });
                     (crawling, runMs) = ([], 0);
                 }
 
@@ -102,11 +108,11 @@ public static class CrawlRunReader
                 var crawledMs = reader.GetInt64(2);
                 earliest = from.AddMilliseconds(crawledMs);
                 crawling.Add(new CrawlingStretch(from, earliest));
-                (run, runMs, ended) = (reader.GetInt64(0), runMs + crawledMs, reader.GetBoolean(3));
+                (run, runMs, ended, isRecheck) = (reader.GetInt64(0), runMs + crawledMs, reader.GetBoolean(3), reader.GetBoolean(4));
             }
         }
 
-        runs.Add(RunOf(crawling, runMs, ended));
+        runs.Add(RunOf(crawling, runMs, ended) with { IsRecheck = isRecheck });
         return new CrawlRuns(time, runs);
     }
 

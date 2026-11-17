@@ -109,6 +109,7 @@ public sealed class CrawlStatsReaderTests(GridCrawl crawl) : IDisposable
             UPDATE responses SET status_code = -7 WHERE url_id = (SELECT MAX(url_id) FROM responses WHERE status_code = 301);
             UPDATE responses SET indexability_reason = 77 WHERE url_id = (SELECT MIN(url_id) FROM responses WHERE indexability_reason = 1);
             UPDATE urls SET skip_reason = 55 WHERE id = (SELECT MIN(id) FROM urls WHERE state = 3);
+            UPDATE urls SET skip_reason = 8 WHERE id = (SELECT MAX(id) FROM urls WHERE state = 3);
             UPDATE urls SET is_internal = 3 WHERE id = (SELECT MAX(id) FROM urls WHERE is_internal = 1 AND source = 1);
             DELETE FROM urls WHERE id = (SELECT MAX(u.id) FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.is_internal = 0);
             INSERT OR REPLACE INTO effective_indexability (url_id, indexability_reason)
@@ -131,6 +132,9 @@ public sealed class CrawlStatsReaderTests(GridCrawl crawl) : IDisposable
     private static List<string> Groups(IReadOnlyDictionary<int, long> groups) =>
         [.. groups.OrderBy(group => group.Key).Select(group => $"{group.Key} | {group.Value}")];
 
+    /// <summary>Found, as the URLs found are counted: not let go by a recheck (the fix loop) as no longer linked.</summary>
+    private const string FOUND = "NOT (state = 3 AND skip_reason = 8)";
+
     /// <summary>Each number by a statement of its own, as plain as it can be written.</summary>
     private static (List<string> Numbers, List<string> Outcomes, List<string> StatusCodes, List<string> SkipReasons, List<string> NonIndexableReasons) Reference(string path)
     {
@@ -144,7 +148,7 @@ public sealed class CrawlStatsReaderTests(GridCrawl crawl) : IDisposable
         var average = TestCrawls.Rows(path, $"SELECT COALESCE(AVG(r.response_ms), 0) {pages}").Single();
         return (
             [
-                $"urls {Count("SELECT COUNT(*) FROM urls")}", $"internal {Count("SELECT COALESCE(SUM(is_internal), 0) FROM urls")}",
+                $"urls {Count($"SELECT COUNT(*) FROM urls WHERE {FOUND}")}", $"internal {Count($"SELECT COALESCE(SUM(is_internal), 0) FROM urls WHERE {FOUND}")}",
                 $"queued {Count("SELECT COUNT(*) FROM urls WHERE state = 0")}", $"links {Count("SELECT COUNT(*) FROM links")}",
                 $"sitemaps {Count("SELECT COUNT(*) FROM sitemaps WHERE error IS NULL")}",
                 $"sitemap errors {Count("SELECT COUNT(*) FROM sitemaps WHERE error IS NOT NULL AND is_probe = 0 AND error NOT LIKE 'Not read%'")}",

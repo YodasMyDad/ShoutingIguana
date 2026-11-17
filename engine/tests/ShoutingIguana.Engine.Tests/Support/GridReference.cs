@@ -56,7 +56,7 @@ internal sealed class GridReference
             command.CommandText = """
                 SELECT u.id, u.url, u.is_internal, u.source, u.depth, r.url_id IS NOT NULL, r.error, r.outcome, r.status_code, r.content_type, r.title,
                        r.meta_description, r.h1, r.h1_count, r.word_count, r.size_bytes, r.response_ms, r.ttfb_ms, r.is_noindex, r.is_nofollow,
-                       r.redirect_url_id, r.canonical_url_id, r.outlink_count, r.pixel_width, r.pixel_height
+                       r.redirect_url_id, r.canonical_url_id, r.outlink_count, r.pixel_width, r.pixel_height, u.state, u.skip_reason
                 FROM urls u LEFT JOIN responses r ON r.url_id = u.id
                 """;
             using var reader = command.ExecuteReader();
@@ -97,6 +97,7 @@ internal sealed class GridReference
                         _ => null
                     },
                     ["outcome"] = !hasResponse ? null : notChecked ? "notChecked" : Name(outcome!.Value),
+                    ["skipReason"] = reader.GetInt32(25) == (int)UrlState.Skipped && reader.GetInt32(26) > 0 ? Name<SkipReason>(reader.GetInt32(26)) : null,
                     ["redirectTargetId"] = reader.IsDBNull(20) ? null : reader.GetInt32(20),
                     ["indexable"] = s.IsIndexable,
                     ["indexability"] = s.IndexabilityReason is { } reason ? Name(reason) : null,

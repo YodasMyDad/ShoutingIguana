@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -45,6 +46,9 @@ internal sealed class CrawlSession
     private static readonly TimeSpan IDLE_DELAY = TimeSpan.FromMilliseconds(20);
     private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>A recheck is a few pages: a site that stops answering ends it after a minute, not a crawl's ten.</summary>
+    internal static readonly TimeSpan RECHECK_GIVE_UP_AFTER = TimeSpan.FromMinutes(1);
+
     /// <summary>
     /// How often the time spent crawling is stored while a stretch of it goes on, in progress reports: every five seconds,
     /// which is as much of it as a run cut short (the process died) can lose.
@@ -75,6 +79,10 @@ internal sealed class CrawlSession
     private readonly Channel<FrontierItem> _internalQueue;
     private readonly Channel<FrontierItem> _externalQueue;
 
+    // A recheck's run (the fix loop): its plan, and how long a site that stops answering is waited for.
+    private readonly RecheckPlan? _recheck;
+    private readonly TimeSpan _giveUpAfter;
+
     // Held back with how they ended, which is what gets recorded if their origin is written off before their one more try.
     private readonly ConcurrentQueue<PageRecord> _deferred = new();
     private readonly ConcurrentDictionary<int, PageRecord> _retried = new();
@@ -98,9 +106,11 @@ internal sealed class CrawlSession
     private int _rateLimited;
     private string? _rateLimitedHost;
 
-    private CrawlSession(CrawlRequest request, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider)
+    private CrawlSession(CrawlRequest request, RecheckPlan? recheck, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider)
     {
         _request = request;
+        _recheck = recheck;
+        _giveUpAfter = recheck is null ? RetryingFetcher.GIVE_UP_AFTER : RECHECK_GIVE_UP_AFTER;
         _options = request.Options;
         _timeProvider = timeProvider;
         _crawling = new RunClock(timeProvider);
@@ -116,7 +126,9 @@ internal sealed class CrawlSession
             ? new HostGate(_options.Concurrency, interval, timeProvider)
             : new HostGate(EXTERNAL_CONCURRENCY_PER_HOST, TimeSpan.Zero, timeProvider));
 
-        _writer = CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>());
+        _writer = recheck is null
+            ? CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>())
+            : CrawlWriter.OpenForRecheck(request.DatabasePath, _options, recheck, _counters, loggerFactory.CreateLogger<CrawlWriter>());
 
         // Every notice is kept with the crawl, then handed on: the host hears of it with the id the file keeps it under.
         _observer = new NoticeRecorder(new SafeCrawlObserver(observer, _logger), _writer, timeProvider);
@@ -145,7 +157,24 @@ internal sealed class CrawlSession
             throw new ArgumentException(string.Join(" ", errors), nameof(request));
         }
 
-        return new CrawlSession(request, observer, loggerFactory, timeProvider);
+        return new CrawlSession(request, null, observer, loggerFactory, timeProvider);
+    }
+
+    /// <summary>Validates the options and opens the crawl file for a recheck's run (the fix loop).</summary>
+    public static CrawlSession OpenRecheck(RecheckRequest request, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider)
+    {
+        var errors = request.Options.Validate();
+        if (errors.Count > 0)
+        {
+            throw new ArgumentException(string.Join(" ", errors), nameof(request));
+        }
+
+        if (request.Plan.Refused is { } refused)
+        {
+            throw new InvalidOperationException(refused.Title);
+        }
+
+        return new CrawlSession(new CrawlRequest(request.Options, request.DatabasePath, Resume: true), request.Plan, observer, loggerFactory, timeProvider);
     }
 
     public void Pause()
@@ -242,7 +271,8 @@ internal sealed class CrawlSession
             InternalFetched = counts.InternalFetched,
             MaxUrls = _options.MaxUrls > 0 ? _options.MaxUrls : null,
             Waits = waits,
-            MoreWaits = moreWaits
+            MoreWaits = moreWaits,
+            Recheck = _writer.RecheckProgress
         };
     }
 
@@ -336,9 +366,18 @@ internal sealed class CrawlSession
 
         try
         {
-            // Opening the writer has already marked the crawl running.
-            await SeedAsync(_stop.Token).ConfigureAwait(false);
-            sitemaps = DiscoverSitemapsAsync(_stop.Token);
+            // Opening the writer has already marked the crawl running; a recheck's has handed out its first phase.
+            if (_recheck is null)
+            {
+                await SeedAsync(_stop.Token).ConfigureAwait(false);
+                sitemaps = DiscoverSitemapsAsync(_stop.Token);
+            }
+            else
+            {
+                await ReadRobotsTxtAgainAsync(_recheck).ConfigureAwait(false);
+                sitemaps = _recheck.Kinds.Contains(RecheckKind.Sitemaps) ? ReadSitemapsAgainAsync(_stop.Token) : Task.CompletedTask;
+            }
+
             workers =
             [
                 .. StartWorkers(_internalQueue.Reader, _options.Concurrency),
@@ -347,6 +386,13 @@ internal sealed class CrawlSession
             ];
 
             var exhausted = await DispatchAsync(sitemaps, _stop.Token).ConfigureAwait(false);
+
+            // A recheck's second phase, the pages referring to what still fails, once its first is done.
+            if (exhausted && _recheck is not null && await _writer.NextRecheckPhaseAsync(_stop.Token).ConfigureAwait(false) > 0)
+            {
+                exhausted = await DispatchAsync(sitemaps, _stop.Token).ConfigureAwait(false);
+            }
+
             _status = exhausted ? CrawlStatus.Completed : CrawlStatus.Stopped;
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -396,7 +442,7 @@ internal sealed class CrawlSession
         var final = Snapshot();
         _observer.OnProgress(final);
         _logger.LogInformation("Crawl {Status}: {Fetched} URLs fetched in {Elapsed}", _status, final.Fetched, final.Elapsed);
-        return new CrawlSummary(_status, final, _request.DatabasePath, error);
+        return new CrawlSummary(_status, final, _request.DatabasePath, error) { RecheckId = _writer.RecheckId };
     }
 
     /// <summary>
@@ -486,6 +532,40 @@ internal sealed class CrawlSession
         {
             _logger.LogWarning(exception, "Sitemap discovery failed");
             _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "sitemaps-failed", $"Sitemap discovery failed: {exception.Message}")
+            {
+                Data = new CrawlNoticeData(Reason: exception.Message)
+            });
+        }
+    }
+
+    /// <summary>
+    /// A recheck of robots.txt reads each origin's again (every run reads robots.txt afresh), which stores it over the old:
+    /// the origins the plan names, and the start URL's.
+    /// </summary>
+    private async Task ReadRobotsTxtAgainAsync(RecheckPlan recheck)
+    {
+        if (!recheck.Kinds.Contains(RecheckKind.RobotsTxt))
+        {
+            return;
+        }
+
+        foreach (var origin in recheck.RobotsOrigins.Append(_startUri.GetLeftPart(UriPartial.Authority)).Distinct(StringComparer.Ordinal))
+        {
+            await _robots.GetAsync(new Uri(origin + "/")).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>A recheck of the sitemaps reads them all again, as the crawl found them: robots.txt's, the extra ones, or the conventional one.</summary>
+    private async Task ReadSitemapsAgainAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _sitemaps.RunAsync(_startUri, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not (OperationCanceledException or ChannelClosedException))
+        {
+            _logger.LogWarning(exception, "Reading the sitemaps again failed");
+            _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "sitemaps-failed", $"Reading the sitemaps again failed: {exception.Message}")
             {
                 Data = new CrawlNoticeData(Reason: exception.Message)
             });
@@ -605,13 +685,14 @@ internal sealed class CrawlSession
     /// </summary>
     private async ValueTask<bool> GiveUpOnADeadSiteAsync()
     {
-        if (_gates.LongestOutage(_timeProvider.GetUtcNow()) is not { } outage || outage.Duration < RetryingFetcher.GIVE_UP_AFTER)
+        if (_gates.LongestOutage(_timeProvider.GetUtcNow()) is not { } outage || outage.Duration < _giveUpAfter)
         {
             return false;
         }
 
-        _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Error, "site-down",
-            $"{outage.Origin} hasn't answered for {outage.Duration.TotalMinutes:0} minutes, so the crawl stopped. Resume it once the site is back.")
+        _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Error, "site-down", _recheck is null
+            ? $"{outage.Origin} hasn't answered for {outage.Duration.TotalMinutes:0} minutes, so the crawl stopped. Resume it once the site is back."
+            : $"{outage.Origin} hasn't answered for a minute, so the recheck stopped. The pages it didn't reach weren't rechecked.")
         {
             Data = new CrawlNoticeData(Origin: outage.Origin, Duration: outage.Duration)
         });

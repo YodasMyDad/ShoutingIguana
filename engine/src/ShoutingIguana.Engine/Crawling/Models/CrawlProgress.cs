@@ -77,4 +77,7 @@ public sealed record CrawlProgress(
 
     /// <summary>For each reason with more waits than <see cref="Waits"/> lists, how many more there are: hosts, as a rule.</summary>
     public IReadOnlyDictionary<CrawlWaitReason, int> MoreWaits { get; init; } = NO_MORE_WAITS;
+
+    /// <summary>For a recheck's run, how far it has got; null for a crawl's. The other counts are the whole crawl's.</summary>
+    public RecheckProgress? Recheck { get; init; }
 }
