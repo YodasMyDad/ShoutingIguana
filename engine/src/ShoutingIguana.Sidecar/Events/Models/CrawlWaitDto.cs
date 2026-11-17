@@ -11,8 +11,8 @@ namespace ShoutingIguana.Sidecar.Events.Models;
 /// <param name="Urls">For <c>robotsTxt</c> and <c>otherSitesRobotsTxt</c>: the URLs waiting. For <c>robotsTxtCoolDown</c>: the URLs it refused, if any.</param>
 /// <param name="DurationMs">
 /// <c>crawlDelay</c>: the delay. <c>backoff</c>: the time between requests now. <c>heldBack</c> and <c>robotsTxtCoolDown</c>: how
-/// long until it ends. <c>siteDown</c>: how long it hasn't answered. <c>sectionLimited</c>: the time between the section's
-/// URLs now.
+/// long until it ends. <c>siteDown</c>: how long it hasn't answered. <c>sectionLimited</c>: how long until the section's next
+/// URL is tried.
 /// </param>
 /// <param name="Section">For <c>sectionLimited</c>: the section the host limits, "/products/". <c>urls</c> is how many are left.</param>
 internal sealed record CrawlWaitDto(

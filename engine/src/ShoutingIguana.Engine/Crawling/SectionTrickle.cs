@@ -12,7 +12,8 @@ namespace ShoutingIguana.Engine.Crawling;
 /// The site's URLs in a section its host limits apart from the rest (<see cref="SectionPace"/>): held back from the
 /// workers, so they never tie one up, and asked one at a time at the section's interval, during the crawl and after it.
 /// One answered 429 again goes back to the front of its section's line; nothing is given up while pages still get
-/// through. A section is given up on after <see cref="GIVE_UP_FAILURES"/> 429s in a row at its slowest pace, and every
+/// through. A section is given up on after <see cref="GIVE_UP_FAILURES"/> 429s in a row at its slowest pace (one page
+/// every <see cref="SectionPace.MAX_INTERVAL"/>, which the cap leaves no room for), and every
 /// section <see cref="GIVE_UP_AFTER"/> after the rest of the crawl is over: what is left is stored as not checked.
 /// </summary>
 internal sealed class SectionTrickle(
@@ -93,16 +94,17 @@ internal sealed class SectionTrickle(
         }
     }
 
-    /// <summary>Each section with URLs waiting: how many, at what interval, for progress to say.</summary>
+    /// <summary>Each section with URLs waiting: how many, and how long until the next is tried, for progress to say.</summary>
     public List<CrawlWait> Waits()
     {
+        var now = timeProvider.GetUtcNow();
         lock (_sync)
         {
             return
             [
                 .. _lines.Where(line => line.Value.Waiting.Count > 0).Select(line =>
-                    new CrawlWait(CrawlWaitReason.SectionLimited, line.Value.Host, Urls: line.Value.Waiting.Count, Duration: line.Key.Interval,
-                        Section: line.Key.Path))
+                    new CrawlWait(CrawlWaitReason.SectionLimited, line.Value.Host, Urls: line.Value.Waiting.Count,
+                        Duration: line.Key.NextDue > now ? line.Key.NextDue - now : TimeSpan.Zero, Section: line.Key.Path))
             ];
         }
     }

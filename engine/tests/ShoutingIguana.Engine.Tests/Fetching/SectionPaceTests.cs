@@ -53,18 +53,23 @@ public sealed class SectionPaceTests
     }
 
     [Fact]
-    public void WithoutRetryAfterItStartsAtTenSecondsAndNeverGoesPastFiveMinutes()
+    public void WithoutRetryAfterItStartsAtTenSecondsAndNeverGoesPastTwentyMinutes()
     {
         var section = new SectionPace(string.Empty);
         var now = T0;
-        for (var trip = 0; trip < 8; trip++)
+        List<double> gaps = [];
+        for (var trip = 0; trip < 10; trip++)
         {
             now = section.NextDue > now ? section.NextDue : now;
             Assert.True(section.TryStart(now));
             section.Throttled(null, now, now);
+            gaps.Add(section.Interval.TotalSeconds);
         }
 
-        // 10, 20, 40, 80 and 160 seconds, then five minutes, twice: two 429s at the slowest pace so far, not yet three.
+        // It keeps doubling past five minutes, so the last tries come after a long quiet spell: then 20 minutes, twice,
+        // two 429s at the slowest pace so far, not yet three.
+        double[] doubling = [10, 20, 40, 80, 160, 320, 640, 1_200, 1_200, 1_200];
+        Assert.Equal(doubling, gaps);
         Assert.Equal(SectionPace.MAX_INTERVAL, section.Interval);
         Assert.Equal("/", section.Path);
         Assert.False(section.IsRefusingEverything(3));

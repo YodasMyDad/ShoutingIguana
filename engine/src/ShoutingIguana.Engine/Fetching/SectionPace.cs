@@ -12,8 +12,13 @@ internal sealed class SectionPace(string folder)
     /// <summary>The first interval when the 429 didn't say how long to wait.</summary>
     public static readonly TimeSpan DEFAULT_INTERVAL = TimeSpan.FromSeconds(10);
 
-    /// <summary>The slowest a section is ever asked: one page every five minutes.</summary>
-    public static readonly TimeSpan MAX_INTERVAL = TimeSpan.FromMinutes(5);
+    /// <summary>
+    /// The slowest a section is ever asked: one page every 20 minutes, as long as a section may go on after the rest of the
+    /// crawl. A limit whose window each refused try renews (a shop's product pages, shut for five or ten minutes at a time)
+    /// only opens after a long quiet spell, so the gap keeps doubling (one, two, four, eight, sixteen minutes) rather than
+    /// stopping where tries still keep it shut.
+    /// </summary>
+    public static readonly TimeSpan MAX_INTERVAL = TimeSpan.FromMinutes(20);
 
     private const double FASTER = 0.9;
 

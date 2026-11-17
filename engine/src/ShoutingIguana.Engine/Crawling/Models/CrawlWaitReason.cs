@@ -46,7 +46,7 @@ public enum CrawlWaitReason
     /// <summary>
     /// The host limits one section apart from the rest (its product pages, say): that section's URLs are read one at a
     /// time, an interval apart learned from its 429s and what got through, while the rest goes on. Host. Section: the
-    /// section, "/products/". Urls: how many are left. Duration: the time between them now.
+    /// section, "/products/". Urls: how many are left. Duration: how long until the next of them is tried.
     /// </summary>
     SectionLimited
 }

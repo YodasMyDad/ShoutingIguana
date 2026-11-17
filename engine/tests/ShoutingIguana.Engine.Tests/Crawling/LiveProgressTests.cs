@@ -139,12 +139,13 @@ public sealed class LiveProgressTests : IAsyncLifetime
         // The clock moves on as the crawl's slow start spaces its first requests, a second at most.
         var progress = await ProgressAsync(job, progress => progress.Waits.Any(wait => wait.Reason == CrawlWaitReason.SectionLimited), time);
 
-        // The 429 is the root pages' (the home page's), so it is that section's wait, at the Retry-After it asked for.
+        // The 429 is the root pages' (the home page's), so it is that section's wait: its next try comes after the
+        // Retry-After it asked for.
         var held = Assert.Single(progress.Waits, wait => wait.Reason == CrawlWaitReason.SectionLimited);
         Assert.Equal("127.0.0.1", held.Host);
         Assert.Equal("/", held.Section);
         Assert.Equal(1, held.Urls);
-        Assert.Equal(TimeSpan.FromSeconds(30), held.Duration);
+        Assert.InRange(held.Duration!.Value, TimeSpan.FromSeconds(25), TimeSpan.FromSeconds(30));
         await job.StopAsync();
     }
 

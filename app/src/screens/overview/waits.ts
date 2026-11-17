@@ -55,15 +55,11 @@ function words(wait: CrawlWait): Omit<WaitEntry, 'key'> {
         title: 'The site isn’t answering',
         detail: `${host} hasn’t answered for ${time(wait.durationMs)}. The crawl stops after 10 minutes of it, and can be continued later.`,
       };
-    case 'sectionLimited': {
-      const section = wait.section ?? 'some';
-      const left = wait.urls ?? 0;
-      const eta = wait.durationMs === undefined || left === 0 ? '' : `, about ${time(left * wait.durationMs)} more`;
+    case 'sectionLimited':
       return {
         title: 'Reading some pages slowly',
-        detail: `${host} limits its ${section} pages: ${formatCountOf(left, 'URL')} left, one every ${time(wait.durationMs)}${eta}. The rest of the site isn’t held up.`,
+        detail: `${host} limits its ${wait.section ?? 'some'} pages: ${formatCountOf(wait.urls ?? 0, 'URL')} left, the next tried in ${time(wait.durationMs)}. The rest of the site isn’t held up.`,
       };
-    }
     case 'robotsTxtCoolDown':
       return {
         title: 'Waiting to ask for robots.txt again',

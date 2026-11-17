@@ -119,10 +119,12 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      in /products/; a URL in no folder is in the root's). That section alone is limited: its URLs are held back from the
      workers and asked one at a time (`Crawling/SectionTrickle`), during the crawl and after it, an interval apart that
      starts at the first Retry-After, doubles at each 429 of a page the section let go (never sooner than the
-     Retry-After), and shortens by a tenth each time a page gets through. The rest of the host keeps its pace. Only 429s
+     Retry-After, and past five minutes up to 20, so a limit that each refused try renews gets a long quiet spell before
+     the last tries), and shortens by a tenth each time a page gets through. The rest of the host keeps its pace. Only 429s
      from three sections within ten minutes are the host's own limit and slow the whole host, as below. Nothing is given
-     up while pages get through: a section is given up on after three 429s in a row at its slowest (one page every five
-     minutes), and every section 20 minutes after the rest of the crawl is over; what is left is not checked.
+     up while pages get through: a section is given up on after three 429s in a row at its slowest (one page every 20
+     minutes), and every section 20 minutes after the rest of the crawl is over; what is left is not checked. Progress
+     says how many are left and when the next is tried.
    - A host that asks to slow down as a whole (429s from three sections, or 503 with Retry-After) is paused, all of it, for its Retry-After (or 10 s,
      doubling while it keeps asking, up to two minutes), then resumes one request at a time at half the pace that
      tripped it (never below one every five seconds), so nothing queued bursts out after the pause. 429s to requests sent before that slowdown don't slow
