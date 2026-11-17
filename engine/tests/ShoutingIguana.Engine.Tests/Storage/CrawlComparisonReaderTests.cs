@@ -129,26 +129,32 @@ public sealed class CrawlComparisonReaderTests(ComparisonCrawls crawls)
     }
 
     /// <summary>
-    /// A duplicate cluster is matched by the pages it shares, not by its name (its first page): the pair /p/184 and /p/185,
-    /// whose first page was renamed and whose title /p/186 took, is one cluster named /p/185 now, the same size; the pair
-    /// /p/36 and /p/37, whose copy took its own title, is a cluster then with no URL now.
+    /// A duplicate cluster is matched by the pages it shares, not by its name (one of its pages): the pair /p/184 and /p/185,
+    /// whose first page was renamed and whose title /p/186 took, is the cluster /p/185 and /p/186 now, the same size; the
+    /// pair /p/36 and /p/37, whose copy took its own title, is a cluster then with no URL now.
     /// </summary>
     [Fact]
     public void DuplicateClustersAreMatchedByThePagesTheyShare()
     {
-        // A cluster is named by one of its pages (the first found), so each is found here by the pages it holds.
-        var groups = IssueGroupReader.ReadGroups(crawls.Now, "title-duplicate", 0, UrlGridReader.MAX_LIMIT, null, crawls.Then)!;
+        // A cluster is named by the page of it the crawl found first, so each is found here by the pages it holds.
         var before = IssueGroupReader.ReadGroups(crawls.Then, "title-duplicate", 0, UrlGridReader.MAX_LIMIT)!.Groups;
-        var renamed = groups.Groups.Single(group => Members(crawls.Now, "title-duplicate", group).Contains(Url("/p/185")));
-        Assert.Equal([Url("/p/185"), Url("/p/186")], Members(crawls.Now, "title-duplicate", renamed).Order(StringComparer.Ordinal));
         var renamedThen = before.Single(group => Members(crawls.Then, "title-duplicate", group).Contains(Url("/p/185")));
         Assert.Equal([Url("/p/184"), Url("/p/185")], Members(crawls.Then, "title-duplicate", renamedThen).Order(StringComparer.Ordinal));
+
+        // Named after /p/184 then, which the cluster no longer has, whichever page the crawl found first: so its name
+        // names no cluster now, for sure.
+        var then = crawls.Copy(crawls.Then);
+        Execute(then, $"UPDATE issue_targets SET related_url_id = {Id(then, Url("/p/184"))} WHERE issue = 'title-duplicate' AND related_url_id = {renamedThen.RelatedUrlId}");
+
+        var groups = IssueGroupReader.ReadGroups(crawls.Now, "title-duplicate", 0, UrlGridReader.MAX_LIMIT, null, then)!;
+        var renamed = groups.Groups.Single(group => Members(crawls.Now, "title-duplicate", group).Contains(Url("/p/185")));
+        Assert.Equal([Url("/p/185"), Url("/p/186")], Members(crawls.Now, "title-duplicate", renamed).Order(StringComparer.Ordinal));
         Assert.Equal(new GroupChange(GroupChangeState.Same, 2), renamed.Change);
 
         // Its name then names no cluster now, and it isn't among the fixed: it's the same cluster.
-        Assert.DoesNotContain(groups.Groups, group => group.RelatedUrl == renamedThen.RelatedUrl);
-        var fixedGroups = CrawlComparisonReader.ReadCleared(crawls.Now, crawls.Then, "title-duplicate", new ClearedQuery(ClearedLevel.Groups, Limit: UrlGridReader.MAX_LIMIT))!;
-        Assert.DoesNotContain(fixedGroups.Groups, group => group.RelatedUrl == renamedThen.RelatedUrl);
+        Assert.DoesNotContain(groups.Groups, group => group.RelatedUrl == Url("/p/184"));
+        var fixedGroups = CrawlComparisonReader.ReadCleared(crawls.Now, then, "title-duplicate", new ClearedQuery(ClearedLevel.Groups, Limit: UrlGridReader.MAX_LIMIT))!;
+        Assert.DoesNotContain(fixedGroups.Groups, group => group.RelatedUrl == Url("/p/184"));
 
         // The pair whose copy took its own title: fixed, both pages.
         Assert.Equal(groups.Compared!.FixedGroups, fixedGroups.Total);
