@@ -3,7 +3,7 @@
 // URLs other pages refer to says how many pages once, in "Found on".
 import { createMemoryHistory } from '@tanstack/react-router';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
@@ -88,6 +88,28 @@ describe('a flat check’s rows', () => {
     expect(headers(grid).some((header) => /Inlinks|Used on/.test(header))).toBe(false);
     const read = requests.find((request) => request.path.endsWith('/issues/title-too-long/rows'));
     expect(read?.body).toMatchObject({ columns: ['url', 'detail'] });
+  });
+});
+
+describe('a flat check’s room', () => {
+  it('gives the detail and “Found on” what the URL doesn’t need, so neither is cut in a wide panel', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
+    const checks = {
+      ...EVIDENCE_CHECKS,
+      checks: EVIDENCE_CHECKS.checks.map((check) =>
+        check.id === 'title-too-long' ? { ...check, references: 'sources' as const, evidence: [] } : check,
+      ),
+    };
+    sidecar({ checks });
+    await open(`${ISSUES}/title-too-long`);
+    const grid = await screen.findByRole('grid', { name: /Title too long/ });
+    await waitFor(() => expect(headers(grid)).toContain('Found on'));
+    const widths = (grid.style.getPropertyValue('--grid-template').match(/\d+(?=px)/g) ?? []).map(Number);
+    // URL, Detail, Found on: the URL two fifths of what the figures leave, the others the rest, alike.
+    expect(widths).toHaveLength(3);
+    expect(widths[2]).toBeGreaterThan(300);
+    expect(widths[1]).toBeGreaterThan(260);
+    vi.restoreAllMocks();
   });
 });
 

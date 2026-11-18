@@ -191,12 +191,20 @@ export function IssueRowsGrid({
   // Where the usual widths don't fit, the words take less: a figure is never scrolled out of view for them.
   const usual = extra.length > 1 ? DETAIL_WITH_EVIDENCE_WIDTH : DETAIL_WIDTH;
   const tight = words > 0 && available < usual + MIN_SHARED_URL_WIDTH + MIN_WORDS_WIDTH * words;
-  const detailWidth = noDetail ? 0 : tight ? TIGHT_DETAIL_WIDTH : usual;
-  const room = available - detailWidth;
+  const baseDetailWidth = noDetail ? 0 : tight ? TIGHT_DETAIL_WIDTH : usual;
+  const room = available - baseDetailWidth;
+  // With no evidence's words beside them, the URL keeps two fifths and the detail and the where line share the rest,
+  // so neither is cut ("Found on 1 page · /a/ (Redirects he…") while the URL has room to spare.
+  const growing = (noDetail ? 0 : 1) + (whereWidth > 0 ? 1 : 0);
   const urlWidth =
     words > 0
       ? Math.max(tight ? TIGHT_URL_WIDTH : MIN_SHARED_URL_WIDTH, Math.round(room * 0.4))
-      : Math.max(MIN_URL_WIDTH, room);
+      : growing > 0
+        ? Math.max(MIN_URL_WIDTH, Math.round(room * 0.4))
+        : Math.max(MIN_URL_WIDTH, room);
+  const grown = words === 0 && growing > 0 ? Math.max(0, Math.floor((room - urlWidth) / growing)) : 0;
+  const detailWidth = noDetail ? 0 : baseDetailWidth + grown;
+  const whereShown = whereWidth > 0 ? whereWidth + grown : 0;
   const wordsWidth =
     words > 0 ? Math.max(tight ? TIGHT_WORDS_WIDTH : MIN_WORDS_WIDTH, Math.floor((room - urlWidth) / words)) : 0;
   const evidenceColumns = useMemo(
@@ -266,7 +274,7 @@ export function IssueRowsGrid({
             {
               id: 'where',
               header: references === 'sources' ? 'Found on' : 'Names',
-              width: WHERE_WIDTH,
+              width: whereShown,
               cell: (row: IssueRow) => (
                 <WhereFoundLine
                   crawlId={crawlId}
@@ -280,7 +288,20 @@ export function IssueRowsGrid({
             },
           ]),
     ];
-  }, [sort, urlWidth, detailWidth, noDetail, evidenceColumns, siteOrigin, references, crawlId, check, compare, files]);
+  }, [
+    sort,
+    urlWidth,
+    detailWidth,
+    whereShown,
+    noDetail,
+    evidenceColumns,
+    siteOrigin,
+    references,
+    crawlId,
+    check,
+    compare,
+    files,
+  ]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.rows', columns);
 
