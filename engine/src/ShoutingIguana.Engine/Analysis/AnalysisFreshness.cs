@@ -67,9 +67,12 @@ public static class AnalysisFreshness
     /// 19 (the links part's) names each URL
     /// <c>protocol-relative-links</c> counts as the issue's targets (on pages parsed from collection 7 on), names in its detail
     /// any in a tag that isn't a link or file, and doesn't flag an HTTPS page the home page's HSTS covers; and
-    /// <c>uncrawlable-links</c>' detail says where on the page each example is.
+    /// <c>uncrawlable-links</c>' detail says where on the page each example is. 20 reads a security header sent twice, or
+    /// with its repeats joined by commas, as browsers do (<c>X-Content-Type-Options: nosniff, nosniff</c> is nosniff, and
+    /// frame-ancestors in any Content-Security-Policy line stands in for X-Frame-Options), and names the first page of a
+    /// canonical loop as each of its pages' <c>canonical-loop</c> target, so a loop is one group.
     /// </summary>
-    public const int VERSION = 19;
+    public const int VERSION = 20;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and
