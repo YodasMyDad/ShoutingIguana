@@ -263,7 +263,7 @@ and is in the group without a related URL.
 | 71 | `hreflang-outside-head` | P/N/– | – | – | none → `2 entries in the body: <div id="gtm"> on line 12 ended the head early`; `2 entries in the body` for a page crawled before this was collected | imp · – |
 | 156 | `hreflang-inconsistent-code` (new) | P/RU/T | – | `statusCode`, `text` (the code this page gives it), `indexability` | The first: `Names /fr/ as "fr"; /fr/ calls itself "fr-CA"` | imp · pages |
 | 157 | `hreflang-header-mismatch` (new) | P/N/– | – | – | `The HTML names 3 versions, the header 2; only in the HTML: x-default` | imp · – |
-| 158 | `hreflang-unlinked` (new) | U/N/S | `inlinks`, `linkingPages` | – | `Only hreflang leads here`, or for a URL the crawl left unread because it doesn't follow hreflang (the default) `Only hreflang leads here; not read, as the crawl doesn't follow hreflang links`; its found-on lists the pages whose hreflang names it | use · – |
+| 158 | `hreflang-unlinked` (new) | P/N/S | `inlinks`, `linkingPages` | – | `No link or sitemap entry leads here`; its found-on lists the pages whose hreflang names it | imp · – |
 | 159 | `hreflang-lang-mismatch` (new) | P/PD/– | `language` | – | `hreflang en, lang fr` | imp · pages |
 | 160 | `hreflang-self-only` (new) | P/N/– | – | – | – | imp · – |
 
@@ -341,8 +341,8 @@ and is in the group without a related URL.
 
 **New checks (step 3b, [v2-new-checks.md](v2-new-checks.md)):** rows 88 on, marked "(new)", each in its category's
 table. `canonical-unlinked` is P where the specification said U: it flags only indexable pages, as `orphan-page` does.
-`hreflang-unlinked` stays U, as specified: the crawl doesn't follow hreflang by default, so a version only hreflang leads
-to is left unread, and is flagged as a URL, which a link or a sitemap entry would have led the crawl to.
+`hreflang-unlinked` is P too, for the same reason. The crawl doesn't follow hreflang by default, so a version only
+hreflang leads to is left unread: where one is, the check is skipped (`hreflang-off`), as which are unlinked can't be told.
 `canonicalised-page` (27) no longer flags a page `canonical-to-first-page` or `canonical-other-domain` flags, and
 `canonical-to-non-indexable` (32) no page of a canonical loop. `meta-refresh` (11) also reads a `Refresh` response header:
 `The Refresh header moves to https://x/ after 5 seconds`.

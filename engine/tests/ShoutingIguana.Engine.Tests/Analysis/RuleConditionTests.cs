@@ -211,7 +211,7 @@ public sealed class RuleConditionTests
         Assert.Equal(
             [
                 new IssueHit(IssueCatalog.HREFLANG_MISSING_RETURN, en.UrlId, "2 alternates don't link back", de.UrlId) { Targets = [de.UrlId, it.UrlId] },
-                .. new[] { en, fr, de, it }.Select(page => page.UrlId).Order().Select(id => new IssueHit(IssueCatalog.HREFLANG_UNLINKED, id, "Only hreflang leads here"))
+                .. new[] { en, fr, de, it }.Select(page => page.UrlId).Order().Select(id => new IssueHit(IssueCatalog.HREFLANG_UNLINKED, id, "No link or sitemap entry leads here"))
             ],
             rules.Finish());
     }

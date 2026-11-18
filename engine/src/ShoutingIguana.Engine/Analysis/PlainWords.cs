@@ -67,6 +67,10 @@ public static class PlainWords
             """This site check was set not to load images and other files.""",
             """Check the site again, with "Images and other files" ticked."""),
 
+        [SkippedCheckReasons.HREFLANG_OFF] = new(
+            """This site check was set not to read the other language versions your pages name, and some of them weren't read.""",
+            """Tick the setting that reads your other language versions in the check's Advanced settings, then check the site again."""),
+
         [SkippedCheckReasons.ROBOTS_TXT_IGNORED] = new(
             """This site check was set to ignore your site's rules files for search engines, so it can't say what they put off limits or whether each can be read.""",
             """Set the check to follow the rules files again in its Advanced settings, then check the site again."""),

@@ -8,11 +8,9 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// Hreflang annotations on indexable pages: valid codes, a self-reference, one URL per code, x-default and working
 /// targets on each page, then return links across pages. Only annotations in the head or an HTTP Link header count,
 /// as with Google, and only on indexable pages: Google reads hreflang on canonical pages, so a canonicalised variant
-/// that repeats its canonical's set is doing the recommended thing. <paramref name="notFollowed"/>: the internal URLs the
-/// crawl left unread because it doesn't follow that kind of link (hreflang, by default), so a version named only by
-/// hreflang is still known to be unlinked.
+/// that repeats its canonical's set is doing the recommended thing.
 /// </summary>
-internal sealed class HreflangRules(UrlTable urls, Func<int, string?>? readUrl = null, IReadOnlySet<int>? notFollowed = null) : IPageRule, ISiteRule
+internal sealed class HreflangRules(UrlTable urls, Func<int, string?>? readUrl = null) : IPageRule, ISiteRule
 {
     /// <summary>Every declared alternate as (page &lt;&lt; 32 | alternate): 8 bytes each, sorted for the return-link lookups.</summary>
     private readonly List<long> _alternates = [];
@@ -187,23 +185,13 @@ internal sealed class HreflangRules(UrlTable urls, Func<int, string?>? readUrl =
             start = end;
         }
 
-        // A version only hreflang leads to: no <a href> from a page the analysis read, and no sitemap entry. An indexable
-        // page, or a URL left unread because the crawl doesn't follow hreflang: a link or a sitemap entry would have led
-        // the crawl to it.
+        // A version no <a href> from a page the analysis read leads to, and no sitemap entry lists. Something else may reach
+        // it (a redirect, a canonical, a refresh), so the detail says what isn't there, not what is.
         foreach (var named in _named.Order())
         {
-            if (urls[named] is not { IsInternal: true, InSitemap: false } status || urls.Inlinks(named) > 0)
+            if (urls[named] is { IsInternal: true, IsIndexablePage: true, InSitemap: false } && urls.Inlinks(named) == 0)
             {
-                continue;
-            }
-
-            if (status.IsIndexablePage)
-            {
-                yield return new IssueHit(IssueCatalog.HREFLANG_UNLINKED, named, "Only hreflang leads here");
-            }
-            else if (notFollowed?.Contains(named) == true)
-            {
-                yield return new IssueHit(IssueCatalog.HREFLANG_UNLINKED, named, "Only hreflang leads here; not read, as the crawl doesn't follow hreflang links");
+                yield return new IssueHit(IssueCatalog.HREFLANG_UNLINKED, named, "No link or sitemap entry leads here");
             }
         }
     }

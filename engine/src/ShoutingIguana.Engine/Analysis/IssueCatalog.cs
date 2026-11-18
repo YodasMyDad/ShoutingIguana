@@ -1620,14 +1620,13 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HREFLANG_UNLINKED = new("hreflang-unlinked", IssueCategory.Hreflang, IssueSeverity.Notice,
         "Hreflang URL that no page links to",
-        """A URL on the site an indexable page names as a language version, but that no crawled page links to with an ordinary link and no sitemap lists: an indexable page, or a URL the crawl didn't read because it doesn't follow hreflang links (an option, off by default), which a link or a sitemap entry would have led it to. It's only checked when the crawl read every page that could link to it. Where it's found lists the pages naming it.""",
+        """An indexable page another page names as a language version, but that no crawled page links to with an ordinary link and no sitemap lists. It's only checked when the crawl read every page that could link to it, and every version hreflang names: the crawl doesn't follow hreflang unless told to, so a version only hreflang leads to is left unread. Where it's found lists the pages naming it.""",
         """Link to each language version from the others, such as with a language switcher, and list them in the sitemap.""")
     {
         Why = """Hreflang says which version to show, not that a page matters: a version only hreflang leads to gets no link signals, and visitors can't reach it from the site.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
         References = IssueReferences.Sources,
-        // A URL: one the crawl didn't read isn't known to be a page.
-        Subject = IssueSubject.Url,
+        Subject = IssueSubject.Page,
         // As an orphan: only a full crawl shows that something now links to it.
         Recheck = [],
         Grouping = IssueGrouping.None,

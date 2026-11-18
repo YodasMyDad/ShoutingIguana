@@ -170,6 +170,18 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     IssueCatalog.BROKEN_EXTERNAL_LINKS, IssueCatalog.SLOW_EXTERNAL_LINKS);
             }
 
+            // A version only hreflang names is never read when hreflang isn't followed, so which are unlinked can't be told;
+            // unless the check is skipped already, for pages the crawl didn't read at all.
+            if (!options.CrawlHreflang && !skipped.ContainsKey(IssueCatalog.HREFLANG_UNLINKED) &&
+                reader.ReadUnreadHreflangTargets() is > 0 and var unread)
+            {
+                var versions = unread == 1 ? "1 language version" : string.Create(CultureInfo.InvariantCulture, $"{unread:N0} language versions");
+                Skip(notes, skipped, $"Hreflang links weren't followed in this crawl, so language versions nothing else leads to weren't looked for.",
+                    SkippedCheckReasons.HREFLANG_OFF,
+                    $"Hreflang links weren't followed in this crawl, and {versions} they name {(unread == 1 ? "wasn't" : "weren't")} read.",
+                    IssueCatalog.HREFLANG_UNLINKED);
+            }
+
             if (!options.CheckResources)
             {
                 Skip(notes, skipped, "Images weren't fetched in this crawl, so broken and oversized images weren't looked for.",
@@ -253,7 +265,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 }
             }
 
-            var hreflang = new HreflangRules(urls, reader.ReadUrl, reader.ReadNotFollowedUrls());
+            var hreflang = new HreflangRules(urls, reader.ReadUrl);
             var indexability = new IndexabilityRules();
             var robotsToken = UserAgents.Resolve(options.UserAgent, options.CustomUserAgent).RobotsToken;
             IPageRule[] pageRules =

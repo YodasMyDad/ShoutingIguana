@@ -128,9 +128,11 @@ public sealed partial class SyntheticSite
         Page("hreflang-header-b", "Hreflang header B", [], page => page with { ExtraHead = headerSet, LangValue = "de" });
         var onlySet = Hreflang(("en", "hreflang-only-a"), ("es", "hreflang-only-b"), ("x-default", "hreflang-only-a"));
         Page("hreflang-only-a", "Hreflang only A", [], page => page with { ExtraHead = onlySet });
-        // Only hreflang leads to b, which the crawler doesn't follow by default: b is never read, and that says it's unlinked.
-        plants.Add(new Plant(PLANTS_PATH + "hreflang-only-b", Plant.NOT_FOLLOWED, Linked: false, InSitemap: false, ["hreflang-unlinked"],
-            () => Html(Render(PlantPage("hreflang-only-b", "Hreflang only B") with { ExtraHead = onlySet, LangValue = "es" }))));
+        // No link leads to b and no sitemap lists it; the crawler reads it through a linked URL that redirects to it (the
+        // crawl doesn't follow hreflang by default, and a version left unread would skip the check).
+        Page("hreflang-only-b", "Hreflang only B", ["hreflang-unlinked", "not-in-sitemap"], page => page with { ExtraHead = onlySet, LangValue = "es" },
+            inSitemap: false, linked: false);
+        Other("hreflang-only-go", 301, linked: true, [], () => Redirect(301, PLANTS_PATH + "hreflang-only-b"));
         var langSet = Hreflang(("en", "hreflang-lang-a"), ("fr", "hreflang-lang-b"), ("x-default", "hreflang-lang-a"));
         Page("hreflang-lang-a", "Hreflang lang A", ["hreflang-lang-mismatch"], page => page with { ExtraHead = langSet, LangValue = "fr" });
         Page("hreflang-lang-b", "Hreflang lang B", [], page => page with { ExtraHead = langSet, LangValue = "fr" });

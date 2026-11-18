@@ -118,24 +118,6 @@ public sealed class TextHreflangCheckTests
         Assert.Equal([c.UrlId, d.UrlId], hits.Where(hit => hit.Issue == IssueCatalog.HREFLANG_UNLINKED).Select(hit => hit.UrlId).Order());
     }
 
-    [Fact]
-    public void AVersionTheCrawlDidntReadBecauseItDoesntFollowHreflangIsUnlinkedToo()
-    {
-        // Hreflang isn't followed by default, so a version only hreflang leads to is never read: that it was left unread
-        // for that reason says nothing links to it and no sitemap lists it.
-        var site = new RuleHarness();
-        var page = site.Page($"{site.Site}/a", RuleHarness.Html(
-            $"<link rel=\"alternate\" hreflang=\"en\" href=\"{site.Site}/a\"><link rel=\"alternate\" hreflang=\"es\" href=\"{site.Site}/es\">" +
-            $"<link rel=\"alternate\" hreflang=\"de\" href=\"{site.Site}/de\">"));
-        var urls = site.Table();
-        var unread = site.Id($"{site.Site}/es");
-        var rules = new HreflangRules(urls, site.UrlOf, new HashSet<int> { unread });
-        urls.CountInlinks(page);
-        rules.Observe(page);
-
-        var hit = Assert.Single(rules.Finish(), hit => hit.Issue == IssueCatalog.HREFLANG_UNLINKED);
-        Assert.Equal((unread, "Only hreflang leads here; not read, as the crawl doesn't follow hreflang links"), (hit.UrlId, hit.Detail));
-    }
 
     private static string? Detail(string body, IssueDefinition check, IndexabilityReason reason = IndexabilityReason.None, string head = "", string lang = " lang=\"en\"")
     {

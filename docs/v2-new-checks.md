@@ -1127,13 +1127,15 @@ Hreflang · **Notice** · Low · U/N/S
 
 - **Simple:** "Language versions that nothing links to"
 - **Rule:** an indexable page an analysed page names as an hreflang alternate, with no `<a href>` inlinks and no sitemap
-  entry. Detail: `Only hreflang leads here`. *Built with one more case:* the crawl doesn't follow hreflang by default, so
-  such a version is usually never read; a URL left unread for that reason is flagged too
-  (`Only hreflang leads here; not read, as the crawl doesn't follow hreflang links`), as a link or a sitemap entry would
-  have led the crawl to it.
+  entry. Detail: `Only hreflang leads here`. *As built:* P, as `canonical-unlinked`; the detail is
+  `No link or sitemap entry leads here`, as a redirect, canonical or refresh may reach it. The crawl doesn't follow hreflang
+  by default, so a version only hreflang leads to is never read: where an hreflang target was left unread for that, the
+  check is skipped with a new reason, `hreflang-off` (flagging the unread URL was tried, and broke the rule that what a
+  check flags is a share of the URLs crawled).
 - **Evidence:** columns `inlinks`, `linkingPages`; its found-on lists the hreflang entries naming it.
 - **Plant:** `hreflang-only-a` (linked) and `hreflang-only-b` (not linked, not in the sitemap; also `not-in-sitemap`),
-  naming each other. Expected **1**. *As built:* b is never read in the default crawl, so it isn't `not-in-sitemap`'s.
+  naming each other. Expected **1**. *As built:* a linked URL, `hreflang-only-go`, redirects to b, so the default crawl
+  reads it.
 - **From:** Screaming Frog "Unlinked Hreflang URLs".
 
 #### 64. `hreflang-lang-mismatch`: Hreflang code and lang attribute differ

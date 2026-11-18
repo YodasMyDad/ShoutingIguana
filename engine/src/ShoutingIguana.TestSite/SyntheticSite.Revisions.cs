@@ -215,7 +215,7 @@ public sealed partial class SyntheticSite
 
     private static SyntheticUrlFate FateOf(Plant plant) => plant switch
     {
-        { Status: Plant.REFUSED or Plant.NOT_FOLLOWED } => SyntheticUrlFate.NotRead,
+        { Status: Plant.REFUSED } => SyntheticUrlFate.NotRead,
         { Status: 200, IsPage: true, IsAnalysed: true } => SyntheticUrlFate.Page,
         { Status: 200 } => SyntheticUrlFate.Answered,
         _ => FateOf(plant.Respond())

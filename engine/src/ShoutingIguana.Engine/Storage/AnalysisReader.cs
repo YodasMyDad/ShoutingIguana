@@ -398,16 +398,14 @@ internal sealed class AnalysisReader : IDisposable
     }
 
     /// <summary>
-    /// The internal URLs the crawl left unread because it doesn't follow their kind of link (canonical, hreflang or
-    /// pagination, each an option).
+    /// The internal URLs an hreflang link names that the crawl left unread because it doesn't follow their kind of link
+    /// (hreflang, unless the crawl was told to).
     /// </summary>
-    public HashSet<int> ReadNotFollowedUrls()
-    {
-        HashSet<int> ids = [];
-        Rows($"SELECT id FROM urls WHERE is_internal = 1 AND state = {(int)UrlState.Skipped} AND skip_reason = {(int)SkipReason.NotFollowedByOption}",
-            reader => ids.Add(reader.GetInt32(0)));
-        return ids;
-    }
+    public long ReadUnreadHreflangTargets() => Convert.ToInt64(CrawlDatabase.Scalar(_connection, $"""
+        SELECT COUNT(*) FROM urls u
+        WHERE u.is_internal = 1 AND u.state = {(int)UrlState.Skipped} AND u.skip_reason = {(int)SkipReason.NotFollowedByOption}
+          AND EXISTS (SELECT 1 FROM links l WHERE l.to_id = u.id AND l.kind = {(int)LinkKind.Hreflang})
+        """), CultureInfo.InvariantCulture);
 
     /// <summary>Every internal URL the crawl has, with its id, in id order.</summary>
     public List<(int Id, string Url)> ReadInternalUrls()
