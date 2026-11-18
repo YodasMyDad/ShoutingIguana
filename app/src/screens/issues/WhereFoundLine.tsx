@@ -19,7 +19,7 @@ export function WhereFoundLine({
   className,
 }: {
   crawlId: string;
-  check: Pick<Check, 'id' | 'references' | 'targetFacts'>;
+  check: Pick<Check, 'id' | 'references' | 'targetFacts'> & Partial<Pick<Check, 'category'>>;
   urlId: number;
   siteOrigin: string | null;
   /** For a page under a group of one URL it names: that URL, named first. */
