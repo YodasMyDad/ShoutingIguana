@@ -2581,6 +2581,7 @@ was found" and "Other address". The two lists (E7) write their screens' columns,
     | The image checks | "Images (addresses)", "Images"; and for `image-too-large` "Largest image (bytes)", a number, so the sheet sorts by it | `https://x/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300; content, alt “Sofa”)`; without alt `… ; no alt`; without a height `… ; no height; the file is 1200×800 px` |
     | The hreflang checks | "Alternates (addresses)", "Alternates" | `https://x/de/ (404; “de”)`, `https://x/de/ (200; noindex; “de”)` |
     | `mixed-content` | "HTTP resources (addresses)", "HTTP resources" | `http://x/a.js (200; script in the head)` |
+    | `protocol-relative-links` | "URLs without a scheme (addresses)", "URLs without a scheme" | `https://cdn.x/app.js (200; script in the head)` |
 
     Up to 10 a cell, then "and N more", as before. [The per-check table](v2-evidence.md#what-the-exports-carry) has
     which check is which.

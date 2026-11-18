@@ -66,6 +66,17 @@ public sealed class EvidenceReadTests(GridCrawl crawl)
         Assert.Matches(@"^200; answered in 3\.[0-9] s; ", WhereFoundColumns.TargetFacts(check, target));
     }
 
+    /// <summary>A URL written without its scheme says what the page loads or links there, and where, as mixed content's do.</summary>
+    [Fact]
+    public void AUrlWrittenWithoutItsSchemeSaysWhatThePageLoadsThere()
+    {
+        var check = IssueCatalog.PROTOCOL_RELATIVE_LINKS;
+        var script = FoundOnReader.ReadTargets(crawl.Path, check.Id, [Id("/plants/protocol-relative")])!.Single().Targets[0];
+
+        Assert.EndsWith("/static/app.js", script.Url, StringComparison.Ordinal);
+        Assert.Matches("^[^;]+; script in the head$", WhereFoundColumns.TargetFacts(check, script));
+    }
+
     [Fact]
     public void AnImageWithoutASizeSaysWhichAttributeIsMissingAndWhatToWrite()
     {

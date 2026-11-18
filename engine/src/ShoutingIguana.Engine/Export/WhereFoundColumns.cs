@@ -143,7 +143,8 @@ internal static class WhereFoundColumns
             }
 
             List<string> link = [];
-            if (check == IssueCatalog.MIXED_CONTENT && target.Kind is { } kind)
+            // What the page loads or links at the URL, and where: a resource of mixed content's, any of a // URL's.
+            if ((check == IssueCatalog.MIXED_CONTENT || check == IssueCatalog.PROTOCOL_RELATIVE_LINKS) && target.Kind is { } kind)
             {
                 link.Add($"{KindWord(kind)} in the {PositionWord(target.Position ?? LinkPosition.Content)}");
             }
