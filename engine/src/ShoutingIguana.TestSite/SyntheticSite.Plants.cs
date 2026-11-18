@@ -152,11 +152,19 @@ public sealed partial class SyntheticSite
                 () => new SyntheticResponse(200, HTML, Render(page), null, null, SECURITY_HEADERS), Url: url));
         }
 
-        // A session cookie without HttpOnly (and on HTTPS without Secure); a script written without its scheme.
+        // A session cookie without HttpOnly (and on HTTPS without Secure).
         Page("insecure-cookie", "Insecure cookie", ["cookies-insecure"], headers: new Dictionary<string, string> { ["Set-Cookie"] = "sessionid=planted; Path=/" });
-        Page("protocol-relative", "Protocol-relative script", ["protocol-relative-links"], page => page with
+
+        // A script and a link written without their scheme (the link beside one to the same page written with it), and a
+        // resource hint naming the partner site's origin so, which is no link. Over HTTPS, revision 1's home page sends
+        // HSTS: browsers that have been there never load the page over HTTP, so it isn't flagged.
+        var schemeless = _base[_base.IndexOf("//", StringComparison.Ordinal)..];
+        Page("protocol-relative", "Protocol-relative script", IsHttps && Revision >= 1 ? [] : ["protocol-relative-links"], page => page with
         {
-            ExtraHead = $"<script src=\"{_base[_base.IndexOf("//", StringComparison.Ordinal)..]}/static/app.js\" defer></script>"
+            ExtraHead = $"<script src=\"{schemeless}/static/app.js\" defer></script>" +
+                        $"<link rel=\"preconnect\" href=\"{_external[_external.IndexOf("//", StringComparison.Ordinal)..]}\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">The thin page</a> " +
+                      $"<a href=\"{schemeless}{PLANTS_PATH}thin\">The thin page, written without its scheme</a></p>"
         });
 
         // A link tagged for ad tracking to the thin page, which canonicalises to itself without the tag (expected beside the

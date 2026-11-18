@@ -18,5 +18,11 @@ public enum LinkFlags : byte
     SamePage = 32,
 
     /// <summary>Came from an HTTP Link header rather than the HTML.</summary>
-    FromHttpHeader = 64
+    FromHttpHeader = 64,
+
+    /// <summary>
+    /// Written without its scheme (<c>//cdn.example.com/app.js</c>), so it takes the page's. Noted by pages parsed from
+    /// collection 6 on (<see cref="PageFacts.CURRENT_COLLECTION"/>).
+    /// </summary>
+    ProtocolRelative = 128
 }

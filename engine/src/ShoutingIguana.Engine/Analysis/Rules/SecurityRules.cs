@@ -8,7 +8,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// HTTPS and mixed content on every page. Site-wide settings (HTTPS itself, security headers) are checked once, on
 /// the home page, instead of repeating the same finding on every URL.
 /// </summary>
-internal sealed class SecurityRules(UrlTable urls) : IPageRule
+/// <param name="hsts">The HSTS the home page sends, which keeps browsers off an HTTP copy of the site's HTTPS pages.</param>
+internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IPageRule
 {
     /// <summary>A year: hstspreload.org's least max-age, and so the least that keeps HSTS on between visits.</summary>
     private const long HSTS_MIN_SECONDS = 31_536_000;
@@ -52,10 +53,10 @@ internal sealed class SecurityRules(UrlTable urls) : IPageRule
             yield return new IssueHit(IssueCatalog.FORM_NOT_SECURE, page.UrlId, form);
         }
 
-        if (page.Facts.ProtocolRelativeUrls is { } relative)
+        // Where HSTS keeps browsers on HTTPS, an HTTPS page has no HTTP copy for them to take the scheme of.
+        if (page.Facts.ProtocolRelativeUrls is { } relative && hsts?.Covers(page.Uri) != true)
         {
-            yield return new IssueHit(IssueCatalog.PROTOCOL_RELATIVE_LINKS, page.UrlId,
-                RuleText.Fit($"{RuleText.Count(relative.Count, "URL", "URLs")}, such as {relative.First}"));
+            yield return ProtocolRelative(page, relative);
         }
 
         if (!isHttps)
@@ -81,6 +82,37 @@ internal sealed class SecurityRules(UrlTable urls) : IPageRule
     }
 
     /// <summary>
+    /// The page's URLs written without their scheme. Each link of the page's written that way names its target, in the page's
+    /// order, so every one can be listed; one in no link (a resource hint, a base) names no URL, and the detail counts it
+    /// and gives the first. A page parsed before links noted how they were written names none.
+    /// </summary>
+    private static IssueHit ProtocolRelative(AnalyzedPage page, ProtocolRelativeFact relative)
+    {
+        TargetSet written = new();
+        foreach (var link in page.Links.Where(link => link.Flags.HasFlag(LinkFlags.ProtocolRelative)))
+        {
+            written.Add(link.ToId);
+        }
+
+        var detail = relative switch
+        {
+            { Unlinked: > 0, FirstUnlinked: { } unlinked } when relative.Unlinked >= relative.Count =>
+                $"{RuleText.Count(relative.Count, "URL in a tag that isn't a link or file", "URLs in tags that aren't links or files")}, such as {unlinked}",
+            { Unlinked: > 0, FirstUnlinked: { } unlinked } =>
+                $"{RuleText.Count(relative.Count, "URL", "URLs")}, such as {relative.First}; " +
+                $"{RuleText.Count(relative.Unlinked, "in a tag that isn't a link or file", "in tags that aren't links or files")}, such as {unlinked}",
+            _ => $"{RuleText.Count(relative.Count, "URL", "URLs")}, such as {relative.First}"
+        };
+
+        return written.First is { } first
+            ? new IssueHit(IssueCatalog.PROTOCOL_RELATIVE_LINKS, page.UrlId, RuleText.Fit(detail), first)
+            {
+                Targets = relative.Unlinked > 0 ? [.. written.Ids, IssueHit.NO_OTHER_URL] : written.Ids
+            }
+            : new IssueHit(IssueCatalog.PROTOCOL_RELATIVE_LINKS, page.UrlId, RuleText.Fit(detail));
+    }
+
+    /// <summary>
     /// Security headers there but set too weakly: Strict-Transport-Security (on HTTPS) without a max-age of a year or more,
     /// as the preload list asks; X-Content-Type-Options other than nosniff, its one directive.
     /// </summary>
@@ -89,15 +121,17 @@ internal sealed class SecurityRules(UrlTable urls) : IPageRule
         List<string> weak = [];
         if (isHttps && page.Header("strict-transport-security") is { } hsts)
         {
-            var maxAge = hsts.Split(';').Select(part => part.Trim()).FirstOrDefault(part => part.StartsWith("max-age", StringComparison.OrdinalIgnoreCase));
-            var value = maxAge?.Split('=', 2) is [_, var written] ? written.Trim().Trim('"') : null;
-            if (!long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds))
+            switch (HstsPolicy.MaxAge(hsts))
             {
-                weak.Add(maxAge is null ? "HSTS without max-age" : $"HSTS max-age {RuleText.Quote(value ?? string.Empty, 20)} unreadable");
-            }
-            else if (seconds < HSTS_MIN_SECONDS)
-            {
-                weak.Add(string.Create(CultureInfo.InvariantCulture, $"HSTS max-age {seconds} ({Duration(seconds)}), under a year"));
+                case null:
+                    weak.Add("HSTS without max-age");
+                    break;
+                case (var written, null):
+                    weak.Add($"HSTS max-age {RuleText.Quote(written ?? string.Empty, 20)} unreadable");
+                    break;
+                case (_, { } seconds) when seconds < HSTS_MIN_SECONDS:
+                    weak.Add(string.Create(CultureInfo.InvariantCulture, $"HSTS max-age {seconds} ({Duration(seconds)}), under a year"));
+                    break;
             }
         }
 

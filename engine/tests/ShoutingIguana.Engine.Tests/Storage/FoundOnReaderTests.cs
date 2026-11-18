@@ -40,7 +40,7 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "broken-resources", "links-to-localhost", "generic-anchor-text",
             "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable",
             "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "hreflang-inconsistent-code",
-            "social-image-broken", "social-image-too-large", "social-image-too-small"
+            "social-image-broken", "social-image-too-large", "social-image-too-small", "protocol-relative-links"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
@@ -215,6 +215,24 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         var thin = Assert.Single(named.Targets, target => target.Url.EndsWith("/plants/thin", StringComparison.Ordinal));
         Assert.Equal((LinkFlags.NoFollow, 1), (thin.Flags, thin.Links));
         Assert.Equal(["2"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {thin.Id}"));
+    }
+
+    /// <summary>
+    /// A page writing URLs without their scheme names each one it links to or loads: its script, and the thin page, which
+    /// it also links with the scheme written. The thin page's link is the one written //, counted alone. Its resource hint
+    /// is no link, so the page is in the group naming no URL as well.
+    /// </summary>
+    [Fact]
+    public void AUrlWrittenWithoutItsSchemeIsNamedByTheLinkWrittenSo()
+    {
+        var page = Flagged("protocol-relative-links").Single(id => Url(id).EndsWith("/plants/protocol-relative", StringComparison.Ordinal));
+        var named = FoundOnReader.ReadTargets(crawl.Path, "protocol-relative-links", [page], FoundOnReader.MAX_LISTED)!.Single();
+        Assert.Equal(["/static/app.js", "/plants/thin"], named.Targets.Select(target => new Uri(target.Url).AbsolutePath));
+        var thin = named.Targets[1];
+        Assert.Equal(("The thin page, written without its scheme", 1), (thin.Text, thin.Links));
+        Assert.Equal(LinkFlags.ProtocolRelative, thin.Flags);
+        Assert.Equal(["2"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {thin.Id}"));
+        Assert.Equal(["1"], Query($"SELECT COUNT(*) FROM issue_targets WHERE issue = 'protocol-relative-links' AND url_id = {page} AND related_url_id = 0"));
     }
 
     [Fact]

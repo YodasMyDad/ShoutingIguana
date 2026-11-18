@@ -256,6 +256,7 @@ public sealed class WorkbookExportTests : IDisposable
             IssueReferences.Sources => ["Linked from (pages)", "Linked from", "Listed in sitemaps"],
             IssueReferences.Targets when check.Category == IssueCategory.Canonicals => ["Canonical"],
             IssueReferences.Targets when check == IssueCatalog.IMAGE_TOO_LARGE => ["Images (addresses)", "Images", "Largest image (bytes)"],
+            IssueReferences.Targets when check == IssueCatalog.PROTOCOL_RELATIVE_LINKS => ["URLs without a scheme (addresses)", "URLs without a scheme"],
             IssueReferences.Targets => check.Category switch
             {
                 IssueCategory.Images => ["Images (addresses)", "Images"],

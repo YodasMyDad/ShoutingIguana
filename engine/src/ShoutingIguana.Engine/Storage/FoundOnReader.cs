@@ -180,14 +180,13 @@ public static class FoundOnReader
             // links count those alone. A broken fragment's are judged against the target's ids below; until then, the
             // first link with a fragment. Any other check's link is the first of its kind, and every link to it counts.
             var flagged = FlaggedLinks(checkId);
-            var first = flagged is not null
-                ? $"CASE WHEN {flagged} THEN 0 ELSE 1 END, "
-                : checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id ? "CASE WHEN l.fragment IS NULL THEN 1 ELSE 0 END, " : string.Empty;
+            var flaggedFirst = flagged is null ? string.Empty : $"CASE WHEN {flagged} THEN 0 ELSE 1 END, ";
+            var fragmentFirst = checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id ? "CASE WHEN l.fragment IS NULL THEN 1 ELSE 0 END, " : string.Empty;
             var counted = flagged is null ? string.Empty : $" AND {flagged}";
             using var command = context.Command($"""
                 SELECT o.id, o.url, {status}, {fetched}, {outcome},
                        (SELECT l.rowid FROM links l WHERE l.from_id = $id AND +l.to_id = o.id
-                        ORDER BY CASE WHEN l.kind = {preferred} THEN 0 ELSE 1 END, {first}l.rowid LIMIT 1) AS link,
+                        ORDER BY {flaggedFirst}CASE WHEN l.kind = {preferred} THEN 0 ELSE 1 END, {fragmentFirst}l.rowid LIMIT 1) AS link,
                        (SELECT COUNT(*) FROM links l WHERE l.from_id = $id AND +l.to_id = o.id{counted}) AS links
                 FROM ({named}) t
                 JOIN urls o ON o.id = t.target
@@ -231,7 +230,8 @@ public static class FoundOnReader
     /// <summary>
     /// The page's links to a target the check flags, as SQL, for the checks where some of them can be fine: a link without
     /// text (outside the head; to the page itself, one not written as a fragment, as its skip and #top links are jumps
-    /// within it), and a nofollow link (a followed one beside it isn't). Null for the others.
+    /// within it), a nofollow link (a followed one beside it isn't), and a link written without its scheme (one written
+    /// with it isn't). Null for the others.
     /// </summary>
     private static string? FlaggedLinks(string checkId)
     {
@@ -240,6 +240,11 @@ public static class FoundOnReader
         if (checkId == IssueCatalog.EMPTY_ANCHOR_TEXT.Id)
         {
             return $"({hyperlink} AND COALESCE(TRIM(l.text), '') = '' AND l.position <> {(int)LinkPosition.Head} AND (l.fragment IS NULL OR NOT {samePage}))";
+        }
+
+        if (checkId == IssueCatalog.PROTOCOL_RELATIVE_LINKS.Id)
+        {
+            return $"((l.flags & {(int)LinkFlags.ProtocolRelative}) <> 0)";
         }
 
         return checkId == IssueCatalog.INTERNAL_NOFOLLOW_LINKS.Id

@@ -52,9 +52,11 @@ public static class AnalysisFreshness
     /// with a space after its colon is one rule. 14 is the new sitemap checks' (batch 4): a sitemap entry on another scheme
     /// than every sitemap listing it, and not on the site's own, is reported as on another host (sitemap-url-other-host). 15
     /// writes one note for each reason checks weren't run, the checks totalled ("24 checks weren't run: this crawl was made
-    /// by an earlier version…"), where 14 wrote one for each collection of facts a page's parse lacked.
+    /// by an earlier version…"), where 14 wrote one for each collection of facts a page's parse lacked. 16 names each URL
+    /// <c>protocol-relative-links</c> counts as the issue's targets (on pages parsed from collection 6 on), names in its detail
+    /// any in a tag that isn't a link or file, and doesn't flag an HTTPS page the home page's HSTS covers.
     /// </summary>
-    public const int VERSION = 15;
+    public const int VERSION = 16;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

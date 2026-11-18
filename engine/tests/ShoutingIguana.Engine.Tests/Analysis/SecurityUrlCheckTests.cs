@@ -92,6 +92,78 @@ public sealed class SecurityUrlCheckTests
         Assert.Equal("3 URLs, such as //cdn.example.com/app.js", Detail(new SecurityRules(site.Table()).Check(page), IssueCatalog.PROTOCOL_RELATIVE_LINKS));
     }
 
+    /// <summary>
+    /// Each URL written without its scheme is named where the page links to it or loads it, so the views and the export
+    /// list every one: the issue's targets, in the page's order, and its link is the one written that way, not a link
+    /// to the same URL written with its scheme. One in no link or file (a resource hint) is counted and named in the
+    /// detail, and puts the page in the group naming no URL too.
+    /// </summary>
+    [Fact]
+    public void UrlsWrittenWithoutTheirSchemeAreEachNamed()
+    {
+        var site = new RuleHarness("http://example.com");
+        site.Ok($"{site.Site}/");
+        var page = site.Page($"{site.Site}/a", RuleHarness.Html(
+            "<script src=\"//cdn.example.com/app.js\"></script><link rel=\"preconnect\" href=\"//fonts.example.net\"><link rel=\"icon\" href=\"//example.com/icon.png\">",
+            "<a href=\"//example.com/b\">B</a><a href=\"http://example.com/b\">B again</a><a href=\"/c\">C</a>" +
+            "<img src=\"//cdn.example.com/p.jpg\" alt=\"P\" width=\"1\" height=\"1\">"));
+
+        var hit = Assert.Single(new SecurityRules(site.Table()).Check(page), hit => hit.Issue == IssueCatalog.PROTOCOL_RELATIVE_LINKS);
+        Assert.Equal("5 URLs, such as //cdn.example.com/app.js; 1 in a tag that isn't a link or file, such as //fonts.example.net", hit.Detail);
+        int[] named = [site.Find("http://cdn.example.com/app.js"), site.Find("http://example.com/icon.png"), site.Find("http://example.com/b"), site.Find("http://cdn.example.com/p.jpg")];
+        Assert.Equal(named[0], hit.RelatedUrlId);
+        Assert.Equal([.. named, IssueHit.NO_OTHER_URL], hit.Targets);
+        Assert.Equal([LinkFlags.ProtocolRelative, LinkFlags.None], page.Links.Where(link => link.ToId == named[2]).Select(link => link.Flags & LinkFlags.ProtocolRelative));
+        Assert.Equal((5, 1, "//fonts.example.net"), (page.Facts.ProtocolRelativeUrls!.Count, page.Facts.ProtocolRelativeUrls.Unlinked, page.Facts.ProtocolRelativeUrls.FirstUnlinked));
+    }
+
+    /// <summary>
+    /// A page parsed before links noted how they were written names none: the issue counts them, as it did, in the group
+    /// naming no URL.
+    /// </summary>
+    [Fact]
+    public void APageParsedBeforeLinksNotedTheirSchemeNamesNone()
+    {
+        var site = new RuleHarness("http://example.com");
+        site.Ok($"{site.Site}/");
+        var page = site.Page($"{site.Site}/a", RuleHarness.Html("<script src=\"//cdn.example.com/app.js\"></script>"));
+        page = page with
+        {
+            Facts = page.Facts with { CollectedVersion = 5, ProtocolRelativeUrls = new ProtocolRelativeFact(1, "//cdn.example.com/app.js") },
+            Links = [.. page.Links.Select(link => link with { Flags = link.Flags & ~LinkFlags.ProtocolRelative })]
+        };
+
+        var hit = Assert.Single(new SecurityRules(site.Table()).Check(page), hit => hit.Issue == IssueCatalog.PROTOCOL_RELATIVE_LINKS);
+        Assert.Equal(("1 URL, such as //cdn.example.com/app.js", null, null), (hit.Detail, hit.RelatedUrlId, hit.Targets));
+    }
+
+    /// <summary>
+    /// A site whose home page sends HSTS over HTTPS has no HTTP copy of its pages for a browser that has been there, which
+    /// is the check's risk: its HTTPS pages aren't flagged. A max-age of 0 turns HSTS off; it covers the home page's host,
+    /// and its subdomains only with includeSubDomains; and a plain-HTTP page is flagged whatever the home page sends.
+    /// </summary>
+    [Theory]
+    [InlineData("max-age=31536000", "https://example.com/a", false)]
+    [InlineData("max-age=86400", "https://example.com/a", false)]
+    [InlineData("max-age=\"31536000\"; preload", "https://example.com/", false)]
+    [InlineData(null, "https://example.com/a", true)]
+    [InlineData("max-age=0", "https://example.com/a", true)]
+    [InlineData("includeSubDomains", "https://example.com/a", true)]
+    [InlineData("max-age=31536000", "https://shop.example.com/a", true)]
+    [InlineData("max-age=31536000; includeSubDomains", "https://shop.example.com/a", false)]
+    [InlineData("max-age=31536000; includeSubDomains", "https://notexample.com/a", true)]
+    [InlineData("max-age=31536000", "http://example.com/a", true)]
+    public void AnHttpsPageOnASiteSendingHstsIsntFlagged(string? hsts, string url, bool flagged)
+    {
+        var site = new RuleHarness();
+        var html = RuleHarness.Html("<script src=\"//cdn.example.com/app.js\"></script>");
+        var home = site.Page($"{site.Site}/", html, headers: hsts is null ? [] : [new ResponseHeader("strict-transport-security", hsts)]);
+        var page = url == $"{site.Site}/" ? home : site.Page(url, html);
+
+        var rules = new SecurityRules(site.Table(), HstsPolicy.Of(home.Uri, home.Headers));
+        Assert.Equal(flagged, rules.Check(page).Any(hit => hit.Issue == IssueCatalog.PROTOCOL_RELATIVE_LINKS));
+    }
+
     [Theory]
     [InlineData("/a//b", "url-multiple-slashes", null)]
     [InlineData("/with%20space", "url-space", null)]

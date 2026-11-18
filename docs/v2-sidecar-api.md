@@ -1608,7 +1608,8 @@ page's links to itself left out, in the order they were found:
   `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`, `socialImage` (an og:image or twitter:image given as a full URL); every kind by default).
 - `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
   is `content`, `navigation`, `header`, `footer`, `sidebar` or `head`. `flags` are among `noFollow`, `sponsored`,
-  `ugc`, `imageLink`, `outsideHead`, `samePage` and `fromHttpHeader`; `followed` is whether search engines follow a
+  `ugc`, `imageLink`, `outsideHead`, `samePage`, `fromHttpHeader` and `protocolRelative` (written without its scheme,
+  `//cdn.example.com/app.js`; noted by pages parsed since 2026-11-18); `followed` is whether search engines follow a
   hyperlink, which a nofollow on its page stops too.
 - Paging is as the URL grid's: `offset`, `limit` (1 to 1,000), and `after` with the `next` cursor. Name each kind once:
   one named twice, or a null, is a field error (`kinds[2]`).
@@ -1871,9 +1872,10 @@ the page without opening anything:
   (`noFollow`, `imageLink`, `fromHttpHeader`, …); and `links`, how many links of any kind the page has to it (a nav
   link and a footer link to the same 404 are 2). Where only some of the page's links to it are at fault, the link is
   the first of those and `links` counts those alone: for `empty-anchor-text` the links with nothing to read (not ones
-  written as a fragment to the page itself), for `internal-nofollow-links` the nofollow ones, and for
-  `broken-fragment-links` the ones to a section the target lacks (a working `#present` beside a broken `#missing` names
-  `#missing`, and counts 1). All null, and `flags` empty, where the page has no stored link to it.
+  written as a fragment to the page itself), for `internal-nofollow-links` the nofollow ones, for
+  `protocol-relative-links` the ones written without a scheme, and for `broken-fragment-links` the ones to a section the
+  target lacks (a working `#present` beside a broken `#missing` names `#missing`, and counts 1). All null, and `flags`
+  empty, where the page has no stored link to it.
 - **`img`** is the `<img>` as the page writes it, for a target the page shows as an image: `width` and `height` the
   attributes as written (`"400"`, `"100%"`, null when missing), `alt` its alt text (null when it has none), `hasAlt`
   whether the attribute is there at all (`alt=""` is there, and fine), `altLength` its length as `image-alt-too-long`

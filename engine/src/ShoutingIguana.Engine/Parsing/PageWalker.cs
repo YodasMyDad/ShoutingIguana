@@ -68,6 +68,12 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     private readonly string _pageUrl = UrlNormalizer.Normalize(pageUri);
 
+    /// <summary>
+    /// The element being walked's href and src values written without a scheme, resolved and as written, and whether a
+    /// link of the element's has taken each: its links to them are marked <see cref="LinkFlags.ProtocolRelative"/>.
+    /// </summary>
+    private readonly List<(string Url, string Written, bool Linked)> _schemeless = [];
+
     public List<string> Titles { get; } = [];
     public List<string> MetaDescriptions { get; } = [];
     public List<MetaTagFact> MetaTags { get; } = [];
@@ -100,6 +106,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     public string? FirstProtocolRelative { get; private set; }
 
+    /// <summary>How many of those are in no link of the page's (a resource hint, a base), and the first (<see cref="ProtocolRelativeFact.Unlinked"/>).</summary>
+    public int ProtocolRelativeUnlinked { get; private set; }
+
+    public string? FirstUnlinkedProtocolRelative { get; private set; }
+
     /// <summary>The first separate mobile version the page names (<see cref="PageFacts.MobileAlternate"/>).</summary>
     public string? MobileAlternate { get; private set; }
 
@@ -113,8 +124,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     /// <summary>The meta tag that declared <see cref="DeclaredCharset"/>, for the parser to say where it ends.</summary>
     public IElement? CharsetElement { get; private set; }
 
-    public void Walk(IElement root) =>
+    public void Walk(IElement root)
+    {
         VisitElement(root, new WalkContext(LinkPosition.Content, InHead: false, ExcludeText: false, InArticle: false), 0);
+        SettleSchemeless();
+    }
 
     internal static string Clean(string? value, int maxChars)
     {
@@ -176,6 +190,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     private void VisitElement(IElement element, WalkContext context, int depth)
     {
+        // An element's links are added as it's visited, before its children and the elements after it.
+        SettleSchemeless();
+
         // SVG and MathML carry no signals we use, and their <title>/<a> elements are not page titles or links, but
         // their ids are places a #fragment can point to.
         if (element.NamespaceUri != NamespaceNames.HtmlUri)
@@ -198,7 +215,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             if (element.GetAttribute(attribute)?.TrimStart() is { } value && value.StartsWith("//", StringComparison.Ordinal) && value.Length > 2)
             {
                 ProtocolRelativeCount++;
-                FirstProtocolRelative ??= value.Length > MAX_LABEL_CHARS ? value[..MAX_LABEL_CHARS] : value;
+                var written = value.Length > MAX_LABEL_CHARS ? value[..MAX_LABEL_CHARS] : value;
+                FirstProtocolRelative ??= written;
+                _schemeless.Add((NormalizeOrNull(value) ?? string.Empty, written, false));
             }
         }
 
@@ -739,7 +758,7 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             url = UrlNormalizer.Normalize(target);
             if (Links.Count < MAX_LINKS)
             {
-                Links.Add(new ExtractedLink(target, LinkKind.Image, LinkFlags.None, context.Position, NullIfBlank(Clean(alt, MAX_LABEL_CHARS))));
+                Links.Add(new ExtractedLink(target, LinkKind.Image, Written(target), context.Position, NullIfBlank(Clean(alt, MAX_LABEL_CHARS))));
             }
         }
 
@@ -775,8 +794,42 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     {
         if (Links.Count < MAX_LINKS)
         {
-            Links.Add(new ExtractedLink(target, kind, flags, position, label));
+            Links.Add(new ExtractedLink(target, kind, flags | Written(target), position, label));
         }
+    }
+
+    /// <summary>
+    /// <see cref="LinkFlags.ProtocolRelative"/> for a link of the element being walked to a URL it writes without a scheme,
+    /// which the link takes; none for any other.
+    /// </summary>
+    private LinkFlags Written(Uri target)
+    {
+        if (_schemeless.Count == 0)
+        {
+            return LinkFlags.None;
+        }
+
+        var url = UrlNormalizer.Normalize(target);
+        var index = _schemeless.FindIndex(value => value.Url == url);
+        if (index < 0)
+        {
+            return LinkFlags.None;
+        }
+
+        _schemeless[index] = _schemeless[index] with { Linked = true };
+        return LinkFlags.ProtocolRelative;
+    }
+
+    /// <summary>Counts the last element's values written without a scheme that none of its links took.</summary>
+    private void SettleSchemeless()
+    {
+        foreach (var value in _schemeless.Where(value => !value.Linked))
+        {
+            ProtocolRelativeUnlinked++;
+            FirstUnlinkedProtocolRelative ??= value.Written;
+        }
+
+        _schemeless.Clear();
     }
 
     /// <summary>An image URL as written, or null for none and for an inline data: placeholder.</summary>

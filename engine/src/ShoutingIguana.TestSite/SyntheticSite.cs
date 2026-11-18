@@ -56,6 +56,12 @@ public sealed partial class SyntheticSite
         ["Referrer-Policy"] = "strict-origin-when-cross-origin"
     };
 
+    /// <summary>The home page's: X-Content-Type-Options misspelt, which sets nothing (security-headers-weak).</summary>
+    private static readonly Dictionary<string, string> HOME_HEADERS = new(SECURITY_HEADERS, StringComparer.OrdinalIgnoreCase)
+    {
+        ["X-Content-Type-Options"] = "no-sniff"
+    };
+
     private static readonly string FILLER_STYLES = BuildFillerStyles();
     private static readonly byte[] IMAGE_BYTES = BuildImage(2_048, IMAGE_WIDTH, IMAGE_HEIGHT);
 
@@ -151,7 +157,7 @@ public sealed partial class SyntheticSite
 
         if (path == "/")
         {
-            return Html(RenderHome()) with { Headers = Revision >= 1 ? HOME_HEADERS_AFTER : SECURITY_HEADERS };
+            return Html(RenderHome()) with { Headers = Revision == 0 ? HOME_HEADERS : IsHttps ? HOME_HEADERS_AFTER_HTTPS : HOME_HEADERS_AFTER };
         }
 
         // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do. The HTTPS site's plain-HTTP side
@@ -452,6 +458,13 @@ public sealed partial class SyntheticSite
         // site without TLS, which is no duplicate.
         // Revision 1 drops a security header from the home page, and mends the plain-HTTP side of the HTTPS site.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
+
+        // The home page's X-Content-Type-Options is misspelt ("no-sniff") until revision 1 mends it. Over HTTPS, revision 1
+        // sends HSTS for a day, under a year.
+        if (Revision == 0 || IsHttps)
+        {
+            Flag("security-headers-weak", "/");
+        }
 
         // The tracked link's URL: the thin page, canonicalised to itself without the tag.
         Flag("url-tracking-parameters", PLANTS_PATH + "thin?utm_source=newsletter");

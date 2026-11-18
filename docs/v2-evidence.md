@@ -74,7 +74,7 @@ and is in the group without a related URL.
   redirect changes), `img` (the `<img>` as the page writes it: `width`, `height`,
   `alt`, `hasAlt`, `altLength`, `srcset`, `loading`), and the page's link to it: `kind`, `text` (anchor, alt or
   hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it; for `empty-anchor-text`,
-  `internal-nofollow-links` and `broken-fragment-links`, only the ones at fault, the first of which is the link named). For a `sources` check
+  `internal-nofollow-links`, `protocol-relative-links` and `broken-fragment-links`, only the ones at fault, the first of which is the link named). For a `sources` check
   they describe the group's related URL only (its rows' sources are the found-on read, which already has the linking
   page, kind, text, position and flags).
 - **Detail**: before → after. "Same" is unchanged. A limit is shown at its default ("over 115"); a detail names the
@@ -289,7 +289,7 @@ and is in the group without a related URL.
 | 138 | `security-headers-weak` (new) | P/N/– | – | – | `HSTS max-age 86400 (1 day), under a year; X-Content-Type-Options "none"` | once |
 | 139 | `cookies-insecure` (new) | P/PD/– | – | – | `sessionid: no Secure, no HttpOnly` (each cookie at fault, what it lacks) | imp · pages |
 | 140 | `form-not-secure` (new) | P/PD/– | – | – | `Sends to http://x/subscribe`, `A password form on an http:// page` | imp · pages |
-| 141 | `protocol-relative-links` (new) | P/N/– | – | – | `3 URLs, such as //cdn.example.com/app.js` | imp · – |
+| 141 | `protocol-relative-links` (new) | P/**RU**/**T** | – | `kind`, `position`, `links` | `3 URLs, such as //cdn.example.com/app.js`; with any in no link, `3 URLs, such as //cdn.example.com/app.js; 1 in a tag that isn't a link or file, such as //fonts.example.net` | imp · pages |
 
 ### URLs
 
@@ -434,6 +434,14 @@ What Stage B built differs from the contract above only where this says so; the 
   shows the title and the H1, not `wordCount` (its detail quotes the field that reads as an error and counts the
   words; which field matched varies, so both stay); and `redirect-loop` shows no column, as its detail is the chain
   (`2 hops: /a (301) → /b (301) → back to /a`). The columns are still the grid's, to add.
+- **`protocol-relative-links` names its URLs** (the site-owner audit of 2026-11-18, where a detail said "19 URLs, such
+  as //…favicon_32x32.png" and nothing listed the other 18): the parser marks each link written without its scheme
+  (link flag `protocolRelative`, from collection 6), so each URL the page links to or loads that way is a target,
+  grouped by it: a favicon written `//` on every page is one group with the template hint. A value in no link (a
+  resource hint such as `preconnect`, a `<base>`) has no URL to name: the detail counts it and names the first, and the
+  page is in the group naming no URL as well. A page parsed before collection 6 names none, its issue in that group, as
+  before. An HTTPS page isn't flagged where the home page's HSTS (a max-age above 0, over HTTPS) covers its host, or a
+  subdomain with includeSubDomains. Analysis version 16.
 - **Rows by importance keep the URL as their last key**: on the 100k benchmark crawl, the biggest check's rows
   (`title-duplicate`, 5,152) read by importance in 18.1 ms at p95 (by inlinks alone, 14.3 ms), its groups in 16.1 ms,
   against the 75 ms gate of a check's reads; no fallback to crawl order was needed.

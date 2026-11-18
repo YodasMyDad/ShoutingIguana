@@ -111,7 +111,12 @@ public static class HtmlPageParser
             JsonLd = walker.JsonLd,
             Microdata = MicrodataReader.Read(document, baseUri),
             Forms = walker.Forms,
-            ProtocolRelativeUrls = walker.FirstProtocolRelative is { } first ? new ProtocolRelativeFact(walker.ProtocolRelativeCount, first) : null,
+            ProtocolRelativeUrls = walker.FirstProtocolRelative is { } first
+                ? new ProtocolRelativeFact(walker.ProtocolRelativeCount, first)
+                {
+                    Unlinked = walker.ProtocolRelativeUnlinked, FirstUnlinked = walker.FirstUnlinkedProtocolRelative
+                }
+                : null,
             PlaceholderText = TextMeasures.Placeholder(text.AsSpan()),
             SentenceCount = sentences,
             SyllableCount = syllables,

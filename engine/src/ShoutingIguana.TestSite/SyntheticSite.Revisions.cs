@@ -18,7 +18,8 @@ namespace ShoutingIguana.TestSite;
 /// <item>the second H1 moves from its plant to another page, the noindex of the robots plant goes, the large image is
 /// replaced at its address, a chain's first hop goes straight to its end, an hreflang alternate links back, robots.txt
 /// allows one private URL, the sitemap index drops its missing file, and the first category is listed;</item>
-/// <item>the home page loses a security header (a check that found nothing finds something), and the HTTPS site's
+/// <item>the home page loses a security header (a check that found nothing finds something) and mends its misspelt one;
+/// the HTTPS site's home page turns HSTS on for a day (too short, but its // URLs aren't flagged any more), and the HTTPS site's
 /// plain-HTTP side answers robots.txt and redirects its home page.</item>
 /// </list>
 /// <see cref="GetChanges"/> gives the exact comparison.
@@ -40,6 +41,15 @@ public sealed partial class SyntheticSite
     private static readonly Dictionary<string, string> HOME_HEADERS_AFTER = SECURITY_HEADERS
         .Where(header => header.Key != "Referrer-Policy")
         .ToDictionary(header => header.Key, header => header.Value, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The HTTPS site's home page at revision 1 also turns HSTS on, for a day: too short (security-headers-weak), and enough
+    /// that browsers never load its pages over HTTP, so its // URLs aren't flagged.
+    /// </summary>
+    private static readonly Dictionary<string, string> HOME_HEADERS_AFTER_HTTPS = new(HOME_HEADERS_AFTER, StringComparer.OrdinalIgnoreCase)
+    {
+        ["Strict-Transport-Security"] = "max-age=86400"
+    };
 
     private enum BrokenLinkFate
     {

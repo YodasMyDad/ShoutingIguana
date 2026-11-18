@@ -41,13 +41,15 @@ internal static class WhereFoundColumns
     /// </summary>
     private static ExportExtraColumns TargetColumns(ExportRun run, IssueDefinition check)
     {
-        var noun = check.Category switch
-        {
-            IssueCategory.Images => "Images",
-            IssueCategory.Hreflang => "Alternates",
-            IssueCategory.Security => "HTTP resources",
-            _ => "Links to"
-        };
+        var noun = check == IssueCatalog.PROTOCOL_RELATIVE_LINKS
+            ? "URLs without a scheme"
+            : check.Category switch
+            {
+                IssueCategory.Images => "Images",
+                IssueCategory.Hreflang => "Alternates",
+                IssueCategory.Security => "HTTP resources",
+                _ => "Links to"
+            };
 
         if (check.Category == IssueCategory.Canonicals)
         {

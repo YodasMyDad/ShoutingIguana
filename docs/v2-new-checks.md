@@ -1173,7 +1173,9 @@ Security · **Notice**, as `security-headers-missing` · Low · P/N/– (reporte
 - **Standard:** hstspreload.org: "The max-age must be at least 31536000 seconds (1 year)"; MDN: browsers ignore HSTS
   over HTTP; `nosniff` is the header's one directive.
 - **Data:** `Headers`. Nothing new.
-- **Plant:** none: the synthetic home page must pass. A rule test. Expected **0**.
+- **Plant:** the synthetic home page's `X-Content-Type-Options: no-sniff` (misspelt). Expected **1**, on `/`. Revision 1
+  mends it, so **0** over HTTP; over HTTPS its home page turns HSTS on with `max-age=86400`, so **1** still (a day,
+  under a year).
 - **From:** backlog ("weak HSTS"; "the nosniff value").
 
 #### 67. `cookies-insecure`: Cookies without Secure or HttpOnly
@@ -1206,14 +1208,22 @@ Security · **Warning**: what people type travels unencrypted, and browsers warn
 
 #### 69. `protocol-relative-links`: Protocol-relative (//) URLs
 
-Security · **Notice** · Low · P/N/–
+Security · **Notice** · Low · P/RU/T
 
 - **Simple:** "Links written in an old shortcut style"
-- **Rule:** a page with any `href` or `src` that starts `//`. Detail: `3 URLs, such as //cdn.example.com/app.js`.
+- **Rule:** a page with any `href` or `src` that starts `//`, except an HTTPS page where the home page's
+  Strict-Transport-Security covers its host (sent over HTTPS with a max-age above 0; a subdomain only with
+  `includeSubDomains`): browsers that have been to the site never load an HTTP copy there, which is the risk. Detail:
+  `3 URLs, such as //cdn.example.com/app.js`, and with values in no link,
+  `…; 1 in a tag that isn't a link or file, such as //fonts.example.net`. The issue's targets are the URLs the page
+  links to or loads written that way (grouped by them); one in no link puts the page in the group naming no URL too.
 - **Standard:** none read *(unverified)*: on an HTTPS page they load over HTTPS anyway, so the fault is only that an
-  HTTP copy of the page would load them insecurely.
-- **Data:** `PageFacts.ProtocolRelativeUrls` (new).
-- **Plant:** `protocol-relative`: `<script src="//{host}/static/app.js">`. Expected **1**.
+  HTTP copy of the page would load them insecurely. HSTS: RFC 6797.
+- **Data:** `PageFacts.ProtocolRelativeUrls` (new; `Unlinked` and `FirstUnlinked` from collection 6), and the link flag
+  `ProtocolRelative` (collection 6). A page parsed before names no URL.
+- **Plant:** `protocol-relative`: `<script src="//{host}/static/app.js">`, a `<link rel="preconnect">` to the partner
+  site written `//`, and a link to the thin page written `//` beside one written with its scheme. Expected **1**; over
+  HTTPS, **0** at revision 1, whose home page sends HSTS.
 - **From:** Screaming Frog Security "Protocol-Relative Resource Links".
 
 ### URLs
