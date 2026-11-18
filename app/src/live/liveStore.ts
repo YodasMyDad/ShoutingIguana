@@ -3,6 +3,7 @@
 // and a hidden window stays idle. Only components that select live data subscribe.
 import { useSyncExternalStore } from 'react';
 import { parseExportJob } from '../api/exports';
+import type { RecheckEvent, RecheckResult, RecheckStatus } from '../api/fixLoop';
 import { CRAWL_PHASES, isCrawlStatus, isLive } from '../api/types';
 import type {
   AlertData,
@@ -173,6 +174,12 @@ export interface LiveCrawl {
   /** Newest last. */
   alerts: readonly AlertEvent[];
   analysis: AnalysisEvent | null;
+  /**
+   * The fix loop: the latest `recheck` event of the crawl's latest recheck here (its progress, its end, then its result
+   * once settled). Kept after the crawl's run ends, so a screen can say the result; gone with a stream that no longer
+   * lists the crawl as live.
+   */
+  recheck: RecheckEvent | null;
   error: string | null;
   errorType: string | null;
 }
@@ -370,9 +377,46 @@ export function parseSidecarEvent(message: SseMessage): LiveEvent | null {
       const job = parseExportJob(record);
       return job ? { type: 'export', data: job } : null;
     }
+    case 'recheck': {
+      const recheck = parseRecheckEvent(record);
+      return recheck ? { type: 'recheck', data: recheck } : null;
+    }
     default:
       return null;
   }
+}
+
+const RECHECK_STATUSES: readonly RecheckStatus[] = ['running', 'completed', 'stopped', 'failed', 'interrupted'];
+const RESULT_COUNTS = ['fixed', 'still', 'notChecked', 'notRechecked', 'new'] as const;
+
+/** A `recheck` event, or null when it doesn't match the contract: a malformed result reads as none, never as zeros. */
+function parseRecheckEvent(record: Record<string, unknown>): RecheckEvent | null {
+  const { crawlId, recheckId, status } = record;
+  if (typeof crawlId !== 'string' || !isCount(recheckId) || !Number.isInteger(recheckId)) return null;
+  if (!RECHECK_STATUSES.includes(status as RecheckStatus)) return null;
+  return {
+    crawlId,
+    recheckId,
+    status: status as RecheckStatus,
+    phase: isCount(record.phase) ? record.phase : null,
+    done: isCount(record.done) ? record.done : 0,
+    total: isCount(record.total) ? record.total : 0,
+    result: parseRecheckResult(record.result),
+  };
+}
+
+function parseRecheckResult(value: unknown): RecheckResult | null {
+  if (!isRecord(value) || !RESULT_COUNTS.every((key) => isCount(value[key]))) return null;
+  const score = (key: string) => (isCount(value[key]) ? value[key] : null);
+  return {
+    fixed: value.fixed as number,
+    still: value.still as number,
+    notChecked: value.notChecked as number,
+    notRechecked: value.notRechecked as number,
+    new: value.new as number,
+    scoreBefore: score('scoreBefore'),
+    scoreAfter: score('scoreAfter'),
+  };
 }
 
 /**
@@ -575,6 +619,7 @@ function blankCrawl(id: string): LiveCrawl {
     pace: [],
     alerts: [],
     analysis: null,
+    recheck: null,
     error: null,
     errorType: null,
   };
@@ -604,7 +649,7 @@ export function applyEvent(state: LiveState, event: LiveEvent): LiveState {
       let crawls = state.crawls;
       for (const crawl of Object.values(state.crawls)) {
         if (crawl.status !== null && isLive(crawl.status) && !live.includes(crawl.id)) {
-          crawls = { ...crawls, [crawl.id]: { ...crawl, status: null, analysis: null } };
+          crawls = { ...crawls, [crawl.id]: { ...crawl, status: null, analysis: null, recheck: null } };
         }
       }
       for (const id of analyzing) {
@@ -682,5 +727,7 @@ export function applyEvent(state: LiveState, event: LiveEvent): LiveState {
     case 'export':
       // An export is no part of a crawl's live state: whoever shows its progress hears it through `onEvent`.
       return state;
+    case 'recheck':
+      return updateCrawl(state, event.data.crawlId, (crawl) => ({ ...crawl, recheck: event.data }));
   }
 }

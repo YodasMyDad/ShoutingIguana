@@ -9,6 +9,7 @@ const crawl = (patch: Partial<CrawlListItem>): CrawlListItem => ({
   path: 'C:\\crawls\\a.sicrawl',
   fileName: 'a.sicrawl',
   site: 'example.com',
+  siteKey: 'example.com',
   startUrl: 'https://example.com/',
   status: 'completed',
   startedAt: '2026-10-31T14:13:00Z',
@@ -27,20 +28,47 @@ const crawl = (patch: Partial<CrawlListItem>): CrawlListItem => ({
 });
 
 describe('Your sites', () => {
-  // The closing audit's gap 30: two test sites on 127.0.0.1 were one row, the newer hiding the other.
-  it('tells two sites on one host apart by their port, and names each with it', () => {
+  // The closing audit's gap 30: two test sites on 127.0.0.1 were one row, the newer hiding the other. The fix loop: the
+  // sidecar's `siteKey` says which site a crawl is (it picks the previous crawl by it), and the app groups by it alone,
+  // never working it out again, so the row and the comparison can't disagree.
+  it('groups by the sidecar’s siteKey, which tells two sites on one host apart by their port, and names each by it', () => {
     const items = [
-      crawl({ id: 'p1', site: '127.0.0.1', startUrl: 'http://127.0.0.1:61877/', startedAt: '2026-10-30T10:00:00Z' }),
-      crawl({ id: 'p2', site: '127.0.0.1', startUrl: 'http://127.0.0.1:61878/', startedAt: '2026-10-31T10:00:00Z' }),
+      crawl({
+        id: 'p1',
+        site: '127.0.0.1',
+        siteKey: '127.0.0.1:61877',
+        startUrl: 'http://127.0.0.1:61877/',
+        startedAt: '2026-10-30T10:00:00Z',
+      }),
+      crawl({
+        id: 'p2',
+        site: '127.0.0.1',
+        siteKey: '127.0.0.1:61878',
+        startUrl: 'http://127.0.0.1:61878/',
+        startedAt: '2026-10-31T10:00:00Z',
+      }),
       crawl({
         id: 'p3',
         site: '127.0.0.1',
+        siteKey: '127.0.0.1:61877',
         startUrl: 'http://127.0.0.1:61877/shop',
         startedAt: '2026-10-29T10:00:00Z',
       }),
       // A scheme's own port is no port of the site's: http and https of one site are one row.
-      crawl({ id: 'd1', site: 'example.com', startUrl: 'http://example.com:80/', startedAt: '2026-10-20T10:00:00Z' }),
-      crawl({ id: 'd2', site: 'example.com', startUrl: 'https://example.com/', startedAt: '2026-10-21T10:00:00Z' }),
+      crawl({
+        id: 'd1',
+        site: 'example.com',
+        siteKey: 'example.com',
+        startUrl: 'http://example.com:80/',
+        startedAt: '2026-10-20T10:00:00Z',
+      }),
+      crawl({
+        id: 'd2',
+        site: 'example.com',
+        siteKey: 'example.com',
+        startUrl: 'https://www.example.com/',
+        startedAt: '2026-10-21T10:00:00Z',
+      }),
     ];
     const { sites } = siteGroups(items, []);
     expect(sites.map((site) => [site.latest.id, site.earlier.map((item) => item.id)])).toEqual([
@@ -49,19 +77,64 @@ describe('Your sites', () => {
       ['d2', ['d1']],
     ]);
     expect(sites.map((site) => siteName(site.latest))).toEqual(['127.0.0.1:61878', '127.0.0.1:61877', 'example.com']);
-    expect(siteName(crawl({ site: null, fileName: 'mystery.sicrawl', startUrl: null }))).toBe('mystery.sicrawl');
+    expect(siteName(crawl({ site: null, siteKey: null, fileName: 'mystery.sicrawl', startUrl: null }))).toBe(
+      'mystery.sicrawl',
+    );
+  });
+
+  it('never works the site out itself: the sidecar’s siteKey is the group, whatever the start URL says', () => {
+    // Two crawls the sidecar holds as one site, and one it holds apart: the app follows it either way.
+    const items = [
+      crawl({
+        id: 'k1',
+        site: 'a.example',
+        siteKey: 'shared',
+        startUrl: 'https://a.example/',
+        startedAt: '2026-10-20T10:00:00Z',
+      }),
+      crawl({
+        id: 'k2',
+        site: 'b.example',
+        siteKey: 'shared',
+        startUrl: 'https://b.example/',
+        startedAt: '2026-10-21T10:00:00Z',
+      }),
+      crawl({
+        id: 'k3',
+        site: 'a.example',
+        siteKey: 'a.example:8443',
+        startUrl: 'https://a.example/',
+        startedAt: '2026-10-22T10:00:00Z',
+      }),
+    ];
+    const { sites } = siteGroups(items, []);
+    expect(sites.map((site) => [site.key, site.latest.id, site.earlier.map((item) => item.id)])).toEqual([
+      ['site:a.example:8443', 'k3', []],
+      ['site:shared', 'k2', ['k1']],
+    ]);
+    expect(siteName(items[2]!)).toBe('a.example:8443');
+    // A file with no start URL has no site: a row of its own, named by its file.
+    const { sites: alone } = siteGroups(
+      [
+        crawl({ id: 'n1', site: null, siteKey: null, startUrl: null }),
+        crawl({ id: 'n2', site: null, siteKey: null, startUrl: null }),
+      ],
+      [],
+    );
+    expect(alone.map((site) => site.key)).toEqual(['crawl:n1', 'crawl:n2']);
   });
 
   it('pins the checks running now, then a row a site, the newest check first, the older ones folded under it', () => {
+    const of = (site: string | null) => ({ site, siteKey: site });
     const items = [
-      crawl({ id: 'a1', site: 'a.example', startedAt: '2026-10-20T10:00:00Z' }),
-      crawl({ id: 'b1', site: 'b.example', startedAt: '2026-10-25T10:00:00Z' }),
-      crawl({ id: 'a2', site: 'a.example', startedAt: '2026-10-28T10:00:00Z' }),
-      crawl({ id: 'a3', site: 'a.example', startedAt: '2026-10-30T10:00:00Z', status: 'running' }),
-      crawl({ id: 'n1', site: null, startedAt: null }),
+      crawl({ id: 'a1', ...of('a.example'), startedAt: '2026-10-20T10:00:00Z' }),
+      crawl({ id: 'b1', ...of('b.example'), startedAt: '2026-10-25T10:00:00Z' }),
+      crawl({ id: 'a2', ...of('a.example'), startedAt: '2026-10-28T10:00:00Z' }),
+      crawl({ id: 'a3', ...of('a.example'), startedAt: '2026-10-30T10:00:00Z', status: 'running' }),
+      crawl({ id: 'n1', ...of(null), startedAt: null }),
       // Within a second, a time without its trailing zeros sorts wrongly as text: by instant, 57.5 is the newer.
-      crawl({ id: 'c1', site: 'c.example', startedAt: '2026-10-26T10:00:57Z' }),
-      crawl({ id: 'c2', site: 'c.example', startedAt: '2026-10-26T10:00:57.5Z' }),
+      crawl({ id: 'c1', ...of('c.example'), startedAt: '2026-10-26T10:00:57Z' }),
+      crawl({ id: 'c2', ...of('c.example'), startedAt: '2026-10-26T10:00:57.5Z' }),
     ];
     const { running, sites } = siteGroups(items, ['a3']);
     expect(running.map((item) => item.id)).toEqual(['a3']);

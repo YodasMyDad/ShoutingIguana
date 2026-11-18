@@ -1,6 +1,7 @@
 // The grid queries (E3a in docs/v2-sidecar-api.md, "URLs", "Facets", "Lookup" and "Issue groups"): a POST with a JSON
 // body to one fixed URL per grid. The shapes are the sidecar's. A wrong JSON type on a field whose type is fixed is
 // `bad-request` (400); a filter's `value` and `values` are checked against the column, under `invalid-query` (422).
+import type { CompareWith, Compared, GroupChange, GroupsCompared, RowChange } from './fixLoop';
 import type { RedirectChain, TargetEnd, UrlTarget } from './inspector';
 
 export interface GridSort {
@@ -89,6 +90,12 @@ export interface GridQuery {
   limit: number;
   /** A check's rows only (`/issues/{checkId}/rows`): one of its groups. `/urls` refuses it with `bad-request`. */
   group?: CheckGroupRef;
+  /**
+   * The fix loop, a check's rows only: compare each row with the previous crawl (`previous`) or a crawl's id. Each row
+   * then has `change`, and the page `compared`; with no previous crawl the page is as without it. The other grids refuse
+   * it with `bad-request`.
+   */
+  compareWith?: CompareWith;
 }
 
 /** A query of one of the URL grids (`/urls`, a check's `/rows`, `/sitemaps/urls`): the grid query, and E6's `linkEnds`. */
@@ -141,6 +148,8 @@ export interface GridPage<Row> {
   summary: SummaryState;
   /** Columns asked for that have no values now: left out of `columns` and of every row (not sent as null). */
   unavailable: string[];
+  /** The fix loop, a check's rows asked with `compareWith`: what they were compared with. Absent otherwise. */
+  compared?: Compared;
 }
 
 export type StatusClass = '2xx' | '3xx' | '4xx' | '5xx' | 'other' | 'noResponse';
@@ -270,6 +279,11 @@ export interface IssueRow extends UrlRow {
   relatedUrlId?: number | null;
   relatedUrl?: string | null;
   relatedStatusCode?: number | null;
+  /**
+   * The fix loop, with `compareWith`: how the row stood in the other crawl. Null when the comparison is counts only;
+   * absent without a comparison.
+   */
+  change?: RowChange | null;
 }
 
 /**
@@ -384,6 +398,8 @@ export interface IssueGroup {
    * writes it. Null for every other group.
    */
   sharedText?: string | null;
+  /** The fix loop, with `compareWith`: the cause then. Absent without a comparison, and when it is counts only. */
+  change?: GroupChange;
 }
 
 /** Evidence: what a group's related URL is: a target's facts less the page's link to it, which is each page's own. */
@@ -411,6 +427,8 @@ export interface IssueGroupsQuery {
   offset: number;
   limit: number;
   sort?: IssueGroupSort;
+  /** The fix loop: compare each group with the previous crawl or a crawl's id (`change`, and the page's `compared`). */
+  compareWith?: CompareWith;
 }
 
 export interface IssueGroupPage {
@@ -426,6 +444,8 @@ export interface IssueGroupPage {
   sort?: IssueGroupSort;
   /** Evidence: the check's `counts[].likelyTemplate`, for a check that doesn't group. */
   likelyTemplate?: boolean;
+  /** The fix loop, asked with `compareWith`: what the groups were compared with. Absent otherwise. */
+  compared?: GroupsCompared;
 }
 
 /**

@@ -6,7 +6,10 @@ import { crawlName } from '../../crawl/status';
 import { formatCount, formatCountOf } from '../../lib/format';
 
 export interface SiteGroup {
-  /** The site (the start URL's host, and its port when it has its own), or the crawl's id for a file with none. */
+  /**
+   * `site:` and the sidecar's `siteKey` (the start URL's host without `www.`, and its port when it has its own), or
+   * `crawl:` and the crawl's id for a file with none.
+   */
   key: string;
   /** The newest check of the site: the row. */
   latest: CrawlListItem;
@@ -25,7 +28,8 @@ const newestFirst = (a: CrawlListItem, b: CrawlListItem) => startedAt(b) - start
 /**
  * The library in Simple's order: the checks running now first (in the order they started), then a group a site,
  * the site with the newest check first, each group's checks newest first. A running check is pinned on its own and
- * isn't one of its site's earlier checks.
+ * isn't one of its site's earlier checks. A site is the sidecar's `siteKey`, never worked out here: the sidecar picks
+ * a crawl's previous crawl by the same key (docs/v2-fix-loop.md, "The same site"), so a row and its comparison agree.
  */
 export function siteGroups(
   items: readonly CrawlListItem[],
@@ -35,7 +39,7 @@ export function siteGroups(
   const bySite = new Map<string, CrawlListItem[]>();
   for (const item of items) {
     if (live.includes(item.id)) continue;
-    const key = item.site ? `site:${item.site}${portOf(item)}` : `crawl:${item.id}`;
+    const key = item.siteKey ? `site:${item.siteKey}` : `crawl:${item.id}`;
     bySite.set(key, [...(bySite.get(key) ?? []), item]);
   }
   const sites = [...bySite.entries()].flatMap(([key, checks]) => {
@@ -47,22 +51,11 @@ export function siteGroups(
 }
 
 /**
- * ":8080" for a start URL on a port other than its scheme's own, else "": two sites on one host are told apart by it
- * (the closing audit's gap 30: two test sites on 127.0.0.1 were one row).
+ * The site as its row names it: its `siteKey`, which has its port when it has one of its own ("127.0.0.1:8080"), so
+ * two sites on one host are told apart (the closing audit's gap 30); the file's name for a file with none.
  */
-function portOf(item: Pick<CrawlListItem, 'startUrl'>): string {
-  if (!item.startUrl) return '';
-  try {
-    const { port } = new URL(item.startUrl);
-    return port ? `:${port}` : '';
-  } catch {
-    return '';
-  }
-}
-
-/** The site as its row names it: its name, with its port when it has one of its own ("127.0.0.1:8080"). */
-export function siteName(item: Pick<CrawlListItem, 'site' | 'fileName' | 'startUrl'>): string {
-  return item.site ? `${item.site}${portOf(item)}` : crawlName(item);
+export function siteName(item: Pick<CrawlListItem, 'site' | 'siteKey' | 'fileName'>): string {
+  return item.siteKey ?? crawlName(item);
 }
 
 /** What a row is, by what can be said of its check: each its own true sentence. */

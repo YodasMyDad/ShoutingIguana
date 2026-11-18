@@ -635,3 +635,59 @@ describe('E3c’s progress, read at the boundary', () => {
     expect(read({ crawled: 'many', crawlingMs: -1 })).toMatchObject({ crawled: null, crawlingMs: undefined });
   });
 });
+
+describe('the fix loop’s recheck events', () => {
+  const event = (data: object) => ({ event: 'recheck', id: '', data: JSON.stringify(data) });
+  const running = { crawlId: 'a', recheckId: 1, status: 'running', phase: 1, done: 3, total: 8, result: null };
+  const result = { fixed: 4, still: 1, notChecked: 0, notRechecked: 0, new: 0, scoreBefore: 85, scoreAfter: 88 };
+
+  it('keeps the crawl’s latest recheck event, its result once settled, and the rechecking status as live', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    store.ingest({ event: 'crawl', id: '', data: '{"crawlId":"a","status":"rechecking"}' });
+    store.ingest(event({ ...running, phase: null, done: 0, total: 0 }));
+    store.ingest(event(running));
+    advance(PUBLISH_INTERVAL_MS);
+    expect(store.getState().live).toEqual(['a']);
+    expect(store.getState().crawls.a?.status).toBe('rechecking');
+    expect(store.getState().crawls.a?.recheck).toEqual(running);
+    store.ingest({ event: 'crawl', id: '', data: '{"crawlId":"a","status":"analyzing"}' });
+    store.ingest(event({ ...running, status: 'completed', done: 8, result }));
+    store.ingest({ event: 'crawl', id: '', data: '{"crawlId":"a","status":"completed"}' });
+    advance(PUBLISH_INTERVAL_MS);
+    // The result stays after the crawl's run ends, for the screen that says it.
+    expect(store.getState().live).toEqual([]);
+    expect(store.getState().crawls.a?.recheck).toEqual({ ...running, status: 'completed', done: 8, result });
+  });
+
+  it('drops a recheck event that isn’t the contract, and reads a malformed result as none, never as zeros', () => {
+    expect(parseSidecarEvent(event({ ...running, recheckId: 'one' }))).toBeNull();
+    expect(parseSidecarEvent(event({ ...running, status: 'exploded' }))).toBeNull();
+    expect(parseSidecarEvent(event({ ...running, crawlId: 7 }))).toBeNull();
+    const malformed = parseSidecarEvent(event({ ...running, status: 'completed', result: { fixed: 4 } }));
+    if (malformed?.type !== 'recheck') throw new Error('not a recheck');
+    expect(malformed.data.result).toBeNull();
+    const bare = parseSidecarEvent(event({ crawlId: 'a', recheckId: 2, status: 'running' }));
+    if (bare?.type !== 'recheck') throw new Error('not a recheck');
+    expect(bare.data).toEqual({
+      crawlId: 'a',
+      recheckId: 2,
+      status: 'running',
+      phase: null,
+      done: 0,
+      total: 0,
+      result: null,
+    });
+  });
+
+  it('forgets a recheck when a new stream no longer lists its crawl as live', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    store.ingest({ event: 'crawl', id: '', data: '{"crawlId":"a","status":"rechecking"}' });
+    store.ingest(event(running));
+    store.ingest({ event: 'hello', id: '', data: '{"live":[],"analyzing":[]}' });
+    advance(PUBLISH_INTERVAL_MS);
+    expect(store.getState().crawls.a?.recheck).toBeNull();
+    expect(store.getState().crawls.a?.status).toBeNull();
+  });
+});

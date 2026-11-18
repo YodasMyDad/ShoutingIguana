@@ -2,6 +2,7 @@
 // what to refresh. Freshness comes from events (`library`, `crawl`), not polling: reads stay fresh until told.
 import { mutationOptions, queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
+import type { FixedQuery, RecheckAsk, RecheckRowsQuery } from './fixLoop';
 import { loadFoundOn, loadIssueTargets } from './whereFoundBatch';
 import type {
   CheckGroupRef,
@@ -94,7 +95,30 @@ export const queryKeys = {
    * counts fresh, and with every menu closed (the query disabled) it only marks them stale.
    */
   urlGridFacets: (id: string, query: FacetsQuery) => ['grid', 'urlFacets', id, query] as const,
+  // ---- The fix loop. Under the crawl's prefix, so whatever changes the crawl (a recheck, an analysis) reads them again.
+  /** The crawl compared with its previous crawl (`previous`) or with another crawl of its site by id. */
+  changes: (id: string, withId = 'previous') => ['crawl', id, 'changes', withId] as const,
+  /** What a check flagged in the other crawl and doesn't flag now: a page of rows, or of causes. */
+  fixed: (id: string, checkId: string, query: FixedQuery) => ['crawl', id, 'fixed', checkId, query] as const,
+  /** What a recheck would do now, and whether it can run. */
+  recheckPlan: (id: string, ask: RecheckAsk) => ['crawl', id, 'recheck-plan', ask] as const,
+  /** The crawl's rechecks, newest first, and one of them. */
+  rechecks: (id: string) => ['crawl', id, 'rechecks'] as const,
+  recheck: (id: string, recheckId: number) => ['crawl', id, 'rechecks', recheckId] as const,
+  recheckRows: (id: string, recheckId: number, query: RecheckRowsQuery) =>
+    ['crawl', id, 'rechecks', recheckId, 'rows', query] as const,
 };
+
+/** The reads of a crawl's comparison: what an analysis of the other crawl (the one compared with) makes stale. */
+export const COMPARISON_READS: readonly string[] = ['changes', 'fixed'];
+
+/** Every crawl's comparison reads (`/changes`, `/fixed`): any crawl analysed again can be another's previous. */
+export function comparisonReads(): QueryFilters {
+  return {
+    queryKey: ['crawl'],
+    predicate: (query) => COMPARISON_READS.includes(String(query.queryKey[2])),
+  };
+}
 
 /** Every page of every grid of one crawl: what a change to the crawl makes stale. */
 export function gridPagesOf(crawlId: string): QueryFilters {
@@ -476,6 +500,56 @@ export const issuesQuery = (id: string, checkId: string, offset: number, limit: 
   queryOptions({
     queryKey: queryKeys.issues(id, checkId, offset, limit),
     queryFn: ({ signal }) => api.issues(id, checkId, { offset, limit }, signal),
+    staleTime: Infinity,
+  });
+
+// ---------------------------------------------------------------------------------------------------- The fix loop
+
+/** The crawl compared with its previous crawl, or `withId`: `comparisonOf` reads a first crawl's answer as null. */
+export const changesQuery = (id: string, withId?: string) =>
+  queryOptions({
+    queryKey: queryKeys.changes(id, withId),
+    queryFn: ({ signal }) => api.changes(id, withId, signal),
+    staleTime: Infinity,
+  });
+
+/** A page of what a check no longer flags since the other crawl. */
+export const fixedQuery = (id: string, checkId: string, query: FixedQuery = {}) =>
+  queryOptions({
+    queryKey: queryKeys.fixed(id, checkId, query),
+    queryFn: ({ signal }) => api.fixed(id, checkId, query, signal),
+    staleTime: Infinity,
+  });
+
+/**
+ * What a recheck would do: read afresh whenever it's shown (staleTime 0), as whether it can run (`refused`) moves with
+ * every crawl of the site, here or not.
+ */
+export const recheckPlanQuery = (id: string, ask: RecheckAsk) =>
+  queryOptions({
+    queryKey: queryKeys.recheckPlan(id, ask),
+    queryFn: ({ signal }) => api.recheckPlan(id, ask, signal),
+    staleTime: 0,
+  });
+
+export const rechecksQuery = (id: string) =>
+  queryOptions({
+    queryKey: queryKeys.rechecks(id),
+    queryFn: ({ signal }) => api.rechecks(id, signal),
+    staleTime: Infinity,
+  });
+
+export const recheckQuery = (id: string, recheckId: number) =>
+  queryOptions({
+    queryKey: queryKeys.recheck(id, recheckId),
+    queryFn: ({ signal }) => api.recheck(id, recheckId, signal),
+    staleTime: Infinity,
+  });
+
+export const recheckRowsQuery = (id: string, recheckId: number, query: RecheckRowsQuery = {}) =>
+  queryOptions({
+    queryKey: queryKeys.recheckRows(id, recheckId, query),
+    queryFn: ({ signal }) => api.recheckRows(id, recheckId, query, signal),
     staleTime: Infinity,
   });
 
