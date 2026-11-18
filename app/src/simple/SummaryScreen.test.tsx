@@ -136,9 +136,17 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
         (id) => `${FIX}/${id}`,
       ),
     );
-    expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 addresses 2 points back$/);
-    expect(list.getByText(/Fixing these five takes the score from/)).toHaveTextContent(
-      'Fixing these five takes the score from 86 to 99.',
+    // One job as What to fix has it (related checks): restoring the 9 missing addresses clears the broken links on all
+    // 5 pages, so they're folded under it, unnumbered, and the row above carries the points of both.
+    expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 addresses 6 points back$/);
+    expect(rows[1]).toHaveAccessibleName(
+      /^Serious Links that lead to broken pages Fixed along with the problem above\. 5 pages$/,
+    );
+    expect(rows[1]!.closest('li')).toHaveClass('si-plain-list__nested');
+    expect(rows[2]).toHaveAccessibleName(/^2 Worth fixing /);
+    expect(rows[4]).toHaveAccessibleName(/^4 Worth fixing /);
+    expect(list.getByText(/Fixing these four takes the score from/)).toHaveTextContent(
+      'Fixing these four takes the score from 86 to 99.',
     );
     expect(list.getByRole('link', { name: 'See all 6 problems and 22 things worth a look' })).toHaveAttribute(
       'href',

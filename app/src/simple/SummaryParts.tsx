@@ -11,6 +11,7 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS } from './fixSections';
+import { fixRows, type FixRow } from './fixRows';
 import {
   bandWord,
   categoriesWords,
@@ -239,6 +240,7 @@ export function FixFirstCard({
   const notices = results.counts.notice;
   // With nothing to fix, the things worth a look are listed in its place.
   const worthALook = results.fixFirst.length > 0 ? [] : results.found.notice.slice(0, FIX_FIRST_COUNT);
+  const jobs = fixFirstJobs(results, score);
   const oneFix = useOneFix(crawlId, results.fixFirst.length > 0 ? results.fixFirst : worthALook);
   return (
     <Card as="section" aria-labelledby="summary-fix-first" className="overflow-hidden">
@@ -252,19 +254,32 @@ export function FixFirstCard({
       </div>
       {results.fixFirst.length > 0 ? (
         <PlainCheckList className="border-t border-border-subtle">
-          {results.fixFirst.map((entry, index) => (
-            <li key={entry.check.id}>
+          {/* Each job numbered, with what its fix also clears folded under it, as What to fix has them. */}
+          {jobs.flatMap((job, index) => [
+            <li key={job.entry.check.id}>
               <ProblemRow
                 crawlId={crawlId}
-                entry={entry}
+                entry={job.entry}
                 results={results}
                 number={index + 1}
-                oneFix={oneFix.has(entry.check.id)}
-                points={score?.lines.find((line) => line.checkId === entry.check.id)?.points}
-                change={changeOf(entry.check.id)}
+                oneFix={oneFix.has(job.entry.check.id)}
+                points={job.points}
+                change={changeOf(job.entry.check.id)}
               />
-            </li>
-          ))}
+            </li>,
+            ...job.nested.map((nested) => (
+              <li key={nested.check.id} className="si-plain-list__nested">
+                <ProblemRow
+                  crawlId={crawlId}
+                  entry={nested}
+                  results={results}
+                  oneFix={oneFix.has(nested.check.id)}
+                  nested
+                  change={changeOf(nested.check.id)}
+                />
+              </li>
+            )),
+          ])}
         </PlainCheckList>
       ) : (
         <>
@@ -300,7 +315,7 @@ export function FixFirstCard({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle bg-surface-sunken px-6 py-4 text-14 text-text-secondary">
           {results.ifFixed !== null && score ? (
             <span>
-              {ifFixedLead(results.fixFirst.length)} <b className="font-semibold text-text">{score.value}</b> to{' '}
+              {ifFixedLead(jobs.length)} <b className="font-semibold text-text">{score.value}</b> to{' '}
               <b className="font-semibold text-text">{results.ifFixed}</b>.
             </span>
           ) : null}
@@ -311,6 +326,23 @@ export function FixFirstCard({
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * The five to fix first as jobs, the model What to fix has (docs/v2-ui-simple.md, "Related problems are one job"): a
+ * problem a fix of another among them clears entirely (the analysis's `clears[].all`) folded under that one, within its
+ * severity, the row above carrying the points of both. The engine's five stay the five, so "Fixing these four takes the
+ * score from 86 to 99" is still its figure: it counts the jobs.
+ */
+function fixFirstJobs(results: PlainResults, score: Score | null): FixRow[] {
+  const points = new Map((score?.lines ?? []).map((line) => [line.checkId, line.points]));
+  const order = { sort: 'fixFirst' as const, fixFirst: results.fixFirst.map((entry) => entry.check.id), points };
+  return (['error', 'warning'] as const).flatMap((severity) =>
+    fixRows(
+      results.fixFirst.filter((entry) => entry.outcome === severity),
+      order,
+    ),
   );
 }
 
