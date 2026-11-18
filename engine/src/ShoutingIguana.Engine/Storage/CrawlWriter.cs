@@ -96,6 +96,10 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     // What the site runs on, once a response or page has said so (or the file did): kept once, and said in refusals.
     private SitePlatform? _platform;
 
+    // The hosts the crawl has a signature for: a URL refused there that no request said more of (one its section held
+    // back and gave up on) was refused a signed crawl.
+    private readonly HashSet<string> _signedHosts = new(StringComparer.Ordinal);
+
     private CrawlWriter(SqliteConnection connection, CrawlFileLock fileLock, CrawlOptions options, CrawlCounters counters, ILogger logger)
     {
         _connection = connection;
@@ -107,6 +111,13 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
         // A crawl continued or rechecked knows its site from before: a refusal then is said in the platform's words too.
         _platform = SitePlatformReader.Read(connection, transaction: null);
+        foreach (var host in options.Signatures.Keys)
+        {
+            if (WebBotSignature.TryNormalizeHost(host, out var authority))
+            {
+                _signedHosts.Add(authority);
+            }
+        }
     }
 
     /// <summary>Completes when the write loop ends; faults if the database failed.</summary>
@@ -530,7 +541,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             KeepPlatform(item, signal);
         }
 
-        response = ExplainRefusal(response);
+        response = ExplainRefusal(item, response);
         _statements.InsertResponse(response, redirectId, canonicalId, outlinkCount);
         if (record.Details is not null)
         {
@@ -577,7 +588,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     /// (<see cref="ResponseRow.RefusalNote"/>). Said at the end of the stored error, so everything that tells a refusal by
     /// the error's start (<see cref="RetryingFetcher.RATE_LIMITED_ERROR"/>) still does.
     /// </summary>
-    private ResponseRow ExplainRefusal(ResponseRow response)
+    private ResponseRow ExplainRefusal(FrontierItem item, ResponseRow response)
     {
         if (response.Error is not { } error || !error.StartsWith(RetryingFetcher.RATE_LIMITED_ERROR, StringComparison.Ordinal) ||
             error.Contains(ShopifySignals.UNSIGNED_REFUSAL, StringComparison.Ordinal) || error.Contains(ShopifySignals.SIGNED_REFUSAL, StringComparison.Ordinal))
@@ -585,10 +596,21 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             return response;
         }
 
-        return response.RefusalNote is { } note ? response with { Error = $"{error}: {note}" }
+        var note = response.RefusalNote ?? SignedHostNote(item);
+        return note is not null ? response with { Error = $"{error}: {note}" }
             : _platform is not null ? response with { Error = $"{error}: {ShopifySignals.UNSIGNED_REFUSAL}" }
             : response;
     }
+
+    /// <summary>
+    /// For a refused URL no request said more of: when the crawl has a signature for its host, Shopify refused a signed
+    /// crawl there, whatever the URL's own last try was; else nothing to add.
+    /// </summary>
+    private string? SignedHostNote(FrontierItem item) =>
+        _signedHosts.Count > 0 && Uri.TryCreate(item.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+        _signedHosts.Contains(WebBotSignature.AuthorityOf(uri))
+            ? ShopifySignals.Explain(new SignatureSituation(SignatureSituationKind.Signed, WebBotSignature.AuthorityOf(uri)), DateTimeOffset.UtcNow)
+            : null;
 
     /// <summary>
     /// A page, as <see cref="CrawlSchema.PAGE"/> defines one for every stored count, so the live count ends where the
