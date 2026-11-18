@@ -5,7 +5,7 @@
 // are drawn on the seeded crawl. The screenshots (1280x720 in both themes, and 200%) go to test-results/r5-home/.
 import { expect, test, type Page } from '@playwright/test';
 import path from 'node:path';
-import { countOf, env, expectNoViolations, read, seededCrawl, sidecar, siteRow } from './support';
+import { countOf, env, expectNoViolations, read, seededCrawl, showChecks, sidecar, siteRow } from './support';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
 
 const SHOTS = path.join(import.meta.dirname, '..', 'test-results', 'r5-home');
@@ -255,6 +255,7 @@ test('Overview opens with its totals, and Issues says each check’s share besid
 
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(`/crawls/${crawl.id}/issues`);
+  await showChecks(page);
   const list = page.getByRole('listbox');
   await expect(list.getByRole('option').first()).toBeVisible();
   // A share beside a count, said whole in the row's name.

@@ -3,7 +3,7 @@
 // and axe at zero violations in both themes and under forced colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { siteRow } from './support';
+import { showChecks, siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -29,7 +29,8 @@ async function openIssues(page: Page) {
   await expect(page.getByRole('heading', { name: 'Issues', level: 1 })).toBeVisible();
   // The first check to fix is selected, in the path.
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/issues\/[a-z0-9-]+/);
-  await expect(page.getByRole('listbox', { name: 'Checks' })).toBeVisible();
+  // Under a 1600 px window the open check has the width, and the list is behind "All checks".
+  await showChecks(page);
 }
 
 test('triage: pick a check, read it, open a group, its URLs, inspect one, then Esc and Alt+Left', async ({ page }) => {
@@ -40,7 +41,8 @@ test('triage: pick a check, read it, open a group, its URLs, inspect one, then E
   );
 
   await page.getByRole('option', { name: /Duplicate title/ }).click();
-  await expect(page).toHaveURL(/\/issues\/title-duplicate$/);
+  // A check's only group opens by itself, in the address.
+  await expect(page).toHaveURL(/\/issues\/title-duplicate(\?group=.*)?$/);
   await expect(page.getByRole('heading', { name: 'Duplicate title', level: 2 })).toBeVisible();
   // What's wrong in the check's head; why it matters and how to fix it after its evidence, a button away.
   await expect(page.getByRole('heading', { name: 'What’s wrong', level: 3 })).toBeVisible();
@@ -158,8 +160,9 @@ test('the checks list runs on the keyboard: arrows move the selection and the ro
   await expect(list.getByRole('option').last()).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Tab');
   // Out of the list, into the selected check: its first action (the fix loop's Recheck leads them).
+  // Where the list is behind "All checks", the way back to it leads the check.
   await expect(page.locator(':focus')).toHaveAccessibleName(
-    /^Recheck|Check the site again|Copy URLs|Hide this check|Show this check|Learn more/,
+    /^All checks|^Recheck|Check the site again|Copy URLs|Hide this check|Show this check|Learn more/,
   );
   await page.keyboard.press('Control+f');
   await expect(page.getByRole('searchbox', { name: 'Filter checks' })).toBeFocused();

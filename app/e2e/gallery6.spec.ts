@@ -4,7 +4,7 @@
 // scroll with the pane, one scroll bar, under a whole focus ring.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { CrawlListItem } from '../src/api/types';
-import { openSection, seededCrawl } from './support';
+import { openSection, seededCrawl, showChecks } from './support';
 
 test.use({ viewport: { width: 1280, height: 720 } });
 
@@ -136,6 +136,7 @@ test('an issue’s affected URLs, a found-on list open, scroll with the pane, on
 }) => {
   await page.setViewportSize({ width: 1280, height: 460 });
   await openSection(page, /^Issues/);
+  await showChecks(page);
   await page.getByRole('option', { name: /Internal URL returns 4xx/ }).click();
   const grid = page.getByRole('treegrid', { name: /Internal URL returns 4xx/ });
   await grid.focus();

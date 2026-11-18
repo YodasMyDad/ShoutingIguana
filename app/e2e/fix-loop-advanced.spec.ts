@@ -7,7 +7,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { startRevisionSite, type RevisionSite } from './revisionSite';
 import { ADVANCED_STORAGE } from './storage';
-import { expectNoViolations, read, removeCrawl, type SeededCrawl } from './support';
+import { expectNoViolations, read, removeCrawl, showChecks, type SeededCrawl } from './support';
 
 test.use({ storageState: ADVANCED_STORAGE });
 test.describe.configure({ mode: 'serial' });
@@ -208,6 +208,7 @@ test('a second crawl is compared with the first: Overview’s card, Issues’ ch
   // Issues narrowed to the checks fixed since: the chip, and each fixed check listed.
   if (count('fixed') > 0) {
     await card.getByRole('link', { name: `${count('fixed')} fixed` }).click();
+    await showChecks(page);
     await expect(main(page).getByRole('button', { name: /^Remove .*Since / })).toBeVisible({ timeout: 20_000 });
     await expect(main(page).getByRole('listbox', { name: 'Checks' }).getByRole('option')).toHaveCount(count('fixed'));
     await expectNoViolations(page);
