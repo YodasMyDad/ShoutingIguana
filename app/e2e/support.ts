@@ -69,11 +69,12 @@ async function settled(id: string, timeoutMs: number): Promise<SeededCrawl & { a
  * A crawl of the engine's synthetic test site (never a real site), made for a spec that needs what the seeded crawl
  * is too small to hold: crawled to its end at the Fast preset, then analysed. The site links to URLs its robots.txt
  * disallows from every 61st product, so a crawl of all of it is refused ten. Remove it with `removeCrawl` when the
- * spec is done: the other specs expect the library to hold the seeded crawl alone.
+ * spec is done: the other specs expect the library to hold the seeded crawl alone. `startUrl` is another synthetic site
+ * of the spec's own (e2e/revisionSite.ts), the shared one by default.
  */
-export async function crawlTestSite(): Promise<SeededCrawl> {
+export async function crawlTestSite(startUrl: string = env('SI_E2E_TESTSITE')): Promise<SeededCrawl> {
   const started = await read<SeededCrawl>('/api/crawls', {
-    options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 16, maxRequestsPerSecond: 0 },
+    options: { startUrl, concurrency: 16, maxRequestsPerSecond: 0 },
   });
   const crawled = await settled(started.id, 120_000);
   if (crawled.status !== 'completed') throw new Error(`The test site's crawl ended ${crawled.status}`);
