@@ -5,7 +5,7 @@
 // colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { chooseTab, siteRow } from './support';
+import { chooseTab, showChecks, siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -245,13 +245,13 @@ test('from a check’s pages: Enter inspects one, its issue leads back to the ch
   page,
 }) => {
   await openSection(page, /^Issues/);
-  await expect(page.getByRole('listbox', { name: 'Checks' })).toBeVisible();
+  await showChecks(page);
   await page.getByRole('option', { name: /Invalid JSON-LD/ }).click();
-  await expect(page).toHaveURL(/\/issues\/structured-data-invalid$/);
+  // Its only group opens by itself, in the address.
+  await expect(page).toHaveURL(/\/issues\/structured-data-invalid\?group=/);
   const groups = page.getByRole('treegrid', { name: /Invalid JSON-LD: affected pages/ });
-  await groups.focus();
-  await page.keyboard.press('ArrowRight');
   await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
+  await groups.focus();
   // Its pages read first: ArrowDown pressed before they came found no row to move to (1 run in 5).
   await expect(groups.getByRole('row', { level: 2 }).first()).toBeVisible();
   await page.keyboard.press('ArrowDown');

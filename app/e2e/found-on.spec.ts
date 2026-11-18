@@ -4,7 +4,7 @@
 // page holding the bad links says what it links to; Simple's problem page says "Linked from …"; and every grid's URL
 // has an open-in-browser button and Shift+Enter, which open the full URL (the opener stubbed: no browser opens).
 import { expect, test, type Page } from '@playwright/test';
-import { expectNoViolations, openSection, read, seededCrawl } from './support';
+import { expectNoViolations, openSection, read, seededCrawl, showChecks } from './support';
 
 interface FoundOn {
   urlId: number;
@@ -50,6 +50,7 @@ test('a broken URL says where it is found, opens to list the pages linking to it
   const { found } = await brokenUrls();
   expect([...found.values()].some((url) => url.pages > 0)).toBe(true);
   await openSection(page, /^Issues/);
+  await showChecks(page);
   await page.getByRole('option', { name: /Internal URL returns 4xx/ }).click();
   const groups = page.getByRole('treegrid', { name: /Internal URL returns 4xx/ });
   await groups.focus();
@@ -94,6 +95,7 @@ test('a broken URL says where it is found, opens to list the pages linking to it
 
 test('a page holding broken links says which URL it links to', async ({ page }) => {
   await openSection(page, /^Issues/);
+  await showChecks(page);
   await page.getByRole('option', { name: /Links to broken internal URLs/ }).click();
   const groups = page.getByRole('treegrid', { name: /Links to broken internal URLs/ });
   await groups.focus();

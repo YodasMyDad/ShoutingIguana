@@ -142,6 +142,11 @@
   /* Issues stacks its checks list over the selected check in a main area narrower than this (200% zoom at 1280 px). */
   --container-split: 880px;
   /*
+    Issues keeps its checks list beside the open check in a main area at least this wide (a 1600 px window); narrower,
+    the open check takes the width and the list is behind "All checks", so the inspector never pushes the check away.
+  */
+  --container-checks-beside: 1344px;
+  /*
     robots.txt stacks its file over the URLs it blocked in a main area narrower than this, so the URLs keep room for
     every column (what blocking each costs) without scrolling sideways: side by side at 1440 px, stacked at the
     window's least (960 px).

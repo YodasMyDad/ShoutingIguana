@@ -8,7 +8,7 @@
 // and on a crawl of the engine's test site, paused part way (every count of a running crawl, from the same moment) and
 // then finished.
 import { expect, test, type Page } from '@playwright/test';
-import { countOf, env, read, seededCrawl, sidecar } from './support';
+import { countOf, env, read, seededCrawl, showChecks, sidecar } from './support';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
 
 interface Item {
@@ -179,6 +179,7 @@ async function hideACheck(page: Page, id: string, scope: 'crawl' | 'all') {
   await page.goto(`/crawls/${id}/issues/${hidden!.id}`);
   await page.getByRole('button', { name: 'Hide this check' }).click();
   await page.getByRole('menuitem', { name: scope === 'crawl' ? /Hide in this crawl/ : /Hide in every crawl/ }).click();
+  await showChecks(page);
   await expect(page.getByRole('button', { name: /Show 1 hidden check/ })).toBeVisible();
   return hidden!.id;
 }

@@ -115,6 +115,20 @@ export async function openSection(page: Page, section: RegExp) {
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: section }).first().click();
 }
 
+/**
+ * Brings the Issues screen's checks list out from behind "All checks", where an open check has the width (a main area
+ * under a 1600 px window, or beside the inspector). Where the list is beside the check already, it does nothing.
+ */
+export async function showChecks(page: Page) {
+  const list = page.getByRole('listbox', { name: 'Checks' });
+  const button = page.getByRole('button', { name: 'All checks' });
+  await expect(page.locator('[data-check-detail]').getByRole('heading', { level: 2 }).first()).toBeVisible();
+  await expect(async () => {
+    if ((await button.isVisible()) && (await button.getAttribute('aria-expanded')) === 'false') await button.click();
+    await expect(list).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+}
+
 /** A count as written on screen ("101,081", "2,348 URLs"), as a number. */
 export const countOf = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));
 

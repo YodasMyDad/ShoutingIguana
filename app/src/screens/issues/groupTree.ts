@@ -1,7 +1,8 @@
 // A check's groups as the rows of one treegrid: every group's row, and under the open one its first pages and the
 // link to all of them. One group is open at a time (the route's `group`), so where any row is comes from two numbers:
 // which group is open and how many rows it has. Pure, so the index arithmetic is unit-tested.
-import type { CheckGroupRef, GridFilter, IssueGroup } from '../../api/grids';
+import type { CheckGroupRef, GridFilter, GridPage, IssueGroup, IssueGroupPage, IssueGroupSort } from '../../api/grids';
+import { groupsAsGridPage } from '../../api/queries';
 
 /** Pages shown under an open group before "Show all N pages in URLs". */
 export const FIRST_GROUP_ROWS = 10;
@@ -81,4 +82,14 @@ export function childPlace(child: number, pages: number, open: OpenPage | null):
   if (!expanded || child <= expanded.page) return { kind: 'page', page: child };
   if (child <= expanded.page + extra) return { kind: 'where', page: expanded.page, row: child - expanded.page - 1 };
   return { kind: 'page', page: child - extra };
+}
+
+/** A page of a check's groups as its grid reads them, with the order the engine used: by pages, or the largest file. */
+export interface GroupsGridPage extends GridPage<IssueGroup> {
+  sort?: IssueGroupSort;
+}
+
+/** The groups answer as a grid page, keeping the order it came in, which the check's line says. */
+export function groupsGridPageOf(page: IssueGroupPage): GroupsGridPage {
+  return { ...groupsAsGridPage(page), ...(page.sort ? { sort: page.sort } : {}) };
 }

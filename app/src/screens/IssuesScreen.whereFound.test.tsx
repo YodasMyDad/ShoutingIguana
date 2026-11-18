@@ -142,3 +142,12 @@ describe('where an issue’s URL is found', () => {
     expect(router.state.location.search).toMatchObject({ filter: [{ column: 'to.id', value: 10 }, {}] });
   });
 });
+
+describe('the one page most of a check’s URLs are linked from', () => {
+  it('says so above the check’s URLs, and to fix the links there for a broken URL', async () => {
+    sidecar();
+    await open(`${ISSUES}/internal-client-error`);
+    expect(await screen.findByText('/garden-furniture/ links to 2 of these 2 URLs')).toBeVisible();
+    expect(screen.getByText('Most of them are linked from there: fix or remove the links there first.')).toBeVisible();
+  });
+});

@@ -95,6 +95,7 @@ export const FLAG_WORDS: Record<LinkFlag, string> = {
   outsideHead: 'outside the head',
   samePage: 'same page',
   fromHttpHeader: 'from the HTTP header',
+  protocolRelative: 'protocol-relative',
 };
 
 /** How the URL answered, in a few words: the status pill's words beside a code. */
