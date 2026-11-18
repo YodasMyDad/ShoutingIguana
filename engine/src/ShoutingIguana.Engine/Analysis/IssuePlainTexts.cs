@@ -1411,6 +1411,56 @@ public static class IssuePlainTexts
             OneFix = """That's almost certainly one heading in your page design, such as your site's name, marked as the main heading of every page."""
         },
 
+        ["heading-levels-skipped"] = new(
+            """Headings that jump levels""",
+            [
+                """These pages have headings that jump a level, such as a main section heading followed by a sub-sub-heading.""",
+                """People who use screen readers move through a page by its headings, and a jump suggests a section is missing."""
+            ],
+            [
+                """Edit each page and use the next heading size down for each smaller section.""",
+                """Change how a heading looks with your site's styles, not by picking a smaller heading."""
+            ],
+            IssueFixer.Either,
+            """No page's headings jump a level"""),
+
+        ["h1-image-only"] = new(
+            """Main headings that are pictures""",
+            [
+                """These pages' main heading is a picture, such as your logo, with no words of its own.""",
+                """It says the same on every page, your site's name, rather than what the page is about."""
+            ],
+            [
+                """Give each page a main heading in words that says what the page is about.""",
+                """Keep the logo as a picture beside it, or elsewhere on the page."""
+            ],
+            IssueFixer.Either,
+            """Every main heading is in words"""),
+
+        ["heading-too-long"] = new(
+            """Headings that run on""",
+            [
+                """These pages have a main heading or section heading longer than {limit:headingMaxLength}.""",
+                """A long heading is harder to take in at a glance, and on a phone it wraps over several lines."""
+            ],
+            [
+                """Shorten each heading to what the section is about, and move the rest into the text below it."""
+            ],
+            IssueFixer.You,
+            """No heading runs on"""),
+
+        ["h2-missing"] = new(
+            """Long pages with no subheadings""",
+            [
+                """These long pages have no subheadings to break up their text.""",
+                """Readers find it hard to scan a long page without them, and to find the part they want."""
+            ],
+            [
+                """Divide each page's text into sections, each under a subheading that says what it covers."""
+            ],
+            IssueFixer.You,
+            """Every long page has subheadings"""),
+
         ["low-word-count"] = new(
             """Pages with very little text""",
             [
@@ -1475,6 +1525,44 @@ public static class IssuePlainTexts
         {
             LooksFor = """A site that answers at more than one address"""
         },
+
+        ["placeholder-text"] = new(
+            """Pages with dummy "lorem ipsum" text""",
+            [
+                """These pages have the dummy text "lorem ipsum" on them, which designers use until the real words are written.""",
+                """Every visitor sees it, and the site looks unfinished, and Google may show it under the page in search."""
+            ],
+            [
+                """Replace the dummy text with the page's real words, or remove the part it's in.""",
+                """Check other pages made from the same design for it too."""
+            ],
+            IssueFixer.You,
+            """No page has dummy text"""),
+
+        ["readability-low"] = new(
+            """Writing that's very hard to read""",
+            [
+                """These pages' English text uses long sentences of long words, which makes it very hard to read.""",
+                """Many readers give up before they reach the point, on phones above all."""
+            ],
+            [
+                """Shorten long sentences, split ones that say several things, and use everyday words where they mean the same."""
+            ],
+            IssueFixer.You,
+            """Every page's writing is readable"""),
+
+        ["boilerplate-heavy"] = new(
+            """Pages that are mostly menus and footers""",
+            [
+                """Less than a quarter of the words on these pages are their own: the rest are menus, footers and sidebars.""",
+                """Search engines see little on them that's different from your other pages."""
+            ],
+            [
+                """Add more of each page's own text about what it offers.""",
+                """Trim menus and footers that repeat long lists of links on every page."""
+            ],
+            IssueFixer.Either,
+            """Every page has enough words of its own"""),
 
         ["image-missing-alt"] = new(
             """Images with no description""",
@@ -1769,6 +1857,70 @@ public static class IssuePlainTexts
             IssueFixer.Developer,
             """No language version is written in the wrong part of the page"""),
 
+        ["hreflang-inconsistent-code"] = new(
+            """Language versions that disagree about their language""",
+            [
+                """These pages point to another language version of themselves, but name its language differently from it.""",
+                """Google may then ignore the language settings and show the wrong version."""
+            ],
+            [
+                """Send the list to your developer: it gives the two names each pair uses.""",
+                """Ask for every version to use the same language name for each page, the one the page uses for itself."""
+            ],
+            IssueFixer.Developer,
+            """Every language version agrees on its language"""),
+
+        ["hreflang-header-mismatch"] = new(
+            """Language versions listed two different ways""",
+            [
+                """These pages list their other language versions twice, in the page and in its server settings, and the two lists differ.""",
+                """Google can't tell which list is right."""
+            ],
+            [
+                """Ask your developer to list the language versions in one place only, or to make both lists the same."""
+            ],
+            IssueFixer.Developer,
+            """Language versions are listed one consistent way"""),
+
+        ["hreflang-unlinked"] = new(
+            """Language versions that nothing links to""",
+            [
+                """These pages are another page's version in another language, but no page on your site links to them.""",
+                """Visitors can't reach them, and search engines see them as less important."""
+            ],
+            [
+                """Add a language switcher, or links between each page's language versions.""",
+                """List these pages in your sitemap too."""
+            ],
+            IssueFixer.Either,
+            """Every language version has links to it"""),
+
+        ["hreflang-lang-mismatch"] = new(
+            """Pages that name two different languages""",
+            [
+                """These pages give one language in their settings for search engines and another in their page code.""",
+                """One of them is usually wrong, copied from another language version unchanged."""
+            ],
+            [
+                """Send the list to your developer: it gives the two languages each page names.""",
+                """Ask them to correct whichever one is wrong."""
+            ],
+            IssueFixer.Developer,
+            """Every page names one language"""),
+
+        ["hreflang-self-only"] = new(
+            """Language settings that list no other language""",
+            [
+                """These pages have language settings for search engines that list only the page itself.""",
+                """They do nothing on their own: they only help when they point to versions in other languages."""
+            ],
+            [
+                """If your site has other language versions, list them all on every version.""",
+                """If it has none, ask your developer to remove the language settings."""
+            ],
+            IssueFixer.Either,
+            """Every page's language settings list its other versions"""),
+
         ["structured-data-invalid"] = new(
             """Details for search engines that can't be read""",
             [
@@ -1921,6 +2073,57 @@ public static class IssuePlainTexts
             LooksFor = """Missing security settings"""
         },
 
+        ["security-headers-weak"] = new(
+            """Security settings that are on but too weak""",
+            [
+                """Your site sends some security settings to browsers, but sets them too weakly to do their job.""",
+                """One that keeps visitors on the secure version of your site may lapse between visits, for example."""
+            ],
+            [
+                """Send the list to your developer or hosting company: it says which settings are too weak.""",
+                """Ask them to strengthen each one, as the list describes."""
+            ],
+            IssueFixer.Developer,
+            """Your site's security settings are strong enough"""),
+
+        ["cookies-insecure"] = new(
+            """Cookies your site sets without basic protection""",
+            [
+                """These pages store small files in visitors' browsers (cookies) without the basic protections browsers offer.""",
+                """A login cookie without them could be read by someone else, which is how accounts get taken over."""
+            ],
+            [
+                """Send the list to your developer: it names each cookie and what it lacks.""",
+                """Ask them to turn on the cookie protections in your site's settings or code."""
+            ],
+            IssueFixer.Developer,
+            """Your site's cookies are protected"""),
+
+        ["form-not-secure"] = new(
+            """Forms that send what people type without encryption""",
+            [
+                """These pages have forms that send what people type over an unencrypted connection.""",
+                """Others on the same network could read it, and browsers warn visitors before they send it."""
+            ],
+            [
+                """Ask your developer to make each form send to a secure address, one that starts with https.""",
+                """If a form plugin made the form, check its settings for the address it sends to."""
+            ],
+            IssueFixer.Developer,
+            """Every form sends securely"""),
+
+        ["protocol-relative-links"] = new(
+            """Links written in an old shortcut style""",
+            [
+                """These pages load files or link to addresses written without their start ("//" instead of "https://").""",
+                """That shortcut was once common, and still works on a secure page, but it's best replaced."""
+            ],
+            [
+                """Ask your developer to write each address in full, starting with "https://"."""
+            ],
+            IssueFixer.Developer,
+            """Every address is written in full"""),
+
         ["url-uppercase"] = new(
             """Addresses with capital letters""",
             [
@@ -1966,6 +2169,96 @@ public static class IssuePlainTexts
             ],
             IssueFixer.Either,
             """No page address is very long"""),
+
+        ["url-tracking-parameters"] = new(
+            """Links between your own pages tagged for ad tracking""",
+            [
+                """Some of your pages link to others with tracking codes meant for ads and emails in the address.""",
+                """Each such link is another address for search engines, and it muddles your visitor statistics."""
+            ],
+            [
+                """Find the links on the pages the list names, and remove the tracking codes after the "?" from each address."""
+            ],
+            IssueFixer.You,
+            """No link between your own pages is tagged for tracking"""),
+
+        ["url-multiple-slashes"] = new(
+            """Addresses with a double slash""",
+            [
+                """These pages' addresses have two slashes in a row.""",
+                """That makes them different addresses from the single-slash ones, so search engines may see two copies."""
+            ],
+            [
+                """Change the links to these pages to use a single slash.""",
+                """Ask your developer to forward each double-slash address to the single-slash one."""
+            ],
+            IssueFixer.Either,
+            """No address has a double slash"""),
+
+        ["url-space"] = new(
+            """Addresses with spaces in them""",
+            [
+                """These pages' addresses have a space in them, which addresses can't hold as typed.""",
+                """It shows as "%20", reads badly, and breaks when the address is copied into emails."""
+            ],
+            [
+                """Rename each page with hyphens in place of the spaces, in your site's editor.""",
+                """Ask your developer to forward the old addresses to the new ones."""
+            ],
+            IssueFixer.Either,
+            """No address has a space in it"""),
+
+        ["url-parameters"] = new(
+            """Pages whose address has a ? part""",
+            [
+                """These pages can appear in search, and their addresses have a "?" part, as sorting and filtering often add.""",
+                """Each different "?" part is another address for search engines to visit, often for the same content."""
+            ],
+            [
+                """Check whether each page is worth finding in search on its own.""",
+                """If not, ask your developer to point its main address at the version without the "?" part."""
+            ],
+            IssueFixer.Either,
+            """No page that can appear in search has a ? part"""),
+
+        ["url-non-ascii"] = new(
+            """Addresses with accented or non-English letters""",
+            [
+                """These pages' addresses have accented or non-English letters in them.""",
+                """Search engines read them fine, but they turn into long codes when copied, which some people and tools get wrong."""
+            ],
+            [
+                """Use plain letters, hyphens and numbers in new page addresses.""",
+                """Don't rename pages that already do well in search."""
+            ],
+            IssueFixer.You,
+            """Every address uses plain letters"""),
+
+        ["url-repetitive-path"] = new(
+            """Addresses that repeat themselves""",
+            [
+                """These addresses repeat part of themselves, such as "/shop/shop/".""",
+                """It's usually a link written slightly wrong, which builds ever-longer addresses for search engines to follow."""
+            ],
+            [
+                """Look at the pages the list names for the link that leads here.""",
+                """Ask your developer to correct the link and forward the address to the right page."""
+            ],
+            IssueFixer.Either,
+            """No address repeats itself"""),
+
+        ["url-internal-search"] = new(
+            """Your site's search results pages show up as pages""",
+            [
+                """Search engines can find and show your site's own search results pages.""",
+                """They rarely help anyone arriving from a search engine, and there's no end of them to visit."""
+            ],
+            [
+                """Look in your site's SEO settings or plugin for an option to hide search results from search engines.""",
+                """Avoid linking to search results from your own pages."""
+            ],
+            IssueFixer.Either,
+            """Your site's search results stay out of search engines"""),
 
         ["slow-response"] = new(
             """Pages that are slow to answer""",
@@ -2087,6 +2380,130 @@ public static class IssuePlainTexts
         {
             OneFix = """That's almost certainly your page design, which leaves the same details out of every page."""
         },
+
+        ["x-card-missing"] = new(
+            """Pages without a preview card for X""",
+            [
+                """These pages don't say which kind of preview X (Twitter) should show when someone shares them.""",
+                """X then shows a plain link, or a small preview, instead of a card with a picture."""
+            ],
+            [
+                """Turn on X (Twitter) cards in your SEO plugin or theme settings.""",
+                """If there's no setting, ask your developer to add an X card to every page."""
+            ],
+            IssueFixer.Either,
+            """Every page has a preview card for X"""),
+
+        ["x-card-incomplete"] = new(
+            """Preview cards for X that are missing parts""",
+            [
+                """These pages ask X (Twitter) for a preview card, but leave out something the card needs, such as a title or a picture.""",
+                """X can't build the card, so people see a plain link instead."""
+            ],
+            [
+                """Send the list to your developer: it says what each page's card lacks.""",
+                """Ask them to fill in the missing parts, or to write the card the way X reads it."""
+            ],
+            IssueFixer.Developer,
+            """Every preview card for X is complete"""),
+
+        ["social-image-relative"] = new(
+            """Share images given an incomplete address""",
+            [
+                """These pages name the picture to show when they're shared, but give only part of its address.""",
+                """Facebook, X and others need the full address, so they may show no picture."""
+            ],
+            [
+                """Ask your developer to give the full address of each share picture, starting with https://."""
+            ],
+            IssueFixer.Developer,
+            """Every share picture has its full address"""),
+
+        ["og-url-not-canonical"] = new(
+            """Share links that point to a different page""",
+            [
+                """These pages tell social networks that their address is another page's, often your home page.""",
+                """Shares and likes then count toward that page, and people who click the share land there."""
+            ],
+            [
+                """Send the list to your developer: it gives the address each page names.""",
+                """Ask them to make each page name its own address, or leave the setting out."""
+            ],
+            IssueFixer.Developer,
+            """Every page names its own address for sharing"""),
+
+        ["social-tags-multiple"] = new(
+            """Share settings given twice with different values""",
+            [
+                """These pages give the same share setting, such as the title to show, twice, with different words.""",
+                """Social networks pick one of them, and it may not be the one you want."""
+            ],
+            [
+                """Look for two plugins or a plugin and your theme both adding share settings, and turn one of them off.""",
+                """If that isn't it, ask your developer to remove the copy."""
+            ],
+            IssueFixer.Either,
+            """No share setting is given twice"""),
+
+        ["og-title-duplicate"] = new(
+            """Pages that share the same title when shared""",
+            [
+                """These pages have different titles in search, but show the same title when they're shared on social networks.""",
+                """People who see the shares can't tell the pages apart."""
+            ],
+            [
+                """Give each page its own share title in your SEO plugin, or leave it empty so the page's own title is used."""
+            ],
+            IssueFixer.Either,
+            """Every page has its own share title"""),
+
+        ["og-description-duplicate"] = new(
+            """Pages that share the same summary when shared""",
+            [
+                """These pages have different summaries in search, but show the same summary when they're shared on social networks.""",
+                """Each share then says the same thing, whatever the page is about."""
+            ],
+            [
+                """Give each page its own share summary in your SEO plugin, or leave it empty so the page's own description is used."""
+            ],
+            IssueFixer.Either,
+            """Every page has its own share summary"""),
+
+        ["social-image-broken"] = new(
+            """Share images that don't load""",
+            [
+                """The picture these pages name for social networks doesn't load: it's missing, or it isn't a picture.""",
+                """Shares of these pages show no picture."""
+            ],
+            [
+                """Choose a new share picture for each page in your SEO plugin, or upload the missing one again."""
+            ],
+            IssueFixer.You,
+            """Every share picture loads"""),
+
+        ["social-image-too-large"] = new(
+            """Share images too big to show""",
+            [
+                """The picture these pages name for social networks is larger than 5 MB.""",
+                """X won't show a picture that large, and other networks are slow to load it."""
+            ],
+            [
+                """Save a smaller copy of each picture, under 1 MB is plenty, and choose it as the share picture."""
+            ],
+            IssueFixer.You,
+            """No share picture is too big"""),
+
+        ["social-image-too-small"] = new(
+            """Share images too small to show well""",
+            [
+                """The picture these pages name for social networks is smaller than they need.""",
+                """Facebook won't use a picture under 200 pixels square, and X shows a small one blurred or not at all."""
+            ],
+            [
+                """Choose a larger share picture for each page: 1,200 by 630 pixels suits every network."""
+            ],
+            IssueFixer.You,
+            """Every share picture is large enough"""),
 
         ["head-tags-in-body"] = new(
             """Page settings that ended up where they're ignored""",

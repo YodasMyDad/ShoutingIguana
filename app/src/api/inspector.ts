@@ -36,7 +36,8 @@ export type LinkKind =
   | 'hreflang'
   | 'pagination'
   | 'metaRefresh'
-  | 'redirect';
+  | 'redirect'
+  | 'socialImage';
 
 /**
  * Why a URL found wasn't fetched. `none` is what the sidecar serialises for `SkipReason.None`; the contract's list of
@@ -58,6 +59,7 @@ export const LINK_KINDS = [
   'pagination',
   'metaRefresh',
   'redirect',
+  'socialImage',
 ] as const satisfies readonly LinkKind[];
 
 export interface UrlDiscovery {

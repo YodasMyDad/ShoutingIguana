@@ -60,17 +60,18 @@ internal sealed class WriterStatements : IDisposable
                 http_version, redirect_url_id, block_reason, error, is_html, title, title_count, meta_description,
                 meta_description_count, h1, h1_count, canonical_url_id, is_noindex, is_nofollow, indexability,
                 indexability_reason, word_count, content_hash, simhash, language, outlink_count, simhash_1, simhash_2, simhash_3,
-                pixel_width, pixel_height)
+                pixel_width, pixel_height, og_title, og_description)
             VALUES (
                 $urlId, $fetchedAt, $outcome, $status, $contentType, $size, $body, $ttfb, $total,
                 $httpVersion, $redirect, $block, $error, $isHtml, $title, $titleCount, $description,
                 $descriptionCount, $h1, $h1Count, $canonical, $noindex, $nofollow, $indexability,
                 $indexabilityReason, $words, $contentHash, $simhash, $language, $outlinks, $simhash1, $simhash2, $simhash3,
-                $pixelWidth, $pixelHeight)
+                $pixelWidth, $pixelHeight, $ogTitle, $ogDescription)
             """, "$urlId", "$fetchedAt", "$outcome", "$status", "$contentType", "$size", "$body", "$ttfb", "$total",
             "$httpVersion", "$redirect", "$block", "$error", "$isHtml", "$title", "$titleCount", "$description",
             "$descriptionCount", "$h1", "$h1Count", "$canonical", "$noindex", "$nofollow", "$indexability",
-            "$indexabilityReason", "$words", "$contentHash", "$simhash", "$language", "$outlinks", "$simhash1", "$simhash2", "$simhash3", "$pixelWidth", "$pixelHeight");
+            "$indexabilityReason", "$words", "$contentHash", "$simhash", "$language", "$outlinks", "$simhash1", "$simhash2", "$simhash3", "$pixelWidth", "$pixelHeight",
+            "$ogTitle", "$ogDescription");
         _readOutcome = Prepare(connection, $"""
             SELECT r.outcome, r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL AND {CrawlSchema.NOT_CLOUDFLARE},
                    CASE WHEN r.body_bytes IS NOT NULL THEN COALESCE(r.size_bytes, 0) ELSE 0 END, r.status_code,
@@ -175,7 +176,7 @@ internal sealed class WriterStatements : IDisposable
             row.Title, row.TitleCount, row.MetaDescription, row.MetaDescriptionCount, row.H1, row.H1Count, canonicalId,
             row.IsNoindex, row.IsNofollow, (int)row.Indexability, (int)row.IndexabilityReason, row.WordCount,
             AsSigned(row.ContentHash), AsSigned(row.SimHash), row.Language, outlinkCount, AsSigned(row.SimHashLanes?.Lane1),
-            AsSigned(row.SimHashLanes?.Lane2), AsSigned(row.SimHashLanes?.Lane3), row.PixelWidth, row.PixelHeight);
+            AsSigned(row.SimHashLanes?.Lane2), AsSigned(row.SimHashLanes?.Lane3), row.PixelWidth, row.PixelHeight, row.ShareTitle, row.ShareDescription);
 
     /// <summary>
     /// What the stored response of a URL was, or null when it has none. IsPage is <see cref="CrawlSchema.PAGE"/> but for

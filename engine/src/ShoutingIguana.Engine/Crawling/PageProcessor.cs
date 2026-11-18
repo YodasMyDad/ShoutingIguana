@@ -193,6 +193,8 @@ internal sealed class PageProcessor(
             BodyBytes = response.BodyBytes,
             PixelWidth = response.PixelWidth,
             PixelHeight = response.PixelHeight,
+            ShareTitle = facts is null ? null : Analysis.Rules.SocialText.ShareTitle(facts),
+            ShareDescription = facts is null ? null : Analysis.Rules.SocialText.ShareDescription(facts),
             TimeToFirstByteMs = response.TimeToFirstByteMs,
             ResponseMs = response.TotalMs,
             HttpVersion = response.HttpVersion,

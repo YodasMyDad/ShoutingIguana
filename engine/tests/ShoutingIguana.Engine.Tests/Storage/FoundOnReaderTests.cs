@@ -27,7 +27,9 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "internal-client-error", "internal-server-error", "internal-unreachable", "internal-blocked", "redirect-chain", "redirect-loop",
             "redirect-broken", "redirect-temporary", "redirect-downgrade", "orphan-page", "blocked-by-robots", "sitemap-non-indexable",
             "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores", "canonical-on-redirect", "canonical-unlinked",
-            "non-indexable-inlinks-only", "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "sitemap-url-repeated"
+            "non-indexable-inlinks-only", "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "sitemap-url-repeated",
+            "url-tracking-parameters", "url-multiple-slashes", "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search",
+            "hreflang-unlinked"
         ];
         string[] targets =
         [
@@ -37,7 +39,8 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions",
             "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "broken-resources", "links-to-localhost", "generic-anchor-text",
             "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable",
-            "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked"
+            "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "hreflang-inconsistent-code",
+            "social-image-broken", "social-image-too-large", "social-image-too-small"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
@@ -151,6 +154,18 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
                 Assert.Equal(link, $"{(int)target.Kind!} {(int)target.Position!} {target.Text}");
             }
         }
+    }
+
+    /// <summary>
+    /// A share image the page also shows is named by its share tag: the link the check is about, of the two (batch 9).
+    /// </summary>
+    [Fact]
+    public void AShareImageIsNamedByItsShareTagWhereThePageAlsoShowsIt()
+    {
+        var page = Flagged("social-image-too-small").Single(id => Url(id).EndsWith("/plants/og-image-small", StringComparison.Ordinal));
+        var target = Assert.Single(FoundOnReader.ReadTargets(crawl.Path, "social-image-too-small", [page])!.Single().Targets);
+        Assert.Equal((LinkKind.SocialImage, "og:image", LinkPosition.Head), (target.Kind, target.Text, target.Position));
+        Assert.Equal(["1"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {target.Id} AND kind = {(int)LinkKind.Image}"));
     }
 
     /// <summary>

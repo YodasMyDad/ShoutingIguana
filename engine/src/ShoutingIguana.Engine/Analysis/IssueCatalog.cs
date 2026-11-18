@@ -12,7 +12,7 @@ public static class IssueCatalog
     // links naming it. Ids, not the definitions, which are made in the order written and so would be null here. First, as
     // the checks use it.
     private static readonly string[] BROKEN_TARGETS =
-        ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken"];
+        ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken", "social-image-broken"];
 
     // Response codes
     public static readonly IssueDefinition INTERNAL_CLIENT_ERROR = new("internal-client-error", IssueCategory.ResponseCodes, IssueSeverity.Error,
@@ -149,7 +149,7 @@ public static class IssueCatalog
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["redirectChain", "redirectKind"],
         TargetFacts = ["statusCode"],
-        Clears = ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken"]
+        Clears = ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "social-image-broken"]
     };
 
     public static readonly IssueDefinition REDIRECT_TEMPORARY = new("redirect-temporary", IssueCategory.Redirects, IssueSeverity.Notice,
@@ -1209,6 +1209,56 @@ public static class IssueCatalog
         Grouping = IssueGrouping.RelatedUrl,
         Evidence = ["h1"]
     };
+    public static readonly IssueDefinition HEADING_LEVELS_SKIPPED = new("heading-levels-skipped", IssueCategory.Headings, IssueSeverity.Notice,
+        "Heading levels skipped",
+        """On this indexable page, which has an H1, a heading after the H1 is more than one level below the one before it (an H2, then an H4). Headings in menus and footers after the H1 count, as screen readers list them all; headings before the H1, such as a theme's hidden cart or a menu's column titles, aren't judged. The detail gives the first such step.""",
+        """Use the next level down for each subsection (H2 under the H1, H3 under an H2), and style a heading by CSS, not by picking a smaller level.""")
+    {
+        Why = """Screen reader users move through a page by its headings, and a skipped level suggests a missing section. HTML asks for each heading to be at most one level below the one before. Search engines cope either way, so this is about structure and accessibility.""",
+        LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition H1_IMAGE_ONLY = new("h1-image-only", IssueCategory.Headings, IssueSeverity.Notice,
+        "H1 is an image",
+        """This indexable page's first H1 has no text of its own: its text is an image's alt, as with a logo in the H1. The detail quotes the alt. A crawl made before the crawler noted this isn't checked.""",
+        """Give the page a text H1 that says what this page is about, and keep the logo as an image outside it, or in it beside the text.""")
+    {
+        Why = """An H1 that's a logo says the same on every page, the site's name, not what this page is about. Search engines read the alt, but a heading in text is clearer to them and to screen reader users.""",
+        LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["h1"]
+    };
+
+    public static readonly IssueDefinition HEADING_TOO_LONG = new("heading-too-long", IssueCategory.Headings, IssueSeverity.Notice,
+        "H1 or H2 over 70 characters",
+        """This indexable page's first H1, or one of its H2s, is longer than 70 characters (the default, which can be changed in the analysis settings). The detail gives the first, its level and its length.""",
+        """Shorten the heading to what the section is about, and move the rest into the text below it.""")
+    {
+        Why = """A heading is read as a label: a long one is harder to scan, and on a phone it wraps over several lines. Search engines read it whole, so this is about readers, not ranking.""",
+        LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["h1"]
+    };
+
+    public static readonly IssueDefinition H2_MISSING = new("h2-missing", IssueCategory.Headings, IssueSeverity.Notice,
+        "Long page without an H2",
+        """This indexable page has 500 or more words of its own (the default, which can be changed in the analysis settings) and no H2 to divide them. A short page doesn't need one, so it isn't asked of one.""",
+        """Break the text into sections, each under an H2 that says what it covers.""")
+    {
+        Why = """Subheadings let readers scan a long page and jump to what they need, and they help search engines see what each part is about.""",
+        LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        Evidence = ["wordCount"]
+    };
 
 
     // Content
@@ -1219,6 +1269,41 @@ public static class IssueCatalog
     {
         Why = """Google says content length alone doesn't matter for ranking: there's no minimum word count. Plenty of good pages are short, such as contact, product and category pages. Use this to find pages that are empty by mistake, such as an unfilled template, a placeholder or content that only appears with JavaScript, not as a reason to pad pages out.""",
         LearnMore = "https://developers.google.com/search/docs/fundamentals/seo-starter-guide#focusing",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+    public static readonly IssueDefinition PLACEHOLDER_TEXT = new("placeholder-text", IssueCategory.Content, IssueSeverity.Warning,
+        "Placeholder text (lorem ipsum)",
+        """This indexable page's text, title or meta description has the placeholder "lorem ipsum" in it. The detail quotes it. A crawl made before the crawler looked for it isn't checked.""",
+        """Replace the placeholder with the page's real text, or remove the block it's in, then check other pages made from the same template.""")
+    {
+        Why = """Every visitor sees it, and it reads as an unfinished site. Search engines index it as the page's text, and it can end up in the snippet under the page's title.""",
+        LearnMore = "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition READABILITY_LOW = new("readability-low", IssueCategory.Content, IssueSeverity.Notice,
+        "Text that's very hard to read",
+        """This indexable English page (its <html lang> is en or en-…) has a Flesch reading ease under 30 (the default, which can be changed in the analysis settings): long sentences of long words. Only prose is judged, 100 words and 5 sentences or more; menus and product grids without sentence ends aren't. A crawl made before the crawler counted sentences isn't checked.""",
+        """Shorten long sentences, split ones that carry several ideas, and prefer short everyday words to long ones where they say the same.""")
+    {
+        Why = """Text that's very hard to read loses readers before they reach the point, on phones above all. Flesch's scale puts under 30 at university level. Search engines don't score readability, so this is about the people reading.""",
+        LearnMore = "https://en.wikipedia.org/wiki/Flesch%E2%80%93Kincaid_readability_tests#Flesch_reading_ease",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition BOILERPLATE_HEAVY = new("boilerplate-heavy", IssueCategory.Content, IssueSeverity.Notice,
+        "Page mostly template text",
+        """Under a quarter of this indexable page's words are its own: the rest are menus, header, footer and sidebars. Pages with too few words of their own are another check's (low word count). The detail gives the page's own words of all its words. A crawl made before the crawler counted them isn't checked.""",
+        """Add text of the page's own, or trim menus and footers that repeat long lists of links on every page.""")
+    {
+        Why = """When most of a page is the same as every other page, search engines see little that's particular to it, and pages made from the template look alike to them.""",
+        LearnMore = "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
@@ -1519,6 +1604,71 @@ public static class IssueCatalog
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
     };
+    public static readonly IssueDefinition HREFLANG_INCONSISTENT_CODE = new("hreflang-inconsistent-code", IssueCategory.Hreflang, IssueSeverity.Warning,
+        "Hreflang return link uses another code",
+        """This indexable page names an alternate under one language code, and the alternate links back but calls itself by another (the page says fr, the alternate fr-ca). A missing return link is another check's. The detail names the first.""",
+        """Make every page in the set use the same code for each version: the one the version uses for itself.""")
+    {
+        Why = """Google asks every version to list itself and all the others; versions that disagree about which language each one is may be ignored, and the wrong version shown to searchers.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
+        References = IssueReferences.Targets,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["statusCode", "text", "indexability"]
+    };
+
+    public static readonly IssueDefinition HREFLANG_HEADER_MISMATCH = new("hreflang-header-mismatch", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang in the HTML and the HTTP header disagree",
+        """This page gives its language versions both in its HTML and in a Link HTTP header, and the two name different sets. The detail counts each and names what only one has.""",
+        """Give the versions in one place, or keep both identical: usually the HTML, from your SEO plugin, with the header removed from the server.""")
+    {
+        Why = """Google reads both as the same declaration, so sets that differ leave it to guess which is right.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#methods-for-indicating-your-alternate-pages",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition HREFLANG_UNLINKED = new("hreflang-unlinked", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang URL that no page links to",
+        """An indexable page another page names as a language version, but that no crawled page links to with an ordinary link and no sitemap lists. It's only checked when the crawl read every page that could link to it, and every version hreflang names: the crawl doesn't follow hreflang unless told to, so a version only hreflang leads to is left unread. Where it's found lists the pages naming it.""",
+        """Link to each language version from the others, such as with a language switcher, and list them in the sitemap.""")
+    {
+        Why = """Hreflang says which version to show, not that a page matters: a version only hreflang leads to gets no link signals, and visitors can't reach it from the site.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        // As an orphan: only a full crawl shows that something now links to it.
+        Recheck = [],
+        Grouping = IssueGrouping.None,
+        Evidence = ["inlinks", "linkingPages"]
+    };
+
+    public static readonly IssueDefinition HREFLANG_LANG_MISMATCH = new("hreflang-lang-mismatch", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang code and lang attribute differ",
+        """This indexable page's hreflang entry for itself and its <html lang> name different languages, both written correctly (en against fr; en-GB against en-US is the same language). x-default isn't compared. The detail gives both.""",
+        """Correct whichever is wrong: the lang attribute in the page's template, or the code your SEO plugin gives this version.""")
+    {
+        Why = """Google reads neither to decide a page's language, but screen readers use lang, and two that disagree usually mean one was copied from another version unchanged.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail,
+        Evidence = ["language"]
+    };
+
+    public static readonly IssueDefinition HREFLANG_SELF_ONLY = new("hreflang-self-only", IssueCategory.Hreflang, IssueSeverity.Notice,
+        "Hreflang that names only the page itself",
+        """Every hreflang entry this indexable page has names the page itself (x-default included), so it lists no other language version.""",
+        """If the site has other language versions, list them all on every version. If it has none, the hreflang entries can go.""")
+    {
+        Why = """Hreflang only helps when it links versions of a page in other languages or regions; on its own it does nothing, and it often means the other versions were left out by mistake.""",
+        LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
 
 
     // Structured data
@@ -1638,6 +1788,54 @@ public static class IssueCatalog
         Grouping = IssueGrouping.None,
         ReportedOnce = true
     };
+    public static readonly IssueDefinition SECURITY_HEADERS_WEAK = new("security-headers-weak", IssueCategory.Security, IssueSeverity.Notice,
+        "Security headers set too weakly",
+        """The home page sends security headers set too weakly: Strict-Transport-Security (on HTTPS) whose max-age is missing, unreadable or under a year (31,536,000 seconds), or X-Content-Type-Options set to anything but nosniff. Checked once, for the whole site, as missing security headers are. The detail names each.""",
+        """Send Strict-Transport-Security: max-age=31536000 (a year) or more, once the whole site works over HTTPS, and X-Content-Type-Options: nosniff. Your host or CDN usually sets them.""")
+    {
+        Why = """HSTS keeps browsers on HTTPS between visits only for as long as its max-age, and the preload list browsers ship asks for a year; a short one lapses between visits. X-Content-Type-Options has one value, nosniff: anything else does nothing.""",
+        LearnMore = "https://hstspreload.org/#deployment-recommendations",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
+    };
+
+    public static readonly IssueDefinition COOKIES_INSECURE = new("cookies-insecure", IssueCategory.Security, IssueSeverity.Notice,
+        "Cookies without Secure or HttpOnly",
+        """The page's response sets cookies without basic protection: on HTTPS, without Secure; with SameSite=None but no Secure, which browsers refuse; or a session or login cookie (its name has sess, sid, auth, token, login or jwt) without HttpOnly. Only cookies the server sets are seen, not those a script sets. The detail names each cookie and what it lacks.""",
+        """Add Secure to every cookie on an HTTPS site, and HttpOnly to session and login cookies, in the server's or framework's cookie settings.""")
+    {
+        Why = """A cookie without Secure can be sent over plain HTTP, where it can be read in transit; one without HttpOnly can be read by a script injected into the page, which is how sessions are stolen. Browsers drop a SameSite=None cookie without Secure altogether.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition FORM_NOT_SECURE = new("form-not-secure", IssueCategory.Security, IssueSeverity.Warning,
+        "Form sends data over HTTP",
+        """On an HTTPS page, a form sends what's typed to an http:// address; or on an HTTP page, a form asks for a password. The detail says where it sends. A crawl made before the crawler read forms isn't checked.""",
+        """Point the form's action at the https:// address, or a relative one, and serve every page with a form over HTTPS.""")
+    {
+        Why = """What people type travels unencrypted, where others on the network can read or change it, and browsers warn them before sending it, or mark the page not secure.""",
+        LearnMore = "https://developer.mozilla.org/en-US/docs/Web/Security/Mixed_content",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition PROTOCOL_RELATIVE_LINKS = new("protocol-relative-links", IssueCategory.Security, IssueSeverity.Notice,
+        "Protocol-relative (//) URLs",
+        """The page has href or src values written without their scheme, starting // (such as //cdn.example.com/app.js), which take the page's own: on an HTTP copy of the page they load over HTTP. The detail counts them and gives the first. A crawl made before the crawler noted them isn't checked.""",
+        """Write each with https:// in front, now that every browser and most hosts support it.""")
+    {
+        Why = """They were a way to load the same file over HTTP and HTTPS. On an HTTPS page they load securely anyway, so the risk is only an HTTP copy of the page, but they're an old habit worth replacing, and some tools misread them.""",
+        LearnMore = "https://www.paulirish.com/2010/the-protocol-relative-url/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
 
 
     // URLs
@@ -1674,6 +1872,96 @@ public static class IssueCatalog
     {
         Why = """Google doesn't document a length limit that affects search, and results usually show the domain and a breadcrumb made from parts of the URL rather than the whole thing. Long URLs are mainly harder to read, share and type, and they often point to deep folder structures, keyword-stuffed slugs or tracking parameters worth cleaning up.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure#use-descriptive-urls",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+    public static readonly IssueDefinition URL_TRACKING_PARAMETERS = new("url-tracking-parameters", IssueCategory.Urls, IssueSeverity.Notice,
+        "Internal link with tracking parameters",
+        """Pages on the site link to this URL of the site's with ad or campaign tracking parameters in its query: utm_source and the other utm_ parameters, gclid, fbclid, msclkid, mc_cid or _ga. The detail names them; where it's found lists the pages linking to it.""",
+        """Link to the URL without its tracking parameters: they belong on links from emails, ads and other sites, not between your own pages.""")
+    {
+        Why = """Each tagged link is another URL for search engines to crawl and fold into the page they belong to, and analytics counts the visitor as arriving from a new campaign, which breaks up their visit.""",
+        LearnMore = "https://support.google.com/analytics/answer/10917952",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_MULTIPLE_SLASHES = new("url-multiple-slashes", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with multiple slashes",
+        """This indexable page's path has two slashes in a row (//), which makes it a different URL from the one with a single slash. Where it's found lists the pages linking to it.""",
+        """Link to the single-slash address, and redirect the double-slash one to it. The usual cause is a template joining a path and a folder that both end or start with a slash.""")
+    {
+        Why = """Most servers answer both with the same page, so the site has two URLs for it, which search engines must crawl and fold together.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_SPACE = new("url-space", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with a space",
+        """This indexable page's path has a space in it (written %20). Where it's found lists the pages linking to it.""",
+        """Rename the page with hyphens in place of spaces, redirect the old address to it, and update the links.""")
+    {
+        Why = """A space isn't allowed in a URL as written, so it's escaped as %20, which reads badly and breaks when the address is copied into emails or documents.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_PARAMETERS = new("url-parameters", IssueCategory.Urls, IssueSeverity.Notice,
+        "Indexable URL with parameters",
+        """This indexable page's URL has a query (a ? part), and it isn't the site's search, which is its own check. The detail names the parameters; where it's found lists the pages linking to it.""",
+        """If the parameters only sort, filter or track, point the page's canonical at the address without them. If they make a page worth finding, give it a plain address instead.""")
+    {
+        Why = """Every combination of parameters is another URL for search engines to crawl, and the same content under many of them divides its signals. Often fine, as for a page of a series, so it's for review.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_NON_ASCII = new("url-non-ascii", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with non-ASCII characters",
+        """This indexable page's path or query, decoded, has characters outside ASCII, such as accented or non-Latin letters. Where it's found lists the pages linking to it.""",
+        """Nothing is broken: search engines read them. Use ASCII letters, hyphens and digits in new addresses if people will type or share them, and don't rename pages that already rank.""")
+    {
+        Why = """URLs are sent as ASCII, so other characters travel percent-encoded (café becomes caf%C3%A9), which some tools, emails and people get wrong when copying.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_REPETITIVE_PATH = new("url-repetitive-path", IssueCategory.Urls, IssueSeverity.Notice,
+        "URL with a repeating path",
+        """This URL of the site's has a path that repeats itself: one segment three times or more, or the same run of segments twice in a row (/shop/shop/, /a/b/a/b/). Where it's found lists the pages linking to it.""",
+        """Find the link that builds it, usually a relative link such as href="shop/" that should be "/shop/", and fix it; redirect the URL to the right one.""")
+    {
+        Why = """A relative link resolved from the wrong place builds ever-longer URLs, which crawlers can follow without end, each answering with the same page.""",
+        LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
+        References = IssueReferences.Sources,
+        Subject = IssueSubject.Url,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition URL_INTERNAL_SEARCH = new("url-internal-search", IssueCategory.Urls, IssueSeverity.Notice,
+        "Internal search results page",
+        """This indexable page is the site's own search: its path has a segment "search", or its query asks something (s, q, query, search, keyword or keywords). The detail names the parameters; where it's found lists the pages linking to it.""",
+        """Keep search results out of search engines: add noindex to them, or point their canonical at a real page, and avoid linking to searches from the site's pages.""")
+    {
+        Why = """Every search is another page of results that rarely helps anyone who lands on it from a search engine, and there's no end to them for a crawler.""",
+        LearnMore = "https://developers.google.com/search/docs/essentials/spam-policies#thin-affiliate-pages",
+        References = IssueReferences.Sources,
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None
@@ -1781,6 +2069,134 @@ public static class IssueCatalog
         Grouping = IssueGrouping.PageDetail
     };
 
+    public static readonly IssueDefinition X_CARD_MISSING = new("x-card-missing", IssueCategory.Html, IssueSeverity.Notice,
+        "X (Twitter) card missing",
+        """This indexable page has no twitter:card meta tag (by name or property), so X shows its link without a card.""",
+        """Add <meta name="twitter:card" content="summary_large_image"> to the <head>; most SEO plugins do it with one setting. X takes the title, description and image from the Open Graph tags when there are no twitter: ones.""")
+    {
+        Why = """X reads twitter:card to choose a card; without it, a shared link gets no image or a small one. It falls back to Open Graph for everything else, so the one tag is usually all a page needs.""",
+        LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition X_CARD_INCOMPLETE = new("x-card-incomplete", IssueCategory.Html, IssueSeverity.Notice,
+        "X (Twitter) card incomplete",
+        """This indexable page asks for an X card that can't be built: its type isn't summary, summary_large_image, app or player; it has no title (twitter:title, else og:title); a summary card has no image (twitter:image, else og:image); a player card has no twitter:player; or its twitter: tags are written only with property=, which X doesn't read. The detail gives each fault. A crawl made before the crawler told name= from property= isn't checked.""",
+        """Fill in what the detail says is missing, or write the twitter: tags with name= rather than property=.""")
+    {
+        Why = """X builds a card only from the tags it reads; with a part missing it shows a bare link, so the card tag does nothing.""",
+        LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_RELATIVE = new("social-image-relative", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image URL isn't absolute",
+        """This indexable page's og:image (og:image:url, og:image:secure_url) or twitter:image isn't a full http:// or https:// URL: a path such as /img/share.jpg, or one starting with //. The detail gives the first.""",
+        """Give the image as a full URL, starting with https:// and your domain.""")
+    {
+        Why = """The Open Graph protocol gives its URLs with http:// or https://, and networks fetch the image on their own: a relative path may be read from the wrong place or not at all, and the share shows no image.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition OG_URL_NOT_CANONICAL = new("og-url-not-canonical", IssueCategory.Html, IssueSeverity.Notice,
+        "og:url isn't the page's address",
+        """This indexable page's og:url, normalised, is another URL than its own: often every page's points at the home page. An indexable page's canonical is itself, so that's what og:url should give. The detail gives it, grouped by it, so a template's is one group.""",
+        """Make og:url the page's own URL (most SEO plugins use the canonical), or remove it: networks then use the URL that was shared.""")
+    {
+        Why = """The Open Graph protocol defines og:url as the canonical URL of the object. Networks gather shares, likes and the preview under it, so one that names another page credits that page and sends clicks there.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition SOCIAL_TAGS_MULTIPLE = new("social-tags-multiple", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X tag repeated",
+        """This indexable page gives og:title, og:description, og:url, og:type, twitter:card, twitter:title or twitter:description more than once, with different content. og:image and the other properties that take several values may repeat. The detail counts each, as "2 og:title".""",
+        """Keep one of each: usually two plugins, or a plugin and the theme, both write them, and one can be turned off.""")
+    {
+        Why = """Each of these says one thing about the page; given twice with different values, each network picks one its own way, and it may not be the one you meant.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition OG_TITLE_DUPLICATE = new("og-title-duplicate", IssueCategory.Html, IssueSeverity.Notice,
+        "Duplicate og:title",
+        """Indexable pages share an og:title (or the twitter:title where it has none) while their <title>s differ: pages whose <title>s are the same are title-duplicate's, and their og:titles usually follow. A page whose og:title is its own title isn't flagged: it's the one the others copied. Grouped by the shared text.""",
+        """Give each page its own og:title, usually by letting the SEO plugin fill it from the page's title.""")
+    {
+        Why = """Shared on a network, pages with one og:title look the same, however different they are: a template's fixed og:title is the usual cause.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["title"]
+    };
+
+    public static readonly IssueDefinition OG_DESCRIPTION_DUPLICATE = new("og-description-duplicate", IssueCategory.Html, IssueSeverity.Notice,
+        "Duplicate og:description",
+        """Indexable pages share an og:description (or the twitter:description where it has none) while their meta descriptions differ. A page whose og:description is its own meta description isn't flagged: it's the one the others copied, as with a platform that gives every page without a description the home page's. Grouped by the shared text.""",
+        """Give each page its own og:description, usually by letting the SEO plugin fill it from the page's meta description.""")
+    {
+        Why = """Shared on a network, pages with one og:description say the same under their titles, whatever they're about.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["description"]
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_BROKEN = new("social-image-broken", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image broken",
+        """This indexable page's og:image or twitter:image is broken (after any redirects), or answers with something other than an image, such as a page. Only checked when the crawl fetched images. The detail gives the first.""",
+        """Point the tag at an image that loads, or upload the missing image again.""")
+    {
+        Why = """A network that can't load the share image shows the link without one. Only link previews suffer, so it's a notice.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        References = IssueReferences.Targets,
+        TargetFacts = ["statusCode", "final", "contentType"]
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_TOO_LARGE = new("social-image-too-large", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image over 5 MB",
+        """This indexable page's og:image or twitter:image is over 5 MB, as received. Only checked when the crawl fetched images. The detail gives the first.""",
+        """Use a smaller copy: 1,200 × 630 pixels, saved as JPEG or WebP, is well under 1 MB.""")
+    {
+        Why = """X doesn't show an image over 5 MB; Facebook's limit is 8 MB, and a large file is slow to fetch for every preview.""",
+        LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        References = IssueReferences.Targets,
+        TargetFacts = ["sizeBytes", "contentType"]
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_TOO_SMALL = new("social-image-too-small", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image too small",
+        """This indexable page's og:image is under 200 × 200 pixels, or the image X uses (twitter:image, else og:image) is under 300 × 157 on a summary_large_image card or 144 × 144 on a summary card. The proportions aren't judged: both networks crop. Only checked when the crawl fetched images. The detail gives the first.""",
+        """Use an image at least 1,200 × 630 pixels, which suits every network.""")
+    {
+        Why = """Facebook rejects an image under 200 × 200 pixels and recommends 1,200 × 630; X shows a small image blurred, or none.""",
+        LearnMore = "https://developers.facebook.com/docs/sharing/webmasters/images/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        References = IssueReferences.Targets,
+        TargetFacts = ["pixelWidth", "pixelHeight"]
+    };
+
     public static readonly IssueDefinition HEAD_TAGS_IN_BODY = new("head-tags-in-body", IssueCategory.Html, IssueSeverity.Warning,
         "Head tags in the body",
         """Tags that belong in the <head> are in the <body> as browsers and Google parse the page: the <title>; a meta description, robots, viewport or the like; Open Graph or X tags; or a <link rel="alternate"> without hreflang. Usually an element that can't be in a head, such as a <div>, an <img> or stray text, ended the head early and pushed every tag after it into the body; the detail names what's out and what ended the head. Canonical and hreflang links have their own checks. A crawl made before the crawler noted these isn't checked.""",
@@ -1876,18 +2292,23 @@ public static class IssueCatalog
         ROBOTS_TXT_NO_SITEMAP, SITEMAP_OVER_LIMIT, SITEMAP_NEAR_LIMIT, SITEMAP_EMPTY, SITEMAP_URL_REPEATED, SITEMAP_LASTMOD_INVALID,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
-        H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,
-        LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT, DUPLICATE_SITE_VERSION,
+        H1_MISSING, H1_MULTIPLE, H1_DUPLICATE, HEADING_LEVELS_SKIPPED, H1_IMAGE_ONLY, HEADING_TOO_LONG, H2_MISSING,
+        LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT, DUPLICATE_SITE_VERSION, PLACEHOLDER_TEXT, READABILITY_LOW, BOILERPLATE_HEAVY,
         IMAGE_MISSING_ALT, IMAGE_ALT_TOO_LONG, IMAGE_MISSING_DIMENSIONS, IMAGE_BROKEN, IMAGE_TOO_LARGE,
         IMAGE_MISSING_SRC, IMAGE_NO_SRCSET, IMAGE_LEGACY_FORMAT, IMAGE_ALT_UNHELPFUL, IMAGE_HOTLINKED, IMAGE_INLINE_LARGE,
         HREFLANG_INVALID_CODE, HREFLANG_MISSING_SELF, HREFLANG_MISSING_RETURN, HREFLANG_BROKEN_TARGET,
         HREFLANG_TO_NON_INDEXABLE, HREFLANG_DUPLICATE_CODE, HREFLANG_MISSING_X_DEFAULT, HREFLANG_OUTSIDE_HEAD,
+        HREFLANG_INCONSISTENT_CODE, HREFLANG_HEADER_MISMATCH, HREFLANG_UNLINKED, HREFLANG_LANG_MISMATCH, HREFLANG_SELF_ONLY,
         STRUCTURED_DATA_INVALID, STRUCTURED_DATA_MISSING_REQUIRED, STRUCTURED_DATA_SCHEMA_ERRORS, STRUCTURED_DATA_MISSING_RECOMMENDED,
         STRUCTURED_DATA_ON_NOINDEX,
-        NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING,
-        URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG,
+        NO_HTTPS, HTTP_PAGE, MIXED_CONTENT, SECURITY_HEADERS_MISSING, SECURITY_HEADERS_WEAK, COOKIES_INSECURE, FORM_NOT_SECURE,
+        PROTOCOL_RELATIVE_LINKS,
+        URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG, URL_TRACKING_PARAMETERS, URL_MULTIPLE_SLASHES, URL_SPACE, URL_PARAMETERS, URL_NON_ASCII,
+        URL_REPETITIVE_PATH, URL_INTERNAL_SEARCH,
         SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT, RESOURCE_PAST_CRAWL_LIMIT,
-        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING,
+        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING, X_CARD_MISSING, X_CARD_INCOMPLETE, SOCIAL_IMAGE_RELATIVE,
+        OG_URL_NOT_CANONICAL, SOCIAL_TAGS_MULTIPLE, OG_TITLE_DUPLICATE, OG_DESCRIPTION_DUPLICATE, SOCIAL_IMAGE_BROKEN, SOCIAL_IMAGE_TOO_LARGE,
+        SOCIAL_IMAGE_TOO_SMALL,
         HEAD_TAGS_IN_BODY, HTML_STRUCTURE_ERRORS, VIEWPORT_INVALID, CHARSET_INVALID, LANG_INVALID, MOBILE_ALTERNATE
     ];
 

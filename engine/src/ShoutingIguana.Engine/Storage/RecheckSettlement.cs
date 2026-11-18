@@ -91,9 +91,11 @@ internal static class RecheckSettlement
         var reading = $"(SELECT {CheckJudging.READING} FROM urls u LEFT JOIN responses r ON r.url_id = u.id WHERE u.id = recheck_urls.url_id)";
 
         // A duplicate no longer flagged though its own text is as it was: the others changed, and a page the recheck didn't
-        // fetch may share it now. Only a full crawl can say it's fixed.
+        // fetch may share it now. Only a full crawl can say it's fixed. A page judged had the text its cluster shares, so
+        // one with none before was fetched before its text was stored (a share title, by an earlier engine): it can't be
+        // said to have changed either.
         var unchanged = RecheckDuplicates.TextOf(check.Id) is { } text
-            ? $"WHEN {reading} IN ({judges}) AND text_before IS (SELECT {text} FROM responses r WHERE r.url_id = recheck_urls.url_id) THEN {(int)RecheckOutcome.NotChecked}"
+            ? $"WHEN {reading} IN ({judges}) AND (text_before IS NULL OR text_before IS (SELECT {text} FROM responses r WHERE r.url_id = recheck_urls.url_id)) THEN {(int)RecheckOutcome.NotChecked}"
             : string.Empty;
         using var command = Command(connection, transaction, $"""
             UPDATE recheck_urls SET outcome = CASE

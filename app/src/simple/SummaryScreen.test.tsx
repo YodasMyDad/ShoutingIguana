@@ -90,7 +90,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
       main().getByText('Your site is in good shape. There are 2 serious problems and 4 problems worth fixing.'),
     ).toBeVisible();
     expect(
-      main().getByText(/The score covers all 265 pages and 120 of 137 checks\. 17 checks couldn’t run\./),
+      main().getByText(/The score covers all 265 pages and 143 of 170 checks\. 27 checks couldn’t run\./),
     ).toBeVisible();
     expect(main().getByText(/Checked on 31 October 2026\. 265 pages read in 37 min/)).toBeVisible();
     expect(main().getByText(/Shouting Iguana read 265 pages and checked 4,521 addresses in all/)).toBeVisible();
@@ -116,11 +116,11 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await site();
     const tally = within(main().getByRole('list', { name: 'What the checks found' }));
     expect(tally.getByRole('link', { name: '3 Things worth a look' })).toHaveAttribute('href', `${FIX}#worth-a-look`);
-    expect(tally.getByRole('link', { name: /^117 Checks found nothing wrong$/ })).toHaveAttribute(
+    expect(tally.getByRole('link', { name: /^140 Checks found nothing wrong$/ })).toHaveAttribute(
       'href',
       `${FIX}#nothing-wrong`,
     );
-    expect(tally.getByRole('link', { name: '17 Checks couldn’t run' })).toHaveAttribute('href', `${FIX}#couldnt-check`);
+    expect(tally.getByRole('link', { name: '27 Checks couldn’t run' })).toHaveAttribute('href', `${FIX}#couldnt-check`);
     expect(tally.queryByRole('link', { name: /Serious problems/ })).toBeNull();
     expect(tally.getByText('Serious problems')).toBeVisible();
   });
@@ -139,7 +139,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(list.getByText(/Fixing these five takes the score from/)).toHaveTextContent(
       'Fixing these five takes the score from 86 to 99.',
     );
-    expect(list.getByRole('link', { name: 'See all 6 problems and 15 things worth a look' })).toHaveAttribute(
+    expect(list.getByRole('link', { name: 'See all 6 problems and 22 things worth a look' })).toHaveAttribute(
       'href',
       FIX,
     );
@@ -149,7 +149,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await open(GARDEN_ANALYSIS);
     await site();
     const fine = within(main().getByRole('region', { name: 'What’s fine' }));
-    expect(fine.getByText('of 120 checks found nothing wrong')).toBeVisible();
+    expect(fine.getByText('of 143 checks found nothing wrong')).toBeVisible();
     expect(fine.getByText(/Nothing wrong with .*visibility in search/)).toBeVisible();
     const skipped = within(main().getByRole('region', { name: 'Couldn’t be checked' }));
     expect(skipped.getByText(/No sitemap, the list of your pages for search engines, could be read/)).toBeVisible();
@@ -164,7 +164,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(
       dialog.getByRole('row', { name: /Pages or files that can't be found 9 of 4,521 addresses: a few −2/ }),
     ).toBeVisible();
-    expect(dialog.getByRole('row', { name: '15 things worth a look They don’t change the score 0' })).toBeVisible();
+    expect(dialog.getByRole('row', { name: '22 things worth a look They don’t change the score 0' })).toBeVisible();
     expect(dialog.getByRole('row', { name: 'Score 100 − 14 86' })).toBeVisible();
     expect(dialog.getByText('Score version 1')).toBeVisible();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
@@ -235,7 +235,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await site();
     expect(
       main().getByText(
-        'Nothing needs fixing among the checks you show. 15 things are worth a look when you have a moment. 6 checks are hidden.',
+        'Nothing needs fixing among the checks you show. 22 things are worth a look when you have a moment. 6 checks are hidden.',
       ),
     ).toBeVisible();
     const list = within(main().getByRole('region', { name: 'Fix these first' }));

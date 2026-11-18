@@ -463,7 +463,8 @@ export type LinkKind =
   | 'hreflang'
   | 'pagination'
   | 'metaRefresh'
-  | 'redirect';
+  | 'redirect'
+  | 'socialImage';
 
 export type LinkPosition = 'content' | 'navigation' | 'header' | 'footer' | 'sidebar' | 'head';
 

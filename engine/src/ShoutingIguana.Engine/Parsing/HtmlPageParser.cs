@@ -94,6 +94,7 @@ public static class HtmlPageParser
 
         var signals = ReadHeaderSignals(headers, pageUri);
         var fingerprint = ContentFingerprint.Compute(text.AsSpan());
+        var (sentences, syllables) = TextMeasures.SentencesAndSyllables(text.AsSpan());
         var (refresh, refreshLink) = RefreshOf(headers, baseUri, walker.MetaRefresh);
         var facts = new PageFacts
         {
@@ -109,6 +110,12 @@ public static class HtmlPageParser
             Images = walker.Images,
             JsonLd = walker.JsonLd,
             Microdata = MicrodataReader.Read(document, baseUri),
+            Forms = walker.Forms,
+            ProtocolRelativeUrls = walker.FirstProtocolRelative is { } first ? new ProtocolRelativeFact(walker.ProtocolRelativeCount, first) : null,
+            PlaceholderText = TextMeasures.Placeholder(text.AsSpan()),
+            SentenceCount = sentences,
+            SyllableCount = syllables,
+            TotalWordCount = fingerprint.WordCount + walker.TemplateWordCount,
             AnchorIds = walker.AnchorIds,
             Icons = walker.Icons,
             MetaRefresh = refresh,

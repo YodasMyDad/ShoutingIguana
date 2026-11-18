@@ -294,14 +294,22 @@ internal static class CrawlSchema
     public static readonly (string Name, string Type)[] PIXEL_COLUMNS = [("pixel_width", "INTEGER"), ("pixel_height", "INTEGER")];
 
     /// <summary>
+    /// Of <see cref="RESPONSE_COLUMNS"/>, the title and description a page gives networks for a share (og:title, else
+    /// twitter:title; og:description, else twitter:description): null for a page without, and for every page fetched
+    /// before they were stored.
+    /// </summary>
+    public static readonly (string Name, string Type)[] SHARE_COLUMNS = [("og_title", "TEXT"), ("og_description", "TEXT")];
+
+    /// <summary>
     /// The <c>responses</c> columns added since the table was first created: lanes 1 to 3 of a page's 256-bit content
-    /// fingerprint (<c>simhash</c> is lane 0), stored bit for bit as signed integers, and an image's size in pixels. The writer adds what's missing
+    /// fingerprint (<c>simhash</c> is lane 0), stored bit for bit as signed integers, an image's size in pixels, and a page's
+    /// share title and description. The writer adds what's missing
     /// whenever it opens a file, so an earlier engine's crawl gets them when it is continued, and its pages so far keep
     /// null; so do the pages an earlier engine fetches when it continues a crawl this one started, its inserts naming only
     /// the columns it knows. The crawl's schema version doesn't change, so either engine can read and continue either file.
     /// </summary>
     /// <remarks>Declared after the two lists it joins: static fields are set in the order they're written.</remarks>
-    public static readonly (string Name, string Type)[] RESPONSE_COLUMNS = [.. FINGERPRINT_LANES, .. PIXEL_COLUMNS];
+    public static readonly (string Name, string Type)[] RESPONSE_COLUMNS = [.. FINGERPRINT_LANES, .. PIXEL_COLUMNS, .. SHARE_COLUMNS];
 
     /// <summary>
     /// The <c>sitemaps</c> columns added since the table was first created, which the writer adds whenever it opens a file,

@@ -30,7 +30,7 @@ public sealed class ImageCheckTests
         Assert.Equal((true, 19L), (images[1].IsDataUri, images[1].DataUriBytes));
         Assert.Equal((true, false), (images[2].InPicture, images[3].InPicture));
         Assert.Equal((null, false, null), (images[4].Url, images[4].IsDataUri, images[4].DataUriBytes));
-        Assert.Equal(2, parsed.Facts.CollectedVersion);
+        Assert.Equal(PageFacts.CURRENT_COLLECTION, parsed.Facts.CollectedVersion);
     }
 
     [Fact]
