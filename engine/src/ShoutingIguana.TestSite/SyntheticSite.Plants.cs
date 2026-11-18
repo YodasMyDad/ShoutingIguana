@@ -577,11 +577,13 @@ public sealed partial class SyntheticSite
             IsPage: false, OnPartnerSite: true));
 
         // A sitemap page only a nofollow link leads to is all but an orphan. Without sitemaps nothing leads the crawl there.
+        // The page also links the thin page twice, once with nofollow: that link is the one at fault.
         if (_options.Sitemaps)
         {
             Page("nofollow-link", "Nofollow link to a listed page", ["internal-nofollow-links"], page => page with
             {
-                Content = page.Content + $"<p><a href=\"{PLANTS_PATH}nofollow-only\" rel=\"nofollow\">Listed page</a></p>"
+                Content = page.Content + $"<p><a href=\"{PLANTS_PATH}nofollow-only\" rel=\"nofollow\">Listed page</a></p>" +
+                          $"<p><a href=\"{PLANTS_PATH}thin\">The thin page</a> <a href=\"{PLANTS_PATH}thin\" rel=\"nofollow\">The thin page, not followed</a></p>"
             });
             Page("nofollow-only", "Only nofollow links lead here", ["orphan-page"], linked: false);
         }

@@ -73,7 +73,8 @@ and is in the group without a related URL.
   `contentType`, `pixelWidth`, `pixelHeight` (the file), `responseMs` (its own answer's time), `redirectKind` (what its own
   redirect changes), `img` (the `<img>` as the page writes it: `width`, `height`,
   `alt`, `hasAlt`, `altLength`, `srcset`, `loading`), and the page's link to it: `kind`, `text` (anchor, alt or
-  hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it). For a `sources` check
+  hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it; for `empty-anchor-text`,
+  `internal-nofollow-links` and `broken-fragment-links`, only the ones at fault, the first of which is the link named). For a `sources` check
   they describe the group's related URL only (its rows' sources are the found-on read, which already has the linking
   page, kind, text, position and flags).
 - **Detail**: before → after. "Same" is unchanged. A limit is shown at its default ("over 115"); a detail names the

@@ -184,7 +184,37 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         Assert.Null(target.Fragment);
         Assert.Equal(LinkFlags.ImageLink | LinkFlags.SamePage, target.Flags);
         Assert.Equal(LinkPosition.Content, target.Position);
-        Assert.True(target.Links >= 3, $"{target.Links} links to itself");
+
+        // Its links are the one the check flags: the jumps within the page are links to it, but not ones without text.
+        Assert.Equal(1, target.Links);
+        Assert.Equal(["3"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {page} AND kind = {(int)LinkKind.Hyperlink}"));
+    }
+
+    /// <summary>
+    /// A page's link to a missing section is the one named: on /plants/fragments, the link to fragment-target#missing, not
+    /// the working one to #present written before it. Its links are the page's links there that miss: that one.
+    /// </summary>
+    [Fact]
+    public void ABrokenFragmentIsNamedByTheLinkWhoseSectionIsMissing()
+    {
+        var page = Flagged("broken-fragment-links").Single(id => Url(id).EndsWith("/plants/fragments", StringComparison.Ordinal));
+        var target = Assert.Single(FoundOnReader.ReadTargets(crawl.Path, "broken-fragment-links", [page])!.Single().Targets);
+        Assert.EndsWith("/plants/fragment-target", target.Url, StringComparison.Ordinal);
+        Assert.Equal(("missing", "Missing section", 1), (target.Fragment, target.Text, target.Links));
+        Assert.Equal(["2"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {target.Id}"));
+    }
+
+    /// <summary>
+    /// A page linking a URL twice, once with nofollow, names the nofollow link, and counts it alone: the followed one is fine.
+    /// </summary>
+    [Fact]
+    public void ANofollowTargetIsNamedAndCountedByItsNofollowLinksOnly()
+    {
+        var page = Flagged("internal-nofollow-links").Single(id => Url(id).EndsWith("/plants/nofollow-link", StringComparison.Ordinal));
+        var named = FoundOnReader.ReadTargets(crawl.Path, "internal-nofollow-links", [page], FoundOnReader.MAX_LISTED)!.Single();
+        var thin = Assert.Single(named.Targets, target => target.Url.EndsWith("/plants/thin", StringComparison.Ordinal));
+        Assert.Equal((LinkFlags.NoFollow, 1), (thin.Flags, thin.Links));
+        Assert.Equal(["2"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {thin.Id}"));
     }
 
     [Fact]

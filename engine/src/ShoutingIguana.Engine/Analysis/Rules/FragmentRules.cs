@@ -127,6 +127,13 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
     /// </summary>
     private static bool Finds(HashSet<ulong> ids, ulong raw, ulong decoded) => ids.Contains(raw) || ids.Contains(decoded);
 
+    /// <summary>
+    /// Whether a link to a #fragment, as written, misses on a page with these ids, as the check judges it: a fragment it
+    /// checks that matches no id as written or decoded. Never on a page whose ids were capped, which can't prove one missing.
+    /// </summary>
+    internal static bool Misses(string raw, IReadOnlyList<string> ids) =>
+        ids.Count < PageWalker.MAX_IDS && Checkable(raw) is { } fragment && !ids.Contains(raw, StringComparer.Ordinal) && !ids.Contains(fragment, StringComparer.Ordinal);
+
     private static HashSet<ulong> HashIds(IReadOnlyList<string> ids) => ids.Select(Hash).ToHashSet();
 
     private static ulong Hash(string text) => XxHash3.HashToUInt64(MemoryMarshal.AsBytes(text.AsSpan()));
