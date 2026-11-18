@@ -43,3 +43,13 @@ export function summarySubtitle(
   const when = date ? `Checked on ${date}. ` : '';
   return `${when}${item.pageCount > 0 ? `${read}${took ? ` in ${took.took}${took.clock}` : ''}.` : ''}`.trim();
 }
+
+/**
+ * What the site's platform sets (the Shopify lane, phase B), in one quiet line a platform, apart from the problems to
+ * fix: "2 set by Shopify: nothing for you to change." `owners` is each such check's platform name, in any order.
+ */
+export function platformLines(owners: readonly string[]): string[] {
+  const counted = new Map<string, number>();
+  for (const name of owners) counted.set(name, (counted.get(name) ?? 0) + 1);
+  return [...counted].map(([name, count]) => `${formatCount(count)} set by ${name}: nothing for you to change.`);
+}

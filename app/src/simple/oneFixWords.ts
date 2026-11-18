@@ -23,6 +23,17 @@ export interface OneFixCause {
   finalPath: string | null;
 }
 
+/**
+ * What One fix is said to do (the callout's title, and the cause's in Where it is): "One fix clears all 14 of these
+ * pages" when the shared cause is on every page the check flagged; "One fix covers 12 of 14 pages" when it isn't, so it
+ * never reads as clearing the whole problem (the fixit audit: 195 of 225 pages was "One fix").
+ */
+export function oneFixTitle(on: number, of: number, noun: 'pages' | 'addresses'): string {
+  return on >= of
+    ? `One fix clears all ${formatCount(of)} of these ${noun}`
+    : `One fix covers ${formatCount(on)} of ${formatCount(of)} ${noun}`;
+}
+
 /** "12 of these 14 pages", "all 14 of these pages". */
 function ofThese(on: number, of: number, noun: string): string {
   return on >= of

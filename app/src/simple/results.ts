@@ -2,7 +2,7 @@
 // last analysis and the checks the user hid in Advanced. One model, so the Summary's counts, its five fixes, What to
 // fix's groups and the sidebar's count are the same entries and can't disagree. Hidden checks are left out of every
 // list and count, as Advanced leaves them out; the score is the engine's and counts them.
-import type { Analysis, Checks, Severity, SkipReason } from '../api/types';
+import type { Analysis, Checks, PlatformOwner, Severity, SkipReason } from '../api/types';
 import { checkEntries, rankChecksToFix, type CheckEntry } from '../screens/issues/checkList';
 import { plainTitle, wholesOf, type ProblemCounts, type Wholes } from './plainWords';
 
@@ -16,11 +16,22 @@ export interface SkippedGroup {
   entries: CheckEntry[];
 }
 
+/** A check that found what only the site's platform can change (the Shopify lane, phase B), with who and why. */
+export interface PlatformEntry {
+  entry: CheckEntry;
+  owner: PlatformOwner;
+}
+
 export interface PlainResults {
   /** Checks that found something and aren't hidden, by severity, each in the engine's order to fix them. */
   found: Record<Severity, CheckEntry[]>;
   /** Checks with problems, by severity: the Summary's counts and What to fix's groups. */
   counts: ProblemCounts;
+  /**
+   * Checks that found what only the site's platform can change (the analysis's `counts[].platform`), hidden ones left
+   * out: never a problem to fix, so in none of `found`, `counts` or `fixFirst`; listed apart, each with its reason.
+   */
+  platform: PlatformEntry[];
   /** Up to five Serious and Worth fixing problems, in the engine's "Fix first" order. */
   fixFirst: CheckEntry[];
   /**
@@ -48,12 +59,19 @@ export interface PlainResults {
 export function plainResults(checks: Checks, analysis: Analysis, hidden: ReadonlySet<string>): PlainResults {
   const all = checkEntries(checks, analysis, hidden);
   const shown = all.filter((entry) => !entry.hidden);
+  // What the site's platform sets is no problem to fix: apart from the rest, with who sets it.
+  const owners = new Map(analysis.counts.flatMap((count) => (count.platform ? [[count.checkId, count.platform]] : [])));
   const ranked = rankChecksToFix(shown, analysis.fixFirst);
+  const toFix = ranked.filter((entry) => !owners.has(entry.check.id));
   const found: Record<Severity, CheckEntry[]> = {
-    error: ranked.filter((entry) => entry.outcome === 'error'),
-    warning: ranked.filter((entry) => entry.outcome === 'warning'),
-    notice: ranked.filter((entry) => entry.outcome === 'notice'),
+    error: toFix.filter((entry) => entry.outcome === 'error'),
+    warning: toFix.filter((entry) => entry.outcome === 'warning'),
+    notice: toFix.filter((entry) => entry.outcome === 'notice'),
   };
+  const platform = ranked.flatMap((entry) => {
+    const owner = owners.get(entry.check.id);
+    return owner && entry.outcome !== 'passed' && entry.outcome !== 'skipped' ? [{ entry, owner }] : [];
+  });
   const fixFirst = [...found.error, ...found.warning].slice(0, FIX_FIRST_COUNT);
   const score = analysis.score ?? null;
   const sameFive =
@@ -85,6 +103,7 @@ export function plainResults(checks: Checks, analysis: Analysis, hidden: Readonl
   return {
     found,
     counts: { error: found.error.length, warning: found.warning.length, notice: found.notice.length },
+    platform,
     fixFirst,
     ifFixed: sameFive && fixFirst.length > 0 ? score.ifFixed.value : null,
     passed,

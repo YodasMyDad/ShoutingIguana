@@ -59,8 +59,13 @@ public static class AnalysisFreshness
     /// checks of what a Shopify store's platform set as Shopify's (<c>issue_types.platform</c>: its security headers and
     /// its own cookies, on pages Shopify served), which are then no part of the score or Fix first, and its notes say
     /// Shopify's reason and the fix for the pages a store refused, where 16 said to check again later or at the Polite speed.
+    /// 18 is the page part's: it quotes in a detail what the check found: the heading
+    /// too long (<c>H2 of 86 characters, over 70: "…"</c>) or skipped to (<c>H1 → H4: "…"</c>), the values of a repeated share
+    /// tag, which image has no source or is inline, the line of a second &lt;head&gt; or &lt;body&gt;, and which JSON-LD block
+    /// failed, on which line and where (counted from 1); and groups <c>heading-levels-skipped</c>, <c>social-tags-multiple</c>
+    /// and <c>html-structure-errors</c> by the fault their detail shows (each from its <see cref="Models.IssueDefinition.FaultsSince"/>).
     /// </summary>
-    public const int VERSION = 17;
+    public const int VERSION = 18;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

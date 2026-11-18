@@ -41,6 +41,7 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
     {
         ImageCount missingAlt = new(), longAlt = new(), missingSize = new(), unhelpfulAlt = new();
         var missingSource = 0;
+        ImageFact? firstMissing = null, largestInline = null;
         List<long> inline = [];
         Dictionary<string, int>? ids = null;
         foreach (var image in page.Facts.Images)
@@ -51,10 +52,15 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
                 if (image.DataUriBytes is { } bytes && bytes > settings.InlineImageMaxBytes)
                 {
                     inline.Add(bytes);
+                    if (largestInline is null || bytes > largestInline.DataUriBytes)
+                    {
+                        largestInline = image;
+                    }
                 }
                 else if (!image.IsDataUri && !image.HasSrcset && !IsTrackingPixel(image))
                 {
                     missingSource++;
+                    firstMissing ??= image;
                 }
 
                 continue;
@@ -107,16 +113,22 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
             yield return unhelpful;
         }
 
-        if (missingSource > 0)
+        if (firstMissing is not null)
         {
-            yield return new IssueHit(IssueCatalog.IMAGE_MISSING_SRC, page.UrlId, RuleText.Count(missingSource, "image", "images"));
+            // "1 image: alt "…"", "3 images, the first: class "…"", "1 image, in the header", "2 images, the first in the footer".
+            var count = RuleText.Count(missingSource, "image", "images");
+            var which = missingSource == 1 ? string.Empty : ", the first";
+            yield return new IssueHit(IssueCatalog.IMAGE_MISSING_SRC, page.UrlId, Identity(firstMissing) is not { } identity ? count
+                : identity.Place ? $"{count}{(missingSource == 1 ? "," : which)} {identity.Text}"
+                : RuleText.Fit($"{count}{which}: {identity.Text}"));
         }
 
-        if (inline.Count > 0)
+        if (largestInline is not null)
         {
-            yield return new IssueHit(IssueCatalog.IMAGE_INLINE_LARGE, page.UrlId, inline.Count == 1
+            var size = inline.Count == 1
                 ? $"1 inline image: {RuleText.Size(inline[0])}"
-                : $"{RuleText.Count(inline.Count, "inline image", "inline images")}, the largest {RuleText.Size(inline.Max())}");
+                : $"{RuleText.Count(inline.Count, "inline image", "inline images")}, the largest {RuleText.Size(inline.Max())}";
+            yield return new IssueHit(IssueCatalog.IMAGE_INLINE_LARGE, page.UrlId, Identity(largestInline) is { } identity ? RuleText.Fit($"{size}, {identity.Text}") : size);
         }
 
         TargetSet broken = new(), large = new(), legacy = new(), hotlinked = new();
@@ -189,6 +201,28 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
                 $"{RuleText.Count(hotlinked.Count, "image", "images")} from {RuleText.Count(hotlinkSites.Count, "site", "sites")}", hotlinked.First) { Targets = hotlinked.Ids };
         }
     }
+
+    /// <summary>
+    /// Which image a detail means, for one with no file to name: its alt text, quoted (<c>alt "Product photo"</c>); else its
+    /// class (<c>class "hero lazy"</c>); else where on the page it is (<c>in the header</c>, a place). Null for an image the
+    /// crawler parsed before it noted the class and place, with no alt text.
+    /// </summary>
+    private static (string Text, bool Place)? Identity(ImageFact image) =>
+        !string.IsNullOrWhiteSpace(image.Alt) ? ($"alt {RuleText.Quote(image.Alt)}", false)
+        : image.Class is { } names ? ($"class {RuleText.Quote(names)}", false)
+        : image.Position is { } position ? ($"in the {PlaceWord(position)}", true)
+        : null;
+
+    /// <summary>A part of the page, as a detail names it after "in the".</summary>
+    private static string PlaceWord(LinkPosition position) => position switch
+    {
+        LinkPosition.Navigation => "navigation",
+        LinkPosition.Header => "header",
+        LinkPosition.Footer => "footer",
+        LinkPosition.Sidebar => "sidebar",
+        LinkPosition.Head => "head",
+        _ => "main content"
+    };
 
     /// <summary>
     /// The page's images whose file is at least the limit wide with no srcset and no picture's sources. Each &lt;img&gt;

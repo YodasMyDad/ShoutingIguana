@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
-import { ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
-import type { Score, Severity } from '../api/types';
-import type { ReactNode } from 'react';
+import { ChevronDown, ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
+import type { PlatformOwner, Score, Severity } from '../api/types';
+import { useId, useState, type ReactNode } from 'react';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -11,6 +11,7 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS } from './fixSections';
+import { fixRows, type FixRow } from './fixRows';
 import {
   bandWord,
   categoriesWords,
@@ -23,13 +24,17 @@ import {
   plainTitle,
   rowCountWords,
   rowPointsWords,
+  skippedGroupWords,
+  skippedListWords,
   skippedTitles,
   summarySentence,
 } from './plainWords';
-import { FIX_FIRST_COUNT, siteWideLead, type PlainResults } from './results';
+import { FIX_FIRST_COUNT, siteWideLead, type PlainResults, type SkippedGroup } from './results';
 import { ScoreRing } from '../ui/ScoreRing';
 import { openedHereState } from './scoreHistory';
-import { useOneFix } from './useOneFix';
+import { platformLines } from './summaryWords';
+import { oneFixTitle } from './oneFixWords';
+import { useOneFix, useOneFixCovers } from './useOneFix';
 import type { CheckEntry } from '../screens/issues/checkList';
 
 const FIX = '/crawls/$crawl/issues/{-$check}';
@@ -84,6 +89,12 @@ export function ScoreHero({
           <p className="mt-2 max-w-(--measure-explain) text-18 text-text">{sentence}</p>
           {change}
           <p className="mt-3 text-14 leading-body text-text-secondary">{coverageSentences(score.covers).join(' ')}</p>
+          {/* What only the site's platform can change: out of the counts beside it, so said apart, once, quietly. */}
+          {platformLines(results.platform.map(({ owner }) => owner.name)).map((line) => (
+            <p key={line} className="mt-1.5 text-14 leading-body text-text-secondary">
+              {line}
+            </p>
+          ))}
           <p className="mt-2 text-14">
             <Link
               to="/crawls/$crawl/overview"
@@ -150,6 +161,8 @@ export function ProblemRow({
   points,
   nested = false,
   change,
+  platform = null,
+  oneFixCovers = null,
   ref,
   ...rest
 }: {
@@ -165,20 +178,45 @@ export function ProblemRow({
   nested?: boolean | undefined;
   /** The fix loop: its change since the site's last check, under its count ("9 on 3 Nov"); left out or null, none. */
   change?: string | null | undefined;
+  /**
+   * Who sets what it found, where the owner can't change it (the Shopify lane, phase B): its reason, as given, is the
+   * row's line, and it gives no points back.
+   */
+  platform?: PlatformOwner | null | undefined;
+  /**
+   * How many of its pages one shared cause covers, where it's most but not all of them (`useOneFixCovers`): said beside
+   * its title as the problem's page says it, "One fix covers 195 of 225 pages".
+   */
+  oneFixCovers?: number | null | undefined;
   ref?: React.Ref<HTMLAnchorElement> | undefined;
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
   const share = rowCountWords(entry.check, entry.count ?? 0);
-  const back = rowPointsWords(points);
+  const back = platform ? null : rowPointsWords(points);
   return (
     <PlainCheckRow
       asChild
       outcome={entry.outcome}
       number={number}
       oneFix={oneFix}
-      quiet={nested || entry.outcome === 'notice'}
+      quiet={nested || platform !== null || entry.outcome === 'notice'}
       className={nested ? 'si-plain-row--nested' : undefined}
-      title={plainTitle(entry.check)}
-      summary={nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
+      title={
+        oneFixCovers && !oneFix ? (
+          <>
+            {plainTitle(entry.check)}{' '}
+            <span className="text-13 font-regular text-text-secondary">
+              {oneFixTitle(
+                oneFixCovers,
+                entry.count ?? 0,
+                (entry.check.subject ?? 'page') === 'page' ? 'pages' : 'addresses',
+              )}
+            </span>
+          </>
+        ) : (
+          plainTitle(entry.check)
+        )
+      }
+      summary={platform ? platform.reason : nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
       count={
         <>
           {share.count === null ? (
@@ -226,7 +264,9 @@ export function FixFirstCard({
   const notices = results.counts.notice;
   // With nothing to fix, the things worth a look are listed in its place.
   const worthALook = results.fixFirst.length > 0 ? [] : results.found.notice.slice(0, FIX_FIRST_COUNT);
+  const jobs = fixFirstJobs(results, score);
   const oneFix = useOneFix(crawlId, results.fixFirst.length > 0 ? results.fixFirst : worthALook);
+  const covers = useOneFixCovers(crawlId, results.fixFirst.length > 0 ? results.fixFirst : worthALook);
   return (
     <Card as="section" aria-labelledby="summary-fix-first" className="overflow-hidden">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-6 pt-5 pb-3">
@@ -239,19 +279,34 @@ export function FixFirstCard({
       </div>
       {results.fixFirst.length > 0 ? (
         <PlainCheckList className="border-t border-border-subtle">
-          {results.fixFirst.map((entry, index) => (
-            <li key={entry.check.id}>
+          {/* Each job numbered, with what its fix also clears folded under it, as What to fix has them. */}
+          {jobs.flatMap((job, index) => [
+            <li key={job.entry.check.id}>
               <ProblemRow
                 crawlId={crawlId}
-                entry={entry}
+                entry={job.entry}
                 results={results}
                 number={index + 1}
-                oneFix={oneFix.has(entry.check.id)}
-                points={score?.lines.find((line) => line.checkId === entry.check.id)?.points}
-                change={changeOf(entry.check.id)}
+                oneFix={oneFix.has(job.entry.check.id)}
+                oneFixCovers={covers.get(job.entry.check.id)}
+                points={job.points}
+                change={changeOf(job.entry.check.id)}
               />
-            </li>
-          ))}
+            </li>,
+            ...job.nested.map((nested) => (
+              <li key={nested.check.id} className="si-plain-list__nested">
+                <ProblemRow
+                  crawlId={crawlId}
+                  entry={nested}
+                  results={results}
+                  oneFix={oneFix.has(nested.check.id)}
+                  oneFixCovers={covers.get(nested.check.id)}
+                  nested
+                  change={changeOf(nested.check.id)}
+                />
+              </li>
+            )),
+          ])}
         </PlainCheckList>
       ) : (
         <>
@@ -275,6 +330,7 @@ export function FixFirstCard({
                     entry={entry}
                     results={results}
                     oneFix={oneFix.has(entry.check.id)}
+                    oneFixCovers={covers.get(entry.check.id)}
                     change={changeOf(entry.check.id)}
                   />
                 </li>
@@ -287,7 +343,7 @@ export function FixFirstCard({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle bg-surface-sunken px-6 py-4 text-14 text-text-secondary">
           {results.ifFixed !== null && score ? (
             <span>
-              {ifFixedLead(results.fixFirst.length)} <b className="font-semibold text-text">{score.value}</b> to{' '}
+              {ifFixedLead(jobs.length)} <b className="font-semibold text-text">{score.value}</b> to{' '}
               <b className="font-semibold text-text">{results.ifFixed}</b>.
             </span>
           ) : null}
@@ -298,6 +354,69 @@ export function FixFirstCard({
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * The five to fix first as jobs, the model What to fix has (docs/v2-ui-simple.md, "Related problems are one job"): a
+ * problem a fix of another among them clears entirely (the analysis's `clears[].all`) folded under that one, within its
+ * severity, the row above carrying the points of both. The engine's five stay the five, so "Fixing these four takes the
+ * score from 86 to 99" is still its figure: it counts the jobs.
+ */
+function fixFirstJobs(results: PlainResults, score: Score | null): FixRow[] {
+  const points = new Map((score?.lines ?? []).map((line) => [line.checkId, line.points]));
+  const order = { sort: 'fixFirst' as const, fixFirst: results.fixFirst.map((entry) => entry.check.id), points };
+  return (['error', 'warning'] as const).flatMap((severity) =>
+    fixRows(
+      results.fixFirst.filter((entry) => entry.outcome === severity),
+      order,
+    ),
+  );
+}
+
+/**
+ * A reason checks couldn't run for, with what would let them: one check named before it; more than one counted ("24
+ * checks couldn’t run."), the reason said once, and their names on demand (after the Shopify merge, never two dozen
+ * names run together).
+ */
+function SkippedReason({ group }: { group: SkippedGroup }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const reason = [
+    group.reason?.plainText ?? group.reason?.text ?? 'An earlier version didn’t say why.',
+    group.reason?.plainAction,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const titles = group.entries.map((entry) => looksForWords(entry.check));
+  if (titles.length === 1) {
+    return (
+      <div>
+        <b className="font-medium text-text">{skippedTitles(titles)}.</b> {reason}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <b className="font-medium text-text">{skippedGroupWords(titles.length)}.</b> {reason}{' '}
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={ChevronDown}
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {skippedListWords(titles.length, open)}
+      </Button>
+      {open ? (
+        <ul id={listId} aria-label={`The ${formatCount(titles.length)} checks`} className="mt-1 list-disc pl-5">
+          {group.entries.map((entry) => (
+            <li key={entry.check.id}>{looksForWords(entry.check)}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -365,13 +484,7 @@ export function SummaryCards({ crawlId, results }: { crawlId: string; results: P
             {results.skipped.map((group) => (
               <li key={group.code ?? 'unknown'} className="grid grid-cols-(--check-row-columns) gap-2">
                 <SeverityWord severity="skipped" variant="mark" size="sm" className="mt-0.5" />
-                <span>
-                  <b className="font-medium text-text">
-                    {skippedTitles(group.entries.map((entry) => looksForWords(entry.check)))}.
-                  </b>{' '}
-                  {group.reason?.plainText ?? group.reason?.text ?? 'An earlier version didn’t say why.'}{' '}
-                  {group.reason?.plainAction ?? ''}
-                </span>
+                <SkippedReason group={group} />
               </li>
             ))}
           </ul>

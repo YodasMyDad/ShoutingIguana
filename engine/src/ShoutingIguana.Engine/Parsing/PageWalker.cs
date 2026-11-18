@@ -41,6 +41,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     private const int MAX_HEAD_TAGS_IN_BODY = 20;
     private const int MAX_CHARSET_DECLARATIONS = 5;
 
+    /// <summary>The most characters of an image's class a page's facts keep, for an image without a URL.</summary>
+    private const int MAX_IMAGE_CLASS_CHARS = 100;
+
     /// <summary>Raw text read for a heading or link label, before whitespace is collapsed and the result capped.</summary>
     private const int MAX_RAW_LABEL_CHARS = 16 * MAX_HEADING_CHARS;
     /// <summary>Longer blocks are cut to this length, which leaves them unparseable; rules skip blocks this long.</summary>
@@ -69,6 +72,12 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     /// <summary>Attributes lazy-loading scripts keep the real image URL in, in the order they're tried.</summary>
     private static readonly string[] LAZY_SOURCES = ["data-src", "data-lazy-src", "data-original", "data-lazy"];
+
+    /// <summary>
+    /// Attributes lazy-loading scripts keep an image's srcset in, which they copy to srcset as it scrolls into view: lazysizes'
+    /// (Shopify's themes), and WordPress's lazy loaders'.
+    /// </summary>
+    private static readonly string[] LAZY_SRCSETS = ["data-srcset", "data-lazy-srcset"];
 
     private readonly string _pageUrl = UrlNormalizer.Normalize(pageUri);
 
@@ -757,7 +766,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             source ??= ImageSource(element.GetAttribute(attribute));
         }
 
-        source ??= FirstCandidate(element.GetAttribute("srcset")) ?? FirstCandidate(element.GetAttribute("data-srcset"));
+        source ??= FirstCandidate(element.GetAttribute("srcset"));
+        foreach (var attribute in LAZY_SRCSETS)
+        {
+            source ??= FirstCandidate(element.GetAttribute(attribute));
+        }
 
         // The URL is resolved past the link cap too, so alt text and dimensions are still checked.
         var alt = element.GetAttribute("alt");
@@ -780,16 +793,27 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 alt is not null,
                 NullIfBlank(element.GetAttribute("width")),
                 NullIfBlank(element.GetAttribute("height")),
-                element.HasAttribute("srcset"),
+                HasSrcset(element),
                 NullIfBlank(element.GetAttribute("loading")))
             {
                 IsDataUri = data is not null,
                 DataUriBytes = data,
                 InPicture = element.ParentElement is { LocalName: "picture" } picture &&
-                            picture.Children.Any(child => child.LocalName == "source" && !string.IsNullOrWhiteSpace(child.GetAttribute("srcset")))
+                            picture.Children.Any(child => child.LocalName == "source" && SourceSrcset(child) is not null),
+
+                // What tells apart an image with no file to name: only those keep it, so a page of photos stores no more.
+                Class = url is null ? NullIfBlank(Clean(element.GetAttribute("class"), MAX_IMAGE_CLASS_CHARS)) : null,
+                Position = url is null ? context.Position : null
             });
         }
     }
+
+    /// <summary>The image has a srcset, or one a lazy-loading script will copy there (<see cref="LAZY_SRCSETS"/>): an empty one too, which a script may fill.</summary>
+    private static bool HasSrcset(IElement image) => image.HasAttribute("srcset") || LAZY_SRCSETS.Any(image.HasAttribute);
+
+    /// <summary>A picture's &lt;source&gt;'s srcset, or the lazy-loaded one, when it names a file; null otherwise.</summary>
+    private static string? SourceSrcset(IElement source) =>
+        NullIfBlank(source.GetAttribute("srcset")) ?? LAZY_SRCSETS.Select(source.GetAttribute).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private void AddLink(string? href, LinkKind kind, LinkFlags flags, LinkPosition position, string? label)
     {

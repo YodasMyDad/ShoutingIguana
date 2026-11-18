@@ -134,6 +134,13 @@ internal sealed class GridReadContext : IDisposable
     /// </summary>
     public bool HasIssueTargets { get; private set; }
 
+    /// <summary>
+    /// The check's groups are by the fault its detail shows (<see cref="IssueDefinition.FaultOf"/>), as the last analysis
+    /// stored them; one from before the check had a fault (<see cref="IssueDefinition.FaultsSince"/>) stored none for it,
+    /// its detail being the fault, so its groups are by that.
+    /// </summary>
+    public bool GroupsByFault(IssueDefinition check) => HasIssueTargets && check.FaultOf is not null && Analysis!.AnalysisVersion >= check.FaultsSince;
+
     /// <summary>The links have the index by target and kind an analysis adds (<see cref="CrawlSchema.LINK_KINDS_INDEX"/>).</summary>
     public bool HasLinkKindIndex { get; private set; }
 

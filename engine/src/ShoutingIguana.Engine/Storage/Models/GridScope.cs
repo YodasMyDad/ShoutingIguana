@@ -17,6 +17,15 @@ internal sealed record GridScope(string? CheckId, IssueGroupKey? Group, IssueGro
     public bool TargetsStored { get; init; }
 
     /// <summary>
+    /// With <see cref="TargetsStored"/>, the version of the analysis (<see cref="AnalysisInfo.AnalysisVersion"/>), which says
+    /// which checks' faults it stored: each one's from its <see cref="IssueDefinition.FaultsSince"/> on.
+    /// </summary>
+    public int AnalysisVersion { get; init; }
+
+    /// <summary>A group of the check holds the URLs stored under its fault, as <see cref="GridReadContext.GroupsByFault"/> counts it.</summary>
+    public bool FaultsStored(IssueDefinition check) => TargetsStored && check.FaultOf is not null && AnalysisVersion >= check.FaultsSince;
+
+    /// <summary>
     /// Only the URLs this sitemap lists, and those of every sitemap under it: the grid is still every URL's, narrowed as a
     /// filter narrows it, with the sitemap's listed URLs as its total.
     /// </summary>

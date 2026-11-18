@@ -12,6 +12,7 @@ import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
+import { SHOPIFY_OWNER, platformOwned } from '../test/platformSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
 import {
@@ -135,14 +136,56 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
         (id) => `${FIX}/${id}`,
       ),
     );
-    expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 addresses 2 points back$/);
-    expect(list.getByText(/Fixing these five takes the score from/)).toHaveTextContent(
-      'Fixing these five takes the score from 86 to 99.',
+    // One job as What to fix has it (related checks): restoring the 9 missing addresses clears the broken links on all
+    // 5 pages, so they're folded under it, unnumbered, and the row above carries the points of both.
+    expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 addresses 6 points back$/);
+    expect(rows[1]).toHaveAccessibleName(
+      /^Serious Links that lead to broken pages Fixed along with the problem above\. 5 pages$/,
+    );
+    expect(rows[1]!.closest('li')).toHaveClass('si-plain-list__nested');
+    expect(rows[2]).toHaveAccessibleName(/^2 Worth fixing /);
+    expect(rows[4]).toHaveAccessibleName(/^4 Worth fixing /);
+    expect(list.getByText(/Fixing these four takes the score from/)).toHaveTextContent(
+      'Fixing these four takes the score from 86 to 99.',
     );
     expect(list.getByRole('link', { name: 'See all 6 problems and 22 things worth a look' })).toHaveAttribute(
       'href',
       FIX,
     );
+  });
+
+  // The fixit page's item: as the problem page and What to fix say it, how much a shared cause covers.
+  it('says how much One fix covers on a row whose shared cause isn’t on every page', async () => {
+    const sharedImage: FakeRoute = [
+      'POST',
+      /\/issues\/image-too-large\/groups$/,
+      () =>
+        json({
+          checkId: 'image-too-large',
+          grouping: 'relatedUrl',
+          total: 61,
+          groupCount: 12,
+          offset: 0,
+          groups: [
+            {
+              detail: null,
+              relatedUrlId: 9,
+              relatedUrl: 'https://www.gardenfurnituresets.co.uk/img/hero.jpg',
+              pages: 50,
+              urls: 50,
+              share: 50 / 265,
+              likelyTemplate: true,
+              related: null,
+              sharedText: null,
+            },
+          ],
+        }),
+    ];
+    await open(GARDEN_ANALYSIS, gardenItem(), `${CRAWL}/overview`, [sharedImage]);
+    await site();
+    const list = within(main().getByRole('region', { name: 'Fix these first' }));
+    expect(await list.findByText('One fix covers 50 of 61 pages')).toBeVisible();
+    expect(list.queryByText('One fix')).toBeNull();
   });
 
   it('says what’s fine and what couldn’t be checked, with the engine’s plain reasons', async () => {
@@ -153,6 +196,26 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(fine.getByText(/Nothing wrong with .*visibility in search/)).toBeVisible();
     const skipped = within(main().getByRole('region', { name: 'Couldn’t be checked' }));
     expect(skipped.getByText(/No sitemap, the list of your pages for search engines, could be read/)).toBeVisible();
+  });
+
+  // After the Shopify merge: a reason many checks share is one short line with its checks on demand, never 24 of their
+  // names run together before it.
+  it('says a reason many checks share once, in a short line, with its checks on demand', async () => {
+    await open(GARDEN_ANALYSIS);
+    await site();
+    const skipped = within(main().getByRole('region', { name: 'Couldn’t be checked' }));
+    expect(skipped.getByText('24 checks couldn’t run.')).toBeVisible();
+    expect(skipped.getAllByText(/made with an older version of Shouting Iguana/)).toHaveLength(1);
+    expect(skipped.queryByRole('list', { name: 'The 24 checks' })).toBeNull();
+    const show = skipped.getByRole('button', { name: 'Show the 24 checks' });
+    expect(show).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(show);
+    expect(skipped.getByRole('button', { name: 'Hide the 24 checks' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(skipped.getByRole('list', { name: 'The 24 checks' })).getAllByRole('listitem')).toHaveLength(24);
+    // Two that share a reason fold the same way; one alone is named, as before.
+    expect(skipped.getByText('2 checks couldn’t run.')).toBeVisible();
+    expect(skipped.getByRole('button', { name: 'Show the 2 checks' })).toBeVisible();
+    expect(skipped.getAllByRole('button', { name: /^Show the/ })).toHaveLength(1);
   });
 
   it('opens the score’s breakdown on score=1, and Esc closes it and takes it off the address', async () => {
@@ -241,6 +304,28 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     expect(list.getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
     expect(list.getByText(/6 checks are hidden\./)).toBeVisible();
+  });
+
+  // The Shopify lane, phase B: what only Shopify can change keeps its count, but isn't among the things to fix.
+  it('leaves what Shopify sets out of its counts, with one quiet line that there’s nothing to change', async () => {
+    await open(platformOwned(GARDEN_ANALYSIS));
+    await site();
+    const tally = within(main().getByRole('list', { name: 'What the checks found' }));
+    expect(tally.getByRole('link', { name: '19 Things worth a look' })).toBeVisible();
+    expect(main().getByText('3 set by Shopify: nothing for you to change.')).toBeVisible();
+    expect(
+      main().getByText(/Your site is in good shape\. There are 2 serious problems and 4 problems worth fixing\./),
+    ).toBeVisible();
+    // Never a thing to fix: not among the five, and not listed for a fix.
+    const list = within(main().getByRole('region', { name: 'Fix these first' }));
+    expect(list.queryByRole('link', { name: /security settings|Cookies/ })).toBeNull();
+    expect(main().queryByText(SHOPIFY_OWNER.reason)).toBeNull();
+  });
+
+  it('says nothing of a platform for an analysis that names none', async () => {
+    await open(GARDEN_ANALYSIS);
+    await site();
+    expect(main().queryByText(/set by Shopify/)).toBeNull();
   });
 
   it('leaves hidden checks out of the counts, and says nothing of five fixed that aren’t the engine’s five', async () => {

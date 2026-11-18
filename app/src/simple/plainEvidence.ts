@@ -3,12 +3,22 @@
 // has it ("Shown at 400×300 pixels, in the main content", "The link is in the footer: “Old range”") and a page's own
 // evidence ("The rules file says “Disallow: /cart/”, on line 12"). Advanced's words are crawl/evidence.ts. Pure.
 import type { IndexabilityReason, RelatedFacts, RobotsRule, UrlOutcome } from '../api/grids';
-import type { ImgFacts, IssueTarget, LinkPosition, RedirectChain, TargetEnd, UrlFoundOn } from '../api/inspector';
+import type {
+  ImgFacts,
+  IssueTarget,
+  LinkKind,
+  LinkPosition,
+  RedirectChain,
+  TargetEnd,
+  UrlFoundOn,
+} from '../api/inspector';
 import type { Check } from '../api/types';
 import type { ShownAt } from '../crawl/evidence';
 import { reasonPhrase } from '../inspector/words';
-import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
+import { formatBytes, formatCount } from '../lib/format';
 import { sourcePages } from '../screens/issues/whereFound';
+import { plainCodeClause, plainFailureClause, plainFetchError, plainFileKind, plainSeconds } from './plainAnswers';
+import { plainDetailWords } from './plainDetails';
 
 /** An address as Simple names it: its path on the site's own origin, else in full. */
 export function plainAddress(url: string, origin: string | null): string {
@@ -62,22 +72,30 @@ export function plainAlt(img: Pick<ImgFacts, 'alt' | 'hasAlt' | 'altLength'>, wi
   return `Alt text: ${quote(alt, 60)}${length}`;
 }
 
-/** How an address answered, as a clause: "works", "is missing (404 Not Found)", "didn’t answer". */
-export function plainStatus(statusCode: number | null | undefined, outcome?: UrlOutcome | null): string {
+/**
+ * How an address answered, as a clause: "works", "is missing (404 Not Found)", "didn’t answer", "couldn’t be reached".
+ * Where the crawl recorded why a request failed (`error`), it says that: "is on a site that couldn’t be found".
+ */
+export function plainStatus(
+  statusCode: number | null | undefined,
+  outcome?: UrlOutcome | null,
+  error?: string | null,
+): string {
   if (typeof statusCode === 'number') {
-    const code = `${statusCode}${reasonPhrase(statusCode) ? ` ${reasonPhrase(statusCode)}` : ''}`;
-    if (statusCode < 300) return 'works';
-    if (statusCode < 400) return `forwards (${code})`;
-    if (statusCode === 404 || statusCode === 410) return `is missing (${code})`;
-    if (statusCode < 500) return `can’t be opened (${code})`;
-    return `has a server error (${code})`;
+    return plainCodeClause(
+      statusCode,
+      `${statusCode}${reasonPhrase(statusCode) ? ` ${reasonPhrase(statusCode)}` : ''}`,
+    );
   }
+  const failed = outcome === 'timeout' || outcome === 'networkError' ? plainFailureClause(error) : null;
+  if (failed) return failed;
   switch (outcome) {
     case 'robotsDisallowed':
       return 'is kept out by the rules file';
     case 'timeout':
-    case 'networkError':
       return 'didn’t answer';
+    case 'networkError':
+      return 'couldn’t be reached';
     case 'blocked':
       return 'turned the check away';
     default:
@@ -234,17 +252,76 @@ export function plainTargetLine(
 /** A line as a sentence: its first letter up. */
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** How a page refers to an address, by its link's kind, where it isn't a link: named as the main address, forwarded. */
+type Reference = 'link' | 'shown' | 'loaded' | 'canonical' | 'language' | 'forward' | 'series' | 'share';
+
+function referenceOf(kind: LinkKind | null): Reference {
+  switch (kind) {
+    case 'image':
+      return 'shown';
+    case 'script':
+    case 'stylesheet':
+    case 'iframe':
+    case 'media':
+    case 'icon':
+      return 'loaded';
+    case 'canonical':
+      return 'canonical';
+    case 'hreflang':
+      return 'language';
+    case 'redirect':
+    case 'metaRefresh':
+      return 'forward';
+    case 'pagination':
+      return 'series';
+    case 'socialImage':
+      return 'share';
+    default:
+      return 'link';
+  }
+}
+
+/** The pages that refer to an address one way, said before them: "Named as the main address by /a/ and /b/". */
+const REFERENCED_BY: Record<Exclude<Reference, 'forward'>, string> = {
+  link: 'Linked from',
+  shown: 'Shown on',
+  loaded: 'Loaded by',
+  canonical: 'Named as the main address by',
+  language: 'Named as a language version by',
+  series: 'Named as the next or previous page by',
+  share: 'Named as the share image by',
+};
+
+/** How the first page refers to it, beside it in a list that mixes ways: "/a/ (names it as its main address)". */
+const REFERENCE_PLACE: Partial<Record<Reference, string>> = {
+  loaded: 'loads it',
+  canonical: 'names it as its main address',
+  language: 'names it as a language version',
+  forward: 'forwards here',
+  series: 'names it as the next or previous page',
+  share: 'names it as its share image',
+};
+
 /**
  * Where to fix a broken or forwarding address: "Linked from /garden/ (in the footer: “Old range”), /sofas/ and 3
  * more", the first page with where on it the link is and what it says; "Listed in your sitemap"; "It’s the address the
- * check started from". Null when nothing crawled refers to it.
+ * check started from". Pages that refer to it another way say so (X7): "Named as the main address by /a/ and /b/",
+ * "/ext-moved forwards here", "Shown on /garden/". Null when nothing crawled refers to it.
  */
 export function plainLinkedFrom(found: UrlFoundOn, origin: string | null, few = 3): string | null {
   const pages = sourcePages(found).slice(0, few);
   if (found.pages > 0 && pages.length > 0) {
+    const references = new Set(pages.map((page) => referenceOf(page.kind)));
+    const one = references.size === 1 ? (references.values().next().value ?? 'link') : null;
     const named = pages.map((page, index) => {
       const path = plainAddress(page.url, origin);
       if (index > 0) return path;
+      const reference = referenceOf(page.kind);
+      // A page's code holds no place to say: "in the page's code" says nothing of a canonical or a redirect.
+      if (reference !== 'link' && reference !== 'shown') {
+        const how = one === null ? REFERENCE_PLACE[reference] : undefined;
+        return how ? `${path} (${how})` : path;
+      }
       const where = plainPosition(page.position);
       const text = page.text?.trim();
       const place = where && text ? `${where}: ${quote(text, 40)}` : (where ?? (text ? quote(text, 40) : null));
@@ -257,7 +334,8 @@ export function plainLinkedFrom(found: UrlFoundOn, origin: string | null, few = 
         : named.length > 1
           ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
           : named[0];
-    return `Linked from ${list}`;
+    if (one === 'forward') return `${list} ${found.pages === 1 ? 'forwards' : 'forward'} here`;
+    return `${REFERENCED_BY[one ?? 'link']} ${list}`;
   }
   if (found.sitemaps.total > 0)
     return found.sitemaps.total === 1 ? 'Listed in your sitemap' : 'Listed in your sitemaps';
@@ -303,12 +381,34 @@ function plainRule(rule: RobotsRule): string {
   return 'The rules file kept the check out';
 }
 
+/** What kind of file an address is, by the URL grid's `type`: "It’s an image". Null for one of no particular kind. */
+const URL_TYPES: Readonly<Record<string, string>> = {
+  page: 'It’s a page',
+  image: 'It’s an image',
+  script: 'It’s a script, code the pages run',
+  stylesheet: 'It’s a style sheet, which sets how the pages look',
+  font: 'It’s a font',
+  media: 'It’s a sound or video file',
+  pdf: 'It’s a PDF',
+};
+
+/** A count of something: "No pages link here", "1 page links here", "4 pages link here". */
+function counting(value: number, none: string, one: string, many: (count: string) => string): string {
+  return value === 0 ? none : value === 1 ? one : many(formatCount(value));
+}
+
 /**
  * One of a page's evidence columns in plain words, for its line under the page in "Where it is": "Main heading:
- * “Sofas”", "The page says “noindex”", "Forwards to /b/, then /new/, which works", "120 words". Null for no value,
- * and for what the line says another way (the title is the page's name; a length is its detail's).
+ * “Sofas”", "The page says “noindex”", "Forwards to /b/, then /new/, which works", "120 words", "2 clicks from the home
+ * page". Null for no value, for what the line says another way (the title is the page's name; a length is its
+ * detail's), and for the page's own address as where it forwards or its main address (`url`, the row's: X1).
  */
-export function plainEvidence(column: string, value: unknown, origin: string | null): string | null {
+export function plainEvidence(
+  column: string,
+  value: unknown,
+  origin: string | null,
+  url: string | null = null,
+): string | null {
   if (value === null || value === undefined || value === '' || SAID_ELSEWHERE.has(column)) return null;
   if (column === 'redirectChain' && typeof value === 'object')
     return plainChain(value as RedirectChain, origin) || null;
@@ -318,13 +418,26 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
       case 'wordCount':
         return value === 1 ? '1 word' : `${formatCount(value)} words`;
       case 'inlinks':
-        return value === 1 ? '1 link to it' : `${formatCount(value)} links to it`;
+        return counting(value, 'No pages link here', '1 link to it', (count) => `${count} links to it`);
+      case 'linkingPages':
+        return counting(value, 'No pages link here', '1 page links here', (count) => `${count} pages link here`);
+      case 'outlinks':
+        return counting(value, 'No links on the page', '1 link on the page', (count) => `${count} links on the page`);
+      case 'depth':
+        return value === 0
+          ? 'It’s the page the check started from'
+          : `${value === 1 ? '1 click' : `${formatCount(value)} clicks`} from the home page`;
       case 'usedOn':
         return value === 1 ? 'Used on 1 page' : `Used on ${formatCount(value)} pages`;
       case 'responseMs':
-        return `Took ${formatMilliseconds(value)} to answer`;
+        // Nothing answered in no time: an address that never answered keeps 0.
+        return value > 0 ? `Checking it took ${plainSeconds(value)}` : null;
+      case 'sizeBytes':
+        // Never a count of bytes: a file under 1 KB is said as that.
+        return `The file is ${value < 1024 ? 'under 1 KB' : formatBytes(value)}`;
       default:
-        return formatCount(value);
+        // A bare number says nothing in Simple.
+        return null;
     }
   }
   if (typeof value !== 'string') return null;
@@ -342,15 +455,19 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
     case 'redirectKind':
       return plainRedirectKind(value);
     case 'canonicalUrl':
-      return `Main address: ${plainAddress(value, origin)}`;
+      return value === url ? null : `Main address: ${plainAddress(value, origin)}`;
     case 'finalUrl':
-      return `Forwards to ${plainAddress(value, origin)}`;
+      return value === url ? null : `Forwards to ${plainAddress(value, origin)}`;
     case 'indexability':
       return value === 'none'
         ? 'Can appear in search results'
         : (plainNotInSearch(value as IndexabilityReason) ?? null);
     case 'fetchError':
-      return value;
+      return plainFetchError(value);
+    case 'type':
+      return URL_TYPES[value] ?? null;
+    case 'contentType':
+      return `The server says it’s ${plainFileKind(value)}`;
     default:
       return value;
   }
@@ -420,13 +537,18 @@ export function plainDetailColumn(check: Pick<Check, 'id'>): string | null {
 }
 
 /**
- * A page's line in place of the engine's detail, for a check Simple says plainly: "Google will likely cut this title
- * off after “…Garden Sofa”", "Only 5 characters long". Null for every other check, and where the row can't say it
- * (nothing cut, no count): the detail then says it.
+ * A page's line in place of the engine's detail, in plain words: for the four checks above, from their column ("Google
+ * will likely cut this title off after “…Garden Sofa”", "Only 5 characters long"); otherwise, and where the column
+ * can't say it (nothing cut, no count), the row's `detail` said plainly ("It goes from the main heading to a level-3
+ * heading, skipping level 2": plainDetails.ts). Null where neither can: no detail, or one in a form no check writes;
+ * the engine's detail then says it. A group's cause reads the same: `plainDetail(check, { detail: group.detail })`.
  */
 export function plainDetail(check: Pick<Check, 'id'>, row: Readonly<Record<string, unknown>>): string | null {
   const plain = PLAIN_DETAILS[check.id];
-  return plain ? plain.say(row[plain.column]) : null;
+  const fromColumn = plain ? plain.say(row[plain.column]) : null;
+  if (fromColumn) return fromColumn;
+  const detail = row.detail;
+  return typeof detail === 'string' && detail.trim() !== '' ? plainDetailWords(check.id, detail) : null;
 }
 
 // ------------------------------------------------------------------------------- An image bigger than it's shown

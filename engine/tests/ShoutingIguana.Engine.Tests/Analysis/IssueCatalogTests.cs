@@ -338,4 +338,34 @@ public sealed class IssueCatalogTests
         Assert.Empty(new AnalysisSettings { NearDuplicateMaxBits = 0 }.Validate());
         Assert.NotEmpty(new AnalysisSettings { LargeImageBytes = 0 }.Validate());
     }
+
+    /// <summary>
+    /// The real-site audit's case: the two pages sharing a title were /login/ and /login/?register=true, one page at two
+    /// addresses, which a new title doesn't fix. Both fixes say so, and what does: a canonical to the clean address, or noindex.
+    /// </summary>
+    [Fact]
+    public void ADuplicateTitlesFixCoversOnePageWithAQueryAdded()
+    {
+        Assert.Contains("/login/?register=true", IssueCatalog.TITLE_DUPLICATE.Fix, StringComparison.Ordinal);
+        Assert.Contains("don't write a new title", IssueCatalog.TITLE_DUPLICATE.Fix, StringComparison.Ordinal);
+        var plain = IssueCatalog.TITLE_DUPLICATE.Plain!.Fix;
+        Assert.Contains(plain, step => step.Contains("/login/?register=true", StringComparison.Ordinal) && step.Contains("don't write a new title", StringComparison.Ordinal));
+        Assert.Contains(plain, step => step.Contains("\"canonical tag\"", StringComparison.Ordinal) && step.Contains("out of search", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The real-site audit's case: a page linked only from page 2 of a list, canonicalised to page 1. Removing the links
+    /// would leave it unlinked; the fixes say to keep them, to look at why the linking pages aren't indexable, and to fix a
+    /// later page of a list that points at the first.
+    /// </summary>
+    [Fact]
+    public void ThePagesOnlyNonIndexablePagesLinkToAreFixedByWhyThoseArentIndexable()
+    {
+        var check = IssueCatalog.NON_INDEXABLE_INLINKS_ONLY;
+        Assert.StartsWith("Don't remove the links", check.Fix, StringComparison.Ordinal);
+        Assert.Contains("page 2 of a list canonicalised to page 1", check.Fix, StringComparison.Ordinal);
+        Assert.Equal("Keep the links you have: they're how search engines reach these pages.", check.Plain!.Fix[0]);
+        Assert.Contains(check.Plain.Fix, step => step.Contains("page 2 of a list", StringComparison.Ordinal));
+        Assert.Equal(IssueFixer.Either, check.Plain.Fixer);
+    }
 }

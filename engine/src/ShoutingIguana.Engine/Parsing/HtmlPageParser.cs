@@ -1,3 +1,4 @@
+using System.Globalization;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom.Events;
 using AngleSharp.Html.Parser;
@@ -40,10 +41,10 @@ public static class HtmlPageParser
 
     /// <summary>
     /// The document-structure errors the parser met in the page being parsed on this thread, with where each tag starts in
-    /// the text (from 0). Emptied before each parse.
+    /// the text (from 0) and the line it's on (from 1). Emptied before each parse.
     /// </summary>
     [ThreadStatic]
-    private static List<(HtmlParseError Code, int Start)>? _structureErrors;
+    private static List<(HtmlParseError Code, int Start, int Line)>? _structureErrors;
 
     /// <summary>
     /// Where each meta element of the page being parsed on this thread starts in its text, as the parser creates them: how
@@ -173,7 +174,7 @@ public static class HtmlPageParser
         if (error is not null && _structureErrors is { } errors && (HtmlParseError)error.Code is HtmlParseError.HeadTagMisplaced or
                 HtmlParseError.BodyTagMisplaced or HtmlParseError.HtmlTagMisplaced or HtmlParseError.TagCannotStartHere)
         {
-            errors.Add(((HtmlParseError)error.Code, error.Position.Position - 1));
+            errors.Add(((HtmlParseError)error.Code, error.Position.Position - 1, error.Position.Line));
         }
     }
 
@@ -183,34 +184,46 @@ public static class HtmlPageParser
         (char.IsWhiteSpace(html[start + 5]) || html[start + 5] is '>' or '/');
 
     /// <summary>
-    /// The document's structure errors, described: a second &lt;head&gt; (or one after content), a second &lt;body&gt;, an
-    /// &lt;html&gt; after content. A body the parser made up (for a stray element in the head) and then the page's own &lt;body&gt;
-    /// tag are one body, whose stray element the head's checks report.
+    /// The document's structure errors, described with the line of the tag at fault: a second &lt;head&gt; (or one after
+    /// content), a second &lt;body&gt;, an &lt;html&gt; after content ("2 &lt;head&gt; tags (the second on line 14)", "&lt;html&gt;
+    /// after content (on line 2)"). A body the parser made up (for a stray element in the head) and then the page's own
+    /// &lt;body&gt; tag are one body, whose stray element the head's checks report.
     /// </summary>
-    private static List<string> StructureErrors(List<(HtmlParseError Code, int Start)> errors, string html, bool headImplied, bool bodyImplied)
+    private static List<string> StructureErrors(List<(HtmlParseError Code, int Start, int Line)> errors, string html, bool headImplied, bool bodyImplied)
     {
-        var heads = errors.Count(error => error.Code == HtmlParseError.HeadTagMisplaced ||
-                                          (error.Code == HtmlParseError.TagCannotStartHere && IsHeadTag(html, error.Start)));
-        var bodies = errors.Count(error => error.Code == HtmlParseError.BodyTagMisplaced) - (bodyImplied ? 1 : 0);
+        var heads = errors.Where(error => error.Code == HtmlParseError.HeadTagMisplaced ||
+                                          (error.Code == HtmlParseError.TagCannotStartHere && IsHeadTag(html, error.Start))).Select(error => error.Line).ToList();
+
+        // The page's own <body> tag after a body the parser made up is its first.
+        var bodies = errors.Where(error => error.Code == HtmlParseError.BodyTagMisplaced).Select(error => error.Line).Skip(bodyImplied ? 1 : 0).ToList();
         List<string> faults = [];
-        if (errors.Any(error => error.Code == HtmlParseError.HtmlTagMisplaced))
+        if (errors.FirstOrDefault(error => error.Code == HtmlParseError.HtmlTagMisplaced) is { Code: HtmlParseError.HtmlTagMisplaced } misplaced)
         {
-            faults.Add("<html> after content");
+            faults.Add(OnLine("<html> after content", misplaced.Line));
         }
 
-        // A head the parser made up for content before it, then the page's own <head> tag: one head, in the wrong place.
-        if (heads > 0)
+        // A head the parser made up for content before it, then the page's own <head> tag: one head, in the wrong place,
+        // and a second <head> tag the second of the page's own.
+        if (headImplied && heads.Count == 1)
         {
-            faults.Add(headImplied && heads == 1 ? "<head> after content" : $"{heads + (headImplied ? 0 : 1)} <head> tags");
+            faults.Add(OnLine("<head> after content", heads[0]));
+        }
+        else if (heads.Count > 0)
+        {
+            faults.Add(TheSecond($"{heads.Count + (headImplied ? 0 : 1)} <head> tags", heads[headImplied ? 1 : 0]));
         }
 
-        if (bodies > 0)
+        if (bodies.Count > 0)
         {
-            faults.Add($"{bodies + 1} <body> tags");
+            faults.Add(TheSecond($"{bodies.Count + 1} <body> tags", bodies[0]));
         }
 
         return faults;
     }
+
+    private static string OnLine(string fault, int line) => string.Create(CultureInfo.InvariantCulture, $"{fault} (on line {line:N0})");
+
+    private static string TheSecond(string fault, int line) => string.Create(CultureInfo.InvariantCulture, $"{fault} (the second on line {line:N0})");
 
     /// <summary>The parser reports a new element's position one-based, at its opening '&lt;'.</summary>
     private static void RecordMeta(IElement element, TextPosition position)

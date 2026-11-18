@@ -377,7 +377,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition NON_INDEXABLE_INLINKS_ONLY = new("non-indexable-inlinks-only", IssueCategory.Links, IssueSeverity.Notice,
         "Linked only from non-indexable pages",
         """Every page that links to this indexable page with a followed link is itself not indexable: noindex, canonicalised to another URL, or a redirect by an instant meta refresh. Links reaching it through a redirect count. The start and home pages aren't reported, and it's only checked when the crawl read every page that could link to it.""",
-        """Link to the page from at least one indexable page where it belongs, such as its category or a related page.""")
+        """Don't remove the links: they're how search engines reach the page. Look at why the pages linking here aren't indexable (each one's indexability says). If one shouldn't be, such as page 2 of a list canonicalised to page 1 (each page of a series should be its own canonical, so its links count), fix that page. If they're excluded on purpose, as tag and filter pages often are, also link to this page from at least one indexable page where it belongs, such as its category or a related page.""")
     {
         Why = """Search engines find and value pages largely through links from pages they index. Links only from pages they're told to drop, or to treat as copies, still let them reach this page but count for little, and if those pages go the page is left with no links. It's often a page linked only from tag, filter or paginated pages that are noindex.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
@@ -1097,7 +1097,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition TITLE_DUPLICATE = new("title-duplicate", IssueCategory.Titles, IssueSeverity.Warning,
         "Duplicate title",
         """Another indexable page has the same title, ignoring case and spacing. The detail says how many other pages share it.""",
-        """Give each page a title that says what's specific about it. If the pages really are the same, consolidate them with a redirect or canonical instead.""")
+        """Give each page a title that says what's specific about it. If the pages really are the same, consolidate them with a redirect or canonical instead. When they're one page at two addresses, the same path with a query added (/login/ and /login/?register=true), don't write a new title: point the address with the query at the clean one with a canonical, or make it noindex.""")
     {
         Why = """Google asks for distinct titles on every page, because identical ones make it impossible for searchers to tell pages apart, and it may rewrite title links that repeat boilerplate. Duplicate titles often mean duplicate pages, or a template that leaves out the distinguishing detail, such as the product, place or page number.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
@@ -1212,14 +1212,14 @@ public static class IssueCatalog
     };
     public static readonly IssueDefinition HEADING_LEVELS_SKIPPED = new("heading-levels-skipped", IssueCategory.Headings, IssueSeverity.Notice,
         "Heading levels skipped",
-        """On this indexable page, which has an H1, a heading after the H1 is more than one level below the one before it (an H2, then an H4). Headings in menus and footers after the H1 count, as screen readers list them all; headings before the H1, such as a theme's hidden cart or a menu's column titles, aren't judged. The detail gives the first such step.""",
+        """On this indexable page, which has an H1, a heading after the H1 is more than one level below the one before it (an H2, then an H4). Headings in menus and footers after the H1 count, as screen readers list them all; headings before the H1, such as a theme's hidden cart or a menu's column titles, aren't judged. The detail gives the first such step and quotes the heading it skips to.""",
         """Use the next level down for each subsection (H2 under the H1, H3 under an H2), and style a heading by CSS, not by picking a smaller level.""")
     {
         Why = """Screen reader users move through a page by its headings, and a skipped level suggests a missing section. HTML asks for each heading to be at most one level below the one before. Search engines cope either way, so this is about structure and accessibility.""",
         LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.HeadingStep, FaultsSince = 18
     };
 
     public static readonly IssueDefinition H1_IMAGE_ONLY = new("h1-image-only", IssueCategory.Headings, IssueSeverity.Notice,
@@ -1237,15 +1237,14 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HEADING_TOO_LONG = new("heading-too-long", IssueCategory.Headings, IssueSeverity.Notice,
         "H1 or H2 over 70 characters",
-        """This indexable page's first H1, or one of its H2s, is longer than 70 characters (the default, which can be changed in the analysis settings). The detail gives the first, its level and its length.""",
+        """This indexable page's first H1, or one of its H2s, is longer than 70 characters (the default, which can be changed in the analysis settings). The detail gives the first: its level, its length and its text.""",
         """Shorten the heading to what the section is about, and move the rest into the text below it.""")
     {
         Why = """A heading is read as a label: a long one is harder to scan, and on a phone it wraps over several lines. Search engines read it whole, so this is about readers, not ranking.""",
         LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.None,
-        Evidence = ["h1"]
+        Grouping = IssueGrouping.None
     };
 
     public static readonly IssueDefinition H2_MISSING = new("h2-missing", IssueCategory.Headings, IssueSeverity.Notice,
@@ -1424,7 +1423,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition IMAGE_MISSING_SRC = new("image-missing-src", IssueCategory.Images, IssueSeverity.Warning,
         "Image without a source",
-        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them. A crawl made before the crawler told data: images apart isn't checked.""",
+        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them and says which is the first: its alt text, else its class, else where on the page it is. A crawl made before the crawler told data: images apart isn't checked.""",
         """Give each image its file in src. If a lazy-loading script fills it in, check that it uses a standard attribute such as data-src or loading="lazy", and that the image shows without the script.""")
     {
         Why = """An image with no source never shows, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.""",
@@ -1492,7 +1491,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition IMAGE_INLINE_LARGE = new("image-inline-large", IssueCategory.Images, IssueSeverity.Notice,
         "Large inline (data:) image",
-        """The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest.""",
+        """The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest, and which it is: its alt text, else its class, else where on the page it is.""",
         """Save each as an image file and show it with an ordinary src, so browsers can cache it and download it alongside the page.""")
     {
         Why = """An inline image comes with the page every time, can't be cached on its own, and in base64 is a third bigger than the file. A small icon is fine; a photo makes every view of the page slower.""",
@@ -1675,7 +1674,7 @@ public static class IssueCatalog
     // Structured data
     public static readonly IssueDefinition STRUCTURED_DATA_INVALID = new("structured-data-invalid", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Invalid JSON-LD",
-        """A JSON-LD block (<script type="application/ld+json">) on the page isn't valid JSON. The detail shows the parser's first error.""",
+        """A JSON-LD block (<script type="application/ld+json">) on the page isn't valid JSON. The detail shows the parser's first error: which block, counted in page order, the line and character in the block where it stopped, counted from 1, and why.""",
         """Fix the syntax where the detail points (often an unescaped quote, a trailing or missing comma, or a comment left in by a template), then test the page with Google's Rich Results Test.""")
     {
         Why = """JSON-LD has to be valid JSON: a trailing comma or a comment is enough for Google to drop the whole block, and its Unparsable structured data report lists the error a trailing comma produces. Nothing in the block is used, so it can't produce a rich result. Other valid blocks on the page still work. A single template error usually breaks the same block on every page that uses it.""",
@@ -2120,14 +2119,14 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SOCIAL_TAGS_MULTIPLE = new("social-tags-multiple", IssueCategory.Html, IssueSeverity.Notice,
         "Open Graph or X tag repeated",
-        """This indexable page gives og:title, og:description, og:url, og:type, twitter:card, twitter:title or twitter:description more than once, with different content. og:image and the other properties that take several values may repeat. The detail counts each, as "2 og:title".""",
+        """This indexable page gives og:title, og:description, og:url, og:type, twitter:card, twitter:title or twitter:description more than once, with different content. og:image and the other properties that take several values may repeat. The detail counts each and quotes its different values, as 2 og:title: "Sofas" · "Chairs".""",
         """Keep one of each: usually two plugins, or a plugin and the theme, both write them, and one can be turned off.""")
     {
         Why = """Each of these says one thing about the page; given twice with different values, each network picks one its own way, and it may not be the one you meant.""",
         LearnMore = "https://ogp.me/",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.RepeatedTags, FaultsSince = 18
     };
 
     public static readonly IssueDefinition OG_TITLE_DUPLICATE = new("og-title-duplicate", IssueCategory.Html, IssueSeverity.Notice,
@@ -2212,14 +2211,14 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HTML_STRUCTURE_ERRORS = new("html-structure-errors", IssueCategory.Html, IssueSeverity.Notice,
         "HTML document structure errors",
-        """The page's HTML has a second <head> or <body> start tag, an <html> tag after content, or a <head> after the body has begun, which the HTML standard counts as errors. A missing <head> or <body> tag isn't one: both are optional. The detail says which. A crawl made before the crawler noted them isn't checked.""",
+        """The page's HTML has a second <head> or <body> start tag, an <html> tag after content, or a <head> after the body has begun, which the HTML standard counts as errors. A missing <head> or <body> tag isn't one: both are optional. The detail says which, and on which line of the page's HTML the tag at fault is. A crawl made before the crawler noted them isn't checked.""",
         """Fix the template so the page has one <html>, one <head> and one <body>, in that order, with nothing before the <html>. Content printed before the page starts, such as a server warning, is a common cause.""")
     {
         Why = """Browsers recover from these the same way every time, merging or dropping the extra tags, so visitors rarely notice. But the attributes on the second tag are lost, and the same fault can move tags out of the head.""",
         LearnMore = "https://html.spec.whatwg.org/multipage/parsing.html#parse-errors",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.StructureFaults, FaultsSince = 18
     };
 
     public static readonly IssueDefinition VIEWPORT_INVALID = new("viewport-invalid", IssueCategory.Html, IssueSeverity.Warning,

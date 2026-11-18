@@ -153,6 +153,35 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     }
 
     /// <summary>
+    /// A check that groups by a fault only from a later analysis (heading-levels-skipped's, since its detail quotes the
+    /// heading) is grouped by its issues' own detail in an analysis stored before, which kept no faults for it, its detail
+    /// being the fault then: the groups, the inspector's key and the group's rows all agree.
+    /// </summary>
+    [Fact]
+    public void ACheckGroupedByAFaultOnlyFromALaterAnalysisIsGroupedByItsDetailBefore()
+    {
+        var check = IssueCatalog.HEADING_LEVELS_SKIPPED;
+        var flagged = Flagged(check.Id);
+        var (url, detail, _) = flagged.First();
+        var fault = check.FaultOf!(detail!);
+        Assert.NotEqual(detail, fault);
+        Assert.True(check.FaultsSince > CrawlSchema.ISSUE_TARGETS_SINCE);
+
+        var earlier = crawl.Copy();
+        Change(earlier, $"UPDATE analysis SET analysis_version = {check.FaultsSince - 1}");
+        Change(earlier, "DELETE FROM issue_faults WHERE issue = $check", ("$check", check.Id));
+        Change(earlier, "UPDATE issues SET detail = $fault WHERE issue = $check AND url_id = $url", ("$fault", fault), ("$check", check.Id), ("$url", url));
+
+        var groups = IssueGroupReader.ReadGroups(earlier, check.Id, 0, 1_000)!;
+        Assert.Equal(flagged.Count, groups.Total);
+        var group = Assert.Single(groups.Groups, group => group.Detail == fault);
+        var key = UrlInspectorReader.Read(earlier, url)!.Issues!.Single(issue => issue.CheckId == check.Id).Group;
+        Assert.Equal(new IssueGroupKey(fault, null), key);
+        Assert.Equal(group.Pages, IssueGroupReader.ReadRows(earlier, check.Id, new UrlQuery(), key)!.Page!.Total);
+        Assert.Contains(url, IssueGroupReader.ReadRows(earlier, check.Id, new UrlQuery(), key)!.Page!.Rows.Select(row => row.Id));
+    }
+
+    /// <summary>
     /// The inspector gives each issue the key of a group it's in, which finds that group among the check's groups and among
     /// its rows: the other URL for a check grouped by it (the one the issue shows, when it's grouped under it), the fault for a
     /// check grouped by one, and nothing for a check that isn't grouped.

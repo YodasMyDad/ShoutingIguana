@@ -96,6 +96,25 @@ describe('what a cause is, in plain words', () => {
     expect(plainStatus(null, 'timeout')).toBe('didn’t answer');
     expect(plainStatus(null, 'robotsDisallowed')).toBe('is kept out by the rules file');
   });
+
+  it('tells a connection that failed from one that timed out, and a site that couldn’t be found from both', () => {
+    expect(plainStatus(null, 'networkError')).toBe('couldn’t be reached');
+    expect(plainStatus(null, 'networkError', 'DNS lookup failed')).toBe('is on a site that couldn’t be found');
+    expect(
+      plainStatus(
+        null,
+        'networkError',
+        'Could not connect: No connection could be made because the target machine actively refused it.',
+      ),
+    ).toBe('refused the connection');
+    expect(plainStatus(null, 'networkError', 'TLS handshake failed: Cannot determine the frame size.')).toBe(
+      'couldn’t be opened securely',
+    );
+    expect(plainStatus(null, 'networkError', 'An error occurred while sending the request.')).toBe(
+      'couldn’t be reached',
+    );
+    expect(plainStatus(null, 'timeout', 'No response within 20 seconds')).toBe('didn’t answer');
+  });
 });
 
 describe('how a page has a cause, in plain words', () => {
@@ -143,32 +162,33 @@ describe('how a page has a cause, in plain words', () => {
     expect(plainTargetLine(target({}), { id: 'x', targetFacts: [] })).toBeNull();
   });
 
+  const link = (id: number, path: string, overrides: Partial<LinkRow> = {}): LinkRow => ({
+    id,
+    url: `${ORIGIN}${path}`,
+    kind: 'hyperlink',
+    text: null,
+    position: 'content',
+    flags: [],
+    followed: true,
+    fragment: null,
+    statusCode: 200,
+    indexable: true,
+    fetched: true,
+    outcome: 'success',
+    ...overrides,
+  });
+  const found = (overrides: Partial<UrlFoundOn> = {}): UrlFoundOn => ({
+    urlId: 10,
+    links: 0,
+    pages: 0,
+    pagesExact: true,
+    sources: [],
+    sitemaps: { total: 0, sitemaps: [] },
+    start: false,
+    ...overrides,
+  });
+
   it('says which pages link to a broken address, the first with where its link is and what it says', () => {
-    const link = (id: number, path: string, overrides: Partial<LinkRow> = {}): LinkRow => ({
-      id,
-      url: `${ORIGIN}${path}`,
-      kind: 'hyperlink',
-      text: null,
-      position: 'content',
-      flags: [],
-      followed: true,
-      fragment: null,
-      statusCode: 200,
-      indexable: true,
-      fetched: true,
-      outcome: 'success',
-      ...overrides,
-    });
-    const found = (overrides: Partial<UrlFoundOn> = {}): UrlFoundOn => ({
-      urlId: 10,
-      links: 0,
-      pages: 0,
-      pagesExact: true,
-      sources: [],
-      sitemaps: { total: 0, sitemaps: [] },
-      start: false,
-      ...overrides,
-    });
     const sources = [
       link(1, '/garden/', { position: 'footer', text: 'Old range' }),
       link(2, '/sofas/'),
@@ -186,6 +206,43 @@ describe('how a page has a cause, in plain words', () => {
     );
     expect(plainLinkedFrom(found({ start: true }), ORIGIN)).toBe('It’s the address the check started from');
     expect(plainLinkedFrom(found(), ORIGIN)).toBeNull();
+  });
+
+  it('says a page names it as its main address or a language version, not that it links here (X7)', () => {
+    const named = [
+      link(1, '/a/', { kind: 'canonical', position: 'head' }),
+      link(2, '/b/', { kind: 'canonical', position: 'head' }),
+    ];
+    expect(plainLinkedFrom(found({ links: 2, pages: 2, sources: named }), ORIGIN)).toBe(
+      'Named as the main address by /a/ and /b/',
+    );
+    const languages = [link(1, '/fr/', { kind: 'hreflang', position: 'head', text: 'fr' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: languages }), ORIGIN)).toBe(
+      'Named as a language version by /fr/',
+    );
+    // A page that names it one way and another links to it: the first says how it refers to it.
+    const mixed = [link(1, '/a/', { kind: 'canonical', position: 'head' }), link(2, '/b/', { position: 'footer' })];
+    expect(plainLinkedFrom(found({ links: 2, pages: 2, sources: mixed }), ORIGIN)).toBe(
+      'Linked from /a/ (names it as its main address) and /b/',
+    );
+  });
+
+  it('says an old address forwards here, not that it links here', () => {
+    const moved = [link(1, '/ext-moved', { kind: 'redirect', position: 'head' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: moved }), ORIGIN)).toBe('/ext-moved forwards here');
+    const many = [
+      link(1, '/a', { kind: 'redirect', position: 'head' }),
+      link(2, '/b', { kind: 'metaRefresh', position: 'head' }),
+    ];
+    expect(plainLinkedFrom(found({ links: 3, pages: 3, sources: many }), ORIGIN)).toBe(
+      '/a, /b and 1 more forward here',
+    );
+    const image = [link(1, '/garden/', { kind: 'image', position: 'content' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: image }), ORIGIN)).toBe(
+      'Shown on /garden/ (in the main content)',
+    );
+    const script = [link(1, '/garden/', { kind: 'script', position: 'head' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: script }), ORIGIN)).toBe('Loaded by /garden/');
   });
 });
 
@@ -303,9 +360,13 @@ describe('a length check’s page in plain words, in place of the detail', () =>
     ).toBe('Google will likely cut this description off after “…six and comes flat-packed for”');
   });
 
-  it('leaves the detail to say it where it can’t: nothing cut, no length, or another check', () => {
-    expect(plainDetail({ id: 'title-too-long' }, { ...row, titleInResults: row.title })).toBeNull();
+  it('says the detail plainly where the column can’t, and nothing where neither can', () => {
+    // Nothing cut: the detail's characters, never its pixels.
+    expect(plainDetail({ id: 'title-too-long' }, { ...row, titleInResults: row.title })).toBe(
+      'Too long to show in full in search results (80 characters)',
+    );
     expect(plainDetail({ id: 'title-too-short' }, { titleLength: null })).toBeNull();
+    // Another check's detail in a form it doesn't write.
     expect(plainDetail({ id: 'title-duplicate' }, row)).toBeNull();
   });
 

@@ -16,6 +16,7 @@ import { TEST_CRAWL_ID, fakeSidecar, json, problem as problemResponse, type Fake
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
 import { GARDEN_ANALYSIS, gardenItem, groupPage, rowsPage, simpleRoutes } from '../test/simpleSidecar';
+import { SHOPIFY_OWNER, platformOwned } from '../test/platformSidecar';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 const FIX = `${CRAWL}/issues`;
@@ -150,7 +151,13 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
   });
 
   it('shows three things worth a look while anything needs fixing, then all of them; Nothing wrong is folded', async () => {
-    await open(FIX);
+    // The logo's link on every one of the 265 pages: One fix (one on 264 of them isn't: useOneFix.test.tsx).
+    const everyPage: FakeRoute = [
+      'POST',
+      /\/issues\/empty-anchor-text\/groups$/,
+      () => json(groupPage('empty-anchor-text', [{ ...HOME_GROUP, pages: 265, urls: 265, share: 1 }], 265)),
+    ];
+    await open(FIX, GARDEN_ANALYSIS, [], [everyPage]);
     await whatToFix();
     const looks = () => within(main().getByRole('region', { name: 'Worth a look 22' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
@@ -170,11 +177,40 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 22' })).toHaveFocus());
   });
 
+  // The fixit page's item: the problem page says how much a shared cause covers when it isn't every page; its row too.
+  it('says how much One fix covers on a row whose shared cause isn’t on every page, as the problem page does', async () => {
+    // The logo's link on 264 of empty-anchor-text's 265 pages.
+    await open(FIX);
+    await whatToFix();
+    const looks = within(main().getByRole('region', { name: 'Worth a look 22' }));
+    expect(await looks.findByText('One fix covers 264 of 265 pages')).toBeVisible();
+    expect(looks.queryByText('One fix')).toBeNull();
+    expect(
+      looks.getByRole('link', { name: /^Worth a look Links with nothing to read One fix covers 264 of 265 pages/ }),
+    ).toBeVisible();
+  });
+
+  it('opens every check that couldn’t run when its count is landed on', async () => {
+    await open(`${FIX}#couldnt-check`);
+    await whatToFix();
+    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 27' }));
+    expect(skipped.getAllByRole('link')).toHaveLength(27);
+    expect(skipped.getAllByText(/made with an older version of Shouting Iguana/)).toHaveLength(1);
+  });
+
   it('lists every check that couldn’t run, with its plain reason, and leaves hidden checks out with a line to show them', async () => {
     await open(FIX, GARDEN_ANALYSIS, ['image-too-large']);
     await whatToFix();
     const skipped = within(main().getByRole('region', { name: 'Couldn’t check 27' }));
+    // After the Shopify merge: a reason many share is said once, its checks on demand, never the sentence 24 times.
+    expect(skipped.getByText('24 checks couldn’t run')).toBeVisible();
+    expect(skipped.getByText('2 checks couldn’t run')).toBeVisible();
+    expect(skipped.getAllByText('Not checked')).toHaveLength(1);
+    fireEvent.click(skipped.getByRole('button', { name: 'Show the 24 checks' }));
+    fireEvent.click(skipped.getByRole('button', { name: 'Show the 2 checks' }));
     expect(skipped.getAllByText('Not checked')).toHaveLength(27);
+    expect(skipped.getAllByText(/made with an older version of Shouting Iguana/)).toHaveLength(1);
+    expect(skipped.getByRole('button', { name: 'Hide the 24 checks' })).toHaveAttribute('aria-expanded', 'true');
     expect(main().getByRole('heading', { name: 'Worth fixing 3' })).toBeVisible();
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));
@@ -231,6 +267,55 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
       "- Pages or files that can't be found: 9 addresses, 6 points back. Some addresses on your site answer with an error",
     );
     expect(writes[0]).toContain('  - Fixed along with it: Links that lead to broken pages, 5 pages.\n');
+    // A reason many checks share, once, with the checks under it.
+    expect(writes[0]).toMatch(
+      /\n- 24 checks couldn’t run: This site check was made with an older version[^\n]*\n {2}- /,
+    );
+    expect(writes[0]!.match(/made with an older version/g)).toHaveLength(1);
+  });
+});
+
+// The Shopify lane, phase B: what only Shopify can change is listed apart, with Shopify's reason, never as a thing to fix.
+describe.skipIf(TABLE_STUBBED)('What to fix, with what the site’s platform sets', () => {
+  it('lists what Shopify sets apart, each with its reason as given, out of the counts and the parts to fix', async () => {
+    await open(FIX, platformOwned(GARDEN_ANALYSIS));
+    await whatToFix();
+    expect(
+      main().getByText(/^6 problems to fix and 19 more worth a look on gardenfurnituresets\.co\.uk/),
+    ).toBeVisible();
+    expect(main().getByRole('heading', { level: 2, name: 'Worth a look 19' })).toBeVisible();
+    const shopify = within(main().getByRole('region', { name: 'Set by Shopify 3' }));
+    expect(shopify.getAllByRole('link').map((row) => row.getAttribute('href'))).toEqual(
+      ['cookies-insecure', 'security-headers-missing', 'security-headers-weak'].map((id) => `${FIX}/${id}`),
+    );
+    expect(shopify.getAllByText(SHOPIFY_OWNER.reason)).toHaveLength(3);
+    expect(shopify.getByText(/^Nothing for you to change/)).toBeVisible();
+    expect(shopify.queryByText(/points? back/)).toBeNull();
+    fireEvent.click(main().getByRole('button', { name: 'Show all 19 things worth a look' }));
+    const looks = within(main().getByRole('region', { name: 'Worth a look 19' }));
+    expect(looks.getAllByRole('link')).toHaveLength(19);
+    expect(looks.queryByRole('link', { name: /security settings|Cookies your site/ })).toBeNull();
+  });
+
+  it('copies what Shopify sets apart, with its reason', async () => {
+    const writes: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          writes.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+    await open(FIX, platformOwned(GARDEN_ANALYSIS));
+    await whatToFix();
+    fireEvent.click(main().getByRole('button', { name: 'Copy this list' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toContain('Worth a look (19)');
+    expect(writes[0]).toContain(
+      `Set by Shopify (3)\n- Cookies your site sets without basic protection: 2 pages. ${SHOPIFY_OWNER.reason}\n`,
+    );
   });
 });
 
@@ -291,7 +376,9 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(main().getByText('Doesn’t change the score')).toBeVisible();
     expect(main().getByText('Usually fixed by you or your developer')).toBeVisible();
     expect(main().getByRole('heading', { name: 'How to fix it' })).toBeVisible();
-    expect(await main().findByText('One fix clears 264 of these 265 pages')).toBeVisible();
+    expect(
+      await main().findByText('One fix covers 264 of 265 pages', { selector: '.si-callout__title' }),
+    ).toBeVisible();
     expect(main().getByText(/almost certainly your logo/)).toBeVisible();
   });
 
@@ -341,14 +428,14 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(
       within(where).getAllByText('/outdoor-pe-rattan-dining-set-with-fire-pit-table/', { exact: false })[0],
     ).toBeVisible();
-    expect(within(where).queryByText(/0 causes/)).toBeNull();
+    expect(within(where).queryByText(/\b0 kinds of problem\b/)).toBeNull();
   });
 
   it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {
     await open(`${FIX}/empty-anchor-text`);
     await problem('Links with nothing to read');
     const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('2 causes, on 265 pages')).toBeVisible();
+    expect(await where.findByText('2 addresses on 265 pages')).toBeVisible();
     expect(await where.findByText('Your home page')).toBeVisible();
     // A check that names what its pages link to lists its first pages one by one, each with its own line (where its
     // link is: ProblemScreen.evidence.test.tsx), then how many more.
@@ -359,7 +446,7 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(await where.findByText('Page 199')).toBeVisible();
     expect(where.getByRole('button', { name: 'See all 264 in Advanced' })).toBeVisible();
     expect(
-      where.getByText('All 2 causes are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
+      where.getByText('All 2 addresses are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
     ).toBeVisible();
   });
 
@@ -367,7 +454,8 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     await open(`${FIX}/slow-response`);
     await problem('Pages that are slow to answer');
     const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('5,476 ms (first byte after 5,475 ms)')).toBeVisible();
+    // The engine's detail, plainly: no ms (plainDetails.ts).
+    expect(await where.findByText('It took 5.5 seconds to open')).toBeVisible();
     expect(where.getByText('Login')).toBeVisible();
     expect(main().getByText(/off the score/)).toHaveTextContent('Takes 2 points off the score');
   });

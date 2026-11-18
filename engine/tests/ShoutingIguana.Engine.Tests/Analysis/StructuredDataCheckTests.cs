@@ -135,6 +135,53 @@ public sealed class StructuredDataCheckTests
         ], parsed.Facts.Microdata);
     }
 
+    /// <summary>
+    /// The real-site audit's case: the detail was System.Text.Json's own message, "LineNumber: 0 | BytePositionInLine: 54",
+    /// counted from zero, in bytes, and with no word of which block. It names the block, then the line and the character
+    /// in the block, counted from 1, then the message without its position. Its group is the message alone.
+    /// </summary>
+    [Fact]
+    public void InvalidJsonLdSaysWhichBlockAndWhereFromOne()
+    {
+        const string VALID = """{"@context":"https://schema.org","@type":"Organization","name":"Acme","url":"https://example.com/"}""";
+        const string MISSING_COMMA = """{"@context":"https://schema.org","@type":"Product" "name":"Chair"}""";
+        var site = new RuleHarness();
+        AnalyzedPage With(params string[] blocks) => site.Page($"{site.Site}/{Guid.NewGuid():N}",
+            RuleHarness.Html(string.Concat(blocks.Select(block => $"<script type=\"application/ld+json\">{block}</script>"))));
+        string? Invalid(AnalyzedPage page) => new StructuredDataRules().Check(page).Where(hit => hit.Issue == IssueCatalog.STRUCTURED_DATA_INVALID).Select(hit => hit.Detail).SingleOrDefault();
+
+        var second = Invalid(With(VALID, MISSING_COMMA, VALID));
+        Assert.Equal("Block 2 of 3, line 1, position 52: '\"' is invalid after a value. Expected either ',', '}', or ']'.", second);
+        Assert.Equal("'\"' is invalid after a value. Expected either ',', '}', or ']'.", IssueCatalog.STRUCTURED_DATA_INVALID.FaultOf!(second!));
+
+        // The line, and the character on it, not the byte: "é" is two bytes in UTF-8.
+        Assert.Equal("Block 1 of 1, line 3, position 18: '\"' is invalid after a value. Expected either ',', '}', or ']'.",
+            Invalid(With("{\n  \"@type\": \"Product\",\n  \"name\": \"Café\" \"sku\": \"1\"\n}")));
+
+        // A trailing comma, and a property name that can't be read (half a surrogate pair), which has no position.
+        Assert.StartsWith("Block 1 of 2, line 1, position ", Invalid(With("""{"@type":"Organization","name":"Acme",}""", VALID)), StringComparison.Ordinal);
+        Assert.Equal("Block 2 of 2: A property name escapes an invalid character, such as half of a surrogate pair",
+            Invalid(With(VALID, """{"@type":"Product","\uDC00":"1","name":"x"}""")));
+    }
+
+    /// <summary>
+    /// A fault is the parser's message without where it failed: an earlier engine's detail ended with the position, and a
+    /// letter the parser stopped at (a quote left unescaped in a product's name) differs from page to page, so it's left out.
+    /// A quote or bracket it stopped at is the same on every page of a template, and is kept, where it read "'…'" before.
+    /// </summary>
+    [Theory]
+    [InlineData("Block 2 of 3, line 1, position 55: '\"' is invalid after a value. Expected either ',', '}', or ']'.", "'\"' is invalid after a value. Expected either ',', '}', or ']'.")]
+    [InlineData("Block 1 of 1, line 1, position 30: 'B' is invalid after a value. Expected either ',', '}', or ']'.", "'…' is invalid after a value. Expected either ',', '}', or ']'.")]
+    [InlineData("'B' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 54.", "'…' is invalid after a value. Expected either ',', '}', or ']'.")]
+    [InlineData("'\"' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 54.", "'\"' is invalid after a value. Expected either ',', '}', or ']'.")]
+    [InlineData("Block 1 of 2, line 1, position 41: '}' is an invalid start of a property name. Expected a '\"'.", "'}' is an invalid start of a property name. Expected a '\"'.")]
+    [InlineData("Block 2 of 2: A property name escapes an invalid character, such as half of a surrogate pair", "A property name escapes an invalid character, such as half of a surrogate pair")]
+    [InlineData("Block 1 of 1, line 12, position 3: '0x0A' is invalid within a JSON string. The string should be correctly escaped.", "'…' is invalid within a JSON string. The string should be correctly escaped.")]
+    public void AJsonFaultIsTheMessageWithoutWhereOrWhichBlock(string detail, string fault)
+    {
+        Assert.Equal(fault, IssueFaults.JsonError(detail));
+    }
+
     [Fact]
     public void MicrodataIsHeldToWhatJsonLdIs()
     {

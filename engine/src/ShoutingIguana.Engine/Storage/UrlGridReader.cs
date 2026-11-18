@@ -213,7 +213,7 @@ public static class UrlGridReader
     /// <summary>One page of a grid, the URL grid or a check's rows, through a context already open.</summary>
     internal static UrlPage Read(GridReadContext context, UrlQuery query, GridScope scope)
     {
-        scope = scope with { TargetsStored = context.HasIssueTargets };
+        scope = scope with { TargetsStored = context.HasIssueTargets, AnalysisVersion = context.Analysis?.AnalysisVersion ?? 0 };
         RefuseWithoutSummary(context, query.Filters, query.Sort, scope);
         var compiled = UrlQueryCompiler.Compile(query, context.Mode, scope, context.Reason);
         context.Bind(compiled.Hidden);

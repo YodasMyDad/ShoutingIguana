@@ -1,6 +1,7 @@
 // Where to fix a broken or redirected address, in plain words, under it in "Where it is": "Linked from /garden/ (in
-// the footer: “Old range”), /sofas/ and 3 more". The read is Advanced's (screens/issues/useWhereFound.ts), batched with
-// the other addresses shown.
+// the footer: “Old range”), /sofas/ and 3 more", or how the pages refer to it where they don't link to it: "Named as
+// the main address by /a/" (an unlinked page, X7), "/ext-moved forwards here" (plainLinkedFrom). The read is
+// Advanced's (screens/issues/useWhereFound.ts), batched with the other addresses shown.
 import type { Check } from '../api/types';
 import { useWhereFoundOf } from '../screens/issues/useWhereFound';
 import { plainLinkedFrom } from './plainEvidence';

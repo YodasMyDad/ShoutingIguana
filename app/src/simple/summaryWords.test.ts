@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarySubtitle } from './summaryWords';
+import { platformLines, summarySubtitle } from './summaryWords';
 
 const item = {
   startedAt: '2026-10-31T14:13:00Z',
@@ -34,5 +34,14 @@ describe('the Summary’s head', () => {
 
   it('no page read: the date alone', () => {
     expect(summarySubtitle({ ...item, pageCount: 0 }, 'completed', 0)).toBe('Checked on 31 October 2026.');
+  });
+});
+
+// The Shopify lane, phase B: one quiet line for what the platform sets, apart from the problems to fix.
+describe('what the site’s platform sets, in a line', () => {
+  it('counts it by who sets it, and says there’s nothing to change', () => {
+    expect(platformLines(['Shopify', 'Shopify'])).toEqual(['2 set by Shopify: nothing for you to change.']);
+    expect(platformLines(['Shopify'])).toEqual(['1 set by Shopify: nothing for you to change.']);
+    expect(platformLines([])).toEqual([]);
   });
 });

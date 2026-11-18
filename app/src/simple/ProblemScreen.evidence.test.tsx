@@ -63,7 +63,9 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
     fireEvent.error(thumb);
     expect(list.queryByRole('img', { name: 'hero.jpg' })).toBeNull();
     // The One fix says exactly what's shared and on how many, the one change, then the file against its use.
-    const callout = screen.getByText('One fix clears 12 of these 14 pages').parentElement!;
+    const callout = screen.getByText('One fix covers 12 of 14 pages', {
+      selector: '.si-callout__title',
+    }).parentElement!;
     await waitFor(() =>
       expect(callout).toHaveTextContent(
         'The same image, /img/hero.jpg, is on 12 of these 14 pages. That’s almost certainly an image in your page design, such as a logo or icon, which every page shares. Make it smaller once and all 12 are fixed.The image file is 1.8 MB, 4000×3000 pixels, but the pages show it at 400×300, so it’s about 10 times bigger than it needs to be.',
