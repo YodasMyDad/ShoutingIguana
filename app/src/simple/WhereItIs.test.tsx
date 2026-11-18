@@ -103,7 +103,7 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     );
     expect(await where.findByText('2 kinds of problem on 3 pages')).toBeVisible();
     expect(await where.findByText('No main heading')).toBeVisible();
-    expect(where.getByText('The main heading has no text')).toBeVisible();
+    expect(where.getByText('The main heading has no words')).toBeVisible();
     expect(where.getByRole('columnheader', { name: 'What was found' })).toBeVisible();
   });
 
@@ -184,8 +184,10 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
       ),
     );
     expect(await where.findAllByText('Page 8')).toHaveLength(2);
-    expect(await where.findByText(detail)).toBeVisible();
-    expect(where.getAllByText(detail)).toHaveLength(1);
+    // In plain words (plainDetails.ts), under the cause it's about only.
+    const said = 'It calls /fr/ “fr”, but /fr/ calls itself “fr-CA”';
+    expect(await where.findByText(said)).toBeVisible();
+    expect(where.getAllByText(said)).toHaveLength(1);
   });
 
   it('says each page’s own detail under the kind of problem it’s an instance of', async () => {
@@ -195,9 +197,64 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
       ['POST', /\/issues\/canonical-relative\/rows$/, () => json(rowsPage(rows, rows.length))],
       ...catalogRoutes('canonical-relative', 2, [group({ detail: 'Root-relative: starts with /', pages: 2 })], rows),
     ]);
-    expect(await where.findByText('Root-relative: starts with /')).toBeVisible();
-    expect(await where.findByText('/plants/', { selector: '.si-row-detail' })).toBeVisible();
-    expect(where.getByText('/sofas/', { selector: '.si-row-detail' })).toBeVisible();
+    // The cause and each page's own, in plain words: never the engine's "Root-relative: starts with /".
+    expect(
+      await where.findByText('It gives its main address without the site’s name, starting with “/”'),
+    ).toBeVisible();
+    expect(where.queryByText(/Root-relative/)).toBeNull();
+    const without = 'It gives its main address without the site’s name: ';
+    expect(await where.findByText(`${without}/plants/`, { selector: '.si-row-detail' })).toBeVisible();
+    expect(where.getByText(`${without}/sofas/`, { selector: '.si-row-detail' })).toBeVisible();
+  });
+
+  // The fixit page's leftovers: a check grouped by what was found headed each cause with the engine's detail.
+  it('heads each cause with its detail in plain words, never the engine’s', async () => {
+    const where = await open(
+      'heading-levels-skipped',
+      catalogRoutes(
+        'heading-levels-skipped',
+        3,
+        [group({ detail: 'H1 → H3', pages: 2 }), group({ detail: 'H2 → H4', pages: 1 })],
+        [
+          page(1, '/sofas/', { detail: 'H1 → H3: "Delivery"' }),
+          page(2, '/tables/', { detail: 'H1 → H3: "Delivery"' }),
+          page(3, '/chairs/', { detail: 'H2 → H4: "Care"' }),
+        ],
+      ),
+    );
+    expect(
+      await where.findByText('It goes from the main heading to a level-3 heading, skipping level 2'),
+    ).toBeVisible();
+    expect(where.getByText('It goes from a section heading to a level-4 heading, skipping level 3')).toBeVisible();
+    expect(where.queryByText(/H\d → H\d/)).toBeNull();
+  });
+
+  it('says no parser’s message for broken details for search engines, on the cause or its pages', async () => {
+    const fault = `'…' is invalid after a value. Expected either ',', '}', or ']'.`;
+    // Each page's own detail says where its block broke; the group is by the fault they share.
+    const rows = [
+      page(1, '/sofas/', {
+        detail: `Block 1 of 1, line 1, position 55: 'S' is invalid after a value. Expected either ',', '}', or ']'.`,
+      }),
+      page(2, '/tables/', {
+        detail: `'"' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 54.`,
+      }),
+    ];
+    const where = await open('structured-data-invalid', [
+      ['POST', /\/issues\/structured-data-invalid\/rows$/, () => json(rowsPage(rows, rows.length))],
+      ...catalogRoutes('structured-data-invalid', 2, [group({ detail: fault, pages: 2 })], rows),
+    ]);
+    expect(
+      await where.findByText(
+        'The details for search engines have a mistake: a comma or closing bracket is missing, so search engines can’t read them',
+      ),
+    ).toBeVisible();
+    expect(
+      await where.findAllByText(
+        'The details for search engines have a mistake on line 1, at character 55: a comma or closing bracket is missing',
+      ),
+    ).toHaveLength(2);
+    expect(where.queryByText(/LineNumber|BytePositionInLine|is invalid after a value/)).toBeNull();
   });
 
   // The fixit index audit's X5: a check with nothing measured showed an empty "What was found" on every row.

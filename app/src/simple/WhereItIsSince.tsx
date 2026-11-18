@@ -13,7 +13,7 @@ import { formatCount } from '../lib/format';
 import { Fold } from '../ui/Fold';
 import { Icon } from '../ui/Icon';
 import type { SimpleChanges } from './useSimpleChanges';
-import { pathOrigin } from './whereWords';
+import { causeName as namedCause, pathOrigin } from './whereWords';
 
 /** How many fixed causes (or pages) are listed: the rest are in Advanced and the report. */
 const LISTED = 50;
@@ -23,11 +23,14 @@ function shown(url: string, item: Pick<CrawlListItem, 'site' | 'startUrl'>): str
   return origin && url.startsWith(origin) ? url.slice(origin.length) || '/' : url;
 }
 
-/** A cause then by what names it: what its pages shared, its other address, or its detail. */
-function causeName(group: ClearedGroup, item: CrawlListItem): string {
+/**
+ * A cause then by what names it: what its pages shared, its other address, or its detail, said as Where it is says
+ * it (in plain words; one without a detail named by the check).
+ */
+function causeName(group: ClearedGroup, item: CrawlListItem, check: Check): string {
   if (group.sharedText) return `“${group.sharedText}”`;
   if (group.relatedUrl) return shown(group.relatedUrl, item);
-  return group.detail ?? '';
+  return namedCause(check, group.detail);
 }
 
 /** How a cause with no page now went: all its pages no longer found ("No longer linked from any page"), or fixed. */
@@ -66,7 +69,7 @@ export function CausesFixedSince({
         .filter((group) => group.notChecked === 0)
         .map((group) => ({
           key: `${group.detail ?? ''}|${group.relatedUrl ?? ''}|${group.sharedText ?? ''}`,
-          name: causeName(group, item),
+          name: causeName(group, item, check),
           words: causeWords(group, check),
         }))
     : rows
@@ -81,7 +84,7 @@ export function CausesFixedSince({
         .filter((group) => group.notChecked > 0)
         .map((group) => ({
           key: `${group.detail ?? ''}|${group.relatedUrl ?? ''}|${group.sharedText ?? ''}`,
-          name: causeName(group, item),
+          name: causeName(group, item, check),
           words:
             group.notChecked >= group.then
               ? group.then === 1

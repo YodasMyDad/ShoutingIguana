@@ -4,6 +4,7 @@
 import type { IssueGroup, IssueRow } from '../api/grids';
 import type { Check, CrawlListItem } from '../api/types';
 import { formatCount } from '../lib/format';
+import { plainDetail } from './plainEvidence';
 import { plainTitle } from './plainWords';
 
 /**
@@ -135,11 +136,6 @@ export function rowDetailSaysMore(
   return DETAIL_SAYS_MORE.has(check.id) && (row.relatedUrl ?? null) === group.relatedUrl;
 }
 
-/** A detail's own name in Simple, where the engine's words aren't plain. */
-const DETAIL_NAMES: Record<string, Record<string, string>> = {
-  'h1-missing': { 'The H1 has no text': 'The main heading has no text' },
-};
-
 /** What a group without a detail (or, for a check grouped by related URL, without one) holds, by the check. */
 const UNNAMED_CAUSES: Record<string, string> = {
   'h1-missing': 'No main heading',
@@ -149,12 +145,13 @@ const UNNAMED_CAUSES: Record<string, string> = {
 };
 
 /**
- * A cause as Where it is and Copy the list name it, where it's named by its detail (h1-missing's "No main heading"):
- * its detail, said plainly where Simple has words for it; a group whose detail is empty is named by the check, so no
- * cause is ever a blank.
+ * A cause as Where it is, Copy the list and the causes fixed since name it, where it's named by its detail
+ * (h1-missing's "No main heading"): its detail in plain words (plainDetails.ts: "It goes from the main heading to a
+ * level-3 heading, skipping level 2", never "H1 → H3"), or as the engine wrote it in a form no check writes; a group
+ * whose detail is empty is named by the check, so no cause is ever a blank.
  */
 export function causeName(check: Check, detail: string | null | undefined): string {
-  if (detail) return DETAIL_NAMES[check.id]?.[detail] ?? detail;
+  if (detail) return plainDetail(check, { detail }) ?? detail;
   return UNNAMED_CAUSES[check.id] ?? plainTitle(check);
 }
 

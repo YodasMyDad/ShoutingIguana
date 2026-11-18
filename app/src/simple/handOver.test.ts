@@ -220,17 +220,31 @@ describe('Copy the list', () => {
       'No main heading',
       '  https://example.com/faqs/',
       '  https://example.com/ccpa/',
-      'The main heading has no text',
+      'The main heading has no words',
       '  https://example.com/about/',
     ]);
     expect(said).toEqual(['Copied the list: 2 kinds of problem on 3 pages']);
+  });
+
+  // The fixit page's leftovers: a cause was handed on in the engine's words ("H1 → H3").
+  it('names each cause by its detail in plain words, as Where it is does', async () => {
+    const kinds = [group({ detail: 'H1 → H3', pages: 1 })];
+    const rowsOf = (): IssueRow[] => [{ id: 1, url: 'https://example.com/sofas/', detail: 'H1 → H3' }];
+    setTransport(groupedSidecar('heading-levels-skipped', kinds, rowsOf));
+    const text = await copied('heading-levels-skipped');
+    expect(text.slice(text.indexOf('Where it is:')).split('\n')).toEqual([
+      'Where it is:',
+      'It goes from the main heading to a level-3 heading, skipping level 2',
+      '  https://example.com/sofas/',
+    ]);
   });
 
   it('lists a check whose groups come back empty flat, as Where it is does', async () => {
     const rows = [{ id: 1, url: 'https://example.com/a/', detail: '404 Not Found' }];
     setTransport(groupedSidecar('internal-client-error', [], () => rows));
     const text = await copied('internal-client-error');
-    expect(text.endsWith('Where it is:\nhttps://example.com/a/ (404 Not Found)')).toBe(true);
+    // As the page says it: the engine's detail in plain words (plainDetails.ts).
+    expect(text.endsWith('Where it is:\nhttps://example.com/a/ (It is missing (404 Not Found))')).toBe(true);
   });
 
   it('lists a check that doesn’t group flat, with what was measured', () => {

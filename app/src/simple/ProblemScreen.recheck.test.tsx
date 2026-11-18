@@ -250,6 +250,28 @@ describe.skipIf(TABLE_STUBBED)('Fixed it?, after a recheck', () => {
     expect(await (await card()).findByText('Cut short: 1 of 5 rechecked. 1 fixed.')).toBeInTheDocument();
   });
 
+  // The fixit page's leftovers: what a page still has was said in the engine's words ("1 broken URL").
+  it('says what a page still has in plain words', async () => {
+    await open({
+      rechecks: [recheckRecord({ result: recheckResult() })],
+      rows: [
+        {
+          urlId: 31,
+          url: 'https://www.gardenfurnituresets.co.uk/sofas/',
+          role: 'judged',
+          outcome: 'still',
+          flaggedBefore: true,
+          detailBefore: '2 broken URLs',
+          detailAfter: '1 broken URL',
+          statusCode: 200,
+        },
+      ],
+    });
+    const fixed = await card();
+    expect(await fixed.findByText('· 1 broken link')).toBeInTheDocument();
+    expect(fixed.queryByText(/broken URL/)).toBeNull();
+  });
+
   it('never counts what couldn’t be rechecked as fixed', async () => {
     await open({ rechecks: [recheckRecord({ result: recheckResult({ fixed: 3, still: 0, notChecked: 2 }) })] });
     const fixed = await card();

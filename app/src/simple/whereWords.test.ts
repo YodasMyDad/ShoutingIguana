@@ -147,15 +147,29 @@ describe('a page’s own detail under its cause', () => {
 describe('a cause found by its detail, named', () => {
   it('names a detail the engine leaves empty, and says a heading’s plainly', () => {
     expect(causeName(check('h1-missing'), null)).toBe('No main heading');
-    expect(causeName(check('h1-missing'), 'The H1 has no text')).toBe('The main heading has no text');
+    expect(causeName(check('h1-missing'), 'The H1 has no text')).toBe('The main heading has no words');
     expect(causeName(check('blocked-by-robots'), null)).toBe('Kept out by the rules file');
     expect(causeName(check('broken-fragment-links'), null)).toBe('Links to a part of the same page that isn’t there');
   });
 
-  it('names any other empty detail by the check, and keeps a detail that says something', () => {
+  it('names any other empty detail by the check, and says a detail in plain words', () => {
     expect(causeName(check('open-graph-missing'), null)).toBe(check('open-graph-missing').plainTitle);
     expect(causeName(check('open-graph-missing'), '')).toBe(check('open-graph-missing').plainTitle);
-    expect(causeName(check('internal-client-error'), '404 Not Found')).toBe('404 Not Found');
+    // The fixit page's leftovers: a cause was headed by the engine's own words.
+    expect(causeName(check('internal-client-error'), '404 Not Found')).toBe('It is missing (404 Not Found)');
+    expect(causeName(check('heading-levels-skipped'), 'H1 → H3')).toBe(
+      'It goes from the main heading to a level-3 heading, skipping level 2',
+    );
+    expect(causeName(check('open-graph-missing'), 'Empty og:title')).toBe('For sharing, its title is empty');
+    expect(
+      causeName(check('structured-data-invalid'), `'…' is invalid after a value. Expected either ',', '}', or ']'.`),
+    ).toBe(
+      'The details for search engines have a mistake: a comma or closing bracket is missing, so search engines can’t read them',
+    );
+  });
+
+  it('keeps a detail in a form no check writes, never a blank', () => {
+    expect(causeName(check('internal-client-error'), 'Something new')).toBe('Something new');
   });
 });
 

@@ -31,6 +31,7 @@ import { Card } from '../ui/Card';
 import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { ProgressBar } from '../ui/ProgressBar';
 import { siteGroups } from './home/sites';
+import { plainDetail } from './plainEvidence';
 import { recheckCardState, type RecheckCardState } from './recheckCardState';
 import { pathOrigin } from './whereWords';
 
@@ -385,13 +386,13 @@ function Result({
     <div className="flex flex-col gap-3">
       <div role="status">
         <p className="text-16 text-text">{lines[0]}</p>
-        {listed ? <AddressList rows={still?.rows ?? []} item={item} /> : null}
+        {listed ? <AddressList rows={still?.rows ?? []} item={item} check={check} /> : null}
         {lines.slice(1).map((line) => (
           <p key={line} className="mt-1.5 text-14 leading-body text-text-secondary">
             {line}
           </p>
         ))}
-        {added && added.rows.length > 0 ? <AddressList rows={added.rows} item={item} /> : null}
+        {added && added.rows.length > 0 ? <AddressList rows={added.rows} item={item} check={check} /> : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         {meta.length > 0 ? <p className="min-w-0 flex-1 text-13 text-text-muted">{meta.join('  ')}</p> : null}
@@ -406,8 +407,11 @@ function Result({
   );
 }
 
-/** The addresses a result names: each by its path on the site, with what it says now and Open in the browser. */
-function AddressList({ rows, item }: { rows: readonly RecheckRow[]; item: CrawlListItem }) {
+/**
+ * The addresses a result names: each by its path on the site, with what it has now in plain words ("1 broken link",
+ * never the engine's "1 broken URL"), and Open in the browser.
+ */
+function AddressList({ rows, item, check }: { rows: readonly RecheckRow[]; item: CrawlListItem; check: Check }) {
   return (
     <ul className="mt-2 flex flex-col gap-1">
       {rows.map((row) => {
@@ -418,7 +422,11 @@ function AddressList({ rows, item }: { rows: readonly RecheckRow[]; item: CrawlL
             <span className="min-w-0 truncate font-medium" title={row.url}>
               {path}
             </span>
-            {row.detailAfter ? <span className="min-w-0 truncate text-text-secondary">· {row.detailAfter}</span> : null}
+            {row.detailAfter ? (
+              <span className="min-w-0 truncate text-text-secondary">
+                · {plainDetail(check, { detail: row.detailAfter }) ?? row.detailAfter}
+              </span>
+            ) : null}
             <OpenUrlButton url={row.url} />
           </li>
         );
