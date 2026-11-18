@@ -13,10 +13,10 @@ import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings } from '../settings/settingsStore';
 import { EVIDENCE_ANALYSIS, SITE, evidenceRoutes } from '../test/evidenceSidecar';
-import { TEST_CRAWL_ID, fakeSidecar, type FakeRoute } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
 import { issuesRoutes } from '../test/issuesSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
-import { SIMPLE_CHECKS } from '../test/simpleSidecar';
+import { SIMPLE_CHECKS, rowsPage } from '../test/simpleSidecar';
 import { TABLE_STUBBED } from './tableStubbed';
 
 const FIX = `/crawls/${TEST_CRAWL_ID}/issues`;
@@ -162,5 +162,53 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     expect(await where.findByText('1 language version on 1 page')).toBeVisible();
     expect(where.getByRole('columnheader', { name: 'Version that doesn’t link back' })).toBeVisible();
     expect(where.getByRole('columnheader', { name: 'Pages it should link back to' })).toBeVisible();
+  });
+
+  // The fixit index audit's X3: the codes that disagree were in no view.
+  it('says what a page’s detail adds to its cause, under the cause it’s about', async () => {
+    const detail = 'Names /fr/ as "fr"; /fr/ calls itself "fr-CA"';
+    const where = await open(
+      'hreflang-inconsistent-code',
+      catalogRoutes(
+        'hreflang-inconsistent-code',
+        1,
+        [
+          group({ relatedUrlId: 7, relatedUrl: `${SITE}/fr/`, pages: 1 }),
+          group({ relatedUrlId: 9, relatedUrl: `${SITE}/de/`, pages: 1 }),
+        ],
+        // The page names both: its detail is about the first, /fr/.
+        [
+          page(8, '/en/', { detail, relatedUrl: `${SITE}/fr/`, group: 7 }),
+          page(8, '/en/', { detail, relatedUrl: `${SITE}/fr/`, group: 9 }),
+        ],
+      ),
+    );
+    expect(await where.findAllByText('Page 8')).toHaveLength(2);
+    expect(await where.findByText(detail)).toBeVisible();
+    expect(where.getAllByText(detail)).toHaveLength(1);
+  });
+
+  it('says each page’s own detail under the kind of problem it’s an instance of', async () => {
+    // The group's rows keep each page's own detail, as the engine's do.
+    const rows = [page(1, '/plants/', { detail: '/plants/' }), page(2, '/sofas/', { detail: '/sofas/' })];
+    const where = await open('canonical-relative', [
+      ['POST', /\/issues\/canonical-relative\/rows$/, () => json(rowsPage(rows, rows.length))],
+      ...catalogRoutes('canonical-relative', 2, [group({ detail: 'Root-relative: starts with /', pages: 2 })], rows),
+    ]);
+    expect(await where.findByText('Root-relative: starts with /')).toBeVisible();
+    expect(await where.findByText('/plants/', { selector: '.si-row-detail' })).toBeVisible();
+    expect(where.getByText('/sofas/', { selector: '.si-row-detail' })).toBeVisible();
+  });
+
+  // The fixit index audit's X5: a check with nothing measured showed an empty "What was found" on every row.
+  it('leaves out "What was found" where nothing was', async () => {
+    const where = await open(
+      'canonical-missing',
+      catalogRoutes('canonical-missing', 2, [], [page(1, '/plants/'), page(2, '/sofas/')]),
+    );
+    expect(await where.findByText('Page 1')).toBeVisible();
+    expect(where.getByRole('columnheader', { name: 'Page' })).toBeVisible();
+    expect(where.queryByRole('columnheader', { name: 'What was found' })).toBeNull();
+    for (const cell of where.getAllByRole('cell')) expect(cell.textContent.trim()).not.toBe('');
   });
 });

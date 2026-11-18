@@ -1,6 +1,7 @@
 // What "Where it is" says under its list (docs/v2-ui-simple.md, "One problem"), and the site's origin its addresses are
 // shortened against. Pure. The closing audit's gap 12: it said "It is shown. Addresses are on gardenfurnituresets.co.uk."
 // of one cause, while the list showed every address in full (the pages were on www., the start address wasn't).
+import type { IssueGroup, IssueRow } from '../api/grids';
 import type { Check, CrawlListItem } from '../api/types';
 import { formatCount } from '../lib/format';
 import { plainTitle } from './plainWords';
@@ -102,6 +103,36 @@ export function sharedSourceAdvice(check: Pick<Check, 'id' | 'category'>): strin
     SHARED_SOURCE_ADVICE[check.id] ??
     (FIXED_WHERE_LINKED.has(check.category) ? 'Fix or remove the links there first.' : null)
   );
+}
+
+/**
+ * The checks grouped by related URL whose page detail says what the cause's facts don't: the language codes that
+ * disagree, the size a share image is under or over, a canonical loop's steps, a canonical forwarding back to the
+ * page, the page number naming page 1. Every other one's detail is a count, or the facts again.
+ */
+const DETAIL_SAYS_MORE: ReadonlySet<string> = new Set([
+  'hreflang-inconsistent-code',
+  'social-image-too-small',
+  'social-image-too-large',
+  'canonical-loop',
+  'canonical-to-redirect',
+  'canonical-to-first-page',
+]);
+
+/**
+ * Whether a page's own detail goes under it in a cause's list (the fixit index audit's X3): for a check grouped by
+ * what was found, where the page's detail isn't the group's (canonical-relative's "/plants/" under "Root-relative");
+ * for one grouped by related URL, where the detail says more than the facts and is about this cause (a page naming two
+ * versions has the detail of its first: it goes under that one only).
+ */
+export function rowDetailSaysMore(
+  check: Pick<Check, 'id' | 'grouping'>,
+  group: Pick<IssueGroup, 'detail' | 'relatedUrl'>,
+  row: Pick<IssueRow, 'detail' | 'relatedUrl'>,
+): boolean {
+  if (!row.detail) return false;
+  if (check.grouping === 'detail') return row.detail !== group.detail;
+  return DETAIL_SAYS_MORE.has(check.id) && (row.relatedUrl ?? null) === group.relatedUrl;
 }
 
 /** A detail's own name in Simple, where the engine's words aren't plain. */

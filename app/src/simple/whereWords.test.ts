@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { SIMPLE_CHECKS } from '../test/simpleSidecar';
-import { causeName, causeWords, causesWords, pathOrigin, sharedSourceAdvice, shownWords } from './whereWords';
+import {
+  causeName,
+  causeWords,
+  causesWords,
+  pathOrigin,
+  rowDetailSaysMore,
+  sharedSourceAdvice,
+  shownWords,
+} from './whereWords';
 
 const pages = (count: number) => (count === 1 ? 'page' : 'pages');
 const garden = { site: 'gardenfurnituresets.co.uk', startUrl: 'https://gardenfurnituresets.co.uk/' };
@@ -86,6 +94,52 @@ describe('what to do at the page linking to most of a check’s addresses', () =
     ]) {
       expect(sharedSourceAdvice(check(id))).toBeNull();
     }
+  });
+});
+
+// The fixit index audit's X3: related-URL groups hid the page's detail, though it said more than the cause's facts.
+describe('a page’s own detail under its cause', () => {
+  const fr = 'https://example.com/fr/';
+  const de = 'https://example.com/de/';
+  const codes = 'Names /fr/ as "fr"; /fr/ calls itself "fr-CA"';
+
+  it('goes under the cause it’s about where it says more than the facts', () => {
+    const inconsistent = check('hreflang-inconsistent-code');
+    expect(rowDetailSaysMore(inconsistent, { detail: null, relatedUrl: fr }, { detail: codes, relatedUrl: fr })).toBe(
+      true,
+    );
+    // The page names /de/ too: its detail is about /fr/, so it isn't said under /de/.
+    expect(rowDetailSaysMore(inconsistent, { detail: null, relatedUrl: de }, { detail: codes, relatedUrl: fr })).toBe(
+      false,
+    );
+    const small = { detail: 'og:image is 120 × 80 px, under 200 × 200', relatedUrl: fr };
+    expect(rowDetailSaysMore(check('social-image-too-small'), { detail: null, relatedUrl: fr }, small)).toBe(true);
+  });
+
+  it('stays out where it’s a count, or the facts again', () => {
+    const large = { detail: '1 image over 200 KB: 1.8 MB', relatedUrl: fr };
+    expect(rowDetailSaysMore(check('image-too-large'), { detail: null, relatedUrl: fr }, large)).toBe(false);
+    const broken = { detail: '1 broken URL', relatedUrl: fr };
+    expect(rowDetailSaysMore(check('broken-internal-links'), { detail: null, relatedUrl: fr }, broken)).toBe(false);
+    expect(
+      rowDetailSaysMore(check('hreflang-inconsistent-code'), { detail: null, relatedUrl: fr }, { detail: null }),
+    ).toBe(false);
+  });
+
+  it('goes under a kind of problem where the page’s instance isn’t the kind', () => {
+    const relative = check('canonical-relative');
+    const kind = { detail: 'Root-relative: starts with /', relatedUrl: null };
+    expect(rowDetailSaysMore(relative, kind, { detail: '/plants/', relatedUrl: null })).toBe(true);
+    expect(
+      rowDetailSaysMore(
+        check('internal-client-error'),
+        { detail: '404 Not Found', relatedUrl: null },
+        {
+          detail: '404 Not Found',
+          relatedUrl: null,
+        },
+      ),
+    ).toBe(false);
   });
 });
 
