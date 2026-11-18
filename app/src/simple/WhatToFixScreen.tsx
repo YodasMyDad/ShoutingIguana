@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
-import { ArrowDownWideNarrow, ChevronDown, Copy, FileText } from 'lucide-react';
+import { ArrowDownWideNarrow, ChevronDown, Copy, FileText, Store } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, rechecksQuery } from '../api/queries';
 import type { Recheck } from '../api/fixLoop';
@@ -9,7 +9,7 @@ import { fixedGroupTitle } from '../changes/changeWords';
 import { FixedSince } from './FixedSince';
 import { FIXED_SECTION, clearedByRechecks, fixedSinceEntries, type FixedEntry } from './fixedSinceEntries';
 import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
-import { isCrawling, type Analysis, type Check, type Severity } from '../api/types';
+import { isCrawling, type Analysis, type Check, type PlatformOwner, type Severity } from '../api/types';
 import { crawlName, crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -26,6 +26,7 @@ import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
 import { SeverityWord } from '../ui/SeverityWord';
@@ -39,14 +40,17 @@ import {
   plainTitle,
   rowCountWords,
   rowPointsWords,
+  skippedGroupWords,
+  skippedListWords,
 } from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
 import { useKeepsPlace } from './scrollPlace';
-import { plainResults, type PlainResults } from './results';
+import { plainResults, type PlainResults, type PlatformEntry, type SkippedGroup } from './results';
 import { ProblemRow } from './SummaryParts';
-import { useOneFix } from './useOneFix';
+import { useOneFix, useOneFixCovers } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
 import { updateSettings, useSettings } from '../settings/settingsStore';
+import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
 import { fixRows, PLAIN_CHECK_SORTS, type FixRow } from './fixRows';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
@@ -258,6 +262,8 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
             </div>
           ) : null}
         </header>
+        {/* Once, at the top: Shopify turned pages away from the whole check (owner's ruling, 2026-11-18). */}
+        <ShopifyPrompt crawlId={crawlId} mode="simple" className="mb-4" />
         {body}
       </div>
     </div>
@@ -328,12 +334,18 @@ function FixLists({
   const nothingAbove = results.counts.error + results.counts.warning === 0;
   const [allLooks, setAllLooks] = useState(landed === 'notice');
   const [passedOpen, setPassedOpen] = useState(landed === 'passed');
+  // A reason more than one check couldn't run for lists its checks on demand; landing on the part opens them all.
+  const everySkipped = () => new Set(results.skipped.map(skippedKey));
+  const [skippedOpen, setSkippedOpen] = useState<ReadonlySet<string>>(() =>
+    landed === 'skipped' ? everySkipped() : new Set(),
+  );
   // Landing on a part of the list (a count on the Summary): it opens if it folds, and comes into view with focus.
   const [lastHash, setLastHash] = useState(hash);
   if (hash !== lastHash) {
     setLastHash(hash);
     if (landed === 'notice') setAllLooks(true);
     if (landed === 'passed') setPassedOpen(true);
+    if (landed === 'skipped') setSkippedOpen(everySkipped());
     if (hash.replace(/^#/, '') === FIXED_SECTION) setFixedOpen(true);
   }
   const headings = useRef(new Map<CheckOutcome, HTMLHeadingElement>());
@@ -347,8 +359,13 @@ function FixLists({
   const parts = partsOf(results, analysis, sort);
   const looks = nothingAbove || allLooks ? parts.notice : parts.notice.slice(0, LOOK_FIRST);
   // Every problem the keys move through, a folded one after the one it's folded under.
-  const shown = [...parts.error, ...parts.warning, ...looks].flatMap((row) => [row.entry, ...row.nested]);
+  const shown = [
+    ...[...parts.error, ...parts.warning, ...looks].flatMap((row) => [row.entry, ...row.nested]),
+    // What the site's platform sets, listed apart after them.
+    ...results.platform.map(({ entry }) => entry),
+  ];
   const oneFix = useOneFix(crawlId, shown);
+  const covers = useOneFixCovers(crawlId, shown);
 
   // J and K: the problem the keys are on, and its link, which Enter opens.
   const [current, setCurrent] = useState<number | null>(null);
@@ -391,15 +408,23 @@ function FixLists({
     link?.focus({ preventScroll: true });
   }, [landedOnNew, firstNew, hash]);
 
-  const rowFor = (entry: CheckEntry, index: number, points: number | null, nested = false) => (
+  const rowFor = (
+    entry: CheckEntry,
+    index: number,
+    points: number | null,
+    nested = false,
+    platform: PlatformOwner | null = null,
+  ) => (
     <li key={entry.check.id} className={nested ? 'si-plain-list__nested' : undefined}>
       <ProblemRow
         crawlId={crawlId}
         entry={entry}
         results={results}
-        oneFix={oneFix.has(entry.check.id)}
+        oneFix={!platform && oneFix.has(entry.check.id)}
+        oneFixCovers={platform ? null : covers.get(entry.check.id)}
         points={points}
         nested={nested}
+        platform={platform}
         change={changes.wordsOf(entry.check.id)}
         ref={(element: HTMLAnchorElement | null) => {
           links.current[index] = element;
@@ -481,6 +506,25 @@ function FixLists({
           </Card>
         </section>
       ) : null}
+      {platformParts(results.platform).map(({ name, entries }) => (
+        // Apart from the problems: what only the site's platform can change, each with its reason, never to fix.
+        <section key={name} aria-labelledby={platformSection(name)} className="mb-6">
+          <h2 id={platformSection(name)} tabIndex={-1} className="si-simple-h2 scroll-mt-4">
+            <Icon icon={Store} className="text-text-muted" />
+            Set by {name} <span className="si-simple-h2__count">{formatCount(entries.length)}</span>
+          </h2>
+          <p className="mt-1.5 mb-3 max-w-(--measure-text) text-14 text-text-secondary">
+            {entries.length === 1
+              ? 'Nothing for you to change, and it doesn’t change the score.'
+              : 'Nothing for you to change, and they don’t change the score.'}
+          </p>
+          <Card className="overflow-hidden">
+            <PlainCheckList>
+              {entries.map(({ entry, owner }) => rowFor(entry, index++, null, false, owner))}
+            </PlainCheckList>
+          </Card>
+        </section>
+      ))}
       {fixed ? (
         <FixedSince
           crawlId={crawlId}
@@ -496,24 +540,55 @@ function FixLists({
           {sectionHead('skipped', results.skippedCount)}
           <Card className="overflow-hidden">
             <PlainCheckList>
-              {results.skipped.flatMap((group) =>
-                group.entries.map((entry) => (
-                  <li key={entry.check.id}>
-                    <PlainCheckRow
-                      asChild
-                      outcome="skipped"
-                      quiet
-                      title={looksForWords(entry.check)}
-                      summary={[group.reason?.plainText ?? group.reason?.text, group.reason?.plainAction]
-                        .filter(Boolean)
-                        .join(' ')}
-                      count="Not checked"
-                    >
-                      <Link to={ROUTE} params={{ crawl: crawlId, check: entry.check.id }} />
-                    </PlainCheckRow>
-                  </li>
-                )),
-              )}
+              {results.skipped.flatMap((group) => {
+                const key = skippedKey(group);
+                const open = skippedOpen.has(key);
+                const many = group.entries.length > 1;
+                const toggle = () =>
+                  setSkippedOpen((current) => {
+                    const next = new Set(current);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  });
+                // One check: its row says why. More: the reason once, on a row of its own, and their rows on demand.
+                const rows =
+                  !many || open
+                    ? group.entries.map((entry) => (
+                        <li key={entry.check.id} className={many ? 'si-plain-list__nested' : undefined}>
+                          <PlainCheckRow
+                            asChild
+                            outcome="skipped"
+                            quiet
+                            className={many ? 'si-plain-row--nested' : undefined}
+                            title={looksForWords(entry.check)}
+                            summary={many ? undefined : skippedReason(group)}
+                            count="Not checked"
+                          >
+                            <Link to={ROUTE} params={{ crawl: crawlId, check: entry.check.id }} />
+                          </PlainCheckRow>
+                        </li>
+                      ))
+                    : [];
+                return many
+                  ? [
+                      <li key={`reason-${key}`}>
+                        <PlainCheckRow
+                          outcome="skipped"
+                          quiet
+                          title={skippedGroupWords(group.entries.length)}
+                          summary={skippedReason(group)}
+                          count={
+                            <Button variant="ghost" size="sm" icon={ChevronDown} aria-expanded={open} onClick={toggle}>
+                              {skippedListWords(group.entries.length, open)}
+                            </Button>
+                          }
+                        />
+                      </li>,
+                      ...rows,
+                    ]
+                  : rows;
+              })}
             </PlainCheckList>
           </Card>
         </section>
@@ -561,6 +636,24 @@ function FixLists({
   );
 }
 
+/** A reason checks couldn't run for, by its code: what keeps its checks' rows open. */
+const skippedKey = (group: SkippedGroup) => group.code ?? '';
+
+/** Why a reason's checks couldn't run, and what would let them, in Simple's words. */
+function skippedReason(group: SkippedGroup): string {
+  return [group.reason?.plainText ?? group.reason?.text, group.reason?.plainAction].filter(Boolean).join(' ');
+}
+
+/** What the site's platform sets, a part a platform ("Shopify"), in the list's order. */
+function platformParts(platform: readonly PlatformEntry[]): { name: string; entries: PlatformEntry[] }[] {
+  const parts = new Map<string, PlatformEntry[]>();
+  for (const each of platform) parts.set(each.owner.name, [...(parts.get(each.owner.name) ?? []), each]);
+  return [...parts].map(([name, entries]) => ({ name, entries }));
+}
+
+/** The id of a platform's part: "set-by-shopify". */
+const platformSection = (name: string) => `set-by-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
 /** A part's mark beside its heading: decorative, as the heading's words say it. */
 function OutcomeMark({ outcome }: { outcome: CheckOutcome }) {
   return (
@@ -598,12 +691,28 @@ async function copyWhatToFix(
     }
     lines.push('');
   }
+  // Apart from the problems: what the site's platform sets, with its reason, as the list shows it.
+  for (const { name, entries } of platformParts(results.platform)) {
+    lines.push(`Set by ${name} (${formatCount(entries.length)})`);
+    for (const { entry, owner } of entries) {
+      lines.push(
+        `- ${plainTitle(entry.check)}: ${rowCountWords(entry.check, entry.count ?? 0).text}${changeOf(entry.check.id)}. ${owner.reason}`,
+      );
+    }
+    lines.push('');
+  }
   if (results.skippedCount > 0) {
     lines.push(`${HEADINGS.skipped} (${formatCount(results.skippedCount)})`);
     for (const group of results.skipped) {
-      for (const entry of group.entries) {
-        lines.push(`- ${looksForWords(entry.check)}: ${group.reason?.plainText ?? group.reason?.text ?? ''}`.trimEnd());
+      const reason = group.reason?.plainText ?? group.reason?.text ?? '';
+      const [only] = group.entries;
+      if (group.entries.length === 1 && only) {
+        lines.push(`- ${looksForWords(only.check)}: ${reason}`.trimEnd());
+        continue;
       }
+      // A reason many share, once, with its checks under it.
+      lines.push(`- ${skippedGroupWords(group.entries.length)}: ${reason}`.trimEnd());
+      for (const entry of group.entries) lines.push(`  - ${looksForWords(entry.check)}`);
     }
   }
   const copied = await copyText(lines.join('\n').trimEnd());

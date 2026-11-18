@@ -197,6 +197,16 @@ public sealed partial class SyntheticSite
         });
         plants.Add(new Plant(PLANTS_PATH + "wide.png", 200, Linked: false, InSitemap: false, [],
             () => new SyntheticResponse(200, "image/png", null, WIDE_PNG, null), IsPage: false));
+
+        // The same wide file, lazy-loaded as a Shopify theme's lazysizes does: its other sizes are in data-srcset, which the
+        // script copies to srcset, so phones get a smaller file. Clean (the real-site audit's false flag).
+        Page("image-lazy-srcset", "Lazy srcset image", [], page => page with
+        {
+            Content = page.Content + $"<img class=\"lazyload\" src=\"{PLANTS_PATH}lazy-wide.png\" data-srcset=\"{PLANTS_PATH}lazy-wide.png?width=400 400w, " +
+                      $"{PLANTS_PATH}lazy-wide.png 1200w\" data-sizes=\"auto\" alt=\"A lazy-loaded wide photo\" width=\"600\" height=\"400\">"
+        });
+        plants.Add(new Plant(PLANTS_PATH + "lazy-wide.png", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "image/png", null, WIDE_PNG, null), IsPage: false));
         Page("image-legacy", "Image in an older format", ["image-legacy-format"], page => page with
         {
             Content = page.Content + $"<img src=\"{PLANTS_PATH}legacy.png\" alt=\"A photo in an older format\" width=\"640\" height=\"480\">"

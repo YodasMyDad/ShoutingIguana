@@ -46,17 +46,51 @@ public sealed class TextHreflangCheckTests
     [Fact]
     public void HeadingsAreJudgedOnIndexablePagesWithAnH1()
     {
-        Assert.Equal("H1 → H3", Detail("<h1>Main</h1><h3>Third</h3>", IssueCatalog.HEADING_LEVELS_SKIPPED));
+        Assert.Equal("H1 → H3: \"Third\"", Detail("<h1>Main</h1><h3>Third</h3>", IssueCatalog.HEADING_LEVELS_SKIPPED));
         Assert.Null(Detail("<h2>No H1 at all</h2><h4>Is h1-missing's</h4>", IssueCatalog.HEADING_LEVELS_SKIPPED));
         Assert.Null(Detail("<h6>Your cart</h6><h1>Main</h1><h2>Part</h2>", IssueCatalog.HEADING_LEVELS_SKIPPED));
         Assert.Equal("The H1 is an image: \"Store logo\"", Detail("<h1><img src=\"/l.png\" alt=\"Store logo\"></h1>", IssueCatalog.H1_IMAGE_ONLY));
         Assert.Null(Detail("<h1><img src=\"/l.png\" alt=\"Store logo\"> Sofas</h1>", IssueCatalog.H1_IMAGE_ONLY));
-        Assert.Equal("H2 of 72 characters, over 70", Detail($"<h1>Short</h1><h2>{new string('a', 72)}</h2>", IssueCatalog.HEADING_TOO_LONG));
+        Assert.Equal($"H2 of 72 characters, over 70: \"{new string('a', 72)}\"", Detail($"<h1>Short</h1><h2>{new string('a', 72)}</h2>", IssueCatalog.HEADING_TOO_LONG));
         Assert.Null(Detail($"<h1>Short</h1><h3>{new string('a', 90)}</h3>", IssueCatalog.HEADING_TOO_LONG));
         var words = string.Join(' ', Enumerable.Repeat("word", 520));
         Assert.Equal("521 words, no H2", Detail($"<h1>Long</h1><p>{words}</p>", IssueCatalog.H2_MISSING));
         Assert.Null(Detail($"<h1>Long</h1><h2>Part</h2><p>{words}</p>", IssueCatalog.H2_MISSING));
         Assert.Null(Detail("<h1>Main</h1><h3>Third</h3>", IssueCatalog.HEADING_LEVELS_SKIPPED, IndexabilityReason.Noindex));
+    }
+
+    /// <summary>
+    /// The real-site audit's case: 98 pages said only "H1 → H4", never which heading. The detail quotes the heading skipped
+    /// to, and its group is the step alone, so a template's pages are one group whatever their headings say.
+    /// </summary>
+    [Fact]
+    public void ASkippedLevelQuotesTheHeadingAndGroupsByTheStep()
+    {
+        var detail = Detail("<h1>Garden sofas</h1><h4>Out Of Stock</h4><h2>Details</h2>", IssueCatalog.HEADING_LEVELS_SKIPPED);
+        Assert.Equal("H1 → H4: \"Out Of Stock\"", detail);
+        Assert.Equal("H1 → H4", IssueCatalog.HEADING_LEVELS_SKIPPED.FaultOf!(detail!));
+        Assert.Equal("H1 → H4", IssueCatalog.HEADING_LEVELS_SKIPPED.FaultOf!("H1 → H4"));
+        Assert.Equal(18, IssueCatalog.HEADING_LEVELS_SKIPPED.FaultsSince);
+
+        // A heading with no text has nothing to quote; a long one is cut.
+        Assert.Equal("H2 → H4", Detail("<h1>Main</h1><h2>Part</h2><h4></h4>", IssueCatalog.HEADING_LEVELS_SKIPPED));
+        Assert.Equal($"H1 → H3: \"{new string('a', 59)}…\"", Detail($"<h1>Main</h1><h3>{new string('a', 90)}</h3>", IssueCatalog.HEADING_LEVELS_SKIPPED));
+    }
+
+    /// <summary>
+    /// The real-site audit's case: an H2 too long was shown beside the page's H1, which was short, so the heading to
+    /// shorten was nowhere. The detail quotes it, as much of it as fits the detail's 120 characters.
+    /// </summary>
+    [Fact]
+    public void AHeadingTooLongIsQuotedInTheDetail()
+    {
+        const string BENCH = "Toddington Steel Garden Bench Heavy-Duty Powder Coated 3 Seater in Antique Bronze Finish";
+        Assert.Equal($"H2 of 88 characters, over 70: \"{BENCH}\"", Detail($"<h1>Garden benches</h1><h2>{BENCH}</h2>", IssueCatalog.HEADING_TOO_LONG));
+
+        var detail = Detail($"<h1>{string.Join(' ', Enumerable.Repeat("Sofa", 60))}</h1>", IssueCatalog.HEADING_TOO_LONG)!;
+        Assert.Equal(RuleText.DETAIL_MAX, detail.Length);
+        Assert.StartsWith("H1 of 299 characters, over 70: \"Sofa Sofa", detail, StringComparison.Ordinal);
+        Assert.EndsWith("…\"", detail, StringComparison.Ordinal);
     }
 
     [Fact]

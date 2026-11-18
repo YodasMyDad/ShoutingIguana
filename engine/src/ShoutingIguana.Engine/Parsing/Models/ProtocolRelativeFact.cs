@@ -5,7 +5,7 @@ public sealed record ProtocolRelativeFact(int Count, string First)
 {
     /// <summary>
     /// How many of them are in no link of the page's (a resource hint such as <c>preconnect</c>, a <c>&lt;base&gt;</c>):
-    /// the rest are in the links marked <see cref="LinkFlags.ProtocolRelative"/>. Counted from collection 6 on
+    /// the rest are in the links marked <see cref="LinkFlags.ProtocolRelative"/>. Counted from collection 7 on
     /// (<see cref="PageFacts.CURRENT_COLLECTION"/>); 0 for a page parsed before.
     /// </summary>
     public int Unlinked { get; init; }

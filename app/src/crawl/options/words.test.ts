@@ -23,6 +23,27 @@ describe('what happens to a proxy password and header values', () => {
     }
   });
 
+  it('says it of a Shopify signature when that is the secret: forgotten on closing, or kept until it ends', () => {
+    expect(rememberWords('simple', false, 'signature').help).toBe(
+      'This signature is forgotten when you close Shouting Iguana. It’s never saved with your results.',
+    );
+    expect(rememberWords('simple', true, 'signature').help).toBe(
+      'Windows keeps this signature safe until it ends, and the next check of this shop uses it, so you won’t paste it again.',
+    );
+    expect(rememberWords('advanced', false, 'signature').help).toBe(
+      'This signature is forgotten when you close Shouting Iguana. Never in the crawl file or your saved defaults.',
+    );
+    expect(rememberWords('advanced', true, 'signature').help).toBe(
+      'Kept in Windows Credential Manager until it ends: a stopped crawl continues with it, and the next crawl of this store fills it in. Never in the crawl file or your saved defaults.',
+    );
+    for (const mode of ['simple', 'advanced'] as const) {
+      for (const checked of [true, false]) {
+        expect(rememberWords(mode, checked, 'signature').label).toBe('Remember in Windows Credential Manager');
+        expect(rememberWords(mode, checked, 'signature').help).not.toMatch(/sign-in|proxy|header/i);
+      }
+    }
+  });
+
   it('never says the secrets aren’t kept: it says where they are, and that the crawl file never has them', () => {
     for (const field of ['headers', 'proxyUrl'] as const) {
       expect(FIELD_WORDS[field].help).not.toMatch(/aren’t kept/);

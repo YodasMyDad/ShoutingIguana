@@ -20,6 +20,33 @@ public sealed class SocialCheckTests
 
     private const string CARD = "<meta name=\"twitter:card\" content=\"summary_large_image\">";
 
+    /// <summary>
+    /// The real-site audit's case: "2 og:title" didn't say what the two were. The detail quotes each tag's different values,
+    /// cut so every tag's count fits, and its group is the counts alone, so a theme and a plugin both writing them is one
+    /// group whatever each page's titles are.
+    /// </summary>
+    [Fact]
+    public void ATagGivenTwiceQuotesItsValuesAndGroupsByTheTags()
+    {
+        var detail = Detail(CARD + OPEN_GRAPH + "<meta property=\"og:title\" content=\"Sofas | Shop\"><meta property=\"og:title\" content=\"Sofas\">",
+            IssueCatalog.SOCIAL_TAGS_MULTIPLE);
+        Assert.Equal("3 og:title: \"Sofas\" · \"Sofas | Shop\"", detail);
+        Assert.Equal("3 og:title", IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultOf!(detail!));
+        Assert.Equal(18, IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultsSince);
+
+        var long1 = string.Join(' ', Enumerable.Repeat("Garden", 20));
+        var long2 = string.Join(' ', Enumerable.Repeat("Bench", 20));
+        var both = Detail(CARD + OPEN_GRAPH +
+            $"<meta property=\"og:title\" content=\"{long1}\"><meta property=\"og:description\" content=\"{long2}\"><meta property=\"og:type\" content=\"product\">" +
+            "<meta property=\"og:type\" content=\"website\">", IssueCatalog.SOCIAL_TAGS_MULTIPLE)!;
+        Assert.True(both.Length <= RuleText.DETAIL_MAX, both);
+        Assert.Matches("^2 og:title: \"Sofas\" · \"Garden[^\"]*…\"; 2 og:description: \"All our[^\"]*\" · \"Bench[^\"]*…\"; 2 og:type: \"product\" · \"website\"$", both);
+        Assert.Equal("2 og:title, 2 og:description, 2 og:type", IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultOf!(both));
+
+        // An earlier engine's detail was the counts.
+        Assert.Equal("2 og:title, 2 twitter:card", IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultOf!("2 og:title, 2 twitter:card"));
+    }
+
     [Fact]
     public void AMetaTagSaysWhetherItWasWrittenAsAProperty()
     {
@@ -73,7 +100,7 @@ public sealed class SocialCheckTests
         Assert.Null(Detail(CARD + OPEN_GRAPH + "<meta property=\"og:url\" content=\"https://EXAMPLE.com/page\">", IssueCatalog.OG_URL_NOT_CANONICAL));
         Assert.Null(Detail(CARD + OPEN_GRAPH + "<meta property=\"og:url\" content=\"/page\">", IssueCatalog.OG_URL_NOT_CANONICAL));
 
-        Assert.Equal("2 og:title, 2 twitter:card",
+        Assert.Equal("2 og:title: \"Sofas\" · \"Chairs\"; 2 twitter:card: \"summary_large_image\" · \"summary\"",
             Detail(CARD + OPEN_GRAPH + "<meta property=\"og:title\" content=\"Chairs\"><meta name=\"twitter:card\" content=\"summary\">", IssueCatalog.SOCIAL_TAGS_MULTIPLE));
         Assert.Null(Detail(CARD + OPEN_GRAPH + "<meta property=\"og:title\" content=\"Sofas\"><meta property=\"og:image\" content=\"https://example.com/2.jpg\">",
             IssueCatalog.SOCIAL_TAGS_MULTIPLE));

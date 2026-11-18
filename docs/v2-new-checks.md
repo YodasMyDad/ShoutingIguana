@@ -370,7 +370,7 @@ Links · **Warning**: what's reached only through them is invisible to search en
   element. A review widget's `<span href="javascript:void(0)">` and a theme's `<a href="">Read more</a>` were flagged, and
   lead nowhere a search engine could go (an empty href is the page itself). *Changed by the site-owner audit
   (2026-11-18):* each says where on the page it is (content, navigation, header, footer or sidebar),
-  `“Shop” (onclick, header)`, from collection 6's facts; a page parsed before doesn't.
+  `“Shop” (onclick, header)`, from collection 7's facts; a page parsed before doesn't.
 - **Standard:** Google, "Make your links crawlable": Google "can only crawl your link if it's an `<a>` HTML element with an
   href attribute"; `<a onclick>`, `<span href>`, `<a routerLink>` and `javascript:` hrefs are "not recommended".
 - **Data:** `PageFacts.UncrawlableLinks` (new).
@@ -1222,8 +1222,8 @@ Security · **Notice** · Low · P/RU/T
   links to or loads written that way (grouped by them); one in no link puts the page in the group naming no URL too.
 - **Standard:** none read *(unverified)*: on an HTTPS page they load over HTTPS anyway, so the fault is only that an
   HTTP copy of the page would load them insecurely. HSTS: RFC 6797.
-- **Data:** `PageFacts.ProtocolRelativeUrls` (new; `Unlinked` and `FirstUnlinked` from collection 6), and the link flag
-  `ProtocolRelative` (collection 6). A page parsed before names no URL.
+- **Data:** `PageFacts.ProtocolRelativeUrls` (new; `Unlinked` and `FirstUnlinked` from collection 7), and the link flag
+  `ProtocolRelative` (collection 7). A page parsed before names no URL.
 - **Plant:** `protocol-relative`: `<script src="//{host}/static/app.js">`, a `<link rel="preconnect">` to the partner
   site written `//`, and a link to the thin page written `//` beside one written with its scheme. Expected **1**; over
   HTTPS, **0** at revision 1, whose home page sends HSTS.

@@ -26,6 +26,7 @@ import {
 import { ProxyTest } from './ProxyTest';
 import { RememberSecrets, type RememberSecretsProps } from './RememberSecrets';
 import { ShopifyAccessFields } from './ShopifyAccessFields';
+import { EMPTY_SIGNATURE } from './shopifySignature';
 import type { FormErrors } from './useValidation';
 import { FIELD_WORDS, SIMPLE_WORDS, USER_AGENT_NAMES, sectionSummary, speedTitle, speedWords } from './words';
 
@@ -49,6 +50,8 @@ export interface CrawlOptionsFormProps {
   now?: Date | undefined;
   /** How many pages Shopify refused on the site's last crawl, said in the Shopify part, which opens by itself. */
   shopifyLastRefused?: number | null | undefined;
+  /** The signature remembered for the store being checked: said while the form holds it. */
+  shopifySaved?: { signatureInput: string; signature: string } | null | undefined;
   /**
    * The option to remember the proxy's password and the headers' values (step 3b), where the form's secrets are kept:
    * with the proxy in Advanced; in Simple, which shows neither, only when the form holds one (from the defaults).
@@ -113,6 +116,7 @@ function SimpleQuestions({
   remember,
   now,
   shopifyLastRefused,
+  shopifySaved,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -244,10 +248,16 @@ function SimpleQuestions({
             onTouch={() => onTouch?.('signatures')}
             now={now}
             lastRefused={shopifyLastRefused}
+            saved={shopifySaved}
           />
         </div>
       </Fold>
-      {remember && formHasSecrets(form) ? <RememberSecrets {...remember} /> : null}
+      {remember && formHasSecrets(form) ? (
+        <RememberSecrets
+          {...remember}
+          subject={formHasSecrets({ ...form, signatures: EMPTY_SIGNATURE }) ? 'secrets' : 'signature'}
+        />
+      ) : null}
     </div>
   );
 }
@@ -278,6 +288,7 @@ function AdvancedSections({
   remember,
   now,
   shopifyLastRefused,
+  shopifySaved,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -437,9 +448,10 @@ function AdvancedSections({
               onTouch={() => onTouch?.('signatures')}
               now={now}
               lastRefused={shopifyLastRefused}
+              saved={shopifySaved}
             />
             {remember && formHasSecrets({ ...form, proxyUrl: '', headers: [] }) ? (
-              <RememberSecrets {...remember} />
+              <RememberSecrets {...remember} subject="signature" />
             ) : null}
           </>,
         )}

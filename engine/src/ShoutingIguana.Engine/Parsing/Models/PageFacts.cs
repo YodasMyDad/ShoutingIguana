@@ -15,12 +15,15 @@ public sealed record PageFacts
     /// 6's: whether an image is a data: URI and its size, and whether it's in a picture with other sources (and the page's
     /// Microdata, batch 5's, which only adds what an earlier page lacks). 3 is batch 7's: the page's forms, and its href
     /// and src values written without a scheme. 4 is batch 8's: whether a heading is an image's alt, the main text's
-    /// placeholder, sentences and syllables, and the whole body's words. 6 is the fix loop's (2026-11-18): which links are
+    /// placeholder, sentences and syllables, and the whole body's words. 5 is batch 9's: whether a meta tag is written as
+    /// property= only, and share images as links of their own. 6 is the fixit page's: an image without a URL's class and
+    /// place, a lazy-loaded srcset (data-srcset) counted as a srcset, and the line of each structure error.
+    /// 7 is the fixit links' part's: which links are
     /// written without a scheme (<see cref="LinkFlags.ProtocolRelative"/>), how many such values are in no link
     /// (<see cref="ProtocolRelativeFact.Unlinked"/>), and where on the page each link search engines can't follow is
     /// (<see cref="UncrawlableLinkFact.Position"/>).
     /// </summary>
-    public const int CURRENT_COLLECTION = 6;
+    public const int CURRENT_COLLECTION = 7;
 
     /// <summary>
     /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed
@@ -59,8 +62,9 @@ public sealed record PageFacts
     public IReadOnlyList<string> HeadTagsInBody { get => _headTagsInBody ?? []; init => _headTagsInBody = value; }
 
     /// <summary>
-    /// The document's structure errors as the parser met them, each described: <c>2 &lt;head&gt; tags</c>, <c>2 &lt;body&gt;
-    /// tags</c>, <c>&lt;html&gt; after content</c>. A body the parser made up for a stray element in the head, then the page's
+    /// The document's structure errors as the parser met them, each described with the line of the tag at fault: <c>2
+    /// &lt;head&gt; tags (the second on line 14)</c>, <c>2 &lt;body&gt; tags (the second on line 40)</c>, <c>&lt;html&gt; after
+    /// content (on line 2)</c>; a page parsed before collection 6 has no lines. A body the parser made up for a stray element in the head, then the page's
     /// own &lt;body&gt; tag, is one body. Empty with none, and for a page crawled before they were noted.
     /// </summary>
     public IReadOnlyList<string> StructureErrors { get => _structureErrors ?? []; init => _structureErrors = value; }

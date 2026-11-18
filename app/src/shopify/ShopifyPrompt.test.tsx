@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
 import type { ShopifyAccess } from '../api/types';
 import { resetPendingRechecks } from '../crawl/recheck';
-import { keptSecrets, resetSessionSecretsForTests, setSecretsStore } from '../crawl/secrets';
+import { keptSecrets, resetSessionSecretsForTests, setSecretsStore, type SecretsStore } from '../crawl/secrets';
 import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { ShopifyPrompt } from './ShopifyPrompt';
@@ -121,6 +121,39 @@ describe('the Shopify prompt in the results', () => {
     });
     expect((await keptSecrets(`crawl:${TEST_CRAWL_ID}`))?.signatures).toEqual({
       'shop.example': { signatureInput: INPUT, signature: SIGNATURE },
+    });
+  });
+
+  it('remembers the signature for the store when Remember is ticked, and says what happens to it either way', async () => {
+    const kept = new Map<string, string>();
+    const store: SecretsStore = {
+      read: (key) => Promise.resolve(kept.get(key) ?? null),
+      write: (key, secrets) => {
+        if (secrets === null) kept.delete(key);
+        else kept.set(key, secrets);
+        return Promise.resolve();
+      },
+    };
+    setSecretsStore(store);
+    renderPrompt(STORE, 'advanced');
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a Shopify signature' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add a Shopify signature' });
+    expect(
+      within(dialog).getByText(
+        'This signature is forgotten when you close Shouting Iguana. Never in the crawl file or your saved defaults.',
+      ),
+    ).toBeVisible();
+
+    await userEvent.type(within(dialog).getByLabelText('Signature-Input'), INPUT);
+    await userEvent.type(within(dialog).getByLabelText('Signature'), SIGNATURE);
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Remember in Windows Credential Manager' }));
+    expect(within(dialog).getByText(/^Kept in Windows Credential Manager until it ends/)).toBeVisible();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Recheck these 8 URLs' }));
+
+    await waitFor(() => expect(kept.get('shopify:shop.example')).toBeDefined());
+    expect(JSON.parse(kept.get('shopify:shop.example') ?? '{}')).toEqual({
+      signatureInput: INPUT,
+      signature: SIGNATURE,
     });
   });
 });

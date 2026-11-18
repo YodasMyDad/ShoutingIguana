@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(18, AnalysisFreshness.VERSION);
+        Assert.Equal(19, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -87,16 +87,36 @@ public sealed class AnalysisFreshnessTests
     }
 
     /// <summary>
-    /// Version 18 (17 is the Shopify lane's) names each URL <c>protocol-relative-links</c> counts as the issue's targets,
-    /// doesn't flag an HTTPS page the home page's HSTS covers, and says where each uncrawlable link is. An analysis 16 or
-    /// 17 stored is out of date.
+    /// Version 17 marks the checks of what a Shopify store's platform sets as Shopify's, out of the score and Fix first, and
+    /// says Shopify's reason and the fix in the note for the pages a store refused. An analysis 16 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeWhatShopifySetsIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 18 (the page part's; 17 is the Shopify lane's phase B) quotes in a detail what the check found (the heading
+    /// too long or skipped to, the repeated share tags' values, which JSON-LD block failed and where), and groups three
+    /// checks by the fault their detail shows. An analysis 17 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeTheQuotedDetailsIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 17 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 19 (the links part's) names each URL <c>protocol-relative-links</c> counts as the issue's targets, doesn't
+    /// flag an HTTPS page the home page's HSTS covers, and says where each uncrawlable link is. An analysis 18 stored is
+    /// out of date.
     /// </summary>
     [Fact]
     public void AnAnalysisFromBeforeProtocolRelativeTargetsIsOutOfDate()
     {
-        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
-        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 17 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 18 }, CRAWLED, new AnalysisSettings()));
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 18 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 19 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

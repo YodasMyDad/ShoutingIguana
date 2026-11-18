@@ -3,12 +3,14 @@
 // events, which update the screens.
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
-import type { CrawlListItem, CrawlOptions, CrawlStatus } from '../api/types';
+import type { CrawlListItem, CrawlOptions, CrawlSignature, CrawlStatus } from '../api/types';
 import { crawlToast, notifyError, notifyResult } from '../feedback/notify';
 import { liveStore } from '../live/liveStore';
 import { getMode } from '../mode/mode';
 import { siteName } from '../simple/home/sites';
 import { sendableHeaders, withScheme } from './options/form';
+import { startHostOf } from './options/shopifySignature';
+import { savedShopifySignature } from './secrets';
 
 /**
  * Pause, Resume and Stop act on a crawl this sidecar is running: `crawl-busy` says it isn't (it ended, or another
@@ -51,9 +53,15 @@ export function openSettingsAction(id: string): { label: string; onClick: () => 
 }
 
 /** Continues a stopped crawl. When its headers or proxy password must be given again, says so plainly. */
-export async function continueCrawl(id: string, options: { skipMissingHeaders?: boolean } = {}): Promise<boolean> {
+export async function continueCrawl(
+  id: string,
+  options: { skipMissingHeaders?: boolean; signatures?: Record<string, CrawlSignature> } = {},
+): Promise<boolean> {
   try {
-    await api.continueCrawl(id, options.skipMissingHeaders ? { skipMissingHeaders: true } : {});
+    await api.continueCrawl(id, {
+      ...(options.skipMissingHeaders ? { skipMissingHeaders: true } : {}),
+      ...(options.signatures ? { signatures: options.signatures } : {}),
+    });
     return true;
   } catch (error) {
     if (isProblem(error, 'needs-secrets')) {
@@ -191,11 +199,27 @@ export async function quickStartUrl(address: string): Promise<string> {
   return startUrlFor(trimmed, options);
 }
 
+/**
+ * The defaults' signatures, with the one remembered for the start address's store (lane shopify) when they have none
+ * for it: a store the user ticked Remember for is checked with its signature until it ends.
+ */
+async function signaturesFor(startUrl: string, given: CrawlOptions['signatures']): Promise<CrawlOptions['signatures']> {
+  const host = startHostOf(startUrl);
+  if (host === null || given?.[host]) return given;
+  const saved = await savedShopifySignature(host, new Date());
+  return saved ? { ...given, [host]: saved.signature } : given;
+}
+
 export async function startCrawl(
   startUrl: string,
 ): Promise<{ ok: true; item: CrawlListItem } | { ok: false; fieldErrors: Record<string, string[]> }> {
   try {
-    return { ok: true, item: await api.startCrawl({ options: { ...(await defaultsToSend()), startUrl } }) };
+    const defaults = await defaultsToSend();
+    const signatures = await signaturesFor(startUrl, defaults.signatures);
+    return {
+      ok: true,
+      item: await api.startCrawl({ options: { ...defaults, startUrl, ...(signatures ? { signatures } : {}) } }),
+    };
   } catch (error) {
     if (isProblem(error, 'invalid-options')) return { ok: false, fieldErrors: error.errors };
     notifyError(error);

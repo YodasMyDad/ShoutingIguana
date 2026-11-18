@@ -74,7 +74,8 @@ internal sealed class CrawlData(CrawlManager crawls, ReadCache cache)
                     Causes = causes?.GetValueOrDefault(check.Id)?.Causes,
                     TemplateCauses = causes?.GetValueOrDefault(check.Id)?.InTemplate,
                     Clears = causes?.GetValueOrDefault(check.Id) is { } found ? [.. found.Clears.Select(cleared => new ClearedCheckDto(cleared.CheckId, cleared.Pages, cleared.All))] : [],
-                    Files = check.About is not null && files?.GetValueOrDefault(check.Id) is { } named ? [.. named.Select(file => new IssueFileDto(file.Url, file.SitemapId))] : null
+                    Files = check.About is not null && files?.GetValueOrDefault(check.Id) is { } named ? [.. named.Select(file => new IssueFileDto(file.Url, file.SitemapId))] : null,
+                    Platform = results.PlatformOwned.GetValueOrDefault(check.Id) is { } platform ? new PlatformDto(platform.Name, platform.Reason) : null
                 })
         ];
         ran.AddRange(counts.Keys.Where(checkId => IssueCatalog.Find(checkId) is null).Order(StringComparer.Ordinal)

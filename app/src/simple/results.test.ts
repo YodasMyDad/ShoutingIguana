@@ -19,6 +19,7 @@ import {
   summarySentence,
 } from './plainWords';
 import { plainResults, siteWideLead } from './results';
+import { SHOPIFY_OWNER, SHOPIFY_SET, platformOwned } from '../test/platformSidecar';
 
 const NONE = new Set<string>();
 const check = (id: string) => SIMPLE_CHECKS.checks.find((candidate) => candidate.id === id)!;
@@ -214,5 +215,46 @@ describe('the Summary’s sentence in every state', () => {
   it('a check that ended before reading the whole site doesn’t say only a few pages were found', () => {
     const covers = { ...GARDEN_ANALYSIS.score!.covers, pages: 6, complete: false, reason: 'stopped' as const };
     expect(coverageSentences(covers).join(' ')).not.toMatch(/Only 6 pages were found/);
+  });
+});
+
+// The Shopify lane, phase B: what only the site's platform can change keeps its count, but isn't a problem to fix.
+describe('what the site’s platform sets', () => {
+  const owned = platformOwned(GARDEN_ANALYSIS);
+  const results = plainResults(SIMPLE_CHECKS, owned, NONE);
+
+  it('leaves it out of the problems and their counts, and out of the five to fix first', () => {
+    expect(results.counts).toEqual({ error: 2, warning: 4, notice: 19 });
+    for (const id of SHOPIFY_SET) expect(ids(results.found.notice)).not.toContain(id);
+    expect(ids(results.fixFirst)).toEqual([
+      'internal-client-error',
+      'broken-internal-links',
+      'image-too-large',
+      'title-duplicate',
+      'slow-response',
+    ]);
+    expect(results.ifFixed).toBe(99);
+  });
+
+  it('lists it apart, each with who sets it and why, and still counts it among the checks that ran', () => {
+    expect(results.platform.map(({ entry, owner }) => [entry.check.id, entry.count, owner])).toEqual([
+      ['cookies-insecure', 2, SHOPIFY_OWNER],
+      ['security-headers-missing', 1, SHOPIFY_OWNER],
+      ['security-headers-weak', 1, SHOPIFY_OWNER],
+    ]);
+    const { error, warning, notice } = results.counts;
+    expect(results.passed.length + error + warning + notice + results.platform.length).toBe(results.ran);
+  });
+
+  it('lists nothing apart for an analysis that names no platform', () => {
+    expect(plainResults(SIMPLE_CHECKS, GARDEN_ANALYSIS, NONE).platform).toEqual([]);
+  });
+
+  it('keeps a check hidden in Advanced hidden, whoever sets it', () => {
+    const hidden = plainResults(SIMPLE_CHECKS, owned, new Set(['cookies-insecure']));
+    expect(hidden.platform.map(({ entry }) => entry.check.id)).toEqual([
+      'security-headers-missing',
+      'security-headers-weak',
+    ]);
   });
 });

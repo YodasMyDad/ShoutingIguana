@@ -391,7 +391,7 @@ internal static class UrlQueryCompiler
         }
 
         // A fault's issues name no other URL, so a group with one has none of them.
-        if (definition is not { Grouping: IssueGrouping.PageDetail, FaultOf: not null })
+        if (definition is not { Grouping: IssueGrouping.PageDetail } || !scope.FaultsStored(definition))
         {
             return null;
         }
@@ -785,7 +785,8 @@ internal static class UrlQueryCompiler
             var check = parameter(checks[0]);
             condition = $"issue = {check}";
             var grouping = IssueCatalog.Find(checks[0])!.Grouping;
-            stored = StoredGroup(new GridScope(checks[0], group, grouping) { TargetsStored = scope.TargetsStored }, group.Detail, group.RelatedUrlId, check, parameter);
+            stored = StoredGroup(new GridScope(checks[0], group, grouping) { TargetsStored = scope.TargetsStored, AnalysisVersion = scope.AnalysisVersion },
+                group.Detail, group.RelatedUrlId, check, parameter);
             if (stored is null && grouping is IssueGrouping.PageDetail or IssueGrouping.ResponseDetail)
             {
                 condition += $" AND detail IS {parameter((object?)group.Detail ?? DBNull.Value)}";

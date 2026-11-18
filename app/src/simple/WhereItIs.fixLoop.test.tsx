@@ -25,7 +25,7 @@ import { TABLE_STUBBED } from './tableStubbed';
 
 const PROBLEM = `/crawls/${TEST_CRAWL_ID}/issues/broken-internal-links`;
 
-async function open(extra: FakeRoute[], item = comparedGardenItem()) {
+async function open(extra: FakeRoute[], item = comparedGardenItem(), path = PROBLEM) {
   replaceSettings({ mode: 'simple', hiddenChecks: [] });
   setTransport(
     fakeSidecar([
@@ -37,7 +37,7 @@ async function open(extra: FakeRoute[], item = comparedGardenItem()) {
     ]),
   );
   const queryClient = createQueryClientWithoutBackoff();
-  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [PROBLEM] }));
+  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
   return within(await screen.findByRole('region', { name: 'Where it is' }, { timeout: 10_000 }));
@@ -82,6 +82,40 @@ describe.skipIf(TABLE_STUBBED)('Where it is since the last check', () => {
     expect(where.getByRole('list', { name: 'Not checked this time' })).toHaveTextContent(
       '/gone-quiet/· Its page wasn’t read this time',
     );
+  });
+
+  // The fixit page's leftovers: a cause fixed since was named by the engine's detail ("H1 → H3").
+  it('names a cause fixed since by its detail in plain words', async () => {
+    const comparison = gardenComparison();
+    // The sidecar's groups of a check grouped by what was found: by their detail then.
+    const fixedGroups: FakeRoute = [
+      'POST',
+      /\/issues\/heading-levels-skipped\/fixed$/,
+      () =>
+        json({
+          checkId: 'heading-levels-skipped',
+          compared: {
+            with: comparison.with.id,
+            startedAt: comparison.with.startedAt,
+            comparable: comparison.comparable,
+          },
+          level: 'groups',
+          total: 1,
+          offset: 0,
+          groups: [
+            { detail: 'H1 → H3', relatedUrl: null, sharedText: null, then: 2, fixed: 2, gone: 0, notChecked: 0 },
+          ],
+        }),
+    ];
+    const where = await open(
+      [changesRoute(comparison), fixedGroups],
+      comparedGardenItem(),
+      `/crawls/${TEST_CRAWL_ID}/issues/heading-levels-skipped`,
+    );
+    fireEvent.click(await where.findByRole('button', { name: 'Fixed since 17 Oct (1)' }));
+    const list = where.getByRole('list', { name: 'Fixed since 17 Oct' });
+    expect(list).toHaveTextContent('It goes from the main heading to a level-3 heading, skipping level 2');
+    expect(list).not.toHaveTextContent('H1 → H3');
   });
 
   it('marks nothing when only the totals are compared, nor for a first check', async () => {

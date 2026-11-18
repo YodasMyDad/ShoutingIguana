@@ -1,12 +1,15 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
 /// HTTPS and mixed content on every page. Site-wide settings (HTTPS itself, security headers) are checked once, on
-/// the home page, instead of repeating the same finding on every URL.
+/// the home page, instead of repeating the same finding on every URL. On a page Shopify served (its headers say so), the
+/// security headers and the cookies Shopify sets are Shopify's, which the store's owner can't change: their issues say so
+/// (<see cref="IssueHit.Platform"/>). A cookie of any other name leaves the page's cookie issue the site's own.
 /// </summary>
 /// <param name="hsts">The HSTS the home page sends, which keeps browsers off an HTTP copy of the site's HTTPS pages.</param>
 internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IPageRule
@@ -20,6 +23,7 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         var isHttps = page.Uri.Scheme == Uri.UriSchemeHttps;
+        var platform = ShopifySignals.FromHeaders(page.Headers) is null ? null : ShopifySignals.OWNER;
         if (page.UrlId == urls.HomeId)
         {
             if (!isHttps)
@@ -30,12 +34,12 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
             var missing = MissingHeaders(page, isHttps);
             if (missing.Count > 0)
             {
-                yield return new IssueHit(IssueCatalog.SECURITY_HEADERS_MISSING, page.UrlId, $"Missing {string.Join(", ", missing)}");
+                yield return new IssueHit(IssueCatalog.SECURITY_HEADERS_MISSING, page.UrlId, $"Missing {string.Join(", ", missing)}") { Platform = platform };
             }
 
             if (WeakHeaders(page, isHttps) is { Count: > 0 } weak)
             {
-                yield return new IssueHit(IssueCatalog.SECURITY_HEADERS_WEAK, page.UrlId, RuleText.Fit(string.Join("; ", weak)));
+                yield return new IssueHit(IssueCatalog.SECURITY_HEADERS_WEAK, page.UrlId, RuleText.Fit(string.Join("; ", weak))) { Platform = platform };
             }
         }
         else if (!isHttps && urls[urls.HomeId].IsHttps)
@@ -45,7 +49,10 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
 
         if (InsecureCookies(page, isHttps) is { Count: > 0 } cookies)
         {
-            yield return new IssueHit(IssueCatalog.COOKIES_INSECURE, page.UrlId, RuleText.Fit(string.Join("; ", cookies)));
+            yield return new IssueHit(IssueCatalog.COOKIES_INSECURE, page.UrlId, RuleText.Fit(string.Join("; ", cookies.Select(cookie => cookie.Fault))))
+            {
+                Platform = cookies.All(cookie => ShopifySignals.STOREFRONT_COOKIES.Contains(cookie.Name)) ? platform : null
+            };
         }
 
         if (InsecureForm(page.Facts.Forms, isHttps) is { } form)
@@ -153,11 +160,12 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
 
     /// <summary>
     /// The page's cookies set without basic protection: on HTTPS without Secure; SameSite=None without Secure, which
-    /// browsers refuse; and a session or login cookie (by its name) without HttpOnly. "sessionid: no Secure, no HttpOnly".
+    /// browsers refuse; and a session or login cookie (by its name) without HttpOnly. Each by its name, with what it lacks:
+    /// "sessionid: no Secure, no HttpOnly".
     /// </summary>
-    private static List<string> InsecureCookies(AnalyzedPage page, bool isHttps)
+    private static List<(string Name, string Fault)> InsecureCookies(AnalyzedPage page, bool isHttps)
     {
-        List<string> faults = [];
+        List<(string Name, string Fault)> faults = [];
         foreach (var cookie in page.Headers.Where(header => header.Name == "set-cookie").Select(header => header.Value))
         {
             var parts = cookie.Split(';').Select(part => part.Trim()).ToList();
@@ -183,7 +191,7 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
 
             if (lacking.Count > 0)
             {
-                faults.Add($"{RuleText.Cut(name, 40)}: {string.Join(", ", lacking)}");
+                faults.Add((name, $"{RuleText.Cut(name, 40)}: {string.Join(", ", lacking)}"));
             }
         }
 

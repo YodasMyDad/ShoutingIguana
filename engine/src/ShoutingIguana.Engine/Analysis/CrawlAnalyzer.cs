@@ -221,11 +221,28 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     : $"{notChecked:N0} URLs weren't checked because their sites had stopped answering, so links to them aren't judged.");
             }
 
-            if (rateLimited > 0)
+            // A Shopify store's refusals have Shopify's reason and fix; the rest, the site's asking to slow down.
+            var shopifyUnsigned = rateLimited == 0 ? 0 : reader.CountRateLimitedSaying(ShopifySignals.UNSIGNED_REFUSAL);
+            var shopifySigned = rateLimited == 0 ? 0 : reader.CountRateLimitedSaying(ShopifySignals.SIGNED_REFUSAL);
+            if (shopifyUnsigned > 0)
             {
-                notes.Add(rateLimited == 1
+                notes.Add(shopifyUnsigned == 1
+                    ? $"1 URL wasn't checked because Shopify limits crawlers without a signature (429 Too Many Requests), so links to it aren't judged. {ShopifySignals.HOW_TO_SIGN.Replace("check them", "check it", StringComparison.Ordinal).Replace("recheck them", "recheck it", StringComparison.Ordinal)}"
+                    : $"{shopifyUnsigned:N0} URLs weren't checked because Shopify limits crawlers without a signature (429 Too Many Requests), so links to them aren't judged. {ShopifySignals.HOW_TO_SIGN}");
+            }
+
+            if (shopifySigned > 0)
+            {
+                notes.Add(shopifySigned == 1
+                    ? $"1 URL wasn't checked because Shopify refused the crawler's signature (429 Too Many Requests), so links to it aren't judged. {ShopifySignals.HOW_TO_RESIGN.Replace("recheck them", "recheck it", StringComparison.Ordinal)}"
+                    : $"{shopifySigned:N0} URLs weren't checked because Shopify refused the crawler's signature (429 Too Many Requests), so links to them aren't judged. {ShopifySignals.HOW_TO_RESIGN}");
+            }
+
+            if (rateLimited - shopifyUnsigned - shopifySigned is > 0 and var slowedDown)
+            {
+                notes.Add(slowedDown == 1
                     ? "1 URL wasn't checked because its site kept asking the crawler to slow down (429 Too Many Requests), so links to it aren't judged. Check the site again later, or at the Polite speed."
-                    : $"{rateLimited:N0} URLs weren't checked because their sites kept asking the crawler to slow down (429 Too Many Requests), so links to them aren't judged. Check the site again later, or at the Polite speed.");
+                    : $"{slowedDown:N0} URLs weren't checked because their sites kept asking the crawler to slow down (429 Too Many Requests), so links to them aren't judged. Check the site again later, or at the Polite speed.");
             }
 
             if (privateAddresses > 0)
@@ -436,7 +453,10 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         // The not-in-sitemap check runs only when every sitemap was read: then the summary can say a URL isn't in one.
         var committed = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes, skips, urls,
             sitemapsCovered: !skipped.ContainsKey(IssueCatalog.NOT_IN_SITEMAP), incomplete, progress);
-        var issues = checks.Select(issue => new IssueCount(issue, committed.Counts.GetValueOrDefault(issue.Id))).ToList();
+        var issues = checks.Select(issue => new IssueCount(issue, committed.Counts.GetValueOrDefault(issue.Id))
+        {
+            Platform = committed.PlatformOwned.GetValueOrDefault(issue.Id)
+        }).ToList();
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks, score {Score}",
             pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0), committed.Score?.Value);

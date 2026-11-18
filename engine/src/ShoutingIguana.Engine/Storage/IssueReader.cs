@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
@@ -86,8 +87,37 @@ public static class IssueReader
             ReadNotes(connection, snapshot),
             ReadSkippedChecks(connection, snapshot, analysis))
         {
-            Score = ReadScore(connection, snapshot, analysis)
+            Score = ReadScore(connection, snapshot, analysis),
+            PlatformOwned = ReadPlatformOwned(connection, snapshot)
         };
+    }
+
+    /// <summary>
+    /// The checks the analysis found were all of what the site's platform set, with the platform and why. None from an
+    /// engine from before them, whose issue_types lack the columns, or leave them null in every row it writes.
+    /// </summary>
+    private static Dictionary<string, PlatformOwner> ReadPlatformOwned(SqliteConnection connection, SqliteTransaction? transaction)
+    {
+        Dictionary<string, PlatformOwner> owned = new(StringComparer.Ordinal);
+        using (var columns = Command(connection, transaction, "SELECT COUNT(*) FROM pragma_table_info('issue_types') WHERE name IN ('platform', 'platform_reason')"))
+        {
+            if (Convert.ToInt32(columns.ExecuteScalar(), CultureInfo.InvariantCulture) != 2)
+            {
+                return owned;
+            }
+        }
+
+        using var command = Command(connection, transaction, "SELECT id, platform, platform_reason FROM issue_types WHERE platform IS NOT NULL AND url_count > 0");
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (reader.GetValue(1) is string name && reader.GetValue(2) is string reason)
+            {
+                owned[reader.GetString(0)] = new PlatformOwner(name, reason);
+            }
+        }
+
+        return owned;
     }
 
     /// <summary>One page of the URLs flagged with an issue, in crawl order.</summary>

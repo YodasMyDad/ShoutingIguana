@@ -462,6 +462,19 @@ export interface CheckCount {
    * analysis from before files were stored (show the page then); left out by a sidecar from before it.
    */
   files?: CheckFile[] | null;
+  /**
+   * What only the site's platform can change (the Shopify lane, phase B): security-headers-missing and -weak, and
+   * cookies-insecure when every cookie it flags is Shopify's. Such a check keeps its count but is out of the score's
+   * `lines`, its `ifFixed` and `fixFirst`: show `reason` as given, and never as a thing to fix. Null otherwise; left out
+   * by an older sidecar.
+   */
+  platform?: PlatformOwner | null;
+}
+
+/** Who sets what a check found, where the site's owner can't change it, and why, in words to show as they are. */
+export interface PlatformOwner {
+  name: string;
+  reason: string;
 }
 
 /** A robots.txt or sitemap a check of the site's own files is about. */

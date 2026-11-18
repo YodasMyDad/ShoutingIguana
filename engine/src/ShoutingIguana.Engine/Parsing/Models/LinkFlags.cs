@@ -22,7 +22,7 @@ public enum LinkFlags : byte
 
     /// <summary>
     /// Written without its scheme (<c>//cdn.example.com/app.js</c>), so it takes the page's. Noted by pages parsed from
-    /// collection 6 on (<see cref="PageFacts.CURRENT_COLLECTION"/>).
+    /// collection 7 on (<see cref="PageFacts.CURRENT_COLLECTION"/>).
     /// </summary>
     ProtocolRelative = 128
 }

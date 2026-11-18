@@ -17,7 +17,14 @@ namespace ShoutingIguana.Engine.Crawling;
 /// section <see cref="GIVE_UP_AFTER"/> after the rest of the crawl is over: what is left is stored as not checked, as
 /// refused if it was asked and answered 429, and as never asked (<see cref="RetryingFetcher.NEVER_ASKED_ERROR"/>) if its
 /// turn hadn't come. A try that would come after that comes as the time runs out instead, so each section has its last
-/// try then, and no wait says a try comes later than that.
+/// try then, and no wait says a try comes later than that. Time the crawl spends paused is no part of those 20 minutes.
+/// <para>
+/// A Shopify store refuses a crawler without a signature for as long as it asks, and every try renews its penalty, so
+/// waiting gets nothing: a section on a store the crawl has no signature for (<see cref="ShopifyWatch.IsUnsignedShopify"/>)
+/// isn't asked while the rest of the crawl goes on, and once that is over it has one more try, after the pause the store
+/// asked for (at most <see cref="SHOPIFY_RETRY_CAP"/>), and is given up on. A signed crawl the store refuses keeps the
+/// polite path.
+/// </para>
 /// </summary>
 internal sealed class SectionTrickle(
     HostGateRegistry gates,
@@ -26,10 +33,17 @@ internal sealed class SectionTrickle(
     ICrawlObserver observer,
     PauseGate pause,
     TimeProvider timeProvider,
-    ILogger logger)
+    ILogger logger,
+    Func<TimeSpan>? timeCrawled = null)
 {
     /// <summary>How long the held-back sections may go on once the rest of the crawl is over: each has its last try as it ends.</summary>
     public static readonly TimeSpan GIVE_UP_AFTER = TimeSpan.FromMinutes(20);
+
+    /// <summary>
+    /// The longest an unsigned crawl of a Shopify store waits, once the rest is over, for a limited section's one more try:
+    /// the Retry-After the store asked for (a minute, as Shopify asks), at most this.
+    /// </summary>
+    public static readonly TimeSpan SHOPIFY_RETRY_CAP = TimeSpan.FromMinutes(2);
 
     /// <summary>429s in a row, at a section's slowest pace, that give it up.</summary>
     public const int GIVE_UP_FAILURES = 3;
@@ -45,6 +59,11 @@ internal sealed class SectionTrickle(
     private int _held;
     private int _heldLinked;
     private DateTimeOffset? _restOverAt;
+
+    // Time spent paused since the rest was over, by the run's own clock of the time it spent crawling: the sections' time
+    // runs out that much later.
+    private TimeSpan _pausedSinceRestOver;
+    private TimeSpan _crawledAtRestOver;
 
     /// <summary>URLs held back now, not counting one being asked.</summary>
     public int Held => Volatile.Read(ref _held);
@@ -87,7 +106,7 @@ internal sealed class SectionTrickle(
             isNew = !_lines.TryGetValue(section, out var line);
             if (line is null)
             {
-                line = new Line(scope.HostName(UrlNormalizer.GetHost(uri)));
+                line = new Line(scope.HostName(UrlNormalizer.GetHost(uri)), uri);
                 _lines[section] = line;
             }
 
@@ -108,7 +127,11 @@ internal sealed class SectionTrickle(
     {
         lock (_sync)
         {
-            _restOverAt ??= now;
+            if (_restOverAt is null)
+            {
+                _restOverAt = now;
+                _crawledAtRestOver = timeCrawled?.Invoke() ?? TimeSpan.Zero;
+            }
         }
     }
 
@@ -118,12 +141,11 @@ internal sealed class SectionTrickle(
         var now = timeProvider.GetUtcNow();
         lock (_sync)
         {
-            var timeRunsOut = TimeRunsOutAt();
             return
             [
-                .. _lines.Where(line => line.Value.Waiting.Count > 0).Select(line => (Line: line.Value, Section: line.Key, Due: line.Key.NextDueBy(timeRunsOut)))
+                .. _lines.Where(line => line.Value.Waiting.Count > 0).Select(line => (Line: line.Value, Section: line.Key, Due: DueAt(line.Key, line.Value)))
                     .Select(line => new CrawlWait(CrawlWaitReason.SectionLimited, line.Line.Host, Urls: line.Line.Waiting.Count,
-                        Duration: line.Due > now ? line.Due - now : TimeSpan.Zero, Section: line.Section.Path))
+                        Duration: line.Due is not { } due ? null : due > now ? due - now : TimeSpan.Zero, Section: line.Section.Path))
             ];
         }
     }
@@ -135,7 +157,7 @@ internal sealed class SectionTrickle(
     {
         while (true)
         {
-            await pause.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await WaitWhilePausedAsync(cancellationToken).ConfigureAwait(false);
             var now = timeProvider.GetUtcNow();
             foreach (var givenUp in GiveUp(now))
             {
@@ -171,15 +193,51 @@ internal sealed class SectionTrickle(
         }
     }
 
+    /// <summary>Waits out a pause, and counts it once the rest is over: the sections' time doesn't run while the crawl is paused.</summary>
+    private async Task WaitWhilePausedAsync(CancellationToken cancellationToken)
+    {
+        if (!pause.IsPaused)
+        {
+            return;
+        }
+
+        var pausedAt = timeProvider.GetUtcNow();
+        await pause.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var now = timeProvider.GetUtcNow();
+        lock (_sync)
+        {
+            if (_restOverAt is not { } over)
+            {
+                return;
+            }
+
+            // The run's clock of the time spent crawling stops as the pause begins, which may be a little before this loop
+            // saw it: the time since the rest was over that wasn't crawling was paused. In whole seconds, so it moves only
+            // with a pause. Without that clock, the pause as seen here.
+            var paused = timeCrawled is null
+                ? _pausedSinceRestOver + (now - pausedAt)
+                : now - over - (timeCrawled() - _crawledAtRestOver);
+            var whole = TimeSpan.FromSeconds(Math.Floor(paused.TotalSeconds));
+            if (whole > _pausedSinceRestOver)
+            {
+                _pausedSinceRestOver = whole;
+            }
+        }
+    }
+
     /// <summary>A URL whose turn has come, taken from the front of its section's line: at the latest as the time runs out.</summary>
     private (SectionPace Section, FrontierItem Item, PageRecord? Last)? Take(DateTimeOffset now)
     {
         lock (_sync)
         {
-            var timeRunsOut = TimeRunsOutAt();
             foreach (var (section, line) in _lines)
             {
-                if (line.Waiting.First is { } first && section.TryStart(now, timeRunsOut))
+                if (IsWaitingForTheRest(line))
+                {
+                    continue;
+                }
+
+                if (line.Waiting.First is { } first && section.TryStart(now, TimeRunsOutAt(section, line)))
                 {
                     line.Waiting.RemoveFirst();
                     Count(first.Value.Item, -1);
@@ -210,9 +268,9 @@ internal sealed class SectionTrickle(
         List<PageRecord> givenUp = [];
         lock (_sync)
         {
-            var timeRunsOut = TimeRunsOutAt();
             foreach (var (section, line) in _lines.Where(line => line.Value.Waiting.Count > 0))
             {
+                var timeRunsOut = TimeRunsOutAt(section, line);
                 // As the time runs out, a section's last try comes first: it is given up on once that try has started.
                 var timeRanOut = now >= timeRunsOut && section.LastTurn >= timeRunsOut;
                 if (!timeRanOut && !section.IsRefusingEverything(GIVE_UP_FAILURES))
@@ -252,8 +310,8 @@ internal sealed class SectionTrickle(
     {
         lock (_sync)
         {
-            var timeRunsOut = TimeRunsOutAt();
-            var next = _lines.Where(line => line.Value.Waiting.Count > 0).Select(line => line.Key.NextDueBy(timeRunsOut)).DefaultIfEmpty(DateTimeOffset.MaxValue).Min();
+            var next = _lines.Where(line => line.Value.Waiting.Count > 0).Select(line => DueAt(line.Key, line.Value) ?? DateTimeOffset.MaxValue)
+                .DefaultIfEmpty(DateTimeOffset.MaxValue).Min();
             if (next == DateTimeOffset.MaxValue)
             {
                 return IDLE;
@@ -264,8 +322,26 @@ internal sealed class SectionTrickle(
         }
     }
 
-    /// <summary>When the held-back sections' time runs out, once the rest of the crawl is over. Called under the lock.</summary>
-    private DateTimeOffset? TimeRunsOutAt() => _restOverAt + GIVE_UP_AFTER;
+    /// <summary>
+    /// When a held-back section's time runs out, once the rest of the crawl is over, paused time aside: 20 minutes on, or for
+    /// a Shopify store the crawl has no signature for, the pause it asked for (<see cref="SHOPIFY_RETRY_CAP"/> at most).
+    /// Called under the lock.
+    /// </summary>
+    private DateTimeOffset? TimeRunsOutAt(SectionPace section, Line line) =>
+        _restOverAt + (IsUnsignedShopify(line) ? ShopifyWait(section) : GIVE_UP_AFTER) + _pausedSinceRestOver;
+
+    /// <summary>When a section's next try comes, or null while it waits for the rest of the crawl. Called under the lock.</summary>
+    private DateTimeOffset? DueAt(SectionPace section, Line line) =>
+        IsWaitingForTheRest(line) ? null : section.NextDueBy(TimeRunsOutAt(section, line));
+
+    /// <summary>A section of an unsigned Shopify store isn't asked until the rest of the crawl is over. Called under the lock.</summary>
+    private bool IsWaitingForTheRest(Line line) => _restOverAt is null && IsUnsignedShopify(line);
+
+    private bool IsUnsignedShopify(Line line) => processor.Shopify.IsUnsignedShopify(line.Sample);
+
+    /// <summary>The pause the store asked for, as the section learned it, at least a second and at most <see cref="SHOPIFY_RETRY_CAP"/>.</summary>
+    private static TimeSpan ShopifyWait(SectionPace section) =>
+        section.Interval < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : section.Interval > SHOPIFY_RETRY_CAP ? SHOPIFY_RETRY_CAP : section.Interval;
 
     private void Count(FrontierItem item, int change)
     {
@@ -285,10 +361,13 @@ internal sealed class SectionTrickle(
 
     private static bool IsRateLimited(PageRecord record) => RateLimitedErrors.IsRateLimited(record.Response.Error);
 
-    /// <summary>One section's URLs waiting their turn, oldest first, and its host as progress names it.</summary>
-    private sealed class Line(string host)
+    /// <summary>One section's URLs waiting their turn, oldest first, its host as progress names it, and one of its URLs.</summary>
+    private sealed class Line(string host, Uri sample)
     {
         public string Host => host;
+
+        /// <summary>A URL of the section, for what is known of its host (a Shopify store's, signed or not).</summary>
+        public Uri Sample => sample;
 
         public LinkedList<(FrontierItem Item, PageRecord? Last)> Waiting { get; } = new();
     }

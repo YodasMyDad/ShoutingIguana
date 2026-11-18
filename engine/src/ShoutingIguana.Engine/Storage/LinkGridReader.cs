@@ -853,7 +853,7 @@ public static class LinkGridReader
             }
         }
 
-        var scope = GridScope.AllUrls with { TargetsStored = context.HasIssueTargets };
+        var scope = GridScope.AllUrls with { TargetsStored = context.HasIssueTargets, AnalysisVersion = context.Analysis?.AnalysisVersion ?? 0 };
         if (!context.Summary.Available)
         {
             UrlSort[] targetSort = sort is null ? [] : [sort with { Column = sort.Column[LinkColumns.TO.Length..] }];

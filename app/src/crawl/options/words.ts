@@ -95,10 +95,32 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
 /** Simple's words for the settings it asks about (docs/v2-ui-simple.md, New crawl in each mode). */
 /**
  * The option to remember a proxy's password and the headers' values (step 3b): off until the user ticks it. What
- * happens either way, in each mode's words: Simple's are plain, with no jargon.
+ * happens either way, in each mode's words: Simple's are plain, with no jargon. Said of a Shopify signature where that
+ * is the secret (lane shopify): remembered, it's kept for its store until it ends.
  */
-export function rememberWords(mode: 'simple' | 'advanced', checked: boolean): FieldWords {
+export function rememberWords(
+  mode: 'simple' | 'advanced',
+  checked: boolean,
+  subject: 'secrets' | 'signature' = 'secrets',
+): FieldWords {
   const label = 'Remember in Windows Credential Manager';
+  if (subject === 'signature') {
+    const forgotten = 'This signature is forgotten when you close Shouting Iguana.';
+    if (mode === 'simple') {
+      return {
+        label,
+        help: checked
+          ? 'Windows keeps this signature safe until it ends, and the next check of this shop uses it, so you won’t paste it again.'
+          : `${forgotten} It’s never saved with your results.`,
+      };
+    }
+    return {
+      label,
+      help: checked
+        ? 'Kept in Windows Credential Manager until it ends: a stopped crawl continues with it, and the next crawl of this store fills it in. Never in the crawl file or your saved defaults.'
+        : `${forgotten} Never in the crawl file or your saved defaults.`,
+    };
+  }
   if (mode === 'simple') {
     return {
       label,

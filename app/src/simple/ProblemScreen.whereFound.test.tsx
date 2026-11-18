@@ -10,17 +10,44 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
-import { analysisWith, gardenItem, problemRoutes, simpleRoutes } from '../test/simpleSidecar';
+import {
+  BROKEN_ADDRESSES,
+  analysisWith,
+  gardenItem,
+  groupPage,
+  issuePage,
+  problemRoutes,
+  rowsPage,
+  simpleRoutes,
+} from '../test/simpleSidecar';
 import { TABLE_STUBBED } from './tableStubbed';
 
 const FIX = `/crawls/${TEST_CRAWL_ID}/issues`;
-const ANALYSIS = analysisWith({ 'internal-client-error': 4, 'empty-anchor-text': 265 }, {});
+const ANALYSIS = analysisWith(
+  {
+    'internal-client-error': 4,
+    'empty-anchor-text': 265,
+    'blocked-by-robots': 4,
+    'non-indexable-inlinks-only': 4,
+  },
+  {},
+);
 
-async function open(path: string) {
+/** The four addresses /garden-furniture/'s footer links to (three of them), as another check's rows. */
+function sameAddresses(checkId: string, detail: string | null): FakeRoute[] {
+  const rows = BROKEN_ADDRESSES.map((path, index) => ({ ...issuePage(60 + index, path, null), detail }));
+  const group = { detail, relatedUrlId: null, relatedUrl: null, pages: 4, urls: 4, share: 1, likelyTemplate: false };
+  return [
+    ['POST', new RegExp(`/issues/${checkId}/groups$`), () => json(groupPage(checkId, [group], 4))],
+    ['POST', new RegExp(`/issues/${checkId}/rows$`), () => json(rowsPage(rows, rows.length))],
+  ];
+}
+
+async function open(path: string, extra: FakeRoute[] = []) {
   replaceSettings({ mode: 'simple', hiddenChecks: [] });
-  const sidecar = fakeSidecar([...problemRoutes(), ...simpleRoutes(gardenItem(), ANALYSIS)]);
+  const sidecar = fakeSidecar([...extra, ...problemRoutes(), ...simpleRoutes(gardenItem(), ANALYSIS)]);
   setTransport(sidecar);
   const queryClient = createQueryClientWithoutBackoff();
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
@@ -70,14 +97,38 @@ describe.skipIf(TABLE_STUBBED)('where to fix a broken address, in Simple', () =>
     );
   });
 
+  // The fixit index audit's X2: it told Jitsunami's owner to remove the Checkout and Cart links for blocked-by-robots.
+  it('tells no one to remove the links to addresses search engines are only told not to visit', async () => {
+    await open(`${FIX}/blocked-by-robots`, sameAddresses('blocked-by-robots', null));
+    const where = within(main().getByRole('region', { name: 'Where it is' }));
+    expect((await where.findAllByText('/old-range/', { exact: false }))[0]).toBeVisible();
+    // Where each is linked from is still said, row by row; only the callout's advice goes.
+    expect((await where.findAllByText(/^Linked from /))[0]).toBeVisible();
+    expect(main().queryByText(/One page links to/)).toBeNull();
+    expect(main().queryByText(/Fix or remove the links/)).toBeNull();
+  });
+
+  // The fixit links audit's item 5: removing the links would make these pages worse off, not better.
+  it('tells the owner of pages linked only from hidden pages to link to them from pages that show in search', async () => {
+    await open(`${FIX}/non-indexable-inlinks-only`, sameAddresses('non-indexable-inlinks-only', null));
+    expect(await main().findByText('One page links to 3 of these 4 pages')).toBeVisible();
+    expect(main().getByText(/links to most of them, from its footer\./)).toHaveTextContent(
+      '/garden-furniture/ links to most of them, from its footer. It’s kept out of search results itself, so link to these pages from one that shows in search too.',
+    );
+    expect(main().queryByText(/Fix or remove the links/)).toBeNull();
+  });
+
   it('says where on every page a shared link is, in its One fix', async () => {
     await open(`${FIX}/empty-anchor-text`);
-    expect(await main().findByText('One fix clears 264 of these 265 pages')).toBeVisible();
+    expect(
+      await main().findByText('One fix covers 264 of 265 pages', { selector: '.si-callout__title' }),
+    ).toBeVisible();
     // What the pages share, exactly, then the one change that fixes them all.
-    const callout = (await main().findByText('One fix clears 264 of these 265 pages')).parentElement!;
+    const callout = (await main().findByText('One fix covers 264 of 265 pages', { selector: '.si-callout__title' }))
+      .parentElement!;
     await waitFor(() =>
       expect(callout).toHaveTextContent(
-        /^One fix clears 264 of these 265 pagesThe same link, to your home page, is in the header on 264 of these 265 pages\. .*Give it some words once there and all 264 are fixed\.$/,
+        /^One fix covers 264 of 265 pagesThe same link, to your home page, is in the header on 264 of these 265 pages\. .*Give it some words once there and all 264 are fixed\.$/,
       ),
     );
   });

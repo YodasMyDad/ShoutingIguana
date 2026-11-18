@@ -6,7 +6,7 @@ namespace ShoutingIguana.Engine.Parsing.Models;
 public sealed record UncrawlableLinkFact(string Text, string Why)
 {
     /// <summary>
-    /// Where on the page it is, as a link's position is read. Noted from collection 6 on
+    /// Where on the page it is, as a link's position is read. Noted from collection 7 on
     /// (<see cref="PageFacts.CURRENT_COLLECTION"/>); null for a page parsed before.
     /// </summary>
     public LinkPosition? Position { get; init; }

@@ -108,6 +108,20 @@ internal sealed class AnalysisReader : IDisposable
         $"SELECT COUNT(*) FROM responses r WHERE substr(r.error, 1, {error.Length}) = '{error}'"),
         CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// URLs never checked because their site kept asking the crawler to slow down, whose error says <paramref name="part"/>
+    /// too: Shopify's limit on unsigned crawlers, or a signature it refused (<see cref="ShopifySignals"/>).
+    /// </summary>
+    public int CountRateLimitedSaying(string part)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM responses r WHERE substr(r.error, 1, $length) = $prefix AND instr(r.error, $part) > 0";
+        command.Parameters.AddWithValue("$length", RetryingFetcher.RATE_LIMITED_ERROR.Length);
+        command.Parameters.AddWithValue("$prefix", RetryingFetcher.RATE_LIMITED_ERROR);
+        command.Parameters.AddWithValue("$part", part);
+        return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+
     /// <summary>The URLs <see cref="ReadUrls"/> will read: ids run from 1 with none missing, so the highest is the count.</summary>
     public int CountUrls() => Convert.ToInt32(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM urls"), CultureInfo.InvariantCulture);
 
