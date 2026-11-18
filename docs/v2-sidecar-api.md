@@ -3184,6 +3184,10 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
   then it analyses the crawl, which settles the recheck.
 - **The crawl is left as it was**: its status (completed, or stopped with its queue untouched), its options. Its stamp
   moves, so its analysis is out of date between the run and the analysis, as after Continue.
+- **All or nothing.** The run is stored in one transaction as it ends. A run that fails anywhere (the file, the
+  network, the run) is rolled back whole: the file is as it was, its analysis still today's, and it has no recheck. The
+  analysis after it isn't run; the `recheck` event says `failed` (no result) and the crawl event's `error` says why ("The
+  recheck failed: …"). A process that dies part-way leaves the file as it was too.
 - **Pace** is the crawl's own options, through the same per-host pacing as a crawl. A site that stops answering ends a
   recheck after a minute (a crawl waits ten).
 - **Stop** is the crawl's: `POST /api/crawls/{id}/stop`. What was fetched stays, the analysis runs, and the recheck is
@@ -3197,8 +3201,8 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
     `needs-secrets` says "Rechecking this crawl needs …"; options the secrets make invalid are `invalid-options`.
   - **The flow**: `analyzing` (when `analysisFirst`) with its `analysis` events, then the plan is made again from
     today's analysis (a refusal now ends it, with the reason as the crawl event's `error`); `rechecking`; `analyzing`
-    (the analysis that settles it); then the file's status, with a `library` event. A failed run is still analysed,
-    and its end says why.
+    (the analysis that settles it); then the file's status, with a `library` event. A failed run stored nothing and
+    isn't analysed: its end says why.
   - **Stop**: during the run, the crawl event says `stopping`, the run ends (`recheck` event `stopped`), and the analysis
     runs and settles it. During the analysis first, it cancels that analysis and no recheck is run (no `recheck`
     event). During the analysis after, `crawl-busy`, as for any analysis: `/analyze/cancel` cancels it. A sidecar shut
@@ -3214,7 +3218,8 @@ one (`recheck-not-found`, 404, for an id the file doesn't have):
 {"rechecks":[{"id":1,"status":"completed","startedAt":"2026-11-17T14:02:12Z","endedAt":"2026-11-17T14:02:31Z",
               "settledAt":"2026-11-17T14:02:41Z","crawlingMs":19200,"checkId":"broken-internal-links","group":null,
               "urlList":false,"kinds":["urls"],"judged":5,"fetched":8,"countBefore":5,
-              "result":{"fixed":4,"still":1,"notChecked":0,"notRechecked":0,"new":0,"scoreBefore":85,"scoreAfter":88}}]}
+              "result":{"fixed":4,"still":1,"notChecked":0,"notRechecked":0,"new":0,"scoreBefore":85,"scoreAfter":88},
+              "answers":{"read":5,"rateLimited":0,"blocked":0,"robotsTxt":0,"noAnswer":0,"notAsked":0,"refused":0}}]}
 ```
 
 - **`status`**: `running` (here), `completed`, `stopped`, `failed`, or `interrupted` (its run ended with the process; the
@@ -3225,6 +3230,14 @@ one (`recheck-not-found`, 404, for an id the file doesn't have):
   rate-limited, refused by robots.txt, now forwarding elsewhere, or the check was skipped); `notRechecked` were past the
   cap or the stop; `new` were in scope, not flagged before and flagged now.
 - **`crawlingMs`** is the recheck's own time. The crawl's `crawlingMs` leaves rechecks out.
+- **`fetched`** is the requests the run sent the site, each counted as the site sees it: its pages (each try, each hop
+  of a redirect), robots.txt and the sitemaps. A URL it never asked isn't one.
+- **`answers`** is how the site answered it for the URLs it judges, kept as its run ended, with or without a check:
+  `read` (an answer of the site's own: a page, a redirect, an error code); refused again, by why: `rateLimited` (429),
+  `blocked` (a firewall or bot check), `robotsTxt` (disallowed, or robots.txt unreadable), `noAnswer`; and `notAsked`
+  (past the cap, not reached before it ended, its time for a section the site limits ran out first, or its host had
+  stopped answering). They add up to `judged`; `refused` is the four refusals together. Null for a recheck by an engine
+  before they were kept.
 
 **`POST /api/crawls/{id}/rechecks/{n}/rows`**, the URLs of one recheck, paged as `/rows` is:
 

@@ -52,9 +52,12 @@ camelCase as the sidecar serves it. A missing file, one never analysed, or an un
 
 `si recheck <crawl> --check <id>` is the fix loop's "Recheck these N pages": it fetches the check's URLs again into the
 same crawl file (`--group-url <url>` or `--group-detail <detail>` for one of its groups, `--urls <file>` for a list of
-URLs instead), analyses the crawl, and says what it found: "4 of 5 fixed. 1 still has it.", with the URLs it couldn't
-check, those past its limit of 1,000, and those that have the problem now and didn't (`--plan` only says what it would
-do, how long it should take, and how long working that out took, fetching nothing). The crawl's analysis is brought
+URLs instead), analyses the crawl, and says what it found: "4 of 5 fixed. 1 still has it.", how the site answered the URLs
+asked for ("Asked for 7 URLs: 1 read, 2 refused again (the site asked the crawler to slow down, 429 Too Many Requests),
+4 never asked."), the URLs it couldn't check, those past its limit of 1,000, those that have the problem now and didn't,
+and the requests it sent (`--plan` only says what it would do, how long it should take, and how long working that out
+took, fetching nothing). Its progress prints as a crawl's does, a line every few seconds when its output is redirected. A
+recheck that fails stores nothing, so it isn't analysed: it says why, exit 1, and the crawl is as it was. The crawl's analysis is brought
 up to date first when it's out of date, so the "before" it records is today's. A crawl that sent header values, which a
 crawl file doesn't keep, needs them again with `--header`, as `--resume` does (and `--proxy` for a proxy's password). A
 check a recheck can't settle (`orphan-page`, `no-https`), a crawl that was interrupted or never analysed, and one open
@@ -698,6 +701,11 @@ result as a record in the file ("rechecked 5 pages on 17 Nov: 4 fixed"). The des
   "found by a recheck, not followed"). The crawl's status and queue are left as they were (a stopped crawl continues as
   it would have), and its row is stamped, so its analysis is out of date until the one after the recheck. A site that
   stops answering ends a recheck after a minute, not a crawl's ten.
+- **All or nothing.** Opening brings the file up to this engine's crawl-time schema (`CrawlSchemaUpgrade`, which a new
+  crawl and a continue run too: every table and column added since the first schema 2 file), then the whole run is one
+  transaction, committed as it ends: its "before", the stamp, every URL stored again, the let-go walk and its record.
+  A run that fails anywhere is rolled back whole, so the file is as it was and its analysis still current; one stopped
+  keeps what it fetched.
 - **Let go.** A page fetched again may have dropped a link (the owner removed the footer link to a 404). At the end,
   each URL that lost a link is looked at, and what only it led to in turn: the part of the link graph the recheck
   changed. A URL there is kept if it's the start URL, a probe of the site's versions or in a sitemap, or a URL outside
@@ -706,11 +714,11 @@ result as a record in the file ("rechecked 5 pages on 17 Nov: 4 fixed"). The des
   keeps its row (ids stay stable) but loses its response, details, HTML and links, and is skipped as `NoLongerLinked`:
   the stats leave it out of the URLs found, and the URL grid's `skipReason` column says "No longer linked". A URL still
   queued is never let go.
-- **The record**, in three crawl-time tables made the first time a file is rechecked (`CrawlSchema.RECHECKS`): the
-  recheck (its run, the check, its group or list, its kinds, how many URLs it judges and fetched, the check's count and
-  the score before), its URLs by role (judged, named, referring, new, let go) as they stood before, and the check's
-  targets on them. The schema version doesn't change: a file never rechecked has none of them, and its readers find no
-  rechecks.
+- **The record**, in three crawl-time tables every writer makes as it opens a file (`CrawlSchema.RECHECKS`): the
+  recheck (its run, the check, its group or list, its kinds, how many URLs it judges, the requests it sent, the check's
+  count and the score before), its URLs by role (judged, named, referring, new, let go) as they stood before, each judged
+  one with how the site answered it (`RecheckAnswer`: read, refused again and why, never asked), and the check's targets
+  on them. The schema version doesn't change: a file from before them has none, and its readers find no rechecks.
 - **Settled once.** The analysis after a recheck settles it in its own commit (`RecheckSettlement`): each URL it judged
   is fixed (read again in a way the check can judge, or let go, and not flagged), still flagged, not checked (an error, a
   block or a redirect in place of what the check needs: `CheckJudging`, the comparison's own line), or not rechecked (past

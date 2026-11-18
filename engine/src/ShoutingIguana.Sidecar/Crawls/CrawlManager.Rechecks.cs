@@ -19,7 +19,8 @@ namespace ShoutingIguana.Sidecar.Crawls;
 /// Rechecks (the fix loop's "Recheck these N pages"): some of a crawl's URLs fetched again into the same file, then the
 /// crawl analysed, which settles the recheck. A recheck is live as a crawl is: one writer at a time, and no other run of
 /// the crawl's site here meanwhile, as each run paces its hosts alone. Its flow: the analysis first when it is out of
-/// date (so the "before" it records is today's), the recheck's run, then the analysis.
+/// date (so the "before" it records is today's), the recheck's run, then the analysis. A run that failed stored nothing
+/// (the engine rolls it back whole), so there is nothing to analyse: the crawl ends with why.
 /// </summary>
 internal sealed partial class CrawlManager
 {
@@ -212,8 +213,8 @@ internal sealed partial class CrawlManager
             PublishRecheck(crawl, ran?.Status ?? (summary.Status == CrawlStatus.Failed ? RecheckStatus.Failed : RecheckStatus.Stopped), summary.Progress.Recheck, result: null,
                 force: true);
 
-            // Not when the app is shutting down: the next analysis settles it.
-            analyse = !_stopping;
+            // Not when the app is shutting down: the next analysis settles it. Nor after a run that failed, which stored nothing.
+            analyse = !_stopping && summary.Status != CrawlStatus.Failed;
             if (analyse)
             {
                 crawl.State = LiveCrawlState.Analyzing;
