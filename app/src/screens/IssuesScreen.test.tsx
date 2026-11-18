@@ -429,7 +429,10 @@ describe('the Issues screen', () => {
     const clear = screen.getByRole('button', { name: 'Clear the filters' });
     act(() => clear.focus());
     fireEvent.click(clear);
-    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    // The check's only group, opened by itself, stays open.
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ group: { detail: '404 Not Found', relatedUrlId: null } }),
+    );
     expect(options().length).toBeGreaterThan(3);
     // The button went with the filters: focus is on the filter field, not dropped.
     expect(clear.isConnected).toBe(false);
@@ -445,7 +448,12 @@ describe('the Issues screen', () => {
     const title = screen.getByRole('button', { name: 'Remove the filter Title contains anchor' });
     act(() => title.focus());
     fireEvent.click(title);
-    await waitFor(() => expect(router.state.location.search).toEqual({ severity: ['error'] }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({
+        severity: ['error'],
+        group: { detail: '404 Not Found', relatedUrlId: null },
+      }),
+    );
     // Errors alone lists a check, so the chips, the one for the severity that had taken focus among them, have gone.
     await waitFor(() => expect(title.isConnected).toBe(false));
     expect(screen.queryByText('No checks match these filters.')).toBeNull();
@@ -1179,9 +1187,7 @@ describe('a check’s count, worded by what the check flags', () => {
     expect(within(grid).queryByRole('columnheader', { name: 'Pages' })).toBeNull();
     expect(row(/^Error Internal URL returns 4xx 2 ?URLs, 5% of the 40 URLs crawled$/)).toBeVisible();
     expect(screen.queryByText(/Pages affected|Share of pages|Affected pages/)).toBeNull();
-    // Its group's link doesn't call them pages, nor say "URLs in URLs".
-    await within(grid).findByText('404 Not Found');
-    fireEvent.pointerDown(grid.querySelector('[data-tree-toggle]')!, { button: 0 });
+    // Its group's link doesn't call them pages, nor say "URLs in URLs": its only group opens by itself.
     await waitFor(() => expect(router.state.location.search).toHaveProperty('group'));
     expect(await within(grid).findByRole('link', { name: 'Show all 2 in URLs' })).toBeVisible();
     expect(facetReads(requests)).toBe(0);

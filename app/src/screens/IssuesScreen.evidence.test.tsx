@@ -156,7 +156,13 @@ describe('a group’s evidence', () => {
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'ArrowRight' });
     await waitFor(() => expect(level3(grid).length).toBeGreaterThan(0));
-    expect(level3(grid)[0]).toHaveTextContent('→ /new/ 200 · in the footer · “Old range” · 2 links');
+    // Its line says its link to the group's URL: what opens under it is the other URL it names, never that link again.
+    expect(
+      level3(grid)
+        .map((row) => row.textContent)
+        .join(' '),
+    ).not.toContain('Old range');
+    expect(level3(grid)[0]).toHaveTextContent('All 1 in the inspector');
   });
 
   it('names a duplicate title’s group by the title its pages share', async () => {
@@ -174,7 +180,12 @@ describe('a group’s evidence', () => {
     const chains = await screen.findByRole('treegrid', { name: /Redirect chains/ });
     expect(await within(chains).findByText('→ /b/ 301 → /new/ 200')).toBeVisible();
     expect(within(chains).getByText('→ /range 302 → /range/ 301 → /new/ 200')).toBeVisible();
-    const read = requests.find((request) => request.path.endsWith('/issues/redirect-chain/rows'));
+    // The group's rows, not the read of the first URLs' addresses that looks for one page linking to most of them.
+    const read = requests.find(
+      (request) =>
+        request.path.endsWith('/issues/redirect-chain/rows') &&
+        (request.body as { columns: string[] }).columns.length > 1,
+    );
     expect(read?.body).toMatchObject({ columns: ['url', 'detail', 'relatedUrl', 'redirectChain'] });
     cleanup();
 

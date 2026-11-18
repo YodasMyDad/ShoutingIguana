@@ -1,7 +1,7 @@
 import { ArrowDown, Check as Tick, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useId, useRef, type ReactNode, type Ref } from 'react';
-import type { CheckGroupRef, GridSort } from '../../api/grids';
+import type { CheckGroupRef, GridSort, IssueGroupSort } from '../../api/grids';
 import type { Analysis } from '../../api/types';
 import { affectedCount, affectedWords, checkReach } from '../../crawl/checkSubject';
 import { formatCount, formatCountOf } from '../../lib/format';
@@ -18,7 +18,6 @@ import { SeverityBadge } from '../../ui/SeverityBadge';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { Stat, StatLink } from '../../ui/Stat';
 import type { CheckEntry, RelatedCheck } from './checkList';
-import { namesFileSize } from '../../crawl/evidence';
 import { importanceWords } from './evidenceColumns';
 import { IssueGroups } from './IssueGroups';
 import { IssueRowsGrid } from './IssueRowsGrid';
@@ -28,6 +27,8 @@ import { checkChangeCell, periodLabel, type ComparedPeriod } from '../compare/ch
 import { FixedList } from '../compare/FixedList';
 import { RecheckBanner } from '../rechecks/RecheckBanner';
 import { RecheckControl, type OpenGroup } from '../rechecks/RecheckControl';
+import { useSharedSource } from '../../simple/useSharedSource';
+import { sharedSourceCallout } from './whereFound';
 
 /** The fix loop: the check compared with another crawl, for its head, its Fixed tab and its grids. */
 export interface CheckCompare {
@@ -47,6 +48,8 @@ export interface CheckDetailProps {
   analysis: Analysis;
   /** The check's groups, once the first page says (null before, and for a check that doesn't group). */
   groupCount: number | null;
+  /** The order its groups came in, as the first page says: by pages, or the largest file first. Null before. */
+  groupOrder?: IssueGroupSort | null | undefined;
   siteOrigin: string | null;
   group: CheckGroupRef | undefined;
   onGroupChange: (group: CheckGroupRef | null) => void;
@@ -99,6 +102,7 @@ export function CheckDetail({
   categoryTitle,
   analysis,
   groupCount,
+  groupOrder = null,
   siteOrigin,
   group,
   onGroupChange,
@@ -130,8 +134,14 @@ export function CheckDetail({
   // group): then its URLs list flat, so a count is never over an empty list (round 4).
   const groups = check.grouping !== 'none' && !(groupCount === 0 && (count ?? 0) > 0);
   // A check that doesn't group, on nearly every page analysed: probably the site's template (the engine's judgement).
-  const likelyTemplate =
-    !groups && analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;
+  const counted = analysis.counts.find((candidate) => candidate.checkId === check.id);
+  const likelyTemplate = !groups && counted?.likelyTemplate === true;
+  // A check of the site's own files (its robots.txt, its sitemaps): the files it found at fault, named in place of the
+  // home page its issue is reported on. Null for any other check, and an analysis from before files were stored.
+  const files = check.about && counted?.files?.length ? counted.files : null;
+  // The one page most of its first URLs are linked from, for a check whose URLs other pages refer to: one place to go.
+  const shared = useSharedSource(crawlId, check);
+  const sharedWords = found && shared && count !== null ? sharedSourceCallout(shared, check, count, siteOrigin) : null;
   // The fix loop: its change since the crawl compared with, and what it no longer flags.
   const change = compare?.change ?? null;
   const changeCell = change && compare ? checkChangeCell(change, compare.period) : null;
@@ -169,6 +179,7 @@ export function CheckDetail({
           <SeverityBadge severity={check.severity} />
           <span>{categoryTitle}</span>
           {outcome === 'skipped' ? <Badge variant="dashed">Skipped</Badge> : null}
+          {entry.platform ? <Badge variant="outline">Set by {entry.platform.name}</Badge> : null}
           {entry.hidden ? (
             <Badge variant="outline">
               {hiddenScope === 'crawl'
@@ -179,6 +190,10 @@ export function CheckDetail({
             </Badge>
           ) : null}
         </div>
+        {entry.platform ? (
+          // Why the owner can't make this fix, exactly as the engine says it.
+          <p className="mb-3 max-w-(--measure-explain) text-13 text-text-secondary">{entry.platform.reason}</p>
+        ) : null}
         <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <h2
             ref={titleRef}
@@ -346,10 +361,15 @@ export function CheckDetail({
               {groups
                 ? groupCount === null
                   ? `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'}`
-                  : `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'} in ${formatCount(groupCount)} ${groupCount === 1 ? 'group' : 'groups'}, ${groupedBy(check)}${namesFileSize(check.targetFacts) ? ', largest file first' : ''}`
-                : `${affectedCount(check, count)}${sort.length === 0 ? `, ${importanceWords(check)}` : ''}`}
+                  : `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'} in ${formatCount(groupCount)} ${groupCount === 1 ? 'group' : 'groups'}, ${groupedBy(check)}${groupOrder === 'size' ? ', largest file first' : ''}`
+                : `${affectedCount(check, count)}${sort.length === 0 && !files ? `, ${importanceWords(check)}` : ''}`}
             </span>
           </div>
+          {sharedWords ? (
+            <Callout tone="insight" title={sharedWords.title} className="mb-3">
+              {sharedWords.body}
+            </Callout>
+          ) : null}
           {likelyTemplate ? (
             <Callout tone="insight" title="Likely in the site’s template" className="mb-3">
               The same issue on {formatCount(count)} of the {formatCountOf(analysis.pagesAnalyzed, 'page')} analysed, so
@@ -374,6 +394,7 @@ export function CheckDetail({
               <IssueRowsGrid
                 crawlId={crawlId}
                 check={check}
+                files={files}
                 total={count}
                 siteOrigin={siteOrigin}
                 sort={sort}
