@@ -21,6 +21,7 @@ import type {
 import type { AnalysisLimit, AnalysisLimitUnit, AnalysisSettings } from '../types';
 import { pagingErrors } from './gridQuery';
 import { answerLinkQuery } from './linkGrid';
+import { answerLinkGroups, answerPageImages } from './linkGroups';
 import type { MockCrawls, MockRoute } from './sitemapsRobots';
 
 export type Answer<T> = { ok: true; page: T } | { ok: false; problem: ProblemBody };
@@ -608,6 +609,36 @@ export function e6Routes(mock: E6Crawls, settings = createAnalysisSettings()): M
       'POST',
       /^\/api\/analysis-settings\/reset$/,
       (_, request) => Promise.resolve(settingsResponse(settings.reset(request.body))),
+    ],
+    // Step 3b: a view's links grouped by target, and the images a page shows.
+    [
+      'POST',
+      new RegExp(`${crawl}/links/groups$`),
+      async ([, id = ''], request) => {
+        const item = await mock.item(id);
+        if (!item) return mock.problem(mock.notFound(id));
+        const links = await mock.links(id);
+        return links ? answered(answerLinkGroups(links, request.body, mock.summary(item))) : mock.problem(noLinks());
+      },
+    ],
+    [
+      'POST',
+      new RegExp(`${crawl}/urls/images$`),
+      async ([, id = ''], request) => {
+        if (!(await mock.item(id))) return mock.problem(mock.notFound(id));
+        const body = (request.body ?? {}) as { urlId?: unknown; limit?: unknown };
+        if (typeof body.urlId !== 'number') return mock.problem(invalidQuery({ urlId: ['Give the URL’s id.'] }));
+        const limit = body.limit ?? 100;
+        if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 500) {
+          return mock.problem(invalidQuery({ limit: ['limit must be from 1 to 500.'] }));
+        }
+        const urlId = body.urlId;
+        if (!(await mock.rows(id)).some((row) => row.id === urlId)) {
+          return mock.problem({ type: 'url-not-found', title: 'This crawl didn’t find that URL.', status: 404 });
+        }
+        const links = await mock.links(id);
+        return links ? mock.json(answerPageImages(links, urlId, limit)) : mock.problem(noLinks());
+      },
     ],
   ];
 }

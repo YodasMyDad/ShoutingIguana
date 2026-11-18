@@ -167,6 +167,7 @@ describe('the links’ presets', () => {
       nofollow: LINKS_COUNTS.nofollow,
       'no-text': LINKS_COUNTS.noText,
       external: LINKS_COUNTS.external,
+      images: LINKS_COUNTS.images,
     });
   });
 

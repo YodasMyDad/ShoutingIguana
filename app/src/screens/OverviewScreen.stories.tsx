@@ -224,6 +224,28 @@ export const DoneWithProbes: Story = {
   render: () => <OverviewApp />,
 };
 
+/**
+ * The answer as the step 3b sidecar counts it: the things to change lead, with those in the template, and each
+ * severity card says its own.
+ */
+export const DoneWithThingsToChange: Story = {
+  loaders: [
+    () =>
+      own({
+        analysis: {
+          ...ISSUES_ANALYSIS,
+          counts: ISSUES_ANALYSIS.counts.map((count) => ({
+            ...count,
+            causes: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : count.count,
+            templateCauses: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : 0,
+            clears: [],
+          })),
+        },
+      }),
+  ],
+  render: () => <OverviewApp />,
+};
+
 export const NoIssues: Story = {
   loaders: [() => own({ analysis: ALL_PASSED, item: { issues: { error: 0, warning: 0, notice: 0 } } })],
   render: () => <OverviewApp />,

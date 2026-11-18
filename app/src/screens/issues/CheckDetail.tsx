@@ -1,5 +1,6 @@
-import { Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
-import { useId, type ReactNode, type Ref } from 'react';
+import { ArrowDown, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { useId, useRef, type ReactNode, type Ref } from 'react';
 import type { CheckGroupRef, GridSort } from '../../api/grids';
 import type { Analysis } from '../../api/types';
 import { affectedCount, affectedWords, checkReach } from '../../crawl/checkSubject';
@@ -16,7 +17,7 @@ import { Num } from '../../ui/Num';
 import { SeverityBadge } from '../../ui/SeverityBadge';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { Stat, StatLink } from '../../ui/Stat';
-import type { CheckEntry } from './checkList';
+import type { CheckEntry, RelatedCheck } from './checkList';
 import { namesFileSize } from '../../crawl/evidence';
 import { importanceWords } from './evidenceColumns';
 import { IssueGroups } from './IssueGroups';
@@ -48,6 +49,11 @@ export interface CheckDetailProps {
   onHideScopeChange?: ((scope: HiddenScope) => void) | undefined;
   onLearnMore: () => void;
   titleRef?: Ref<HTMLHeadingElement>;
+  /**
+   * The checks related to it by a fix on this crawl (`relatedChecks`): those a fix of it also clears, and those whose fix
+   * clears its pages. Left out, none is said.
+   */
+  related?: { clears: readonly RelatedCheck[]; clearedBy: readonly RelatedCheck[] } | undefined;
 }
 
 /** "groups, by detail", "groups, by related URL", "by image" (the image checks): what the third figure counts. */
@@ -57,8 +63,9 @@ function groupedBy(check: CheckEntry['check']): string {
 }
 
 /**
- * The selected check (docs/v2-ui-ia.md, Issues): its severity and category, title and actions, its figures, what's
- * wrong, why it matters and how to fix it, then what it flags. That is worded by the check's `subject`
+ * The selected check (docs/v2-ui-ia.md, Issues): its severity and category, title and actions, its figures, the things
+ * to change and what a fix also clears, what's wrong, then what it flags, the evidence, ahead of why it matters and how
+ * to fix it, which follow it (the UX audit, top 12 item 6). That is worded by the check's `subject`
  * (crawl/checkSubject.ts): pages, as a share of the pages analysed, only for a check that flags nothing else; URLs, as
  * a share of the URLs crawled, for one that can flag any URL or doesn't say. A skipped check shows its reason, never
  * 0s; a check that passed says so plainly.
@@ -83,8 +90,10 @@ export function CheckDetail({
   onHideScopeChange,
   onLearnMore,
   titleRef,
+  related,
 }: CheckDetailProps) {
   const titleId = useId();
+  const explainRef = useRef<HTMLDivElement>(null);
   const { check, outcome, count } = entry;
   const found = outcome !== 'passed' && outcome !== 'skipped';
   const words = affectedWords(check);
@@ -169,6 +178,41 @@ export function CheckDetail({
                 context={groupedBy(check)}
               />
             ) : null}
+            {entry.causes !== null && count !== null && entry.causes < count ? (
+              // Only when its URLs share causes: a thing to change for each URL says nothing the count doesn't.
+              <Stat
+                compact
+                size="md"
+                label="Things to change"
+                value={<Num value={entry.causes} />}
+                context={
+                  entry.templateCauses
+                    ? `${formatCount(entry.templateCauses)} in the site’s template`
+                    : 'its URLs share causes'
+                }
+              />
+            ) : null}
+          </div>
+        ) : null}
+        {found && related ? <RelatedLines crawlId={crawlId} related={related} /> : null}
+        {check.description.trim() !== '' ? (
+          <div className="mt-5">
+            <h3 className="mb-1 text-13 font-semibold">What’s wrong</h3>
+            <p className="max-w-(--measure-explain) text-14 leading-body text-text-secondary">{check.description}</p>
+            {check.why.trim() !== '' || check.fix.trim() !== '' ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={ArrowDown}
+                className="mt-1 -ml-2"
+                onClick={() => {
+                  explainRef.current?.scrollIntoView({ block: 'start' });
+                  explainRef.current?.focus({ preventScroll: true });
+                }}
+              >
+                Why it matters and how to fix it
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -199,13 +243,6 @@ export function CheckDetail({
           </EmptyState>
         </div>
       ) : null}
-
-      <Explain
-        what={check.description}
-        why={check.why}
-        fix={check.fix}
-        learnMore={check.learnMore ? <LearnMore onClick={onLearnMore} /> : null}
-      />
 
       {found && count !== null ? (
         <section aria-labelledby={`${titleId}-pages`} className="px-6 pt-5 pb-6">
@@ -252,19 +289,88 @@ export function CheckDetail({
           )}
         </section>
       ) : null}
+
+      <Explain
+        ref={explainRef}
+        why={check.why}
+        fix={check.fix}
+        learnMore={check.learnMore ? <LearnMore onClick={onLearnMore} /> : null}
+      />
     </article>
   );
 }
 
-/** What's wrong, why it matters and how to fix it: the catalog's own words, side by side. */
-function Explain({ what, why, fix, learnMore }: { what: string; why: string; fix: string; learnMore: ReactNode }) {
+/** A check's pages as a phrase: "5 pages", "1 page". */
+const pagesWords = (pages: number) => formatCountOf(pages, 'page');
+
+/**
+ * What a fix also clears, and which fix clears this check's pages: each other check a link to it in Issues, with its
+ * pages and, when the fix clears all of it, the points it gives back.
+ */
+function RelatedLines({
+  crawlId,
+  related,
+}: {
+  crawlId: string;
+  related: { clears: readonly RelatedCheck[]; clearedBy: readonly RelatedCheck[] };
+}) {
+  if (related.clears.length === 0 && related.clearedBy.length === 0) return null;
+  const checkLink = (other: RelatedCheck) => (
+    <Link
+      to="/crawls/$crawl/issues/{-$check}"
+      params={{ crawl: crawlId, check: other.entry.check.id }}
+      className="si-link si-link--inline font-semibold"
+    >
+      {other.entry.check.title}
+    </Link>
+  );
+  return (
+    <ul aria-label="Related checks" className="mt-4 flex flex-col gap-1 text-14 text-text-secondary">
+      {related.clears.map((other) => (
+        <li key={`clears-${other.entry.check.id}`}>
+          Fixing this also clears {checkLink(other)}
+          {other.all
+            ? `: ${other.pages === 1 ? 'the 1 page' : `all ${pagesWords(other.pages)}`} it flags`
+            : ` on ${formatCount(other.pages)} of the ${pagesWords(other.entry.count ?? other.pages)} it flags`}
+          {other.points ? ` (${formatCountOf(other.points, 'point')} back)` : ''}.
+        </li>
+      ))}
+      {related.clearedBy.map((other) => (
+        <li key={`by-${other.entry.check.id}`}>
+          Fixing {checkLink(other)} clears{' '}
+          {other.all ? 'every page here' : `${formatCount(other.pages)} of the pages here`}.
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Why it matters and how to fix it: the catalog's own words, side by side, after the check's evidence. What's wrong is
+ * in the head, above it. Focusable, for the head's button that brings it into view.
+ */
+function Explain({
+  why,
+  fix,
+  learnMore,
+  ref,
+}: {
+  why: string;
+  fix: string;
+  learnMore: ReactNode;
+  ref?: Ref<HTMLDivElement> | undefined;
+}) {
   const parts = [
-    { title: 'What’s wrong', text: what },
     { title: 'Why it matters', text: why },
     { title: 'How to fix it', text: fix },
   ].filter((part) => part.text.trim() !== '');
+  if (parts.length === 0 && !learnMore) return null;
   return (
-    <div className="border-y border-border-subtle bg-surface-sunken px-6 py-5">
+    <div
+      ref={ref}
+      tabIndex={-1}
+      className="scroll-mt-4 border-t border-border-subtle bg-surface-sunken px-6 py-5 outline-none"
+    >
       <div className="grid grid-cols-(--explain-columns) gap-6">
         {parts.map((part) => (
           <div key={part.title}>

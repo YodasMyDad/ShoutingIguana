@@ -135,7 +135,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
         (id) => `${FIX}/${id}`,
       ),
     );
-    expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 of 4,521 addresses$/);
+    expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 addresses 2 points back$/);
     expect(list.getByText(/Fixing these five takes the score from/)).toHaveTextContent(
       'Fixing these five takes the score from 86 to 99.',
     );
@@ -276,7 +276,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     expect(rows.map((row) => row.getAttribute('href'))).toEqual(
       ['empty-anchor-text', 'image-missing-dimensions', 'description-too-long'].map((id) => `${FIX}/${id}`),
     );
-    expect(rows[0]).toHaveAccessibleName(/Worth a look .* 265 of 265 pages$/);
+    expect(rows[0]).toHaveAccessibleName(/Worth a look .* 265 pages$/);
   });
 
   it('stopped early: a banner with what it read and what was left, Continue checking, and a score so far', async () => {
@@ -298,7 +298,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     expect(main().getByText(/That holds everything else back\. There are 2 serious problems\./)).toBeVisible();
     const first = within(main().getByRole('region', { name: 'Fix these first' })).getAllByRole('link')[0];
     expect(first).toHaveAttribute('href', `${FIX}/no-https`);
-    expect(first).toHaveAccessibleName(/The whole site$/);
+    expect(first).toHaveAccessibleName(/The whole site 60 points back$/);
   });
 
   it('never analysed: no score yet, and Work out the results', async () => {

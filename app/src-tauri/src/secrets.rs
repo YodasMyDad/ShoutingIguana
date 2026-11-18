@@ -1,7 +1,9 @@
 //! Secrets the user gave (a proxy's password, a site login sent as a header), kept in the operating system's credential
 //! store: Windows' Credential Manager, macOS's Keychain, the Secret Service on Linux. Never in a settings file or a
-//! crawl file: the engine stores neither (docs/v2-sidecar-api.md, "Crawl options"), and the page keeps them only
-//! while it runs (docs/v2-ui-architecture.md, "Secrets").
+//! crawl file: the engine stores neither (docs/v2-sidecar-api.md, "Crawl options"). Only with the user's consent: the
+//! page writes here only what the user ticked "Remember in Windows Credential Manager" for, keeps the rest in its own
+//! memory while it runs, and writes nothing (which forgets) when the option is unticked (docs/v2-ui-architecture.md,
+//! "Secrets"). This module keeps what it's given and forgets what it's told to; the consent is the page's to ask.
 //!
 //! The page names what the secrets are for, never where they go: `defaults` (the crawl defaults' proxy) or
 //! `crawl:<id>` (what a crawl was started with, so Continue needn't ask again). Each is one entry, a small JSON object

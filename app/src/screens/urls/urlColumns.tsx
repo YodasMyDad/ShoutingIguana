@@ -12,6 +12,7 @@ import { OUTCOME_WORDS } from '../../inspector/words';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
+import { RESOURCE_URL_TYPES } from '../../ui/urlText';
 import { outcomeWords } from '../sitemaps/urlOutcome';
 
 /** A column preset (docs/v2-ui-ia.md, URLs): the columns an audit of one kind reads, in its order. */
@@ -586,7 +587,18 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
       // The host is named once, here, where the rows show its URLs as paths.
       ...(origin ? { headerDetail: `on ${new URL(origin).host}` } : {}),
       cell: (row) =>
-        row.url ? <Url url={row.url} siteOrigin={origin} copyable={false} tabbable={false} /> : muted('–'),
+        row.url ? (
+          <Url
+            url={row.url}
+            siteOrigin={origin}
+            copyable={false}
+            tabbable={false}
+            // A file a page loads (an image, a stylesheet) is named by its file, not cut in the middle of its name.
+            label={row.type && RESOURCE_URL_TYPES.has(row.type) ? 'file' : 'address'}
+          />
+        ) : (
+          muted('–')
+        ),
       text: (row) => row.url ?? '',
     };
   }

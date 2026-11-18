@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json.Nodes;
 using ShoutingIguana.Sidecar.Tests.Support;
+using ShoutingIguana.TestSite;
+using ShoutingIguana.TestSite.Models;
 
 namespace ShoutingIguana.Sidecar.Tests;
 
@@ -36,6 +38,25 @@ public sealed class ProxyEndpointTests : IAsyncLifetime
         Assert.Null(answer.Body["status"]);
         Assert.True((int?)answer.Body["elapsedMs"] >= 0);
         Assert.Equal("Nothing answered at the proxy's address.", (string?)answer.Body["message"]);
+    }
+
+    /// <summary>A SOCKS5 proxy that asks for a login (RFC 1929): through it with the right one, and plain words for a wrong one.</summary>
+    [Fact]
+    public async Task ASocks5ProxysLoginIsTestedThroughIt()
+    {
+        await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 2 });
+        await using var socks = Socks5ProxyServer.Start("crawler", "pa55:w@rd");
+
+        var through = await _sidecar.PostAsync("api/proxy/test", new JsonObject { ["proxyUrl"] = socks.Address("crawler", "pa55:w@rd"), ["url"] = site.BaseUri.AbsoluteUri });
+        Assert.Equal(HttpStatusCode.OK, through.Status);
+        Assert.Equal(("ok", 200), ((string?)through.Body!["outcome"], (int?)through.Body["status"]));
+        Assert.Equal([("crawler", "pa55:w@rd", true)], socks.Logins);
+        Assert.Contains($"127.0.0.1:{site.BaseUri.Port}", socks.Tunnels);
+
+        var wrong = await _sidecar.PostAsync("api/proxy/test", new JsonObject { ["proxyUrl"] = socks.Address("crawler", "wrong"), ["url"] = site.BaseUri.AbsoluteUri });
+        Assert.Equal(("proxyAuthRequired", null, "The SOCKS5 proxy didn't accept the user name and password."),
+            ((string?)wrong.Body!["outcome"], (int?)wrong.Body["status"], (string?)wrong.Body["message"]));
+        Assert.Single(socks.Tunnels);
     }
 
     [Theory]

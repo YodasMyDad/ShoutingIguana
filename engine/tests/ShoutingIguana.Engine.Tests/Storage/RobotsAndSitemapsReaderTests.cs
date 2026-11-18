@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -266,7 +267,7 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // The blocked URLs, in crawl order, each with the line and its text; narrowed to a line or a reason; paged.
         var all = RobotsReader.ReadBlocked(crawl.Path, Site)!;
         Assert.Equal((Site, blocked.Count, blocked.Count, 0), (all.Origin, all.Total, all.Matching, all.Offset));
-        Assert.Equal(blocked.Select(id => new RobotsBlockedUrl(id, (string)Row(id, "url")!, RobotsBlockReason.Rule, 2, "Disallow: /private/", null)), all.Rows);
+        Assert.Equal(blocked.Select(id => Why(new RobotsBlockedUrl(id, (string)Row(id, "url")!, RobotsBlockReason.Rule, 2, "Disallow: /private/", null))), all.Rows.Select(Why));
         Assert.All(all.Rows, row => Assert.StartsWith($"{Site}/private/", row.Url, StringComparison.Ordinal));
         Assert.Equal(all.Rows, RobotsReader.ReadBlocked(crawl.Path, Site, line: 2, reason: RobotsBlockReason.Rule)!.Rows);
         Assert.Equal((blocked.Count, 0), (RobotsReader.ReadBlocked(crawl.Path, Site, line: 1)!.Total, RobotsReader.ReadBlocked(crawl.Path, Site, line: 1)!.Matching));
@@ -277,8 +278,82 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         Assert.Null(RobotsReader.ReadFile(crawl.Path, "https://elsewhere.example"));
         Assert.Null(RobotsReader.ReadBlocked(crawl.Path, "https://elsewhere.example"));
 
-        // The same without a URL summary: nothing here reads it.
-        Assert.Equal(all.Rows, RobotsReader.ReadBlocked(crawl.Changed, Site)!.Rows);
+        // The same without a URL summary: why each was refused reads nothing of it.
+        Assert.Equal(all.Rows.Select(Why), RobotsReader.ReadBlocked(crawl.Changed, Site)!.Rows.Select(Why));
+    }
+
+    /// <summary>
+    /// What blocking each URL costs, as the analysis counted it: the pages that link to it, whether a sitemap lists it (and
+    /// which), and whether a menu links to it. One in a sitemap or a menu is a conflict: the site asks for it and blocks it.
+    /// The conflicts can be listed alone. A crawl changed since its analysis knows none of it, and says so with nulls.
+    /// </summary>
+    [Fact]
+    public async Task ABlockedUrlSaysWhatLinksToItWhetherASitemapListsItAndWhetherThatConflicts()
+    {
+        var all = RobotsReader.ReadBlocked(crawl.Path, Site, limit: 1_000)!;
+        foreach (var row in all.Rows)
+        {
+            var sitemaps = TestCrawls.Rows(crawl.Path, $"SELECT s.id || ' ' || s.url FROM sitemaps s JOIN sitemap_urls m ON m.sitemap_id = s.id WHERE m.url_id = {row.Id} ORDER BY s.id");
+            var first = sitemaps.FirstOrDefault()?.Split(' ', 2);
+            Assert.Equal(
+                ((long?)(long)Row(row.Id, "linkingPages")!, (bool?)Row(row.Id, "inSitemap"), (bool?)false, sitemaps.Count > 0 ? sitemaps.Count : (long?)null,
+                    first is null ? null : new SitemapRef(int.Parse(first[0], System.Globalization.CultureInfo.InvariantCulture), first[1]),
+                    (bool?)((bool?)Row(row.Id, "inSitemap") == true)),
+                (row.LinkingPages, row.InSitemap, row.InMenu, row.Sitemaps, row.Sitemap, row.Conflict));
+        }
+
+        // The planted cases: pages link to the private area, and a sitemap lists one private URL nothing links to.
+        var listed = Assert.Single(all.Rows, row => row.InSitemap == true);
+        Assert.Equal(($"{Site}/private/listed", 0L, true), (listed.Url, listed.LinkingPages, listed.Conflict));
+        Assert.Contains(all.Rows, row => row.LinkingPages > 0 && row.Conflict == false);
+        Assert.Equal(1L, all.Conflicts);
+
+        // The conflicts alone, of the origin's blocked URLs; with a line, those of it.
+        var conflicts = RobotsReader.ReadBlocked(crawl.Path, Site, conflict: true)!;
+        Assert.Equal((all.Total, 1L, (long?)1L), (conflicts.Total, conflicts.Matching, conflicts.Conflicts));
+        Assert.Equal([listed], conflicts.Rows);
+        Assert.Equal(1L, RobotsReader.ReadBlocked(crawl.Path, Site, line: 2, conflict: true)!.Matching);
+        Assert.Equal(0L, RobotsReader.ReadBlocked(crawl.Path, Site, line: 1, conflict: true)!.Matching);
+        Assert.Equal(all.Total - 1, RobotsReader.ReadBlocked(crawl.Path, Site, conflict: false)!.Matching);
+
+        // A menu's link to a blocked URL makes it a conflict, read from the link summary and, without one, from the links.
+        var linked = all.Rows.Where(row => row.LinkingPages > 0).MaxBy(row => row.LinkingPages)!;
+        var menu = crawl.Copy();
+        Change(menu, $"UPDATE links SET position = {(int)LinkPosition.Navigation} WHERE rowid = (SELECT rowid FROM links WHERE to_id = $id AND kind = {(int)LinkKind.Hyperlink} AND from_id <> to_id LIMIT 1)",
+            ("$id", linked.Id));
+        Stamp(menu);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(menu);
+        foreach (var withoutLinkSummary in new[] { false, true })
+        {
+            GridReadContext.ReadWithoutLinkSummary = withoutLinkSummary;
+            try
+            {
+                var read = RobotsReader.ReadBlocked(menu, Site, limit: 1_000)!;
+                var row = read.Rows.Single(row => row.Id == linked.Id);
+                Assert.Equal((true, true, linked.LinkingPages, 2L), (row.InMenu, row.Conflict, row.LinkingPages, read.Conflicts));
+                Assert.All(read.Rows.Where(other => other.Id != linked.Id), other => Assert.False(other.InMenu));
+                Assert.Equal(new[] { listed.Id, linked.Id }.Order(), RobotsReader.ReadBlocked(menu, Site, conflict: true)!.Rows.Select(other => other.Id).Order());
+            }
+            finally
+            {
+                GridReadContext.ReadWithoutLinkSummary = false;
+            }
+        }
+
+        // A page's own link to itself isn't a menu linking to it.
+        var self = crawl.Copy();
+        Change(self, $"INSERT INTO links (from_id, to_id, kind, flags, position, text, fragment) VALUES ($id, $id, {(int)LinkKind.Hyperlink}, 0, {(int)LinkPosition.Navigation}, 'Me', NULL)",
+            ("$id", linked.Id));
+        Stamp(self);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(self);
+        Assert.False(RobotsReader.ReadBlocked(self, Site, urlId: linked.Id)!.Rows.Single().InMenu);
+
+        // Changed since its analysis: nothing of it is known, and no URL is listed as a conflict.
+        var changed = RobotsReader.ReadBlocked(crawl.Changed, Site, limit: 1_000)!;
+        Assert.All(changed.Rows, row => Assert.Equal((null, null, null, null, null, null), (row.LinkingPages, row.InSitemap, row.InMenu, row.Sitemaps, row.Sitemap, row.Conflict)));
+        Assert.Null(changed.Conflicts);
+        var none = RobotsReader.ReadBlocked(crawl.Changed, Site, conflict: true)!;
+        Assert.Equal((all.Total, 0L, null), (none.Total, none.Matching, none.Conflicts));
     }
 
     /// <summary>
@@ -368,8 +443,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // robots.txt couldn't be read when a URL came up: the crawl stored how with the URL.
         var one = blocked[1].Id;
         var failedOnce = With("UPDATE responses SET error = 'robots.txt unreachable: HTTP 503' WHERE url_id = $id", ("$id", one));
-        Assert.Equal(new RobotsBlockedUrl(one, blocked[1].Url, RobotsBlockReason.Unreachable, null, null, "HTTP 503"),
-            Assert.Single(RobotsReader.ReadBlocked(failedOnce, Site, reason: RobotsBlockReason.Unreachable)!.Rows));
+        Assert.Equal(Why(new RobotsBlockedUrl(one, blocked[1].Url, RobotsBlockReason.Unreachable, null, null, "HTTP 503")),
+            Why(Assert.Single(RobotsReader.ReadBlocked(failedOnce, Site, reason: RobotsBlockReason.Unreachable)!.Rows)));
         Assert.Equal((new RobotsUnmatched(1, 0), blocked.Count - 1), (RobotsReader.ReadFile(failedOnce, Site)!.Unmatched, RobotsReader.ReadFile(failedOnce, Site)!.Lines[1].Blocked));
 
         // Or the origin's own answer says so, for a crawl by an engine that didn't: the file has no lines to show.
@@ -516,7 +591,11 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
                 // The list, asked for that URL alone: its one row, of the origin's total.
                 var one = RobotsReader.ReadBlocked(path, Site, urlId: row.Id)!;
                 Assert.Equal((blocked.Count, 1L), (one.Total, one.Matching));
-                Assert.Equal([row], one.Rows);
+                Assert.Equal([Why(row)], one.Rows.Select(Why));
+                if (path == crawl.Path)
+                {
+                    Assert.Equal([row], one.Rows);
+                }
             }
         }
 
@@ -647,4 +726,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
     ];
 
     private object? Row(int id, string column) => crawl.Reference.Rows[id][column];
+
+    /// <summary>Why a URL was refused, without what blocking it costs, which only an analysis counts.</summary>
+    private static (int Id, string Url, RobotsBlockReason Reason, int? Line, string? Rule, string? Error) Why(RobotsBlockedUrl row) =>
+        (row.Id, row.Url, row.Reason, row.Line, row.Rule, row.Error);
 }

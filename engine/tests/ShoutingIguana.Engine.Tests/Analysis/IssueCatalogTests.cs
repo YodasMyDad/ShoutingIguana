@@ -222,6 +222,47 @@ public sealed class IssueCatalogTests
     }
 
     /// <summary>
+    /// What a fix also clears is data, so it's checked as data: every check named is a real one, never the check itself,
+    /// named once; the check flags URLs others refer to, and each check it clears flags the pages that refer to them, so
+    /// the pages it clears can be counted from the targets they name.
+    /// </summary>
+    [Fact]
+    public void EveryCheckAFixAlsoClearsIsARealCheckOfTheReferencesToIt()
+    {
+        var related = IssueCatalog.All.Where(check => check.Clears.Count > 0).ToList();
+        Assert.Equal(
+            ["internal-client-error", "internal-server-error", "internal-unreachable", "redirect-chain", "redirect-loop", "redirect-broken"],
+            related.Select(check => check.Id));
+        foreach (var check in related)
+        {
+            Assert.Equal(IssueReferences.Sources, check.References);
+            Assert.Equal(check.Clears.Count, check.Clears.Distinct(StringComparer.Ordinal).Count());
+            foreach (var id in check.Clears)
+            {
+                var cleared = IssueCatalog.Find(id);
+                Assert.True(cleared is not null, $"{check.Id} clears {id}, which isn't a check");
+                Assert.NotEqual(check.Id, id);
+                Assert.Equal(IssueReferences.Targets, cleared!.References);
+                Assert.Equal(IssueSubject.Page, cleared.Subject);
+                Assert.Equal(IssueGrouping.RelatedUrl, cleared.Grouping);
+            }
+        }
+
+        Assert.Equal(["links-to-redirects", "pagination-broken"], IssueCatalog.REDIRECT_CHAIN.Clears);
+        Assert.Equal(
+            ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken"],
+            IssueCatalog.INTERNAL_CLIENT_ERROR.Clears);
+        Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_SERVER_ERROR.Clears);
+        Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_UNREACHABLE.Clears);
+        Assert.Equal(["broken-internal-links", "image-broken", "broken-resources", "canonical-broken"], IssueCatalog.REDIRECT_BROKEN.Clears);
+
+        // A canonical loop's pages aren't reported as canonicalised to a non-indexable page too, and a canonical header on a
+        // redirect is the redirect's own fault: neither clears another check, so neither names one.
+        Assert.Empty(IssueCatalog.Find("canonical-loop")!.Clears);
+        Assert.Empty(IssueCatalog.Find("canonical-on-redirect")!.Clears);
+    }
+
+    /// <summary>
     /// Every check says what a recheck of it reads again (the fix loop's "Recheck these N pages"). The property is
     /// required, so a check added without one doesn't build; this holds each to its kinds. Every check reads its URLs again
     /// but those the table names: the sitemaps' checks read the sitemaps too (or only them), robots.txt's the robots.txt of

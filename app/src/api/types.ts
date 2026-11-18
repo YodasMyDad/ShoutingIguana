@@ -153,6 +153,12 @@ export interface Check {
    * check that names no URL; left out by a sidecar from before it.
    */
   targetFacts?: TargetFact[];
+  /**
+   * Related checks (step 3b): the checks a fix of this one also clears, by id, as the catalog declares them (a 404's
+   * fix clears the links to it). What it clears on a crawl is the analysis's `counts[].clears`. Left out by a sidecar
+   * from before it, which reads as empty.
+   */
+  clears?: string[];
 }
 
 /**
@@ -365,6 +371,28 @@ export interface CheckCount {
    * say it instead. Left out by a sidecar from before it.
    */
   likelyTemplate?: boolean;
+  /**
+   * Headline counts (step 3b): the separate things to change its issues come to. A group that shares a cause (one
+   * broken target, one large image) or is likely the template is one; every other URL is one of its own. Null for a
+   * check that found nothing, and when the analysis changed while it was read; left out by a sidecar from before it.
+   */
+  causes?: number | null;
+  /** Of `causes`, those likely in the site's template: one fix each. */
+  templateCauses?: number | null;
+  /**
+   * Related checks (step 3b): the checks a fix of this one also clears that found something, each with the pages it
+   * clears there. Empty when none; left out by a sidecar from before it.
+   */
+  clears?: ClearedCheck[];
+}
+
+/** Another check a fix of one clears (related checks). */
+export interface ClearedCheck {
+  checkId: string;
+  /** Its pages whose every target is a URL the fixed check flagged: the pages the fix clears there. */
+  pages: number;
+  /** They are every page it flagged: the fix clears it entirely. */
+  all: boolean;
 }
 
 export interface SkipReason {

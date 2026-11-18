@@ -215,8 +215,10 @@ export const IGNORED =
   'This crawl was told to ignore robots.txt, so nothing was blocked. It still read the site’s own, for the sitemaps it declares.';
 
 export interface BlockedWhy {
-  /** For the list's cell: "Line 2: Disallow: /private/". */
+  /** In a few words, with the rule: "Line 2: Disallow: /private/", as a row is copied. */
   short: string;
+  /** For the list's narrow Blocked by column: "Line 2" (the file beside the list shows the rule). */
+  cell: string;
   /** In full, for the tooltip and the note over the list. */
   sentence: string;
   /** How robots.txt failed, as the crawl recorded it, when that says more than the sentence: for the tooltip. */
@@ -230,6 +232,7 @@ export function blockedWhy(row: Pick<RobotsBlockedUrl, 'reason' | 'line' | 'rule
       const line = row.line === null ? 'A rule' : `Line ${formatCount(row.line)}`;
       return {
         short: row.rule === null ? line : `${line}: ${row.rule}`,
+        cell: line,
         sentence: row.rule === null ? `${line} of this file refused it.` : `${line} refused it: ${row.rule}`,
         recorded: null,
       };
@@ -238,26 +241,106 @@ export function blockedWhy(row: Pick<RobotsBlockedUrl, 'reason' | 'line' | 'rule
       const failure = failureOf(row.error);
       return {
         short: 'robots.txt couldn’t be read',
+        cell: 'Couldn’t be read',
         sentence: `robots.txt couldn’t be read when the crawl came to this URL${failure ? ` (${failure.words})` : ''}, which refuses everything.`,
         recorded: failure?.recorded ?? null,
       };
     }
     default:
-      return { short: 'No rule kept', sentence: UNKNOWN_REASON, recorded: null };
+      return { short: 'No matching rule', cell: 'No matching rule', sentence: UNKNOWN_REASON, recorded: null };
   }
 }
 
-/** A URL stored as refused that nothing kept accounts for. No more is said than is known. */
+/**
+ * A URL stored as refused that nothing kept accounts for: robots.txt blocked it when the crawl came to it, but the copy
+ * the crawl kept (only the last answer is) has no rule that does, as the file changed when a later run read it again,
+ * or wasn't kept. What happened, and what to do about it; no more is said than is known.
+ */
 export const UNKNOWN_REASON =
-  'The crawl stored this URL as refused by robots.txt, but the robots.txt it kept for this origin doesn’t refuse it. Only the last answer is kept, so what refused it is gone.';
+  'The crawl recorded this URL as blocked by robots.txt, but the copy of robots.txt it kept has no rule that blocks it: the file changed when the crawl read it again later, or wasn’t kept. Open the live robots.txt to check, or crawl again to see whether it’s still blocked.';
+
+/** Under the link to those URLs: what happened to them, and what to do. */
+export const UNKNOWN_ACTION =
+  'robots.txt changed after the crawl read it, or the crawl didn’t keep it. Open the live file to check, or crawl again to see what it blocks now.';
 
 /** The two cases no line accounts for, as the words of the link that lists their URLs. */
 export const UNMATCHED_WORDS = {
   unreachable: (count: number) =>
     `${formatCountOf(count, 'URL')} ${count === 1 ? 'was' : 'were'} refused while robots.txt couldn’t be read`,
   unknown: (count: number) =>
-    `${formatCountOf(count, 'URL')} ${count === 1 ? 'is' : 'are'} stored as refused, though nothing kept here refuses ${count === 1 ? 'it' : 'them'}`,
+    `${formatCountOf(count, 'URL')} ${count === 1 ? 'was' : 'were'} blocked by a rule that isn’t in this copy of the file`,
 } as const;
+
+// ------------------------------------------------------------------------------- What blocking a URL costs (step 3b)
+
+type Costs = Pick<RobotsBlockedUrl, 'linkingPages' | 'inSitemap' | 'sitemaps' | 'sitemap' | 'inMenu' | 'conflict'>;
+
+/**
+ * The Conflict cell: the site asks for a URL it blocks, by listing it in a sitemap or linking it from a menu. The same
+ * words as the engine's export (`RobotsOriginWords.Conflict`). Null for a URL that isn't one, or while that isn't known.
+ */
+export function conflictWords(row: Partial<Costs>): string | null {
+  if (row.conflict !== true) return null;
+  if (row.inSitemap === true && row.inMenu === true) return 'In your sitemap and menu but blocked';
+  return row.inSitemap === true ? 'In your sitemap but blocked' : 'In your menu but blocked';
+}
+
+/** The Conflict column's few words, with `conflictWords`' sentence behind them: "In sitemap", "In menu". */
+export function conflictShortWords(row: Partial<Costs>): string | null {
+  if (row.conflict !== true) return null;
+  if (row.inSitemap === true && row.inMenu === true) return 'In sitemap, menu';
+  return row.inSitemap === true ? 'In sitemap' : 'In menu';
+}
+
+/** The Linked from cell: the pages linking to the URL. Null while the analysis hasn't counted them. */
+export function linkedFromWords(count: number | null | undefined): string | null {
+  if (count === null || count === undefined) return null;
+  return count === 0 ? 'No pages' : formatCountOf(count, 'page');
+}
+
+/** The last segment of a sitemap's address, which tells a site's sitemaps apart: "products-2.xml". */
+function sitemapName(url: string): string {
+  const path = url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  return path.slice(path.lastIndexOf('/') + 1) || url;
+}
+
+/**
+ * The In a sitemap cell: which sitemap lists the URL, and how many more do; "No" only when every sitemap was read.
+ * Null while the analysis hasn't said (the Linked from count is its sign: they come and go together).
+ */
+export function inSitemapWords(row: Partial<Costs>): { short: string; title: string } | null {
+  if (row.inSitemap === true && row.sitemap) {
+    const more = (row.sitemaps ?? 1) - 1;
+    return more > 0
+      ? {
+          short: `Yes: ${sitemapName(row.sitemap.url)} and ${formatCount(more)} more`,
+          title: `Listed in ${formatCountOf(more + 1, 'sitemap')}, the first ${row.sitemap.url}`,
+        }
+      : { short: `Yes: ${sitemapName(row.sitemap.url)}`, title: `Listed in ${row.sitemap.url}` };
+  }
+  if (row.inSitemap === true) return { short: 'Yes', title: 'A sitemap lists it.' };
+  if (row.inSitemap === false) return { short: 'No', title: 'No sitemap lists it.' };
+  return row.linkingPages === null || row.linkingPages === undefined
+    ? null
+    : {
+        short: 'Not in those read',
+        title: 'No sitemap the crawl read lists it, but not every sitemap could be read.',
+      };
+}
+
+/** Over the list: how many of the origin's blocked URLs conflict, as the link that lists them, or that none does. */
+export function conflictsWords(count: number): string {
+  return count === 0
+    ? 'None of them is in your sitemap or menu.'
+    : `${formatCountOf(count, 'URL')} in your sitemap or menu but blocked`;
+}
+
+/** Why the costs are empty: the analysis counts them, of the crawl as it stands. */
+export function costsUnknownWords(crawling: boolean): string {
+  return crawling
+    ? 'Known once the crawl has finished and been analysed.'
+    : 'Known once the crawl is analysed as it stands.';
+}
 
 /** Why the crawler made nothing of a line, whatever the line is. `lineProblemWords` says it by the line's kind. */
 export const LINE_PROBLEM_WORDS: Record<RobotsLineProblem, string> = {

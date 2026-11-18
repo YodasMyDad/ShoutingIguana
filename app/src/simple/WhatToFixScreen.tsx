@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
-import { ChevronDown, Copy, FileText } from 'lucide-react';
+import { ArrowDownWideNarrow, ChevronDown, Copy, FileText } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
-import { isCrawling, type Severity } from '../api/types';
+import { isCrawling, type Analysis, type Severity } from '../api/types';
 import { crawlName, crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -15,22 +15,33 @@ import { useCommands } from '../keyboard/registry';
 import { copyText } from '../lib/clipboard';
 import { formatCount } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import type { CheckEntry } from '../screens/issues/checkList';
+import type { CheckEntry, PlainCheckSort } from '../screens/issues/checkList';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Select } from '../ui/Select';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS, fixSectionOf } from './fixSections';
-import { checksWord, looksForWords, passedWords, plainSummary, plainTitle, shareWords } from './plainWords';
+import {
+  checksWord,
+  looksForWords,
+  passedWords,
+  plainSummary,
+  plainTitle,
+  rowCountWords,
+  rowPointsWords,
+} from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
 import { useKeepsPlace } from './scrollPlace';
 import { plainResults, type PlainResults } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
+import { updateSettings, useSettings } from '../settings/settingsStore';
+import { fixRows, PLAIN_CHECK_SORTS, type FixRow } from './fixRows';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -61,8 +72,10 @@ const HEADINGS: Record<CheckOutcome, string> = {
 
 /**
  * What to fix (docs/v2-ui-simple.md, "What to fix"): Serious, Worth fixing and Worth a look, each in the engine's
- * order to fix them; then Couldn't check, always listed with its reasons, and Nothing wrong, folded. J and K move
- * through the problems and Enter opens one. Checks hidden in Advanced stay out, with a line to show them.
+ * order to fix them, or the most points back or the most found first (remembered for Simple); a problem a fix of
+ * another clears entirely folded under it; then Couldn't check, always listed with its reasons, and Nothing wrong,
+ * folded. J and K move through the problems and Enter opens one. Checks hidden in Advanced stay out, with a line to
+ * show them.
  */
 function WhatToFix({ crawlId }: { crawlId: string }) {
   const item = useQuery(crawlQuery(crawlId)).data;
@@ -77,6 +90,9 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   const { neverAnalysed, rereading } = useAnalysisAnswer(crawlId, analysis, { crawling, analysing });
   const { titleRef, analyse } = useAnalysisControl(crawlId, analysing, neverAnalysed);
   const hiddenIds = useHiddenChecks(crawlId);
+  const sort = useSettings((settings) => settings.checkSort.simple);
+  const onSortChange = (next: PlainCheckSort) =>
+    updateSettings((settings) => ({ checkSort: { ...settings.checkSort, simple: next } }));
   const [showHidden, setShowHidden] = useState(false);
   const hidden = useMemo(() => new Set(showHidden ? [] : hiddenIds), [hiddenIds, showHidden]);
   const results = useMemo(
@@ -177,6 +193,8 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
       <FixLists
         crawlId={crawlId}
         results={results}
+        analysis={analysis.data}
+        sort={sort}
         hiddenCount={hiddenCount}
         showHidden={showHidden}
         onShowHidden={setShowHidden}
@@ -186,8 +204,8 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   }
 
   const copyList = () => {
-    if (!results || !item) return;
-    void copyWhatToFix(results, crawlName(item));
+    if (!results || !item || !analysis.data) return;
+    void copyWhatToFix(results, partsOf(results, analysis.data, sort), crawlName(item));
   };
 
   return (
@@ -202,6 +220,13 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
           </div>
           {results ? (
             <div className="flex flex-wrap items-center gap-2">
+              <Select<PlainCheckSort>
+                label="Order"
+                icon={ArrowDownWideNarrow}
+                options={PLAIN_CHECK_SORTS}
+                value={sort}
+                onValueChange={onSortChange}
+              />
               <Button icon={Copy} onClick={copyList}>
                 Copy this list
               </Button>
@@ -219,10 +244,23 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   );
 }
 
+/** The parts' rows, in the order asked for, related problems folded (`fixRows`). */
+function partsOf(results: PlainResults, analysis: Analysis, sort: PlainCheckSort): Record<Severity, FixRow[]> {
+  const points = new Map((analysis.score?.lines ?? []).map((line) => [line.checkId, line.points]));
+  const order = { sort, fixFirst: analysis.fixFirst, points };
+  return {
+    error: fixRows(results.found.error, order),
+    warning: fixRows(results.found.warning, order),
+    notice: fixRows(results.found.notice, order),
+  };
+}
+
 /** The groups, each with its rows, and J, K and Enter over the problems. */
 function FixLists({
   crawlId,
   results,
+  analysis,
+  sort,
   hiddenCount,
   showHidden,
   onShowHidden,
@@ -230,6 +268,8 @@ function FixLists({
 }: {
   crawlId: string;
   results: PlainResults;
+  analysis: Analysis;
+  sort: PlainCheckSort;
   hiddenCount: number;
   showHidden: boolean;
   onShowHidden: (show: boolean) => void;
@@ -255,8 +295,10 @@ function FixLists({
     heading?.focus({ preventScroll: true });
   }, [landed, hash]);
 
-  const looks = nothingAbove || allLooks ? results.found.notice : results.found.notice.slice(0, LOOK_FIRST);
-  const shown = [...results.found.error, ...results.found.warning, ...looks];
+  const parts = partsOf(results, analysis, sort);
+  const looks = nothingAbove || allLooks ? parts.notice : parts.notice.slice(0, LOOK_FIRST);
+  // Every problem the keys move through, a folded one after the one it's folded under.
+  const shown = [...parts.error, ...parts.warning, ...looks].flatMap((row) => [row.entry, ...row.nested]);
   const oneFix = useOneFix(crawlId, shown);
 
   // J and K: the problem the keys are on, and its link, which Enter opens.
@@ -280,13 +322,15 @@ function FixLists({
     links.current.length = shown.length;
   }, [shown.length]);
 
-  const rowFor = (entry: CheckEntry, index: number) => (
-    <li key={entry.check.id}>
+  const rowFor = (entry: CheckEntry, index: number, points: number | null, nested = false) => (
+    <li key={entry.check.id} className={nested ? 'si-plain-list__nested' : undefined}>
       <ProblemRow
         crawlId={crawlId}
         entry={entry}
         results={results}
         oneFix={oneFix.has(entry.check.id)}
+        points={points}
+        nested={nested}
         ref={(element: HTMLAnchorElement | null) => {
           links.current[index] = element;
         }}
@@ -295,6 +339,12 @@ function FixLists({
       />
     </li>
   );
+  // A row, then what's folded under it: one job, with the points of both on the row.
+  const rowsFor = (rows: readonly FixRow[]) =>
+    rows.flatMap((row) => [
+      rowFor(row.entry, index++, row.points),
+      ...row.nested.map((nested) => rowFor(nested, index++, null, true)),
+    ]);
 
   const sectionHead = (outcome: CheckOutcome, count: number) => (
     <>
@@ -341,7 +391,7 @@ function FixLists({
           <section key={severity} aria-labelledby={FIX_SECTIONS[severity]} className="mb-6">
             {sectionHead(severity, results.found[severity].length)}
             <Card className="overflow-hidden">
-              <PlainCheckList>{results.found[severity].map((entry) => rowFor(entry, index++))}</PlainCheckList>
+              <PlainCheckList>{rowsFor(parts[severity])}</PlainCheckList>
             </Card>
           </section>
         ) : null,
@@ -350,8 +400,8 @@ function FixLists({
         <section aria-labelledby={FIX_SECTIONS.notice} className="mb-6">
           {sectionHead('notice', results.found.notice.length)}
           <Card className="overflow-hidden">
-            <PlainCheckList>{looks.map((entry) => rowFor(entry, index++))}</PlainCheckList>
-            {looks.length < results.found.notice.length ? (
+            <PlainCheckList>{rowsFor(looks)}</PlainCheckList>
+            {looks.length < parts.notice.length ? (
               <div className="border-t border-border-subtle bg-surface-sunken px-6 py-3">
                 <Button variant="ghost" size="sm" icon={ChevronDown} onClick={() => setAllLooks(true)}>
                   Show all {plainSeverityCount('notice', results.found.notice.length)}
@@ -440,21 +490,26 @@ function OutcomeMark({ outcome }: { outcome: CheckOutcome }) {
   );
 }
 
-/** Copy this list: the titles, counts and one-line summaries, as text. */
-async function copyWhatToFix(results: PlainResults, site: string): Promise<void> {
+/**
+ * Copy this list: the titles, counts, points back and one-line summaries, as text, in the list's order, a folded
+ * problem under the one it's folded under.
+ */
+async function copyWhatToFix(results: PlainResults, parts: Record<Severity, FixRow[]>, site: string): Promise<void> {
   const lines = [`What to fix on ${site}`, ''];
-  const parts: [CheckOutcome, CheckEntry[]][] = [
-    ['error', results.found.error],
-    ['warning', results.found.warning],
-    ['notice', results.found.notice],
-  ];
-  for (const [outcome, entries] of parts) {
-    if (entries.length === 0) continue;
-    lines.push(`${HEADINGS[outcome]} (${formatCount(entries.length)})`);
-    for (const entry of entries) {
+  const severities: Severity[] = ['error', 'warning', 'notice'];
+  for (const severity of severities) {
+    if (results.found[severity].length === 0) continue;
+    lines.push(`${HEADINGS[severity]} (${formatCount(results.found[severity].length)})`);
+    for (const row of parts[severity]) {
+      const back = rowPointsWords(row.points);
       lines.push(
-        `- ${plainTitle(entry.check)}: ${shareWords(entry.check, entry.count ?? 0, results.wholes).text}. ${plainSummary(entry.check)}`,
+        `- ${plainTitle(row.entry.check)}: ${rowCountWords(row.entry.check, row.entry.count ?? 0).text}${back ? `, ${back}` : ''}. ${plainSummary(row.entry.check)}`,
       );
+      for (const nested of row.nested) {
+        lines.push(
+          `  - Fixed along with it: ${plainTitle(nested.check)}, ${rowCountWords(nested.check, nested.count ?? 0).text}.`,
+        );
+      }
     }
     lines.push('');
   }

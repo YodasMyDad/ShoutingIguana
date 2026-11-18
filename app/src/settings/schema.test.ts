@@ -37,6 +37,20 @@ describe('stored settings', () => {
     expect(readSettings({ hiddenChecks: 'title-too-long' }).hiddenChecks).toEqual([]);
   });
 
+  it('remembers the order of checks for each mode, fix first until one is chosen', () => {
+    expect(DEFAULT_SETTINGS.checkSort).toEqual({ advanced: 'fixFirst', simple: 'fixFirst' });
+    expect(readSettings({ checkSort: { advanced: 'points', simple: 'count' } }).checkSort).toEqual({
+      advanced: 'points',
+      simple: 'count',
+    });
+    // Simple's parts are the severities already: it has no order by severity or category of its own.
+    expect(readSettings({ checkSort: { advanced: 'colour', simple: 'severity' } }).checkSort).toEqual({
+      advanced: 'fixFirst',
+      simple: 'fixFirst',
+    });
+    expect(readSettings({ checkSort: 'points' }).checkSort).toEqual(DEFAULT_SETTINGS.checkSort);
+  });
+
   it('leaves the inspector at the layout’s own size until it’s resized', () => {
     expect(DEFAULT_SETTINGS.inspectorWidth).toBeNull();
     expect(DEFAULT_SETTINGS.inspectorHeight).toBeNull();
