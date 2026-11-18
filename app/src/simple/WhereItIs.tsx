@@ -92,9 +92,11 @@ const rowsQuery = (
  */
 function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; origin: string | null }) {
   const values = row as unknown as Record<string, unknown>;
+  // The row's own address, so it's never said to forward to itself or be its own main address (X1); a line two columns
+  // say alike ("No pages link here") once.
   const lines = evidenceOf(check)
-    .map((column) => plainEvidence(column, values[column], origin))
-    .filter((line): line is string => line !== null);
+    .map((column) => plainEvidence(column, values[column], origin, row.url ?? null))
+    .filter((line, index, all): line is string => line !== null && all.indexOf(line) === index);
   if (lines.length === 0) return null;
   return (
     <span className="si-evidence-lines mt-0.5 block text-13 text-text-secondary">
