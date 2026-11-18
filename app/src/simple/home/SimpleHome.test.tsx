@@ -274,6 +274,54 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     );
   });
 
+  it('says what changed since the site’s last check: the score’s change, the problems fixed and new, and its recheck (the fix loop)', async () => {
+    const checks = {
+      categories: [],
+      checks: [
+        { id: 'broken-internal-links', severity: 'error' },
+        { id: 'redirect-chain', severity: 'warning' },
+        { id: 'sitemap-error', severity: 'warning' },
+        { id: 'title-too-long', severity: 'notice' },
+      ],
+    };
+    const compared = testCrawlItem({
+      ...garden,
+      previous: {
+        id: '5555555555555555',
+        startedAt: '2026-10-17T10:00:00Z',
+        score: { value: 71, band: 'good', partial: false },
+        comparable: 'full',
+        needsAnalysis: false,
+      },
+      changes: {
+        score: 14,
+        partial: false,
+        fixed: ['broken-internal-links', 'redirect-chain', 'title-too-long'],
+        new: ['sitemap-error'],
+        fewer: [],
+        more: [],
+        newCheck: [],
+        notCheckedNow: [],
+      },
+      rechecks: {
+        count: 1,
+        last: { id: 1, endedAt: '2026-10-31T16:02:00Z', checkId: 'broken-internal-links', judged: 5, fixed: 4 },
+      },
+    });
+    await open([compared], undefined, [['GET', /^\/api\/checks$/, () => json(checks)]]);
+    const row = await rowOf('gardenfurnituresets.co.uk');
+    expect(await within(row).findByText('2 fixed · 1 new since 17 Oct')).toBeInTheDocument();
+    expect(within(row).getByText('▲14 since 17 Oct')).toBeInTheDocument();
+    // Its own part of the line under the site, after the pages.
+    expect(within(row).getByText('rechecked 5 on 31 Oct').previousElementSibling).toHaveTextContent('265 pages ·');
+  });
+
+  it('says nothing of changes for a site’s first check: no line, no zeros', async () => {
+    await open([testCrawlItem({ ...garden, previous: null, changes: null })]);
+    const row = await rowOf('gardenfurnituresets.co.uk');
+    expect(row).not.toHaveTextContent(/since|fixed|▲|▼/);
+  });
+
   it('folds a site’s older checks under its newest', async () => {
     const older = testCrawlItem({
       ...garden,
