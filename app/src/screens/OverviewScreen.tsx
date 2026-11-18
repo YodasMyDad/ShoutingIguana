@@ -242,6 +242,21 @@ export function OverviewScreen() {
       <>
         {/* The totals before anything else (round 5, gap 16), whatever the crawl's state: they need no analysis. */}
         <TotalsRow crawlId={crawlId} />
+        {/* Not compared, with a crawl of the site to pick (after Don't compare, or a first crawl with later ones): a line
+            with Compare with…, where the card would be. A site's only crawl has nothing to pick: no line. */}
+        {!empty && analysis.data && comparison.comparing.kind === 'none' && comparison.candidates.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-13 text-text-secondary">
+            {comparison.comparing.why === 'off'
+              ? 'Not compared with another crawl.'
+              : 'No earlier crawl of this site to compare with.'}
+            <CompareWithMenu
+              crawlId={crawlId}
+              comparison={comparison}
+              open={pickerOpen || askedToCompare}
+              onOpenChange={onPickerOpenChange}
+            />
+          </div>
+        ) : null}
         {empty ? null : (
           <ComparisonCard
             crawlId={crawlId}
@@ -360,15 +375,6 @@ export function OverviewScreen() {
           actions={
             item ? (
               <>
-                {/* Compare with… where there's no comparison card to hold it: a site's first crawl, or Don't compare. */}
-                {!crawling && !empty && analysis.data && comparison.comparing.kind === 'none' ? (
-                  <CompareWithMenu
-                    crawlId={crawlId}
-                    comparison={comparison}
-                    open={pickerOpen || askedToCompare}
-                    onOpenChange={onPickerOpenChange}
-                  />
-                ) : null}
                 {/* The score beside the answer, once there is one to show: it opens its breakdown. */}
                 {!crawling && !empty && analysis.data && totals ? (
                   <OverviewScore crawlId={crawlId} analysis={analysis.data} linkRef={scoreRef} />

@@ -99,9 +99,8 @@ test('a site’s first crawl shows no comparison, and Compare with… says there
   await page.goto(`/crawls/${first.id}/overview`);
   await expect(main(page).getByRole('region', { name: 'Fix first' })).toBeVisible({ timeout: 20_000 });
   await expect(main(page).getByRole('region', { name: /^Since / })).toHaveCount(0);
-  await main(page).getByRole('button', { name: 'Compare with…' }).click();
-  await expect(page.getByRole('menuitem', { name: 'No other crawl of this site' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  // A site's only crawl: nothing to pick, so no Compare with… on Overview; the library's menu says why.
+  await expect(main(page).getByRole('button', { name: /^Compare with/ })).toHaveCount(0);
   await page.goto(`/crawls/${first.id}/issues/${CHECK}`);
   await expect(main(page).getByRole('group', { name: /^Since / })).toHaveCount(0);
   await expectNoViolations(page);

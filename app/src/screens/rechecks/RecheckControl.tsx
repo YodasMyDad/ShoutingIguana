@@ -120,7 +120,8 @@ export function RecheckControl({
           </MenuItem>
         </DropdownMenu>
       </div>
-      {line ? <span className="max-w-(--measure-text) text-right text-12 text-text-muted">{line}</span> : null}
+      {/* Narrow, so a long line wraps under the button rather than widen the head. */}
+      {line ? <span className="max-w-72 text-right text-12 text-text-muted">{line}</span> : null}
     </div>
   );
 }

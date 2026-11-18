@@ -122,11 +122,20 @@ describe('Overview’s comparison (Advanced)', () => {
     expect(await fixFirst.findByText(/was 9/)).toBeVisible();
   });
 
-  it('has no card for a site’s first crawl: Compare with… says there’s no other crawl', async () => {
+  it('has no card for a site’s only crawl, nor Compare with…: there’s nothing to pick', async () => {
     await open({ previous: null }, recheckRoutes(), undefined, []);
-    await userEvent.click(await main().findByRole('button', { name: 'Compare with…' }));
-    expect(await screen.findByRole('menuitem', { name: 'No other crawl of this site' })).toBeVisible();
+    await main().findByRole('region', { name: 'Fix first' });
+    expect(main().queryByRole('button', { name: /^Compare with/ })).toBeNull();
     expect(main().queryByRole('region', { name: /^Since/ })).toBeNull();
+  });
+
+  it('says Don’t compare in a line with Compare with…, where the card would be', async () => {
+    updateSettings({ compareWithByCrawl: { [TEST_CRAWL_ID]: 'none' } });
+    await open({ previous: PREVIOUS }, [changesRoute(comparison()), ...recheckRoutes()]);
+    expect(await main().findByText('Not compared with another crawl.')).toBeVisible();
+    await userEvent.click(main().getByRole('button', { name: 'Not compared' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: /^17 Oct 2026/ }));
+    expect(await main().findByRole('region', { name: /^Since 17 Oct/ })).toBeVisible();
   });
 
   it('opens the picker from the library’s Compare with… (?compare=1)', async () => {

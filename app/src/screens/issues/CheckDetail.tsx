@@ -168,7 +168,7 @@ export function CheckDetail({
           >
             {check.title}
           </h2>
-          <div className="flex shrink-0 items-start gap-2">
+          <div className="flex max-w-full min-w-0 flex-wrap items-start justify-end gap-2">
             {found ? <RecheckControl crawlId={crawlId} check={check} group={recheckGroup} /> : null}
             {found ? (
               <Button size="sm" icon={Copy} command="issues.copyUrls" loading={copying} onClick={onCopy}>
