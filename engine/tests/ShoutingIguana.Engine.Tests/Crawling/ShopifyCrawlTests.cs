@@ -101,8 +101,18 @@ public sealed class ShopifyCrawlTests : IDisposable
         Assert.Equal("powered-by: Shopify", fromHeaders?.Signal);
         Assert.Equal((int)refused, fromHeaders?.NotCheckedUnsigned);
 
+        // The crawl's end and its analysis say Shopify's reason and the fix, not "check again later, or at the Polite speed".
+        var left = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited-unchecked");
+        Assert.Contains("runs on Shopify, which refuses crawlers that don't send a signature", left.Message, StringComparison.Ordinal);
+        Assert.Contains("Online Store › Preferences › Crawler access › Create signature", left.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Polite", left.Message, StringComparison.Ordinal);
+
         // Not checked is no fault of the pages: no check calls them broken or unreachable.
-        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        var note = Assert.Single(analysis.Notes, note => note.Contains("429", StringComparison.Ordinal));
+        Assert.StartsWith($"{refused:N0} URLs weren't checked because Shopify limits crawlers without a signature (429 Too Many Requests)", note, StringComparison.Ordinal);
+        Assert.Contains("Online Store › Preferences › Crawler access › Create signature", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("Polite", note, StringComparison.Ordinal);
         string[] failures = ["internal-blocked", "internal-client-error", "internal-server-error", "internal-unreachable", "broken-internal-links"];
         Assert.DoesNotContain(IssueReader.ReadAll(path), row => failures.Contains(row.Issue) && (row.Url.Contains("/p/", StringComparison.Ordinal) ||
             row.RelatedUrl?.Contains("/p/", StringComparison.Ordinal) == true));
@@ -195,6 +205,12 @@ public sealed class ShopifyCrawlTests : IDisposable
             "may have expired, or may be for another domain. The crawl asks again for them at its end; any still refused are marked not checked, not broken.",
             notice.Message);
         Assert.Equal(0, observer.Count("shopify-unsigned"));
+        var left = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited-unchecked");
+        Assert.Contains("Shopify refused the crawler's signature", left.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Polite", left.Message, StringComparison.Ordinal);
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        Assert.Contains(analysis.Notes, note => note.StartsWith($"{refused:N0} URLs weren't checked because Shopify refused the crawler's signature", StringComparison.Ordinal));
+        Assert.DoesNotContain(analysis.Notes, note => note.Contains("Polite", StringComparison.Ordinal));
         var access = ShopifyAccessReader.Read(path)!;
         Assert.Equal(refused, access.NotCheckedSigned);
         Assert.Equal(0, access.NotCheckedUnsigned);

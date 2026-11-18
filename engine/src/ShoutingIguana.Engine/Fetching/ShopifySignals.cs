@@ -24,6 +24,17 @@ public static class ShopifySignals
     /// <summary>Begins the Shopify part of the error of a URL refused though its request carried the crawl's signature.</summary>
     public const string SIGNED_REFUSAL = "Shopify refused the crawler's signature";
 
+    /// <summary>Where a store's owner makes a signature, in Shopify's own words.</summary>
+    public const string WHERE_TO_SIGN = "Online Store › Preferences › Crawler access › Create signature";
+
+    /// <summary>What to do about pages a store refused an unsigned crawler: the end of the crawl's notice and of the analysis's note.</summary>
+    public const string HOW_TO_SIGN =
+        $"To check them, create a signature in Shopify admin ({WHERE_TO_SIGN}), add it to the crawl as Shopify crawler access, and recheck them.";
+
+    /// <summary>What to do about pages a store refused though the crawl sent its signature.</summary>
+    public const string HOW_TO_RESIGN =
+        "It may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain. Check it in Shopify admin, or create a new one, then recheck them.";
+
     /// <summary>How long a new signature can take to start working, as Screaming Frog's users found.</summary>
     public static readonly TimeSpan ACTIVATION = TimeSpan.FromHours(1);
 

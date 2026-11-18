@@ -474,6 +474,20 @@ internal sealed class CrawlSession
 
         var host = Volatile.Read(ref _rateLimitedHost) ?? _scope.HostName(UrlNormalizer.GetHost(_startUri));
         var urls = count == 1 ? "1 URL wasn't" : $"{count:N0} URLs weren't";
+        if (_processor.Shopify.IsDetected)
+        {
+            // A Shopify store: waiting or slowing down gets nothing, and a signature is the way through.
+            var signedOnly = _processor.Shopify.Refused == 0 && _options.Signatures.Count > 0;
+            var shopify = signedOnly
+                ? $"{urls} checked because {host} runs on Shopify, and Shopify refused the crawler's signature ({HttpStatusNames.Describe(429)}): they're marked not checked, not broken. {ShopifySignals.HOW_TO_RESIGN}"
+                : $"{urls} checked because {host} runs on Shopify, which refuses crawlers that don't send a signature ({HttpStatusNames.Describe(429)}): they're marked not checked, not broken. {ShopifySignals.HOW_TO_SIGN}";
+            _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "rate-limited-unchecked", shopify)
+            {
+                Data = new CrawlNoticeData(Host: host, Reason: HttpStatusNames.Describe(429), Count: count)
+            });
+            return;
+        }
+
         List<string?> said =
         [
             $"{urls} checked because {host} kept asking the crawler to slow down ({HttpStatusNames.Describe(429)}).",
