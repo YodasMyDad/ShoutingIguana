@@ -12,8 +12,11 @@ internal static class RecheckAnswers
         var error = response.Error ?? string.Empty;
         return response.Outcome switch
         {
+            // Given up on before its turn came, in a section the site limits: never asked.
+            FetchOutcome.NetworkError when RateLimitedErrors.WasNeverAsked(error) => RecheckAnswer.NotAsked,
+
             // Asked, and refused: told to slow down, then given up on.
-            FetchOutcome.NetworkError when error.StartsWith(RetryingFetcher.RATE_LIMITED_ERROR, StringComparison.Ordinal) => RecheckAnswer.RateLimited,
+            FetchOutcome.NetworkError when RateLimitedErrors.WasRefused(error) => RecheckAnswer.RateLimited,
 
             // Failed without a request: the host had stopped answering, or the address is one a public site's crawl never asks.
             FetchOutcome.NetworkError or FetchOutcome.Timeout when error.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) => RecheckAnswer.NotAsked,

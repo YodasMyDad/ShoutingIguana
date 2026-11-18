@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(14, AnalysisFreshness.VERSION);
+        Assert.Equal(15, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -61,7 +61,18 @@ public sealed class AnalysisFreshnessTests
     public void AnAnalysisFromBeforeTheSitemapChecksIsOutOfDate()
     {
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 13 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 14 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 15 writes one note for each reason checks weren't run, with the checks totalled, where 14 wrote one for each
+    /// collection of facts a page's parse lacked (five notes worded the same on a real crawl). An analysis 14 stored is out
+    /// of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeOneNoteForEachReasonIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 14 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]
