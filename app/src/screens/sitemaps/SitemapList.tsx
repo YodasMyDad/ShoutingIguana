@@ -247,7 +247,8 @@ function NotInAnySitemap({ crawlId }: { crawlId: string }) {
 function SitemapChecks({ crawlId }: { crawlId: string }) {
   const analysis = useQuery(analysisQuery(crawlId));
   const checks = useQuery(checksQuery());
-  if (!analysis.data || !checks.data) return null;
+  // A sidecar from before the counts, or a crawl never analysed, has none to list.
+  if (!analysis.data?.counts || !checks.data) return null;
   const found = sitemapChecksOf(checks.data.checks, analysis.data.counts);
   if (found.length === 0) return null;
   return (

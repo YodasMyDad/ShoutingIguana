@@ -23,7 +23,7 @@ import {
   type SitemapsRobotsOptions,
 } from '../test/sitemapsRobotsSidecar';
 import { resetPlaces } from './listPlace';
-import { ANSWERED_SITE_PAGES } from './overview/links';
+import { INDEXABLE_SITE_PAGES } from './sitemaps/sitemapWords';
 
 const SITEMAPS = `/crawls/${TEST_CRAWL_ID}/sitemaps`;
 
@@ -379,18 +379,20 @@ describe('Sitemaps: the list', () => {
     expect(tree).not.toBeInTheDocument();
   });
 
-  it('says how many of the site’s pages no sitemap lists, as a link to exactly those pages', async () => {
+  it('says how many of the site’s indexable pages no sitemap lists, as the check counts them, as a link to exactly those pages', async () => {
     sidecar();
     await open(SITEMAPS);
-    const line = await screen.findByText(wholeText('2 of the site’s 9 pages aren’t in any sitemap.'));
-    // The pages it's "of" are a link too: the site's pages, as Overview counts them.
-    const pages = decodeURIComponent(within(line).getByRole('link', { name: '9 pages' }).getAttribute('href') ?? '');
-    expect(JSON.parse(pages.slice(pages.indexOf('filter=') + 'filter='.length))).toEqual(ANSWERED_SITE_PAGES);
+    const line = await screen.findByText(wholeText('2 of the site’s 9 indexable pages aren’t in any sitemap.'));
+    // The pages it's "of" are a link too: the site's indexable pages.
+    const pages = decodeURIComponent(
+      within(line).getByRole('link', { name: '9 indexable pages' }).getAttribute('href') ?? '',
+    );
+    expect(JSON.parse(pages.slice(pages.indexOf('filter=') + 'filter='.length))).toEqual(INDEXABLE_SITE_PAGES);
     const link = within(line).getByRole('link', { name: '2' });
     const href = decodeURIComponent(link.getAttribute('href') ?? '');
     expect(href.startsWith(`/crawls/${TEST_CRAWL_ID}/urls?filter=`)).toBe(true);
     const filter = JSON.parse(href.slice(href.indexOf('filter=') + 'filter='.length)) as unknown;
-    expect(filter).toEqual([...ANSWERED_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }]);
+    expect(filter).toEqual([...INDEXABLE_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }]);
   });
 
   it('says the analysis didn’t count them, and why, when the engine can’t place the site’s pages: never “in a sitemap”', async () => {

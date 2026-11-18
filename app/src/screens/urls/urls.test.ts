@@ -10,6 +10,7 @@ import { withFacetValue } from '../links/facets';
 import {
   DEFAULT_URL_COLUMNS,
   URL_MIN_WIDTH,
+  URL_GRID_AT_1440,
   URL_PRESETS,
   activeUrlPreset,
   colsParam,
@@ -19,6 +20,7 @@ import {
   urlColumnWidth,
   urlFilterColumns,
   urlGridColumns,
+  urlPresetFits,
   urlQueryColumns,
   urlStatusWords,
 } from './urlColumns';
@@ -48,6 +50,19 @@ describe('the URL grid’s presets', () => {
       'Performance',
       'Links',
     ]);
+  });
+
+  it('fit the URL grid of a 1,440-pixel window, the URL at its least width or more (the fix-it pass)', () => {
+    // The Indexability preset's Redirects to was off the right edge at 1,440 pixels, where the grid is 1,120 wide.
+    for (const preset of URL_PRESETS) {
+      expect({ preset: preset.id, fits: urlPresetFits(preset.columns, URL_COLUMNS, URL_GRID_AT_1440) }).toEqual({
+        preset: preset.id,
+        fits: true,
+      });
+    }
+    // A redirect's target and a page's canonical lead the Indexability preset's reasons.
+    const indexability = URL_PRESETS.find((preset) => preset.id === 'indexability')!.columns;
+    expect(indexability).toEqual(expect.arrayContaining(['canonicalUrl', 'metaRobots', 'inSitemap', 'redirectTarget']));
   });
 
   it('reads as chosen exactly while the columns are its own, in its order', () => {
@@ -86,7 +101,7 @@ describe('the columns shown', () => {
   it('give the URL the room the others leave, never less than its least, so a narrow grid scrolls sideways', () => {
     const shown = ['url', 'statusCode', 'title'];
     expect(urlColumnWidth(shown, URL_COLUMNS, null)).toBeUndefined();
-    expect(urlColumnWidth(shown, URL_COLUMNS, 1000)).toBe(1000 - 104 - 240);
+    expect(urlColumnWidth(shown, URL_COLUMNS, 1000)).toBe(1000 - 88 - 208);
     expect(urlColumnWidth(shown, URL_COLUMNS, 400)).toBe(URL_MIN_WIDTH);
     expect(urlColumnWidth(['title'], URL_COLUMNS, 1000)).toBeUndefined();
   });
