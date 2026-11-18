@@ -23,6 +23,9 @@ internal sealed class HttpFetcher : IDisposable
     private const int MEASURE_BUFFER_BYTES = 64 * 1024;
     private const long MAX_MEASURED_IMAGE_BYTES = 10 * 1024 * 1024;
     private const int MAX_HEADERS = 200;
+    /// <summary>Marks a request that carries the crawl's signature, so its response can say so.</summary>
+    private static readonly HttpRequestOptionsKey<bool> SIGNED = new("ShoutingIguana.Signed");
+
     private const string ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
     private readonly HttpClient _client;
@@ -30,6 +33,7 @@ internal sealed class HttpFetcher : IDisposable
     private readonly CrawlScope _scope;
     private readonly bool _startsOnHttps;
     private readonly TimeProvider _timeProvider;
+    private readonly SignatureBook _signatures;
     private readonly string _userAgent;
     private readonly TimeSpan _timeout;
 
@@ -42,6 +46,7 @@ internal sealed class HttpFetcher : IDisposable
         _scope = scope;
         _startsOnHttps = Uri.TryCreate(options.StartUrl, UriKind.Absolute, out var start) && start.Scheme == Uri.UriSchemeHttps;
         _timeProvider = timeProvider;
+        _signatures = new SignatureBook(options.Signatures, timeProvider);
         _userAgent = userAgent.Header;
         _timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         Guard = new PrivateNetworkGuard(options.StartUrl);
@@ -160,6 +165,7 @@ internal sealed class HttpFetcher : IDisposable
                 BodyTruncated = truncated,
                 Location = ResolveLocation(uri, response),
                 RetryAfter = GetRetryAfter(response),
+                Signed = IsSigned(response),
                 HttpVersion = response.Version.ToString(),
                 TimeToFirstByteMs = timeToFirstByte,
                 TotalMs = (int)stopwatch.ElapsedMilliseconds,
@@ -235,6 +241,10 @@ internal sealed class HttpFetcher : IDisposable
 
     public void Dispose() => _client.Dispose();
 
+    /// <summary>Whether the request a response answers carried the crawl's signature: marked as it was made.</summary>
+    private static bool IsSigned(HttpResponseMessage response) =>
+        response.RequestMessage?.Options.TryGetValue(SIGNED, out var signed) == true && signed;
+
     private HttpRequestMessage CreateRequest(Uri uri)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, uri)
@@ -262,7 +272,24 @@ internal sealed class HttpFetcher : IDisposable
             }
         }
 
+        // A crawler signature goes to the one host it was made for, over https, while it lasts (SignatureBook): not to
+        // another site, a subdomain, a CDN, or the www twin without its own. Each hop of a redirect is a request of its
+        // own, so one that leads to another host goes there unsigned.
+        if (_signatures.For(uri) is { } signature)
+        {
+            SetHeader(headers, CrawlSignature.INPUT_HEADER, signature.SignatureInput);
+            SetHeader(headers, CrawlSignature.SIGNATURE_HEADER, signature.Signature);
+            SetHeader(headers, CrawlSignature.AGENT_HEADER, CrawlSignature.SHOPIFY_AGENT);
+            request.Options.Set(SIGNED, true);
+        }
+
         return request;
+    }
+
+    private static void SetHeader(System.Net.Http.Headers.HttpRequestHeaders headers, string name, string value)
+    {
+        headers.Remove(name);
+        headers.TryAddWithoutValidation(name, value);
     }
 
     private static async Task<PooledBuffer> ReadBodyAsync(HttpResponseMessage response, int limit, CancellationToken cancellationToken)

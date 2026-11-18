@@ -48,6 +48,9 @@ internal sealed record FetchResponse
     public string? BlockReason { get; init; }
     public string? Error { get; init; }
 
+    /// <summary>The request carried the crawl's signature for its host (<see cref="SignatureBook"/>).</summary>
+    public bool Signed { get; init; }
+
     /// <summary>A network-level failure that is worth retrying.</summary>
     public bool IsTransientFailure { get; init; }
 

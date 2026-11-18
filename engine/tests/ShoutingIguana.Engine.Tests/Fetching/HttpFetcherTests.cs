@@ -7,6 +7,7 @@ using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Tests.Support;
 using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Tests.Fetching;
@@ -242,6 +243,52 @@ public sealed class HttpFetcherTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ASignatureGoesToItsHostOverHttpsWithShopifysAgent()
+    {
+        await using var secure = await LoopbackServer.StartAsync(RespondAsync, https: true);
+        using var fetcher = SignedFetcher(secure, TimeProvider.System);
+
+        var response = await fetcher.FetchAsync(secure.Url("/signature"), FetchBody.Text, CancellationToken.None);
+        using var direct = await fetcher.SendAsync(secure.Url("/signature"), CancellationToken.None);
+
+        var expected = $"{FakeSignatures.Input()}|{FakeSignatures.SIGNATURE}|\"https://shopify.com\"";
+        Assert.Equal(expected, response.Body);
+        Assert.True(response.Signed);
+        Assert.Equal(expected, await direct.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ASignatureNeverGoesOverPlainHttpOrToAnotherSite()
+    {
+        await using var secure = await LoopbackServer.StartAsync(RespondAsync, https: true);
+        using var fetcher = SignedFetcher(secure, TimeProvider.System);
+
+        var plain = await fetcher.FetchAsync(new UriBuilder(secure.Url("/signature")) { Scheme = Uri.UriSchemeHttp }.Uri, FetchBody.Text, CancellationToken.None);
+        var other = await fetcher.FetchAsync(secure.OtherUrl("/signature"), FetchBody.Text, CancellationToken.None);
+
+        Assert.Equal("(none)", plain.Body);
+        Assert.False(plain.Signed);
+        Assert.Equal("(none)", other.Body);
+        Assert.False(other.Signed);
+    }
+
+    [Fact]
+    public async Task ASignatureStopsBeingSentWhenItExpires()
+    {
+        await using var secure = await LoopbackServer.StartAsync(RespondAsync, https: true);
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeSeconds(FakeSignatures.CREATED));
+        using var fetcher = SignedFetcher(secure, clock, expires: FakeSignatures.CREATED + 60);
+
+        var before = await fetcher.FetchAsync(secure.Url("/signature"), FetchBody.Text, CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(1));
+        var after = await fetcher.FetchAsync(secure.Url("/signature"), FetchBody.Text, CancellationToken.None);
+
+        Assert.True(before.Signed);
+        Assert.Equal("(none)", after.Body);
+        Assert.False(after.Signed);
+    }
+
+    [Fact]
     public async Task MeasuresImagesSentWithoutALength()
     {
         using var fetcher = Fetcher();
@@ -271,6 +318,19 @@ public sealed class HttpFetcherTests : IAsyncLifetime
     }
 
     private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri };
+
+    /// <summary>A fetcher whose crawl has a signature for the https server's own host and port.</summary>
+    private static HttpFetcher SignedFetcher(LoopbackServer secure, TimeProvider clock, long expires = FakeSignatures.LASTS_UNTIL)
+    {
+        var options = new CrawlOptions
+        {
+            StartUrl = secure.BaseUri.AbsoluteUri,
+            Signatures = FakeSignatures.For(secure.BaseUri.Authority, expires),
+            TrustedCertificate = secure.Certificate
+        };
+        return new HttpFetcher(options, UserAgents.Resolve(options.UserAgent, null),
+            new CrawlScope(secure.BaseUri, includeSubdomains: false, stayInStartFolder: false), clock);
+    }
 
     private async Task RespondAsync(HttpContext context)
     {
@@ -316,6 +376,12 @@ public sealed class HttpFetcherTests : IAsyncLifetime
             case "/throttled":
                 response.StatusCode = 503;
                 response.Headers.RetryAfter = request.Query["retry-after"].ToString();
+                break;
+            case "/signature":
+                response.ContentType = "text/plain";
+                await response.WriteAsync(request.Headers.ContainsKey("Signature")
+                    ? $"{request.Headers["Signature-Input"]}|{request.Headers["Signature"]}|{request.Headers["Signature-Agent"]}"
+                    : "(none)");
                 break;
             case "/echo":
                 response.ContentType = "text/plain";
