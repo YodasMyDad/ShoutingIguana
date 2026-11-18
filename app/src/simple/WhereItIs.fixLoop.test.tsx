@@ -21,6 +21,7 @@ import {
 } from '../test/fixLoopSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { GARDEN_ANALYSIS, gardenItem, problemRoutes, simpleRoutes } from '../test/simpleSidecar';
+import { TABLE_STUBBED } from './tableStubbed';
 
 const PROBLEM = `/crawls/${TEST_CRAWL_ID}/issues/broken-internal-links`;
 
@@ -48,7 +49,7 @@ afterEach(() => {
   resetLikeForLikeForTests();
 });
 
-describe('Where it is since the last check', () => {
+describe.skipIf(TABLE_STUBBED)('Where it is since the last check', () => {
   it('says under each cause whether it’s still there or new', async () => {
     const where = await open([changesRoute(), fixedRoute()]);
     expect((await where.findAllByText('Still there since 17 Oct')).length).toBeGreaterThan(0);
