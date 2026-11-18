@@ -390,21 +390,56 @@ machine):
   - Checks at `fce0cde6`: unit 4,674; 635 stories clean in both themes, in forced colours and in reduced motion; e2e
     284 passed, 3 skipped; `e2e:filled` 33 passed.
 
+- **`77d20e7`: every class the app writes compiles to CSS** (`ui/3b-classes` at `4a6bfed`; found while reviewing U2's
+  shots).
+  - The theme is closed, so an off-scale utility compiled to nothing, silently. The guard test,
+    `app/src/styles/classes.test.ts`, failed on 30 uses: `max-w-72`, `basis-80`, `pl-11`, `text-text-link` and others.
+    It now fails on any class with no CSS, naming the file and line. It can't see interpolated or passed-on classes:
+    138 of 5,678 uses.
+  - Each one is fixed with a named token:
+    - Advanced's check head puts Recheck, Copy URLs and Hide on one row, with the plan line beneath.
+    - Simple's flex bases work again (the Summary's name was squeezed at 200% zoom, and the recheck card at 960 px).
+    - Fold bodies start under their title.
+    - Dead `si-*` names are removed.
+  - Visible changes the owner hasn't seen yet:
+    - Crawl options' folds indent their switches.
+    - Earlier crawls are indented under their site.
+    - Two captions are now regular weight.
+  - Checks: Vitest 4,694; 232 stories, axe clean in both themes, in forced colours and reduced motion; e2e 10 specs, 53
+    passed.
+- **Real sites, at the owner's word (2026-11-18):** a fourth Jitsunami crawl, and rechecks on a copy of the garden
+  crawl. Both are reported in the [`handoff/2026-11-18/realsites-ready.md`](handoff/2026-11-18/realsites-ready.md).
+  - **Jitsunami, crawl 4:** 62 URLs, 9 pages, none blocked. The same 7 products and `/collections/belts` were still not
+    checked: Shopify kept refusing for the whole 20-minute cap.
+    - One recheck of the products, 15 minutes later, read 1. The site refused again.
+    - Score 97. The 3 points are the new `placeholder-text` check, and its flag is correct: the theme's lorem ipsum
+      shows in the blog sidebar.
+    - All 7 checks that fired on the product pages it read are correct. They come from the theme or the platform.
+  - **Garden rechecks:**
+    - The broken pages: 0 fixed, 8 still, in 7 s.
+    - Duplicate titles: 2 still.
+    - Both are right: the site wasn't changed.
+    - The robots.txt recheck failed. The fix lane below takes that up.
+- **Found by the real-site run, now on `ui/3b-recheck-fixes`:**
+  - B1: rechecking sitemaps fails on any crawl made before `sitemap_urls.lastmod`, which includes every 17 Nov crawl.
+  - B2: a failed recheck leaves the file half-written (all 240 sitemap entries deleted), and the analysis still runs.
+    `si compare` then reports two checks as fixed that weren't.
+  - B3: the recheck summaries mislead ("Rechecked 47 URLs" for 7 asked; "refused again" never said).
+  - B4 and B5: the 429 words and the cap's last try.
+  - B6: Microdata `content` on any element.
+  - B7: repeated notes.
+  - Session cookies counted as new on a recheck.
+  - The owner's installed app predates the fix loop, so none of the owner's files can have been touched.
+
 Next:
 
-- **`ui/3b-classes`** (found while reviewing U2's shots).
-  - The theme is closed, so an off-scale utility compiles to nothing. Eight in use did: `max-w-72`, `basis-80`,
-    `basis-64`, `text-text-link`, `pl-11`, `pl-5.5`, `font-normal` and `text-24`.
-  - Ten `si-*` names had no CSS.
-  - The lane adds a guard test that every static class compiles, fixes each one with named tokens, and puts Advanced's
-    check head (Recheck, Copy URLs, Hide) on one row with the plan line beneath.
+- Merge `ui/3b-recheck-fixes`.
 - Then the round's gates on a quiet machine:
   - readbench first (if the links search misses again, it's investigated, not waved through);
   - the full app verify and `e2e:filled`;
   - the stories in forced colours and reduced motion;
   - the release build, `smoke:shell`, the installer and `smoke:tauri`.
-- Then gallery 7 and the owner's look. Rechecking the garden site for real waits for the owner's word, and so does a
-  third Jitsunami crawl.
+- Then gallery 7 and the owner's look. Any further real crawl or recheck needs the owner's word again.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.
@@ -423,8 +458,8 @@ Next:
 4. The fix loop, stages E1 to V (designed on `ui/3b-fixloop`). Done to U2 (`7e36b8a`, `1602893`, `5e327f3`). Stage V
    is the round's gates and gallery 7.
 5. The new checks, batches 1 to 9 in order (specified on `ui/3b-newchecks`). Done (`8b6d891`, `1b714f1`, `8ca8a53`).
-6. Audit Jitsunami's product pages again once a crawl reads them (the 429s left them unchecked; a third real crawl is
-   the owner's call).
+6. ~~Audit Jitsunami's product pages again once a crawl reads them.~~ Done 2026-11-18 on the two product pages that
+   could be read: every flag was correct. Shopify still refuses the rest for longer than the 20-minute cap.
 7. Gallery 7, then tell the owner step 3b is finished. The release step follows at the owner's word.
 
 **Merged 2026-11-15: the framed workspace and where each URL was found** (`66f5c46` merges `ui/framed`, which holds
