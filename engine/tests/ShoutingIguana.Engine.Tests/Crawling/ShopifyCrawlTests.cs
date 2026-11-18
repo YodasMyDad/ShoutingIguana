@@ -172,9 +172,12 @@ public sealed class ShopifyCrawlTests : IDisposable
 
         await CrawlAsync(Signed(Options(server), server), path, time, observer);
 
-        var refused = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{REFUSED_SIGNED.Replace("'", "''", StringComparison.Ordinal)}'");
-        Assert.True(refused > 0, $"{refused} refused");
-        Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{REFUSED_UNSIGNED.Replace("'", "''", StringComparison.Ordinal)}'"));
+        // Refused when asked, or never asked before the section's time ran out (the crawl's end, under load): either way
+        // a signed crawl was refused, and said so, never "without a signature".
+        var asked = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{REFUSED_SIGNED.Replace("'", "''", StringComparison.Ordinal)}'");
+        var refused = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error LIKE '%{ShopifySignals.SIGNED_REFUSAL.Replace("'", "''", StringComparison.Ordinal)}: %'");
+        Assert.True(asked > 0, $"{asked} refused when asked");
+        Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error LIKE '%{ShopifySignals.UNSIGNED_REFUSAL}%'"));
         var notice = Assert.Single(observer.Notices, notice => notice.Code == "shopify-signature-refused");
         Assert.Equal(
             $"{server.BaseUri.Host} runs on Shopify, and Shopify refused pages even with the signature: it may not be active yet (a new one can take up to an hour), " +
