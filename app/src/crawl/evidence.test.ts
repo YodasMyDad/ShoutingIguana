@@ -310,7 +310,7 @@ describe('a column whose value is an object', () => {
     expect(robotsRuleWords({ origin: SITE, reason: 'unreachable', line: null, rule: null })).toBe(
       'robots.txt couldn’t be read',
     );
-    expect(robotsRuleWords({ origin: SITE, reason: 'unknown', line: null, rule: null })).toBe('No rule kept');
+    expect(robotsRuleWords({ origin: SITE, reason: 'unknown', line: null, rule: null })).toBe('No matching rule');
   });
 
   it('reads either by its column, an end’s too, and says one it doesn’t know as JSON', () => {

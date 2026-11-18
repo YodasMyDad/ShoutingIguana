@@ -277,6 +277,23 @@ export const ScoreBreakdownHeld: Story = story(
 /** What to fix on the garden crawl: three groups, Couldn't check and Nothing wrong folded. */
 export const WhatToFix: Story = story(FIX, GARDEN_ANALYSIS);
 
+/** Each part by the most points back, remembered for Simple: the folded broken links count with the 404s. */
+export const WhatToFixByPoints: Story = {
+  loaders: [
+    () => {
+      own(GARDEN_ANALYSIS);
+      updateSettings({ checkSort: { advanced: 'fixFirst', simple: 'points' } });
+    },
+  ],
+  render: () => <ScreenApp path={FIX} mode="simple" />,
+};
+
+/** The 404s: fixing them also fixes the broken links on all 5 pages, 4 more points back. */
+export const ProblemAlsoFixes: Story = story(`${FIX}/internal-client-error`, GARDEN_ANALYSIS);
+
+/** The broken links: fixing the 404s fixes them too. */
+export const ProblemFixedByAnother: Story = story(`${FIX}/broken-internal-links`, GARDEN_ANALYSIS);
+
 /** Landed on from the Summary's "13 Things worth a look": all of them, the heading in view with focus. */
 export const WhatToFixLandedOnNotices: Story = story(`${FIX}#worth-a-look`, GARDEN_ANALYSIS);
 

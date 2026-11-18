@@ -8,6 +8,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { ENGINE_DEFAULTS } from '../crawl/options/engineDefaults';
+import { keptSecrets, setSecretsStore, type SecretsStore } from '../crawl/secrets';
 import { VALIDATE_DELAY_MS } from '../crawl/options/useValidation';
 import { installKeyboard } from '../keyboard/registry';
 import type { Mode } from '../mode/mode';
@@ -328,5 +329,105 @@ describe('New crawl, the review’s findings', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Check site/ }));
     expect(await screen.findByText(/Type the site’s address/)).toBeVisible();
     expect(sent(transport, 'PUT', /defaults$/)).toBeUndefined();
+  });
+});
+
+describe('remembering a proxy password and header values (step 3b: consent)', () => {
+  /** The OS credential store, as a map. */
+  let kept: Map<string, string>;
+  const store: SecretsStore = {
+    read: (key) => Promise.resolve(kept.get(key) ?? null),
+    write: (key, secrets) => {
+      if (secrets === null) kept.delete(key);
+      else kept.set(key, secrets);
+      return Promise.resolve();
+    },
+  };
+  beforeEach(() => {
+    kept = new Map();
+    setSecretsStore(store);
+  });
+  afterEach(() => setSecretsStore(null));
+
+  const remember = () => screen.getByRole('checkbox', { name: 'Remember in Windows Credential Manager' });
+  const typeHeader = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /^Headers and network/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a header' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Header 1 name' }), { target: { value: 'X-Allow' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Header 1 value' }), { target: { value: 's3cret' } });
+  };
+
+  it('is off until chosen: a crawl’s header value lasts for this session only, and the words say so', async () => {
+    const transport = sidecar();
+    await open('/new?url=https://example.com/', 'advanced');
+    await typeHeader();
+    expect(remember()).not.toBeChecked();
+    expect(screen.getByText(/^Kept for this session only/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
+    await waitFor(() => expect(sent(transport, 'POST', /^\/api\/crawls$/)).toBeDefined());
+    await waitFor(async () =>
+      expect(await keptSecrets(`crawl:${TEST_CRAWL_ID}`)).toEqual({ headers: { 'X-Allow': 's3cret' } }),
+    );
+    expect(kept.size).toBe(0);
+  });
+
+  it('ticked, remembers them in the credential store, and says so', async () => {
+    const transport = sidecar();
+    await open('/new?url=https://example.com/', 'advanced');
+    await typeHeader();
+    fireEvent.click(remember());
+    expect(remember()).toBeChecked();
+    expect(screen.getByText(/are kept in Windows Credential Manager/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
+    await waitFor(() => expect(kept.get(`crawl:${TEST_CRAWL_ID}`)).toBeDefined());
+    expect(JSON.parse(kept.get(`crawl:${TEST_CRAWL_ID}`) ?? '{}')).toEqual({ headers: { 'X-Allow': 's3cret' } });
+    expect(JSON.stringify(sent(transport, 'POST', /^\/api\/crawls$/))).toContain('s3cret');
+  });
+
+  it('shows ticked where an earlier version remembered the defaults’, and saving unticked takes them out', async () => {
+    kept.set('defaults', JSON.stringify({ headers: { 'X-Allow': 's3cret' } }));
+    const transport = sidecar({ ...ENGINE_DEFAULTS, extraHeaders: { 'X-Allow': '' } });
+    await open('/new?url=https://example.com/', 'advanced');
+    fireEvent.click(await screen.findByRole('button', { name: /^Headers and network/ }));
+    expect(screen.getByRole('textbox', { name: 'Header 1 value' })).toHaveValue('s3cret');
+    expect(remember()).toBeChecked();
+    fireEvent.click(remember());
+    fireEvent.click(screen.getByRole('button', { name: 'Save as my defaults' }));
+    await waitFor(() => expect(sent(transport, 'PUT', /defaults$/)).toBeDefined());
+    expect(
+      await screen.findByText(
+        'Every new crawl starts with these settings. The proxy password and header values are kept until you close the app, not in your defaults.',
+      ),
+    ).toBeVisible();
+    expect(kept.has('defaults')).toBe(false);
+    expect(await keptSecrets('defaults')).toEqual({ headers: { 'X-Allow': 's3cret' } });
+  });
+
+  it('in Simple, doesn’t ask when there’s nothing to remember', async () => {
+    sidecar();
+    await open('/new?url=https://example.com/', 'simple');
+    await screen.findByRole('textbox', { name: 'Web address' });
+    expect(screen.queryByRole('checkbox', { name: 'Remember in Windows Credential Manager' })).toBeNull();
+  });
+
+  it('in Simple, asks when the defaults bring a sign-in, in Simple’s words', async () => {
+    kept.set('defaults', JSON.stringify({ proxyUrl: 'http://me:pw@proxy.example.com:8080' }));
+    sidecar({ ...ENGINE_DEFAULTS, proxyUrl: 'http://***@proxy.example.com:8080', hasRedactedProxyCredentials: true });
+    await open('/new?url=https://example.com/', 'simple');
+    expect(await screen.findByRole('checkbox', { name: 'Remember in Windows Credential Manager' })).toBeChecked();
+    expect(screen.getByText(/Windows keeps your sign-in details safe/)).toBeVisible();
+  });
+
+  it('crawls again without asking for what was kept, ticked as it was', async () => {
+    kept.set(
+      `crawl:${TEST_CRAWL_ID}`,
+      JSON.stringify({ proxyUrl: 'http://me:pw@proxy.example.com:8080', headers: { 'X-Allow': 'v' } }),
+    );
+    sidecar();
+    await open(`/new?from=${TEST_CRAWL_ID}`, 'advanced');
+    expect(await screen.findByRole('textbox', { name: 'Start URL' })).toHaveValue('https://example.com/');
+    expect(screen.queryByText('Some of this crawl’s settings must be given again')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Headers and network/ }));
+    expect(remember()).toBeChecked();
   });
 });

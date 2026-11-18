@@ -28,7 +28,7 @@ import { useCommands } from '../keyboard/registry';
 import { useMode } from '../mode/mode';
 import { formatCountOf } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import { getSettings, useSettings } from '../settings/settingsStore';
+import { getSettings, updateSettings, useSettings } from '../settings/settingsStore';
 import { useInspector } from '../routing/inspector';
 import { openInBrowser } from '../shell/os';
 import { Card } from '../ui/Card';
@@ -51,7 +51,9 @@ import {
   hiddenTotals,
   hiddenWords,
   isInCategory,
+  relatedChecks,
   type CheckEntry,
+  type CheckSort,
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
@@ -122,6 +124,14 @@ export function IssuesScreen() {
   // the list, never text in the filter field, which would match other categories' checks by their titles.
   const category = search.category;
   const sort = useMemo<GridSort[]>(() => search.sort ?? [], [search.sort]);
+  // The list's order, remembered for Advanced: the order to fix them in until another is chosen.
+  const checkSort = useSettings((settings) => settings.checkSort.advanced);
+  const onCheckSortChange = (next: CheckSort) =>
+    updateSettings((settings) => ({ checkSort: { ...settings.checkSort, advanced: next } }));
+  const points = useMemo(
+    () => new Map((analysis.data?.score?.lines ?? []).map((line) => [line.checkId, line.points])),
+    [analysis.data?.score?.lines],
+  );
 
   const entries = useMemo(
     () => (checks.data && analysis.data ? checkEntries(checks.data, analysis.data, hidden) : null),
@@ -130,16 +140,33 @@ export function IssuesScreen() {
   const list = useMemo(
     () =>
       checks.data && entries
-        ? buildCheckList(checks.data, entries, {
-            severity: severity === 'all' ? [] : [severity],
-            q,
-            category,
-            showPassed,
-            showHidden,
-            hidden,
-          })
+        ? buildCheckList(
+            checks.data,
+            entries,
+            {
+              severity: severity === 'all' ? [] : [severity],
+              q,
+              category,
+              showPassed,
+              showHidden,
+              hidden,
+            },
+            { sort: checkSort, fixFirst: analysis.data?.fixFirst, points },
+          )
         : null,
-    [checks.data, entries, severity, q, category, showPassed, showHidden, hidden],
+    [
+      checks.data,
+      entries,
+      severity,
+      q,
+      category,
+      showPassed,
+      showHidden,
+      hidden,
+      checkSort,
+      analysis.data?.fixFirst,
+      points,
+    ],
   );
   // The answer counts the checks that aren't hidden, as the list, its severities and the Overview do, and says what
   // it left out.
@@ -545,6 +572,9 @@ export function IssuesScreen() {
               onQueryChange={onQueryChange}
               severity={severity}
               onSeverityChange={onSeverityChange}
+              sort={checkSort}
+              onSortChange={onCheckSortChange}
+              points={points}
               onCategoryClear={clearCategory}
               showPassed={showPassed}
               onShowPassedChange={setShowPassed}
@@ -566,6 +596,7 @@ export function IssuesScreen() {
                 entry={selected}
                 categoryTitle={categoryTitle(checks.data, selected.check)}
                 analysis={analysis.data}
+                related={entries ? relatedChecks(entries, selected, points) : undefined}
                 groupCount={groupsPage.data?.matching ?? null}
                 siteOrigin={siteOriginOf(item?.startUrl)}
                 group={search.group}

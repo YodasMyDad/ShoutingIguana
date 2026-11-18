@@ -600,6 +600,9 @@ internal sealed class GridReadContext : IDisposable
     /// <summary>The links a statement is counting by target and shape (<c>si_link</c>, <c>si_links</c>).</summary>
     public LinkTally? LinkTally { get; set; }
 
+    /// <summary>The links a statement is counting by the pages they're on, by target (<c>si_link</c>), read in crawl order.</summary>
+    public LinkSpread? LinkSpread { get; set; }
+
     /// <summary>The URLs and titles a statement is reading for searching (<c>si_search_url</c>, <c>si_search_title</c>).</summary>
     public SearchText? SearchText { get; set; }
 
@@ -611,6 +614,7 @@ internal sealed class GridReadContext : IDisposable
     {
         LinkIds?.Add(id);
         LinkTally?.Add(toId, kind, position, flags, NofollowPages?.Contains(fromId) == true, 1);
+        LinkSpread?.Add(toId, fromId, position);
     }
 
     /// <summary>

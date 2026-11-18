@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -206,6 +207,192 @@ public static class LinkGridReader
         }));
     }
 
+    /// <summary>
+    /// One page of the links the filters match grouped by target: each target once, with how many of the links lead to it,
+    /// the pages they're on, the text most of them have, where on their pages they sit, whether that's the template the
+    /// view's pages share, and what the target is (its status, size, pixels, where its redirects end). A broken footer link
+    /// is one row, however many pages carry it. The most linked from pages come first unless asked otherwise.
+    /// <list type="bullet">
+    /// <item>The links are counted in one pass over them in crawl order (<see cref="LinkSpread"/>), kept per filter set, so
+    /// another page of the list, or another order, costs only its rows; the order itself is kept per sort.</item>
+    /// <item>Each row reads at most <see cref="LinkGroupPage.TEXT_SAMPLE"/> of its target's matching links, on the links'
+    /// index by target, for their text; and its target's facts, as a check's related URL's are read.</item>
+    /// </list>
+    /// </summary>
+    /// <inheritdoc cref="Query(string, UrlQuery, ReadCache?, CancellationToken)" path="/exception"/>
+    public static LinkGroupPage Groups(string databasePath, LinkGroupQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
+    {
+        var errors = ValidateGroups(query);
+        if (query.Limit is < 1 or > LinkGroupPage.MAX_LIMIT)
+        {
+            UrlQueryCompiler.Add(errors, "limit", $"limit must be from 1 to {LinkGroupPage.MAX_LIMIT:N0}.");
+        }
+
+        if (query.Offset < 0)
+        {
+            UrlQueryCompiler.Add(errors, "offset", "offset must be 0 or more.");
+        }
+
+        UrlGridReader.ThrowIfInvalid(errors);
+        var sort = GroupSortOf(query);
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
+        {
+            var (filters, tally, spread, order) = Grouped(context, query, sort);
+            var rows = GroupRows(context, filters, tally, spread, [.. order.Skip(query.Offset).Take(query.Limit)]);
+            return new LinkGroupPage(order.Length, tally.Links, spread.Pages, query.Offset, sort, rows, context.Summary) { PixelSizes = context.HasPixelSizes };
+        }));
+    }
+
+    /// <summary>
+    /// Every target of the links the filters match, in the order asked for, as <see cref="Groups"/> lists them, read from
+    /// one snapshot of the file a page at a time: the export of the grouped view. <paramref name="expect"/> is told how
+    /// many there are before the first page.
+    /// </summary>
+    /// <returns>Whether the crawl was running: the targets are of one moment of it.</returns>
+    /// <inheritdoc cref="Query(string, UrlQuery, ReadCache?, CancellationToken)" path="/exception"/>
+    internal static bool EveryGroup(string databasePath, LinkGroupQuery query, ReadCache? cache, CancellationToken cancellationToken, Action<long> expect,
+        Action<IReadOnlyList<LinkGroupRow>> page)
+    {
+        UrlGridReader.ThrowIfInvalid(ValidateGroups(query));
+        var sort = GroupSortOf(query);
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
+        {
+            var (filters, tally, spread, order) = Grouped(context, query, sort);
+            expect(order.Length);
+            foreach (var chunk in order.Chunk(LinkGroupPage.MAX_LIMIT))
+            {
+                context.Token.ThrowIfCancellationRequested();
+                page(GroupRows(context, filters, tally, spread, [.. chunk]));
+            }
+
+            return context.Stamp is { Live: true };
+        }));
+    }
+
+    /// <summary>What's wrong with a grouped view's filters, search, sort or hidden checks, by field: none when it can be read.</summary>
+    internal static Dictionary<string, List<string>> ValidateGroups(LinkGroupQuery query)
+    {
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        ValidateFilters(query.Filters, query.Search, errors);
+        var sort = GroupSortOf(query);
+        if (sort.Column is not (LinkGroupPage.PAGES or LinkGroupPage.LINKS) && LinkColumns.End(sort.Column) is not (LinkColumns.TO, { Sortable: true }))
+        {
+            UrlQueryCompiler.Add(errors, "sort.column",
+                $"The links grouped by target sort by '{LinkGroupPage.PAGES}', '{LinkGroupPage.LINKS}', or a column of the target that the URL grid sorts by; not by '{sort.Column}'.");
+        }
+
+        UrlQueryCompiler.ValidateHidden(query.HiddenChecks, errors);
+        return errors;
+    }
+
+    private static UrlSort GroupSortOf(LinkGroupQuery query) => query.Sort ?? new UrlSort(LinkGroupPage.PAGES, Descending: true);
+
+    /// <summary>A grouped view's links counted (kept per filter set) and its targets in order (kept per sort).</summary>
+    private static (Filters Filters, LinkTally Tally, LinkSpread Spread, int[] Order) Grouped(GridReadContext context, LinkGroupQuery query, UrlSort sort)
+    {
+        var byTarget = sort.Column is not (LinkGroupPage.PAGES or LinkGroupPage.LINKS);
+        var filters = Compile(context, query.Filters, query.Search, byTarget ? sort : null, query.HiddenChecks);
+        var (tally, spread) = Spread(context, filters);
+        return (filters, tally, spread, GroupOrder(context, filters, tally, spread, sort, query.HiddenChecks));
+    }
+
+    /// <summary>The rows of some targets, in the order given: each with its URL, its links counted, their text and positions, and its facts.</summary>
+    private static List<LinkGroupRow> GroupRows(GridReadContext context, Filters filters, LinkTally tally, LinkSpread spread, List<int> ids)
+    {
+        Dictionary<int, string> urls = [];
+        if (ids.Count > 0)
+        {
+            using var command = context.Command($"SELECT id, url FROM urls WHERE id IN ({string.Join(",", ids.Select(id => id.ToString(CultureInfo.InvariantCulture)))})", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                urls[reader.GetInt32(0)] = reader.GetString(1);
+            }
+        }
+
+        // A target the crawl has no URL for (a crafted file's link to nowhere) has no row: it's counted, and can't be named.
+        ids.RemoveAll(id => !urls.ContainsKey(id));
+        var facts = UrlFactsReader.Read(context, ids);
+        List<LinkGroupRow> rows = [];
+        foreach (var id in ids)
+        {
+            var (text, texts) = TextOf(context, filters, id);
+            var pages = spread.PagesTo(id);
+            rows.Add(new LinkGroupRow(id, urls[id], tally.To(id), pages, text, texts, PositionsIn(spread.PositionsOf(id)),
+                pages >= IssueGroupReader.TEMPLATE_MIN_PAGES && pages * 2 >= spread.Pages, facts[id]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// The matching links counted by target and by the pages they're on, in one pass over them in crawl order, kept per
+    /// filter set: the order a page's links are stored in is what counts its pages (<see cref="LinkSpread"/>), so the pass
+    /// never reads them on an index, which gives a target's links in another order.
+    /// </summary>
+    private static (LinkTally Tally, LinkSpread Spread) Spread(GridReadContext context, Filters filters) =>
+        HeldHuge(context, "linkspread|" + filters.Key, () =>
+        {
+            var (_, tally, spread) = Scan(context, filters, Total(context), ids: false, tally: true, indexed: false, spread: true);
+            return (tally!, spread!);
+        });
+
+    /// <summary>
+    /// The targets in the order asked for, kept per sort: by pages or links (ties by the other, then in the order the crawl
+    /// found the targets), or by a column of the target as the links grid sorts a page by it.
+    /// </summary>
+    private static int[] GroupOrder(GridReadContext context, Filters filters, LinkTally tally, LinkSpread spread, UrlSort sort, IReadOnlyList<string> hidden)
+    {
+        var direction = sort.Descending ? "desc" : "asc";
+        if (sort.Column is LinkGroupPage.PAGES or LinkGroupPage.LINKS)
+        {
+            return HeldHuge(context, $"linkgrouporder|{sort.Column}|{direction}|{filters.Key}", () =>
+            {
+                var byPages = sort.Column == LinkGroupPage.PAGES;
+                var sign = sort.Descending ? -1 : 1;
+                List<(int Id, long First, long Second)> targets =
+                [
+                    .. tally.Targets().Select(target => (target.Target, (long)(byPages ? spread.PagesTo(target.Target) : target.Links),
+                        (long)(byPages ? target.Links : spread.PagesTo(target.Target))))
+                ];
+                targets.Sort((a, b) => a.First != b.First ? sign * a.First.CompareTo(b.First)
+                    : a.Second != b.Second ? sign * a.Second.CompareTo(b.Second)
+                    : a.Id.CompareTo(b.Id));
+                return targets.Select(target => target.Id).ToArray();
+            });
+        }
+
+        var key = TargetSort(context, sort, hidden);
+        return HeldHuge(context, $"linkgrouporder|{key.Column}|{direction}|{filters.Key}{key.Query.HiddenKey}", () => Ordered(context, tally, key, sort.Descending).Targets);
+    }
+
+    /// <summary>
+    /// The text most of the target's matching links have, among the first <see cref="LinkGroupPage.TEXT_SAMPLE"/> in crawl
+    /// order on the links' index by target, the first found on a tie; and how many texts they have between them.
+    /// </summary>
+    private static (string? Text, int Texts) TextOf(GridReadContext context, Filters filters, int targetId)
+    {
+        var within = Within(context) is { } moment ? $" AND {moment}" : string.Empty;
+        var sql = $"SELECT l.text FROM links l{filters.Where($"l.to_id = $groupTarget{within}")} ORDER BY l.rowid LIMIT {LinkGroupPage.TEXT_SAMPLE.ToString(CultureInfo.InvariantCulture)}";
+        Ran?.Invoke(sql);
+        using var command = context.Command(sql, [.. filters.Parameters, new("$groupTarget", targetId)]);
+        using var reader = command.ExecuteReader();
+        Dictionary<string, (int Count, int First)> counts = new(StringComparer.Ordinal);
+        for (var read = 0; reader.Read(); read++)
+        {
+            // No text is one text of its own, counted as the empty one: it's never the text shown.
+            var text = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+            counts[text] = counts.TryGetValue(text, out var seen) ? (seen.Count + 1, seen.First) : (1, read);
+        }
+
+        var top = counts.Where(entry => entry.Key.Length > 0).OrderByDescending(entry => entry.Value.Count).ThenBy(entry => entry.Value.First)
+            .Select(entry => entry.Key).FirstOrDefault();
+        return (top, counts.Count);
+    }
+
+    /// <summary>The positions a bit set names, in their order, without the bit for one this engine has no name for.</summary>
+    private static List<LinkPosition> PositionsIn(int bits) => [.. Enum.GetValues<LinkPosition>().Where(position => (bits & (1 << (int)position)) != 0)];
+
     /// <summary>The filters of a condition on the ends of links, checked as the links grid's own are, each error under <c>linkEnds</c>.</summary>
     internal static void ValidateEnds(UrlLinkEnds? ends, Dictionary<string, List<string>> errors)
     {
@@ -297,7 +484,10 @@ public static class LinkGridReader
         }
 
         var next = more && ids.Length > 0 ? GridCursor.Encode(hash, Keys(ids[^1]) ?? [], ids[^1]) : null;
-        return new LinkGridPage([.. columns.Select(column => column.Id)], rows, after is null ? query.Offset : null, matching, total, next, context.Summary, unavailable);
+        return new LinkGridPage([.. columns.Select(column => column.Id)], rows, after is null ? query.Offset : null, matching, total, next, context.Summary, unavailable)
+        {
+            PixelSizes = context.HasPixelSizes
+        };
     }
 
     /// <returns>Null when a running crawl's moment no longer holds (<see cref="Settled"/>).</returns>
@@ -826,7 +1016,7 @@ public static class LinkGridReader
 
     private static Pass Passed(GridReadContext context, Filters filters) => HeldHuge(context, "linkpass|" + filters.Key, () =>
     {
-        var (ids, tally) = Scan(context, filters, Total(context), ids: filters.Conditions.Count > 0, tally: true);
+        var (ids, tally, _) = Scan(context, filters, Total(context), ids: filters.Conditions.Count > 0, tally: true);
         return new Pass(ids, tally!);
     });
 
@@ -879,7 +1069,9 @@ public static class LinkGridReader
     /// many links, each of which the index would fetch from wherever it's stored.
     /// </param>
     /// <param name="bySource">Counts the links by the page they're on rather than by their target: the tally's targets are then the sources.</param>
-    private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true, bool bySource = false)
+    /// <param name="spread">Counts the pages the links are on, by target (<see cref="LinkSpread"/>): read in crawl order, as it needs.</param>
+    private static (LinkIdSet? Ids, LinkTally? Tally, LinkSpread? Spread) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true,
+        bool bySource = false, bool spread = false)
     {
         var largest = LargestLinkId(context);
         LinkIdSet? NewIds() => ids ? new LinkIdSet(largest, total) : null;
@@ -887,21 +1079,21 @@ public static class LinkGridReader
 
         // What a part's tally is sized by, read here, on the read's own thread: a part runs on a thread and a connection
         // of its own, and never touches the read's context, which isn't made to be shared.
-        var (largestUrl, urls) = tally ? (LargestUrlId(context), UrlCount(context)) : (0L, 0L);
+        var (largestUrl, urls) = tally || spread ? (LargestUrlId(context), UrlCount(context)) : (0L, 0L);
 
         // With nothing to count, the id is all that's passed on.
-        var each = tally
+        var each = tally || spread
             ? $"{ReaderFunctions.LINK}(l.rowid, {(bySource ? "l.from_id" : "l.to_id")}, l.from_id, l.kind, l.position, l.flags)"
             : $"{ReaderFunctions.LINK_ID}(l.rowid)";
-        var inOrder = !indexed || !filters.Direct;
+        var inOrder = !indexed || !filters.Direct || spread;
         var from = inOrder ? "links l NOT INDEXED" : filters.From;
 
         // One part of the pass, on one read's connection: the links between two ids (all of them, with no bounds), kept
         // and counted by that read.
-        (LinkIdSet? Ids, LinkTally? Tally) Part(GridReadContext read, string? bounds)
+        (LinkIdSet? Ids, LinkTally? Tally, LinkSpread? Spread) Part(GridReadContext read, string? bounds)
         {
-            var (found, counted) = (NewIds(), tally ? new LinkTally(largestUrl, urls) : null);
-            (read.LinkIds, read.LinkTally, read.NofollowPages) = (found, counted, nofollow);
+            var (found, counted, spreading) = (NewIds(), tally ? new LinkTally(largestUrl, urls) : null, spread ? new LinkSpread(largestUrl, urls) : null);
+            (read.LinkIds, read.LinkTally, read.LinkSpread, read.NofollowPages) = (found, counted, spreading, nofollow);
             try
             {
                 var sql = $"SELECT COUNT({each}) FROM {from}{filters.Where(bounds is null ? Within(context) : bounds)}";
@@ -911,10 +1103,10 @@ public static class LinkGridReader
             }
             finally
             {
-                (read.LinkIds, read.LinkTally, read.NofollowPages) = (null, null, null);
+                (read.LinkIds, read.LinkTally, read.LinkSpread, read.NofollowPages) = (null, null, null, null);
             }
 
-            return (found, counted);
+            return (found, counted, spreading);
         }
 
         // Every link read in order, of a crawl that stands still, and many of them: split by link id over as many
@@ -924,8 +1116,8 @@ public static class LinkGridReader
         if (helpers is not { Count: > 0 })
         {
             Split?.Invoke(1);
-            var (found, counted) = Part(context, null);
-            return (found?.Seal(), counted);
+            var (found, counted, spreading) = Part(context, null);
+            return (found?.Seal(), counted, spreading?.Seal());
         }
 
         var parts = helpers.Count + 1;
@@ -939,7 +1131,7 @@ public static class LinkGridReader
                 using var alongside = context.OpenAlongside(stop.Token);
                 try
                 {
-                    return alongside is null ? ((LinkIdSet? Ids, LinkTally? Tally)?)null : Part(alongside.Context, Bounds(part));
+                    return alongside is null ? ((LinkIdSet? Ids, LinkTally? Tally, LinkSpread? Spread)?)null : Part(alongside.Context, Bounds(part));
                 }
                 catch (Exception exception) when (alongside?.Context.RefusedPattern is { } pattern && exception is not RegexTooComplexException)
                 {
@@ -955,7 +1147,7 @@ public static class LinkGridReader
             }
         }, stop.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
 
-        (LinkIdSet? Ids, LinkTally? Tally) mine;
+        (LinkIdSet? Ids, LinkTally? Tally, LinkSpread? Spread) mine;
         try
         {
             mine = Part(context, Bounds(0));
@@ -981,8 +1173,8 @@ public static class LinkGridReader
         {
             // A connection found the file changed under the read: the pass again, on this read's own.
             Split?.Invoke(1);
-            var (found, counted) = Part(context, null);
-            return (found?.Seal(), counted);
+            var (found, counted, spreading) = Part(context, null);
+            return (found?.Seal(), counted, spreading?.Seal());
         }
 
         Split?.Invoke(parts);
@@ -997,9 +1189,15 @@ public static class LinkGridReader
             {
                 mine.Tally!.Merge(other.Tally);
             }
+
+            // In the parts' order, which is the links': the page that straddles two parts is counted once.
+            if (other.Spread is not null)
+            {
+                mine.Spread!.Merge(other.Spread);
+            }
         }
 
-        return (mine.Ids?.Seal(), mine.Tally);
+        return (mine.Ids?.Seal(), mine.Tally, mine.Spread?.Seal());
     }
 
     /// <summary>

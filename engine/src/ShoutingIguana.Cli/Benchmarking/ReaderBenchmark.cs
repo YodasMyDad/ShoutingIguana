@@ -61,6 +61,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// The first search of a crawl reads that text from the file (<c>search-first</c>: 55 to 89 ms at p95 on the
     /// desktop, <b>over the palette's 50 ms</b>, which is why the palette asks an empty search as it opens): held to
     /// 200 ms for the runner, so it can't get slower unseen.</item>
+    /// <item>An analysis's checks as things to change, with what a fix of each clears (<c>causes</c>), pass over the
+    /// issues once, check by check: 19 to 22 ms at 100k on the desktop, cold, and kept after. Held to the formula's 200 ms,
+    /// as a read that grows linearly.</item>
     /// </list>
     /// engine/README.md has the measurements.
     /// </summary>
@@ -88,6 +91,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["link-pass-split"] = 1_500,
         ["search"] = 25,
         ["search-first"] = 200,
+        ["causes"] = 200,
 
         // The fix loop's comparison (the design's budget, docs/v2-fix-loop.md section 8): its summary, a page of a check's
         // rows or groups with another crawl to compare with, and the first page of what a check no longer flags, each
@@ -169,6 +173,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
                 offset => IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Columns = [.. COLUMNS, "detail"], Offset = offset }));
         }
 
+        // The analysis's checks as things to change, and what a fix of each clears: read once per analysis, then kept.
+        Timed("Analysis: every check's things to change and what fixing it clears", "causes", "causes", null, () => IssueCauseReader.Read(path));
+
         Timed("Facets of every URL", "facets", "facets", all.Total, () => UrlGridReader.Facets(path, new UrlFacetQuery()));
         Timed("Facets of the pages", "facets", "facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = [In("type", "page")] }));
         Timed("Facets of a common title filter", "facets", "facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = [Text("title", FilterOperator.Contains, "product")] }));
@@ -201,6 +208,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
 
         LinksGrid();
         LinkEnds();
+        LinkGroups();
         SitemapsAndRobots();
         WithoutSummary();
         Stats();
@@ -288,6 +296,11 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Timed("robots.txt: the site's file, with what each line blocked", "robots", "robots", site.Blocked, () => RobotsReader.ReadFile(path, site.Origin));
             Paged("robots.txt: the site's blocked URLs", "robots", "robots", site.Blocked, offset => RobotsReader.ReadBlocked(path, site.Origin, offset: offset));
 
+            // What blocking each costs (the pages linking to it, a sitemap, a menu) is counted for every blocked URL of the
+            // origin, as the conflicts are listed alone: two lookups a URL in the summaries, never a pass over the links.
+            Timed("robots.txt: the site's blocked URLs a sitemap lists or a menu links to", "robots", "robots", null,
+                () => RobotsReader.ReadBlocked(path, site.Origin, conflict: true));
+
         }
 
         // What the inspector links by: one blocked URL's row, and the URL inspected, with the line that refused it. Of the
@@ -334,6 +347,48 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Ends($"Link ends: the pages of {name} (every link read)", "link-pass", LinkEnd.From, filters);
             Ends($"Link ends: the pages of {name} (every link read, on several connections)", "link-pass-split", LinkEnd.From, filters, HELPERS);
         }
+    }
+
+    /// <summary>
+    /// A view of the links grouped by target (step 3b): its first page and the page half way down. Every grouped view takes
+    /// one pass over every link in crawl order, which counts the pages a target's links are on: cold on one connection
+    /// (<c>link-pass</c>) and split over those a host lends (<c>link-pass-split</c>). Then, the pass kept, the same pages
+    /// again and in other orders, which read only their rows (<c>link-grid</c>): each target's links' text, on the links'
+    /// index by target, and its facts.
+    /// </summary>
+    private void LinkGroups()
+    {
+        (string Name, UrlFilter[] Filters, UrlSort? Sort)[] views =
+        [
+            ("every link, the most linked from pages first", [], null),
+            ("the hyperlinks to 4xx URLs", [In("kind", "hyperlink"), In("to.statusClass", "4xx")], null),
+            ("the images, the largest first", [In("kind", "image")], new UrlSort("to.sizeBytes", true)),
+            ("the links whose text contains a common word", [Text("text", FilterOperator.Contains, "product")], null),
+            ("every link, by target URL", [], new UrlSort("to.url"))
+        ];
+        foreach (var (name, filters, sort) in views)
+        {
+            Groups($"Link groups: {name} (every link read)", "link-pass", filters, sort, null);
+            Groups($"Link groups: {name} (every link read, on several connections)", "link-pass-split", filters, sort, () => new ReadCache { Helpers = HELPERS });
+            if (Wanted($"Link groups: {name} (counted)"))
+            {
+                ReadCache kept = new();
+                LinkGridReader.Groups(path, new LinkGroupQuery { Filters = filters, Sort = sort, Limit = 1 }, kept);
+                Groups($"Link groups: {name} (counted)", "link-grid", filters, sort, () => kept);
+            }
+        }
+    }
+
+    /// <summary>A grouped view's first page and the page half way down, each read with the cache given, or none.</summary>
+    private void Groups(string name, string readClass, UrlFilter[] filters, UrlSort? sort, Func<ReadCache>? cache)
+    {
+        if (!Wanted(name))
+        {
+            return;
+        }
+
+        var total = LinkGridReader.Groups(path, new LinkGroupQuery { Filters = filters, Sort = sort, Limit = 1 }).Total;
+        Paged(name, "link-groups", readClass, total, offset => LinkGridReader.Groups(path, new LinkGroupQuery { Filters = filters, Sort = sort, Offset = offset }, cache?.Invoke()));
     }
 
     /// <summary>One end of a view's links: the list's first page and the page half way down, then the URL grid narrowed to them.</summary>

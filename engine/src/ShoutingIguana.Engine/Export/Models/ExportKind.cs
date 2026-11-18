@@ -31,5 +31,11 @@ public enum ExportKind
     Sitemaps,
 
     /// <summary>The origins the crawl asked for a robots.txt, as the robots.txt screen lists them: all, or those a search and a filter match.</summary>
-    RobotsOrigins
+    RobotsOrigins,
+
+    /// <summary>
+    /// The links grid grouped by target (step 3b): one row a target of the links the query matches, with how many links
+    /// and pages lead to it, its status, the text most of them have, where they sit and whether that's the template.
+    /// </summary>
+    LinkGroups
 }

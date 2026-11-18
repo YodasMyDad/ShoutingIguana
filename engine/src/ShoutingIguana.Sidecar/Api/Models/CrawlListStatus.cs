@@ -11,6 +11,9 @@ internal enum CrawlListStatus
     /// <summary>An analysis is running, in this process.</summary>
     Analyzing,
 
+    /// <summary>A recheck is fetching some of the crawl's URLs again, in this process; analysing follows it (the fix loop).</summary>
+    Rechecking,
+
     /// <summary>Stopped, and can be continued.</summary>
     Stopped,
 

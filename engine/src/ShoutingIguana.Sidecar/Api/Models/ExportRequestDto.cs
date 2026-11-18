@@ -50,6 +50,9 @@ internal sealed record ExportRequestDto
     /// <summary><c>rule</c>, <c>unreachable</c> or <c>unknown</c>.</summary>
     public string? Reason { get; init; }
 
+    /// <summary>For <c>robotsBlocked</c>: only the URLs a sitemap lists or a menu links to (true), or only the others (false).</summary>
+    public bool? Conflict { get; init; }
+
     /// <summary>For <c>issueRows</c> and <c>check</c>.</summary>
     public string? CheckId { get; init; }
 
@@ -65,4 +68,10 @@ internal sealed record ExportRequestDto
 
     /// <summary>For <c>workbook</c>: only these checks, the ones the Issues view listed.</summary>
     public IReadOnlyList<string>? Checks { get; init; }
+
+    /// <summary>
+    /// For <c>report</c> and <c>workbook</c> (the fix loop): <c>previous</c> (when left out), <c>none</c>, or a crawl's id
+    /// to compare with. One that can't be compared leaves the comparison out and says why; it never fails the export.
+    /// </summary>
+    public string? CompareWith { get; init; }
 }

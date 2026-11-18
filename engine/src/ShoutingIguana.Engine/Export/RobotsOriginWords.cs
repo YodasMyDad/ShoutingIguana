@@ -25,4 +25,17 @@ internal static class RobotsOriginWords
             _ => "None kept"
         };
     }
+
+    /// <summary>
+    /// The blocked URLs' Conflict cell (<c>robotsWords.ts</c>, <c>conflictWords</c>): the site asks for a URL it blocks, by
+    /// listing it in a sitemap or linking it from a menu. Null for a URL that isn't one, or while that isn't known.
+    /// </summary>
+    public static string? Conflict(RobotsBlockedUrl url) => url.Conflict != true
+        ? null
+        : (url.InSitemap == true, url.InMenu == true) switch
+        {
+            (true, true) => "In your sitemap and menu but blocked",
+            (true, false) => "In your sitemap but blocked",
+            _ => "In your menu but blocked"
+        };
 }

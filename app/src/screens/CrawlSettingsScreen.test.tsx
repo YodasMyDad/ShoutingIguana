@@ -79,7 +79,7 @@ describe('the crawl’s settings', () => {
     const used = await screen.findByRole('region', { name: 'What it used' });
     expect(within(used).getByText('https://example.com/')).toBeVisible();
     expect(within(used).getByText('5,000')).toBeVisible();
-    expect(within(used).getByText(/values aren’t kept with the crawl/)).toBeVisible();
+    expect(within(used).getByText(/values aren’t in the crawl file/)).toBeVisible();
   });
 
   it('crawl again with these, from the crawl’s own start URL', async () => {
@@ -98,7 +98,9 @@ describe('the crawl’s settings', () => {
     await open(SETTINGS);
     await screen.findByRole('region', { name: 'Continue' });
     fireEvent.click(await continueCard().findByRole('button', { name: 'Continue the crawl' }));
-    expect(await continueCard().findByText(/The values of X-Allow aren’t kept with the crawl\./)).toBeVisible();
+    expect(
+      await continueCard().findByText(/The values of X-Allow aren’t in the crawl file, and weren’t remembered\./),
+    ).toBeVisible();
 
     fireEvent.change(continueCard().getByRole('textbox', { name: 'Header 1 value' }), { target: { value: 's3cret' } });
     fireEvent.click(continueCard().getByRole('button', { name: 'Continue the crawl' }));

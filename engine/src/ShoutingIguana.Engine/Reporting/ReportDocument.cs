@@ -177,6 +177,7 @@ internal static class ReportDocument
 
         Head(html, model, checkedOn);
         Summary(html, model, full);
+        SinceLastCheck(html, model, full);
         FixFirst(html, model, full);
         if (model.Score is not null)
         {
@@ -342,6 +343,162 @@ internal static class ReportDocument
 
         return text.ToString();
     }
+
+    // ---- 2a. Since your last check (the fix loop).
+
+    /// <summary>
+    /// The crawl compared with the site's last check: the score then and now, then each problem fixed, new, on fewer pages
+    /// and on more, then the crawl's rechecks. The summary cut has it in a line: the score and the counts.
+    /// </summary>
+    private static void SinceLastCheck(StringBuilder html, ReportModel model, bool full)
+    {
+        if (model.Comparison is not { } since)
+        {
+            return;
+        }
+
+        var on = Date(since.StartedAt, model.TimeZone);
+        List<ReportChange> Of(CheckChangeState state) => [.. since.Checks.Where(check => check.State == state)];
+        var (fixedChecks, newChecks, fewer, more) = (Of(CheckChangeState.Fixed), Of(CheckChangeState.New), Of(CheckChangeState.Fewer), Of(CheckChangeState.More));
+        var caution = Caution(since.Comparison);
+        if (!full)
+        {
+            List<string> counts = [];
+            void Count(int count, string words)
+            {
+                if (count > 0)
+                {
+                    counts.Add($"{Number(count)} {words}");
+                }
+            }
+
+            Count(fixedChecks.Count, fixedChecks.Count == 1 ? "problem fixed" : "problems fixed");
+            Count(newChecks.Count, "new");
+            Count(fewer.Count, "on fewer pages");
+            Count(more.Count, "on more");
+            html.Append("  <p class=\"note\"><b>Since your last check on ").Append(on).Append(":</b> ").AppendText(ScoreSince(since.Comparison.Score, on))
+                .Append(counts.Count == 0 ? "No problem was fixed, and none is new." : Sentence(string.Join(", ", counts)) + ".")
+                .Append(caution is null ? string.Empty : " ").AppendText(caution ?? string.Empty).Append("</p>\n\n");
+            return;
+        }
+
+        html.Append("  <h2>Since your last check on ").Append(on).Append("</h2>\n  <p class=\"lead\">").AppendText(ScoreSince(since.Comparison.Score, on))
+            .Append(fixedChecks.Count + newChecks.Count + fewer.Count + more.Count == 0 ? "The same problems were found as then, on as many pages." : string.Empty)
+            .Append(caution is null ? string.Empty : " ").AppendText(caution ?? string.Empty).Append("</p>\n");
+        SinceGroup(html, "Fixed", fixedChecks, change => $"{CountOf(change.Then!.Value, change.Check)} on {on}; none now.", _ => "passed");
+        SinceGroup(html, "New", newChecks, change => $"{CountOf(change.Now!.Value, change.Check)} now; none on {on}.", change => MarkOf(change.Check.Severity));
+        SinceGroup(html, "Fewer", fewer, change => $"{CountOf(change.Now!.Value, change.Check)} now; {Number(change.Then!.Value)} on {on}.", change => MarkOf(change.Check.Severity));
+        SinceGroup(html, "More", more, change => $"{CountOf(change.Now!.Value, change.Check)} now; {Number(change.Then!.Value)} on {on}.", change => MarkOf(change.Check.Severity));
+        Rechecked(html, model);
+        html.Append('\n');
+    }
+
+    private static void SinceGroup(StringBuilder html, string title, IReadOnlyList<ReportChange> changes, Func<ReportChange, string> count, Func<ReportChange, string> mark)
+    {
+        if (changes.Count == 0)
+        {
+            return;
+        }
+
+        html.Append("    <h3 class=\"group-title\">").Append(title).Append(" <span>").Append(changes.Count).Append("</span></h3>\n  <ul class=\"plain-list\">\n");
+        foreach (var change in changes)
+        {
+            html.Append("    <li>");
+            Mark(html, mark(change), 14);
+            html.Append("<span><b>").AppendText(change.Words.Title).Append(".</b> ").AppendText(count(change)).Append("</span></li>\n");
+        }
+
+        html.Append("  </ul>\n");
+    }
+
+    /// <summary>The crawl's rechecks that were settled, the latest first: "Rechecked on 17 November 2026: 5 pages, 4 fixed".</summary>
+    private static void Rechecked(StringBuilder html, ReportModel model)
+    {
+        List<RecheckRecord> settled = [.. model.Rechecks.Where(recheck => recheck.Result is not null && recheck.CheckId is not null).Take(RECHECKS_LISTED)];
+        if (settled.Count == 0)
+        {
+            return;
+        }
+
+        html.Append("    <h3 class=\"group-title\">Rechecked <span>").Append(model.Rechecks.Count).Append("</span></h3>\n  <ul class=\"plain-list\">\n");
+        foreach (var recheck in settled)
+        {
+            var check = IssueCatalog.Find(recheck.CheckId!);
+            html.Append("    <li>");
+            Mark(html, recheck.Result!.Fixed == recheck.Judged ? "passed" : check is null ? "notice" : MarkOf(check.Severity), 14);
+            html.Append("<span><b>").AppendText(RecheckedOn(recheck, model.TimeZone)).Append(".</b> ")
+                .AppendText(check is null ? recheck.CheckId! : ReportSources.Words(check, model.Settings).Title).Append("</span></li>\n");
+        }
+
+        html.Append("  </ul>\n");
+    }
+
+    /// <summary>"Rechecked on 17 November 2026: 5 pages, 4 fixed".</summary>
+    private static string RecheckedOn(RecheckRecord recheck, TimeZoneInfo zone) =>
+        $"Rechecked on {Date(recheck.EndedAt ?? recheck.StartedAt, zone)}: {Plural(recheck.Judged, "page", "pages")}, {Number(recheck.Result!.Fixed)} fixed";
+
+    /// <summary>The rechecks the report lists, the latest first.</summary>
+    private const int RECHECKS_LISTED = 5;
+
+    /// <summary>"The score was 71 on 3 November 2026, and is 85 now: up 14."</summary>
+    private static string ScoreSince(ScoreChange? score, string on)
+    {
+        if (score is null)
+        {
+            return string.Empty;
+        }
+
+        var soFar = score.Then.Partial || score.Now.Partial ? ", so far" : string.Empty;
+        return score.Change switch
+        {
+            null => $"The score is {score.Now.Value} now{soFar}; it was worked out another way on {on}, so the two aren’t set side by side. ",
+            0 => $"The score is {score.Now.Value}, as it was on {on}{soFar}. ",
+            > 0 and var up => $"The score was {score.Then.Value} on {on}, and is {score.Now.Value} now{soFar}: up {up}. ",
+            var down => $"The score was {score.Then.Value} on {on}, and is {score.Now.Value} now{soFar}: down {-down}. "
+        };
+    }
+
+    /// <summary>What a comparison that isn't like for like says, in one sentence; null for one that is.</summary>
+    private static string? Caution(CrawlComparison comparison)
+    {
+        if (comparison.Comparable == Comparability.CountsOnly)
+        {
+            return comparison.Differences.Any(difference => difference.Code == ComparisonDifferenceCode.StartOrigin)
+                ? "The two checks started at different addresses, so only the problems’ counts are compared."
+                : "The last check’s results were worked out by other rules, so only the problems’ counts are compared until they are worked out again.";
+        }
+
+        if (comparison.Comparable == Comparability.Full)
+        {
+            return null;
+        }
+
+        List<string> what = [];
+        foreach (var difference in comparison.Differences)
+        {
+            var phrase = difference switch
+            {
+                { Code: ComparisonDifferenceCode.StartPath } => "they started from different pages",
+                { Code: ComparisonDifferenceCode.Scope } => "they were set to follow different links",
+                { Code: ComparisonDifferenceCode.Limits } => "they had different limits",
+                { Code: ComparisonDifferenceCode.Fetching } => "they were set to check different things",
+                { Code: ComparisonDifferenceCode.StoppedEarly, Side: ComparisonSide.Now } => "this one didn’t finish",
+                { Code: ComparisonDifferenceCode.StoppedEarly, Side: ComparisonSide.Then } => "the last one didn’t finish",
+                { Code: ComparisonDifferenceCode.StoppedEarly } => "neither finished",
+                { Code: ComparisonDifferenceCode.Coverage } => "one read far fewer pages",
+                _ => null
+            };
+            if (phrase is not null && !what.Contains(phrase))
+            {
+                what.Add(phrase);
+            }
+        }
+
+        return $"The two checks didn’t read the site alike ({string.Join(", ", what)}), so a page only one of them read isn’t compared.";
+    }
+
+    /// <summary>A sentence's first letter as a capital.</summary>
+    private static string Sentence(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
     // ---- 3. Fix these first.
 
@@ -943,7 +1100,25 @@ internal static class ReportDocument
                 : model.Finished ? "Yes: it read every address it found"
                 : "No. " + Unfinished(model) + HowToFinish(model))
             .Append("</dd>\n")
-            .Append("    <dt>Results worked out</dt><dd>").Append(Date(model.AnalyzedAt, zone)).Append(", ").Append(Time(model.AnalyzedAt, zone)).Append("</dd>\n")
+            .Append("    <dt>Results worked out</dt><dd>").Append(Date(model.AnalyzedAt, zone)).Append(", ").Append(Time(model.AnalyzedAt, zone)).Append("</dd>\n");
+        if (model.Comparison is { } since)
+        {
+            html.Append("    <dt>Compared with</dt><dd>The check of ").Append(Date(since.StartedAt, zone)).Append(", ").Append(Time(since.StartedAt, zone)).Append("</dd>\n");
+        }
+        else if (model.NotCompared is { } notCompared)
+        {
+            html.Append("    <dt>Compared with</dt><dd>").AppendText(notCompared).Append("</dd>\n");
+        }
+
+        if (model.Rechecks.Count > 0)
+        {
+            var last = model.Rechecks[0];
+            html.Append("    <dt>Rechecked</dt><dd>").Append(model.Rechecks.Count == 1 ? "Once" : $"{Number(model.Rechecks.Count)} times")
+                .Append(last.Result is null ? $", last on {Date(last.StartedAt, zone)}" : $", last on {Date(last.EndedAt ?? last.StartedAt, zone)}: {Plural(last.Judged, "page", "pages")}, {Number(last.Result.Fixed)} fixed")
+                .Append(". Other pages are as the check found them on ").Append(Date(model.StartedAt, zone)).Append(".</dd>\n");
+        }
+
+        html
             .Append("    <dt>The words in this report</dt><dd>Serious is the checks’ “Error”, Worth fixing is “Warning” and Worth a look is “Notice”. An address is a URL.</dd>\n")
             .Append("  </dl>\n\n");
     }

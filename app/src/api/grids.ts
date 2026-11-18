@@ -141,6 +141,12 @@ export interface GridPage<Row> {
   summary: SummaryState;
   /** Columns asked for that have no values now: left out of `columns` and of every row (not sent as null). */
   unavailable: string[];
+  /**
+   * Step 3b, round 2: whether the crawl measured images' pixel sizes. False for a crawl made before they were read, whose
+   * images' widths and heights are all unknown: the app leaves out its pixel size columns and says so. Left out by a
+   * sidecar from before it, and by every grid but the links grid.
+   */
+  pixelSizes?: boolean;
 }
 
 export type StatusClass = '2xx' | '3xx' | '4xx' | '5xx' | 'other' | 'noResponse';
@@ -548,6 +554,65 @@ export interface LinkEndsPage {
   summary: SummaryState;
 }
 
+// ------------------------------------------------------------------------------ Links grouped by target (step 3b)
+
+/**
+ * `POST /crawls/{id}/links/groups`: a view of the links grid, one row a target. Sorted by one key: `pages` (the
+ * default, the most first), `links`, or a column of the target the links grid sorts by (`to.url`, `to.sizeBytes`).
+ */
+export interface LinkGroupsQuery {
+  /** The links grid's filters; none is every link. */
+  filters?: GridFilter[];
+  /** The links grid's search. */
+  search?: string;
+  /** One key at most; `pages` descending when left out. */
+  sort?: GridSort[];
+  offset?: number;
+  /** 1 to 200; 100 when left out. */
+  limit?: number;
+}
+
+/** A target of a view's links, with the links that lead to it and what it is. */
+export interface LinkGroup extends UrlRef {
+  /** The view's links to it. */
+  links: number;
+  /** The pages those links are on, each once. */
+  pages: number;
+  /**
+   * The text most of its links have (an anchor, an image's alt text), among the first 200 of them in crawl order;
+   * null when none of those has any.
+   */
+  text: string | null;
+  /** How many texts those links have between them, none counted as one. */
+  texts: number;
+  /** Where on their pages its links sit, in the positions' order. */
+  positions: LinkPosition[];
+  /** It's on at least 10 pages and half the pages the view's links are on: the template those pages share. */
+  likelyTemplate: boolean;
+  /** What the target is: its status, its size and pixels after any redirects, where those end. */
+  target: RelatedFacts;
+}
+
+export interface LinkGroupsPage {
+  /** How many targets there are: `/links/ends`' `total` for the same links. */
+  total: number;
+  /** The links the view matches: the links grid's `matching`. */
+  links: number;
+  /** The pages the view's links are on, each once. */
+  pages: number;
+  offset: number;
+  /** The order used: as asked, or `pages` descending. */
+  sort: GridSort;
+  rows: LinkGroup[];
+  summary: SummaryState;
+  /**
+   * Step 3b, round 2: whether the crawl measured images' pixel sizes. False for a crawl made before they were read, whose
+   * images' widths and heights are all unknown: the app leaves out its pixel size columns and says so. Left out by a
+   * sidecar from before it, and by every grid but the links grid.
+   */
+  pixelSizes?: boolean;
+}
+
 // --------------------------------------------------------------------------------------------------- Sitemaps (E3b)
 
 /** How far the crawl got with its sitemaps: `unfinished` means the list isn't all there is. */
@@ -716,6 +781,20 @@ export interface RobotsBlockedUrl extends UrlRef {
   rule: string | null;
   /** How robots.txt failed, for `unreachable`, when stored. */
   error: string | null;
+  // Step 3b: what blocking it costs, as the analysis counted it. Each is null while the crawl has changed since its
+  // analysis (or was never analysed), and absent from a sidecar built before step 3b.
+  /** The pages that link to it, a page's links to itself left out. */
+  linkingPages?: number | null;
+  /** A sitemap lists it; false only when every sitemap was read and none does. */
+  inSitemap?: boolean | null;
+  /** How many sitemaps list it, where one does. */
+  sitemaps?: number | null;
+  /** The first sitemap that lists it, by the id the Sitemaps screen opens. */
+  sitemap?: { id: number; url: string } | null;
+  /** A page's menu (a navigation hyperlink) links to it. */
+  inMenu?: boolean | null;
+  /** The site asks for it and blocks it: a sitemap lists it, or a menu links to it. */
+  conflict?: boolean | null;
 }
 
 export interface RobotsBlockedQuery {
@@ -725,6 +804,8 @@ export interface RobotsBlockedQuery {
   reason?: RobotsBlockReason;
   /** E6: only this URL: its row and `matching` 1, or no rows and `matching` 0 for a URL the origin didn't block. */
   urlId?: number;
+  /** Step 3b: only the URLs a sitemap lists or a menu links to (true), or only the others (false). */
+  conflict?: boolean;
   offset?: number;
   /** 1 to 1,000. */
   limit?: number;
@@ -739,6 +820,11 @@ export interface RobotsBlockedPage {
   matching: number;
   offset: number;
   rows: RobotsBlockedUrl[];
+  /**
+   * Step 3b: the origin's blocked URLs that conflict (a sitemap lists them or a menu links to them), whatever is
+   * narrowed to; null while the crawl has changed since its analysis. Absent from a sidecar built before step 3b.
+   */
+  conflicts?: number | null;
 }
 
 // ---------------------------------------------------------------------------------------------------- Search (E6)

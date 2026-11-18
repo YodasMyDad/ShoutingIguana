@@ -311,8 +311,34 @@ machine):
     cluster is fetched again.
   - Verify on `e208ece` (this merge's tree): engine 1,971, CLI 34, sidecar 287; bench and readbench exit 0.
 
-Next: S1 and S2 (running in the fix-loop lane), then U1 and U2 side by side. Batches 4 to 9 continue in the checks
-lane, which now merges `ui/step-3` for `Recheck`. The views lane is still building.
+- **`1602893`: the fix loop in the sidecar, S1 and S2** (`ui/3b-fixloop-engine` at `4886cac`).
+  - Library items carry `siteKey`, `previous` and `changes` from cached summaries, without opening a file.
+  - Endpoints: `/changes`, `compareWith` on groups and rows, `/fixed`, and `recheck` on `/api/checks`.
+  - The report's "Since your last check"; the workbook's "Fixed since" sheet.
+  - Rechecks: plan, start, reads, the `rechecking` status, events, `needs-secrets`, Stop, and the refusals
+    (`site-busy`, `recheck-not-latest`).
+  - A duplicate is fixed only when its own text changed. Unchanged text that is unflagged only because other pages
+    changed is "not checked".
+  - Verify on the same tree: engine 1,976, CLI 34, sidecar 315, bench exit 0.
+  - Readbench missed one timing gate under the lanes' load: a links search for a common word took 2,529 ms against
+    2,500, where it took 1,281 ms at E4. It is to be rerun on a quiet machine.
+- **`1b714f1`: new checks, batches 4 to 6** (`ui/3b-checks` at `a5e4d53`): sitemaps and robots.txt (changes C2, C4),
+  structured data (C5), images.
+  - The real-site audit, all correct:
+    - garden: `robots-txt-no-sitemap` 1, `image-legacy-format` 240;
+    - aptitude: `image-legacy-format` 28, `image-alt-unhelpful` 7, `image-missing-src` 1, `image-hotlinked` 1.
+  - Two wrong flags were fixed first: `structured-data-schema-errors` on a `www.schema.org` context, and
+    `image-alt-unhelpful` on a logo whose alt is its plain name.
+  - The merged tree (S1 and S2 with batches 4 to 6) was built and tested: engine 2,081, CLI 34, sidecar 315; app
+    typecheck, unit 3,994.
+
+Next:
+
+- U1 and U2 run side by side on `ui/3b-fixloop-ui`. They leave the screens the views lane changes until it merges;
+  the orchestrator then writes the `VIEWS-MERGED` flag in the scratchpad's `audit3b/`.
+- The views lane fixes the review's points (images named by file, thumbnails, the clipped robots column, the grouped
+  export), then merges `ui/step-3`.
+- Batches 7 to 9 continue in the checks lane.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.

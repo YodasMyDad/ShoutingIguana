@@ -40,6 +40,17 @@ describe('the robots.txt route’s search', () => {
     expect(validateRobotsSearch({ line: 6, reason: 'unknown' })).toMatchObject({ line: 6, reason: undefined });
   });
 
+  it('takes the conflicts, which a line or a reason wins over, and only as true', () => {
+    expect(validateRobotsSearch({ conflict: true })).toMatchObject({ conflict: true });
+    expect(validateRobotsSearch({ conflict: true, line: 6 })).toMatchObject({ line: 6, conflict: undefined });
+    expect(validateRobotsSearch({ conflict: true, reason: 'unknown' })).toMatchObject({
+      reason: 'unknown',
+      conflict: undefined,
+    });
+    for (const conflict of [false, 'true', 1, null])
+      expect(validateRobotsSearch({ conflict }).conflict).toBeUndefined();
+  });
+
   it('drops a line that isn’t a positive whole number and a reason the engine doesn’t have', () => {
     for (const line of [0, -2, 1.5, 'six', null]) expect(validateRobotsSearch({ line }).line).toBeUndefined();
     // `rule` is the engine's too, but it's what every line's URLs are: a line narrows to them, never the word.

@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace ShoutingIguana.Sidecar.Api.Models;
 
-/// <summary>A page of the URLs robots.txt blocked on an origin, narrowed to one line's or one reason's when given.</summary>
+/// <summary>A page of the URLs robots.txt blocked on an origin, narrowed to one line's, one reason's or the conflicts when given.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record RobotsBlockedRequest
 {
@@ -15,6 +15,9 @@ internal sealed record RobotsBlockedRequest
 
     /// <summary>Only this URL: its row, with why it was refused, or none when the origin didn't block it.</summary>
     public long? UrlId { get; init; }
+
+    /// <summary>Only the URLs a sitemap lists or a menu links to (true), or only the others (false).</summary>
+    public bool? Conflict { get; init; }
 
     public int? Offset { get; init; }
 

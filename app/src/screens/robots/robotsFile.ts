@@ -95,12 +95,17 @@ export function obeyedWords(
   return obeyed === null ? `The rules for ${userAgent} are ${listed}.` : `As ${userAgent}, the crawl obeyed ${listed}.`;
 }
 
-/** What the blocked URLs are narrowed to: one line's, one reason's, or all of the origin's. */
-export type Narrowing = { by: 'line'; line: number } | { by: 'reason'; reason: RobotsReasonSearch } | { by: 'none' };
+/**
+ * What the blocked URLs are narrowed to: one line's, one reason's, the conflicts (a sitemap lists them or a menu links
+ * to them, yet robots.txt blocks them), or all of the origin's.
+ */
+export type Narrowing =
+  { by: 'line'; line: number } | { by: 'reason'; reason: RobotsReasonSearch } | { by: 'conflict' } | { by: 'none' };
 
-export function narrowingOf(search: Pick<RobotsSearch, 'line' | 'reason'>): Narrowing {
+export function narrowingOf(search: Pick<RobotsSearch, 'line' | 'reason' | 'conflict'>): Narrowing {
   if (search.line !== undefined) return { by: 'line', line: search.line };
   if (search.reason !== undefined) return { by: 'reason', reason: search.reason };
+  if (search.conflict === true) return { by: 'conflict' };
   return { by: 'none' };
 }
 
@@ -108,6 +113,7 @@ export function narrowingOf(search: Pick<RobotsSearch, 'line' | 'reason'>): Narr
 export function blockedQueryOf(origin: string, narrowing: Narrowing): Omit<RobotsBlockedQuery, 'offset' | 'limit'> {
   if (narrowing.by === 'line') return { origin, line: narrowing.line };
   if (narrowing.by === 'reason') return { origin, reason: narrowing.reason };
+  if (narrowing.by === 'conflict') return { origin, conflict: true };
   return { origin };
 }
 
@@ -152,8 +158,10 @@ export function narrowingWords(
     case 'reason':
       return {
         field: 'Reason',
-        value: narrowing.reason === 'unreachable' ? 'robots.txt couldn’t be read' : 'no rule kept',
+        value: narrowing.reason === 'unreachable' ? 'robots.txt couldn’t be read' : 'no matching rule',
       };
+    case 'conflict':
+      return { field: 'Conflict', value: 'in your sitemap or menu but blocked' };
     default:
       return null;
   }

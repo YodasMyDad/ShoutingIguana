@@ -82,7 +82,21 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IssueFixer>),
 
         // The proxy test (round 5).
-        typeof(CamelCaseEnumConverter<ProxyTestOutcome>)
+        typeof(CamelCaseEnumConverter<ProxyTestOutcome>),
+
+        // The fix loop.
+        typeof(CamelCaseEnumConverter<Comparability>),
+        typeof(CamelCaseEnumConverter<ComparisonDifferenceCode>),
+        typeof(CamelCaseEnumConverter<ComparisonSide>),
+        typeof(CamelCaseEnumConverter<CheckChangeState>),
+        typeof(CamelCaseEnumConverter<RowChangeState>),
+        typeof(CamelCaseEnumConverter<GroupChangeState>),
+        typeof(CamelCaseEnumConverter<NotCheckedCode>),
+        typeof(CamelCaseEnumConverter<RecheckKind>),
+        typeof(CamelCaseEnumConverter<RecheckStatus>),
+        typeof(CamelCaseEnumConverter<RecheckRole>),
+        typeof(CamelCaseEnumConverter<RecheckOutcome>),
+        typeof(CamelCaseEnumConverter<ProgressPhase>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]
@@ -148,6 +162,12 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(RobotsOriginsRequest))]
 [JsonSerializable(typeof(LinkEndsRequest))]
 [JsonSerializable(typeof(LinkEndPage))]
+
+// Links grouped by target (step 3b).
+[JsonSerializable(typeof(LinkGroupsRequest))]
+[JsonSerializable(typeof(LinkGroupPageDto))]
+[JsonSerializable(typeof(UrlImagesRequest))]
+[JsonSerializable(typeof(PageImages))]
 [JsonSerializable(typeof(AnalysisSettingsDto))]
 [JsonSerializable(typeof(ResetAnalysisSettingsRequest))]
 [JsonSerializable(typeof(Dictionary<string, JsonElement>))]
@@ -164,6 +184,21 @@ namespace ShoutingIguana.Sidecar.Serialization;
 // The proxy test (round 5).
 [JsonSerializable(typeof(ProxyTestRequest))]
 [JsonSerializable(typeof(ProxyTestResult))]
+
+// The fix loop.
+[JsonSerializable(typeof(ChangesDto))]
+[JsonSerializable(typeof(NoComparisonDto))]
+[JsonSerializable(typeof(RowChange))]
+[JsonSerializable(typeof(FixedRequest))]
+[JsonSerializable(typeof(FixedPageDto))]
+[JsonSerializable(typeof(RecheckAskRequest))]
+[JsonSerializable(typeof(StartRecheckRequest))]
+[JsonSerializable(typeof(RecheckPlanDto))]
+[JsonSerializable(typeof(RechecksDto))]
+[JsonSerializable(typeof(RecheckDto))]
+[JsonSerializable(typeof(RecheckRowsRequest))]
+[JsonSerializable(typeof(RecheckRowPage))]
+[JsonSerializable(typeof(RecheckEventDto))]
 internal sealed partial class SidecarJsonContext : JsonSerializerContext
 {
 }

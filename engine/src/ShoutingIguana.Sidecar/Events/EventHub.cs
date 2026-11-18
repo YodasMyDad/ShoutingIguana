@@ -21,6 +21,9 @@ internal sealed class EventHub(SidecarOptions options)
     private readonly Dictionary<string, SidecarEvent> _latestProgress = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SidecarEvent> _latestAnalysis = new(StringComparer.Ordinal);
 
+    // The latest recheck event of each crawl rechecked here (the fix loop), until the crawl ends.
+    private readonly Dictionary<string, SidecarEvent> _latestRecheck = new(StringComparer.Ordinal);
+
     // The exports running, each with its latest event, in the order they started.
     private readonly Dictionary<string, SidecarEvent> _latestExport = new(StringComparer.Ordinal);
     private readonly List<string> _exports = [];
@@ -54,6 +57,11 @@ internal sealed class EventHub(SidecarOptions options)
             foreach (var analysis in _latestAnalysis.Values)
             {
                 client.Enqueue(analysis);
+            }
+
+            foreach (var recheck in _latestRecheck.Values)
+            {
+                client.Enqueue(recheck);
             }
 
             foreach (var export in _exports)
@@ -115,11 +123,22 @@ internal sealed class EventHub(SidecarOptions options)
             {
                 _latestProgress.Remove(crawl.CrawlId);
                 _latestAnalysis.Remove(crawl.CrawlId);
+                _latestRecheck.Remove(crawl.CrawlId);
                 _analyzing.Remove(crawl.CrawlId);
             }
-            else if (crawl.Status == CrawlListStatus.Analyzing && !_analyzing.Contains(crawl.CrawlId))
+            else if (crawl.Status == CrawlListStatus.Analyzing)
             {
-                _analyzing.Add(crawl.CrawlId);
+                if (!_analyzing.Contains(crawl.CrawlId))
+                {
+                    _analyzing.Add(crawl.CrawlId);
+                }
+            }
+            else
+            {
+                // An analysis that ended with the crawl still live (a recheck's analysis first, before its run) is no
+                // longer one a stream that connects should hear of.
+                _latestAnalysis.Remove(crawl.CrawlId);
+                _analyzing.Remove(crawl.CrawlId);
             }
 
             Broadcast(sidecarEvent);
@@ -150,6 +169,20 @@ internal sealed class EventHub(SidecarOptions options)
                 _latestExport[export.ExportId] = sidecarEvent;
             }
 
+            Broadcast(sidecarEvent);
+        }
+    }
+
+    /// <summary>
+    /// A recheck's own progress, as it starts, as it goes and as it ends, and once settled (the fix loop). Never merged or
+    /// dropped. The latest of each is kept for streams that connect later, until the crawl is no longer live here.
+    /// </summary>
+    public void PublishRecheck(RecheckEventDto recheck)
+    {
+        var sidecarEvent = new SidecarEvent("recheck", JsonSerializer.Serialize(recheck, SidecarJsonContext.Default.RecheckEventDto), recheck.CrawlId);
+        lock (_sync)
+        {
+            _latestRecheck[recheck.CrawlId] = sidecarEvent;
             Broadcast(sidecarEvent);
         }
     }

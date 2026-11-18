@@ -18,16 +18,17 @@ internal sealed class UrlRowsConverter : JsonConverter<UrlRowsDto>
     public override void Write(Utf8JsonWriter writer, UrlRowsDto value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        foreach (var row in value.Rows)
+        for (var index = 0; index < value.Rows.Count; index++)
         {
-            WriteRow(writer, value.Columns, row.Values);
+            WriteRow(writer, value.Columns, value.Rows[index].Values, value.Changes is { } changes ? (true, changes[index]) : null);
         }
 
         writer.WriteEndArray();
     }
 
     /// <summary>One row as an object keyed by column id, for any grid whose columns are its query's.</summary>
-    public static void WriteRow(Utf8JsonWriter writer, IReadOnlyList<string> columns, IReadOnlyList<object?> values)
+    /// <param name="change">The row's change since another crawl, written as its <c>change</c> when the rows were compared with one.</param>
+    public static void WriteRow(Utf8JsonWriter writer, IReadOnlyList<string> columns, IReadOnlyList<object?> values, (bool Compared, RowChange? Change)? change = null)
     {
         writer.WriteStartObject();
         for (var index = 0; index < columns.Count; index++)
@@ -56,6 +57,19 @@ internal sealed class UrlRowsConverter : JsonConverter<UrlRowsDto>
                 case var number:
                     writer.WriteNumberValue(Convert.ToInt64(number, CultureInfo.InvariantCulture));
                     break;
+            }
+        }
+
+        if (change is { Change: var rowChange })
+        {
+            writer.WritePropertyName("change");
+            if (rowChange is null)
+            {
+                writer.WriteNullValue();
+            }
+            else
+            {
+                JsonSerializer.Serialize(writer, rowChange, SidecarJsonContext.Default.RowChange);
             }
         }
 

@@ -226,14 +226,18 @@ export function sitemapsRobotsRoutes(mock: MockCrawls): MockRoute[] {
           (row) =>
             (query.line === undefined || row.line === query.line) &&
             (query.reason === undefined || row.reason === query.reason) &&
-            (query.urlId === undefined || row.id === query.urlId),
+            (query.urlId === undefined || row.id === query.urlId) &&
+            (query.conflict === undefined || row.conflict === query.conflict),
         );
+        // Fixtures saved before step 3b have no costs: unknown, as a crawl changed since its analysis says.
+        const counted = all.length > 0 && all.every((row) => typeof row.conflict === 'boolean');
         return mock.json({
           origin: asked,
           total: all.length,
           matching: matching.length,
           offset,
           rows: matching.slice(offset, offset + limit),
+          conflicts: counted ? all.filter((row) => row.conflict === true).length : null,
         } satisfies RobotsBlockedPage);
       },
     ],

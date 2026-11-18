@@ -55,6 +55,7 @@ internal static class ExportRequests
         Only(body.Origin is not null, "origin");
         Only(body.Line is not null, "line");
         Only(body.Reason is not null, "reason");
+        Only(body.Conflict is not null, "conflict");
         Only(body.CheckId is not null, "checkId");
         Only(body.Cut is not null, "cut");
         Only(body.Examples is not null, "examples");
@@ -68,6 +69,16 @@ internal static class ExportRequests
         }
 
         CheckIds(body.Checks, "checks", errors);
+
+        // The fix loop's comparison is the sidecar's to resolve (the library knows the crawls), so it's checked here.
+        if (body.CompareWith is not null && kind is not (ExportKind.Report or ExportKind.Workbook))
+        {
+            errors["compareWith"] = [$"An export of {kindName} doesn't take compareWith: it belongs to report and workbook."];
+        }
+        else if (body.CompareWith is "")
+        {
+            errors["compareWith"] = ["compareWith is previous, none, or a crawl's id."];
+        }
 
         RobotsBlockReason? reason = body.Reason switch
         {
@@ -93,7 +104,8 @@ internal static class ExportRequests
         {
             Kind = kind,
             Format = format,
-            Query = GRIDS.Contains(kind)
+            // A grid's query, and the grouped links' (the links grid's filters, search, sort and hidden checks).
+            Query = GRIDS.Contains(kind) || kind == ExportKind.LinkGroups
                 ? GridRequests.Query(new GridQueryRequest
                 {
                     Columns = body.Columns, Filters = body.Filters, Search = body.Search, Sort = body.Sort, LinkEnds = body.LinkEnds, HiddenChecks = body.HiddenChecks
@@ -104,6 +116,7 @@ internal static class ExportRequests
             Origin = body.Origin,
             Line = body.Line,
             Reason = reason,
+            Conflict = body.Conflict,
             CheckId = body.CheckId,
             Group = body.Group is { } group ? new IssueGroupKey(group.Detail, group.RelatedUrlId) : null,
             Report = Report(cut, body.Examples, body.LookExamples) with { HiddenChecks = body.HiddenChecks ?? [], Checks = body.Checks }
@@ -128,8 +141,11 @@ internal static class ExportRequests
         }
     }
 
-    /// <summary>The report's options from a query string: <c>cut</c>, <c>examples</c> and <c>lookExamples</c>, each optional.</summary>
-    public static ReportOptions Report(IQueryCollection query)
+    /// <summary>
+    /// The report's options from a query string: <c>cut</c>, <c>examples</c>, <c>lookExamples</c>, <c>hiddenChecks</c> and
+    /// <c>compareWith</c> (the fix loop: <c>previous</c>, <c>none</c> or a crawl's id), each optional.
+    /// </summary>
+    public static ReportOptions Report(IQueryCollection query, out string? compareWith)
     {
         Dictionary<string, IReadOnlyList<string>> errors = new(StringComparer.Ordinal);
         int? Number(string name)
@@ -152,9 +168,15 @@ internal static class ExportRequests
             ? []
             : [.. string.Join(',', query["hiddenChecks"].Select(value => value ?? string.Empty)).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
         CheckIds(hidden, "hiddenChecks", errors);
-        if (query.Keys.FirstOrDefault(key => key is not ("cut" or "examples" or "lookExamples" or "hiddenChecks")) is { } unknown)
+        compareWith = query["compareWith"] switch
         {
-            errors[unknown] = ["The report takes cut, examples, lookExamples and hiddenChecks."];
+            { Count: 0 } => null,
+            { Count: 1 } one when !string.IsNullOrEmpty(one[0]) => one[0],
+            _ => Refuse<string?>(errors, "compareWith", "compareWith is previous, none, or one crawl's id.")
+        };
+        if (query.Keys.FirstOrDefault(key => key is not ("cut" or "examples" or "lookExamples" or "hiddenChecks" or "compareWith")) is { } unknown)
+        {
+            errors[unknown] = ["The report takes cut, examples, lookExamples, hiddenChecks and compareWith."];
         }
 
         return errors.Count > 0 ? throw Problems.InvalidExport(errors) : Report(cut, examples, lookExamples) with { HiddenChecks = hidden };
