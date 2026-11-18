@@ -163,7 +163,9 @@ public sealed class SecurityUrlCheckTests
 
         var rules = new SecurityRules(site.Table(), HstsPolicy.Of(home.Uri, home.Headers));
         Assert.Equal(flagged, rules.Check(page).Any(hit => hit.Issue == IssueCatalog.PROTOCOL_RELATIVE_LINKS));
+    }
 
+    /// <summary>
     /// On a page Shopify served (a header says so), the security headers and the cookies Shopify sets (its cookie policy's
     /// names) are Shopify's: the store's owner can't change them. A cookie of any other name on the page, or a page no
     /// header says Shopify served, leaves the issue the site's own.
