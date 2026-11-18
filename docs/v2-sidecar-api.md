@@ -2837,10 +2837,16 @@ Shopify`, `shopify-complexity-score`, `x-shopid`, `x-shopify-stage`, `x-sorting-
 for a crawl made before that, read from the first page's stored headers. `signal` is what told it (null when only a
 refused signature did). `notCheckedUnsigned` counts the site's URLs Shopify refused with 429 without a signature,
 `notCheckedSigned` those it refused though the crawl sent one; their stored errors say so ("Not checked: the site asked
-the crawler to slow down (429 Too Many Requests): Shopify limits crawlers without a signature", or that the signature may
-be invalid, expired or for another domain and a new one can take up to an hour). `urlIds` are both kinds, most important
-first, at most 1,000: what "Recheck these pages" sends as `urlIds`, with the signature in `signatures`. The live alerts
-`shopify-unsigned` and `shopify-signature-refused` say the same as it happens (data: host, reason).
+the crawler to slow down (429 Too Many Requests): Shopify limits crawlers without a signature", or "Shopify refused the
+crawler's signature"), then what was wrong with the signature when the crawl could tell: made under an hour ago (a new
+one can take up to an hour), expired on a date, or made for the www twin or the bare domain; else that it may not be
+active yet, may have expired or may be for another domain. `reasons` gives those, each once. `urlIds` are both kinds,
+most important first, at most 1,000: what "Recheck these pages" sends as `urlIds`, with the signature in `signatures`.
+
+The live alerts say it as it happens. `shopify-unsigned` (data: host, count, reason) is raised at the first refusal of
+an unsigned request on a host known to be a store, and raised again with its count while that grows, at most every
+30 s: the app shows one alert, its newest count. `reason` is set when the crawl had a signature it couldn't send there
+(expired, or for the www twin or bare domain). `shopify-signature-refused` (data: host, reason) is raised once.
 
 ### Favicon (E6)
 
