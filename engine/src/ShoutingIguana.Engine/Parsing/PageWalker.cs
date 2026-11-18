@@ -66,6 +66,12 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     /// <summary>Attributes lazy-loading scripts keep the real image URL in, in the order they're tried.</summary>
     private static readonly string[] LAZY_SOURCES = ["data-src", "data-lazy-src", "data-original", "data-lazy"];
 
+    /// <summary>
+    /// Attributes lazy-loading scripts keep an image's srcset in, which they copy to srcset as it scrolls into view: lazysizes'
+    /// (Shopify's themes), and WordPress's lazy loaders'.
+    /// </summary>
+    private static readonly string[] LAZY_SRCSETS = ["data-srcset", "data-lazy-srcset"];
+
     private readonly string _pageUrl = UrlNormalizer.Normalize(pageUri);
 
     public List<string> Titles { get; } = [];
@@ -729,7 +735,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             source ??= ImageSource(element.GetAttribute(attribute));
         }
 
-        source ??= FirstCandidate(element.GetAttribute("srcset")) ?? FirstCandidate(element.GetAttribute("data-srcset"));
+        source ??= FirstCandidate(element.GetAttribute("srcset"));
+        foreach (var attribute in LAZY_SRCSETS)
+        {
+            source ??= FirstCandidate(element.GetAttribute(attribute));
+        }
 
         // The URL is resolved past the link cap too, so alt text and dimensions are still checked.
         var alt = element.GetAttribute("alt");
@@ -752,16 +762,23 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 alt is not null,
                 NullIfBlank(element.GetAttribute("width")),
                 NullIfBlank(element.GetAttribute("height")),
-                element.HasAttribute("srcset"),
+                HasSrcset(element),
                 NullIfBlank(element.GetAttribute("loading")))
             {
                 IsDataUri = data is not null,
                 DataUriBytes = data,
                 InPicture = element.ParentElement is { LocalName: "picture" } picture &&
-                            picture.Children.Any(child => child.LocalName == "source" && !string.IsNullOrWhiteSpace(child.GetAttribute("srcset")))
+                            picture.Children.Any(child => child.LocalName == "source" && SourceSrcset(child) is not null)
             });
         }
     }
+
+    /// <summary>The image has a srcset, or one a lazy-loading script will copy there (<see cref="LAZY_SRCSETS"/>): an empty one too, which a script may fill.</summary>
+    private static bool HasSrcset(IElement image) => image.HasAttribute("srcset") || LAZY_SRCSETS.Any(image.HasAttribute);
+
+    /// <summary>A picture's &lt;source&gt;'s srcset, or the lazy-loaded one, when it names a file; null otherwise.</summary>
+    private static string? SourceSrcset(IElement source) =>
+        NullIfBlank(source.GetAttribute("srcset")) ?? LAZY_SRCSETS.Select(source.GetAttribute).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private void AddLink(string? href, LinkKind kind, LinkFlags flags, LinkPosition position, string? label)
     {

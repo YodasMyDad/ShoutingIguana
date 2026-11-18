@@ -73,6 +73,30 @@ public sealed class ImageCheckTests
         Assert.DoesNotContain(modern, legacy.Targets!);
     }
 
+    /// <summary>
+    /// The real-site audit's case: a Shopify theme's lazysizes image keeps its other sizes in data-srcset, which its script
+    /// copies to srcset, so phones get a smaller file: not flagged. WordPress's lazy loaders write data-lazy-srcset, and a
+    /// picture's sources can be lazy too.
+    /// </summary>
+    [Fact]
+    public void AWideFileWithALazyLoadedSrcsetIsntFlagged()
+    {
+        var site = new RuleHarness();
+        var wide = site.Fetched($"{site.Site}/wide.png", FetchOutcome.Success, 200, size: 30 * 1024, contentType: "image/png", pixelWidth: 1_200);
+        site.Fetched($"{site.Site}/lazy_1200x.png", FetchOutcome.Success, 200, size: 30 * 1024, contentType: "image/png", pixelWidth: 1_200);
+        site.Fetched($"{site.Site}/wordpress.png", FetchOutcome.Success, 200, size: 30 * 1024, contentType: "image/png", pixelWidth: 1_200);
+        site.Fetched($"{site.Site}/pictured.png", FetchOutcome.Success, 200, size: 30 * 1024, contentType: "image/png", pixelWidth: 1_200);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
+            "<img class=\"lazyload\" src=\"/lazy_1200x.png\" data-srcset=\"/lazy_400x.png 360w, /lazy_1024x.png 1024w\" alt=\"Lazy\">" +
+            "<img src=\"/wordpress.png\" data-lazy-srcset=\"/wordpress-480.png 480w, /wordpress.png 1200w\" alt=\"WordPress\">" +
+            "<picture><source data-srcset=\"/pictured.webp\" type=\"image/webp\"><img src=\"/pictured.png\" alt=\"Pictured\"></picture>" +
+            "<img src=\"/wide.png\" alt=\"Wide\">"));
+
+        var srcset = Assert.Single(new ImageRules(SETTINGS, site.Table(), site.Find).Check(page), hit => hit.Issue == IssueCatalog.IMAGE_NO_SRCSET);
+        Assert.Equal([wide], srcset.Targets!);
+        Assert.Equal([true, true, true, false], page.Facts.Images.Select(image => image.HasSrcset || image.InPicture));
+    }
+
     [Theory]
     [InlineData("IMG_0423.jpg", true)]
     [InlineData("photo.JPEG", true)]
