@@ -24,6 +24,8 @@ import type { ChangesAnswer } from '../../api/fixLoop';
 import { ComparisonCard } from './ComparisonCard';
 import { CompareWithMenu } from './CompareWithMenu';
 import { useComparison } from './useComparison';
+import { useThingsMoved } from './useThingsMoved';
+import type { Analysis } from '../../api/types';
 
 const meta = { title: 'Fix loop/Advanced' } satisfies Meta;
 export default meta;
@@ -256,7 +258,8 @@ export const PickerOnlyCrawl: Story = {
 // ---------------------------------------------------------------------------------------------- The comparison card
 
 function CardOf({ crawlId }: { crawlId: string }) {
-  return <ComparisonCard crawlId={crawlId} comparison={useComparison(crawlId)} />;
+  const comparison = useComparison(crawlId);
+  return <ComparisonCard crawlId={crawlId} comparison={comparison} things={useThingsMoved(crawlId, comparison)} />;
 }
 
 function CardStory({ crawlId = GARDEN.id }: { crawlId?: string }) {
@@ -382,3 +385,45 @@ export const IssuesFixedCheck: Story = onMock('issues/title-missing');
 
 /** A check that doesn't group: its rows with how each stood then. */
 export const IssuesComparedRows: Story = onMock('issues/title-too-long');
+
+// ---------------------------------------------------------------------------------------------- In things
+
+/**
+ * Both analyses with their things counted, as a current engine's are: the garden crawl's from its counts, the earlier
+ * check's with more of them. The card then counts as the headline does, in things.
+ */
+function analysesWithThings(): FakeRoute[] {
+  const withThings = (scale: number): Analysis => ({
+    ...GARDEN_ANALYSIS,
+    counts: GARDEN_ANALYSIS.counts.map((entry) => ({
+      ...entry,
+      causes: entry.count === 0 ? 0 : Math.max(1, Math.round((entry.count / 3) * scale)),
+    })),
+  });
+  return [
+    ['GET', new RegExp(`^/api/crawls/${GARDEN.id}/analysis$`), () => json(withThings(1))],
+    ['GET', new RegExp(`^/api/crawls/${EARLIER_ID}/analysis$`), () => json(withThings(1.4))],
+  ];
+}
+
+/** The card in the headline's unit: things to fix and worth a look then and now, the things fixed and new. */
+export const CardInThings: Story = {
+  loaders: [
+    () => {
+      ownSidecar([...analysesWithThings(), ...cardRoutes(gardenComparison(), [LATER, ...LIBRARY])]);
+      updateSettings({ compareWithByCrawl: {} });
+    },
+  ],
+  render: () => <CardStory />,
+};
+
+/** Issues' head in the headline's unit: what moved since, under the headline. */
+export const IssuesHeadInThings: Story = {
+  loaders: [
+    () => {
+      ownSidecar([...analysesWithThings(), ...cardRoutes(gardenComparison(), [LATER, ...LIBRARY])]);
+      updateSettings({ compareWithByCrawl: {}, checkSort: { advanced: 'fixFirst', simple: 'fixFirst' } });
+    },
+  ],
+  render: () => <ScreenApp path={`/crawls/${GARDEN.id}/issues/broken-internal-links`} crawlId={GARDEN.id} />,
+};
