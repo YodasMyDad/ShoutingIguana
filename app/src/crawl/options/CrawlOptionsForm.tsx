@@ -14,6 +14,7 @@ import { TextField } from '../../ui/TextField';
 import {
   FIELD_SECTIONS,
   SECTION_TITLES,
+  formHasSecrets,
   headerRow,
   speedOf,
   withSpeed,
@@ -23,6 +24,7 @@ import {
   type HeaderRow,
 } from './form';
 import { ProxyTest } from './ProxyTest';
+import { RememberSecrets, type RememberSecretsProps } from './RememberSecrets';
 import type { FormErrors } from './useValidation';
 import { FIELD_WORDS, SIMPLE_WORDS, USER_AGENT_NAMES, sectionSummary, speedTitle, speedWords } from './words';
 
@@ -42,6 +44,11 @@ export interface CrawlOptionsFormProps {
   onTouch?: ((field: CrawlFormField) => void) | undefined;
   /** Put focus on the start URL when the form opens. */
   autoFocusStart?: boolean | undefined;
+  /**
+   * The option to remember the proxy's password and the headers' values (step 3b), where the form's secrets are kept:
+   * with the proxy in Advanced; in Simple, which shows neither, only when the form holds one (from the defaults).
+   */
+  remember?: RememberSecretsProps | undefined;
 }
 
 /** The start URL's field, with focus put on it as the form opens when asked: the one field every crawl needs. */
@@ -87,6 +94,7 @@ function SimpleQuestions({
   withStartUrl = true,
   onTouch,
   autoFocusStart,
+  remember,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -197,6 +205,7 @@ function SimpleQuestions({
           />
         </div>
       </fieldset>
+      {remember && formHasSecrets(form) ? <RememberSecrets {...remember} /> : null}
     </div>
   );
 }
@@ -224,6 +233,7 @@ function AdvancedSections({
   onOpenChange,
   onTouch,
   autoFocusStart,
+  remember,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -366,6 +376,7 @@ function AdvancedSections({
             />
             {text('proxyUrl', { mono: true, placeholder: 'http://proxy.example.com:8080' })}
             <ProxyTest proxyUrl={form.proxyUrl} startUrl={withStartUrl ? form.startUrl : null} />
+            {remember ? <RememberSecrets {...remember} /> : null}
             {toggle('useCookies')}
           </>,
         )}

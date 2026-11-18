@@ -5,6 +5,7 @@
 import type { GridQuery, LinkFacetsQuery, LinkRow, SummaryState, UrlRow } from '../api/grids';
 import { answerGridQuery } from '../api/mock/gridQuery';
 import { LINK_COLUMNS, answerLinkFacets, answerLinkQuery, linkRows, type LinkFacts } from '../api/mock/linkGrid';
+import { answerLinkGroups } from '../api/mock/linkGroups';
 import type { TransportRequest } from '../api/transport';
 import type { CrawlListItem } from '../api/types';
 import { json, problem, standardRoutes, testCrawlItem, type FakeRoute } from './fakeSidecar';
@@ -204,6 +205,24 @@ export function linksRoutes(options: LinksSidecarOptions = {}): { routes: FakeRo
       /^\/api\/crawls\/[0-9a-f]{16}\/urls$/,
       (request: TransportRequest) => {
         const answer = answerGridQuery(state.urls, request.body as GridQuery, state.summary);
+        return answer.ok ? json(answer.page) : problem(answer.problem);
+      },
+    ],
+    // Step 3b: the links grouped by target, answered by the mock's own code from the same links.
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/links\/groups$/,
+      async (request: TransportRequest) => {
+        const body = (request.body ?? {}) as { filters?: GridQuery['filters']; search?: string };
+        await waits({
+          filters: body.filters ?? [],
+          sort: [],
+          limit: 1,
+          ...(body.search ? { search: body.search } : {}),
+        });
+        if (request.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (options.linksProblem) return problem(options.linksProblem);
+        const answer = answerLinkGroups(state.links, request.body, state.summary);
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],

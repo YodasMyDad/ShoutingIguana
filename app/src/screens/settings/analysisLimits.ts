@@ -18,6 +18,9 @@ const NAMES: Readonly<Record<string, string>> = {
   nearDuplicateMaxBits: 'Near-duplicate distance',
   imageAltMaxLength: 'Longest alt text',
   largeImageBytes: 'Largest image',
+  responsiveImageMinWidth: 'Widest image without smaller versions',
+  legacyImageMinBytes: 'Largest image in an older format',
+  inlineImageMaxBytes: 'Largest image built into a page',
   largePageBytes: 'Largest page',
   slowResponseMs: 'Slowest response',
   maxUrlLength: 'Longest URL',
@@ -39,6 +42,7 @@ export function limitName(id: string): string {
 const UNIT_WORDS: Record<string, [string, string]> = {
   characters: ['character', 'characters'],
   pixels: ['px', 'px'],
+  px: ['px', 'px'],
   words: ['word', 'words'],
   bits: ['bit', 'bits'],
   bytes: ['byte', 'bytes'],

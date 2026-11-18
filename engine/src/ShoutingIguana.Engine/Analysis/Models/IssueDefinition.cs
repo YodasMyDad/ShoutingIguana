@@ -59,6 +59,16 @@ public sealed record IssueDefinition(
     public IReadOnlyList<string> TargetFacts { get; init; } = [];
 
     /// <summary>
+    /// The checks a fix of this one also clears, by id: this check flags the URLs others refer to (<see cref="References"/>
+    /// is <see cref="IssueReferences.Sources"/>: a 404, a redirect chain), and each of those flags the pages that refer to
+    /// them (<see cref="IssueReferences.Targets"/>: links to broken URLs, links to redirects). A fix of the URL, or of its
+    /// references as the fix says, clears the pages whose every target is one of this check's URLs; how many that is on a
+    /// crawl is counted from its issues (<c>Storage.IssueCauseReader</c>), never assumed. Only how the check is shown: it
+    /// isn't stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public IReadOnlyList<string> Clears { get; init; } = [];
+
+    /// <summary>
     /// What a recheck of the check (the fix loop's "Recheck these N pages") reads again to settle it: its URLs and what
     /// judges them, every sitemap, the robots.txt of the origins it names, or the site's other versions. Empty for a check
     /// a recheck can't settle, because it depends on pages nobody can name in advance: an orphan (only a full crawl shows

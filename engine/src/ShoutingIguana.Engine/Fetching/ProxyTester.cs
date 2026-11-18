@@ -97,6 +97,18 @@ public static class ProxyTester
             return ProxyAuthentication(407, elapsed, hasCredentials);
         }
 
+        // A SOCKS5 proxy's refusal comes as a failed tunnel, whatever it was: which one it was is in its own words.
+        if (SocksRefusals.Of(exception) is { } socks)
+        {
+            return socks.Refusal switch
+            {
+                SocksRefusal.LoginRefused or SocksRefusal.LoginNeeded or SocksRefusal.NoUsableMethod => new(ProxyTestOutcome.ProxyAuthRequired, null, elapsed,
+                    SocksRefusals.Describe(socks.Refusal, socks.Message, hasCredentials) + "."),
+                SocksRefusal.SiteUnreachable => new(ProxyTestOutcome.SiteUnreachable, null, elapsed, "The SOCKS5 proxy let the test in, but couldn't reach the site."),
+                _ => new(ProxyTestOutcome.Failed, null, elapsed, SocksRefusals.Describe(socks.Refusal, socks.Message, hasCredentials).TrimEnd('.') + ".")
+            };
+        }
+
         return exception.HttpRequestError switch
         {
             HttpRequestError.NameResolutionError => new(ProxyTestOutcome.ProxyRefused, null, elapsed, "The proxy's address couldn't be found."),

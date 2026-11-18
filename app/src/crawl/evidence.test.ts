@@ -10,6 +10,7 @@ import {
   objectCellWords,
   pixelsWords,
   redirectChainWords,
+  redirectKindWords,
   relatedFactParts,
   robotsRuleWords,
   shownAtCellWords,
@@ -157,6 +158,27 @@ describe('what a URL a page names is', () => {
     ]);
   });
 
+  it('says what a redirect changes, in its row and as a link’s target', () => {
+    expect(redirectKindWords('httpToHttps,addsWww')).toBe('HTTP to HTTPS, adds www');
+    expect(redirectKindWords('addsSlash')).toBe('adds a trailing slash');
+    expect(redirectKindWords('other')).toBe('moves elsewhere');
+    expect(evidenceValueWords('redirectKind', 'removesSlash,changesCase', null)).toBe(
+      'removes the trailing slash, changes case',
+    );
+    const old = target({
+      url: `${SITE}/old`,
+      statusCode: 301,
+      outcome: 'redirect',
+      kind: 'hyperlink',
+      text: 'Shop',
+      redirectKind: 'addsSlash',
+    });
+    expect(targetFactParts(old, ['statusCode', 'redirectKind', 'text'], SITE)).toEqual([
+      'adds a trailing slash',
+      '“Shop”',
+    ]);
+  });
+
   it('says how long a slow link’s page took to answer, then where the link is and what it says', () => {
     const slow = target({
       url: 'https://elsewhere.example/slow',
@@ -288,7 +310,7 @@ describe('a column whose value is an object', () => {
     expect(robotsRuleWords({ origin: SITE, reason: 'unreachable', line: null, rule: null })).toBe(
       'robots.txt couldn’t be read',
     );
-    expect(robotsRuleWords({ origin: SITE, reason: 'unknown', line: null, rule: null })).toBe('No rule kept');
+    expect(robotsRuleWords({ origin: SITE, reason: 'unknown', line: null, rule: null })).toBe('No matching rule');
   });
 
   it('reads either by its column, an end’s too, and says one it doesn’t know as JSON', () => {

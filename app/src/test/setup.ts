@@ -11,6 +11,9 @@ const hasDom = typeof window !== 'undefined';
 beforeEach(async () => {
   const { replaceSettings } = await import('../settings/settingsStore');
   replaceSettings({ mode: 'advanced' });
+  // Every test starts as a new run of the app: no proxy password or header value kept from the one before.
+  const { resetSessionSecretsForTests } = await import('../crawl/secrets');
+  resetSessionSecretsForTests();
 });
 
 if (hasDom) {

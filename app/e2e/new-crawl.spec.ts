@@ -131,6 +131,49 @@ test.describe('in Advanced', () => {
     expect(options.extraHeaders).toEqual({ 'X-E2E': '' });
   });
 
+  test('the option to remember a proxy password and header values is off until chosen, and says what happens either way', async ({
+    page,
+  }) => {
+    await page.goto(`/new?url=${encodeURIComponent(testSite())}&focus=proxy`);
+    const remember = page.getByRole('checkbox', { name: 'Remember in Windows Credential Manager' });
+    await expect(remember).not.toBeChecked();
+    await expect(page.getByText(/^Kept for this session only: once the app is closed they’re gone/)).toBeVisible();
+    await expect(page.getByText(/aren’t kept/)).toHaveCount(0);
+    await expectNoViolations(page);
+    await remember.check();
+    await expect(
+      page.getByText(/are kept in Windows Credential Manager, so they’re filled in next time/),
+    ).toBeVisible();
+    await expectNoViolations(page);
+  });
+
+  test('unticked, a header value lasts for the session: Settings gives it to New crawl, and a restart forgets it', async ({
+    page,
+  }) => {
+    await page.goto('/settings/crawl-defaults');
+    await page.getByRole('button', { name: /^Headers and network/ }).click();
+    await expect(page.getByRole('checkbox', { name: 'Remember in Windows Credential Manager' })).not.toBeChecked();
+    await page.getByRole('button', { name: 'Add a header' }).click();
+    await page.getByRole('textbox', { name: 'Header 1 name' }).fill('X-E2E-Session');
+    await page.getByRole('textbox', { name: 'Header 1 value' }).fill('s3cret');
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+    // The engine keeps the name only.
+    expect((await read<{ options: CrawlOptions }>('/api/crawl-options/defaults')).options.extraHeaders).toEqual({
+      'X-E2E-Session': '',
+    });
+
+    // In the same run of the app, New crawl has the value.
+    await page.keyboard.press('Control+N');
+    await page.getByRole('button', { name: /^Headers and network/ }).click();
+    await expect(page.getByRole('textbox', { name: 'Header 1 value' })).toHaveValue('s3cret');
+
+    // A restart (a reload of the page: there's no credential store here) forgets it.
+    await page.reload();
+    await page.getByRole('button', { name: /^Headers and network/ }).click();
+    await expect(page.getByRole('textbox', { name: 'Header 1 name' })).toHaveValue('X-E2E-Session');
+    await expect(page.getByRole('textbox', { name: 'Header 1 value' })).toHaveValue('');
+  });
+
   test('Home’s Settings… opens New crawl with the address typed', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('textbox', { name: 'Start URL' }).fill('https://www.example.com/');

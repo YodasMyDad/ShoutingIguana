@@ -23,6 +23,12 @@ public sealed record SyntheticSiteOptions
     public bool Sitemaps { get; init; } = true;
 
     /// <summary>
+    /// With <see cref="Sitemaps"/>, name the sitemap in robots.txt. Without the line the crawler still finds it, at
+    /// /sitemap.xml, so <c>robots-txt-no-sitemap</c> says robots.txt doesn't name it.
+    /// </summary>
+    public bool SitemapInRobots { get; init; } = true;
+
+    /// <summary>
     /// A plain HTTP site whose https:// version, on the same port, doesn't answer, and which links to it: once from the
     /// plants hub, a URL the crawler asks for and finds dead, and <see cref="SyntheticSite.DEAD_TWIN_UNCHECKED"/> times
     /// from the first orphan page. Only the sitemap leads to that page, so the crawler reads it once no linked URL is in

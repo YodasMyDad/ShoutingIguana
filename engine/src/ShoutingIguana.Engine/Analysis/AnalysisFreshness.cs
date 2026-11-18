@@ -49,9 +49,10 @@ public static class AnalysisFreshness
     /// docs/v2-new-checks.md): a page's Refresh header is a refresh as its meta tag is, and an instant one makes it a
     /// redirect; a canonical to another site, or from a later page of a series to its first, and the pages of a canonical
     /// loop, are no longer reported as canonicalised or canonicalised to a non-indexable page; and a robots rule written
-    /// with a space after its colon is one rule.
+    /// with a space after its colon is one rule. 14 is the new sitemap checks' (batch 4): a sitemap entry on another scheme
+    /// than every sitemap listing it, and not on the site's own, is reported as on another host (sitemap-url-other-host).
     /// </summary>
-    public const int VERSION = 13;
+    public const int VERSION = 14;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

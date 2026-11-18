@@ -66,6 +66,19 @@ describe('Url', () => {
     expect(container.querySelector('.si-url__origin')).toHaveTextContent(SITE);
   });
 
+  it('names a file by its name, then its query or folder, muted, and is still read and copied in full', async () => {
+    layOut(160);
+    const image = `${SITE}/media/5265/harpswell-metal-patio-set-9.jpg?width=896`;
+    const { container } = render(<Url url={image} siteOrigin={SITE} label="file" />);
+    expect(container.querySelector('.si-url__file')).toHaveTextContent('harpswell-metal-patio-set-9.jpg');
+    expect(container.querySelector('.si-url__rest')).toHaveTextContent('?width=896');
+    // Never cut in the middle: the name leads, and what doesn't fit is cut at its end.
+    expect(shownText(container)).not.toContain(ELLIPSIS);
+    expect(screen.getByRole('button', { name: image })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: image }));
+    expect(writeText).toHaveBeenCalledWith(image);
+  });
+
   it('copies the full URL on click, and says so', async () => {
     layOut(20 * CHAR);
     const heard: string[] = [];

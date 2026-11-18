@@ -3,6 +3,7 @@
 // the preset reads as chosen exactly while the route's filters are its own. So a preset's count is the grid's count,
 // and nothing is filtered that the filter bar doesn't say.
 import type { GridFilter, GridSort } from '../../api/grids';
+import { PIXELS_COLUMN } from './linkWords';
 
 export interface LinkPreset {
   id: string;
@@ -10,7 +11,27 @@ export interface LinkPreset {
   /** What it shows, for its tooltip. */
   hint: string;
   filters: readonly GridFilter[];
+  /**
+   * The columns it shows, for a preset whose links want their own (Images: the file's size and pixels). Choosing it puts
+   * them in the route; choosing another preset after it puts the default columns back. Left out, the columns stay.
+   */
+  columns?: readonly string[];
+  /** The order it shows its links in, put in the route as it's chosen; left out, the view's own order. */
+  sort?: readonly GridSort[];
 }
+
+/** The Images preset's columns: the image, its file's size and pixels, its alt text, and the page that shows it. */
+export const IMAGE_COLUMNS: readonly string[] = [
+  'to.url',
+  'to.sizeBytes',
+  PIXELS_COLUMN,
+  'text',
+  'from.url',
+  'position',
+];
+
+/** The largest image file first. */
+export const IMAGE_SORT: readonly GridSort[] = [{ column: 'to.sizeBytes', desc: true }];
 
 export const ALL_LINKS: LinkPreset = {
   id: 'all',
@@ -54,6 +75,14 @@ export const LINK_PRESETS: readonly LinkPreset[] = [
     hint: 'Links to other sites',
     filters: [{ column: 'to.isInternal', op: 'is', value: false }],
   },
+  {
+    id: 'images',
+    title: 'Images',
+    hint: 'Every image the pages show, the largest file first, with its pixels, its alt text and the page it’s on',
+    filters: [{ column: 'kind', op: 'in', values: ['image'] }],
+    columns: IMAGE_COLUMNS,
+    sort: IMAGE_SORT,
+  },
 ];
 
 /** A filter in one form, whatever order its fields and values came in, so two that select the same links match. */
@@ -91,4 +120,49 @@ export function sortShown(sort: readonly GridSort[] | undefined, shown: readonly
   const kept = (sort ?? []).filter((key) => shown.includes(key.column));
   // The keys whose columns are still shown stay, in their order: hiding one column drops its key, not the others.
   return kept.length > 0 ? kept : undefined;
+}
+
+/** Whether some columns are exactly a preset's own, in its order: the columns it put in the route. */
+function presetColumns(cols: readonly string[] | undefined): boolean {
+  return (
+    cols !== undefined &&
+    LINK_PRESETS.some(
+      (preset) => preset.columns?.length === cols.length && preset.columns.every((id, index) => cols[index] === id),
+    )
+  );
+}
+
+/**
+ * The route a preset is chosen into, from the one it's chosen from: its filters, and its own columns and order where it
+ * has them. The mode stays (one row a link, or a target); a preset's order is kept in either mode where it means
+ * something there (a column of the target). The columns stay as the user chose them, unless they were another preset's
+ * own: a preset's columns go with it.
+ */
+export function presetSearch(
+  preset: LinkPreset,
+  previous: { cols?: string[] | undefined; by?: 'target' | undefined },
+): { cols?: string[]; filter?: GridFilter[]; sort?: GridSort[]; by?: 'target' } {
+  const cols = preset.columns ? [...preset.columns] : presetColumns(previous.cols) ? undefined : previous.cols;
+  return {
+    ...(cols ? { cols } : {}),
+    ...(preset.filters.length > 0 ? { filter: [...preset.filters] } : {}),
+    ...(preset.sort ? { sort: [...preset.sort] } : {}),
+    ...(previous.by ? { by: previous.by } : {}),
+  };
+}
+
+/**
+ * The Links view of the images one page shows, as the Images preset shows them: what an image check's page opens in
+ * Links. Its links to itself are left out, as the inspector leaves them out.
+ */
+export function imagesOfPage(pageId: number): { cols: string[]; filter: GridFilter[]; sort: GridSort[] } {
+  return {
+    cols: [...IMAGE_COLUMNS],
+    filter: [
+      { column: 'from.id', op: 'eq', value: pageId },
+      { column: 'selfLink', op: 'is', value: false },
+      { column: 'kind', op: 'in', values: ['image'] },
+    ],
+    sort: [...IMAGE_SORT],
+  };
 }

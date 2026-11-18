@@ -17,6 +17,8 @@ import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
 import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
 import { ImageThumb } from '../ui/ImageThumb';
+import { fileLabelOf } from '../ui/urlText';
+import { isBrokenImage } from '../ui/imageFacts';
 import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
 import { pathOrigin, shownWords } from './whereWords';
@@ -77,11 +79,30 @@ function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; or
 }
 
 /** An address as Where it is shows it: its path on the site's own origin, else in full; the full one is read. */
-function Address({ url, origin, small = false }: { url: string; origin: string | null; small?: boolean }) {
+function Address({
+  url,
+  origin,
+  small = false,
+  file = false,
+}: {
+  url: string;
+  origin: string | null;
+  small?: boolean;
+  /** A file a page loads (an image): named by its file, its folder or query after it, muted. */
+  file?: boolean;
+}) {
   const shown = origin && url.startsWith(origin) ? url.slice(origin.length) || '/' : url;
+  const label = file ? fileLabelOf(url, origin) : null;
   return (
     <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'} title={url}>
-      <span aria-hidden="true">{shown}</span>
+      {label ? (
+        <span aria-hidden="true">
+          <span className="si-file-name">{label.name}</span>
+          {label.rest ? <span className="block text-12 text-text-muted">{label.rest}</span> : null}
+        </span>
+      ) : (
+        <span aria-hidden="true">{shown}</span>
+      )}
       <span className="sr-only">{url}</span>
       <OpenUrlButton url={url} className="ml-1" />
     </span>
@@ -296,8 +317,7 @@ function GroupRow({
       : plainRelated(group.related, check, origin);
   // An image is known by sight before by its address.
   const image = check.grouping === 'relatedUrl' && check.id.startsWith('image-') && group.relatedUrl !== null;
-  const broken =
-    typeof group.related?.statusCode === 'number' ? group.related.statusCode >= 400 : Boolean(group.related?.outcome);
+  const broken = isBrokenImage(group.related ?? {});
   // Each page's own facts in plain words: the engine's detail is Advanced's words, so these lines say it instead.
   const pageLines = (row: IssueRow) => (
     <>
@@ -322,7 +342,12 @@ function GroupRow({
               {origin && (group.relatedUrl === origin || group.relatedUrl === `${origin}/`) ? (
                 <span className="block font-medium">Your home page</span>
               ) : null}
-              <Address url={group.relatedUrl} origin={origin} small={group.relatedUrl === `${origin ?? ''}/`} />
+              <Address
+                url={group.relatedUrl}
+                origin={origin}
+                small={group.relatedUrl === `${origin ?? ''}/`}
+                file={image}
+              />
               {about ? (
                 <span className="si-cause-facts mt-1 block text-13 text-text-secondary">{about}</span>
               ) : status !== null && status >= 400 ? (

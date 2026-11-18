@@ -1,4 +1,4 @@
-import { EyeOff } from 'lucide-react';
+import { ArrowDownWideNarrow, EyeOff } from 'lucide-react';
 import { useEffect, useId, useRef, type KeyboardEvent, type Ref } from 'react';
 import type { Severity } from '../../api/types';
 import { affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
@@ -12,9 +12,10 @@ import { ListHeading, ListRow } from '../../ui/ListRow';
 import { RefreshLine } from '../../ui/ProgressBar';
 import { SearchField } from '../../ui/SearchField';
 import { SegmentedControl } from '../../ui/SegmentedControl';
+import { Select } from '../../ui/Select';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { Switch } from '../../ui/Switch';
-import type { CheckEntry, CheckList } from './checkList';
+import { CHECK_SORTS, type CheckEntry, type CheckList, type CheckSort } from './checkList';
 import { CountWithReach } from './CountWithReach';
 
 export type SeverityFilter = Severity | 'all';
@@ -32,6 +33,11 @@ export interface ChecksListProps {
   onQueryChange: (q: string) => void;
   severity: SeverityFilter;
   onSeverityChange: (severity: SeverityFilter) => void;
+  /** The list's order (`list` is built in it); left out, the list is by category and offers no choice. */
+  sort?: CheckSort | undefined;
+  onSortChange?: ((sort: CheckSort) => void) | undefined;
+  /** Points off the score by check id: shown on each row while the list is sorted by them. */
+  points?: ReadonlyMap<string, number> | undefined;
   /** Removes the category the list is narrowed to (`list.category`): its chip's ✕. */
   onCategoryClear?: (() => void) | undefined;
   showPassed: boolean;
@@ -69,6 +75,9 @@ export function ChecksList({
   onQueryChange,
   severity,
   onSeverityChange,
+  sort,
+  onSortChange,
+  points,
   onCategoryClear,
   showPassed,
   onShowPassedChange,
@@ -181,6 +190,16 @@ export function ChecksList({
           ]}
         />
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {sort && onSortChange ? (
+            <Select<CheckSort>
+              label="Sort"
+              size="sm"
+              icon={ArrowDownWideNarrow}
+              options={CHECK_SORTS}
+              value={sort}
+              onValueChange={onSortChange}
+            />
+          ) : null}
           <Switch
             label={
               list.passedCount === 1
@@ -257,6 +276,7 @@ export function ChecksList({
                     onOpen={onOpen}
                     notesShown={notesShown}
                     totals={totals}
+                    points={sort === 'points' ? (points?.get(entry.check.id) ?? 0) : null}
                     ref={(element) => {
                       if (element) options.current.set(entry.check.id, element);
                       else options.current.delete(entry.check.id);
@@ -280,6 +300,7 @@ function CheckOption({
   onOpen,
   notesShown,
   totals,
+  points,
   ref,
 }: {
   entry: CheckEntry;
@@ -289,6 +310,8 @@ function CheckOption({
   onOpen: () => void;
   notesShown: boolean;
   totals: CrawlCounts | null;
+  /** Its points off the score, shown while the list is sorted by them; null otherwise. */
+  points: number | null;
   ref: Ref<HTMLDivElement>;
 }) {
   const { check, outcome, count, skipReason } = entry;
@@ -300,11 +323,18 @@ function CheckOption({
   ) : outcome === 'passed' ? (
     <span className="text-12 text-text-muted">Passed</span>
   ) : (
-    <CountWithReach
-      count={count ?? 0}
-      noun={count === 1 ? words.noun : words.plural}
-      reach={checkReach(check, count, totals)}
-    />
+    <span className="inline-flex items-baseline gap-2">
+      {points !== null ? (
+        <span className="text-12 text-text-muted tabular-nums">
+          {points === 0 ? 'No points' : `−${formatCountOf(points, 'point')}`}
+        </span>
+      ) : null}
+      <CountWithReach
+        count={count ?? 0}
+        noun={count === 1 ? words.noun : words.plural}
+        reach={checkReach(check, count, totals)}
+      />
+    </span>
   );
   return (
     <ListRow

@@ -108,6 +108,7 @@ public static class HtmlPageParser
             Headings = walker.Headings,
             Images = walker.Images,
             JsonLd = walker.JsonLd,
+            Microdata = MicrodataReader.Read(document, baseUri),
             AnchorIds = walker.AnchorIds,
             Icons = walker.Icons,
             MetaRefresh = refresh,

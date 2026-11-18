@@ -161,10 +161,10 @@ function UsedSettings({ stored }: { stored: CrawlOptions }) {
                   <Fact key={field} label={FIELD_WORDS[field].label} className="break-words whitespace-pre-line">
                     {settingValue(field, form)}
                     {field === 'headers' && form.headers.length > 0 ? (
-                      <span className="text-text-muted"> (values aren’t kept with the crawl)</span>
+                      <span className="text-text-muted"> (values aren’t in the crawl file)</span>
                     ) : null}
                     {field === 'proxyUrl' && stored.hasRedactedProxyCredentials ? (
-                      <span className="text-text-muted"> (its user name and password aren’t kept)</span>
+                      <span className="text-text-muted"> (its user name and password aren’t in the crawl file)</span>
                     ) : null}
                   </Fact>
                 ))}
@@ -378,7 +378,7 @@ function ContinuePanel({
             label={FIELD_WORDS.proxyUrl.label}
             description={
               stored.hasRedactedProxyCredentials
-                ? 'This crawl’s proxy had a user name and password, which aren’t kept: give its whole address again, with them.'
+                ? 'This crawl’s proxy had a user name and password, which aren’t in the crawl file and weren’t remembered: give its whole address again, with them.'
                 : FIELD_WORDS.proxyUrl.help
             }
             mono
@@ -394,12 +394,15 @@ function ContinuePanel({
             <Callout tone="warning" title="Some settings must be given again" role="alert">
               {missing.headers.length > 0 ? (
                 <p>
-                  The values of {missing.headers.join(', ')} aren’t kept with the crawl. Type them above, or continue
-                  without {missing.headers.length === 1 ? 'it' : 'them'}.
+                  The values of {missing.headers.join(', ')} aren’t in the crawl file, and weren’t remembered. Type them
+                  above, or continue without {missing.headers.length === 1 ? 'it' : 'them'}.
                 </p>
               ) : null}
               {missing.proxy ? (
-                <p>The proxy’s user name and password aren’t kept: give its whole address above.</p>
+                <p>
+                  The proxy’s user name and password aren’t in the crawl file, and weren’t remembered: give its whole
+                  address above.
+                </p>
               ) : null}
             </Callout>
           ) : null}

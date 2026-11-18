@@ -182,7 +182,8 @@ test('an issue’s affected URLs, a found-on list open, scroll with the pane, on
   expect(await inView(), 'the first row').toBe(true);
 
   // A whole focus ring: each edge of the grid's frame is the focus colour along its length, the top edge with the pane
-  // scrolled to it, the bottom with the pane scrolled to the end.
+  // scrolled to it, the bottom with the frame's end scrolled into view (why it matters and how to fix it follow the
+  // list since step 3b, so the pane's end is past it).
   const colour = await focusColour(page);
   const frame = grid.locator('xpath=..');
   const edgePoints = async (edge: 'top' | 'bottom' | 'left' | 'right') => {
@@ -216,6 +217,6 @@ test('an issue’s affected URLs, a found-on list open, scroll with the pane, on
   expect(await ringAt('top'), 'the top edge').toEqual([true, true, true, true, true]);
   expect(await ringAt('left'), 'the left edge').toEqual([true, true, true, true, true]);
   expect(await ringAt('right'), 'the right edge').toEqual([true, true, true, true, true]);
-  await pane.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await frame.evaluate((element) => element.scrollIntoView({ block: 'end' }));
   expect(await ringAt('bottom'), 'the bottom edge').toEqual([true, true, true, true, true]);
 });

@@ -75,11 +75,28 @@ const entries = (hidden: string[] = []) => checkEntries(CHECKS, ANALYSIS, new Se
 
 describe('issues by severity', () => {
   it('counts the checks that found issues and their issues, each leading to its severity in Issues', () => {
+    // An analysis that doesn't count the things to change has none to say: null, never a short sum.
+    const none = { causes: null, templateCauses: 0 };
     expect(severityFigures(entries())).toEqual([
-      { severity: 'error', checks: 2, issues: 14, link: { to: 'issues', severity: 'error' } },
-      { severity: 'warning', checks: 1, issues: 6, link: { to: 'issues', severity: 'warning' } },
-      { severity: 'notice', checks: 2, issues: 351, link: { to: 'issues', severity: 'notice' } },
+      { severity: 'error', checks: 2, issues: 14, ...none, link: { to: 'issues', severity: 'error' } },
+      { severity: 'warning', checks: 1, issues: 6, ...none, link: { to: 'issues', severity: 'warning' } },
+      { severity: 'notice', checks: 2, issues: 351, ...none, link: { to: 'issues', severity: 'notice' } },
     ]);
+  });
+
+  it('counts the things to change per severity, and those in the template, when the analysis does', () => {
+    const counted = checkEntries(CHECKS, {
+      ...ANALYSIS,
+      counts: ANALYSIS.counts.map((count) => ({
+        ...count,
+        causes: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : count.count,
+        templateCauses: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : 0,
+        clears: [],
+      })),
+    });
+    const [errors, , notices] = severityFigures(counted);
+    expect(errors).toMatchObject({ checks: 2, issues: 14, causes: 14, templateCauses: 0 });
+    expect(notices).toMatchObject({ checks: 2, causes: 87, templateCauses: 1 });
   });
 
   it('leaves hidden checks out, as the sidebar’s counts do', () => {

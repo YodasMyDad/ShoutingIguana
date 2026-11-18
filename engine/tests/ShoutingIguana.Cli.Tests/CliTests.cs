@@ -402,6 +402,7 @@ public sealed class CliTests : IAsyncLifetime
         AssertFails(await RunAsync("export", crawl, "--kind", "workbook", "--out", Path.Combine(_folder, "w.xlsx"), "--examples", "2"), "--examples isn't for an export of workbook: it belongs to report.");
         AssertFails(await RunAsync("export", crawl, "--kind", "check", "--check", "title-too-long", "--out", csv, "--filter", "depth:eq:1"), "--filter isn't for an export of check");
         AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--blocked", "true"), "--blocked isn't for an export of urls: it belongs to robotsOrigins.");
+        AssertFails(await RunAsync("export", crawl, "--kind", "urls", "--out", csv, "--conflict", "true"), "--conflict isn't for an export of urls: it belongs to robotsBlocked.");
         AssertFails(await RunAsync("export", crawl, "--kind", "links", "--out", csv, "--link-ends", "to"), "--link-ends isn't for an export of links: it belongs to urls.");
         AssertFails(await RunAsync("export", crawl, "--kind", "sitemaps", "--out", csv, "--search", "x"), "--search isn't for an export of sitemaps");
         AssertFails(await RunAsync("export", crawl, "--kind", "robotsOrigins", "--out", csv, "--sort", "origin"), "--sort isn't for an export of robotsOrigins");
@@ -551,7 +552,7 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True((bool?)result["summaryAvailable"]);
         Assert.Equal(2, (int?)result["runs"]);
         Assert.Empty(result["failures"]!.AsArray());
-        Assert.Equal(["facets", "grid", "groups", "inspector", "link-ends", "links", "links-grid", "lookup", "robots", "rows", "search", "sitemaps", "stats"],
+        Assert.Equal(["causes", "facets", "grid", "groups", "inspector", "link-ends", "link-groups", "links", "links-grid", "lookup", "robots", "rows", "search", "sitemaps", "stats"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
 
         // Search as it's typed: a keystroke with the crawl's text kept, held to the palette's budget, and the first one,

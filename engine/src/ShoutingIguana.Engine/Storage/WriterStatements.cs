@@ -120,11 +120,11 @@ internal sealed class WriterStatements : IDisposable
             """, "$url", "$parent");
         _updateSitemap = Prepare(connection, """
             UPDATE sitemaps SET status_code = $status, is_index = $isIndex, url_count = $count, error = $error, is_probe = $isProbe,
-                                listed_sitemaps = $listed
+                                listed_sitemaps = $listed, size_bytes = $size
             WHERE id = $id
-            """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$listed", "$id");
+            """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$listed", "$size", "$id");
         _insertSitemapUrl = Prepare(connection,
-            "INSERT OR IGNORE INTO sitemap_urls (sitemap_id, url_id) VALUES ($sitemap, $url)", "$sitemap", "$url");
+            "INSERT OR IGNORE INTO sitemap_urls (sitemap_id, url_id, lastmod) VALUES ($sitemap, $url, $lastmod)", "$sitemap", "$url", "$lastmod");
         // The stamp only ever moves forward, even when the clock went back (or two runs fell in one millisecond): an
         // analysis keeps the stamp it saw, and a crawl that changed since must never stamp that same value again.
         _updateCrawlStatus = Prepare(connection, """
@@ -260,9 +260,9 @@ internal sealed class WriterStatements : IDisposable
     }
 
     public void UpdateSitemap(SitemapRecord record) =>
-        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.IsProbe, record.ListedSitemaps, record.Id);
+        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.IsProbe, record.ListedSitemaps, record.SizeBytes, record.Id);
 
-    public void InsertSitemapUrl(int sitemapId, int urlId) => Run(_insertSitemapUrl, sitemapId, urlId);
+    public void InsertSitemapUrl(int sitemapId, int urlId, long? lastmod = null) => Run(_insertSitemapUrl, sitemapId, urlId, lastmod);
 
     public void UpdateCrawlStatus(CrawlStatus status, bool isFinished, long now) =>
         Run(_updateCrawlStatus, (int)status, now, isFinished);

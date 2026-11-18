@@ -1678,10 +1678,10 @@ touch the same lines:
   limit keeps its bytes unless it's changed. "Use these choices every time" (Simple) saves the form's options once
   the crawl has started, and "Save as my defaults" (Advanced) at once, each without a start URL or a secret. In
   Simple, a message about one of its questions is tied to it and in Simple's words.
-- **Secrets** (header values, a proxy's user name and password) live only in the form's state while the app runs:
-  never in saved defaults (the app strips them before the sidecar does), never in a crawl file. The OS credential
-  store the brief offers, with the user's consent, needs a shell command the shell doesn't have (below), so nothing is
-  remembered between runs.
+- **Secrets** (header values, a proxy's user name and password) are never in saved defaults (the app strips them
+  before the sidecar does), never in a crawl file. They're kept in the OS credential store only with the user's
+  consent, the "Remember in Windows Credential Manager" option beside the proxy (below, "Secrets in the OS credential
+  store"); otherwise for this session only.
 - **`/new` params**: `url` (the start URL), `from` (a crawl's id: "Crawl again with these", its options and start
   URL, with a note that header values and a proxy password must be given again; a crawl the library no longer has
   gives the saved defaults, with a note), `focus` (`speed`, `headers`, `proxy`, `userAgent`, `robots`: that setting's section open and focus on it; `robots` arrives with robots.txt ignored; in
@@ -1777,6 +1777,28 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   without. Nothing secret is ever in `settings.json`, `shell.json`, `defaults.json` or a crawl file. In a browser
   (development, the tests) there's no store and nothing changes. Site logins are headers here: the engine refuses a
   user name in a URL. A test run keeps its secrets under its own service name.
+
+  **Consent (step 3b).** Nothing goes to the credential store unless the user ticks **Remember in Windows Credential
+  Manager**, off until they choose it:
+  - **Where.** Settings › Crawl defaults and New crawl, beside the proxy (after its Test), in both modes. Settings is
+    the same in both modes, every word of it, so the option's words there are those of the fields beside it. Simple's
+    New crawl shows neither proxy nor headers: it shows the option, in Simple's plain words, only when the form holds a
+    secret (from the defaults).
+  - **Ticked**: `saveCrawlOptionDefaults(options, secrets, { remember: true })` and `startCrawl(request, { remember:
+    true })` write the store. A crawl's secrets are then there after a restart, and Continue doesn't ask again.
+  - **Unticked**: the secrets live in the page's memory for this session only (`crawl/secrets.ts`'s session map): New
+    crawl and Continue have them until the app is closed; after a restart Continue answers `needs-secrets` and the
+    crawl's settings ask for them again, as for a crawl started in a browser. Saving with it unticked writes nothing to
+    the store for that key, which takes out what it had.
+  - **Each key its own.** The defaults' option starts ticked when the store has `defaults`; New crawl's when it has
+    the secrets the form starts from (`crawl:<from>` for Crawl again with these, else `defaults`). A Continue keeps
+    the secrets it's given where the crawl's already were; Remove's Undo puts them back where they were.
+  - **What an earlier version saved without asking** (the owner's install has used the app): it counts as remembered,
+    so the option shows ticked where something is, and unticking it removes it. A crawl's entry stays until the crawl
+    leaves the library, as before.
+  - **The words** say what happens in each case: remembered in Windows Credential Manager when ticked; for this session
+    only when not; never in the crawl file. "Crawl again with these" asks again only for what nothing kept
+    (`missingSecrets`: a header with no value, or a proxy whose login was taken out).
 - **A data folder the user can change** (`data_folder.rs`, Settings › Data folder). **Settled: a switch, not a
   move.** Change folder… asks with the system's own dialog, checks a file can be written there, keeps the choice in
   the shell's `shell.json` (with the folder before it) and starts the engine again on it (`Sidecar::relaunch`: the

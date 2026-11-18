@@ -21,6 +21,8 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 /// </param>
 /// <param name="ResponseMs">How long the whole response took, as the crawl measured it; 0 when it wasn't fetched.</param>
 /// <param name="ContentClass">What a successful response's Content-Type says it is (<see cref="Models.ContentClass"/>); none for any other.</param>
+/// <param name="PixelWidth">An image's own width, read from its file; null for anything else and a crawl from before it was read.</param>
+/// <param name="IsLegacyImage">A successful response sent as JPEG, PNG, GIF or BMP, which WebP or AVIF would usually make smaller.</param>
 /// <param name="IsPrivateHost">
 /// Its host is localhost (or a .localhost name) or a private or loopback address written into the URL
 /// (<see cref="Fetching.PrivateNetworkGuard.IsPrivateLiteral"/>): an address only the visitor's own machine or network has.
@@ -45,7 +47,9 @@ internal readonly record struct UrlStatus(
     bool IsRateLimited = false,
     int ResponseMs = 0,
     bool IsPrivateHost = false,
-    ContentClass ContentClass = ContentClass.None)
+    ContentClass ContentClass = ContentClass.None,
+    int? PixelWidth = null,
+    bool IsLegacyImage = false)
 {
     /// <summary>Statuses many sites send crawlers but not people (Amazon answers unknown bots with 503, LinkedIn with 999).</summary>
     private static readonly HashSet<int> BOT_REFUSALS = [401, 403, 405, 429, 503, 999];

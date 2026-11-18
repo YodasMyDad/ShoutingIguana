@@ -2182,6 +2182,34 @@
     color: var(--color-text);
   }
 
+  /* A file named by its name (an image, a stylesheet): the name leads, its query or folder after it, muted; each cut at
+     its end where there isn't room, the name last of all. */
+  .si-url__shown--file {
+    display: flex;
+    gap: var(--space-1-5);
+    align-items: baseline;
+  }
+
+  .si-url__file {
+    flex: 0 0 auto;
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--color-text);
+    text-overflow: ellipsis;
+  }
+
+  .si-url__rest {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-muted);
+    text-overflow: ellipsis;
+  }
+
+  .si-url__go .si-url__file {
+    color: var(--color-accent-text);
+  }
+
   /* The open-in-browser button has its own room at the end, so it never covers the end of the URL. */
   .si-url--openable {
     padding-right: calc(var(--control-height-xs) + var(--space-0-5));

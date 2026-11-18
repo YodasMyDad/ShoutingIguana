@@ -90,6 +90,11 @@ export const queryKeys = {
    * refresh moves the counts with the rows, and whatever changes the crawl refreshes both.
    */
   linkFacets: (id: string, query: LinkFacetsQuery) => ['grid', 'linkFacets', id, query] as const,
+  /** Step 3b: a view of the links grouped by target, as grid pages. Among the grids' keys, so a running crawl refreshes it. */
+  linkGroupsGrid: (id: string, view: { filters: readonly GridFilter[]; q: string; sort: readonly GridSort[] }) =>
+    ['grid', 'linkGroups', id, view] as const,
+  /** Step 3b: the images a page shows, each file once, the largest first: the inspector's Images. */
+  urlImages: (id: string, urlId: number) => ['crawl', id, 'urlImages', urlId] as const,
   /**
    * The URL grid's facets, among the grids' reads: while a facet menu is open a running crawl's refresh keeps its
    * counts fresh, and with every menu closed (the query disabled) it only marks them stale.
@@ -267,6 +272,17 @@ export const startUrlQuery = (id: string) =>
   });
 
 /** One URL in full: the inspector's summary, its issues, its redirects, headers, structured data and hreflang. */
+/**
+ * Step 3b: the images a page shows, each file once, the largest first, the first `limit` of them: the inspector's Images
+ * and its tab's count, one read for both.
+ */
+export const urlImagesQuery = (id: string, urlId: number, limit: number) =>
+  queryOptions({
+    queryKey: [...queryKeys.urlImages(id, urlId), limit] as const,
+    queryFn: ({ signal }) => api.urlImages(id, urlId, limit, signal),
+    staleTime: Infinity,
+  });
+
 export const urlDetailQuery = (id: string, urlId: number) =>
   queryOptions({
     queryKey: queryKeys.urlDetail(id, urlId),

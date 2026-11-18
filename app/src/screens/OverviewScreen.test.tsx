@@ -165,6 +165,33 @@ describe('the Overview of an analysed crawl', () => {
     expect(figures.getByText('1 was skipped, with why below')).toBeVisible();
   });
 
+  it('leads with the things to change when the analysis counts them, per severity too', async () => {
+    sidecar({
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        counts: ISSUES_ANALYSIS.counts.map((count) => ({
+          ...count,
+          causes: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : count.count,
+          templateCauses: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : 0,
+          clears: [],
+        })),
+      },
+    });
+    await open();
+    expect(
+      await main().findByText(
+        'About 6 things to change, 1 of them in the site’s template: 3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.',
+      ),
+    ).toBeVisible();
+    const figures = region('Issues by severity');
+    expect(await figures.findByRole('link', { name: /Errors/ })).toHaveTextContent(
+      'About 2 things to change, from 2 issues',
+    );
+    expect(figures.getByRole('link', { name: /Notices/ })).toHaveTextContent(
+      'About 4 things to change, 1 of them in the site’s template, from 9 issues',
+    );
+  });
+
   it('lists what to fix first, the most severe then the most pages or URLs, each opening its check', async () => {
     sidecar();
     await open();

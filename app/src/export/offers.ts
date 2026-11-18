@@ -249,13 +249,18 @@ export function sitemapUrlsOffer(args: GridViewArgs & { sitemapId: number; sitem
   return { ...base(args.item, 'Export a sitemap’s URLs', args.crawling), choices: [view] };
 }
 
-/** An origin's blocked URLs, all or one line's (or one reason's), as CSV or Excel. */
+/**
+ * An origin's blocked URLs, all or one line's (or one reason's, or those your sitemap or menu asks for), as CSV or
+ * Excel, each with what blocking it costs: the pages linking to it, its sitemap, and whether that conflicts.
+ */
 export function robotsBlockedOffer(args: {
   item: CrawlListItem;
   crawling: boolean;
   origin: string;
   line?: number | undefined;
   reason?: RobotsBlockReason | undefined;
+  /** Step 3b: only the blocked URLs a sitemap lists or a menu links to. */
+  conflict?: boolean | undefined;
   rows: number | null;
 }): ExportOffer {
   const host = args.origin.replace(/^[a-z]+:\/\//i, '');
@@ -275,9 +280,9 @@ export function robotsBlockedOffer(args: {
           }
         : args.reason === 'unknown'
           ? {
-              title: 'Blocked with no rule kept',
-              which: 'every URL blocked whose rule the crawl didn’t keep',
-              file: `blocked by ${host} robots.txt no rule kept`,
+              title: 'Blocked with no matching rule',
+              which: 'every URL blocked that no rule in the copy of the file kept matches',
+              file: `blocked by ${host} robots.txt no matching rule`,
             }
           : args.reason === 'rule'
             ? {
@@ -285,14 +290,25 @@ export function robotsBlockedOffer(args: {
                 which: 'every URL a rule blocked',
                 file: `blocked by ${host} robots.txt rules`,
               }
-            : { title: 'The blocked URLs', which: 'every URL it blocked', file: `blocked by ${host} robots.txt` };
+            : args.conflict === true
+              ? {
+                  title: 'In your sitemap or menu but blocked',
+                  which: 'every URL it blocked that your sitemap or menu asks for',
+                  file: `blocked by ${host} robots.txt in sitemap or menu`,
+                }
+              : { title: 'The blocked URLs', which: 'every URL it blocked', file: `blocked by ${host} robots.txt` };
+  // The conflicts are the ones the costs are about: their line is the file's to show.
+  const columns =
+    args.conflict === true
+      ? 'with the pages linking to each and its sitemap'
+      : 'with the line that decided each, the pages linking to it and its sitemap';
   const view: ExportChoice = {
     id: 'view',
     title: narrowed.title,
     description:
       args.rows === null
-        ? `${host}’s robots.txt: ${narrowed.which}, with the line that decided each`
-        : `${formatCountOf(args.rows, 'URL')}: ${narrowed.which}, with the line that decided each`,
+        ? `${host}’s robots.txt: ${narrowed.which}, ${columns}`
+        : `${formatCountOf(args.rows, 'URL')}: ${narrowed.which}, ${columns}`,
     formats: ['csv', 'xlsx'],
     fileView: narrowed.file,
     build: ({ format, path }) => ({
@@ -302,6 +318,7 @@ export function robotsBlockedOffer(args: {
       origin: args.origin,
       ...(args.line !== undefined ? { line: args.line } : {}),
       ...(args.reason !== undefined ? { reason: args.reason } : {}),
+      ...(args.conflict === true ? { conflict: true } : {}),
     }),
   };
   return { ...base(args.item, 'Export blocked URLs', args.crawling), choices: [view] };
@@ -539,4 +556,59 @@ export function robotsOriginsOffer(args: {
     }),
   };
   return { ...base(args.item, 'Export robots.txt', args.crawling), choices: [view] };
+}
+
+// ------------------------------------------------------------------------------ Links grouped by target (step 3b)
+
+/** The words of a grouped view's order: what the dialog says the file is sorted by. */
+function groupOrderWords(sort: GridSort): string {
+  if (sort.column === 'pages' && sort.desc) return 'the most linked from pages first';
+  return 'by this sort';
+}
+
+/**
+ * The Links screen grouped by target: what's shown, one row a target (the engine's `linkGroups` export), with the view's
+ * filters, search and order; its columns are the grouped view's own.
+ */
+export function linkGroupsOffer(args: {
+  item: CrawlListItem;
+  crawling: boolean;
+  filters: readonly GridFilter[];
+  /** The grouped view's order, as it reads by. */
+  sort: GridSort;
+  search: string | undefined;
+  /** The targets the view holds now, when known. */
+  targets: number | null;
+  /** The preset the view is on, for the file's name; null for a view of the user's own making. */
+  viewName: string | null;
+  /** The view's links are images alone: the rows are images. */
+  images?: boolean | undefined;
+}): ExportOffer {
+  const [one, many] = args.images ? ['image', 'images'] : ['target', 'targets'];
+  const parts = [
+    args.filters.length > 0
+      ? args.filters.length === 1
+        ? 'this filter'
+        : `these ${formatCount(args.filters.length)} filters`
+      : null,
+    args.search ? 'this search' : null,
+    groupOrderWords(args.sort),
+  ].filter((part): part is string => part !== null);
+  const counted = args.targets === null ? `The ${many}` : formatCountOf(args.targets, one, many);
+  const view: ExportChoice = {
+    id: 'view',
+    title: 'This view',
+    description: `${counted}, one row ${args.images ? 'an image' : 'a target'}: ${parts.join(', ')}`,
+    formats: ['csv', 'xlsx'],
+    fileView: args.viewName ? `${args.viewName} by target` : args.images ? 'images' : 'links by target',
+    build: ({ format, path }) => ({
+      kind: 'linkGroups',
+      format: format === 'xlsx' ? 'xlsx' : 'csv',
+      path,
+      filters: [...args.filters],
+      ...(args.search ? { search: args.search } : {}),
+      sort: [{ ...args.sort }],
+    }),
+  };
+  return { ...base(args.item, 'Export links by target', args.crawling), choices: [view] };
 }

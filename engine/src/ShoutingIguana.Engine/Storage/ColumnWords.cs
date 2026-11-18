@@ -52,6 +52,7 @@ internal static class ColumnWords
         ["sizeBytes"] = "Size",
         ["responseMs"] = "Response time",
         ["ttfbMs"] = "Time to first byte",
+        ["redirectKind"] = "Redirect kind",
         ["titleLength"] = "Title length",
         ["descriptionLength"] = "Description length",
         ["titleWidth"] = "Title width",
@@ -230,6 +231,14 @@ internal static class ColumnWords
         var name = outcome.ToString();
         var value = char.ToLowerInvariant(name[0]) + name[1..];
         return VALUES["outcome"].GetValueOrDefault(value) ?? FromId(value);
+    }
+
+    /// <summary>Where on a page a link sits, as the position column's cells say it: "Footer", "Navigation".</summary>
+    public static string PositionTitle(Parsing.Models.LinkPosition position)
+    {
+        var name = position.ToString();
+        var value = char.ToLowerInvariant(name[0]) + name[1..];
+        return VALUES["position"].GetValueOrDefault(value) ?? FromId(value);
     }
 
     /// <summary>An enum's values in words, each value that has none standing for itself.</summary>

@@ -8,6 +8,8 @@ import type {
   LinkPage,
   LinkRow,
   LinksQuery,
+  PageImage,
+  PageImages,
   UrlDetail,
   UrlResponse,
 } from '../api/inspector';
@@ -204,6 +206,8 @@ export interface InspectorSidecarOptions {
   lookup?: Record<string, UrlLookup>;
   /** Delays every inspector answer: how long a slow engine takes. */
   delayMs?: number;
+  /** Step 3b: each URL's images (`/urls/images`). A URL the crawl has without any shows none. */
+  images?: Record<number, Answer<readonly PageImage[]>>;
 }
 
 /** The routes the inspector reads. Put them before the screen's own (`standardRoutes`, `issuesRoutes`). */
@@ -269,5 +273,47 @@ export function inspectorRoutes(options: InspectorSidecarOptions = {}): FakeRout
         return found ? json(found) : NOT_FOUND();
       },
     ],
+    // Step 3b: a page's images, each file once, the largest first.
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/urls\/images$/,
+      (request) => {
+        const { urlId, limit = 100 } = request.body as { urlId: number; limit?: number };
+        if (urlFor(urlId) === undefined) return NOT_FOUND();
+        return answer(options.images?.[urlId] ?? [], (rows) =>
+          json({
+            urlId,
+            total: rows.length,
+            links: rows.reduce((sum, row) => sum + row.links, 0),
+            rows: rows.slice(0, limit),
+            pixelSizes: rows.length === 0 || rows.some((row) => typeof row.target.pixelWidth === 'number'),
+          } satisfies PageImages),
+        );
+      },
+    ],
   ];
+}
+
+/** A page's image file, as `/urls/images` lists it: an image over 200 KB, by default. */
+export function testPageImage(facts: Partial<PageImage> = {}, target: Partial<PageImage['target']> = {}): PageImage {
+  return {
+    id: 40,
+    url: 'https://www.gardenfurnituresets.co.uk/wp-content/uploads/harpswell-hero.jpg',
+    links: 1,
+    text: 'Harpswell metal patio set on a lawn',
+    positions: ['content'],
+    target: {
+      statusCode: 200,
+      outcome: 'success',
+      contentType: 'image/jpeg',
+      sizeBytes: 2_202_009,
+      pixelWidth: 4000,
+      pixelHeight: 3000,
+      final: null,
+      indexability: null,
+      canonical: null,
+      ...target,
+    },
+    ...facts,
+  };
 }

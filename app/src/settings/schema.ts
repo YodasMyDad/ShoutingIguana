@@ -2,6 +2,7 @@
 // so each is checked at the boundary and anything unusable falls back to its default.
 import { readColumnLayouts, type ColumnLayout } from '../grid/columnLayout';
 import { readSavedViews, type SavedView } from '../grid/savedViews';
+import type { CheckSort, PlainCheckSort } from '../screens/issues/checkList';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type Density = 'compact' | 'standard' | 'comfortable';
@@ -53,6 +54,11 @@ export interface Settings {
    * crawl (docs/v2-fix-loop.md, "Comparing with another crawl").
    */
   compareWithByCrawl: Record<string, string>;
+  /**
+   * The order checks are listed in, remembered for each mode: Advanced's Issues list (fix first, by count, by points, by
+   * severity or by category), and the order within each part of Simple's What to fix (fix first, by points or by count).
+   */
+  checkSort: { advanced: CheckSort; simple: PlainCheckSort };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -74,6 +80,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gridColumns: {},
   hiddenChecksByCrawl: {},
   compareWithByCrawl: {},
+  checkSort: { advanced: 'fixFirst', simple: 'fixFirst' },
 };
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
@@ -143,6 +150,19 @@ function readCompareWith(value: unknown): Record<string, string> {
   return byCrawl;
 }
 
+/** Each mode's order of checks; anything unusable is the default, the order to fix them in. */
+function readCheckSort(value: unknown): Settings['checkSort'] {
+  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  return {
+    advanced: oneOf(
+      stored.advanced,
+      ['fixFirst', 'count', 'points', 'severity', 'category'],
+      DEFAULT_SETTINGS.checkSort.advanced,
+    ),
+    simple: oneOf(stored.simple, ['fixFirst', 'points', 'count'], DEFAULT_SETTINGS.checkSort.simple),
+  };
+}
+
 /** Reads stored settings of any shape (or none) into valid ones. */
 export function readSettings(value: unknown): Settings {
   const hadSettings = typeof value === 'object' && value !== null;
@@ -190,5 +210,6 @@ export function readSettings(value: unknown): Settings {
     gridColumns: readColumnLayouts(stored.gridColumns),
     hiddenChecksByCrawl: readHiddenByCrawl(stored.hiddenChecksByCrawl),
     compareWithByCrawl: readCompareWith(stored.compareWithByCrawl),
+    checkSort: readCheckSort(stored.checkSort),
   };
 }

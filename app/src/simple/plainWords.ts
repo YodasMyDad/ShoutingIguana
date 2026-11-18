@@ -83,6 +83,25 @@ export function shareWords(check: Check, count: number, wholes: Wholes): ShareWo
   return { count: formatCount(count), rest, text: `${formatCount(count)}${rest}` };
 }
 
+/**
+ * A row's count in a list of problems, without what it's a share of: "9 addresses", "5 pages", "The whole site". The
+ * rows of a list then compare (the UX audit, X6: "9 of 4,521 addresses" beside "5 of 265 pages" didn't); the share is
+ * on the problem's own page.
+ */
+export function rowCountWords(check: Check, count: number): ShareWords {
+  if (check.siteWide) return { count: null, rest: 'The whole site', text: 'The whole site' };
+  if (check.reportedOnce) return { count: null, rest: 'Once, for the whole site', text: 'Once, for the whole site' };
+  const pages = (check.subject ?? 'page') === 'page';
+  const rest = pages ? (count === 1 ? ' page' : ' pages') : count === 1 ? ' address' : ' addresses';
+  return { count: formatCount(count), rest, text: `${formatCount(count)}${rest}` };
+}
+
+/** The points fixing a problem gives back, on its row: "4 points back", or nothing when it gives none. */
+export function rowPointsWords(points: number | null | undefined): string | null {
+  if (!points) return null;
+  return `${formatCount(points)} ${points === 1 ? 'point' : 'points'} back`;
+}
+
 // ---------------------------------------------------------------------------------------------------- The score
 
 /** The score as a word: "Good", or "Good so far" for a crawl that didn't read all of the site. The ring's words. */
