@@ -60,7 +60,7 @@ const crawled = async (page: Page) =>
 test('the answer comes first, and Fix first leads to its check in Issues', async ({ page }) => {
   await openOverview(page);
   await expect(main(page).locator('.si-page-header__subtitle')).toHaveText(
-    /^(About [\d,]+ things to fix|1 thing to fix|Nothing to fix)[^·]*( · [\d,]+ notices? worth a look)? · \d+ checks found [\d,]+ issues on this crawl\./,
+    /^(About [\d,]+ things to fix|1 thing to fix|Nothing to fix)[^·]*( · (about )?[\d,]+ (more|things?) worth a look)? · \d+ checks found [\d,]+ issues on this crawl\./,
   );
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
 
@@ -177,7 +177,7 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   await expect(answer).toBeVisible({ timeout: 150_000 });
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
   await expect(main(page).locator('.si-page-header__subtitle')).toHaveText(
-    /^(About [\d,]+ things to fix|1 thing to fix|Nothing to fix)[^·]*( · [\d,]+ notices? worth a look)? · \d+ checks found [\d,]+ issues on this crawl\./,
+    /^(About [\d,]+ things to fix|1 thing to fix|Nothing to fix)[^·]*( · (about )?[\d,]+ (more|things?) worth a look)? · \d+ checks found [\d,]+ issues on this crawl\./,
   );
   await expect(main(page).getByRole('list', { name: 'Status codes by class' })).toBeVisible();
   // "Pages" is one count everywhere: the test site has an iframe's target, which answers 2xx with HTML but was only

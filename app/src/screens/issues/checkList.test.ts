@@ -98,7 +98,7 @@ describe('what each check came to', () => {
       templateCauses: 0,
       fixCauses: null,
       fixTemplateCauses: 0,
-      notices: 2,
+      noticeCauses: null,
     });
   });
 });
@@ -124,7 +124,7 @@ describe('hidden checks', () => {
       templateCauses: 0,
       fixCauses: null,
       fixTemplateCauses: 0,
-      notices: 1,
+      noticeCauses: null,
     });
     expect(hiddenTotals(entries)).toEqual({ checks: 3, found: 2, issues: 274 });
     expect(hiddenTotals(checkEntries(CHECKS, ANALYSIS))).toBeNull();
@@ -437,38 +437,41 @@ describe('things to change', () => {
       // What moves the score: the errors' and warnings' alone, the links again the 404s' job; then the notices.
       fixCauses: 9,
       fixTemplateCauses: 0,
-      notices: 2,
+      noticeCauses: 88,
     });
     // With the 404s hidden, the links are a job of their own again.
     const hidden = checkEntries(CHECKS, COUNTED, new Set(['internal-client-error']));
     expect(analysisTotals(countedEntries(hidden)).causes).toBe(91);
   });
 
-  it('lead the answer with what moves the score, then the notices worth a look, then the counts', () => {
+  it('lead the answer with what moves the score, then the notices’ things in the same unit, then the counts', () => {
     const totals = { found: 21, issues: 1_124, passed: 112, skipped: 4, causes: 852, templateCauses: 3 };
-    expect(answerSentence({ ...totals, fixCauses: 77, fixTemplateCauses: 3, notices: 14 })).toBe(
-      'About 77 things to fix, 3 of them in the site’s template · 14 notices worth a look · 21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
+    // Things, then more things: the units agree; the checks and issues are named as such.
+    expect(answerSentence({ ...totals, fixCauses: 77, fixTemplateCauses: 3, noticeCauses: 775 })).toBe(
+      'About 77 things to fix, 3 of them in the site’s template · about 775 more worth a look · 21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
     );
-    expect(answerParts({ ...totals, fixCauses: 1, fixTemplateCauses: 0, notices: 1 })).toEqual({
+    expect(answerParts({ ...totals, fixCauses: 1, fixTemplateCauses: 0, noticeCauses: 1 })).toEqual({
       fix: '1 thing to fix',
-      notices: '1 notice worth a look',
+      notices: '1 more worth a look',
       counts: '21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
     });
-    // Only notices: nothing to fix, and they follow.
-    expect(answerSentence({ ...totals, found: 2, issues: 14, fixCauses: 0, fixTemplateCauses: 0, notices: 2 })).toBe(
-      'Nothing to fix · 2 notices worth a look · 2 checks found 14 issues on this crawl. 112 passed and 4 were skipped.',
+    // Only notices: nothing to fix, and their things follow, named.
+    expect(
+      answerSentence({ ...totals, found: 2, issues: 14, fixCauses: 0, fixTemplateCauses: 0, noticeCauses: 9 }),
+    ).toBe(
+      'Nothing to fix · about 9 things worth a look · 2 checks found 14 issues on this crawl. 112 passed and 4 were skipped.',
     );
     // No notices: none said.
-    expect(answerParts({ ...totals, fixCauses: 5, fixTemplateCauses: 0, notices: 0 }).notices).toBeNull();
+    expect(answerParts({ ...totals, fixCauses: 5, fixTemplateCauses: 0, noticeCauses: 0 }).notices).toBeNull();
     // Nothing found, or an earlier sidecar's analysis: the counts alone, as before.
-    expect(answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0, fixCauses: 0, notices: 0 })).toBe(
+    expect(answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0, fixCauses: 0, noticeCauses: 0 })).toBe(
       answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0 }),
     );
     expect(answerSentence({ ...totals, fixCauses: null })).toBe(
       '21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
     );
     // Only notices found something, on an analysis that counts no things: not "nothing to fix", the counts alone.
-    expect(answerSentence({ ...totals, causes: null, fixCauses: 0, notices: 21 })).toBe(
+    expect(answerSentence({ ...totals, causes: null, fixCauses: 0, noticeCauses: null })).toBe(
       '21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
     );
   });

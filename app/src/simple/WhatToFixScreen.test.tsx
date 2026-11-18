@@ -130,7 +130,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     expect(
       main().getByText(
-        /6 problems to fix and 22 things worth a look on gardenfurnituresets\.co\.uk, from 143 checks on 265 pages\./,
+        /6 problems to fix and 22 more worth a look on gardenfurnituresets\.co\.uk, from 143 checks on 265 pages\./,
       ),
     ).toBeVisible();
     for (const [name, count] of [

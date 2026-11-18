@@ -131,8 +131,11 @@ export interface AnalysisTotals {
   fixCauses?: number | null;
   /** Of `fixCauses`, those likely in the site's template. */
   fixTemplateCauses?: number;
-  /** Notices that found something: "14 notices worth a look", as Simple's "14 things worth a look" counts them. */
-  notices?: number;
+  /**
+   * The notices' things to change, in the same unit as `fixCauses` (round 4): "about 775 more worth a look". Null as
+   * `causes` is.
+   */
+  noticeCauses?: number | null;
 }
 
 /** What each check came to on this crawl, in catalog order. */
@@ -225,18 +228,17 @@ export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
   let issues = 0;
   let passed = 0;
   let skipped = 0;
-  let notices = 0;
   for (const entry of entries) {
     if (entry.outcome === 'skipped') skipped++;
     else if (entry.outcome === 'passed') passed++;
     else {
       found++;
       issues += entry.count ?? 0;
-      if (entry.outcome === 'notice') notices++;
     }
   }
   const all = workOf(entries);
   const fix = workOf(entries.filter((entry) => entry.outcome === 'error' || entry.outcome === 'warning'));
+  const notices = workOf(entries.filter((entry) => entry.outcome === 'notice'));
   return {
     found,
     issues,
@@ -246,7 +248,7 @@ export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
     templateCauses: all.templateCauses,
     fixCauses: fix.causes,
     fixTemplateCauses: fix.templateCauses,
-    notices,
+    noticeCauses: notices.causes,
   };
 }
 
@@ -288,7 +290,7 @@ export function causeWords(causes: number, templateCauses: number, to: 'change' 
 export interface AnswerParts {
   /** "About 77 things to fix, 3 of them in the site’s template", or "Nothing to fix"; null without things counted. */
   fix: string | null;
-  /** "14 notices worth a look"; null with none, or without things counted. */
+  /** "about 775 more worth a look", the notices' things; null with none, or without things counted. */
   notices: string | null;
   /** "21 checks found 1,124 issues on this crawl. 116 passed and 4 were skipped." */
   counts: string;
@@ -298,12 +300,12 @@ const capitalised = (text: string) => `${text.charAt(0).toUpperCase()}${text.sli
 
 /**
  * The header's answer, leading with what moves the score when the analysis counts its things to change (round 3): the
- * errors' and warnings' things to fix and how many are in the template; then the notices, quieter, as checks worth a
- * look (Simple's "14 things worth a look"); then the counts. Without things counted (an earlier sidecar's analysis),
- * only the counts: "19 checks found 933 issues on this crawl. 63 passed and 3 were skipped."
+ * errors' and warnings' things to fix and how many are in the template; then, quieter, the notices' things, in the same
+ * unit ("about 775 more worth a look", round 4), then the counts of checks and issues, named as such. Without things
+ * counted (an earlier sidecar's analysis), only the counts: "19 checks found 933 issues on this crawl. 63 passed and 3 were skipped."
  */
 export function answerParts(totals: AnalysisTotals): AnswerParts {
-  const { found, causes, fixCauses, fixTemplateCauses, notices } = totals;
+  const { found, causes, fixCauses, fixTemplateCauses, noticeCauses } = totals;
   // Counted only when every check that found something has its things counted: an analysis that counts none has 0
   // errors' things too when only notices found something, which isn't "nothing to fix".
   const counted = found > 0 && causes !== null && causes !== undefined && fixCauses !== null && fixCauses !== undefined;
@@ -313,9 +315,19 @@ export function answerParts(totals: AnalysisTotals): AnswerParts {
         ? 'Nothing to fix'
         : capitalised(causeWords(fixCauses, fixTemplateCauses ?? 0, 'fix'))
       : null,
-    notices: counted && notices ? `${formatCount(notices)} ${notices === 1 ? 'notice' : 'notices'} worth a look` : null,
+    notices: counted && noticeCauses ? worthALookWords(noticeCauses, fixCauses > 0) : null,
     counts: countsSentence(totals),
   };
+}
+
+/**
+ * The notices' things, in the unit the fix part names: "about 775 more worth a look" after things to fix, "about 775
+ * things worth a look" after nothing to fix; "1 more" and "1 thing" for one.
+ */
+function worthALookWords(things: number, afterFix: boolean): string {
+  const about = things === 1 ? '1' : `about ${formatCount(things)}`;
+  const noun = afterFix ? 'more' : things === 1 ? 'thing' : 'things';
+  return `${about} ${noun} worth a look`;
 }
 
 /** The answer as one line of text: its parts, " · " between them (the window title, a copy, a test). */

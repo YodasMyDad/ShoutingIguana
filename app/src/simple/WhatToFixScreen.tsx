@@ -182,8 +182,10 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
         {problems === 0
           ? 'Nothing to fix'
           : `${problems === 1 ? '1 problem' : `${formatCount(problems)} problems`} to fix`}
+        {/* The same unit as the problems before it (round 4): "6 problems to fix and 22 more worth a look", never "things",
+            which Advanced's answer counts in. */}
         {results.counts.notice > 0
-          ? ` and ${results.counts.notice === 1 ? '1 thing' : `${formatCount(results.counts.notice)} things`} worth a look`
+          ? ` and ${formatCount(results.counts.notice)}${problems > 0 ? ' more' : ''} worth a look`
           : ''}{' '}
         on {site}, from {checksWord(results.ran)} on{' '}
         {analysis.data.pagesAnalyzed === 1 ? '1 page' : `${formatCount(analysis.data.pagesAnalyzed)} pages`}.

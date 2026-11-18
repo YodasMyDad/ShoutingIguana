@@ -95,14 +95,26 @@ test.describe('Advanced', () => {
     const causes = moves
       .filter((count) => !sameJob.has(count.checkId))
       .reduce((sum, count) => sum + (count.causes ?? 0), 0);
-    const notices = found.length - moves.length;
+    // The notices' things, in the same unit, a notice another notice's fix clears entirely being its job.
+    const noticeChecks = found.filter((count) => byId.get(count.checkId)?.severity === 'notice');
+    const noticeIds = new Set(noticeChecks.map((count) => count.checkId));
+    const noticeJob = new Set(
+      related
+        .filter(({ fixer, cleared }) => cleared.all && noticeIds.has(fixer.checkId) && noticeIds.has(cleared.checkId))
+        .map(({ cleared }) => cleared.checkId),
+    );
+    const notices = noticeChecks
+      .filter((count) => !noticeJob.has(count.checkId))
+      .reduce((sum, count) => sum + (count.causes ?? 0), 0);
     expect(found.every((count) => count.causes !== null && count.causes <= count.count)).toBe(true);
 
     await page.goto(`/crawls/${crawl.id}/overview`);
     const lead =
       causes === 0 ? 'Nothing to fix' : causes === 1 ? '1 thing to fix' : `About ${number(causes)} things to fix`;
     const noticesWords =
-      notices === 0 ? '' : ` · ${number(notices)} ${notices === 1 ? 'notice' : 'notices'} worth a look`;
+      notices === 0
+        ? ''
+        : ` · ${notices === 1 ? '1' : `about ${number(notices)}`} ${causes > 0 ? 'more' : notices === 1 ? 'thing' : 'things'} worth a look`;
     await expect(page.getByRole('main').locator('.si-page-header__subtitle')).toHaveText(
       new RegExp(`^${lead}[^·]*${noticesWords} · [0-9]+ checks found`),
     );
