@@ -2,8 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { CrawlComparison } from '../api/fixLoop';
 import type { Analysis, CrawlListItem } from '../api/types';
 import { liveStore } from '../live/liveStore';
-import { TEST_CRAWL_ID, type FakeRoute } from '../test/fakeSidecar';
-import { changesRoute, comparedGardenItem, gardenComparison } from '../test/fixLoopSidecar';
+import { TEST_CRAWL_ID, json, type FakeRoute } from '../test/fakeSidecar';
+import {
+  changesRoute,
+  comparedGardenItem,
+  gardenComparison,
+  recheckRecord,
+  recheckResult,
+} from '../test/fixLoopSidecar';
 import { ScreenApp, ownSidecar } from '../test/ScreenStory';
 import { GARDEN_ANALYSIS, gardenItem, problemRoutes, simpleRoutes } from '../test/simpleSidecar';
 
@@ -124,4 +130,45 @@ export const SummaryWhileRechecking: Story = summary(
 export const BreakdownSinceLastCheck: Story = {
   loaders: [() => own(comparedGardenItem(), [changesRoute()])],
   render: () => <ScreenApp path={`${SUMMARY}?score=1`} mode="simple" />,
+};
+
+// ---------------------------------------------------------------------------------------------------- What to fix
+
+const FIX = `${CRAWL}/issues`;
+
+/** What to fix since the last check: each row's change under its count; the Fixed group folded below the severities. */
+export const WhatToFixSinceLastCheck: Story = {
+  loaders: [() => own(comparedGardenItem(), [changesRoute()])],
+  render: () => <ScreenApp path={FIX} mode="simple" />,
+};
+
+/** Landed on from the Summary's "3 problems fixed": the Fixed group open, its heading in view. */
+export const WhatToFixFixedGroupOpen: Story = {
+  loaders: [() => own(comparedGardenItem(), [changesRoute()])],
+  render: () => <ScreenApp path={`${FIX}#fixed-since`} mode="simple" />,
+};
+
+/** A site's first check with a recheck that cleared a problem: its Fixed group is what the recheck cleared. */
+export const WhatToFixFirstCheckRechecked: Story = {
+  loaders: [
+    () =>
+      own(gardenItem({ previous: null, changes: null }), [
+        [
+          'GET',
+          /^\/api\/crawls\/[0-9a-f]{16}\/rechecks$/,
+          () =>
+            json({
+              rechecks: [
+                recheckRecord({
+                  checkId: 'title-missing',
+                  countBefore: 3,
+                  judged: 3,
+                  result: recheckResult({ fixed: 3, still: 0 }),
+                }),
+              ],
+            }),
+        ],
+      ]),
+  ],
+  render: () => <ScreenApp path={`${FIX}#fixed-since`} mode="simple" />,
 };

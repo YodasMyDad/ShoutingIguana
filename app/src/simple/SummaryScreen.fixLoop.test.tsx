@@ -216,3 +216,18 @@ describe('how the score is worked out, since the last check', () => {
     expect(first.queryByRole('button', { name: /Fixed since/ })).toBeNull();
   });
 });
+
+describe('Fix these first, since the last check', () => {
+  it('gives each row its change under its count', async () => {
+    await open(comparedGardenItem(), [changesRoute()]);
+    const first = screen.getByRole('region', { name: /Fix these first/ });
+    await waitFor(() =>
+      expect(within(first).getByRole('link', { name: /Pages or files that can't be found/ })).toHaveTextContent(
+        '12 on 17 Oct',
+      ),
+    );
+    expect(within(first).getByRole('link', { name: /Pages that are slow to answer/ })).toHaveTextContent(
+      'Not looked for last time',
+    );
+  });
+});

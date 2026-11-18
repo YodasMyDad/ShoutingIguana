@@ -139,6 +139,14 @@
     color: var(--color-text-muted);
   }
 
+  /* The fix loop: its change since the site's last check, under its count ("9 on 3 Nov"): text, never colour alone. */
+  .si-plain-row__change {
+    display: block;
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    color: var(--color-text-muted);
+  }
+
   /* A check a fix of the row above clears entirely, folded under it: indented past the row's mark, on the same card. */
   .si-plain-row--nested {
     padding-inline-start: calc(var(--space-6) + var(--icon-lg) + var(--space-4));
