@@ -264,7 +264,11 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
       matching: number;
       unavailable: string[];
       facets: { inSitemap?: { value: boolean | null; count: number }[] };
-    }>(`/api/crawls/${crawl.id}/urls/facets`, { filters: ANSWERED_SITE_PAGES, facets: ['inSitemap'] });
+    }>(`/api/crawls/${crawl.id}/urls/facets`, {
+      // The site's indexable pages, as the line counts them (the not-in-sitemap check's, since the fix-it pass).
+      filters: [...ANSWERED_SITE_PAGES, { column: 'indexable', op: 'is', value: true }],
+      facets: ['inSitemap'],
+    });
     await page.goto(`/crawls/${crawl.id}/sitemaps`);
     const unplaced = facets.facets.inSitemap?.find((bucket) => bucket.value === null)?.count ?? 0;
     if (facets.unavailable.includes('inSitemap')) {
@@ -275,12 +279,16 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
       await expect(main(page).getByText(/^The analysis didn’t count the site’s pages no sitemap lists/)).toBeVisible();
       await expect(main(page).getByText(/in (a|any) sitemap\./)).toHaveCount(0);
     } else if (facets.matching === 0) {
-      await expect(main(page).getByText(/^The crawl read no pages on this site/)).toBeVisible();
+      await expect(
+        main(page).getByText(/^The crawl found no pages on this site that can appear in search/),
+      ).toBeVisible();
     } else {
-      // "N of the site's M pages": M is the crawl's pages, as the library counts them.
-      expect(facets.matching).toBe(crawl.pageCount);
+      // "N of the site's M indexable pages": M is the crawl's pages that can appear in search, some of the library's.
+      expect(facets.matching).toBeLessThanOrEqual(crawl.pageCount);
       const missing = facets.facets.inSitemap?.find((bucket) => bucket.value === false)?.count ?? 0;
-      const sentence = main(page).getByText(/the site’s [\d,]+ pages? (is|are|isn’t|aren’t) in (a|any) sitemap\./);
+      const sentence = main(page).getByText(
+        /the site’s [\d,]+ indexable pages? (is|are|isn’t|aren’t) in (a|any) sitemap\./,
+      );
       await expect(sentence).toBeVisible();
       // Each count in it is a link to exactly its URLs: the pages no sitemap lists (when there are some), and the
       // site's pages.

@@ -73,7 +73,8 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
 
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         Assert.Equal(1, IssueReader.ReadCounts(path).GetValueOrDefault(IssueCatalog.BROKEN_EXTERNAL_LINKS.Id));
-        Assert.Null(Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.BLOCKED_BY_ROBOTS.Id, 10)).Detail);
+        // The rule that refused it, with its line (the fix-it pass): each rule is one group.
+        Assert.Equal("Disallow: /private/, line 2", Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.BLOCKED_BY_ROBOTS.Id, 10)).Detail);
     }
 
     [Fact]

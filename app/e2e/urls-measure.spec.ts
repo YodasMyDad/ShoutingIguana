@@ -14,44 +14,42 @@ test.beforeAll(async () => {
 });
 
 const PRESETS: Record<string, string[]> = {
-  Overview: [],
-  Indexability: [
+  Overview: [
     'url',
     'statusCode',
     'indexability',
-    'canonicalUrl',
-    'noindex',
-    'nofollow',
-    'inSitemap',
-    'metaRobots',
-    'xRobotsTag',
-    'redirectTarget',
-  ],
-  Content: [
-    'url',
     'title',
-    'titleLength',
-    'titleWidth',
-    'h1',
-    'h1Count',
-    'wordCount',
-    'description',
-    'descriptionLength',
-    'descriptionWidth',
+    'depth',
+    'inlinks',
+    'issues',
+    'responseMs',
+    'sizeBytes',
+    'type',
   ],
-  Performance: ['url', 'statusCode', 'type', 'responseMs', 'ttfbMs', 'sizeBytes', 'contentType', 'depth'],
+  Indexability: ['url', 'indexability', 'canonicalUrl', 'metaRobots', 'inSitemap', 'redirectTarget'],
+  Content: ['url', 'title', 'titleWidth', 'description', 'descriptionWidth', 'h1Count'],
+  Performance: [
+    'url',
+    'statusCode',
+    'type',
+    'responseMs',
+    'ttfbMs',
+    'sizeBytes',
+    'pixelWidth',
+    'pixelHeight',
+    'usedOn',
+    'depth',
+  ],
   Links: [
     'url',
     'statusCode',
     'depth',
     'inlinks',
+    'usedOn',
     'followedInlinks',
     'nofollowInlinks',
     'linkingPages',
     'outlinks',
-    'redirectTarget',
-    'finalUrl',
-    'finalStatusCode',
   ],
 };
 
@@ -132,7 +130,7 @@ test('the URL grid against its budgets on this crawl', async ({ page }) => {
       name === 'Links'
         ? 'Followed inlinks'
         : name === 'Content'
-          ? 'Title length'
+          ? 'Title width'
           : name === 'Performance'
             ? 'First byte'
             : name === 'Indexability'

@@ -82,8 +82,11 @@ async function sweepFacets(page: Page, view: string) {
       })),
     );
     if (!OVERLAPPING.has(facet)) {
+      // The Sitemaps menu's offer of the not-in-sitemap check's pages (the fix-it pass) is some of "In no sitemap" again.
       expect(
-        values.reduce((sum, value) => sum + value.count, 0),
+        values
+          .filter((value) => value.words !== 'Indexable pages in no sitemap')
+          .reduce((sum, value) => sum + value.count, 0),
         `${view}: the ${facet} values add up to the URLs in view`,
       ).toBe(inView);
     }

@@ -15,4 +15,11 @@ internal sealed record ReportProblem(
     long Count,
     ScoreLine? Line,
     IReadOnlyList<ReportExample> Examples,
-    ReportOneFix? OneFix);
+    ReportOneFix? OneFix)
+{
+    /// <summary>
+    /// For a check of the site's own files (<see cref="IssueDefinition.About"/>): the robots.txt or sitemaps it's about, which
+    /// the report names where its row would name the home page. Null for any other check, and an analysis that stored none.
+    /// </summary>
+    public IReadOnlyList<string>? Files { get; init; }
+}

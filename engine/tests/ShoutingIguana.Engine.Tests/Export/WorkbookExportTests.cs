@@ -73,6 +73,26 @@ public sealed class WorkbookExportTests : IDisposable
     }
 
     /// <summary>Discovery decision 2: a check the user hid is left out of the workbook's sheets and its summary, which says so.</summary>
+    /// <summary>
+    /// The "can I fix it from this?" pass: a sheet holds no column that's empty on every row, no "Other address" beside the
+    /// column naming the same URLs, no final URL that's only ever the address; and a check of the site's files names them.
+    /// </summary>
+    [Fact]
+    public void ASheetHoldsOnlyColumnsThatSaySomething()
+    {
+        var path = Path.Combine(_folder, "shape.xlsx");
+        CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx }, path);
+        var order = IssueReader.ReadResults(_crawl.Path)!.FixFirst.ToList();
+        var sheets = XlsxFile.Read(path).Sheets;
+        object?[] Header(string checkId) => sheets[order.IndexOf(checkId) + 1].Values[0];
+
+        Assert.Equal(["Address", "Page title"], Header("canonical-missing"));
+        Assert.Equal(["Address", "Page title", "What was found", "Canonical"], Header("canonical-broken"));
+        Assert.DoesNotContain("Final URL", Header("sitemap-non-indexable"));
+        Assert.Equal(["File", "What was found"], Header("sitemap-error"));
+        Assert.Equal($"{_crawl.Server.BaseUri.GetLeftPart(UriPartial.Authority)}/sitemaps/missing.xml", sheets[order.IndexOf("sitemap-error") + 1].Values[1][0]);
+    }
+
     [Fact]
     public void AWorkbookLeavesOutTheChecksTheUserHid()
     {
@@ -149,7 +169,7 @@ public sealed class WorkbookExportTests : IDisposable
     [Fact]
     public void OneChecksFileIsNumberedAsTheWorkbookWithTheSameChecksHidden()
     {
-        var order = IssueReader.ReadResults(_crawl.Path)!.FixFirst;
+        var order = IssueReader.ReadResults(_crawl.Path)!.FixFirst.ToList();
         string[] hidden = [order[0], "a-check-from-another-version"];
         var check = order[4];
 
@@ -218,11 +238,38 @@ public sealed class WorkbookExportTests : IDisposable
     /// <summary>A sheet's rows are the check's rows, as its grid reads them when no order is asked for: by importance.</summary>
     private void AssertHoldsTheChecksRows(string checkId, List<object?[]> sheet, bool guarded = false)
     {
+        var shape = Shape(checkId);
+        var rows = GridRows(checkId, SHEET_COLUMNS);
+        Assert.Equal(rows.Count, sheet.Count - 1);
+
+        // A check of the site's files names them, one a line, where the row would name the home page.
+        if (shape.Files is { } files)
+        {
+            Assert.Equal([string.Join("\n", files), rows[0][3] as string], sheet[1]);
+            return;
+        }
+
+        for (var row = 0; row < rows.Count; row++)
+        {
+            for (var column = 0; column < shape.Columns.Length; column++)
+            {
+                var expected = rows[row][Array.IndexOf(SHEET_COLUMNS, shape.Columns[column]) + 1] as string;
+                expected = string.IsNullOrEmpty(expected) ? null : guarded && "=+-@\t\r".Contains(expected[0], StringComparison.Ordinal) ? "'" + expected : expected;
+                Assert.True(Equals(expected, sheet[row + 1][column]), $"{checkId}, row {row + 1}, {shape.Titles[column]}: the grid has '{expected}', the sheet '{sheet[row + 1][column]}'.");
+            }
+        }
+
+        AssertSaysWhereToFix(checkId, [.. rows.Select(row => Convert.ToInt32(row[0], CultureInfo.InvariantCulture))], sheet);
+    }
+
+    /// <summary>A check's rows as its grid gives them, the id first, then <paramref name="columns"/>.</summary>
+    private List<IReadOnlyList<object?>> GridRows(string checkId, string[] columns)
+    {
         List<IReadOnlyList<object?>> rows = [];
         for (var offset = 0; ; offset += 1_000)
         {
-            var page = IssueGroupReader.ReadRows(_crawl.Path, checkId, new UrlQuery { Columns = SHEET_COLUMNS, Offset = offset, Limit = 1_000 })!.Page!;
-            Assert.Equal(["id", .. SHEET_COLUMNS], page.Columns);
+            var page = IssueGroupReader.ReadRows(_crawl.Path, checkId, new UrlQuery { Columns = columns, Offset = offset, Limit = 1_000 })!.Page!;
+            Assert.Equal(["id", .. columns], page.Columns);
             rows.AddRange(page.Rows.Select(row => row.Values));
             if (rows.Count >= page.Matching)
             {
@@ -230,27 +277,46 @@ public sealed class WorkbookExportTests : IDisposable
             }
         }
 
-        Assert.Equal(rows.Count, sheet.Count - 1);
-        for (var row = 0; row < rows.Count; row++)
+        return rows;
+    }
+
+    /// <summary>
+    /// What a check's sheet holds, worked out from its grid rows: the address, then the page's title, what was found and the
+    /// other address only where some row has one (the other address not where where-to-fix names the same URLs), then its
+    /// evidence but a final URL or canonical that's always the address itself. A check of the site's files: the files.
+    /// </summary>
+    private (string[] Columns, string[] Titles, string[] Evidence, IReadOnlyList<string>? Files) Shape(string checkId)
+    {
+        var check = IssueCatalog.Find(checkId)!;
+        if (check.About is not null && IssueFileReader.Read(_crawl.Path)!.Checks.GetValueOrDefault(checkId) is { } files)
         {
-            for (var column = 0; column < SHEET_COLUMNS.Length; column++)
-            {
-                var expected = rows[row][column + 1] as string;
-                expected = string.IsNullOrEmpty(expected) ? null : guarded && "=+-@\t\r".Contains(expected[0], StringComparison.Ordinal) ? "'" + expected : expected;
-                Assert.True(Equals(expected, sheet[row + 1][column]), $"{checkId}, row {row + 1}, {SHEET_TITLES[column]}: the grid has '{expected}', the sheet '{sheet[row + 1][column]}'.");
-            }
+            return (["url", "detail"], ["File", "What was found"], [], [.. files.Select(file => file.Url)]);
         }
 
-        AssertSaysWhereToFix(checkId, [.. rows.Select(row => Convert.ToInt32(row[0], CultureInfo.InvariantCulture))], sheet);
+        var rows = GridRows(checkId, [.. SHEET_COLUMNS, "finalUrl", "canonicalUrl"]);
+        bool Any(int column) => rows.Any(row => row[column] is string { Length: > 0 });
+        bool Elsewhere(int column) => rows.Any(row => row[column] is string { Length: > 0 } other && other != row[1] as string);
+        bool[] keep = [true, Any(2), Any(3), Any(4) && check.References != IssueReferences.Targets];
+        string[] evidence =
+        [
+            .. check.Evidence.Where(column => column != "title" && column switch { "finalUrl" => Elsewhere(5), "canonicalUrl" => Elsewhere(6), _ => true })
+        ];
+        return ([.. SHEET_COLUMNS.Where((_, index) => keep[index])], [.. SHEET_TITLES.Where((_, index) => keep[index])], evidence, null);
     }
 
     /// <summary>
     /// A check's file's header: its sheet's, its evidence (but the page's title, already there), then where to fix each URL
     /// where the check's URLs are referred to, named by what a page's targets are.
     /// </summary>
-    private static object?[] Titles(string checkId)
+    private object?[] Titles(string checkId)
     {
         var check = IssueCatalog.Find(checkId)!;
+        var shape = Shape(checkId);
+        if (shape.Files is not null)
+        {
+            return [.. shape.Titles];
+        }
+
         object?[] where = check.References switch
         {
             IssueReferences.Sources => ["Linked from (pages)", "Linked from", "Listed in sitemaps"],
@@ -265,14 +331,12 @@ public sealed class WorkbookExportTests : IDisposable
             },
             _ => []
         };
-        return [.. SHEET_TITLES, .. EvidenceTitles(check), .. where];
+        return [.. shape.Titles, .. EvidenceTitles(shape.Evidence), .. where];
     }
 
     /// <summary>The titles of a check's evidence columns on its sheet, its unit in brackets: "Title length", "Response time (ms)".</summary>
-    private static string[] EvidenceTitles(IssueDefinition check) =>
-    [
-        .. check.Evidence.Where(column => column != "title").Select(column => GridExport.Title(UrlGridReader.IssueRowColumns.Single(info => info.Id == column)))
-    ];
+    private static string[] EvidenceTitles(string[] evidence) =>
+        [.. evidence.Select(column => GridExport.Title(UrlGridReader.IssueRowColumns.Single(info => info.Id == column)))];
 
     /// <summary>
     /// Each row's added cells say where to fix it, as the found-on reader reads it: how many pages link to the URL and the
@@ -282,7 +346,8 @@ public sealed class WorkbookExportTests : IDisposable
     {
         var check = IssueCatalog.Find(checkId)!;
         var references = check.References;
-        var first = SHEET_TITLES.Length + EvidenceTitles(check).Length;
+        var shape = Shape(checkId);
+        var first = shape.Columns.Length + shape.Evidence.Length;
         if (references == IssueReferences.None)
         {
             Assert.All(sheet, row => Assert.True(row.Length <= first, $"{checkId}: {row.Length} cells"));

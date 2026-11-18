@@ -166,8 +166,9 @@ test('the file shows the line that blocked a planted URL, and choosing the line 
 
   // Every blocked URL names the line that decided it, the rule's text behind it (and in the file beside the list).
   await expect(shown(page)).toHaveText(String(own.blocked));
-  await expect(blocked(page).getByRole('row').nth(1)).toContainText(`Line ${rule.number}`);
-  await expect(blocked(page).getByRole('row').nth(1).getByText(`Line ${rule.number}`, { exact: true })).toHaveAttribute(
+  // The rule itself in the cell, its line in the tooltip (the fix-it pass).
+  await expect(blocked(page).getByRole('row').nth(1)).toContainText(rule.text);
+  await expect(blocked(page).getByRole('row').nth(1).getByText(rule.text, { exact: true })).toHaveAttribute(
     'title',
     `Line ${rule.number} refused it: ${rule.text}`,
   );

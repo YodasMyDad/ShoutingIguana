@@ -153,6 +153,18 @@ export interface Check {
    */
   recheck?: RecheckKind[];
   /**
+   * The kind of file a check of the whole site is about (the fix-it pass, X4): its robots.txt or its sitemaps. The
+   * analysis's count for the check names the files (`CheckCount.files`), to show in place of the home page the issue is
+   * reported on. Null for a check of pages or URLs; left out by a sidecar from before it.
+   */
+  about?: 'robotsTxt' | 'sitemap' | null;
+  /**
+   * The order the check's rows come in when none is asked for: `importance` (the most linked page, or the URL the most
+   * pages use, first) or `fewestLinksFirst` (the pages links lead to least first: pages missing from the sitemaps, where a
+   * sitemap helps most). Left out by a sidecar from before it, which reads as importance.
+   */
+  rowOrder?: 'importance' | 'fewestLinksFirst';
+  /**
    * Evidence (step 3b): the URL columns that show what the check found, in the order to show them, beside each row's
    * `url` and `detail` (`["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
    * `["redirectChain"]` for the redirect checks).
@@ -444,6 +456,23 @@ export interface CheckCount {
    * clears there. Empty when none; left out by a sidecar from before it.
    */
   clears?: ClearedCheck[];
+  /**
+   * For a check of the site's own files (`about` on the check): every robots.txt or sitemap it found at fault, in the order
+   * its detail names them, to name in place of the home page its issue is reported on. Null for any other check, and for an
+   * analysis from before files were stored (show the page then); left out by a sidecar from before it.
+   */
+  files?: CheckFile[] | null;
+}
+
+/** A robots.txt or sitemap a check of the site's own files is about. */
+export interface CheckFile {
+  /** The file's full URL. */
+  url: string;
+  /**
+   * The sitemap's id, for `/crawls/{id}/sitemaps/{sitemapId}`; null for a robots.txt, which opens at
+   * `/crawls/{id}/robots/{origin}` (its URL without "/robots.txt").
+   */
+  sitemapId: number | null;
 }
 
 /** Another check a fix of one clears (related checks). */

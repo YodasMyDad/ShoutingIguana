@@ -5,7 +5,9 @@ import { COVERAGE_PAGE, TEST_SITEMAP_LIST, testSitemap } from '../../test/sitema
 import { sentenceText } from '../countSentence';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
 import {
+  COVERAGE_FACETS,
   COVERAGE_NEEDS,
+  sitemapChecksOf,
   answerSentence,
   coverageOf,
   coverageSkippedWords,
@@ -254,20 +256,25 @@ describe('the answer in a sentence', () => {
 });
 
 describe('the site’s pages no sitemap lists', () => {
-  it('counts them from the facets, with the filters that open exactly them', () => {
+  // The fix-it pass: the pages the not-in-sitemap check counts, those that can appear in search. A canonicalised page
+  // (page 2 of a list) is rightly in no sitemap, and the garden crawl's line said 21 where the check said 18.
+  const INDEXABLE_PAGES = [...ANSWERED_SITE_PAGES, { column: 'indexable', op: 'is', value: true }];
+
+  it('counts the indexable pages, as the check does, from the facets, with the filters that open exactly them', () => {
+    expect(COVERAGE_FACETS.filters).toEqual(INDEXABLE_PAGES);
     const coverage = coverageOf(COVERAGE_PAGE);
     expect(coverage).toEqual({
       known: true,
       missing: 2,
       pages: 9,
-      filters: [...ANSWERED_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }],
+      filters: [...INDEXABLE_PAGES, { column: 'inSitemap', op: 'is', value: false }],
     });
     const parts = coverage.known ? coverageWords(coverage) : [];
-    expect(sentenceText(parts)).toBe('2 of the site’s 9 pages aren’t in any sitemap.');
-    // Both counts are links: the pages no sitemap lists, and the site's pages as Overview counts them.
+    expect(sentenceText(parts)).toBe('2 of the site’s 9 indexable pages aren’t in any sitemap.');
+    // Both counts are links: the pages no sitemap lists, and the site's indexable pages.
     expect(parts.filter((part) => typeof part !== 'string')).toEqual([
-      { text: '2', filters: [...ANSWERED_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }] },
-      { text: '9 pages', filters: ANSWERED_SITE_PAGES },
+      { text: '2', filters: [...INDEXABLE_PAGES, { column: 'inSitemap', op: 'is', value: false }] },
+      { text: '9 indexable pages', filters: INDEXABLE_PAGES },
     ]);
   });
 
@@ -277,10 +284,12 @@ describe('the site’s pages no sitemap lists', () => {
       facets: { inSitemap: [{ value: true, count: 9, filter: { column: 'inSitemap', op: 'is', value: true } }] },
     };
     const coverage = coverageOf(all);
-    expect(coverage.known && sentenceText(coverageWords(coverage))).toBe('All of the site’s 9 pages are in a sitemap.');
+    expect(coverage.known && sentenceText(coverageWords(coverage))).toBe(
+      'All of the site’s 9 indexable pages are in a sitemap.',
+    );
     const none = coverageOf({ ...all, matching: 0, facets: { inSitemap: [] } });
     expect(none.known && sentenceText(coverageWords(none))).toBe(
-      'The crawl read no pages on this site, so there’s nothing for a sitemap to list.',
+      'The crawl found no pages on this site that can appear in search, so there’s nothing for a sitemap to list.',
     );
   });
 
@@ -289,9 +298,11 @@ describe('the site’s pages no sitemap lists', () => {
       ...COVERAGE_PAGE,
       facets: { inSitemap: [{ value: false, count: 1, filter: { column: 'inSitemap', op: 'is', value: false } }] },
     });
-    expect(one.known && sentenceText(coverageWords(one))).toBe('1 of the site’s 9 pages isn’t in any sitemap.');
+    expect(one.known && sentenceText(coverageWords(one))).toBe(
+      '1 of the site’s 9 indexable pages isn’t in any sitemap.',
+    );
     const single = coverageOf({ ...COVERAGE_PAGE, matching: 1, facets: { inSitemap: [] } });
-    expect(single.known && sentenceText(coverageWords(single))).toBe('The site’s 1 page is in a sitemap.');
+    expect(single.known && sentenceText(coverageWords(single))).toBe('The site’s 1 indexable page is in a sitemap.');
   });
 
   it('never tells a page the engine couldn’t place that it’s in a sitemap: the analysis skipped the comparison', () => {
@@ -369,5 +380,47 @@ describe('what the crawl did with a listed URL', () => {
     // It may have been requested or refused: no more is said than is known.
     expect(outcomeWords({ fetched: true, outcome: null }, false)).toBe('Unknown');
     expect(outcomeWords({ fetched: true, outcome: 'somethingNew' as UrlOutcome }, false)).toBe('Unknown');
+  });
+});
+
+describe('an empty sitemap', () => {
+  it('is flagged, where the engine counted what the file lists', () => {
+    const empty = testSitemap({ id: 1, state: 'read', isIndex: false, entries: 0, listedSitemaps: 0 });
+    expect(stateWords(empty, false)).toMatchObject({
+      tone: 'failed',
+      short: 'Empty: lists no URLs',
+      sentence: 'The crawl read it, and it lists no URLs: an empty sitemap, which search engines ignore.',
+    });
+    // One that lists URLs, an index, or one an engine from before the count read, isn't.
+    expect(stateWords(testSitemap({ id: 2, entries: 3, listedSitemaps: 0 }), false).short).toBe('Read');
+    expect(stateWords(testSitemap({ id: 3, isIndex: true, listedSitemaps: 0 }), false).short).toBe('Read');
+    expect(stateWords(testSitemap({ id: 4 }), false).short).toBe('Read');
+  });
+});
+
+describe('what the checks found in the sitemaps', () => {
+  const check = (id: string, title: string) => ({ id, title, category: 'sitemaps' });
+  const checks = [
+    check('sitemap-non-indexable', 'Non-indexable URL in sitemap'),
+    check('not-in-sitemap', 'Indexable page not in a sitemap'),
+    check('sitemap-url-other-host', 'Sitemap lists a URL on another host'),
+    check('sitemap-empty', 'Empty sitemap'),
+    { id: 'title-too-long', title: 'Title too long', category: 'titles' },
+  ];
+
+  it('lists each sitemap check that found something, with its count, in the analysis’s order', () => {
+    const counts = [
+      { checkId: 'title-too-long', count: 40 },
+      { checkId: 'sitemap-url-other-host', count: 2 },
+      { checkId: 'sitemap-non-indexable', count: 1 },
+      { checkId: 'not-in-sitemap', count: 23 },
+      { checkId: 'sitemap-empty', count: 0 },
+    ];
+    expect(sitemapChecksOf(checks, counts)).toEqual([
+      { id: 'sitemap-url-other-host', title: 'Sitemap lists a URL on another host', count: 2 },
+      { id: 'sitemap-non-indexable', title: 'Non-indexable URL in sitemap', count: 1 },
+      { id: 'not-in-sitemap', title: 'Indexable page not in a sitemap', count: 23 },
+    ]);
+    expect(sitemapChecksOf(checks, [])).toEqual([]);
   });
 });
