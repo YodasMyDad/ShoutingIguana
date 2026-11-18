@@ -8,11 +8,11 @@ import { queryKeys } from '../api/queries';
 import { setTransport, type Transport } from '../api/transport';
 import type { CrawlListItem } from '../api/types';
 import { isQuietAnalysis, noteQuietAnalysis } from '../crawl/quietAnalyses';
-import { forgetRecheckAsked, noteRecheckAsked, resetRechecksAskedForTests } from '../crawl/rechecks';
+import { resetPendingRechecks, startRecheck } from '../crawl/recheck';
 import { AppToaster } from '../feedback/AppToaster';
 import { dismissToast } from '../feedback/notify';
 import { replaceSettings } from '../settings/settingsStore';
-import { recheckRecord, recheckResult } from '../test/fixLoopSidecar';
+import { recheckPlan, recheckRecord, recheckResult } from '../test/fixLoopSidecar';
 import { startLiveBridge } from './liveBridge';
 import { LiveStore, type LiveStoreClock } from './liveStore';
 
@@ -47,6 +47,9 @@ const transport: Transport = {
   send: async (request) => {
     await frame();
     if (request.path === '/api/checks') return Response.json(CHECKS);
+    if (request.method === 'POST' && request.path.endsWith('/rechecks')) {
+      return Response.json({ recheckId: 1, ...recheckPlan() }, { status: 202 });
+    }
     if (request.path.endsWith('/rechecks/1')) return Response.json(recheckRecord());
     return Response.json(item);
   },
@@ -92,7 +95,7 @@ function setup(viewing?: string, queryClient = new QueryClient()) {
 
 beforeEach(() => {
   setTransport(transport);
-  resetRechecksAskedForTests();
+  resetPendingRechecks();
   item = {
     id: ID,
     path: 'C:\\crawls\\gardenfurnituresets.co.uk.sicrawl',
@@ -178,12 +181,11 @@ describe('a recheck’s end, in its own toast', () => {
     replaceSettings({ mode: 'simple' });
     render(<AppToaster />);
     const { stop, status } = setup('/');
-    noteRecheckAsked(ID, { recheckId: 1, checkId: 'broken-internal-links', judged: 5 });
+    await startRecheck(ID, { checkId: 'broken-internal-links' });
     status('analyzing');
     status('completed', { error: 'A check of this site is running. Its results will show what’s fixed.' });
     expect(await screen.findByText('The recheck of gardenfurnituresets.co.uk couldn’t run')).toBeInTheDocument();
     expect(screen.queryByText(/the analysis failed|couldn’t be worked out/)).toBeNull();
-    forgetRecheckAsked(ID);
     stop();
   });
 });

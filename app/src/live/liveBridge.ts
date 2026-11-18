@@ -12,7 +12,7 @@ import type { CrawlEvent, CrawlListItem, CrawlStatus, IssueCounts } from '../api
 import { isCrawling, isLive } from '../api/types';
 import { analyseCrawl, continueCrawl } from '../crawl/actions';
 import { forgetQuietAnalysis, isQuietAnalysis } from '../crawl/quietAnalyses';
-import { askedRecheck, forgetRecheckAsked } from '../crawl/rechecks';
+import { pendingRecheck } from '../crawl/recheck';
 import { changeCounts, countedItemChanges, severitiesOf } from '../changes/changes';
 import { recheckToastTitle } from '../changes/recheckWords';
 import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
@@ -81,6 +81,15 @@ export function startLiveBridge({
    * the crawl's status at rest again. Their analyses and stops are the recheck's: its own toast says how it went.
    */
   const rechecking = new Set<string>();
+  /**
+   * The latest recheck of each crawl whose end the bridge has heard: settled (its result), or the crawl at rest again
+   * without it. A recheck asked here (`pendingRecheck`) past those is still on its way, though nothing of it has come.
+   */
+  const heardTheEnd = new Map<string, number>();
+  const askedUnderway = (crawlId: string) => {
+    const asked = pendingRecheck(crawlId);
+    return asked !== undefined && (heardTheEnd.get(crawlId) ?? 0) < asked.recheckId;
+  };
   /** When each running analysis's crawl was last analysed: an analysis that ends with it unchanged was cancelled. */
   const analysedBefore = new Map<string, string | null>();
   const lastStatus = new Map<string, CrawlStatus>();
@@ -130,7 +139,9 @@ export function startLiveBridge({
   /** A recheck's event: it marks the crawl as being rechecked, and its last (with the result) earns the toast. */
   function onRecheckEvent(event: RecheckEvent) {
     rechecking.add(event.crawlId);
-    if (event.result !== null) void toastRecheck(event);
+    if (event.result === null) return;
+    heardTheEnd.set(event.crawlId, Math.max(heardTheEnd.get(event.crawlId) ?? 0, event.recheckId));
+    void toastRecheck(event);
   }
 
   /**
@@ -139,8 +150,9 @@ export function startLiveBridge({
    */
   async function toastRecheck(event: RecheckEvent) {
     const { crawlId, recheckId, status, result } = event;
-    let judged = askedRecheck(crawlId)?.recheckId === recheckId ? askedRecheck(crawlId)?.judged : undefined;
-    let checkId = askedRecheck(crawlId)?.recheckId === recheckId ? askedRecheck(crawlId)?.checkId : undefined;
+    const asked = pendingRecheck(crawlId);
+    let judged: number | undefined;
+    let checkId: string | null | undefined = asked?.recheckId === recheckId ? asked.ask.checkId : undefined;
     try {
       const record = await api.recheck(crawlId, recheckId);
       judged = record.judged;
@@ -302,7 +314,7 @@ export function startLiveBridge({
    */
   function decideToast(event: CrawlEvent, previous: CrawlStatus | undefined) {
     const { crawlId, status } = event;
-    if (rechecking.has(crawlId) || askedRecheck(crawlId)) {
+    if (rechecking.has(crawlId) || askedUnderway(crawlId)) {
       decideRecheckToast(event);
       return;
     }
@@ -375,7 +387,11 @@ export function startLiveBridge({
    */
   function decideRecheckToast(event: CrawlEvent) {
     const { crawlId, status } = event;
-    if (status === 'failed' || event.error) {
+    const asked = pendingRecheck(crawlId);
+    // On the check's own page, its card says why it didn't run.
+    const onItsPage =
+      asked?.ask.checkId !== undefined && viewing().startsWith(`/crawls/${crawlId}/issues/${asked.ask.checkId}`);
+    if ((status === 'failed' || event.error) && !onItsPage) {
       void itemOf(crawlId).then((item) =>
         notifyError(new CrawlFailure(event.error ?? 'The engine didn’t say why.', false), {
           id: crawlToast(crawlId, 'failed'),
@@ -388,7 +404,7 @@ export function startLiveBridge({
     }
     if (!isLive(status)) {
       rechecking.delete(crawlId);
-      forgetRecheckAsked(crawlId);
+      if (asked) heardTheEnd.set(crawlId, Math.max(heardTheEnd.get(crawlId) ?? 0, asked.recheckId));
       crawledHere.delete(crawlId);
       analysingAfterCrawl.delete(crawlId);
       stoppedHere.delete(crawlId);

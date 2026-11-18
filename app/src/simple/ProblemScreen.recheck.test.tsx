@@ -7,7 +7,7 @@ import type { Recheck, RecheckPlan, RecheckRow } from '../api/fixLoop';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createAppRouter } from '../app/router';
-import { resetRechecksAskedForTests } from '../crawl/rechecks';
+import { resetPendingRechecks } from '../crawl/recheck';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem, type FakeRoute, type FakeSidecar } from '../test/fakeSidecar';
@@ -54,12 +54,12 @@ const publish = () => act(() => new Promise((resolve) => setTimeout(resolve, 300
 
 beforeEach(() => {
   liveStore.reset();
-  resetRechecksAskedForTests();
+  resetPendingRechecks();
 });
 afterEach(() => {
   replaceSettings({ mode: 'advanced', hiddenChecks: [] });
   liveStore.reset();
-  resetRechecksAskedForTests();
+  resetPendingRechecks();
 });
 
 describe('Fixed it?, before a recheck', () => {
@@ -159,7 +159,7 @@ describe('Fixed it?, rechecking', () => {
     expect(fixed.getByRole('button', { name: 'Recheck again' })).toBeEnabled();
   });
 
-  it('asks for what the crawl file doesn’t keep, and rechecks without the headers when told to', async () => {
+  it('asks for what the crawl file doesn’t keep as Continue does, and rechecks without the headers when told to', async () => {
     let asks = 0;
     const sidecar = await open({
       start: () => {
@@ -170,15 +170,11 @@ describe('Fixed it?, rechecking', () => {
     const fixed = await card();
     fireEvent.click(await fixed.findByRole('button', { name: 'Recheck these 5 pages' }));
     expect(
-      await fixed.findByText(
-        'Rechecking needs the values of its headers (Authorization), which aren’t kept in the check’s file. Enter them again in its settings, or recheck without them.',
+      await screen.findByText(
+        'Its headers (Authorization) aren’t kept in the crawl file. Enter them again in its settings, or recheck without them.',
       ),
     ).toBeInTheDocument();
-    expect(fixed.getByRole('link', { name: 'Open its settings' })).toHaveAttribute(
-      'href',
-      `/crawls/${TEST_CRAWL_ID}/settings`,
-    );
-    fireEvent.click(fixed.getByRole('button', { name: 'Recheck without them' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Recheck without' }));
     await waitFor(() =>
       expect(
         sidecar.requests.filter((request) => request.method === 'POST' && request.path.endsWith('/rechecks')).at(-1)
@@ -188,6 +184,29 @@ describe('Fixed it?, rechecking', () => {
         skipMissingHeaders: true,
       }),
     );
+    // Asked: the card follows it at once.
+    expect(await fixed.findByText('Starting the recheck…')).toBeInTheDocument();
+  });
+
+  it('says why the one asked didn’t run, when it was refused once its analysis first was done', async () => {
+    await open();
+    const fixed = await card();
+    fireEvent.click(await fixed.findByRole('button', { name: 'Recheck these 5 pages' }));
+    expect(await fixed.findByText('Starting the recheck…')).toBeInTheDocument();
+    status('analyzing');
+    await publish();
+    expect(await fixed.findByText('Updating the results first…')).toBeInTheDocument();
+    event('crawl', {
+      crawlId: TEST_CRAWL_ID,
+      status: 'completed',
+      error: 'A check of this site is running. Its results will show what’s fixed.',
+    });
+    await publish();
+    expect(
+      await fixed.findByText(
+        'The recheck didn’t run: A check of this site is running. Its results will show what’s fixed.',
+      ),
+    ).toBeInTheDocument();
   });
 });
 

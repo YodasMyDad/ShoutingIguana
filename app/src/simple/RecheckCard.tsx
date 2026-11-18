@@ -1,9 +1,9 @@
 // "Fixed it?" as a recheck (docs/v2-fix-loop.md, section 4, "One problem"): the card at the foot of a problem's page
 // that fetches just its pages again and says "4 of 5 fixed", in every state: what it will do and how long, why it can't
-// run now, what the crawl file doesn't keep, its progress with Stop, and what it found, with Recheck again. A check a
-// recheck can't settle offers Check the site again instead. Leaving the page doesn't stop it: the top bar, the sidebar
-// and a toast follow it.
-import { useQuery } from '@tanstack/react-query';
+// run now, its progress with Stop, and what it found, with Recheck again. What the crawl file doesn't keep is asked for
+// as Continue asks (crawl/recheck.ts, shared with Advanced). A check a recheck can't settle offers Check the site again
+// instead. Leaving the page doesn't stop it: the top bar, the sidebar and a toast follow it.
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { RefreshCw, RotateCcw, Square } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -22,12 +22,9 @@ import {
   NEEDS_FULL_CHECK_WORDS,
 } from '../changes/recheckWords';
 import { stopCrawl } from '../crawl/actions';
-import { startRecheck, useAskedRecheck, type RecheckStart } from '../crawl/rechecks';
+import { pendingRecheck, refreshAfterRecheck, startRecheck, useRecheckRun } from '../crawl/recheck';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
-import { notifyError } from '../feedback/notify';
-import { formatList } from '../lib/format';
-import { useLiveCrawl } from '../live/liveStore';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { OpenUrlButton } from '../ui/OpenUrlButton';
@@ -42,37 +39,31 @@ const STILL_SHOWN = 5;
 export function RecheckCard({ crawlId, item, check }: { crawlId: string; item: CrawlListItem; check: Check }) {
   const ask = { checkId: check.id };
   const supported = (check.recheck?.length ?? 0) > 0;
-  const live = useLiveCrawl(crawlId);
-  const asked = useAskedRecheck(crawlId);
+  const queryClient = useQueryClient();
+  const run = useRecheckRun(crawlId);
   const rechecks = useQuery({ ...rechecksQuery(crawlId), enabled: supported });
   const plan = useQuery({ ...recheckPlanQuery(crawlId, ask), enabled: supported });
-  const [start, setStart] = useState<RecheckStart | null>(null);
-  // Its result has come: the crawl's rechecks and what another would do are read again, here, whoever else does.
-  const settledResult = live?.recheck?.result ?? null;
-  const { refetch: refetchRechecks } = rechecks;
-  const { refetch: refetchPlan } = plan;
-  useEffect(() => {
-    if (!settledResult) return;
-    void refetchRechecks();
-    void refetchPlan();
-  }, [settledResult, refetchRechecks, refetchPlan]);
   const [starting, setStarting] = useState(false);
+  // Settled: the crawl's rechecks and what another would do are read again, here, whoever else does.
+  const settled = run?.stage === 'settled' ? run.recheckId : null;
+  useEffect(() => {
+    if (settled !== null) void refreshAfterRecheck(queryClient, crawlId);
+  }, [settled, queryClient, crawlId]);
   const state = recheckCardState({
     check,
     plan: plan.data,
     planFailed: plan.isError,
     rechecks: rechecks.data?.rechecks,
-    live: live ? { status: live.status, recheck: live.recheck } : undefined,
-    asked,
+    run,
+    pending: pendingRecheck(crawlId),
   });
 
-  const recheck = async (options: { skipMissingHeaders?: boolean } = {}) => {
+  const recheck = async () => {
     setStarting(true);
-    const outcome = await startRecheck(crawlId, ask, options);
+    const started = await startRecheck(crawlId, ask);
     setStarting(false);
-    setStart(outcome);
-    if (outcome.kind === 'failed') notifyError(outcome.error, { retry: () => void recheck(options) });
-    if (outcome.kind === 'refused') void plan.refetch();
+    // Refused or not started: whether it can run has moved.
+    if (!started) void plan.refetch();
   };
 
   return (
@@ -85,9 +76,8 @@ export function RecheckCard({ crawlId, item, check }: { crawlId: string; item: C
         crawlId={crawlId}
         item={item}
         check={check}
-        start={start}
         starting={starting}
-        onRecheck={(options) => void recheck(options)}
+        onRecheck={() => void recheck()}
         onRetryPlan={() => void plan.refetch()}
       />
     </Card>
@@ -99,7 +89,6 @@ function CardBody({
   crawlId,
   item,
   check,
-  start,
   starting,
   onRecheck,
   onRetryPlan,
@@ -108,9 +97,8 @@ function CardBody({
   crawlId: string;
   item: CrawlListItem;
   check: Check;
-  start: RecheckStart | null;
   starting: boolean;
-  onRecheck: (options?: { skipMissingHeaders?: boolean }) => void;
+  onRecheck: () => void;
   onRetryPlan: () => void;
 }) {
   const whole = <WholeSiteAgain crawlId={crawlId} item={item} />;
@@ -152,15 +140,7 @@ function CardBody({
       return <Running crawlId={crawlId} state={state} />;
     case 'result':
       return (
-        <Result
-          crawlId={crawlId}
-          item={item}
-          check={check}
-          state={state}
-          start={start}
-          starting={starting}
-          onRecheck={onRecheck}
-        />
+        <Result crawlId={crawlId} item={item} check={check} state={state} starting={starting} onRecheck={onRecheck} />
       );
     case 'refused':
     case 'ready': {
@@ -184,7 +164,7 @@ function CardBody({
                   icon={RotateCcw}
                   disabled={state.kind === 'refused'}
                   loading={starting}
-                  onClick={() => onRecheck()}
+                  onClick={onRecheck}
                 >
                   {label}
                 </Button>
@@ -194,8 +174,12 @@ function CardBody({
           />
           {state.kind === 'refused' ? (
             <Refused crawlId={crawlId} checkId={check.id} item={item} refused={state.refused} />
+          ) : state.ended ? (
+            // The last one asked didn't run: refused once its analysis first was done, or stopped then.
+            <p className="text-14 leading-body text-text-secondary" role="status">
+              The recheck didn’t run: {state.ended}
+            </p>
           ) : null}
-          <StartOutcome start={start} crawlId={crawlId} onRecheck={onRecheck} />
         </>
       );
     }
@@ -293,56 +277,17 @@ function Refused({
   );
 }
 
-/** What asking for a recheck answered, when it didn't start: what the file doesn't keep, or why it can't run. */
-function StartOutcome({
-  start,
-  crawlId,
-  onRecheck,
-}: {
-  start: RecheckStart | null;
-  crawlId: string;
-  onRecheck: (options?: { skipMissingHeaders?: boolean }) => void;
-}) {
-  if (!start || start.kind === 'started' || start.kind === 'failed') return null;
-  if (start.kind === 'refused') {
-    return (
-      <p className="text-14 leading-body text-text-secondary" role="status">
-        {refusalWords(start.refused, 'simple')}
-      </p>
-    );
-  }
-  const headersOnly = !start.proxyCredentials && start.missingHeaders.length > 0;
-  return (
-    <div
-      role="status"
-      className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border border-border-subtle px-4 py-3"
-    >
-      <p className="basis-80 min-w-0 flex-1 text-14 leading-body text-text">
-        {headersOnly
-          ? `Rechecking needs the values of its headers (${formatList(start.missingHeaders)}), which aren’t kept in the check’s file. Enter them again in its settings, or recheck without them.`
-          : 'Rechecking needs its proxy password, which isn’t kept in the check’s file. Enter it again in its settings to recheck.'}
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        {headersOnly ? (
-          <Button onClick={() => onRecheck({ skipMissingHeaders: true })}>Recheck without them</Button>
-        ) : null}
-        <Link to="/crawls/$crawl/settings" params={{ crawl: crawlId }} className="si-link text-14">
-          Open its settings
-        </Link>
-      </div>
-    </div>
-  );
-}
-
 /** A recheck on its way: what it's doing, its count, and Stop (the crawl's). */
 function Running({ crawlId, state }: { crawlId: string; state: Extract<RecheckCardState, { kind: 'running' }> }) {
   const { step, progress } = state;
   const words =
-    step === 'first'
-      ? 'Updating the results first…'
-      : step === 'stopping'
-        ? 'Stopping…'
-        : recheckProgressWords(progress, 'simple', step === 'settling');
+    step === 'starting'
+      ? 'Starting the recheck…'
+      : step === 'first'
+        ? 'Updating the results first…'
+        : step === 'stopping'
+          ? 'Stopping…'
+          : recheckProgressWords(progress, 'simple', step === 'settling');
   const counted = step === 'fetching' && progress !== null && progress.total > 0;
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -374,7 +319,6 @@ function Result({
   item,
   check,
   state,
-  start,
   starting,
   onRecheck,
 }: {
@@ -382,9 +326,8 @@ function Result({
   item: CrawlListItem;
   check: Check;
   state: Extract<RecheckCardState, { kind: 'result' }>;
-  start: RecheckStart | null;
   starting: boolean;
-  onRecheck: (options?: { skipMissingHeaders?: boolean }) => void;
+  onRecheck: () => void;
 }) {
   const { recheck, plan } = state;
   const { result } = recheck;
@@ -421,17 +364,11 @@ function Result({
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         {meta.length > 0 ? <p className="min-w-0 flex-1 text-13 text-text-muted">{meta.join('  ')}</p> : null}
-        <Button
-          icon={RotateCcw}
-          disabled={refused !== null || plan === null}
-          loading={starting}
-          onClick={() => onRecheck()}
-        >
+        <Button icon={RotateCcw} disabled={refused !== null || plan === null} loading={starting} onClick={onRecheck}>
           Recheck again
         </Button>
       </div>
       {refused ? <Refused crawlId={crawlId} checkId={check.id} item={item} refused={refused} /> : null}
-      <StartOutcome start={start} crawlId={crawlId} onRecheck={onRecheck} />
     </div>
   );
 }

@@ -1,11 +1,12 @@
 // The problem page's "Fixed it?" card as a recheck (docs/v2-fix-loop.md, section 4, "One problem"): which of its states
-// it's in, from the check, the plan, the crawl's rechecks, the live stream and what was asked here. Pure.
-import type { Recheck, RecheckEvent, RecheckPlan, RecheckRefusal } from '../api/fixLoop';
-import type { Check, CrawlStatus } from '../api/types';
-import { recheckUnderway, type AskedRecheck } from '../crawl/rechecks';
+// it's in, from the check, the plan, the crawl's rechecks and the recheck's run (crawl/recheck.ts, shared with
+// Advanced). Pure.
+import type { Recheck, RecheckAsk, RecheckPlan, RecheckRefusal } from '../api/fixLoop';
+import type { Check } from '../api/types';
+import { isRecheckRunning, type PendingRecheck, type RecheckRun } from '../crawl/recheck';
 
-/** Where a running recheck is: its analysis first, fetching, stopping, or the analysis that settles it. */
-export type RecheckStep = 'first' | 'fetching' | 'stopping' | 'settling';
+/** Where a running recheck is: asked, its analysis first, fetching, stopping, or the analysis that settles it. */
+export type RecheckStep = 'starting' | 'first' | 'fetching' | 'stopping' | 'settling';
 
 export type RecheckCardState =
   /** A sidecar from before the fix loop: no recheck, the old card's Check the site again. */
@@ -15,18 +16,31 @@ export type RecheckCardState =
   | { kind: 'loading' }
   /** The plan couldn't be read. */
   | { kind: 'planFailed' }
-  | { kind: 'ready'; plan: RecheckPlan }
+  /** It can run: `ended` says why the last one asked here didn't run, when the sidecar said. */
+  | { kind: 'ready'; plan: RecheckPlan; ended: string | null }
   | { kind: 'refused'; plan: RecheckPlan; refused: RecheckRefusal }
-  /** A recheck of another problem of this check runs: this one waits for it. */
+  /** A recheck of another of this crawl's problems runs: this one waits for it. */
   | { kind: 'busyElsewhere' }
-  | { kind: 'running'; recheckId: number | null; step: RecheckStep; progress: RecheckEvent | null }
+  | { kind: 'running'; recheckId: number; step: RecheckStep; progress: RecheckRun['progress'] }
   /** The latest recheck of the check, settled: its result, and whether it can be rechecked again now. */
   | { kind: 'result'; recheck: Recheck & { result: NonNullable<Recheck['result']> }; plan: RecheckPlan | null };
 
 /** A recheck of the whole check (not one of its causes, nor a list of URLs): what the Simple card gives the result of. */
-function ofTheCheck(recheck: Recheck, checkId: string): boolean {
+function ofTheCheck(recheck: Pick<Recheck, 'checkId' | 'group' | 'urlList'>, checkId: string): boolean {
   return recheck.checkId === checkId && recheck.group === null && !recheck.urlList;
 }
+
+function askOfTheCheck(ask: RecheckAsk, checkId: string): boolean {
+  return ask.checkId === checkId && ask.group === undefined && ask.urlIds === undefined;
+}
+
+const STEPS: Record<Exclude<RecheckRun['stage'], 'settled' | 'ended'>, RecheckStep> = {
+  starting: 'starting',
+  analysingFirst: 'first',
+  fetching: 'fetching',
+  stopping: 'stopping',
+  analysing: 'settling',
+};
 
 export function recheckCardState(input: {
   check: Pick<Check, 'id' | 'recheck'>;
@@ -34,32 +48,40 @@ export function recheckCardState(input: {
   planFailed: boolean;
   /** The crawl's rechecks, newest first; undefined while they're read. */
   rechecks: readonly Recheck[] | undefined;
-  live: { status: CrawlStatus | null; recheck: RecheckEvent | null } | undefined;
-  asked: AskedRecheck | undefined;
+  /** The crawl's recheck as it runs here (`useRecheckRun`). */
+  run: RecheckRun | null;
+  /** The recheck this window started on the crawl (`pendingRecheck`). */
+  pending: PendingRecheck | undefined;
 }): RecheckCardState {
-  const { check, plan, planFailed, rechecks, live, asked } = input;
+  const { check, plan, planFailed, rechecks, run, pending } = input;
   if (check.recheck === undefined) return { kind: 'legacy' };
   if (check.recheck.length === 0) return { kind: 'unsupported' };
 
-  const running = rechecks?.find((recheck) => recheck.status === 'running' && ofTheCheck(recheck, check.id));
-  const ours = asked ? (asked.checkId === check.id ? asked.recheckId : undefined) : running?.id;
-  if (recheckUnderway(live, asked) || (live?.status === 'rechecking' && running)) {
-    if (ours === undefined) return { kind: 'busyElsewhere' };
-    const event = live?.recheck?.recheckId === ours ? live.recheck : null;
-    const status = live?.status ?? null;
-    const step: RecheckStep =
-      status === 'rechecking' ? 'fetching' : status === 'stopping' ? 'stopping' : event === null ? 'first' : 'settling';
-    return { kind: 'running', recheckId: ours, step, progress: event };
+  // Whose the run is: the one asked here says; else the crawl's list does.
+  const asked = pending?.recheckId === run?.recheckId ? pending : undefined;
+  const listed = run ? rechecks?.find((recheck) => recheck.id === run.recheckId) : undefined;
+  const ours =
+    run !== null && (asked ? askOfTheCheck(asked.ask, check.id) : listed ? ofTheCheck(listed, check.id) : false);
+
+  if (run && isRecheckRunning(run)) {
+    if (!ours) return { kind: 'busyElsewhere' };
+    const step = run.stage === 'settled' || run.stage === 'ended' ? 'settling' : STEPS[run.stage];
+    return { kind: 'running', recheckId: run.recheckId, step, progress: run.progress };
   }
 
-  // The latest settled recheck of the check: from the list, or from the stream's last event when the list hasn't been
-  // read again since it settled.
-  const event = live?.recheck?.result ? live.recheck : null;
+  // Settled, but not in the crawl's list yet (read before it began): its result comes with the list's next read.
+  if (run?.stage === 'settled' && ours && !listed) {
+    return { kind: 'running', recheckId: run.recheckId, step: 'settling', progress: null };
+  }
+
+  // The latest settled recheck of the check: from the list, its result from the stream when the list hasn't been read
+  // again since it settled.
   const latest = rechecks?.find((recheck) => ofTheCheck(recheck, check.id));
   if (latest) {
-    const result = latest.result ?? (event?.recheckId === latest.id ? event.result : null);
+    const fresh = run?.stage === 'settled' && run.recheckId === latest.id ? run : null;
+    const result = latest.result ?? fresh?.result ?? null;
     if (result) {
-      const status = latest.result ? latest.status : (event?.status ?? latest.status);
+      const status = latest.result ? latest.status : (fresh?.status ?? latest.status);
       return { kind: 'result', recheck: { ...latest, status, result }, plan: plan ?? null };
     }
   }
@@ -67,5 +89,6 @@ export function recheckCardState(input: {
   if (planFailed) return { kind: 'planFailed' };
   if (!plan) return { kind: 'loading' };
   if (plan.refused) return { kind: 'refused', plan, refused: plan.refused };
-  return { kind: 'ready', plan };
+  const ended = run?.stage === 'ended' && ours ? (run.error ?? 'The recheck didn’t run.') : null;
+  return { kind: 'ready', plan, ended };
 }

@@ -40,7 +40,7 @@ import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
 import { RecheckCard } from './RecheckCard';
-import { useRecheckUnderway } from '../crawl/rechecks';
+import { isRecheckRunning, useRecheckRun } from '../crawl/recheck';
 import { useSharedSource } from './useSharedSource';
 import { pathOrigin } from './whereWords';
 import { useTemplateLink } from '../screens/issues/useWhereFound';
@@ -59,8 +59,8 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
   const status = effectiveStatus(item, liveStatus === undefined ? undefined : { status: liveStatus });
   const crawling = status !== null && isCrawling(status);
   // A recheck's analyses (before and after it) are the recheck's: the page stays, its card following it.
-  const recheckUnderway = useRecheckUnderway(crawlId);
-  const analysing = status === 'analyzing' && !recheckUnderway;
+  const rechecking = isRecheckRunning(useRecheckRun(crawlId));
+  const analysing = status === 'analyzing' && !rechecking;
   const readable = item !== undefined && status !== 'unreadable';
   const checks = useQuery(checksQuery());
   const analysis = useQuery({ ...analysisQuery(crawlId), enabled: readable && !crawling });
