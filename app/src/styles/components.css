@@ -2719,6 +2719,16 @@
     color: var(--color-text-secondary);
   }
 
+  /* Advanced's score at a crawl's end in the switcher (the fix loop): the number, "so far" under it. */
+  .si-switcher-menu__score {
+    display: inline-flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: var(--space-2);
+    font-weight: var(--font-weight-medium);
+  }
+
   /* Advanced's Compare with… (the fix loop): a crawl's start over its status, URLs and score, as the switcher's rows. */
   .si-compare-menu {
     width: var(--switcher-menu-width);
