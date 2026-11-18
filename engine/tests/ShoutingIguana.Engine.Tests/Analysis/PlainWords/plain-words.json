@@ -387,12 +387,14 @@
       "plainWhat": [
         "The only pages that link to these are themselves kept out of search results, or point Google at another page.",
         "Search engines can still reach them, but such links count for little.",
-        "It's often a page linked only from filtered lists or archive pages."
+        "It's often a page linked only from filtered lists, or from page 2 of a list that points Google at page 1."
       ],
       "plainFix": [
-        "Link to each page from a page that appears in search, such as its category or a related page."
+        "Keep the links you have: they're how search engines reach these pages.",
+        "If page 2 of a list links here but points Google at page 1, ask your developer to let each page stand for itself.",
+        "If they're kept out on purpose, like filtered lists, link to each page from one that appears in search, such as its category."
       ],
-      "fixer": "you",
+      "fixer": "either",
       "plainPassed": "Every page has a link from a page Google can show"
     },
     "deep-page": {
@@ -1202,7 +1204,9 @@
       ],
       "plainFix": [
         "Open each page in your site's editor and give it a title that says what's specific to it.",
-        "If two addresses show the same page, keep one and ask your developer to forward the other to it."
+        "If two addresses show the same page, keep one and ask your developer to forward the other to it.",
+        "If they differ only by what follows a \"?\", such as /login/ and /login/?register=true, they're one page, so don't write a new title.",
+        "Instead, ask your developer to point the longer address at the shorter one (a \"canonical tag\"), or to keep it out of search results."
       ],
       "fixer": "you",
       "plainPassed": "No two pages share a title"

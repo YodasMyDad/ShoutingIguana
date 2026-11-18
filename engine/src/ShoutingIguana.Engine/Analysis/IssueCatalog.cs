@@ -377,7 +377,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition NON_INDEXABLE_INLINKS_ONLY = new("non-indexable-inlinks-only", IssueCategory.Links, IssueSeverity.Notice,
         "Linked only from non-indexable pages",
         """Every page that links to this indexable page with a followed link is itself not indexable: noindex, canonicalised to another URL, or a redirect by an instant meta refresh. Links reaching it through a redirect count. The start and home pages aren't reported, and it's only checked when the crawl read every page that could link to it.""",
-        """Link to the page from at least one indexable page where it belongs, such as its category or a related page.""")
+        """Don't remove the links: they're how search engines reach the page. Look at why the pages linking here aren't indexable (each one's indexability says). If one shouldn't be, such as page 2 of a list canonicalised to page 1 (each page of a series should be its own canonical, so its links count), fix that page. If they're excluded on purpose, as tag and filter pages often are, also link to this page from at least one indexable page where it belongs, such as its category or a related page.""")
     {
         Why = """Search engines find and value pages largely through links from pages they index. Links only from pages they're told to drop, or to treat as copies, still let them reach this page but count for little, and if those pages go the page is left with no links. It's often a page linked only from tag, filter or paginated pages that are noindex.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
@@ -1096,7 +1096,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition TITLE_DUPLICATE = new("title-duplicate", IssueCategory.Titles, IssueSeverity.Warning,
         "Duplicate title",
         """Another indexable page has the same title, ignoring case and spacing. The detail says how many other pages share it.""",
-        """Give each page a title that says what's specific about it. If the pages really are the same, consolidate them with a redirect or canonical instead.""")
+        """Give each page a title that says what's specific about it. If the pages really are the same, consolidate them with a redirect or canonical instead. When they're one page at two addresses, the same path with a query added (/login/ and /login/?register=true), don't write a new title: point the address with the query at the clean one with a canonical, or make it noindex.""")
     {
         Why = """Google asks for distinct titles on every page, because identical ones make it impossible for searchers to tell pages apart, and it may rewrite title links that repeat boilerplate. Duplicate titles often mean duplicate pages, or a template that leaves out the distinguishing detail, such as the product, place or page number.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",

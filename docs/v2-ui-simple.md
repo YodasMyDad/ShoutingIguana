@@ -637,7 +637,10 @@ here as the file has it, as its token: `{limit:largeImageBytes}` reads "200 KB" 
   results. Searchers can't tell the pages apart, and Google may make up a title of its own. It often means two
   addresses show the same page, or the site's design leaves out what's different, such as the page number.
 - Fix: (1) Open each page in your site's editor and give it a title that says what's specific to it. (2) If two
-  addresses show the same page, keep one and ask your developer to forward the other to it.
+  addresses show the same page, keep one and ask your developer to forward the other to it. (3) If they differ only
+  by what follows a "?", such as /login/ and /login/?register=true, they're one page, so don't write a new title.
+  (4) Instead, ask your developer to point the longer address at the shorter one (a "canonical tag"), or to keep it
+  out of search results.
 - Passed: No two pages share a title
 
 **9. `slow-response`** (Performance, Warning; a measurement). Fixer: developer.
