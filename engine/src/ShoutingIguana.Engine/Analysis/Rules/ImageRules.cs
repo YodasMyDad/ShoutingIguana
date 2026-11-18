@@ -52,7 +52,10 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
                 if (image.DataUriBytes is { } bytes && bytes > settings.InlineImageMaxBytes)
                 {
                     inline.Add(bytes);
-                    largestInline = bytes > largestInline?.DataUriBytes ? image : largestInline ?? image;
+                    if (largestInline is null || bytes > largestInline.DataUriBytes)
+                    {
+                        largestInline = image;
+                    }
                 }
                 else if (!image.IsDataUri && !image.HasSrcset && !IsTrackingPixel(image))
                 {
