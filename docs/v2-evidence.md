@@ -216,7 +216,7 @@ and is in the group without a related URL.
 | 52 | `h1-missing` | P/PD/– | – | – | Same (none, or "The H1 has no text") | imp · pages |
 | 53 | `h1-multiple` | P/N/– | – | – | "3 H1s" → `3 H1s: "Sofas" · "Example" · "Sign up"` | imp · – |
 | 54 | `h1-duplicate` | P/RU/– | `h1` | – | Same. The group is named by its `sharedText` | imp · pages |
-| 149 | `heading-levels-skipped` (new) | P/PD/– | – | – | The first skip: `H1 → H3`, `An H3 before the H1` | imp · pages |
+| 149 | `heading-levels-skipped` (new) | P/PD/– | – | – | The first skip from the first H1 on: `H1 → H3` (headings before the H1 aren't judged, as ruled) | imp · pages |
 | 150 | `h1-image-only` (new) | P/N/– | `h1` | – | `The H1 is an image: "Store logo"` | imp · – |
 | 151 | `heading-too-long` (new) | P/N/– | `h1` | – | The first: `H2 of 84 characters, over 70` | imp · – |
 | 152 | `h2-missing` (new) | P/N/– | `wordCount` | – | `620 words, no H2` | imp · – |

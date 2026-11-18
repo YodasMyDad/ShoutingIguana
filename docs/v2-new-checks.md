@@ -1318,11 +1318,16 @@ Headings · **Notice** · Low · P/PD/–
 - **Simple:** "Headings that jump levels"
 - **Rule:** an indexable page with an H1 where a heading is more than one level deeper than the one before it (H2 then
   H4), or the first heading isn't an H1. Pages without an H1 are `h1-missing`'s. Detail: the first jump (`H2 → H4`, or
-  `An H3 before the H1`), grouped by it.
+  `An H3 before the H1`), grouped by it. *Ruled after the real-site audit:* the "first heading isn't an H1" case is
+  dropped; the sequence is judged from the first H1 on. The headings it caught before the H1 (a theme's hidden cart
+  heading on 7 of jitsunami.com's pages; a mega-menu's column titles and a header line on 19 of
+  gardenfurnituresets.co.uk's) skip no level of the page's outline, the HTML rule cited doesn't forbid them, and they
+  gave the owner flags they can't act on. Detail: the first jump, `H2 → H4`.
 - **Standard:** HTML: a heading after another "must have a heading level that is less than, equal to, or 1 greater
   than" the one before *(read through a summary of the spec page; its non-conforming example is an h1 then an h3)*.
 - **Data:** `Headings` (in order, kept to 500).
-- **Plant:** `heading-skip`: an `<h3>` straight after the H1. Expected **1**.
+- **Plant:** `heading-skip`: an `<h3>` straight after the H1. Expected **1**. *As built:* `heading-before-h1` (an `<h6>`
+  before the H1, then an H2) is clean, for the ruling; still **1**.
 - **From:** backlog ("skipped heading levels"); Screaming Frog H1 and H2 "Non-sequential".
 
 #### 79. `h1-image-only`: H1 is an image

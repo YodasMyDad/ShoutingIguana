@@ -71,20 +71,23 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
         }
     }
 
-    /// <summary>The first heading more than one level below the one before it ("H2 → H4"), or a heading before the first H1 ("An H3 before the H1").</summary>
+    /// <summary>From the first H1 on, the first heading more than one level below the one before it ("H2 → H4").</summary>
     internal static string? SkippedLevel(IReadOnlyList<Parsing.Models.HeadingFact> headings)
     {
-        if (headings.Count == 0)
+        // From the first H1 on: headings before it (a theme's hidden cart, a menu's column titles) skip no level of the
+        // page's outline, and the rule cited doesn't forbid them (ruled after the real-site audit).
+        var first = -1;
+        for (var index = 0; index < headings.Count && first < 0; index++)
+        {
+            first = headings[index].Level == 1 ? index : -1;
+        }
+
+        if (first < 0)
         {
             return null;
         }
 
-        if (headings[0].Level != 1)
-        {
-            return $"An H{headings[0].Level} before the H1";
-        }
-
-        for (var index = 1; index < headings.Count; index++)
+        for (var index = first + 1; index < headings.Count; index++)
         {
             if (headings[index].Level > headings[index - 1].Level + 1)
             {

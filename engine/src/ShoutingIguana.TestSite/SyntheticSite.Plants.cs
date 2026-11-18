@@ -83,6 +83,12 @@ public sealed partial class SyntheticSite
         {
             Content = $"<h3>Straight to the third level</h3><p>{Text("plant-heading-skip", 220)}</p>"
         });
+        // A theme's hidden cart heading before the H1 skips no level of the outline: clean, as ruled.
+        Page("heading-before-h1", "Heading before the H1", [], page => page with
+        {
+            H1 = null,
+            Content = $"<h6>Your cart</h6><h1>Heading before the H1</h1><h2>The details</h2><p>{Text("plant-heading-before-h1", 220)}</p>"
+        });
         Page("h1-image", "H1 image", ["h1-image-only"], page => page with
         {
             H1 = null,

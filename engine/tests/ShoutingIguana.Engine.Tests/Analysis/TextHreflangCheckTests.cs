@@ -33,7 +33,10 @@ public sealed class TextHreflangCheckTests
     [InlineData(new[] { 1, 2, 3, 2, 3 }, null)]
     [InlineData(new[] { 1, 3 }, "H1 → H3")]
     [InlineData(new[] { 1, 2, 4 }, "H2 → H4")]
-    [InlineData(new[] { 3, 1, 2 }, "An H3 before the H1")]
+    // Headings before the H1 (a theme's hidden cart, a menu's column titles) aren't judged, as ruled: only from the H1 on.
+    [InlineData(new[] { 3, 1, 2 }, null)]
+    [InlineData(new[] { 2, 4, 6, 1, 2 }, null)]
+    [InlineData(new[] { 6, 6, 1, 3 }, "H1 → H3")]
     [InlineData(new int[0], null)]
     public void AHeadingMoreThanOneLevelDownIsASkip(int[] levels, string? skip)
     {
@@ -45,6 +48,7 @@ public sealed class TextHreflangCheckTests
     {
         Assert.Equal("H1 → H3", Detail("<h1>Main</h1><h3>Third</h3>", IssueCatalog.HEADING_LEVELS_SKIPPED));
         Assert.Null(Detail("<h2>No H1 at all</h2><h4>Is h1-missing's</h4>", IssueCatalog.HEADING_LEVELS_SKIPPED));
+        Assert.Null(Detail("<h6>Your cart</h6><h1>Main</h1><h2>Part</h2>", IssueCatalog.HEADING_LEVELS_SKIPPED));
         Assert.Equal("The H1 is an image: \"Store logo\"", Detail("<h1><img src=\"/l.png\" alt=\"Store logo\"></h1>", IssueCatalog.H1_IMAGE_ONLY));
         Assert.Null(Detail("<h1><img src=\"/l.png\" alt=\"Store logo\"> Sofas</h1>", IssueCatalog.H1_IMAGE_ONLY));
         Assert.Equal("H2 of 72 characters, over 70", Detail($"<h1>Short</h1><h2>{new string('a', 72)}</h2>", IssueCatalog.HEADING_TOO_LONG));
