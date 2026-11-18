@@ -368,6 +368,9 @@
   --inspector-width-min: 320px;
   --inspector-height: 320px; /* docked at the bottom; never more than the view above can spare (InspectorSlot) */
   --banner-measure-min: 14rem; /* a banner's words keep this much before its action goes under them */
+  /* Simple's words beside their actions (a screen's title and its line, the recheck card's): they keep this much, and the
+     actions go under them first (200% zoom), rather than squeeze the words into a narrow column. */
+  --simple-words-min: 320px;
   --checks-width: 372px;
   --issues-columns: var(--checks-width) minmax(0, 1fr); /* the checks list, then the selected check */
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
@@ -449,6 +452,7 @@
   --ring-lg: 136px; /* the score ring: the Summary's score */
   --ring-md: 72px; /* the score ring in a dialog or the report's toolbar */
   --ring-sm: 36px; /* the score ring in a list (Home's rows) */
+  --ring-words-min: 256px; /* the words beside a score ring (No score yet): they keep this much before going under it */
   --button-height-lg: 40px;
   --grid-foot-height: 36px;
   --row-height-child: 34px; /* a group's rows, inside a grouped grid */

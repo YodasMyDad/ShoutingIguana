@@ -238,7 +238,7 @@ function SummaryHeader({
   const hasResults = item !== undefined && item.analyzedAt !== null && item.pageCount > 0;
   return (
     <header className="flex flex-wrap items-end gap-x-5 gap-y-3">
-      <div className="basis-80 min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-(--simple-words-min)">
         <h1 ref={titleRef} tabIndex={-1} className="si-simple-title">
           {item ? crawlName(item) : 'Summary'}
         </h1>
@@ -459,7 +459,7 @@ function NoScoreYet({
   return (
     <Card className="flex flex-wrap items-center gap-7 px-8 py-7">
       <ScoreRing value={null} label="No score yet" />
-      <div className="basis-64 flex min-w-0 flex-1 flex-col gap-3">
+      <div className="flex min-w-0 flex-1 basis-(--ring-words-min) flex-col gap-3">
         <h2 className="text-28 font-semibold">No score yet</h2>
         <p className="text-16 text-text-secondary">{words}</p>
         {canAnalyse ? (
@@ -500,7 +500,7 @@ function NothingReadCard({
   return (
     <Card className="flex flex-wrap items-center gap-7 px-8 py-7">
       <ScoreRing value={null} />
-      <div className="basis-64 flex min-w-0 flex-1 flex-col gap-3">
+      <div className="flex min-w-0 flex-1 basis-(--ring-words-min) flex-col gap-3">
         <h2 className="text-28 font-semibold">No pages could be read</h2>
         {robotsPending ? (
           <Skeleton className="h-(--skeleton-text) w-full" />
