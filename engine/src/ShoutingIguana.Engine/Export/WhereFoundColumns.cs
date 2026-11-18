@@ -277,6 +277,7 @@ internal static class WhereFoundColumns
         LinkKind.Pagination => "pagination",
         LinkKind.MetaRefresh => "meta refresh",
         LinkKind.Redirect => "redirect",
+        LinkKind.SocialImage => "share image",
         _ => "link"
     };
 

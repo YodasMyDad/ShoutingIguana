@@ -494,7 +494,16 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         AddMetaTag(name, cleaned);
         if (property != name)
         {
-            AddMetaTag(property, cleaned);
+            AddMetaTag(property, cleaned, isProperty: true);
+        }
+
+        // A share image given as a full URL is fetched as a file, so its checks can judge it; one given in part is
+        // social-image-relative's, and isn't guessed at.
+        if (new[] { name, property }.FirstOrDefault(tag => tag is "og:image" or "og:image:url" or "og:image:secure_url" or "twitter:image") is { } imageTag &&
+            Uri.TryCreate(cleaned.Trim(), UriKind.Absolute, out var image) && image.Scheme is "http" or "https" &&
+            !cleaned.TrimStart().StartsWith("//", StringComparison.Ordinal))
+        {
+            AddLink(cleaned.Trim(), LinkKind.SocialImage, LinkFlags.None, LinkPosition.Head, imageTag);
         }
 
         // Search engines read the description and robots directives from name; property is RDFa, as Open Graph uses.
@@ -508,11 +517,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         }
     }
 
-    private void AddMetaTag(string? name, string content)
+    private void AddMetaTag(string? name, string content, bool isProperty = false)
     {
         if (name is not null && MetaTags.Count < MAX_META_TAGS)
         {
-            MetaTags.Add(new MetaTagFact(name, content));
+            MetaTags.Add(new MetaTagFact(name, content) { IsProperty = isProperty });
         }
     }
 

@@ -54,7 +54,8 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
             IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.IMAGE_NO_SRCSET, IssueCatalog.IMAGE_LEGACY_FORMAT, IssueCatalog.ORPHAN_PAGE,
             IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_ERROR, IssueCatalog.SITEMAP_MISSING, IssueCatalog.SITEMAP_NON_INDEXABLE,
             IssueCatalog.SITEMAP_URL_OTHER_HOST, IssueCatalog.ROBOTS_TXT_NO_SITEMAP, IssueCatalog.SITEMAP_OVER_LIMIT, IssueCatalog.SITEMAP_NEAR_LIMIT,
-            IssueCatalog.SITEMAP_EMPTY, IssueCatalog.SITEMAP_URL_REPEATED, IssueCatalog.SITEMAP_LASTMOD_INVALID
+            IssueCatalog.SITEMAP_EMPTY, IssueCatalog.SITEMAP_URL_REPEATED, IssueCatalog.SITEMAP_LASTMOD_INVALID,
+            IssueCatalog.SOCIAL_IMAGE_BROKEN, IssueCatalog.SOCIAL_IMAGE_TOO_LARGE, IssueCatalog.SOCIAL_IMAGE_TOO_SMALL
         ];
         Assert.True(analysis.IsPartial);
         Assert.Equal(

@@ -45,6 +45,7 @@ export const LINK_KIND_VALUES: readonly LinkKind[] = [
   'pagination',
   'metaRefresh',
   'redirect',
+  'socialImage',
 ];
 
 export const LINK_POSITION_VALUES: readonly LinkPosition[] = [

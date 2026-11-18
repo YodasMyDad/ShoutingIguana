@@ -50,7 +50,9 @@ public sealed class IssueCatalogTests
         "security-headers-weak", "cookies-insecure", "form-not-secure", "protocol-relative-links", "url-tracking-parameters", "url-multiple-slashes",
         "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search",
         "heading-levels-skipped", "h1-image-only", "heading-too-long", "h2-missing", "placeholder-text", "readability-low", "boilerplate-heavy",
-        "hreflang-inconsistent-code", "hreflang-header-mismatch", "hreflang-unlinked", "hreflang-lang-mismatch", "hreflang-self-only"
+        "hreflang-inconsistent-code", "hreflang-header-mismatch", "hreflang-unlinked", "hreflang-lang-mismatch", "hreflang-self-only",
+        "x-card-missing", "x-card-incomplete", "social-image-relative", "og-url-not-canonical", "social-tags-multiple", "og-title-duplicate",
+        "og-description-duplicate", "social-image-broken", "social-image-too-large", "social-image-too-small"
     ];
 
     [Fact]
@@ -203,7 +205,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(160, IssueCatalog.All.Count);
+        Assert.Equal(170, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(

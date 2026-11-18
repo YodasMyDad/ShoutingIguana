@@ -71,12 +71,16 @@ public sealed class CollectedFactsTests : IAsyncLifetime
                 new SkippedCheck(IssueCatalog.IMAGE_INLINE_LARGE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.FORM_NOT_SECURE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.PROTOCOL_RELATIVE_LINKS.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.X_CARD_INCOMPLETE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.SOCIAL_IMAGE_BROKEN.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.SOCIAL_IMAGE_TOO_LARGE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
+                new SkippedCheck(IssueCatalog.SOCIAL_IMAGE_TOO_SMALL.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.HEAD_TAGS_IN_BODY.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.HTML_STRUCTURE_ERRORS.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.MOBILE_ALTERNATE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT)
             ], analysis.Skipped);
         // One note for each collection the page predates: the new checks' first (1), the images' (2), the forms' (3), the
-        // text measures' (4).
+        // text measures' (4), and the share tags' (5), which also has four.
         Assert.Contains($"9 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
         Assert.Contains($"3 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
         Assert.Contains($"2 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);

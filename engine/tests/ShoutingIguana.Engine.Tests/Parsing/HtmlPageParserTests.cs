@@ -106,8 +106,10 @@ public sealed class HtmlPageParserTests
             """).Facts;
 
         Assert.Equal(["Shared text"], facts.MetaDescriptions);
-        Assert.Equal([new MetaTagFact("description", "Shared text"), new MetaTagFact("og:description", "Shared text"),
-            new MetaTagFact("description", "Not a meta description"), new MetaTagFact("twitter:title", "Title"), new MetaTagFact("og:title", "Title")],
+        // Each says which attribute named it: property= alone (as Open Graph writes it) is noted, as X reads only name=.
+        Assert.Equal([new MetaTagFact("description", "Shared text"), new MetaTagFact("og:description", "Shared text") { IsProperty = true },
+            new MetaTagFact("description", "Not a meta description") { IsProperty = true }, new MetaTagFact("twitter:title", "Title"),
+            new MetaTagFact("og:title", "Title") { IsProperty = true }],
             facts.MetaTags);
     }
 

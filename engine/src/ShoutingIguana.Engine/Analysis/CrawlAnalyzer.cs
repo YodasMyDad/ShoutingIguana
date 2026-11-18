@@ -174,7 +174,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             {
                 Skip(notes, skipped, "Images weren't fetched in this crawl, so broken and oversized images weren't looked for.",
                     SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.",
-                    IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.IMAGE_NO_SRCSET, IssueCatalog.IMAGE_LEGACY_FORMAT);
+                    IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.IMAGE_NO_SRCSET, IssueCatalog.IMAGE_LEGACY_FORMAT,
+                    IssueCatalog.SOCIAL_IMAGE_BROKEN, IssueCatalog.SOCIAL_IMAGE_TOO_LARGE, IssueCatalog.SOCIAL_IMAGE_TOO_SMALL);
                 Skip(notes, skipped, note: null,
                     SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl.",
                     IssueCatalog.BROKEN_RESOURCES, IssueCatalog.CONTENT_TYPE_MISMATCH, IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT);
@@ -259,7 +260,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
                 new ImageRules(settings, urls, reader.ReadUrlId, scope, PrivateNetworkGuard.IsPrivateLiteral(new Uri(startUrl)), reader.ReadUrl),
-                new TextStructureRules(settings), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
+                new TextStructureRules(settings), new SocialRules(urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
                 new DirectiveRules(urls, robotsToken), new LinkStructureRules(settings, urls, reader.ReadUrl, new Uri(startUrl)), hreflang, new StructuredDataRules(),
                 new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings), new HtmlRules()
             ];

@@ -73,7 +73,8 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     [Fact]
     public void ACheckGroupedByTheOtherUrlStoresEveryIssueUnderTheUrlsItNames()
     {
-        string[] duplicates = ["title-duplicate", "description-duplicate", "h1-duplicate", "duplicate-content", "near-duplicate-content"];
+        string[] duplicates =
+            ["title-duplicate", "description-duplicate", "h1-duplicate", "duplicate-content", "near-duplicate-content", "og-title-duplicate", "og-description-duplicate"];
         foreach (var check in Checks().Where(check => IssueCatalog.Find(check)!.Grouping == IssueGrouping.RelatedUrl))
         {
             foreach (var issue in Flagged(check))

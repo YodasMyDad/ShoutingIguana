@@ -956,6 +956,11 @@ These ten are in the HTML category, beside `open-graph-missing`. A category of t
 in the Issues screen but is a new category for the app to name; it's an owner's choice
 ([Owner decisions](#owner-decisions)).
 
+*As built:* all ten judge indexable pages only, as `open-graph-missing` does, so a canonicalised variant doesn't repeat
+its canonical's faults (53 and 55 didn't say). A share image given as a full URL is a link of a new kind, `socialImage`,
+which the crawler fetches as it does images (not with resources off); `MetaTagFact.IsProperty` and those links are page
+collection 5, so a crawl parsed before skips `x-card-incomplete` and the three share image checks as earlier-version.
+
 The template gains `<meta name="twitter:card" content="summary_large_image">`, or every page would be flagged.
 
 #### 51. `x-card-missing`: X (Twitter) card missing
@@ -1029,7 +1034,9 @@ HTML · **Notice** · Low · P/RU/–
 - **Standard:** none needed.
 - **Data:** `MetaTags`, in `DuplicateRules` (a hash a page, as for titles).
 - **Evidence:** column `title`.
-- **Plant:** `og-title-copy-a`, `og-title-copy-b`. Expected **2**.
+- **Plant:** `og-title-copy-a`, `og-title-copy-b`. Expected **2**. *As built:* revision 1 gives b a share title of its own, for the
+  fix loop's tests: a recheck fixes b and can't say a is fixed (5c4aaa7). The share title and description are stored as
+  `responses.og_title` and `og_description` for that, and for a cluster's shared text.
 - **From:** Screaming Frog "Duplicate OG Title", "Duplicate X Card Title".
 
 #### 57. `og-description-duplicate`: Duplicate og:description
@@ -1038,6 +1045,9 @@ HTML · **Notice** · Low · P/RU/–
 
 - **Simple:** "Pages that share the same summary when shared"
 - **Rule:** as `og-title-duplicate`, for `og:description` (or `twitter:description`) where the meta descriptions differ.
+  *Changed by the real-site audit:* a page whose share text is its own (title, or meta description) isn't flagged, in
+  either check: it's the one the others copied. jitsunami.com's home page was flagged with the six pages Shopify gave
+  its description to, which had none of their own.
 - **Evidence:** column `description`.
 - **Plant:** `og-description-copy-a`, `og-description-copy-b`. Expected **2**.
 - **From:** Screaming Frog "Duplicate OG Description", "Duplicate X Card Description".

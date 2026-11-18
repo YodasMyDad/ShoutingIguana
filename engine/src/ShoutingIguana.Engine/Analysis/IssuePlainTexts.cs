@@ -2381,6 +2381,130 @@ public static class IssuePlainTexts
             OneFix = """That's almost certainly your page design, which leaves the same details out of every page."""
         },
 
+        ["x-card-missing"] = new(
+            """Pages without a preview card for X""",
+            [
+                """These pages don't say which kind of preview X (Twitter) should show when someone shares them.""",
+                """X then shows a plain link, or a small preview, instead of a card with a picture."""
+            ],
+            [
+                """Turn on X (Twitter) cards in your SEO plugin or theme settings.""",
+                """If there's no setting, ask your developer to add an X card to every page."""
+            ],
+            IssueFixer.Either,
+            """Every page has a preview card for X"""),
+
+        ["x-card-incomplete"] = new(
+            """Preview cards for X that are missing parts""",
+            [
+                """These pages ask X (Twitter) for a preview card, but leave out something the card needs, such as a title or a picture.""",
+                """X can't build the card, so people see a plain link instead."""
+            ],
+            [
+                """Send the list to your developer: it says what each page's card lacks.""",
+                """Ask them to fill in the missing parts, or to write the card the way X reads it."""
+            ],
+            IssueFixer.Developer,
+            """Every preview card for X is complete"""),
+
+        ["social-image-relative"] = new(
+            """Share images given an incomplete address""",
+            [
+                """These pages name the picture to show when they're shared, but give only part of its address.""",
+                """Facebook, X and others need the full address, so they may show no picture."""
+            ],
+            [
+                """Ask your developer to give the full address of each share picture, starting with https://."""
+            ],
+            IssueFixer.Developer,
+            """Every share picture has its full address"""),
+
+        ["og-url-not-canonical"] = new(
+            """Share links that point to a different page""",
+            [
+                """These pages tell social networks that their address is another page's, often your home page.""",
+                """Shares and likes then count toward that page, and people who click the share land there."""
+            ],
+            [
+                """Send the list to your developer: it gives the address each page names.""",
+                """Ask them to make each page name its own address, or leave the setting out."""
+            ],
+            IssueFixer.Developer,
+            """Every page names its own address for sharing"""),
+
+        ["social-tags-multiple"] = new(
+            """Share settings given twice with different values""",
+            [
+                """These pages give the same share setting, such as the title to show, twice, with different words.""",
+                """Social networks pick one of them, and it may not be the one you want."""
+            ],
+            [
+                """Look for two plugins or a plugin and your theme both adding share settings, and turn one of them off.""",
+                """If that isn't it, ask your developer to remove the copy."""
+            ],
+            IssueFixer.Either,
+            """No share setting is given twice"""),
+
+        ["og-title-duplicate"] = new(
+            """Pages that share the same title when shared""",
+            [
+                """These pages have different titles in search, but show the same title when they're shared on social networks.""",
+                """People who see the shares can't tell the pages apart."""
+            ],
+            [
+                """Give each page its own share title in your SEO plugin, or leave it empty so the page's own title is used."""
+            ],
+            IssueFixer.Either,
+            """Every page has its own share title"""),
+
+        ["og-description-duplicate"] = new(
+            """Pages that share the same summary when shared""",
+            [
+                """These pages have different summaries in search, but show the same summary when they're shared on social networks.""",
+                """Each share then says the same thing, whatever the page is about."""
+            ],
+            [
+                """Give each page its own share summary in your SEO plugin, or leave it empty so the page's own description is used."""
+            ],
+            IssueFixer.Either,
+            """Every page has its own share summary"""),
+
+        ["social-image-broken"] = new(
+            """Share images that don't load""",
+            [
+                """The picture these pages name for social networks doesn't load: it's missing, or it isn't a picture.""",
+                """Shares of these pages show no picture."""
+            ],
+            [
+                """Choose a new share picture for each page in your SEO plugin, or upload the missing one again."""
+            ],
+            IssueFixer.You,
+            """Every share picture loads"""),
+
+        ["social-image-too-large"] = new(
+            """Share images too big to show""",
+            [
+                """The picture these pages name for social networks is larger than 5 MB.""",
+                """X won't show a picture that large, and other networks are slow to load it."""
+            ],
+            [
+                """Save a smaller copy of each picture, under 1 MB is plenty, and choose it as the share picture."""
+            ],
+            IssueFixer.You,
+            """No share picture is too big"""),
+
+        ["social-image-too-small"] = new(
+            """Share images too small to show well""",
+            [
+                """The picture these pages name for social networks is smaller than they need.""",
+                """Facebook won't use a picture under 200 pixels square, and X shows a small one blurred or not at all."""
+            ],
+            [
+                """Choose a larger share picture for each page: 1,200 by 630 pixels suits every network."""
+            ],
+            IssueFixer.You,
+            """Every share picture is large enough"""),
+
         ["head-tags-in-body"] = new(
             """Page settings that ended up where they're ignored""",
             [

@@ -187,7 +187,8 @@ internal static class ColumnWords
             ["hreflang"] = "Hreflang",
             ["pagination"] = "Pagination",
             ["metaRefresh"] = "Meta refresh",
-            ["redirect"] = "Redirect"
+            ["redirect"] = "Redirect",
+            ["socialImage"] = "Share image"
         },
         ["position"] = new(StringComparer.Ordinal)
         {

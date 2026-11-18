@@ -2058,6 +2058,134 @@ public static class IssueCatalog
         Grouping = IssueGrouping.PageDetail
     };
 
+    public static readonly IssueDefinition X_CARD_MISSING = new("x-card-missing", IssueCategory.Html, IssueSeverity.Notice,
+        "X (Twitter) card missing",
+        """This indexable page has no twitter:card meta tag (by name or property), so X shows its link without a card.""",
+        """Add <meta name="twitter:card" content="summary_large_image"> to the <head>; most SEO plugins do it with one setting. X takes the title, description and image from the Open Graph tags when there are no twitter: ones.""")
+    {
+        Why = """X reads twitter:card to choose a card; without it, a shared link gets no image or a small one. It falls back to Open Graph for everything else, so the one tag is usually all a page needs.""",
+        LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.None
+    };
+
+    public static readonly IssueDefinition X_CARD_INCOMPLETE = new("x-card-incomplete", IssueCategory.Html, IssueSeverity.Notice,
+        "X (Twitter) card incomplete",
+        """This indexable page asks for an X card that can't be built: its type isn't summary, summary_large_image, app or player; it has no title (twitter:title, else og:title); a summary card has no image (twitter:image, else og:image); a player card has no twitter:player; or its twitter: tags are written only with property=, which X doesn't read. The detail gives each fault. A crawl made before the crawler told name= from property= isn't checked.""",
+        """Fill in what the detail says is missing, or write the twitter: tags with name= rather than property=.""")
+    {
+        Why = """X builds a card only from the tags it reads; with a part missing it shows a bare link, so the card tag does nothing.""",
+        LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_RELATIVE = new("social-image-relative", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image URL isn't absolute",
+        """This indexable page's og:image (og:image:url, og:image:secure_url) or twitter:image isn't a full http:// or https:// URL: a path such as /img/share.jpg, or one starting with //. The detail gives the first.""",
+        """Give the image as a full URL, starting with https:// and your domain.""")
+    {
+        Why = """The Open Graph protocol gives its URLs with http:// or https://, and networks fetch the image on their own: a relative path may be read from the wrong place or not at all, and the share shows no image.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition OG_URL_NOT_CANONICAL = new("og-url-not-canonical", IssueCategory.Html, IssueSeverity.Notice,
+        "og:url isn't the page's address",
+        """This indexable page's og:url, normalised, is another URL than its own: often every page's points at the home page. An indexable page's canonical is itself, so that's what og:url should give. The detail gives it, grouped by it, so a template's is one group.""",
+        """Make og:url the page's own URL (most SEO plugins use the canonical), or remove it: networks then use the URL that was shared.""")
+    {
+        Why = """The Open Graph protocol defines og:url as the canonical URL of the object. Networks gather shares, likes and the preview under it, so one that names another page credits that page and sends clicks there.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition SOCIAL_TAGS_MULTIPLE = new("social-tags-multiple", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X tag repeated",
+        """This indexable page gives og:title, og:description, og:url, og:type, twitter:card, twitter:title or twitter:description more than once, with different content. og:image and the other properties that take several values may repeat. The detail counts each, as "2 og:title".""",
+        """Keep one of each: usually two plugins, or a plugin and the theme, both write them, and one can be turned off.""")
+    {
+        Why = """Each of these says one thing about the page; given twice with different values, each network picks one its own way, and it may not be the one you meant.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.PageDetail
+    };
+
+    public static readonly IssueDefinition OG_TITLE_DUPLICATE = new("og-title-duplicate", IssueCategory.Html, IssueSeverity.Notice,
+        "Duplicate og:title",
+        """Indexable pages share an og:title (or the twitter:title where it has none) while their <title>s differ: pages whose <title>s are the same are title-duplicate's, and their og:titles usually follow. A page whose og:title is its own title isn't flagged: it's the one the others copied. Grouped by the shared text.""",
+        """Give each page its own og:title, usually by letting the SEO plugin fill it from the page's title.""")
+    {
+        Why = """Shared on a network, pages with one og:title look the same, however different they are: a template's fixed og:title is the usual cause.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["title"]
+    };
+
+    public static readonly IssueDefinition OG_DESCRIPTION_DUPLICATE = new("og-description-duplicate", IssueCategory.Html, IssueSeverity.Notice,
+        "Duplicate og:description",
+        """Indexable pages share an og:description (or the twitter:description where it has none) while their meta descriptions differ. A page whose og:description is its own meta description isn't flagged: it's the one the others copied, as with a platform that gives every page without a description the home page's. Grouped by the shared text.""",
+        """Give each page its own og:description, usually by letting the SEO plugin fill it from the page's meta description.""")
+    {
+        Why = """Shared on a network, pages with one og:description say the same under their titles, whatever they're about.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        Evidence = ["description"]
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_BROKEN = new("social-image-broken", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image broken",
+        """This indexable page's og:image or twitter:image is broken (after any redirects), or answers with something other than an image, such as a page. Only checked when the crawl fetched images. The detail gives the first.""",
+        """Point the tag at an image that loads, or upload the missing image again.""")
+    {
+        Why = """A network that can't load the share image shows the link without one. Only link previews suffer, so it's a notice.""",
+        LearnMore = "https://ogp.me/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        References = IssueReferences.Targets,
+        TargetFacts = ["statusCode", "final", "contentType"]
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_TOO_LARGE = new("social-image-too-large", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image over 5 MB",
+        """This indexable page's og:image or twitter:image is over 5 MB, as received. Only checked when the crawl fetched images. The detail gives the first.""",
+        """Use a smaller copy: 1,200 × 630 pixels, saved as JPEG or WebP, is well under 1 MB.""")
+    {
+        Why = """X doesn't show an image over 5 MB; Facebook's limit is 8 MB, and a large file is slow to fetch for every preview.""",
+        LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        References = IssueReferences.Targets,
+        TargetFacts = ["sizeBytes", "contentType"]
+    };
+
+    public static readonly IssueDefinition SOCIAL_IMAGE_TOO_SMALL = new("social-image-too-small", IssueCategory.Html, IssueSeverity.Notice,
+        "Open Graph or X image too small",
+        """This indexable page's og:image is under 200 × 200 pixels, or the image X uses (twitter:image, else og:image) is under 300 × 157 on a summary_large_image card or 144 × 144 on a summary card. The proportions aren't judged: both networks crop. Only checked when the crawl fetched images. The detail gives the first.""",
+        """Use an image at least 1,200 × 630 pixels, which suits every network.""")
+    {
+        Why = """Facebook rejects an image under 200 × 200 pixels and recommends 1,200 × 630; X shows a small image blurred, or none.""",
+        LearnMore = "https://developers.facebook.com/docs/sharing/webmasters/images/",
+        Subject = IssueSubject.Page,
+        Recheck = [RecheckKind.Urls],
+        Grouping = IssueGrouping.RelatedUrl,
+        References = IssueReferences.Targets,
+        TargetFacts = ["pixelWidth", "pixelHeight"]
+    };
+
     public static readonly IssueDefinition HEAD_TAGS_IN_BODY = new("head-tags-in-body", IssueCategory.Html, IssueSeverity.Warning,
         "Head tags in the body",
         """Tags that belong in the <head> are in the <body> as browsers and Google parse the page: the <title>; a meta description, robots, viewport or the like; Open Graph or X tags; or a <link rel="alternate"> without hreflang. Usually an element that can't be in a head, such as a <div>, an <img> or stray text, ended the head early and pushed every tag after it into the body; the detail names what's out and what ended the head. Canonical and hreflang links have their own checks. A crawl made before the crawler noted these isn't checked.""",
@@ -2167,7 +2295,9 @@ public static class IssueCatalog
         URL_UPPERCASE, URL_UNDERSCORES, URL_TOO_LONG, URL_TRACKING_PARAMETERS, URL_MULTIPLE_SLASHES, URL_SPACE, URL_PARAMETERS, URL_NON_ASCII,
         URL_REPETITIVE_PATH, URL_INTERNAL_SEARCH,
         SLOW_RESPONSE, LARGE_PAGE, HTML_PAST_CRAWL_LIMIT, RESOURCE_PAST_CRAWL_LIMIT,
-        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING,
+        VIEWPORT_MISSING, LANG_MISSING, CHARSET_MISSING, OPEN_GRAPH_MISSING, X_CARD_MISSING, X_CARD_INCOMPLETE, SOCIAL_IMAGE_RELATIVE,
+        OG_URL_NOT_CANONICAL, SOCIAL_TAGS_MULTIPLE, OG_TITLE_DUPLICATE, OG_DESCRIPTION_DUPLICATE, SOCIAL_IMAGE_BROKEN, SOCIAL_IMAGE_TOO_LARGE,
+        SOCIAL_IMAGE_TOO_SMALL,
         HEAD_TAGS_IN_BODY, HTML_STRUCTURE_ERRORS, VIEWPORT_INVALID, CHARSET_INVALID, LANG_INVALID, MOBILE_ALTERNATE
     ];
 

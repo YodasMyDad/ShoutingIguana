@@ -41,6 +41,12 @@ public sealed partial class SyntheticSite
     /// <summary>12 KB of a PNG's bytes, in base64: image-inline-large's data: image, over its 10 KB.</summary>
     private static readonly string INLINE_PNG = Convert.ToBase64String(BuildPng(12 * 1024, 120, 80));
 
+    /// <summary>A share image past X's 5 MB, at a size networks like (social-image-too-large).</summary>
+    private static readonly byte[] HUGE_SHARE_PNG = BuildPng(5_200 * 1024, 1_200, 630);
+
+    /// <summary>A share image under Facebook's 200 × 200 (social-image-too-small).</summary>
+    private static readonly byte[] SMALL_SHARE_PNG = BuildPng(2 * 1024, 100, 100);
+
     /// <summary>A script past the 2 MB Googlebot reads of a file: comment lines, then one statement.</summary>
     private static readonly byte[] HUGE_SCRIPT_BYTES = Encoding.UTF8.GetBytes(
         string.Concat(Enumerable.Repeat("// A planted script well past the size Googlebot reads of a file.\n", 34_000)) + "document.title = document.title;\n");
@@ -790,7 +796,66 @@ public sealed partial class SyntheticSite
         Page("charset-bom", "Byte-order mark", [], page => page with { Charset = false }, contentType: "text/html", markedAs: Encoding.UTF8);
         Page("charset-bom-utf16", "UTF-16 byte-order mark", ["charset-invalid"], page => page with { Charset = false }, contentType: "text/html",
             markedAs: Encoding.Unicode);
-        Page("no-open-graph", "Missing Open Graph", ["open-graph-missing"], page => page with { OpenGraph = false });
+        // It keeps the template's X card, with nothing to fill it: x-card-incomplete's too.
+        Page("no-open-graph", "Missing Open Graph", ["open-graph-missing", "x-card-incomplete"], page => page with { OpenGraph = false });
+
+        // Open Graph and X cards (batch 9): each page writes its own tags in place of the template's where it needs to.
+        string Share(string title, string description, string image) =>
+            $"<meta property=\"og:title\" content=\"{title}\"><meta property=\"og:description\" content=\"{description}\"><meta property=\"og:image\" content=\"{image}\">";
+        var shareImage = $"{_base}/img/0.jpg";
+        Page("no-x-card", "No X card", ["x-card-missing"], page => page with { TwitterCard = false });
+        Page("x-card-property", "X card by property", ["x-card-incomplete"], page => page with
+        {
+            TwitterCard = false, ExtraHead = "<meta property=\"twitter:card\" content=\"summary\">"
+        });
+        Page("og-image-relative", "Relative share image", ["social-image-relative"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share(page.Title!, page.Description!, "/img/0.jpg")
+        });
+        Page("og-url-home", "Share URL of the home page", ["og-url-not-canonical"], page => page with
+        {
+            ExtraHead = $"<meta property=\"og:url\" content=\"{_base}/\">"
+        });
+        Page("og-title-twice", "Share title twice", ["social-tags-multiple"], page => page with
+        {
+            ExtraHead = "<meta property=\"og:title\" content=\"Another share title for the same page\">"
+        });
+        // Revision 1 gives b a share title of its own: b is fixed, and a, unchanged, isn't flagged any more either.
+        Page("og-title-copy-a", "Share title copy A", revised ? [] : ["og-title-duplicate"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share("One share title two pages give", page.Description!, shareImage)
+        });
+        Page("og-title-copy-b", "Share title copy B", revised ? [] : ["og-title-duplicate"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share(revised ? page.Title! : "One share title two pages give", page.Description!, shareImage)
+        });
+        Page("og-description-copy-a", "Share description copy A", ["og-description-duplicate"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share(page.Title!, "One share description two pages give", shareImage)
+        });
+        Page("og-description-copy-b", "Share description copy B", ["og-description-duplicate"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share(page.Title!, "One share description two pages give", shareImage)
+        });
+        Page("og-image-broken", "Broken share image", ["social-image-broken"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share(page.Title!, page.Description!, $"{_base}{PLANTS_PATH}missing-og.jpg")
+        });
+        Other("missing-og.jpg", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "missing-og.jpg"));
+        Page("og-image-huge", "Huge share image", ["social-image-too-large"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share(page.Title!, page.Description!, $"{_base}{PLANTS_PATH}huge-og.png")
+        });
+        plants.Add(new Plant(PLANTS_PATH + "huge-og.png", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "image/png", null, HUGE_SHARE_PNG, null), IsPage: false));
+        // Shown on the page too, so the page links to it two ways: the check's is the share image.
+        Page("og-image-small", "Small share image", ["social-image-too-small"], page => page with
+        {
+            OpenGraph = false, ExtraHead = Share(page.Title!, page.Description!, $"{_base}{PLANTS_PATH}small-og.png"),
+            Content = page.Content + $"<img src=\"{PLANTS_PATH}small-og.png\" alt=\"The small share image\" width=\"100\" height=\"100\">"
+        });
+        plants.Add(new Plant(PLANTS_PATH + "small-og.png", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "image/png", null, SMALL_SHARE_PNG, null), IsPage: false));
 
         // One meta tag serving as both the description and og:description is both.
         Page("meta-name-and-property", "Shared description tag", [], page => page with

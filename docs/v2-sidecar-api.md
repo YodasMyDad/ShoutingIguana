@@ -1545,7 +1545,7 @@ page's links to itself left out, in the order they were found:
   that robots.txt refused, that timed out or that wasn't checked says which, where `statusCode` is null for each of
   them as it is for a URL never fetched (`outcome` null).
   `kinds` filters by the kind of link (`hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`,
-  `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`; every kind by default).
+  `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`, `socialImage` (an og:image or twitter:image given as a full URL); every kind by default).
 - `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
   is `content`, `navigation`, `header`, `footer`, `sidebar` or `head`. `flags` are among `noFollow`, `sponsored`,
   `ugc`, `imageLink`, `outsideHead`, `samePage` and `fromHttpHeader`; `followed` is whether search engines follow a
@@ -1835,7 +1835,7 @@ snapshot per call, a request given up stops its read, reads queue, and an analys
   | Column | Type | Sorts | Is |
   | --- | --- | --- | --- |
   | `id` | number | Yes | The link's id: the order the crawl stored links in. The default sort |
-  | `kind` | enum | | `hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`, `canonical`, `hreflang`, `pagination`, `metaRefresh` or `redirect` |
+  | `kind` | enum | | `hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`, `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect` or `socialImage` |
   | `text` | text | | The anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link |
   | `position` | enum | | Where on the page: `content`, `navigation`, `header`, `footer`, `sidebar` or `head` |
   | `noFollow`, `sponsored`, `ugc` | boolean | | The link's own `rel` says it |

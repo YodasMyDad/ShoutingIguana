@@ -918,6 +918,11 @@ public sealed partial class SyntheticSite
                 .Append("<meta property=\"og:image\" content=\"").Append(_base).Append("/img/0.jpg\">");
         }
 
+        if (page.TwitterCard)
+        {
+            html.Append("<meta name=\"twitter:card\" content=\"summary_large_image\">");
+        }
+
         html.Append("<link rel=\"stylesheet\" href=\"/static/site.css\"><script src=\"/static/app.js\" defer></script>");
         html.Append("<style>").Append(FILLER_STYLES).Append("</style>");
         if (page.JsonLd is not null)

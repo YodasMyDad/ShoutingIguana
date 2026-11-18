@@ -17,7 +17,7 @@ public sealed record PageFacts
     /// and src values written without a scheme. 4 is batch 8's: whether a heading is an image's alt, the main text's
     /// placeholder, sentences and syllables, and the whole body's words.
     /// </summary>
-    public const int CURRENT_COLLECTION = 4;
+    public const int CURRENT_COLLECTION = 5;
 
     /// <summary>
     /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed

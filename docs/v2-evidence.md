@@ -322,6 +322,16 @@ and is in the group without a related URL.
 | 85 | `lang-missing` | P/N/– | – | – | Same (none). Template hint | imp · – |
 | 86 | `charset-missing` | P/N/– | – | – | None → none, but a meta tag past the first 1024 bytes says where it ends (the check audit's): `A meta tag declares it, but ends at byte 1,180, past the first 1,024 bytes browsers read`. Template hint | imp · – |
 | 87 | `open-graph-missing` | P/PD/– | – | – | Same ("Missing og:image; empty og:description") | imp · pages |
+| 161 | `x-card-missing` (new) | P/N/– | – | – | – | imp · – |
+| 162 | `x-card-incomplete` (new) | P/PD/– | – | – | Each fault: `No title (twitter:title or og:title); No image (twitter:image or og:image)`, `Card type "photo" isn't one X shows`, `No twitter:player`, `twitter: tags written as property=, which X doesn't read` | imp · pages |
+| 163 | `social-image-relative` (new) | P/PD/– | – | – | The first: `og:image is /img/share.jpg` | imp · pages |
+| 164 | `og-url-not-canonical` (new) | P/PD/– | – | – | `og:url is https://x/` | imp · pages |
+| 165 | `social-tags-multiple` (new) | P/PD/– | – | – | `2 og:title, 2 twitter:card` | imp · pages |
+| 166 | `og-title-duplicate` (new) | P/RU/– | `title` | – | `1 other page`. The group is named by its `sharedText` (the share title, stored as `responses.og_title`) | imp · pages |
+| 167 | `og-description-duplicate` (new) | P/RU/– | `description` | – | As 166 (`responses.og_description`) | imp · pages |
+| 168 | `social-image-broken` (new) | P/RU/T | – | `statusCode`, `final`, `contentType` | The first: `og:image returns 404 Not Found`, `twitter:image is a page, not an image` | imp · pages |
+| 169 | `social-image-too-large` (new) | P/RU/T | – | `sizeBytes`, `contentType` | The first: `og:image is 6.2 MB, over 5 MB` | imp · pages |
+| 170 | `social-image-too-small` (new) | P/RU/T | – | `pixelWidth`, `pixelHeight` | The first: `og:image is 100 × 100 px, under 200 × 200`, `twitter:image is 280 × 280 px, under 300 × 157 (X's large card)` | imp · pages |
 | 117 | `head-tags-in-body` (new) | P/PD/– | – | – | `title, meta description and 3 Open Graph tags are in the body: <div id="promo"> on line 12 ended the head early`, or `… are in the body, after <body> on line 30`; grouped by the cause (`FaultOf`: the element, without its line, or "After <body>") | imp · pages |
 | 118 | `html-structure-errors` (new) | P/PD/– | – | – | `2 <head> tags; 2 <body> tags`, `<html> after content`, `<head> after content` | imp · pages |
 | 119 | `viewport-invalid` (new) | P/PD/– | – | – | `user-scalable=no; maximum-scale=1`, `no width or initial-scale`, `2 viewport tags that differ` | imp · pages |

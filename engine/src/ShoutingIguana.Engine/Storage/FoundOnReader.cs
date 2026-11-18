@@ -289,11 +289,13 @@ public static class FoundOnReader
     }
 
     /// <summary>The kind of link a check is about, where a page can link to its target more than one way.</summary>
-    private static LinkKind PreferredKind(string checkId) => IssueCatalog.Find(checkId)?.Category switch
+    private static LinkKind PreferredKind(string checkId) => IssueCatalog.Find(checkId) switch
     {
-        IssueCategory.Canonicals => LinkKind.Canonical,
-        IssueCategory.Hreflang => LinkKind.Hreflang,
-        IssueCategory.Images => LinkKind.Image,
+        { Category: IssueCategory.Canonicals } => LinkKind.Canonical,
+        { Category: IssueCategory.Hreflang } => LinkKind.Hreflang,
+        { Category: IssueCategory.Images } => LinkKind.Image,
+        var check when check == IssueCatalog.SOCIAL_IMAGE_BROKEN || check == IssueCatalog.SOCIAL_IMAGE_TOO_LARGE || check == IssueCatalog.SOCIAL_IMAGE_TOO_SMALL =>
+            LinkKind.SocialImage,
         _ => LinkKind.Hyperlink
     };
 }

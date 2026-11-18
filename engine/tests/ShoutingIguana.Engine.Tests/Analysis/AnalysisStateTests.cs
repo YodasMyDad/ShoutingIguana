@@ -65,7 +65,10 @@ public sealed class AnalysisStateTests : IAsyncLifetime
             [IssueCatalog.IMAGE_BROKEN.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
             [IssueCatalog.IMAGE_TOO_LARGE.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
             [IssueCatalog.IMAGE_NO_SRCSET.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
-            [IssueCatalog.IMAGE_LEGACY_FORMAT.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.")
+            [IssueCatalog.IMAGE_LEGACY_FORMAT.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
+            [IssueCatalog.SOCIAL_IMAGE_BROKEN.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
+            [IssueCatalog.SOCIAL_IMAGE_TOO_LARGE.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl."),
+            [IssueCatalog.SOCIAL_IMAGE_TOO_SMALL.Id] = (SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.")
         };
         foreach (var check in IssueCatalog.All.Where(check => check.Category == IssueCategory.Sitemaps))
         {
@@ -245,7 +248,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         string[] duplicates =
         [
             IssueCatalog.TITLE_DUPLICATE.Id, IssueCatalog.DESCRIPTION_DUPLICATE.Id, IssueCatalog.H1_DUPLICATE.Id, IssueCatalog.DUPLICATE_CONTENT.Id,
-            IssueCatalog.NEAR_DUPLICATE_CONTENT.Id
+            IssueCatalog.NEAR_DUPLICATE_CONTENT.Id, IssueCatalog.OG_TITLE_DUPLICATE.Id, IssueCatalog.OG_DESCRIPTION_DUPLICATE.Id
         ];
         Assert.True(counts[IssueCatalog.TITLE_DUPLICATE.Id] > 0);
         Assert.Empty(IssueReader.ReadSkippedChecks(path));
