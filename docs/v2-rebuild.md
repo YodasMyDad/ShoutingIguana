@@ -359,11 +359,45 @@ machine):
     specs.
   - Readbench missed two timing gates under load (the links search for a common word, 2,694 ms against 2,500; pages
     by response time, 199 ms against 185). Batch 9 adds a share-image link from every page.
+- **`eeaeb07`: the headline leads with what to fix** (`ui/3b-views` at `b05c7b5`): errors and warnings as things to
+  fix, notices apart as worth a look; long file names in the inspector.
+- **`31b9112`: never a count over an empty list, and one unit per mode** (`ui/3b-views` at `b7a221b`).
+  - An empty 4xx list on a screenshot came from Simple's fake sidecar. The real sidecar listed all 9 pages, with the
+    pages linking to each, on copies of the garden crawls.
+    - A grouped check whose groups come back empty now lists its URLs.
+    - A sidecar invariant over every check fails any count with no rows under it.
+  - Advanced counts things ("About 77 things to fix · about 775 more worth a look"). Simple counts problems ("6
+    problems to fix and 22 more worth a look").
+  - Checks at `b7a221b`: 573 stories × 2 themes clean.
+  - The views lane is finished.
+- **`5e327f3`: the fix loop in the app, U1 Simple and U2 Advanced** (`ui/3b-fixloop-ui` at `c65fe6d`; tree identical
+  to the verified `fce0cde6`).
+  - Simple:
+    - each line then and now on Home, Summary and the score breakdown;
+    - the recheck card in every state;
+    - What to fix's change lines and Fixed group;
+    - causes marked "Still there" or "New since".
+  - Advanced:
+    - the Library's score column and Compare with…, with a picker kept per crawl;
+    - Overview's comparison and Rechecks cards;
+    - Issues' change column, filters, sort, and Now and Fixed tabs;
+    - Recheck in Issues, URLs and the inspector.
+  - Both modes:
+    - "Check the site again" for every check a recheck can't settle (a test covers the catalog);
+    - "not checked" is never shown as fixed;
+    - counts are in each mode's headline unit.
+  - Decisions and what isn't built are in [`v2-fix-loop.md`](v2-fix-loop.md) §12.
+  - Checks at `fce0cde6`: unit 4,674; 635 stories clean in both themes, in forced colours and in reduced motion; e2e
+    284 passed, 3 skipped; `e2e:filled` 33 passed.
 
 Next:
 
-- U1 and U2 on `ui/3b-fixloop-ui`, now building on the merged views. Then the views lane's headline round: errors and
-  warnings first, notices apart.
+- **`ui/3b-classes`** (found while reviewing U2's shots).
+  - The theme is closed, so an off-scale utility compiles to nothing. Eight in use did: `max-w-72`, `basis-80`,
+    `basis-64`, `text-text-link`, `pl-11`, `pl-5.5`, `font-normal` and `text-24`.
+  - Ten `si-*` names had no CSS.
+  - The lane adds a guard test that every static class compiles, fixes each one with named tokens, and puts Advanced's
+    check head (Recheck, Copy URLs, Hide) on one row with the plan line beneath.
 - Then the round's gates on a quiet machine:
   - readbench first (if the links search misses again, it's investigated, not waved through);
   - the full app verify and `e2e:filled`;
@@ -384,8 +418,11 @@ Next:
    - the robots.txt-blocked list with "linked from" and "in a sitemap".
 
    Also the settings fixes above.
-4. The fix loop, stages E1 to V (designed on `ui/3b-fixloop`).
-5. The new checks, batches 1 to 9 in order (specified on `ui/3b-newchecks`).
+
+   Done (`40f5e6b`, `eeaeb07`, `31b9112`).
+4. The fix loop, stages E1 to V (designed on `ui/3b-fixloop`). Done to U2 (`7e36b8a`, `1602893`, `5e327f3`). Stage V
+   is the round's gates and gallery 7.
+5. The new checks, batches 1 to 9 in order (specified on `ui/3b-newchecks`). Done (`8b6d891`, `1b714f1`, `8ca8a53`).
 6. Audit Jitsunami's product pages again once a crawl reads them (the 429s left them unchecked; a third real crawl is
    the owner's call).
 7. Gallery 7, then tell the owner step 3b is finished. The release step follows at the owner's word.
