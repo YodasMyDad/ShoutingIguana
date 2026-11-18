@@ -130,15 +130,15 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     expect(
       main().getByText(
-        /6 problems to fix and 14 things worth a look on gardenfurnituresets\.co\.uk, from 109 checks on 265 pages\./,
+        /6 problems to fix and 15 things worth a look on gardenfurnituresets\.co\.uk, from 120 checks on 265 pages\./,
       ),
     ).toBeVisible();
     for (const [name, count] of [
       ['Serious', '2'],
       ['Worth fixing', '4'],
-      ['Worth a look', '14'],
-      ['Couldn’t check', '13'],
-      ['Nothing wrong', '89'],
+      ['Worth a look', '15'],
+      ['Couldn’t check', '17'],
+      ['Nothing wrong', '99'],
     ]) {
       expect(main().getByRole('heading', { level: 2, name: `${name} ${count}` })).toBeVisible();
     }
@@ -152,29 +152,29 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
   it('shows three things worth a look while anything needs fixing, then all of them; Nothing wrong is folded', async () => {
     await open(FIX);
     await whatToFix();
-    const looks = () => within(main().getByRole('region', { name: 'Worth a look 14' }));
+    const looks = () => within(main().getByRole('region', { name: 'Worth a look 15' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
     expect(await looks().findByText('One fix')).toBeVisible();
-    fireEvent.click(looks().getByRole('button', { name: 'Show all 14 things worth a look' }));
-    expect(looks().getAllByRole('link')).toHaveLength(14);
-    const passed = within(main().getByRole('region', { name: 'Nothing wrong 89' }));
+    fireEvent.click(looks().getByRole('button', { name: 'Show all 15 things worth a look' }));
+    expect(looks().getAllByRole('link')).toHaveLength(15);
+    const passed = within(main().getByRole('region', { name: 'Nothing wrong 99' }));
     expect(passed.queryAllByRole('link')).toHaveLength(0);
-    fireEvent.click(passed.getByRole('button', { name: 'Show the 89 checks that found nothing wrong' }));
-    expect(passed.getAllByRole('link')).toHaveLength(89);
+    fireEvent.click(passed.getByRole('button', { name: 'Show the 99 checks that found nothing wrong' }));
+    expect(passed.getAllByRole('link')).toHaveLength(99);
   });
 
-  it('opens the part a count lands on: all 14 worth a look, and the 89 that found nothing wrong', async () => {
+  it('opens the part a count lands on: all 15 worth a look, and the 99 that found nothing wrong', async () => {
     await open(`${FIX}#worth-a-look`);
     await whatToFix();
-    expect(within(main().getByRole('region', { name: 'Worth a look 14' })).getAllByRole('link')).toHaveLength(14);
-    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 14' })).toHaveFocus());
+    expect(within(main().getByRole('region', { name: 'Worth a look 15' })).getAllByRole('link')).toHaveLength(15);
+    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 15' })).toHaveFocus());
   });
 
   it('lists every check that couldn’t run, with its plain reason, and leaves hidden checks out with a line to show them', async () => {
     await open(FIX, GARDEN_ANALYSIS, ['image-too-large']);
     await whatToFix();
-    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 13' }));
-    expect(skipped.getAllByText('Not checked')).toHaveLength(13);
+    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 17' }));
+    expect(skipped.getAllByText('Not checked')).toHaveLength(17);
     expect(main().getByRole('heading', { name: 'Worth fixing 3' })).toBeVisible();
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));
@@ -225,7 +225,59 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     fireEvent.click(main().getByRole('button', { name: 'Copy this list' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toContain('Serious (2)');
-    expect(writes[0]).toContain("- Pages or files that can't be found: 9 of 4,521 addresses.");
+    // A row's count without what it's a share of, so the rows compare, and the points fixing it gives back: with the
+    // broken links its fix clears, folded under it.
+    expect(writes[0]).toContain(
+      "- Pages or files that can't be found: 9 addresses, 6 points back. Some addresses on your site answer with an error",
+    );
+    expect(writes[0]).toContain('  - Fixed along with it: Links that lead to broken pages, 5 pages.\n');
+  });
+});
+
+/** The garden crawl as a sidecar from before related checks gave it: nothing folded, so the parts can be reordered. */
+const UNRELATED_ANALYSIS: Analysis = {
+  ...GARDEN_ANALYSIS,
+  counts: GARDEN_ANALYSIS.counts.map((count) => ({ ...count, clears: [] })),
+};
+
+describe.skipIf(TABLE_STUBBED)('What to fix, related and ordered', () => {
+  it('folds a problem a fix of another clears under that one, as one job with the points of both', async () => {
+    // The garden crawl: restoring its 9 missing addresses clears the broken links on all 5 pages.
+    await open(FIX);
+    await whatToFix();
+    const serious = within(main().getByRole('region', { name: /^Serious/ }));
+    const rows = serious.getAllByRole('link');
+    expect(rows.map((row) => row.getAttribute('href'))).toEqual([
+      `${FIX}/internal-client-error`,
+      `${FIX}/broken-internal-links`,
+    ]);
+    expect(rows[0]).toHaveAccessibleName(/Pages or files that can't be found .* 9 addresses 6 points back$/);
+    expect(rows[1]).toHaveAccessibleName(
+      /^Serious Links that lead to broken pages Fixed along with the problem above\. 5 pages$/,
+    );
+    expect(rows[1]!.closest('li')).toHaveClass('si-plain-list__nested');
+    // Still two problems: the heading counts them.
+    expect(main().getByRole('heading', { level: 2, name: /^Serious\s*2$/ })).toBeVisible();
+    // J and K go through the folded one after the one it's under.
+    fireEvent.keyDown(document.body, { key: 'j' });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'j' });
+    expect(rows[1]).toHaveFocus();
+  });
+
+  it('orders each part by the most points back or the most found, remembered for Simple', async () => {
+    await open(FIX, UNRELATED_ANALYSIS);
+    await whatToFix();
+    const serious = () =>
+      within(main().getByRole('region', { name: /^Serious/ }))
+        .getAllByRole('link')
+        .map((row) => row.getAttribute('href')?.split('/').pop());
+    // The engine's order: the 9 missing addresses (2 points) before the 5 pages' broken links (4 points).
+    expect(serious()).toEqual(['internal-client-error', 'broken-internal-links']);
+    fireEvent.pointerDown(main().getByRole('button', { name: 'Order: Fix first' }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Most points' }));
+    await waitFor(() => expect(serious()).toEqual(['broken-internal-links', 'internal-client-error']));
+    expect(getSettings().checkSort).toEqual({ advanced: 'fixFirst', simple: 'points' });
+    expect(main().getByRole('button', { name: 'Order: Most points' })).toBeVisible();
   });
 });
 
@@ -241,6 +293,21 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(main().getByRole('heading', { name: 'How to fix it' })).toBeVisible();
     expect(await main().findByText('One fix clears 264 of these 265 pages')).toBeVisible();
     expect(main().getByText(/almost certainly your logo/)).toBeVisible();
+  });
+
+  it('says what fixing it also fixes, and which fix fixes it, each a link to the other problem', async () => {
+    const { router } = await open(`${FIX}/internal-client-error`);
+    await problem("Pages or files that can't be found");
+    const also = main().getByRole('list', { name: 'Fixed along with it' });
+    expect(also).toHaveTextContent(
+      'Fixing this also fixes Links that lead to broken pages: all 5 pages, 4 more points back.',
+    );
+    fireEvent.click(within(also).getByRole('link', { name: 'Links that lead to broken pages' }));
+    await problem('Links that lead to broken pages');
+    expect(router.state.location.pathname).toBe(`${FIX}/broken-internal-links`);
+    expect(main().getByRole('list', { name: 'Fixed along with it' })).toHaveTextContent(
+      "Fixing Pages or files that can't be found fixes this too.",
+    );
   });
 
   it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {

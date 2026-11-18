@@ -34,14 +34,20 @@ async function openIssues(page: Page) {
 
 test('triage: pick a check, read it, open a group, its URLs, inspect one, then Esc and Alt+Left', async ({ page }) => {
   await openIssues(page);
-  await expect(page.getByText(/^\d+ checks found [\d,]+ issues on this crawl\./)).toBeVisible();
+  await expect(
+    page.getByText(
+      /^(About [\d,]+ things to change|1 thing to change)[^:]*: \d+ checks found [\d,]+ issues on this crawl\./,
+    ),
+  ).toBeVisible();
 
   await page.getByRole('option', { name: /Duplicate title/ }).click();
   await expect(page).toHaveURL(/\/issues\/title-duplicate$/);
   await expect(page.getByRole('heading', { name: 'Duplicate title', level: 2 })).toBeVisible();
-  await expect(page.getByText('What’s wrong')).toBeVisible();
-  await expect(page.getByText('Why it matters')).toBeVisible();
-  await expect(page.getByText('How to fix it')).toBeVisible();
+  // What's wrong in the check's head; why it matters and how to fix it after its evidence, a button away.
+  await expect(page.getByRole('heading', { name: 'What’s wrong', level: 3 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Why it matters', level: 3 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How to fix it', level: 3 })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Why it matters and how to fix it' })).toBeVisible();
 
   // Its groups: open the first with the keyboard, as the treegrid pattern has it.
   const groups = page.getByRole('treegrid', { name: /Duplicate title: affected pages/ });

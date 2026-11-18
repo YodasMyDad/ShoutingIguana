@@ -337,10 +337,10 @@ export function recheckRoutes({
 }
 
 /** The needs-secrets problem a recheck of a crawl that had header values answers with, as Continue does. */
-export const RECHECK_NEEDS_SECRETS: ProblemBody = {
+export const RECHECK_NEEDS_SECRETS = {
   type: 'needs-secrets',
   title: 'Rechecking this crawl needs the values of its headers.',
   status: 409,
   missingHeaders: ['Authorization'],
   proxyCredentials: false,
-};
+} satisfies ProblemBody;

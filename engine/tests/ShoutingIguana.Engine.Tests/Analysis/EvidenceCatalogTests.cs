@@ -10,7 +10,7 @@ public sealed class EvidenceCatalogTests
     /// <summary>The fields of a target (and of a group's related URL) a check can name, as the API gives them.</summary>
     private static readonly string[] TARGET_FIELDS =
     [
-        "statusCode", "final", "indexability", "canonical", "sizeBytes", "contentType", "pixelWidth", "pixelHeight", "responseMs", "img",
+        "statusCode", "final", "indexability", "canonical", "sizeBytes", "contentType", "pixelWidth", "pixelHeight", "responseMs", "redirectKind", "img",
         "kind", "text", "position", "fragment", "flags", "links"
     ];
 
@@ -30,8 +30,8 @@ public sealed class EvidenceCatalogTests
                 check.Id);
         }
 
-        Assert.Equal(43, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
-        Assert.Equal(34, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
+        Assert.Equal(44, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
+        Assert.Equal(38, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
         Assert.All(IssueCatalog.All.Where(check => check.References == IssueReferences.Targets), check => Assert.NotEmpty(check.TargetFacts));
     }
 

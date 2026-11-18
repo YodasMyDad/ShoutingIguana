@@ -5,6 +5,7 @@ import {
   crawlFileChoices,
   issuesOffer,
   linkExportColumns,
+  linkGroupsOffer,
   linksOffer,
   robotsBlockedOffer,
   robotsOriginsOffer,
@@ -135,6 +136,48 @@ describe('a grid’s export is the grid’s own read', () => {
   });
 });
 
+describe('Links grouped by target', () => {
+  it('writes what’s shown: one row a target, with the view’s filters, search and order, and no columns to choose', () => {
+    const offer = linkGroupsOffer({
+      item,
+      crawling: false,
+      filters: [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }],
+      sort: { column: 'pages', desc: true },
+      search: 'rattan',
+      targets: 9,
+      viewName: 'Broken links',
+    });
+    expect(offer.title).toBe('Export links by target');
+    const [choice] = offer.choices;
+    expect(choice?.description).toBe(
+      '9 targets, one row a target: this filter, this search, the most linked from pages first',
+    );
+    expect(choice?.fileView).toBe('Broken links by target');
+    expect(choice?.formats).toEqual(['csv', 'xlsx']);
+    expect(choice?.build(as({ format: 'csv' }))).toEqual({
+      kind: 'linkGroups',
+      format: 'csv',
+      path: 'C:\\x\\a.xlsx',
+      filters: [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }],
+      search: 'rattan',
+      sort: [{ column: 'pages', desc: true }],
+    });
+    // Images, by size: named for them; no view name, the links.
+    const images = linkGroupsOffer({
+      item,
+      crawling: false,
+      filters: [{ column: 'kind', op: 'in', values: ['image'] }],
+      sort: { column: 'to.sizeBytes', desc: true },
+      search: undefined,
+      targets: 1,
+      viewName: null,
+      images: true,
+    });
+    expect(images.choices[0]?.description).toBe('1 image, one row an image: this filter, by this sort');
+    expect(images.choices[0]?.fileView).toBe('images');
+  });
+});
+
 describe('the two lists', () => {
   it('Sitemaps: the list, as CSV or Excel, with no field of a grid’s', () => {
     const offer = sitemapsOffer({ item, crawling: false, rows: 12 });
@@ -194,7 +237,36 @@ it('names an origin’s blocked URLs narrowed by their reason (the review’s fi
   expect(
     robotsBlockedOffer({ item, crawling: false, origin: 'https://example.com', reason: 'unknown', rows: 2 }).choices[0]
       ?.title,
-  ).toBe('Blocked with no rule kept');
+  ).toBe('Blocked with no matching rule');
+});
+
+it('names an origin’s blocked URLs narrowed to the conflicts, and every file says what blocking each costs', () => {
+  const offer = robotsBlockedOffer({
+    item,
+    crawling: false,
+    origin: 'https://example.com',
+    conflict: true,
+    rows: null,
+  });
+  const choice = offer.choices[0];
+  expect(choice?.title).toBe('In your sitemap or menu but blocked');
+  expect(choice?.description).toBe(
+    'example.com’s robots.txt: every URL it blocked that your sitemap or menu asks for, with the pages linking to each and its sitemap',
+  );
+  expect(choice?.fileView).toBe('blocked by example.com robots.txt in sitemap or menu');
+  expect(choice?.build(as())).toEqual({
+    kind: 'robotsBlocked',
+    format: 'xlsx',
+    path: 'C:\\x\\a.xlsx',
+    origin: 'https://example.com',
+    conflict: true,
+  });
+  // Not narrowed to them: no conflict field, and the costs are in the file all the same.
+  const all = robotsBlockedOffer({ item, crawling: false, origin: 'https://example.com', conflict: false, rows: 4 });
+  expect(all.choices[0]?.build(as())).not.toHaveProperty('conflict');
+  expect(all.choices[0]?.description).toBe(
+    '4 URLs: every URL it blocked, with the line that decided each, the pages linking to it and its sitemap',
+  );
 });
 
 describe('Issues and Overview', () => {

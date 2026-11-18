@@ -2,6 +2,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { CrawlOptions } from '../api/types';
 import { ENGINE_DEFAULTS } from '../crawl/options/engineDefaults';
+import { setSecretsStore } from '../crawl/secrets';
 import type { Mode } from '../mode/mode';
 import { AT_200_PERCENT, GARDEN_CRAWL, ScreenApp, freshStory, ownSidecar } from '../test/ScreenStory';
 import { TEST_CRAWL_ID, json, problem, standardRoutes, testCrawlItem, type FakeRoute } from '../test/fakeSidecar';
@@ -18,6 +19,8 @@ const PRESETS = [
 
 /** A sidecar with these saved defaults, and a crawl whose own settings had a header and a proxy password. */
 function sidecar(saved: CrawlOptions = ENGINE_DEFAULTS, extra: FakeRoute[] = []) {
+  // No credential store unless the story gives one (`rememberedDefaults`), as in a browser.
+  setSecretsStore(null);
   ownSidecar([
     ...extra,
     ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options: saved, speedPresets: PRESETS })],
@@ -85,6 +88,50 @@ const at = (path: string, mode: Mode, setup: () => void = () => sidecar(), at200
   loaders: [setup],
   render: () => <ScreenApp path={path} mode={mode} size={at200 ? AT_200_PERCENT : undefined} />,
 });
+
+/** Saved defaults with a header and a proxy login: the header's name, and the proxy without its password. */
+const WITH_SECRETS: CrawlOptions = {
+  ...ENGINE_DEFAULTS,
+  extraHeaders: { 'X-Allow-Crawler': '' },
+  proxyUrl: 'http://***@proxy.example.com:8080',
+  hasRedactedProxyCredentials: true,
+};
+
+/** Those defaults' secrets, remembered in the credential store (here, a map): the form fills them in. */
+function rememberedDefaults() {
+  sidecar(WITH_SECRETS);
+  const kept = new Map([
+    [
+      'defaults',
+      JSON.stringify({
+        proxyUrl: 'http://crawler:pa55word@proxy.example.com:8080',
+        headers: { 'X-Allow-Crawler': 'yes-please' },
+      }),
+    ],
+  ]);
+  setSecretsStore({
+    read: (key) => Promise.resolve(kept.get(key) ?? null),
+    write: (key, secrets) => {
+      if (secrets === null) kept.delete(key);
+      else kept.set(key, secrets);
+      return Promise.resolve();
+    },
+  });
+}
+
+/**
+ * Step 3b: the proxy and headers with the option to remember their secrets, off until chosen, saying they last for
+ * this session only.
+ */
+export const AdvancedSecretsNotRemembered = at('/new?url=https://www.example.co.uk/&focus=proxy', 'advanced');
+/** Step 3b: secrets an earlier run remembered: filled in, and the option ticked, saying where they're kept. */
+export const AdvancedSecretsRemembered = at(
+  '/new?url=https://www.example.co.uk/&focus=proxy',
+  'advanced',
+  rememberedDefaults,
+);
+/** Step 3b: Simple shows the option only when the defaults bring a sign-in, in its own plain words. */
+export const SimpleSecretsRemembered = at('/new?url=https://www.example.co.uk/', 'simple', rememberedDefaults);
 
 /** Simple's four questions, pre-filled from Home's field. */
 export const Simple = at('/new?url=https://www.example.co.uk/', 'simple');

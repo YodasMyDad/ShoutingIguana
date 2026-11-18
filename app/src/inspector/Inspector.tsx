@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { UrlDetail } from '../api/inspector';
-import { crawlQuery, queryKeys, urlDetailQuery } from '../api/queries';
+import { crawlQuery, queryKeys, urlDetailQuery, urlImagesQuery } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
@@ -41,6 +41,8 @@ import { Tabs, type TabItem } from '../ui/Tabs';
 import { siteOriginOf, urlDisplay } from '../ui/urlText';
 import { HeadersSection } from './HeadersSection';
 import { HreflangSection } from './HreflangSection';
+import { IMAGES_LISTED } from './images';
+import { ImagesSection } from './ImagesSection';
 import { InspectorContext, type InspectorContextValue } from './inspectorContext';
 import { IssuesSection } from './IssuesSection';
 import { LinksSection } from './LinksSection';
@@ -304,6 +306,8 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   const settled = useSettled(urlId, LINK_COUNT_DELAY_MS) === urlId && !notFound && state.status === 'ready';
   const inlinks = useLinkCount(crawlId, urlId, 'inlinks', settled && !totalsKnown);
   const outlinks = useLinkCount(crawlId, urlId, 'outlinks', settled && !totalsKnown);
+  // The Images tab's count is its own read's (step 3b), once the inspector settles on the URL: the section reads the same.
+  const images = useQuery({ ...urlImagesQuery(crawlId, urlId, IMAGES_LISTED), enabled: settled }).data?.total;
 
   const tabs = useMemo<TabItem<SectionId>[]>(() => {
     const counts: Partial<Record<SectionId, number>> =
@@ -314,6 +318,7 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
       if (outlinks !== undefined && outlinks > 0) counts.outlinks = outlinks;
       else delete counts.outlinks;
     }
+    if (images !== undefined && images > 0) counts.images = images;
     const fromDetail = (id: SectionId, render: (detail: UrlDetail) => ReactNode): ReactNode => {
       if (state.status === 'ready') {
         return (
@@ -339,6 +344,11 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
           <LinksSection direction="outlinks" />
         </RegionBoundary>
       ),
+      images: (
+        <RegionBoundary name="inspector’s images">
+          <ImagesSection />
+        </RegionBoundary>
+      ),
       redirects: fromDetail('redirects', (value) => <RedirectsSection detail={value} />),
       headers: fromDetail('headers', (value) => <HeadersSection detail={value} />),
       structuredData: fromDetail('structuredData', (value) => <StructuredDataSection detail={value} />),
@@ -350,7 +360,7 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
       ),
     };
     return SECTION_IDS.map((id) => ({ value: id, label: SECTION_TITLES[id], count: counts[id], content: content[id] }));
-  }, [state, totalsKnown, inlinks, outlinks, choose, urlId, searchRequest, searchFocused, hiddenChecks]);
+  }, [state, totalsKnown, inlinks, outlinks, images, choose, urlId, searchRequest, searchFocused, hiddenChecks]);
 
   const refreshing = query.isFetching && !waiting && !crawling;
   const compact = dock === 'bottom';

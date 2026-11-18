@@ -10,7 +10,7 @@ using ShoutingIguana.Sidecar.Errors;
 namespace ShoutingIguana.Sidecar.Crawls;
 
 /// <summary>What a crawl file holds, through the engine's readers. Readers are safe at any time, a running crawl included.</summary>
-internal sealed class CrawlData(CrawlManager crawls)
+internal sealed class CrawlData(CrawlManager crawls, ReadCache cache)
 {
     private const int DEFAULT_LIMIT = 200;
     private const int MAX_LIMIT = 1_000;
@@ -59,11 +59,19 @@ internal sealed class CrawlData(CrawlManager crawls)
         var reasons = results.Skipped.ToDictionary(skip => skip.CheckId, StringComparer.Ordinal);
         var outOfDate = results.OutOfDate(crawls.AnalysisSettings);
 
+        // The checks as things to change, and what a fix of each clears: read apart, so only when it's of the same analysis.
+        var causes = EngineErrors.Read(() => IssueCauseReader.Read(path, cache)) is { } read && read.AnalyzedAt == analysis.AnalyzedAt ? read.Checks : null;
+
         // In catalog order. A check from a newer engine, which this one doesn't know, still counts, after the rest.
         List<CheckCountDto> ran =
         [
             .. IssueCatalog.All.Where(check => counts.ContainsKey(check.Id))
-                .Select(check => new CheckCountDto(check.Id, counts[check.Id], IssueGroupReader.IsLikelyTemplateCheck(check, counts[check.Id], analysis.PagesAnalyzed)))
+                .Select(check => new CheckCountDto(check.Id, counts[check.Id], IssueGroupReader.IsLikelyTemplateCheck(check, counts[check.Id], analysis.PagesAnalyzed))
+                {
+                    Causes = causes?.GetValueOrDefault(check.Id)?.Causes,
+                    TemplateCauses = causes?.GetValueOrDefault(check.Id)?.InTemplate,
+                    Clears = causes?.GetValueOrDefault(check.Id) is { } found ? [.. found.Clears.Select(cleared => new ClearedCheckDto(cleared.CheckId, cleared.Pages, cleared.All))] : []
+                })
         ];
         ran.AddRange(counts.Keys.Where(checkId => IssueCatalog.Find(checkId) is null).Order(StringComparer.Ordinal)
             .Select(checkId => new CheckCountDto(checkId, counts[checkId])));

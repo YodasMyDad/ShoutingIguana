@@ -6,6 +6,7 @@ import {
   continueWithSecrets,
   forgetCrawlSecrets,
   keepCrawlSecrets,
+  isRemembered,
   keepSecrets,
   keptSecrets,
   secretsOf,
@@ -39,6 +40,8 @@ import type {
   LinkColumn,
   LinkEndsPage,
   LinkEndsQuery,
+  LinkGroupsPage,
+  LinkGroupsQuery,
   LinkFacetsPage,
   LinkFacetsQuery,
   LinkRow,
@@ -53,7 +56,15 @@ import type {
   UrlLookup,
   UrlRow,
 } from './grids';
-import type { FoundOnPage, HtmlSource, IssueTargetsPage, LinkPage, LinksQuery, UrlDetail } from './inspector';
+import type {
+  FoundOnPage,
+  HtmlSource,
+  IssueTargetsPage,
+  LinkPage,
+  LinksQuery,
+  PageImages,
+  UrlDetail,
+} from './inspector';
 import { getTransport, type TransportRequest } from './transport';
 import type {
   AlertEvent,
@@ -178,8 +189,11 @@ function withHiddenChecks<T extends object>(crawlId: string, query: T): T {
 /** The exports of a grid, which take the grid's query and so its hidden checks. */
 const GRID_EXPORTS: ReadonlySet<ExportRequest['kind']> = new Set(['urls', 'links', 'sitemapUrls', 'issueRows']);
 
-/** The secrets of the crawls removed from the library while the app runs, for Undo (restoreCrawl) to put back. */
-const removedSecrets = new Map<string, CrawlSecrets>();
+/**
+ * The secrets of the crawls removed from the library while the app runs, and whether they were remembered, for Undo
+ * (restoreCrawl) to put back where they were.
+ */
+const removedSecrets = new Map<string, { secrets: CrawlSecrets; remember: boolean }>();
 
 export const api = {
   // App
@@ -197,9 +211,14 @@ export const api = {
   },
   /**
    * Saves "my defaults". The start URL, header values and proxy credentials are never saved by the engine: given
-   * `secrets` (the options as typed), the app keeps those in the credential store instead.
+   * `secrets` (the options as typed), the app keeps those itself: in the credential store with the user's consent
+   * (`remember`), else for this session only, taking out what the store had.
    */
-  saveCrawlOptionDefaults: async (options: CrawlOptions, secrets?: CrawlOptions) => {
+  saveCrawlOptionDefaults: async (
+    options: CrawlOptions,
+    secrets?: CrawlOptions,
+    { remember = false }: { remember?: boolean } = {},
+  ) => {
     const saved = await call<CrawlOptionDefaults>({
       method: 'PUT',
       path: '/api/crawl-options/defaults',
@@ -207,7 +226,7 @@ export const api = {
     });
     if (!secrets) return saved;
     const kept = secretsOf(secrets);
-    await keepSecrets('defaults', kept);
+    await keepSecrets('defaults', kept, { remember });
     return { ...saved, options: withSecrets(saved.options, kept) };
   },
   /** Field-keyed messages; always 200 for options that parse. */
@@ -243,14 +262,16 @@ export const api = {
    */
   removeCrawl: async (id: string) => {
     await call<undefined>({ method: 'DELETE', path: crawl(id) });
+    const remember = await isRemembered(`crawl:${id}`);
     const kept = await forgetCrawlSecrets(id);
-    if (kept) removedSecrets.set(id, kept);
+    if (kept) removedSecrets.set(id, { secrets: kept, remember });
   },
   restoreCrawl: async (id: string) => {
     const item = await post<CrawlListItem>(`${crawl(id)}/restore`);
     const kept = removedSecrets.get(id);
     removedSecrets.delete(id);
-    if (kept) await keepSecrets(`crawl:${id}`, kept);
+    // Back where they were: the credential store when they were remembered, else this session.
+    if (kept) await keepSecrets(`crawl:${id}`, kept.secrets, { remember: kept.remember });
     return item;
   },
   /** Deletes the file. Only after a confirmation that names the crawl. Its secrets are forgotten with it. */
@@ -261,10 +282,13 @@ export const api = {
   },
 
   // Crawl control
-  /** Starts a crawl. In the app, what it was given that the engine doesn't keep is kept for Continue. */
-  startCrawl: async (request: StartCrawlRequest) => {
+  /**
+   * Starts a crawl. What it was given that the engine doesn't keep is kept for Continue: in the credential store with
+   * the user's consent (`remember`), else for this session only.
+   */
+  startCrawl: async (request: StartCrawlRequest, { remember = false }: { remember?: boolean } = {}) => {
     const item = await post<CrawlListItem>('/api/crawls', request);
-    keepCrawlSecrets(item.id, request.options);
+    await keepCrawlSecrets(item.id, request.options, remember);
     return item;
   },
   pauseCrawl: (id: string) => post<undefined>(`${crawl(id)}/pause`),
@@ -283,7 +307,8 @@ export const api = {
       continueWithSecrets(request, await keptSecrets(`crawl:${id}`)),
     );
     if (request.proxyUrl !== undefined || request.extraHeaders !== undefined) {
-      keepCrawlSecrets(id, { proxyUrl: request.proxyUrl ?? null, extraHeaders: request.extraHeaders ?? null });
+      // Where the crawl's secrets already were: remembered, or this session's.
+      await keepCrawlSecrets(id, { proxyUrl: request.proxyUrl ?? null, extraHeaders: request.extraHeaders ?? null });
     }
     return item;
   },
@@ -345,6 +370,9 @@ export const api = {
    */
   foundOn: (id: string, urlIds: readonly number[], limit?: number, signal?: Signal) =>
     post<FoundOnPage>(`${crawl(id)}/urls/found-on`, limit === undefined ? { urlIds } : { urlIds, limit }, signal),
+  /** Step 3b: the images a page shows, each file once, the largest first; `limit` 1 to 500 (100 when left out). */
+  urlImages: (id: string, urlId: number, limit?: number, signal?: Signal) =>
+    post<PageImages>(`${crawl(id)}/urls/images`, limit === undefined ? { urlId } : { urlId, limit }, signal),
   /** The stored HTML, streamed as one JSON object. `bytes` is null for a page over 512 MB. */
   urlSource: (id: string, urlId: number, signal?: Signal) =>
     post<HtmlSource>(`${crawl(id)}/urls/source`, { urlId }, signal),
@@ -381,6 +409,9 @@ export const api = {
    */
   linkEnds: (id: string, query: LinkEndsQuery, signal?: Signal) =>
     post<LinkEndsPage>(`${crawl(id)}/links/ends`, withHiddenChecks(id, query), signal),
+  /** Step 3b: a view's links grouped by target, one row a target; the most linked from pages first unless asked. */
+  linkGroups: (id: string, query: LinkGroupsQuery, signal?: Signal) =>
+    post<LinkGroupsPage>(`${crawl(id)}/links/groups`, withHiddenChecks(id, query), signal),
   sitemaps: (id: string, signal?: Signal) => get<SitemapList>(`${crawl(id)}/sitemaps`, signal),
   /** The URL grid for one sitemap (an index: every sitemap under it). `sitemap-not-found` for an id the crawl lacks. */
   sitemapUrls: (id: string, sitemapId: number, query: UrlGridQuery, signal?: Signal) =>

@@ -64,9 +64,21 @@ internal static class SitemapReader
         var rootSeen = false;
         var isIndex = false;
 
+        // An entry's <loc> and <lastmod> can come in either order: it's given when its <url> or <sitemap> ends (or the
+        // next one starts, or the file does), at the depth its <loc> was found.
+        string? location = null;
+        string? lastmod = null;
+        var entryDepth = -1;
+
         while (!xml.EOF)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (location is not null && xml.Depth <= entryDepth && xml.NodeType is XmlNodeType.EndElement or XmlNodeType.Element)
+            {
+                yield return new SitemapEntry(location, isIndex, lastmod);
+                (location, lastmod, entryDepth) = (null, null, -1);
+            }
+
             if (xml.NodeType == XmlNodeType.Element)
             {
                 if (!rootSeen)
@@ -74,13 +86,27 @@ internal static class SitemapReader
                     rootSeen = true;
                     isIndex = xml.LocalName == "sitemapindex";
                 }
-                else if (xml.LocalName == "loc" && IsSitemapNamespace(xml.NamespaceURI))
+                else if (xml.LocalName is "loc" or "lastmod" && IsSitemapNamespace(xml.NamespaceURI))
                 {
+                    var name = xml.LocalName;
+                    var depth = xml.Depth - 1;
+
                     // ReadElementContentAsString already moves the reader past the element.
-                    var location = (await xml.ReadElementContentAsStringAsync().ConfigureAwait(false)).Trim();
-                    if (location.Length > 0)
+                    var text = (await xml.ReadElementContentAsStringAsync().ConfigureAwait(false)).Trim();
+                    if (name == "loc" && text.Length > 0)
                     {
-                        yield return new SitemapEntry(location, isIndex);
+                        if (location is not null)
+                        {
+                            // A second <loc> in one entry, or one with no <url> around it: each is an entry of its own.
+                            yield return new SitemapEntry(location, isIndex, lastmod);
+                            lastmod = null;
+                        }
+
+                        (location, entryDepth) = (text, depth);
+                    }
+                    else if (name == "lastmod" && text.Length > 0)
+                    {
+                        lastmod = text;
                     }
 
                     continue;
@@ -91,6 +117,11 @@ internal static class SitemapReader
             {
                 break;
             }
+        }
+
+        if (location is not null)
+        {
+            yield return new SitemapEntry(location, isIndex, lastmod);
         }
     }
 

@@ -147,6 +147,8 @@ internal sealed class SitemapDiscoverer(
     {
         List<string> children = [];
         var batch = new List<OutLink>(BATCH_SIZE);
+        var lastmods = new List<long?>(BATCH_SIZE);
+        CountingStream? counted = null;
         var urlCount = 0;
         var isIndex = false;
         var bodyRead = false;
@@ -173,7 +175,10 @@ internal sealed class SitemapDiscoverer(
             else
             {
                 await using var body = await HttpFetcher.OpenBodyAsync(response, timeout.Token).ConfigureAwait(false);
-                await using var content = IsGzipFile(uri, response.Content.Headers) ? new GZipStream(body, CompressionMode.Decompress) : body;
+                await using var unpacked = IsGzipFile(uri, response.Content.Headers) ? new GZipStream(body, CompressionMode.Decompress) : body;
+
+                // The protocol's 50 MB limit is on the file uncompressed: counted as it's read.
+                await using var content = counted = new CountingStream(unpacked);
                 var isText = MediaTypeOf(response.Content.Headers) == "text/plain" ||
                              uri.AbsolutePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase);
 
@@ -194,11 +199,13 @@ internal sealed class SitemapDiscoverer(
                     }
 
                     batch.Add(links.Create(target, LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null));
+                    lastmods.Add(SitemapLastmod.Parse(entry.Lastmod));
                     urlCount++;
                     if (batch.Count == BATCH_SIZE)
                     {
-                        await writer.DiscoverAsync(batch, DiscoverySource.Sitemap, sitemapId, cancellationToken).ConfigureAwait(false);
+                        await writer.DiscoverAsync(batch, lastmods, sitemapId, cancellationToken).ConfigureAwait(false);
                         batch = new List<OutLink>(BATCH_SIZE);
+                        lastmods = new List<long?>(BATCH_SIZE);
                     }
                 }
             }
@@ -216,12 +223,14 @@ internal sealed class SitemapDiscoverer(
         // Also after a parse error or a timeout part-way through: the URLs read before it are listed, and counted.
         if (batch.Count > 0)
         {
-            await writer.DiscoverAsync(batch, DiscoverySource.Sitemap, sitemapId, cancellationToken).ConfigureAwait(false);
+            await writer.DiscoverAsync(batch, lastmods, sitemapId, cancellationToken).ConfigureAwait(false);
         }
 
         // Every sitemap the file lists is counted, whether or not the crawl goes on to read it: past its limit of sitemaps,
         // or of nesting, an index still says how many it names.
-        await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null), cancellationToken)
+        await writer.CompleteSitemapAsync(
+                new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null, bodyRead ? counted?.BytesRead : null),
+                cancellationToken)
             .ConfigureAwait(false);
         return (children, urlCount);
     }

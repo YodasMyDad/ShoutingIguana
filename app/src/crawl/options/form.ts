@@ -190,6 +190,22 @@ export function withoutCredentials(proxyUrl: string): string {
 }
 
 /** Whether a proxy address carries a user name or password. */
+/** The form holds a secret: a proxy with a user name or password, or a header with a value. */
+export function formHasSecrets(form: Pick<CrawlForm, 'proxyUrl' | 'headers'>): boolean {
+  return hasCredentials(form.proxyUrl) || form.headers.some((row) => row.value !== '');
+}
+
+/**
+ * A crawl's options came back without its secrets (none kept for it, this session or remembered): a header with no
+ * value, or a proxy whose login was taken out. "Crawl again with these" then asks for them again.
+ */
+export function missingSecrets(options: CrawlOptions): boolean {
+  return (
+    options.hasRedactedProxyCredentials === true ||
+    Object.values(options.extraHeaders ?? {}).some((value) => value === '')
+  );
+}
+
 export function hasCredentials(proxyUrl: string): boolean {
   try {
     const url = new URL(proxyUrl.trim());

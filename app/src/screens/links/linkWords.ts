@@ -25,6 +25,15 @@ const END_WORDS = { from: 'Source', to: 'Target' } as const;
  */
 export const FOLLOW_COLUMN = 'follow';
 
+/**
+ * The pixel size column (step 3b): one column for a target's `pixelWidth` and `pixelHeight`, "896×600 px", as the
+ * Images preset shows them. The screen's own, as the follow column is: its two columns are what the query asks for.
+ */
+export const PIXELS_COLUMN = 'to.pixels';
+
+/** The engine's columns the pixel size column is drawn from. */
+export const PIXELS_PARTS = ['to.pixelWidth', 'to.pixelHeight'] as const;
+
 const OWN_COLUMNS: Record<string, string> = {
   id: 'Crawl order',
   kind: 'Kind',
@@ -65,6 +74,7 @@ function wordsFromId(id: string): string {
 export function linkColumnName(id: string): string {
   const own = OWN_COLUMNS[id];
   if (own) return own;
+  if (id === PIXELS_COLUMN) return 'Target pixel size';
   const end = endColumn(id);
   if (!end) return wordsFromId(id);
   if (end.column === 'id' || end.column === 'url') return `${END_WORDS[end.end]} URL`;
@@ -73,6 +83,7 @@ export function linkColumnName(id: string): string {
 
 /** A column's name within its group, where the group's heading says whose it is: "Status" under "Its target". */
 export function linkColumnShortName(id: string): string {
+  if (id === PIXELS_COLUMN) return 'Pixel size';
   const end = endColumn(id);
   if (!end) return linkColumnName(id);
   if (end.column === 'id' || end.column === 'url') return 'URL';

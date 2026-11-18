@@ -38,7 +38,11 @@ const connect = () => setDirectConnection({ baseUrl: 'mock://sidecar', token: 'm
 
 /** Every story starts clean: nothing hidden, nothing live. */
 function fresh() {
-  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
+  updateSettings({
+    hiddenChecks: [],
+    hiddenChecksByCrawl: {},
+    checkSort: { advanced: 'fixFirst', simple: 'fixFirst' },
+  });
   liveStore.reset();
 }
 
@@ -590,4 +594,105 @@ export const EvidenceRedirectChains: Story = {
 export const EvidenceBlockedByRobots: Story = {
   loaders: [evidence],
   render: () => <IssuesApp path={`${ISSUES}/blocked-by-robots${evidenceGroup(null)}`} />,
+};
+
+// ---------------------------------------------------------------------------------------------- Step 3b: what matters
+
+/** The links to broken URLs, a check whose pages a fix of the 404s clears, beside the stories' own catalog. */
+const BROKEN_LINKS = {
+  ...ISSUES_CHECKS.checks[2]!,
+  id: 'broken-internal-links',
+  severity: 'error' as const,
+  title: 'Links to broken internal URLs',
+};
+
+/**
+ * The stories' own crawl as the step 3b sidecar analyses it: each check's things to change (the links without text
+ * are 2, one in the template), what a fix of the 404s clears (the broken links on all 3 pages), and the score's points.
+ */
+const WHAT_MATTERS: IssuesSidecarOptions = {
+  checks: { ...ISSUES_CHECKS, checks: [...ISSUES_CHECKS.checks, BROKEN_LINKS] },
+  analysis: {
+    ...ISSUES_ANALYSIS,
+    fixFirst: ['internal-client-error', 'broken-internal-links', 'empty-anchor-text', 'title-too-long'],
+    counts: [
+      {
+        checkId: 'internal-client-error',
+        count: 2,
+        causes: 2,
+        templateCauses: 0,
+        clears: [{ checkId: 'broken-internal-links', pages: 3, all: true }],
+      },
+      { checkId: 'internal-server-error', count: 0, causes: null, templateCauses: null, clears: [] },
+      { checkId: 'empty-anchor-text', count: 6, causes: 2, templateCauses: 1, clears: [] },
+      { checkId: 'title-too-long', count: 3, causes: 3, templateCauses: 0, clears: [] },
+      { checkId: 'broken-internal-links', count: 3, causes: 2, templateCauses: 0, clears: [] },
+    ],
+    score: {
+      version: 1,
+      value: 92,
+      band: 'veryGood',
+      lost: 8,
+      beforeCeiling: 92,
+      heldBySerious: false,
+      partial: false,
+      covers: { pages: 6, urls: 40, checksRun: 5, checksSkipped: 1, complete: true, reason: null, blockedByRobots: 0 },
+      lines: [
+        {
+          checkId: 'internal-client-error',
+          severity: 'error',
+          count: 2,
+          of: 40,
+          unit: 'urls',
+          extent: 'some',
+          points: 2,
+        },
+        {
+          checkId: 'broken-internal-links',
+          severity: 'error',
+          count: 3,
+          of: 6,
+          unit: 'pages',
+          extent: 'most',
+          points: 6,
+        },
+        { checkId: 'empty-anchor-text', severity: 'notice', count: 6, of: 6, unit: 'pages', extent: 'most', points: 0 },
+        { checkId: 'title-too-long', severity: 'notice', count: 3, of: 6, unit: 'pages', extent: 'most', points: 0 },
+      ],
+      ifFixed: { checkIds: ['internal-client-error', 'broken-internal-links'], value: 100 },
+    },
+  },
+};
+
+/** One sort of the list, remembered for Advanced. */
+const sorted = (sort: 'fixFirst' | 'count' | 'points' | 'severity' | 'category') => () => {
+  own(WHAT_MATTERS);
+  updateSettings({ checkSort: { advanced: sort, simple: 'fixFirst' } });
+};
+
+/**
+ * The checks in the order to fix them (the default): the answer leads with the things to change; the 404s' page says
+ * what fixing them also clears, then its evidence, then why it matters and how to fix it.
+ */
+export const SortedToFixFirst: Story = {
+  loaders: [sorted('fixFirst')],
+  render: () => <IssuesApp path={`${ISSUES}/internal-client-error`} />,
+};
+
+/** By the points each check takes off the score, each row saying them; notices take none. */
+export const SortedByPoints: Story = {
+  loaders: [sorted('points')],
+  render: () => <IssuesApp path={`${ISSUES}/broken-internal-links`} />,
+};
+
+/** By severity: a part for each, in the order to fix them within it. */
+export const SortedBySeverity: Story = {
+  loaders: [sorted('severity')],
+  render: () => <IssuesApp path={`${ISSUES}/internal-client-error`} />,
+};
+
+/** The links without text: 6 pages, 2 things to change, 1 of them in the template. */
+export const ThingsToChange: Story = {
+  loaders: [sorted('fixFirst')],
+  render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text`} />,
 };

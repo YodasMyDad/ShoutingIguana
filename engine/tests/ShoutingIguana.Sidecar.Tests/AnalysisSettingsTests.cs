@@ -60,7 +60,7 @@ public sealed class AnalysisSettingsTests : IAsyncLifetime
             var id = (string)limit["id"]!;
             Assert.Equal((engine[id], engine[id], engine[id]), ((long)limit["value"]!, (long)limit["default"]!, (long)state["settings"]![id]!));
             Assert.InRange((long)limit["default"]!, (long)limit["min"]!, (long)limit["max"]!);
-            Assert.Contains((string)limit["unit"]!, new[] { "characters", "pixels", "words", "bits", "bytes", "ms", "links", "clicks" });
+            Assert.Contains((string)limit["unit"]!, new[] { "characters", "pixels", "px", "words", "bits", "bytes", "ms", "links", "clicks" });
             Assert.EndsWith(".", (string)limit["description"]!, StringComparison.Ordinal);
             Assert.InRange(((string)limit["description"]!).Length, 20, 200);
         }

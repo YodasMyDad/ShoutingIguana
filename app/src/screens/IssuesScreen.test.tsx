@@ -18,6 +18,7 @@ import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import {
   ANCHOR_ROWS,
   ISSUES_ANALYSIS,
+  ISSUES_CHECKS,
   ISSUES_CHECKS_WITHOUT_SUBJECTS,
   ISSUE_GROUPS,
   issuesRoutes,
@@ -67,7 +68,11 @@ beforeEach(() => {
 });
 afterEach(() => {
   uninstall();
-  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} });
+  updateSettings({
+    hiddenChecks: [],
+    hiddenChecksByCrawl: {},
+    checkSort: { advanced: 'fixFirst', simple: 'fixFirst' },
+  });
   setTransport(fakeSidecar([]));
 });
 
@@ -105,6 +110,8 @@ describe('the Issues screen', () => {
   });
 
   it('lists checks by category, a skipped one with its reason, and the passed ones only when asked', async () => {
+    // In the order the list had before it could be sorted: by category.
+    updateSettings({ checkSort: { advanced: 'category', simple: 'fixFirst' } });
     sidecar();
     await open(`${ISSUES}/internal-client-error`);
     const list = await screen.findByRole('listbox', { name: 'Checks' });
@@ -121,7 +128,221 @@ describe('the Issues screen', () => {
     expect(within(list).getByRole('option', { name: 'Internal URL returns 5xx Passed' })).toBeVisible();
   });
 
+  it('lists the checks in the order to fix them unless another is chosen, which is remembered for Advanced', async () => {
+    sidecar({
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        fixFirst: ['internal-client-error', 'empty-anchor-text', 'title-too-long'],
+        counts: ISSUES_ANALYSIS.counts.map((count) =>
+          count.checkId === 'internal-client-error' ? { ...count, causes: 2, templateCauses: 0, clears: [] } : count,
+        ),
+      },
+    });
+    await open(`${ISSUES}/internal-client-error`);
+    const list = await screen.findByRole('listbox', { name: 'Checks' });
+    const parts = () =>
+      within(list)
+        .getAllByRole('group')
+        .map((group) => [
+          group.querySelector(`[id="${group.getAttribute('aria-labelledby')}"]`)?.textContent.trim(),
+          within(group)
+            .getAllByRole('option')
+            .map((option) => option.getAttribute('data-check')),
+        ]);
+    expect(parts()).toEqual([
+      ['Found issues', ['internal-client-error', 'empty-anchor-text', 'title-too-long']],
+      ['Skipped', ['orphan-page']],
+    ]);
+
+    // By count: the most URLs first; the choice is the list's, for Advanced, and kept.
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Sort: Fix first' }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Most URLs' }));
+    await waitFor(() =>
+      expect(parts()[0]).toEqual(['Found issues', ['empty-anchor-text', 'title-too-long', 'internal-client-error']]),
+    );
+    expect(getSettings().checkSort).toEqual({ advanced: 'count', simple: 'fixFirst' });
+    expect(screen.getByRole('button', { name: 'Sort: Most URLs' })).toBeVisible();
+
+    // By severity: a part for each.
+    updateSettings({ checkSort: { advanced: 'severity', simple: 'fixFirst' } });
+    await waitFor(() => expect(parts().map(([title]) => title)).toEqual(['Errors', 'Notices', 'Skipped']));
+  });
+
+  it('shows each check’s points while sorted by them, notices taking none', async () => {
+    updateSettings({ checkSort: { advanced: 'points', simple: 'fixFirst' } });
+    sidecar({
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        fixFirst: ['internal-client-error', 'empty-anchor-text', 'title-too-long'],
+        score: {
+          version: 1,
+          value: 96,
+          band: 'veryGood',
+          lost: 4,
+          beforeCeiling: 96,
+          heldBySerious: false,
+          partial: false,
+          covers: {
+            pages: 6,
+            urls: 40,
+            checksRun: 4,
+            checksSkipped: 1,
+            complete: true,
+            reason: null,
+            blockedByRobots: 0,
+          },
+          lines: [
+            {
+              checkId: 'internal-client-error',
+              severity: 'error',
+              count: 2,
+              of: 40,
+              unit: 'urls',
+              extent: 'some',
+              points: 4,
+            },
+            {
+              checkId: 'empty-anchor-text',
+              severity: 'notice',
+              count: 6,
+              of: 6,
+              unit: 'pages',
+              extent: 'most',
+              points: 0,
+            },
+            {
+              checkId: 'title-too-long',
+              severity: 'notice',
+              count: 3,
+              of: 6,
+              unit: 'pages',
+              extent: 'most',
+              points: 0,
+            },
+          ],
+          ifFixed: { checkIds: ['internal-client-error'], value: 100 },
+        },
+      },
+    });
+    await open(`${ISSUES}/internal-client-error`);
+    const list = await screen.findByRole('listbox', { name: 'Checks' });
+    expect(within(list).getByRole('option', { name: /^Error Internal URL returns 4xx −4 points/ })).toBeVisible();
+    expect(within(list).getByRole('option', { name: /^Notice Title too long No points/ })).toBeVisible();
+  });
+
+  it('says the things to change and what a fix also clears, then the evidence ahead of why and how', async () => {
+    const brokenLinks = {
+      ...ISSUES_CHECKS.checks[2]!,
+      id: 'broken-internal-links',
+      severity: 'error' as const,
+      title: 'Links to broken internal URLs',
+    };
+    sidecar({
+      checks: { ...ISSUES_CHECKS, checks: [...ISSUES_CHECKS.checks, brokenLinks] },
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        counts: [
+          ...ISSUES_ANALYSIS.counts.map((count) =>
+            count.checkId === 'internal-client-error'
+              ? {
+                  ...count,
+                  causes: 2,
+                  templateCauses: 0,
+                  clears: [{ checkId: 'broken-internal-links', pages: 3, all: true }],
+                }
+              : count,
+          ),
+          { checkId: 'broken-internal-links', count: 3, causes: 2, templateCauses: 0, clears: [] },
+        ],
+        score: {
+          version: 1,
+          value: 92,
+          band: 'veryGood',
+          lost: 8,
+          beforeCeiling: 92,
+          heldBySerious: false,
+          partial: false,
+          covers: {
+            pages: 6,
+            urls: 40,
+            checksRun: 5,
+            checksSkipped: 1,
+            complete: true,
+            reason: null,
+            blockedByRobots: 0,
+          },
+          lines: [
+            {
+              checkId: 'internal-client-error',
+              severity: 'error',
+              count: 2,
+              of: 40,
+              unit: 'urls',
+              extent: 'some',
+              points: 4,
+            },
+            {
+              checkId: 'broken-internal-links',
+              severity: 'error',
+              count: 3,
+              of: 6,
+              unit: 'pages',
+              extent: 'most',
+              points: 4,
+            },
+          ],
+          ifFixed: { checkIds: ['internal-client-error', 'broken-internal-links'], value: 100 },
+        },
+      },
+    });
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    // A 404 is a thing to change a URL: nothing to say beyond the count.
+    expect(screen.queryByText('Things to change', { selector: '.si-stat__label' })).toBeNull();
+    const related = screen.getByRole('list', { name: 'Related checks' });
+    expect(related).toHaveTextContent(
+      'Fixing this also clears Links to broken internal URLs: all 3 pages it flags (4 points back).',
+    );
+    fireEvent.click(within(related).getByRole('link', { name: 'Links to broken internal URLs' }));
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/broken-internal-links`));
+  });
+
+  it('says the things to change when a check’s URLs share causes, with those in the template', async () => {
+    sidecar({
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        counts: ISSUES_ANALYSIS.counts.map((count) =>
+          count.checkId === 'empty-anchor-text' ? { ...count, causes: 2, templateCauses: 1, clears: [] } : count,
+        ),
+      },
+    });
+    await open(`${ISSUES}/empty-anchor-text`);
+    await screen.findByRole('heading', { name: 'Internal links without anchor text', level: 2 });
+    expect(screen.getByText('Things to change', { selector: '.si-stat__label' }).parentElement).toHaveTextContent(
+      /^Things to change21 in the site’s template$/,
+    );
+  });
+
+  it('puts what the check flags ahead of why it matters and how to fix it, a button away', async () => {
+    sidecar();
+    await open(`${ISSUES}/title-too-long`);
+    const affected = await screen.findByRole('heading', { name: 'Affected pages', level: 3 });
+    const why = screen.getByRole('heading', { name: 'Why it matters', level: 3 });
+    expect(affected.compareDocumentPosition(why) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: 'What’s wrong', level: 3 }).compareDocumentPosition(affected) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+    fireEvent.click(screen.getByRole('button', { name: 'Why it matters and how to fix it' }));
+    expect(scrolled).toHaveBeenCalled();
+    scrolled.mockRestore();
+    expect(document.activeElement).toBe(why.closest('[tabindex="-1"]'));
+  });
+
   it('moves the selection with the arrow keys, replacing the address, and a click is a new place', async () => {
+    // In the order the list had before it could be sorted: by category.
+    updateSettings({ checkSort: { advanced: 'category', simple: 'fixFirst' } });
     sidecar();
     const { router, history } = await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('listbox');
@@ -158,6 +379,8 @@ describe('the Issues screen', () => {
   });
 
   it('keeps focus where it is on J elsewhere, and announces the check it moved to', async () => {
+    // In the order the list had before it could be sorted: by category.
+    updateSettings({ checkSort: { advanced: 'category', simple: 'fixFirst' } });
     const heard: string[] = [];
     const stop = onAnnounce((message) => heard.push(message));
     sidecar();
@@ -952,6 +1175,8 @@ describe('a check’s count, worded by what the check flags', () => {
   });
 
   it('says only what’s known of a check that doesn’t say what it flags: URLs, of the URLs crawled', async () => {
+    // In the order the list had before it could be sorted: by category.
+    updateSettings({ checkSort: { advanced: 'category', simple: 'fixFirst' } });
     const heard: string[] = [];
     const stop = onAnnounce((message) => heard.push(message));
     sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -35,13 +36,15 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // robots.txt declares /sitemap.xml, an index of the pages' sitemap, one of the pages only sitemaps list, and one that
         // doesn't exist.
         var index = list.Sitemaps[0];
-        Assert.Equal(($"{Site}/sitemap.xml", null, SitemapSource.RobotsTxt, SitemapState.Read, 200, true, 0, 3, null),
+        Assert.Equal(($"{Site}/sitemap.xml", null, SitemapSource.RobotsTxt, SitemapState.Read, 200, true, 0, 4, null),
             (index.Url, index.ParentId, index.FoundVia, index.State, index.StatusCode, index.IsIndex, index.Entries, index.Sitemaps, index.Error));
-        Assert.Equal([$"{Site}/sitemaps/pages-0.xml", $"{Site}/sitemaps/extra.xml", $"{Site}/sitemaps/missing.xml"], list.Sitemaps.Skip(1).Select(sitemap => sitemap.Url));
+        Assert.Equal([$"{Site}/sitemaps/pages-0.xml", $"{Site}/sitemaps/extra.xml", $"{Site}/sitemaps/empty.xml", $"{Site}/sitemaps/missing.xml"],
+            list.Sitemaps.Skip(1).Select(sitemap => sitemap.Url));
         Assert.All(list.Sitemaps.Skip(1), sitemap => Assert.Equal((index.Id, SitemapSource.Index, 0, false), (sitemap.ParentId, sitemap.FoundVia, sitemap.Sitemaps, sitemap.IsIndex)));
-        var (pages, extra, missing) = (list.Sitemaps[1], list.Sitemaps[2], list.Sitemaps[3]);
+        var (pages, extra, missing) = (list.Sitemaps[1], list.Sitemaps[2], list.Sitemaps[4]);
         Assert.Equal((SitemapState.Failed, 404, "404 Not Found", new SitemapUrlCounts(0, 0, 0, 0)), (missing.State, missing.StatusCode, missing.Error, missing.Urls));
-        Assert.Equal((SitemapState.Read, 200, null, GridCrawl.PAGES), (pages.State, pages.StatusCode, pages.Error, pages.Entries));
+        // Every page, and the thin plant again (with a lastmod in the year 3000).
+        Assert.Equal((SitemapState.Read, 200, null, GridCrawl.PAGES + 1), (pages.State, pages.StatusCode, pages.Error, pages.Entries));
         Assert.Equal((SitemapState.Read, TestCrawls.Count(crawl.Path, $"SELECT url_count FROM sitemaps WHERE id = {extra.Id}")), (extra.State, extra.Entries));
         Assert.True(extra.Entries >= Planted.GetExpectations().Orphans + 3);
 
@@ -59,7 +62,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         Assert.Equal((1, 2, 0, 0), (extra.Urls.RobotsDisallowed, extra.Urls.RedirectingOrBroken, pages.Urls.RobotsDisallowed, pages.Urls.RedirectingOrBroken));
         Assert.Equal((1, 2), (index.Urls.RobotsDisallowed, index.Urls.RedirectingOrBroken));
 
-        Assert.Equal(pages.Urls.Listed + extra.Urls.Listed, index.Urls.Listed);
+        // The thin plant is in both, and the index counts it once.
+        Assert.Equal(pages.Urls.Listed + extra.Urls.Listed - 1, index.Urls.Listed);
         Assert.True(pages.Urls.NonIndexable > 0 && pages.Urls.Indexable > pages.Urls.NonIndexable && extra.Urls.Fetched == extra.Urls.Listed);
 
         // Every count opens its URLs in the sitemap's grid, with or without a URL summary.
@@ -137,8 +141,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // A URL two sitemaps list counts once under their index: here the URL robots.txt refused and the two that redirect
         // or are gone, listed by the pages' sitemap too, and seven of its pages by the extra one.
         var twice = After("""
-            INSERT INTO sitemap_urls SELECT 3, url_id FROM sitemap_urls WHERE sitemap_id = 2 ORDER BY url_id LIMIT 7;
-            INSERT INTO sitemap_urls SELECT 2, m.url_id FROM sitemap_urls m JOIN responses r ON r.url_id = m.url_id WHERE m.sitemap_id = 3 AND r.outcome <> 0
+            INSERT INTO sitemap_urls (sitemap_id, url_id) SELECT 3, url_id FROM sitemap_urls WHERE sitemap_id = 2 ORDER BY url_id LIMIT 7;
+            INSERT INTO sitemap_urls (sitemap_id, url_id) SELECT 2, m.url_id FROM sitemap_urls m JOIN responses r ON r.url_id = m.url_id WHERE m.sitemap_id = 3 AND r.outcome <> 0
             """);
         Assert.Equal(index.Urls, twice.Sitemaps[0].Urls);
         Assert.Equal((1, 2), (twice.Sitemaps[1].Urls.RobotsDisallowed, twice.Sitemaps[1].Urls.RedirectingOrBroken));
@@ -160,7 +164,7 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
             UPDATE sitemaps SET status_code = NULL, error = 'Not read: the crawler reads at most 1,000 sitemaps' WHERE id = 3;
             UPDATE sitemaps SET status_code = 200, error = 'Unexpected end of file' WHERE id = 4;
             """);
-        Assert.Equal([SitemapState.Read, SitemapState.Pending, SitemapState.NotRead, SitemapState.Failed], states.Sitemaps.Select(sitemap => sitemap.State));
+        Assert.Equal([SitemapState.Read, SitemapState.Pending, SitemapState.NotRead, SitemapState.Failed, SitemapState.Failed], states.Sitemaps.Select(sitemap => sitemap.State));
 
         // How far the crawl got with them.
         Assert.Equal(SitemapDiscovery.Unfinished, After("UPDATE crawl SET sitemaps_done = 0").Discovery);
@@ -263,7 +267,7 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // The blocked URLs, in crawl order, each with the line and its text; narrowed to a line or a reason; paged.
         var all = RobotsReader.ReadBlocked(crawl.Path, Site)!;
         Assert.Equal((Site, blocked.Count, blocked.Count, 0), (all.Origin, all.Total, all.Matching, all.Offset));
-        Assert.Equal(blocked.Select(id => new RobotsBlockedUrl(id, (string)Row(id, "url")!, RobotsBlockReason.Rule, 2, "Disallow: /private/", null)), all.Rows);
+        Assert.Equal(blocked.Select(id => Why(new RobotsBlockedUrl(id, (string)Row(id, "url")!, RobotsBlockReason.Rule, 2, "Disallow: /private/", null))), all.Rows.Select(Why));
         Assert.All(all.Rows, row => Assert.StartsWith($"{Site}/private/", row.Url, StringComparison.Ordinal));
         Assert.Equal(all.Rows, RobotsReader.ReadBlocked(crawl.Path, Site, line: 2, reason: RobotsBlockReason.Rule)!.Rows);
         Assert.Equal((blocked.Count, 0), (RobotsReader.ReadBlocked(crawl.Path, Site, line: 1)!.Total, RobotsReader.ReadBlocked(crawl.Path, Site, line: 1)!.Matching));
@@ -274,8 +278,82 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         Assert.Null(RobotsReader.ReadFile(crawl.Path, "https://elsewhere.example"));
         Assert.Null(RobotsReader.ReadBlocked(crawl.Path, "https://elsewhere.example"));
 
-        // The same without a URL summary: nothing here reads it.
-        Assert.Equal(all.Rows, RobotsReader.ReadBlocked(crawl.Changed, Site)!.Rows);
+        // The same without a URL summary: why each was refused reads nothing of it.
+        Assert.Equal(all.Rows.Select(Why), RobotsReader.ReadBlocked(crawl.Changed, Site)!.Rows.Select(Why));
+    }
+
+    /// <summary>
+    /// What blocking each URL costs, as the analysis counted it: the pages that link to it, whether a sitemap lists it (and
+    /// which), and whether a menu links to it. One in a sitemap or a menu is a conflict: the site asks for it and blocks it.
+    /// The conflicts can be listed alone. A crawl changed since its analysis knows none of it, and says so with nulls.
+    /// </summary>
+    [Fact]
+    public async Task ABlockedUrlSaysWhatLinksToItWhetherASitemapListsItAndWhetherThatConflicts()
+    {
+        var all = RobotsReader.ReadBlocked(crawl.Path, Site, limit: 1_000)!;
+        foreach (var row in all.Rows)
+        {
+            var sitemaps = TestCrawls.Rows(crawl.Path, $"SELECT s.id || ' ' || s.url FROM sitemaps s JOIN sitemap_urls m ON m.sitemap_id = s.id WHERE m.url_id = {row.Id} ORDER BY s.id");
+            var first = sitemaps.FirstOrDefault()?.Split(' ', 2);
+            Assert.Equal(
+                ((long?)(long)Row(row.Id, "linkingPages")!, (bool?)Row(row.Id, "inSitemap"), (bool?)false, sitemaps.Count > 0 ? sitemaps.Count : (long?)null,
+                    first is null ? null : new SitemapRef(int.Parse(first[0], System.Globalization.CultureInfo.InvariantCulture), first[1]),
+                    (bool?)((bool?)Row(row.Id, "inSitemap") == true)),
+                (row.LinkingPages, row.InSitemap, row.InMenu, row.Sitemaps, row.Sitemap, row.Conflict));
+        }
+
+        // The planted cases: pages link to the private area, and a sitemap lists one private URL nothing links to.
+        var listed = Assert.Single(all.Rows, row => row.InSitemap == true);
+        Assert.Equal(($"{Site}/private/listed", 0L, true), (listed.Url, listed.LinkingPages, listed.Conflict));
+        Assert.Contains(all.Rows, row => row.LinkingPages > 0 && row.Conflict == false);
+        Assert.Equal(1L, all.Conflicts);
+
+        // The conflicts alone, of the origin's blocked URLs; with a line, those of it.
+        var conflicts = RobotsReader.ReadBlocked(crawl.Path, Site, conflict: true)!;
+        Assert.Equal((all.Total, 1L, (long?)1L), (conflicts.Total, conflicts.Matching, conflicts.Conflicts));
+        Assert.Equal([listed], conflicts.Rows);
+        Assert.Equal(1L, RobotsReader.ReadBlocked(crawl.Path, Site, line: 2, conflict: true)!.Matching);
+        Assert.Equal(0L, RobotsReader.ReadBlocked(crawl.Path, Site, line: 1, conflict: true)!.Matching);
+        Assert.Equal(all.Total - 1, RobotsReader.ReadBlocked(crawl.Path, Site, conflict: false)!.Matching);
+
+        // A menu's link to a blocked URL makes it a conflict, read from the link summary and, without one, from the links.
+        var linked = all.Rows.Where(row => row.LinkingPages > 0).MaxBy(row => row.LinkingPages)!;
+        var menu = crawl.Copy();
+        Change(menu, $"UPDATE links SET position = {(int)LinkPosition.Navigation} WHERE rowid = (SELECT rowid FROM links WHERE to_id = $id AND kind = {(int)LinkKind.Hyperlink} AND from_id <> to_id LIMIT 1)",
+            ("$id", linked.Id));
+        Stamp(menu);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(menu);
+        foreach (var withoutLinkSummary in new[] { false, true })
+        {
+            GridReadContext.ReadWithoutLinkSummary = withoutLinkSummary;
+            try
+            {
+                var read = RobotsReader.ReadBlocked(menu, Site, limit: 1_000)!;
+                var row = read.Rows.Single(row => row.Id == linked.Id);
+                Assert.Equal((true, true, linked.LinkingPages, 2L), (row.InMenu, row.Conflict, row.LinkingPages, read.Conflicts));
+                Assert.All(read.Rows.Where(other => other.Id != linked.Id), other => Assert.False(other.InMenu));
+                Assert.Equal(new[] { listed.Id, linked.Id }.Order(), RobotsReader.ReadBlocked(menu, Site, conflict: true)!.Rows.Select(other => other.Id).Order());
+            }
+            finally
+            {
+                GridReadContext.ReadWithoutLinkSummary = false;
+            }
+        }
+
+        // A page's own link to itself isn't a menu linking to it.
+        var self = crawl.Copy();
+        Change(self, $"INSERT INTO links (from_id, to_id, kind, flags, position, text, fragment) VALUES ($id, $id, {(int)LinkKind.Hyperlink}, 0, {(int)LinkPosition.Navigation}, 'Me', NULL)",
+            ("$id", linked.Id));
+        Stamp(self);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(self);
+        Assert.False(RobotsReader.ReadBlocked(self, Site, urlId: linked.Id)!.Rows.Single().InMenu);
+
+        // Changed since its analysis: nothing of it is known, and no URL is listed as a conflict.
+        var changed = RobotsReader.ReadBlocked(crawl.Changed, Site, limit: 1_000)!;
+        Assert.All(changed.Rows, row => Assert.Equal((null, null, null, null, null, null), (row.LinkingPages, row.InSitemap, row.InMenu, row.Sitemaps, row.Sitemap, row.Conflict)));
+        Assert.Null(changed.Conflicts);
+        var none = RobotsReader.ReadBlocked(crawl.Changed, Site, conflict: true)!;
+        Assert.Equal((all.Total, 0L, null), (none.Total, none.Matching, none.Conflicts));
     }
 
     /// <summary>
@@ -365,8 +443,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         // robots.txt couldn't be read when a URL came up: the crawl stored how with the URL.
         var one = blocked[1].Id;
         var failedOnce = With("UPDATE responses SET error = 'robots.txt unreachable: HTTP 503' WHERE url_id = $id", ("$id", one));
-        Assert.Equal(new RobotsBlockedUrl(one, blocked[1].Url, RobotsBlockReason.Unreachable, null, null, "HTTP 503"),
-            Assert.Single(RobotsReader.ReadBlocked(failedOnce, Site, reason: RobotsBlockReason.Unreachable)!.Rows));
+        Assert.Equal(Why(new RobotsBlockedUrl(one, blocked[1].Url, RobotsBlockReason.Unreachable, null, null, "HTTP 503")),
+            Why(Assert.Single(RobotsReader.ReadBlocked(failedOnce, Site, reason: RobotsBlockReason.Unreachable)!.Rows)));
         Assert.Equal((new RobotsUnmatched(1, 0), blocked.Count - 1), (RobotsReader.ReadFile(failedOnce, Site)!.Unmatched, RobotsReader.ReadFile(failedOnce, Site)!.Lines[1].Blocked));
 
         // Or the origin's own answer says so, for a crawl by an engine that didn't: the file has no lines to show.
@@ -513,7 +591,11 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
                 // The list, asked for that URL alone: its one row, of the origin's total.
                 var one = RobotsReader.ReadBlocked(path, Site, urlId: row.Id)!;
                 Assert.Equal((blocked.Count, 1L), (one.Total, one.Matching));
-                Assert.Equal([row], one.Rows);
+                Assert.Equal([Why(row)], one.Rows.Select(Why));
+                if (path == crawl.Path)
+                {
+                    Assert.Equal([row], one.Rows);
+                }
             }
         }
 
@@ -612,16 +694,16 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
     public void AnIndexSaysHowManySitemapsItsFileLists()
     {
         var list = SitemapListReader.Read(crawl.Path).Sitemaps;
-        var (index, pages, extra, missing) = (list[0], list[1], list[2], list[3]);
-        Assert.Equal((3, 3), (index.ListedSitemaps, index.Sitemaps));
-        Assert.Equal((0, 0, null), (pages.ListedSitemaps, extra.ListedSitemaps, missing.ListedSitemaps));
+        var (index, pages, extra, empty, missing) = (list[0], list[1], list[2], list[3], list[4]);
+        Assert.Equal((4, 4), (index.ListedSitemaps, index.Sitemaps));
+        Assert.Equal((0, 0, 0, null), (pages.ListedSitemaps, extra.ListedSitemaps, empty.ListedSitemaps, missing.ListedSitemaps));
         Assert.Equal(SitemapState.Failed, missing.State);
 
         // The crawl has fewer than the file lists where it didn't go on to read them all.
         var fewer = crawl.Copy();
         Change(fewer, "UPDATE sitemaps SET listed_sitemaps = 5000 WHERE id = $id", ("$id", index.Id));
         var over = SitemapListReader.Read(fewer).Sitemaps[0];
-        Assert.Equal((5_000, 3), (over.ListedSitemaps, over.Sitemaps));
+        Assert.Equal((5_000, 4), (over.ListedSitemaps, over.Sitemaps));
 
         // A file from before the count was kept has no column for it: nothing is said, and nothing fails.
         var earlier = crawl.Copy();
@@ -644,4 +726,8 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
     ];
 
     private object? Row(int id, string column) => crawl.Reference.Rows[id][column];
+
+    /// <summary>Why a URL was refused, without what blocking it costs, which only an analysis counts.</summary>
+    private static (int Id, string Url, RobotsBlockReason Reason, int? Line, string? Rule, string? Error) Why(RobotsBlockedUrl row) =>
+        (row.Id, row.Url, row.Reason, row.Line, row.Rule, row.Error);
 }

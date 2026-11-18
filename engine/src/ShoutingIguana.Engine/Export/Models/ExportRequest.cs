@@ -41,6 +41,9 @@ public sealed record ExportRequest
     /// <summary>For <see cref="ExportKind.RobotsBlocked"/>: only the URLs refused for this reason.</summary>
     public RobotsBlockReason? Reason { get; init; }
 
+    /// <summary>For <see cref="ExportKind.RobotsBlocked"/>: only the URLs a sitemap lists or a menu links to (true), or only the others (false).</summary>
+    public bool? Conflict { get; init; }
+
     /// <summary>For <see cref="ExportKind.IssueRows"/> and <see cref="ExportKind.Check"/>: the check.</summary>
     public string? CheckId { get; init; }
 

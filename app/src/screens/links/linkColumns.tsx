@@ -6,15 +6,20 @@ import type { ChooserGroup } from '../../grid/ColumnChooser';
 import type { FilterColumn, FilterGroup } from '../../grid/filterEditing';
 import type { GridColumn } from '../../grid/types';
 import { midPhrase } from '../../grid/urlFilterWords';
-import { objectCellWords } from '../../crawl/evidence';
+import { objectCellWords, pixelsWords } from '../../crawl/evidence';
 import { FLAG_WORDS } from '../../inspector/words';
 import { urlStatusWords } from '../urls/urlColumns';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
+import { ImageThumb } from '../../ui/ImageThumb';
+import { isBrokenImage } from '../../ui/imageFacts';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
+import { RESOURCE_LINK_KINDS } from '../../ui/urlText';
 import {
   FOLLOW_COLUMN,
   LINK_GROUP_TITLES,
+  PIXELS_COLUMN,
+  PIXELS_PARTS,
   endColumn,
   linkColumnGroup,
   linkColumnName,
@@ -37,8 +42,11 @@ export const DEFAULT_LINK_COLUMNS: readonly string[] = [
 /** The engine's columns the follow column is drawn from. */
 export const FOLLOW_PARTS = ['followed', 'noFollow', 'sponsored', 'ugc'] as const;
 
-/** Columns that are never one of the grid's own: an end's id opens it, and the follow column shows the flags. */
-const NOT_CHOSEN: ReadonlySet<string> = new Set(['from.id', 'to.id', ...FOLLOW_PARTS]);
+/**
+ * Columns that are never one of the grid's own: an end's id opens it, the follow column shows the flags, and the pixel
+ * size column a target's width and height.
+ */
+const NOT_CHOSEN: ReadonlySet<string> = new Set(['from.id', 'to.id', ...FOLLOW_PARTS, ...PIXELS_PARTS]);
 
 const GROUPS: readonly LinkColumnGroup[] = ['link', 'from', 'to'];
 
@@ -48,6 +56,7 @@ const OWN_ORDER = [FOLLOW_COLUMN, 'text', 'kind', 'position', 'imageLink', 'self
 /** Whether the engine's list (or the follow column, which is made of it) has a column. */
 export function isLinkColumn(id: string, catalogue: readonly LinkColumn[]): boolean {
   if (id === FOLLOW_COLUMN) return FOLLOW_PARTS.every((part) => catalogue.some((column) => column.id === part));
+  if (id === PIXELS_COLUMN) return PIXELS_PARTS.every((part) => catalogue.some((column) => column.id === part));
   return !NOT_CHOSEN.has(id) && catalogue.some((column) => column.id === id);
 }
 
@@ -70,11 +79,14 @@ export function shownLinkColumns(
  * columns the follow column is made of, and, with an end's status, how it answered, so no status reads as what
  * happened ("Blocked by robots.txt") and never as a guess.
  */
-export function linkQueryColumns(shown: readonly string[]): string[] {
+export function linkQueryColumns(shown: readonly string[], images = false): string[] {
   // Each end's URL too, shown or not: a row's menu opens and copies the URL of the end it was opened in.
   const asked = new Set<string>(['from.id', 'to.id', 'from.url', 'to.url']);
+  // An image view draws each image's thumbnail, broken only where the image is known to be: how it answered.
+  if (images) ['to.statusCode', 'to.outcome'].forEach((column) => asked.add(column));
   for (const id of shown) {
     if (id === FOLLOW_COLUMN) FOLLOW_PARTS.forEach((part) => asked.add(part));
+    else if (id === PIXELS_COLUMN) PIXELS_PARTS.forEach((part) => asked.add(part));
     else asked.add(id);
     const end = endColumn(id);
     if (end?.column === 'statusCode') {
@@ -150,6 +162,8 @@ const URL_WIDTH = 300;
 const URL_MIN_WIDTH = 160;
 const END_WIDTHS: Record<string, number> = {
   url: URL_WIDTH,
+  pixels: 120,
+  sizeBytes: 104,
   statusCode: 128,
   indexability: 168,
   title: 280,
@@ -183,6 +197,33 @@ export interface LinkColumnContext {
   crawling?: boolean | undefined;
   /** A width for each URL column, when the grid has room to share between them. */
   urlWidth?: number | undefined;
+  /**
+   * The view's links are images alone (the Images preset): the target is "Image", shown with a picture of it, its text
+   * "Alt text", and the page it's on "Shown on".
+   */
+  images?: boolean | undefined;
+}
+
+/** What an image view calls the columns it's about: the image, not "the target". */
+const IMAGE_NAMES: Record<string, string> = {
+  'to.url': 'Image',
+  'to.sizeBytes': 'Size',
+  [PIXELS_COLUMN]: 'Pixel size',
+  text: 'Alt text',
+  'from.url': 'Shown on',
+  'to.statusCode': 'Image status',
+};
+
+/** The words of the composed pixel size column: "896×600 px", or nothing where either isn't known. */
+export function pixelsCellWords(row: LinkRow): string {
+  const width = row['to.pixelWidth'];
+  const height = row['to.pixelHeight'];
+  return pixelsWords(typeof width === 'number' ? width : null, typeof height === 'number' ? height : null) ?? '';
+}
+
+/** A view's columns as an export writes them: each composed column as the engine's columns it's made of. */
+export function linkExportShown(shown: readonly string[]): string[] {
+  return shown.flatMap((id) => (id === PIXELS_COLUMN ? [...PIXELS_PARTS] : [id]));
 }
 
 /** Why a column can't be sorted by: its header's tooltip, and what Enter on it says. */
@@ -195,7 +236,7 @@ function sortHint(name: string): string {
  * then drawn as text, and doesn't sort) and for the follow column, which is the screen's own.
  */
 function linkGridColumn(id: string, column: LinkColumn | undefined, context: LinkColumnContext): GridColumn<LinkRow> {
-  const name = linkColumnName(id);
+  const name = (context.images ? IMAGE_NAMES[id] : undefined) ?? linkColumnName(id);
   const type: UrlColumnType = column?.type ?? 'text';
   const sorted = context.sort.find((key) => key.column === id);
   const base = {
@@ -208,6 +249,13 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
   };
   const end = endColumn(id);
 
+  if (id === PIXELS_COLUMN) {
+    return {
+      ...base,
+      cell: (row) => pixelsCellWords(row) || muted('–'),
+      text: pixelsCellWords,
+    };
+  }
   if (id === FOLLOW_COLUMN) {
     return {
       ...base,
@@ -225,13 +273,31 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
         const url = row[`${end.end}.url`];
         const urlId = row[`${end.end}.id`];
         if (typeof url !== 'string') return '';
-        return (
+        // A target that's a file a page loads (an image, a stylesheet) is named by its file, never cut in its name.
+        const resource = typeof row.kind === 'string' && RESOURCE_LINK_KINDS.has(row.kind);
+        const file = end.end === 'to' && (context.images === true || resource);
+        const link = (
           <Url
             url={url}
             siteOrigin={context.siteOrigin}
             tabbable={false}
+            label={file ? 'file' : 'address'}
             {...(typeof urlId === 'number' ? { onGo: () => context.onOpen(urlId, end.end) } : {})}
           />
+        );
+        if (!context.images || end.end !== 'to') return link;
+        // An image is known by sight before by its address: its picture beside it, the address always there too.
+        const status = row['to.statusCode'];
+        const outcome = row['to.outcome'];
+        const broken = isBrokenImage({
+          statusCode: typeof status === 'number' ? status : null,
+          outcome: typeof outcome === 'string' ? (outcome as UrlOutcome) : null,
+        });
+        return (
+          <span className="flex min-w-0 items-center gap-2">
+            <ImageThumb url={url} broken={broken} />
+            <span className="min-w-0 flex-1">{link}</span>
+          </span>
         );
       },
       text: (row) => row[`${end.end}.url`] ?? '',
@@ -345,7 +411,11 @@ const NEEDS_ANALYSIS = 'needs an analysis';
 
 /** The chooser's groups: the link, its source page, its target, each with the columns that can be shown. */
 export function linkChooserGroups(catalogue: readonly LinkColumn[], summaryAvailable: boolean): ChooserGroup[] {
-  const ids = [FOLLOW_COLUMN, ...catalogue.map((column) => column.id)].filter((id) => isLinkColumn(id, catalogue));
+  // The pixel size column stands where the target's width would.
+  const ids = [
+    FOLLOW_COLUMN,
+    ...catalogue.map((column) => (column.id === PIXELS_PARTS[0] ? PIXELS_COLUMN : column.id)),
+  ].filter((id) => isLinkColumn(id, catalogue));
   const byId = new Map(catalogue.map((column) => [column.id, column]));
   const rank = (id: string) => (OWN_ORDER.includes(id) ? OWN_ORDER.indexOf(id) : OWN_ORDER.length);
   return GROUPS.map((group) => ({

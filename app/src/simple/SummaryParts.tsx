@@ -21,7 +21,8 @@ import {
   looksForWords,
   plainSummary,
   plainTitle,
-  shareWords,
+  rowCountWords,
+  rowPointsWords,
   skippedTitles,
   summarySentence,
 } from './plainWords';
@@ -146,35 +147,52 @@ export function ProblemRow({
   results,
   number,
   oneFix,
+  points,
+  nested = false,
   ref,
   ...rest
 }: {
   crawlId: string;
   entry: CheckEntry;
-  results: PlainResults;
+  /** Kept for the callers that have it; a row's count is said without what it's a share of. */
+  results?: PlainResults | undefined;
   number?: number | undefined;
   oneFix: boolean;
+  /** The points fixing it gives back (with what's folded under it); left out or null, none is said. */
+  points?: number | null | undefined;
+  /** Folded under the row above: a fix of that one clears it. */
+  nested?: boolean | undefined;
   ref?: React.Ref<HTMLAnchorElement> | undefined;
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
-  const share = shareWords(entry.check, entry.count ?? 0, results.wholes);
+  const share = rowCountWords(entry.check, entry.count ?? 0);
+  const back = rowPointsWords(points);
   return (
     <PlainCheckRow
       asChild
       outcome={entry.outcome}
       number={number}
       oneFix={oneFix}
-      quiet={entry.outcome === 'notice'}
+      quiet={nested || entry.outcome === 'notice'}
+      className={nested ? 'si-plain-row--nested' : undefined}
       title={plainTitle(entry.check)}
-      summary={plainSummary(entry.check)}
+      summary={nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
       count={
-        share.count === null ? (
-          share.rest
-        ) : (
-          <>
-            <b>{share.count}</b>
-            {share.rest}
-          </>
-        )
+        <>
+          {share.count === null ? (
+            share.rest
+          ) : (
+            <>
+              <b>{share.count}</b>
+              {share.rest}
+            </>
+          )}
+          {back ? (
+            <>
+              {' '}
+              <span className="si-plain-row__points">{back}</span>
+            </>
+          ) : null}
+        </>
       }
     >
       <Link ref={ref} to={FIX} params={{ crawl: crawlId, check: entry.check.id }} {...rest} />
@@ -217,6 +235,7 @@ export function FixFirstCard({
                 results={results}
                 number={index + 1}
                 oneFix={oneFix.has(entry.check.id)}
+                points={score?.lines.find((line) => line.checkId === entry.check.id)?.points}
               />
             </li>
           ))}

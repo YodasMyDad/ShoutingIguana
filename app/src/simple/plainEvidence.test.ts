@@ -204,9 +204,17 @@ describe('a page’s own evidence, in plain words', () => {
     expect(
       plainEvidence('robotsRule', { origin: ORIGIN, reason: 'rule', line: 12, rule: 'Disallow: /cart/' }, ORIGIN),
     ).toBe('The rules file says “Disallow: /cart/”, on line 12');
+    // A URL the crawl was kept from by a rule the copy of the rules file it kept no longer has: what to do, plainly.
+    expect(plainEvidence('robotsRule', { origin: ORIGIN, reason: 'unknown', line: null, rule: null }, ORIGIN)).toBe(
+      'The rules file kept the check out then, but doesn’t now. Check the site again to be sure',
+    );
     expect(plainEvidence('h1', 'Sofas', ORIGIN)).toBe('Main heading: “Sofas”');
     expect(plainEvidence('metaRobots', 'noindex, follow', ORIGIN)).toBe('The page says “noindex, follow”');
     expect(plainEvidence('language', 'en_GB', ORIGIN)).toBe('The page gives its language as “en_GB”');
+    expect(plainEvidence('redirectKind', 'httpToHttps,addsWww', ORIGIN)).toBe(
+      'It forwards from http to https, and adds “www”',
+    );
+    expect(plainEvidence('redirectKind', 'other', ORIGIN)).toBe('It forwards to another page');
     expect(plainEvidence('indexability', 'canonicalised', ORIGIN)).toBe(
       'It can’t appear in search results: it names another address as its main address',
     );

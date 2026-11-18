@@ -9,7 +9,7 @@ import { openExportDialog } from '../export/exportFlow';
 import { urlLinksOffer } from '../export/offers';
 import { FOLLOW_PARTS } from '../screens/links/linkColumns';
 import { IconButton } from '../ui/IconButton';
-import { urlDisplay } from '../ui/urlText';
+import { RESOURCE_LINK_KINDS, urlDisplay } from '../ui/urlText';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { GridCore } from '../grid/GridCore';
 import { useColumnLayout } from '../grid/useColumnLayout';
@@ -151,7 +151,16 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
         id: 'url',
         header: words.url,
         width: urlWidth,
-        cell: (row) => <Url url={row.url} siteOrigin={siteOrigin} tabbable={false} onGo={() => walk(row.id)} />,
+        cell: (row) => (
+          <Url
+            url={row.url}
+            siteOrigin={siteOrigin}
+            tabbable={false}
+            onGo={() => walk(row.id)}
+            // An outlink to a file the page loads (an image, a script) is named by its file.
+            label={direction === 'outlinks' && row.kind && RESOURCE_LINK_KINDS.has(row.kind) ? 'file' : 'address'}
+          />
+        ),
         text: (row) => row.url,
       },
       {
@@ -193,7 +202,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
         text: followWords,
       },
     ],
-    [words.url, urlWidth, siteOrigin, walk],
+    [words.url, urlWidth, siteOrigin, walk, direction],
   );
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('inspector.links', columns);

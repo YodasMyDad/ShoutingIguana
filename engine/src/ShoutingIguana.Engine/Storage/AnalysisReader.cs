@@ -121,6 +121,7 @@ internal sealed class AnalysisReader : IDisposable
         var statuses = new UrlStatus[maxId + 1];
         var startId = 0;
         long read = 0;
+        var pixelWidth = HasColumn("responses", "pixel_width") ? "r.pixel_width" : "NULL";
         // A URL failed without a request, because its host had stopped answering, was never checked: links to it can't
         // be judged, so it counts as unfetched.
         Rows($"""
@@ -128,7 +129,7 @@ internal sealed class AnalysisReader : IDisposable
                    r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
                    r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type,
                    COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0),
-                   COALESCE(r.response_ms, 0)
+                   COALESCE(r.response_ms, 0), {pixelWidth}
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -161,7 +162,9 @@ internal sealed class AnalysisReader : IDisposable
                 IsRateLimited: reader.GetBoolean(15),
                 ResponseMs: fetched ? reader.GetInt32(16) : 0,
                 ContentClass: outcome == FetchOutcome.Success && fetched ? ResourceTypes.ClassOf(contentType) : ContentClass.None,
-                IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri));
+                IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri),
+                PixelWidth: fetched && !reader.IsDBNull(17) ? reader.GetInt32(17) : null,
+                IsLegacyImage: ContentTypeHeader.MediaTypeOf(contentType) is "image/jpeg" or "image/png" or "image/gif" or "image/bmp" or "image/x-ms-bmp");
             read++;
             progress?.Advance(read);
         });
@@ -375,15 +378,91 @@ internal sealed class AnalysisReader : IDisposable
 
     public IReadOnlyList<StoredSitemap> ReadSitemaps()
     {
+        // The columns added since the table was made (CrawlSchema.SITEMAP_COLUMNS): a crawl from before them has none.
+        var listed = HasColumn("sitemaps", "listed_sitemaps") ? "listed_sitemaps" : "NULL";
+        var size = HasColumn("sitemaps", "size_bytes") ? "size_bytes" : "NULL";
         List<StoredSitemap> sitemaps = [];
-        Rows("SELECT url, status_code, is_index, url_count, error, is_probe FROM sitemaps ORDER BY id", reader => sitemaps.Add(new StoredSitemap(
+        Rows($"SELECT url, status_code, is_index, url_count, error, is_probe, {listed}, {size} FROM sitemaps ORDER BY id", reader => sitemaps.Add(new StoredSitemap(
             reader.GetString(0),
             reader.IsDBNull(1) ? null : reader.GetInt32(1),
             reader.GetBoolean(2),
             reader.GetInt32(3),
             reader.IsDBNull(4) ? null : reader.GetString(4),
-            reader.GetBoolean(5))));
+            reader.GetBoolean(5))
+        {
+            ListedSitemaps = reader.IsDBNull(6) ? null : reader.GetInt32(6),
+            SizeBytes = reader.IsDBNull(7) ? null : reader.GetInt64(7)
+        }));
         return sitemaps;
+    }
+
+    /// <summary>Whether the crawl's sitemap entries have their lastmod (an engine from before it didn't read it).</summary>
+    public bool HasSitemapLastmods() => HasColumn("sitemap_urls", "lastmod");
+
+    /// <summary>
+    /// Each sitemap with entries whose lastmod is later than <paramref name="latestSeconds"/> or isn't a date, in the order
+    /// the crawl found them. Empty for a crawl without lastmods (<see cref="HasSitemapLastmods"/>).
+    /// </summary>
+    public IReadOnlyList<SitemapLastmodFaults> ReadSitemapLastmodFaults(long latestSeconds)
+    {
+        List<SitemapLastmodFaults> faults = [];
+        if (!HasSitemapLastmods())
+        {
+            return faults;
+        }
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT s.url, SUM(su.lastmod > $latest), SUM(su.lastmod = {Sitemaps.SitemapLastmod.UNREADABLE})
+            FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id
+            WHERE su.lastmod > $latest OR su.lastmod = {Sitemaps.SitemapLastmod.UNREADABLE}
+            GROUP BY s.id ORDER BY s.id
+            """;
+        command.Parameters.AddWithValue("$latest", latestSeconds);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            faults.Add(new SitemapLastmodFaults(reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2)));
+        }
+
+        return faults;
+    }
+
+    /// <summary>The URLs more than one sitemap file lists, with how many do.</summary>
+    public Dictionary<int, int> ReadRepeatedSitemapEntries()
+    {
+        Dictionary<int, int> repeated = [];
+        Rows("SELECT url_id, COUNT(DISTINCT sitemap_id) FROM sitemap_urls GROUP BY url_id HAVING COUNT(DISTINCT sitemap_id) > 1",
+            reader => repeated[reader.GetInt32(0)] = reader.GetInt32(1));
+        return repeated;
+    }
+
+    /// <summary>
+    /// Sitemap entries on another scheme than every sitemap that lists them (an http:// URL in an https:// sitemap), which
+    /// sitemaps.org drops: the URL's scheme, and the first such sitemap's.
+    /// </summary>
+    public Dictionary<int, (string Url, string Sitemap)> ReadOtherSchemeSitemapEntries()
+    {
+        static string Scheme(string column) => $"substr({column}, 1, instr({column}, '://') - 1)";
+        Dictionary<int, (string Url, string Sitemap)> entries = [];
+        Rows($"""
+            SELECT su.url_id, MIN({Scheme("u.url")}), MIN({Scheme("s.url")})
+            FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id JOIN urls u ON u.id = su.url_id
+            GROUP BY su.url_id HAVING MAX({Scheme("u.url")} = {Scheme("s.url")}) = 0
+            """, reader => entries[reader.GetInt32(0)] = (reader.GetString(1), reader.GetString(2)));
+        return entries;
+    }
+
+    /// <summary>When the crawl last ran (Unix milliseconds); null for a file without its row.</summary>
+    public long? ReadCrawlUpdatedAt() => CrawlDatabase.Scalar(_connection, "SELECT updated_at FROM crawl WHERE id = 1") is long updated ? updated : null;
+
+    private bool HasColumn(string table, string column)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM pragma_table_info($table) WHERE name = $column";
+        command.Parameters.AddWithValue("$table", table);
+        command.Parameters.AddWithValue("$column", column);
+        return Convert.ToInt64(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) > 0;
     }
 
     public void Dispose()

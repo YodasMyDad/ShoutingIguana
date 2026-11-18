@@ -14,6 +14,7 @@ namespace ShoutingIguana.Engine.Storage.Models;
 /// <param name="Indexability">As the URL grid's column: <see cref="IndexabilityReason.None"/> for indexable, null when not judged.</param>
 /// <param name="Canonical">The URL it's canonicalised to, when its canonical names another; null otherwise.</param>
 /// <param name="ResponseMs">Its own response, not its redirects' end's: how long the whole answer took, as the URL grid's column.</param>
+/// <param name="RedirectKind">What its own redirect changes (<see cref="Urls.RedirectKinds"/>); null when it doesn't redirect.</param>
 public sealed record UrlFacts(
     int? StatusCode,
     UrlOutcome? Outcome,
@@ -24,4 +25,5 @@ public sealed record UrlFacts(
     RedirectEnd? Final,
     IndexabilityReason? Indexability,
     UrlTarget? Canonical,
-    int? ResponseMs = null);
+    int? ResponseMs = null,
+    string? RedirectKind = null);

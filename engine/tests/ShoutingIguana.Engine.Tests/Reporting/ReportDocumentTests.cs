@@ -285,7 +285,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         // The checks whose words name a limit, and that this analysis found something for: the test is of them.
         static bool Names(IssuePlainText plain) => plain.What.Concat(plain.Fix).Append(plain.Title).Append(plain.Passed).Any(text => text.Contains("{limit:", StringComparison.Ordinal));
         var naming = IssueCatalog.All.Where(check => Names(check.Plain!)).ToList();
-        Assert.Equal(14, naming.Count);
+        Assert.Equal(17, naming.Count);
         var found = naming.Where(check => results.Counts.GetValueOrDefault(check.Id) > 0).ToList();
         Assert.Contains(found, check => check.Id == "title-too-long");
 

@@ -698,6 +698,7 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
         if (Images.Count < MAX_IMAGES)
         {
+            var data = url is null ? DataUriBytes(element.GetAttribute("src")) : null;
             Images.Add(new ImageFact(
                 url,
                 alt is null ? null : Clean(alt, MAX_LABEL_CHARS),
@@ -705,7 +706,13 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 NullIfBlank(element.GetAttribute("width")),
                 NullIfBlank(element.GetAttribute("height")),
                 element.HasAttribute("srcset"),
-                NullIfBlank(element.GetAttribute("loading"))));
+                NullIfBlank(element.GetAttribute("loading")))
+            {
+                IsDataUri = data is not null,
+                DataUriBytes = data,
+                InPicture = element.ParentElement is { LocalName: "picture" } picture &&
+                            picture.Children.Any(child => child.LocalName == "source" && !string.IsNullOrWhiteSpace(child.GetAttribute("srcset")))
+            });
         }
     }
 
@@ -726,6 +733,29 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     }
 
     /// <summary>An image URL as written, or null for none and for an inline data: placeholder.</summary>
+    /// <summary>
+    /// A <c>data:</c> src's size once decoded: its payload after the comma, three bytes for every four characters of
+    /// base64 (less its padding), one for each character otherwise. Null for a src that isn't a data: URI.
+    /// </summary>
+    private static long? DataUriBytes(string? source)
+    {
+        var value = source?.Trim();
+        if (value is null || !value.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var comma = value.IndexOf(',', StringComparison.Ordinal);
+        if (comma < 0)
+        {
+            return 0;
+        }
+
+        var payload = value.AsSpan(comma + 1).Trim();
+        var isBase64 = value.AsSpan(0, comma).EndsWith(";base64", StringComparison.OrdinalIgnoreCase);
+        return isBase64 ? Math.Max(0, payload.Length * 3L / 4 - payload.Length + payload.TrimEnd('=').Length) : payload.Length;
+    }
+
     private static string? ImageSource(string? value) =>
         string.IsNullOrWhiteSpace(value) || value.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase) ? null : value;
 

@@ -104,7 +104,10 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var page = await ReadAsync(token => LinkGridReader.Query(path, query, cache, token), cancellationToken).ConfigureAwait(false);
-        return new LinkGridPageDto(page.Columns, new LinkRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable);
+        return new LinkGridPageDto(page.Columns, new LinkRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable)
+        {
+            PixelSizes = page.PixelSizes
+        };
     }
 
     /// <summary>
@@ -124,6 +127,34 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
             HiddenChecks = request?.HiddenChecks ?? []
         };
         return await ReadAsync(token => LinkGridReader.Ends(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A page of the links a links view matches, grouped by target: each target once, with its links, the pages they're on,
+    /// their text and positions, and what it is; the most linked from pages first unless the request asks otherwise.
+    /// </summary>
+    public async Task<LinkGroupPageDto> LinkGroupsAsync(string id, LinkGroupsRequest? request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        var filters = GridRequests.Filters(request?.Filters, errors);
+        var sort = GridRequests.Sorts(request?.Sort, errors);
+        if (sort.Count > 1)
+        {
+            GridRequests.Add(errors, "sort", "The links grouped by target sort by one key.");
+        }
+
+        GridRequests.ThrowIfAny(errors);
+        var query = new LinkGroupQuery
+        {
+            Filters = filters, Search = request?.Search, Sort = sort.FirstOrDefault(), Offset = request?.Offset ?? 0, Limit = request?.Limit ?? LinkGroupPage.DEFAULT_LIMIT,
+            HiddenChecks = request?.HiddenChecks ?? []
+        };
+        var page = await ReadAsync(token => LinkGridReader.Groups(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+        return new LinkGroupPageDto(page.Total, page.Links, page.Pages, page.Offset, new LinkGroupSortDto(page.Sort.Column, page.Sort.Descending), page.Rows, page.Summary)
+        {
+            PixelSizes = page.PixelSizes
+        };
     }
 
     public async Task<FacetsDto> LinkFacetsAsync(string id, FacetsRequest? request, CancellationToken cancellationToken)
@@ -209,6 +240,18 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
                        : null)
                    ?? throw Problems.UrlNotFound();
         return new LinkPageDto([.. page.Rows.Select(LinkRowDto.From)], page.Offset, page.Total, page.Next);
+    }
+
+    /// <summary>The images a page shows, each file once, the largest first: the inspector's Images.</summary>
+    public async Task<PageImages> ImagesAsync(string id, UrlImagesRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var urlId = GridRequests.UrlId(request.UrlId);
+        var limit = request.Limit ?? PageImagesReader.DEFAULT_LIMIT;
+        return (urlId is { } known
+                   ? await ReadAsync(token => PageImagesReader.Read(path, known, limit, cache, token), cancellationToken).ConfigureAwait(false)
+                   : null)
+               ?? throw Problems.UrlNotFound();
     }
 
     /// <summary>Where each of a page of URLs is found: the links to it, the pages they're on, the sitemaps listing it.</summary>
@@ -543,7 +586,8 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
         // An id no URL could have is one the origin didn't block: no rows, as for any other URL it didn't.
         int? urlId = request.UrlId is { } asked ? asked is < 1 or > int.MaxValue ? 0 : (int)asked : null;
         return await ReadAsync(
-                       token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token, urlId),
+                       token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token, urlId,
+                           request.Conflict),
                        cancellationToken).ConfigureAwait(false)
                ?? throw Problems.OriginNotFound();
     }

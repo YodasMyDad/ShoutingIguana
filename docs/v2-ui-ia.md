@@ -207,7 +207,18 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
   count sit above the list, so Tab goes from the list to the selected check. A category a link narrowed the list to
   (Overview's "Issues by category") shows there as a chip that removes it: it is never text in the search field, as a
   category's title is in other categories' checks' titles too.
-- The selected check shows what's wrong, why it matters and how to fix it.
+- **Sorted by what matters (step 3b).** The list comes in the engine's order to fix them (Fix first, as Overview's
+  Fix first), in one part "Found issues", then the skipped and the passed checks. A Sort menu above it also offers
+  Most URLs, Most points (each row then says its points, "−4 points", "No points") and Severity (a part each), and
+  Category, the list as it first was. The choice is remembered for Advanced (`checkSort.advanced`).
+- **Counts as things to change (step 3b).** The answer leads with the work when the analysis counts it ("About 40
+  things to change, 3 of them in the site's template: 19 checks found 933 issues on this crawl"), from each check's
+  `causes` and `templateCauses`, a check another one's fix clears entirely left out as the same job; Overview's
+  severity cards say the same of each severity.
+- The selected check shows its figures ("Things to change" too when its URLs share causes), what a fix of it also
+  clears and which fix clears its pages, each a link to that check ("Fixing this also clears Links to broken internal
+  URLs: all 3 pages it flags (4 points back)"), and what's wrong; then what it flags, the evidence; then why it
+  matters and how to fix it, which a button in the head brings into view (the UX audit, top 12 item 6).
 - Its rows are grouped by detail or by the other URL involved, as the catalog says for each check, so a template
   fault is one row with its count; open a group for its first pages and all of them in URLs. A check whose detail is a
   measurement lists its URLs flat. One group is open at a time.

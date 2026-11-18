@@ -24,6 +24,10 @@ describe('parseExportJob', () => {
     expect(job && isExportOver(job)).toBe(false);
   });
 
+  it('reads an export of the links grouped by target (step 3b)', () => {
+    expect(parseExportJob({ ...RUNNING, kind: 'linkGroups' })?.kind).toBe('linkGroups');
+  });
+
   it('reads what a finished export wrote', () => {
     const result = {
       rows: 5053909,
