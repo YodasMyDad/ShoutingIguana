@@ -4,6 +4,7 @@ import type { CheckChange } from '../../api/fixLoop';
 import type { Severity } from '../../api/types';
 import type { ChangeFilterSearch } from '../../routing/search';
 import { Icon } from '../../ui/Icon';
+import { hasMoved } from '../../changes/changes';
 import { checkChangeCell, periodLabel, type ComparedPeriod } from '../compare/changeCell';
 import { affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
@@ -382,7 +383,8 @@ function CheckOption({
   const skipped = outcome === 'skipped';
   // What the count is of, for the row's name: pages only for a check that flags nothing else.
   const words = affectedWords(check);
-  const cell = change && period ? checkChangeCell(change, period) : null;
+  // A check whose count and rows didn't move says nothing: only what changed is marked, so the list scans.
+  const cell = change && period && hasMoved(change) ? checkChangeCell(change, period) : null;
   // The change as text (a tick for a fixed check), never colour alone; its words for a screen reader, its rows' split
   // in its tooltip.
   const moved = cell ? (

@@ -17,7 +17,7 @@ import {
   gardenComparison,
 } from '../../test/fixLoopSidecar';
 import { overviewRoutes } from '../../test/overviewSidecar';
-import { ownSidecar, ScreenApp } from '../../test/ScreenStory';
+import { freshStory, GARDEN_CRAWL, ownSidecar, ScreenApp } from '../../test/ScreenStory';
 import { GARDEN_ANALYSIS, simpleRoutes } from '../../test/simpleSidecar';
 import { StoryFrame, StorySection } from '../../test/StoryFrame';
 import type { ChangesAnswer } from '../../api/fixLoop';
@@ -357,3 +357,28 @@ export const CardUntil: Story = cardStory(
   }),
   { [GARDEN.id]: LATER.id },
 );
+
+// ---------------------------------------------------------------------------------------------- On the screens
+
+/** A screen of the garden crawl over the mock sidecar, which compares it with an earlier check of the site. */
+const onMock = (path: string): Story => ({
+  loaders: [
+    () => {
+      freshStory();
+      updateSettings({ compareWithByCrawl: {}, checkSort: { advanced: 'fixFirst', simple: 'fixFirst' } });
+    },
+  ],
+  render: () => <ScreenApp path={`/crawls/${GARDEN_CRAWL}/${path}`} crawlId={GARDEN_CRAWL} />,
+});
+
+/** Overview: the comparison card under the totals, Fix first's "was 12", Compare with… at the card's right. */
+export const OverviewCompared: Story = onMock('overview');
+
+/** Issues: each check's change, the fixed checks apart, the Since filter; a check's head, Recheck, its Now and Fixed tabs. */
+export const IssuesCompared: Story = onMock('issues/broken-internal-links');
+
+/** A check fixed since then: "Fixed since", what it flagged then, and what it no longer flags. */
+export const IssuesFixedCheck: Story = onMock('issues/title-missing');
+
+/** A check that doesn't group: its rows with how each stood then. */
+export const IssuesComparedRows: Story = onMock('issues/title-too-long');
