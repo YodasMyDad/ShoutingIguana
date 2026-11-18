@@ -23,6 +23,7 @@ import { WhereFoundLine } from './WhereFoundLine';
 import { referencesOf } from './whereFound';
 import { evidenceFrameClass } from './evidenceFrame';
 import { periodLabel, rowChangeCell, type ComparedPeriod } from '../compare/changeCell';
+import { recheckable } from '../rechecks/rechecks';
 
 /** The fix loop: the rows compared with another crawl, each with how it stood then. */
 export interface RowsCompare {
@@ -259,7 +260,7 @@ export function IssueRowsGrid({
         foundIn={menuRow && references === 'sources' ? linksOfUrl('inlinks', menuRow.id, 'all') : null}
         urlOf={(row) => row.url}
         onInspect={onInspect}
-        recheck={{ checkId: check.id, idOf: (row) => row.id }}
+        recheck={{ checkId: check.id, idOf: (row) => row.id, fullCheck: !recheckable(check) }}
       />
     </div>
   );

@@ -1,9 +1,10 @@
-import { RefreshCw } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import { RefreshCw, RotateCcw } from 'lucide-react';
 import { isRecheckRunning, startRecheck, useRecheckRun } from '../../crawl/recheck';
 import { notifyError } from '../../feedback/notify';
 import { formatCount } from '../../lib/format';
 import { MenuItem } from '../../ui/Menu';
-import { RECHECK_LIMIT, recheckAskOf } from './rechecks';
+import { CHECK_AGAIN_WORDS, RECHECK_LIMIT, recheckAskOf } from './rechecks';
 
 /**
  * "Recheck 3 URLs" in a grid's row menu (docs/v2-fix-loop.md, Advanced: "The URL grid's selection menu … get Recheck",
@@ -18,6 +19,7 @@ export function RecheckMenuItem<Row>({
   rows,
   idOf,
   disabled = false,
+  fullCheck = false,
 }: {
   crawlId: string;
   /** The check that judges them, in Issues; none in URLs. */
@@ -28,8 +30,18 @@ export function RecheckMenuItem<Row>({
   idOf: (row: Row) => number | null | undefined;
   /** It can't be asked now (the crawl is running here). */
   disabled?: boolean | undefined;
+  /** Only checking the whole site again can settle these rows' checks: Check the site again in its place. */
+  fullCheck?: boolean | undefined;
 }) {
+  const navigate = useNavigate();
   const running = isRecheckRunning(useRecheckRun(crawlId));
+  if (fullCheck) {
+    return (
+      <MenuItem icon={RotateCcw} onSelect={() => void navigate({ to: '/new', search: { from: crawlId } })}>
+        {CHECK_AGAIN_WORDS}
+      </MenuItem>
+    );
+  }
   const taken = Math.min(count, RECHECK_LIMIT);
   const words =
     count > RECHECK_LIMIT

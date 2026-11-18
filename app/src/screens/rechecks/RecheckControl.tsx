@@ -11,7 +11,14 @@ import { formatCount } from '../../lib/format';
 import { Button } from '../../ui/Button';
 import { IconButton } from '../../ui/IconButton';
 import { DropdownMenu, MenuItem } from '../../ui/Menu';
-import { RECHECK_LIMIT, recheckAskOf, recheckable, type RecheckTarget } from './rechecks';
+import {
+  CHECK_AGAIN_WORDS,
+  FULL_CHECK_ONLY_WORDS,
+  RECHECK_LIMIT,
+  recheckAskOf,
+  recheckable,
+  type RecheckTarget,
+} from './rechecks';
 
 /** The open group, as a recheck asks for it, and its URLs now. */
 export interface OpenGroup extends RecheckGroup {
@@ -22,7 +29,8 @@ export interface OpenGroup extends RecheckGroup {
  * Recheck in a check's head (docs/v2-fix-loop.md, Advanced, "Issues, a check's detail"): "Recheck 5 URLs" fetches the
  * check's URLs again into the crawl and analyses it; its menu rechecks the open group or the grid's selection (at most
  * 1,000). Under it, what it fetches and about how long, or why it can't run now (the sidecar's words), and the button
- * disabled. A check only a full crawl can settle offers Crawl again… in its place. While a recheck of the crawl runs, it
+ * disabled. A check only checking the whole site again can settle (its `recheck` empty) offers Check the site again in
+ * its place. While a recheck of the crawl runs, it
  * can't be asked again.
  */
 export function RecheckControl({
@@ -52,10 +60,10 @@ export function RecheckControl({
       <div className="flex flex-col items-end gap-1">
         <Button size="sm" icon={RotateCcw} asChild>
           <Link to="/new" search={{ from: crawlId }}>
-            Crawl again…
+            {CHECK_AGAIN_WORDS}
           </Link>
         </Button>
-        <span className="text-12 text-text-muted">Only a full crawl can show whether this is fixed.</span>
+        <span className="max-w-72 text-right text-12 text-text-muted">{FULL_CHECK_ONLY_WORDS}</span>
       </div>
     );
   }

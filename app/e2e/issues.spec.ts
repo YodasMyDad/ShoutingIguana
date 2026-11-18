@@ -159,7 +159,7 @@ test('the checks list runs on the keyboard: arrows move the selection and the ro
   await page.keyboard.press('Tab');
   // Out of the list, into the selected check: its first action (the fix loop's Recheck leads them).
   await expect(page.locator(':focus')).toHaveAccessibleName(
-    /^Recheck|Crawl again…|Copy URLs|Hide this check|Show this check|Learn more/,
+    /^Recheck|Check the site again|Copy URLs|Hide this check|Show this check|Learn more/,
   );
   await page.keyboard.press('Control+f');
   await expect(page.getByRole('searchbox', { name: 'Filter checks' })).toBeFocused();

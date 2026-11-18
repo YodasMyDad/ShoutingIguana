@@ -83,6 +83,7 @@ import {
 import { evidenceFrameClass } from './evidenceFrame';
 import { changeDate } from '../../changes/changeWords';
 import { groupChangeCell, type ComparedPeriod } from '../compare/changeCell';
+import { recheckable } from '../rechecks/rechecks';
 
 /**
  * A row of the tree: a group, one of the open group's first pages or URLs, a row under the one expanded to show where
@@ -1031,7 +1032,7 @@ export function IssueGroups({
           menuRow?.kind === 'page' && references === 'sources' ? linksOfUrl('inlinks', menuRow.row.id, 'all') : null
         }
         imagesIn={menuRow?.kind === 'page' && check.category === 'images' ? imagesOfPage(menuRow.row.id) : null}
-        recheck={{ checkId: check.id, idOf: urlIdOf }}
+        recheck={{ checkId: check.id, idOf: urlIdOf, fullCheck: !recheckable(check) }}
         group={
           menuRow && (menuRow.kind === 'group' || menuRow.kind === 'more')
             ? {

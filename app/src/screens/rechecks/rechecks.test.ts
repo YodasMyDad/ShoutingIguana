@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { recheckRecord, recheckResult } from '../../test/fixLoopSidecar';
-import { recheckAskOf, recheckOutcomeWords, recheckResultLine, recheckWhatWords, recheckable } from './rechecks';
+import { SIMPLE_CHECKS } from '../../test/simpleSidecar';
+import {
+  onlyFullCheck,
+  recheckAskOf,
+  recheckOutcomeWords,
+  recheckResultLine,
+  recheckWhatWords,
+  recheckable,
+} from './rechecks';
 
 const titleOf = (id: string) => ({ 'broken-internal-links': 'Broken internal links' })[id] ?? null;
 
@@ -69,5 +77,38 @@ describe('a recheck in Advanced’s words', () => {
     expect(recheckable({ recheck: [] })).toBe(false);
     // A sidecar from before the fix loop offers no recheck.
     expect(recheckable({})).toBe(false);
+  });
+});
+
+describe('a check only checking the whole site again can settle (its `recheck` is empty)', () => {
+  const catalog = SIMPLE_CHECKS.checks;
+  const empty = catalog.filter((check) => check.recheck?.length === 0);
+
+  it('is every such check of the catalog, as the engine’s catalog has them', () => {
+    expect(empty.map((check) => check.id).sort()).toEqual(
+      [
+        'canonical-unlinked',
+        'deep-page',
+        'hreflang-unlinked',
+        'no-https',
+        'non-indexable-inlinks-only',
+        'orphan-page',
+      ].sort(),
+    );
+  });
+
+  it('offers Check the site again for a URL or a selection flagged only by such checks, Recheck otherwise', () => {
+    for (const check of empty) expect(onlyFullCheck([check.id], catalog), check.id).toBe(true);
+    expect(
+      onlyFullCheck(
+        empty.map((check) => check.id),
+        catalog,
+      ),
+    ).toBe(true);
+    expect(onlyFullCheck(['orphan-page', 'internal-client-error'], catalog)).toBe(false);
+    expect(onlyFullCheck(['internal-client-error'], catalog)).toBe(false);
+    // Nothing known of them: a recheck can still read them again.
+    expect(onlyFullCheck([], catalog)).toBe(false);
+    expect(onlyFullCheck(['a-check-the-catalog-lacks'], catalog)).toBe(false);
   });
 });

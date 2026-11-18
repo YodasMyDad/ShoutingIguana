@@ -10,6 +10,7 @@ import { resetPendingRechecks } from '../../crawl/recheck';
 import { liveStore } from '../../live/liveStore';
 import { TEST_CRAWL_ID, fakeSidecar, type FakeSidecar } from '../../test/fakeSidecar';
 import { recheckPlan, recheckRoutes } from '../../test/fixLoopSidecar';
+import { SIMPLE_CHECKS } from '../../test/simpleSidecar';
 import { createQueryClientWithoutBackoff } from '../../test/queryClient';
 import { RecheckControl } from './RecheckControl';
 
@@ -112,12 +113,17 @@ describe('Recheck in a check’s head (Advanced)', () => {
     ).toBeVisible();
   });
 
-  it('offers Crawl again… in its place for a check only a full crawl can settle', async () => {
-    const sidecar = show({ check: { ...CHECK, id: 'orphan-page', recheck: [] } });
-    expect(await screen.findByRole('link', { name: 'Crawl again…' })).toBeVisible();
-    expect(screen.getByText('Only a full crawl can show whether this is fixed.')).toBeVisible();
-    expect(screen.queryByRole('button', { name: /^Recheck/ })).toBeNull();
-    // Nothing to plan.
-    expect(sidecar.requests.some((request) => request.path.endsWith('/rechecks/plan'))).toBe(false);
-  });
+  // Every check of the catalog a recheck can't settle (its `recheck` is empty): Check the site again in its place.
+  for (const check of SIMPLE_CHECKS.checks.filter((entry) => entry.recheck?.length === 0)) {
+    it(`offers Check the site again in its place for ${check.id}, which only checking the whole site can settle`, async () => {
+      const sidecar = show({ check });
+      const again = await screen.findByRole('link', { name: 'Check the site again' });
+      expect(new URL((again as HTMLAnchorElement).href).searchParams.get('from')).toBe(TEST_CRAWL_ID);
+      expect(screen.getByText('Only checking the whole site again can show whether this is fixed.')).toBeVisible();
+      expect(screen.queryByRole('button', { name: /^Recheck/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'More ways to recheck' })).toBeNull();
+      // Nothing to plan.
+      expect(sidecar.requests.some((request) => request.path.endsWith('/rechecks/plan'))).toBe(false);
+    });
+  }
 });

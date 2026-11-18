@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { FacetId, GridFilter, SummaryReason, UrlRow } from '../api/grids';
-import { crawlQuery, urlColumnsQuery, urlGridFacetsQuery } from '../api/queries';
+import { checksQuery, crawlQuery, urlColumnsQuery, urlGridFacetsQuery } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
@@ -89,6 +89,7 @@ import {
 } from './urls/urlColumns';
 import { useUrlFilterWords } from './urls/useUrlFilterWords';
 import { RecheckMenuItem } from './rechecks/RecheckMenuItem';
+import { onlyFullCheck } from './rechecks/rechecks';
 
 const ROUTE = '/crawls/$crawl/urls';
 
@@ -117,6 +118,8 @@ export function UrlsScreen() {
   const { rowHeight, headerHeight } = useGridMetrics();
   const sort = useMemo(() => search.sort ?? [], [search.sort]);
   const filters = useMemo(() => search.filter ?? [], [search.filter]);
+  // The catalog, for Recheck: a grid narrowed to checks only checking the whole site again can settle offers that.
+  const catalog = useQuery(checksQuery());
   const q = search.q;
   // Narrowed to one end of a links view's links ("Show these pages in URLs" on Links): beside the filters, as one more.
   const linkEnds = useMemo(() => linkEndsOf(search.links), [search.links]);
@@ -1013,6 +1016,12 @@ export function UrlsScreen() {
           rows={() => rowMenu.state?.menu.rows() ?? Promise.resolve([])}
           idOf={(row) => row.id}
           disabled={crawling}
+          fullCheck={onlyFullCheck(
+            filters.flatMap((filter) =>
+              filter.column === 'check' && filter.op === 'in' && 'values' in filter ? filter.values.map(String) : [],
+            ),
+            catalog.data?.checks ?? [],
+          )}
         />
       </RowMenu>
       <ViewNameDialog

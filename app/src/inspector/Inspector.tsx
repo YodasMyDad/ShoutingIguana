@@ -11,13 +11,14 @@ import {
   PanelBottom,
   PanelRight,
   RefreshCw,
+  RotateCcw,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { UrlDetail } from '../api/inspector';
-import { crawlQuery, queryKeys, urlDetailQuery, urlImagesQuery } from '../api/queries';
+import { checksQuery, crawlQuery, queryKeys, urlDetailQuery, urlImagesQuery } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
@@ -64,6 +65,8 @@ import { SummarySection } from './SummarySection';
 import { TYPE_WORDS, depthInBrief } from './words';
 import { useHiddenChecks } from '../settings/hiddenChecks';
 import { isRecheckRunning, startRecheck, useRecheckRun } from '../crawl/recheck';
+import { CHECK_AGAIN_WORDS, onlyFullCheck } from '../screens/rechecks/rechecks';
+import { useNavigate } from '@tanstack/react-router';
 
 /** Ctrl+F (Cmd+F on macOS): on the Source tab, the source's search. */
 const FIND = parseChord('mod+f');
@@ -367,6 +370,13 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   const refreshing = query.isFetching && !waiting && !crawling;
   // The fix loop: this URL fetched again into the crawl, and the crawl analysed (not while it runs, nor during a recheck).
   const rechecking = isRecheckRunning(useRecheckRun(crawlId));
+  // A URL flagged only by checks a recheck can't settle (an orphan page, no HTTPS): Check the site again in its place.
+  const catalog = useQuery(checksQuery()).data;
+  const fullCheck = onlyFullCheck(
+    (own?.issues ?? []).map((issue) => issue.checkId),
+    catalog?.checks ?? [],
+  );
+  const navigate = useNavigate();
   const compact = dock === 'bottom';
   // Ctrl+F on the Source tab, from its tab, its panel or anywhere in the sheet, searches the source (docs/v2-ui-ia.md,
   // Keyboard, "In the inspector"), never the grid behind. The pane takes the key itself with focus inside it (and
@@ -392,14 +402,25 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
         <div className={clsx('flex flex-wrap items-center gap-x-3 px-5', compact ? 'pt-2 pb-1' : 'pt-3 pb-2')}>
           <Kind detail={own} loading={state.status === 'loading'} crawling={crawling} compact={compact} />
           <div className={clsx('ml-auto flex shrink-0 gap-0.5', compact && 'order-3')}>
-            <IconButton
-              label="Recheck this URL"
-              tooltip={rechecking ? 'A recheck of this crawl is running' : 'Recheck this URL'}
-              icon={RefreshCw}
-              size="sm"
-              disabled={crawling || rechecking || notFound || detail === undefined}
-              onClick={() => void startRecheck(crawlId, { urlIds: [urlId] })}
-            />
+            {fullCheck ? (
+              <IconButton
+                label={CHECK_AGAIN_WORDS}
+                tooltip="Only checking the whole site again can show whether this URL’s issues are fixed"
+                icon={RotateCcw}
+                size="sm"
+                disabled={crawling}
+                onClick={() => void navigate({ to: '/new', search: { from: crawlId } })}
+              />
+            ) : (
+              <IconButton
+                label="Recheck this URL"
+                tooltip={rechecking ? 'A recheck of this crawl is running' : 'Recheck this URL'}
+                icon={RefreshCw}
+                size="sm"
+                disabled={crawling || rechecking || notFound || detail === undefined}
+                onClick={() => void startRecheck(crawlId, { urlIds: [urlId] })}
+              />
+            )}
             <IconButton label="Open in the browser" icon={ExternalLink} size="sm" disabled={!web} onClick={openUrl} />
             <IconButton
               label="Copy the URL"

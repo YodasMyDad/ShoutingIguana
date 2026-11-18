@@ -38,7 +38,7 @@ export interface IssuePageMenuProps<Row> {
    */
   imagesIn?: { filter: GridFilter[]; cols: string[]; sort: GridSort[] } | null | undefined;
   /** The fix loop: Recheck the row or the selection, judged by this check; each row's URL id. */
-  recheck?: { checkId: string; idOf: (row: Row) => number | null } | null | undefined;
+  recheck?: { checkId: string; idOf: (row: Row) => number | null; fullCheck?: boolean } | null | undefined;
 }
 
 export function IssuePageMenu<Row>({
@@ -102,6 +102,7 @@ export function IssuePageMenu<Row>({
               count={count}
               rows={() => state.menu.rows()}
               idOf={recheck.idOf}
+              fullCheck={recheck.fullCheck}
             />
           ) : null}
           {imagesIn ? (

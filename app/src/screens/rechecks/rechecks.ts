@@ -5,6 +5,10 @@ import type { Recheck, RecheckAsk, RecheckGroup, RecheckOutcome } from '../../ap
 import type { Check } from '../../api/types';
 import { formatCount, formatCountOf } from '../../lib/format';
 
+/** What Advanced offers in Recheck's place for what only checking the whole site again can settle. */
+export const CHECK_AGAIN_WORDS = 'Check the site again';
+export const FULL_CHECK_ONLY_WORDS = 'Only checking the whole site again can show whether this is fixed.';
+
 /** The most URLs one recheck takes (the sidecar's `limit`). */
 export const RECHECK_LIMIT = 1_000;
 
@@ -89,4 +93,17 @@ const OUTCOMES: Record<RecheckOutcome, string> = {
 /** A recheck's URL's outcome: "Fixed", "Still", "Not checked", "Not rechecked", "New"; nothing for a URL not judged. */
 export function recheckOutcomeWords(outcome: RecheckOutcome | null): string {
   return outcome ? OUTCOMES[outcome] : '';
+}
+
+/**
+ * Whether only checking the whole site again can show a fix for these checks (a URL's, or a selection's): each is in the
+ * catalog with nothing a recheck reads again (`orphan-page`, `no-https`…). None, or one the catalog doesn't know or a
+ * recheck can settle, and a recheck can still be asked.
+ */
+export function onlyFullCheck(checkIds: readonly string[], catalog: readonly Pick<Check, 'id' | 'recheck'>[]): boolean {
+  if (checkIds.length === 0) return false;
+  const byId = new Map(catalog.map((check) => [check.id, check]));
+  return checkIds.every((id) => {
+    return byId.get(id)?.recheck?.length === 0;
+  });
 }
