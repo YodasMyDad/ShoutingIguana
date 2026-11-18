@@ -1,24 +1,28 @@
 // A problem, handed on (docs/v2-ui-simple.md, "One problem": A list to send on). Copy the list puts it on the clipboard
 // as plain text: the plain title and the technical one, the site and the date, how to fix it, then each cause with
-// the addresses it's on, in full. Save as a spreadsheet writes this check's sheet of the workbook (E5's `check`
+// the addresses it's on, in full: every cause the check's groups give (an image with its size and pixels), each with
+// every page it's on. Save as a spreadsheet writes this check's sheet of the workbook (E5's `check`
 // export) through the app's one export flow: the export dialog, the native save dialog, and the export's toast.
 import { api } from '../api/client';
 import { isAbort } from '../api/errors';
-import type { CheckGrouping, IssueRow } from '../api/grids';
+import type { CheckGroupRef, IssueGroup, IssueRow, RelatedFacts } from '../api/grids';
 import type { Check, CrawlListItem } from '../api/types';
 import { announce } from '../feedback/announce';
 import { notifyError, notifyProgress, notifyResult } from '../feedback/notify';
 import { copyText } from '../lib/clipboard';
-import { formatCount } from '../lib/format';
+import { formatBytes, formatCount } from '../lib/format';
 import { openExportDialog } from '../export/exportFlow';
 import type { ExportOffer } from '../export/exportOffer';
 import { issuesOffer } from '../export/offers';
 import { longDate } from './dates';
 import { plainDetail, plainDetailColumn } from './plainEvidence';
 import { plainTitle } from './plainWords';
+import { causeName, causesWords, rowDetailSaysMore } from './whereWords';
 
-/** The most rows one read asks for (the contract's limit). */
+/** The most rows (or groups) one read asks for (the contract's limit). */
 const PAGE = 1_000;
+/** The groups whose rows are read at once: a check with thousands of causes reads each, so a few go side by side. */
+const READERS = 6;
 /** A copy that takes longer than this shows its progress, with Cancel. */
 const PROGRESS_DELAY_MS = 300;
 
@@ -32,15 +36,55 @@ export interface ProblemListContext {
   share: string;
 }
 
-/** The cause a row belongs to, as the check groups its issues: its detail, or the address it's about. */
-function causeOf(row: IssueRow, grouping: CheckGrouping): string | null {
-  if (grouping === 'relatedUrl') return row.relatedUrl ?? null;
-  if (grouping === 'detail') return row.detail ?? null;
-  return null;
+/** A cause of a check that groups its issues, with the rows of the addresses it's on, as Copy the list hands it on. */
+export interface ProblemCause {
+  group: IssueGroup;
+  rows: readonly IssueRow[];
 }
 
-/** The list as text, from every row of the check. */
-export function problemListText(context: ProblemListContext, rows: readonly IssueRow[]): string {
+/** A row's detail as the page says it: a few checks' details are said plainly ("Google will likely cut this title…"). */
+const detailOf = (check: Check, row: IssueRow): string | null =>
+  plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? null;
+
+/**
+ * What a file a cause names is, where the check judges it by that: "2.1 MB, 4000×3000 pixels" for an oversized
+ * image, the pixels alone for one without its size. Null where the check says nothing of the file.
+ */
+function fileFacts(check: Check, related: RelatedFacts | null | undefined): string | null {
+  const facts = check.targetFacts ?? [];
+  if (!related) return null;
+  const parts = [
+    facts.includes('sizeBytes') && typeof related.sizeBytes === 'number' ? formatBytes(related.sizeBytes) : null,
+    facts.includes('pixelWidth') && typeof related.pixelWidth === 'number' && typeof related.pixelHeight === 'number'
+      ? `${related.pixelWidth}×${related.pixelHeight} pixels`
+      : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+/**
+ * A cause's line: the text its pages share, in quotes; the address it's about, in full, with what the file is for a
+ * check that judges it; else what was found, named as Where it is names it ("No main heading").
+ */
+function causeLine(check: Check, group: IssueGroup): string {
+  if (group.sharedText) return `“${group.sharedText}”`;
+  if (group.relatedUrl) {
+    const facts = fileFacts(check, group.related);
+    return facts ? `${group.relatedUrl} (${facts})` : group.relatedUrl;
+  }
+  return causeName(check, group.detail);
+}
+
+/**
+ * The list as text. A check that groups its issues lists each of its causes, as the check's groups give them (an image
+ * on every page it's on, not only on the pages it's the first of), with its pages, and a page's own detail where it
+ * says more than the cause; one that doesn't (or whose groups came back empty) lists its rows, each with its detail.
+ */
+export function problemListText(
+  context: ProblemListContext,
+  rows: readonly IssueRow[],
+  causes: readonly ProblemCause[] | null = null,
+): string {
   const { check } = context;
   const head = [
     plainTitle(check) === check.title ? check.title : `${plainTitle(check)} (${check.title})`,
@@ -50,46 +94,52 @@ export function problemListText(context: ProblemListContext, rows: readonly Issu
   const steps = (check.plainFix ?? []).map((step, index) => `${index + 1}. ${step}`);
   const lines = [...head, ''];
   if (steps.length > 0) lines.push('How to fix it:', ...steps, '');
-  if (check.grouping === 'none') {
-    lines.push('Where it is:');
+  lines.push('Where it is:');
+  if (check.grouping === 'none' || causes === null) {
     for (const row of rows) {
-      // As the page says it: a few checks' details are said plainly ("Google will likely cut this title off after…").
-      const detail = plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail;
+      const detail = detailOf(check, row);
       lines.push(detail ? `${row.url ?? ''} (${detail})` : (row.url ?? ''));
     }
     return lines.join('\n');
   }
-  const causes = new Map<string, string[]>();
-  for (const row of rows) {
-    const cause = causeOf(row, check.grouping) ?? '';
-    const list = causes.get(cause) ?? [];
-    list.push(row.url ?? '');
-    causes.set(cause, list);
-  }
-  lines.push('Where it is:');
-  for (const [cause, urls] of causes) {
-    lines.push(cause || 'Other', ...urls.map((url) => `  ${url}`));
+  for (const { group, rows: pages } of causes) {
+    lines.push(causeLine(check, group));
+    for (const row of pages) {
+      const detail = rowDetailSaysMore(check, group, row) ? detailOf(check, row) : null;
+      lines.push(detail ? `  ${row.url ?? ''} (${detail})` : `  ${row.url ?? ''}`);
+    }
   }
   return lines.join('\n');
 }
 
-/** Reads every row of a check, page after page, until its cursor runs out. */
+/** The columns each row is read with: its address, its detail and the address it's about, and a plain line's column. */
+function rowColumns(checkId: string): string[] {
+  const plain = plainDetailColumn({ id: checkId });
+  return ['url', 'detail', 'relatedUrl', ...(plain ? [plain] : [])];
+}
+
+/** Reads every row of a check, or of one of its groups, page after page, until its cursor runs out. */
 async function readAllRows(
   crawlId: string,
   checkId: string,
   signal: AbortSignal,
   onPage: (read: number, total: number | null) => void,
+  group: CheckGroupRef | null = null,
 ): Promise<IssueRow[]> {
   const rows: IssueRow[] = [];
-  // And the column a check's plain line reads, where it has one.
-  const plain = plainDetailColumn({ id: checkId });
-  const columns = ['url', 'detail', 'relatedUrl', ...(plain ? [plain] : [])];
   let after: string | undefined;
   for (;;) {
     const page = await api.issueRows(
       crawlId,
       checkId,
-      { columns, filters: [], sort: [], limit: PAGE, ...(after ? { after } : {}) },
+      {
+        columns: rowColumns(checkId),
+        filters: [],
+        sort: [],
+        limit: PAGE,
+        ...(group ? { group } : {}),
+        ...(after ? { after } : {}),
+      },
       signal,
     );
     rows.push(...page.rows);
@@ -97,6 +147,41 @@ async function readAllRows(
     if (!page.next || page.rows.length === 0) return rows;
     after = page.next;
   }
+}
+
+/** Reads every group of a check, in the check's own order, a page of them at a time. */
+async function readAllGroups(crawlId: string, checkId: string, signal: AbortSignal): Promise<IssueGroup[]> {
+  const groups: IssueGroup[] = [];
+  for (;;) {
+    const page = await api.issueGroups(crawlId, checkId, { offset: groups.length, limit: PAGE }, signal);
+    groups.push(...page.groups);
+    if (page.groups.length === 0 || groups.length >= (page.groupCount ?? 0)) return groups;
+  }
+}
+
+/**
+ * Reads each group's rows, a few groups at a time (a check can have thousands of causes, each its own read), keeping
+ * the groups' order. Says how many causes are read as it goes.
+ */
+async function readCauses(
+  crawlId: string,
+  checkId: string,
+  groups: readonly IssueGroup[],
+  signal: AbortSignal,
+  onRead: (read: number) => void,
+): Promise<ProblemCause[]> {
+  const causes: ProblemCause[] = groups.map((group) => ({ group, rows: [] }));
+  let next = 0;
+  let read = 0;
+  const reader = async () => {
+    for (let cause = causes[next++]; cause; cause = causes[next++]) {
+      const ref: CheckGroupRef = { detail: cause.group.detail, relatedUrlId: cause.group.relatedUrlId };
+      cause.rows = await readAllRows(crawlId, checkId, signal, () => undefined, ref);
+      onRead(++read);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(READERS, groups.length) }, reader));
+  return causes;
 }
 
 /** Copy the list: every cause and address of the problem, as text. Says what it copied, once. */
@@ -109,15 +194,25 @@ export async function copyProblemList(
   const timer = setTimeout(() => {
     progress = notifyProgress('Copying the list…', { onCancel: () => controller.abort() });
   }, PROGRESS_DELAY_MS);
+  const { check } = context;
+  const update = (read: number, total: number | null) =>
+    progress?.update(total === null ? `${formatCount(read)} read` : `${formatCount(read)} of ${formatCount(total)}`);
   try {
-    const rows = await readAllRows(context.crawlId, context.check.id, controller.signal, (read, total) =>
-      progress?.update(total === null ? `${formatCount(read)} read` : `${formatCount(read)} of ${formatCount(total)}`),
-    );
+    // A check that groups its issues hands over its causes as its groups give them; its rows alone where it has none.
+    const groups = check.grouping === 'none' ? [] : await readAllGroups(context.crawlId, check.id, controller.signal);
+    const causes =
+      groups.length > 0
+        ? await readCauses(context.crawlId, check.id, groups, controller.signal, (read) => update(read, groups.length))
+        : null;
+    const rows = causes ? [] : await readAllRows(context.crawlId, check.id, controller.signal, update);
     clearTimeout(timer);
-    const copied = await copy(problemListText(context, rows));
-    const words = copied
-      ? `Copied the list: ${rows.length === 1 ? '1 address' : `${formatCount(rows.length)} addresses`}`
-      : 'The list couldn’t be copied';
+    const copied = await copy(problemListText(context, rows, causes));
+    const pages = causes ? new Set(causes.flatMap((cause) => cause.rows.map((row) => row.url))).size : rows.length;
+    const words = !copied
+      ? 'The list couldn’t be copied'
+      : causes
+        ? `Copied the list: ${causesWords(check, causes.length, pages)}`
+        : `Copied the list: ${pages === 1 ? '1 address' : `${formatCount(pages)} addresses`}`;
     const shown = progress as ReturnType<typeof notifyProgress> | null;
     if (shown) shown.done(words);
     else if (copied) notifyResult(words);
@@ -130,6 +225,8 @@ export async function copyProblemList(
       shown?.dismiss();
       return;
     }
+    // One cause's read failed: the others reading beside it stop too.
+    controller.abort();
     if (shown) shown.fail(error);
     else notifyError(error, { title: 'The list couldn’t be copied' });
   }
