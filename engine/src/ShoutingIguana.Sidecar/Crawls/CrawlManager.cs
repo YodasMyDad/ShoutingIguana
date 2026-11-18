@@ -386,6 +386,7 @@ internal sealed partial class CrawlManager(
             MaxRequestsPerSecond = request.MaxRequestsPerSecond,
             RequestTimeoutSeconds = request.RequestTimeoutSeconds,
             ExtraHeaders = headers,
+            Signatures = CrawlSignatureDto.ToEngine(request.Signatures),
             ProxyUrl = request.ProxyUrl
         });
 

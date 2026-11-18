@@ -64,7 +64,12 @@ internal sealed partial class CrawlManager
         }
 
         var headers = CrawlOptionsDto.Headers(body.ExtraHeaders, out var headerErrors);
-        var resume = EngineErrors.Read(() => CrawlDatabase.ReadOptions(path)).PlanResume(new ResumeChanges { ExtraHeaders = headers, ProxyUrl = body.ProxyUrl });
+        var resume = EngineErrors.Read(() => CrawlDatabase.ReadOptions(path)).PlanResume(new ResumeChanges
+        {
+            ExtraHeaders = headers,
+            Signatures = CrawlSignatureDto.ToEngine(body.Signatures),
+            ProxyUrl = body.ProxyUrl
+        });
         var missingHeaders = body.SkipMissingHeaders ? [] : resume.MissingHeaders;
         if (resume.MissingProxyCredentials || missingHeaders.Count > 0)
         {

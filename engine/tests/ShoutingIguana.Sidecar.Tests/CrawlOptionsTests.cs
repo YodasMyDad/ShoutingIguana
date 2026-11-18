@@ -217,6 +217,10 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             CustomUserAgent = "TestBot/1.0",
             AcceptLanguage = "de-DE",
             ExtraHeaders = new Dictionary<string, string> { ["X-Key"] = "value" },
+            Signatures = new Dictionary<string, CrawlSignature>
+            {
+                ["example.com"] = new() { SignatureInput = SyntheticShopify.SIGNATURE_INPUT, Signature = SyntheticShopify.SIGNATURE }
+            },
             RespectRobotsTxt = false,
             RespectCrawlDelay = true,
             CheckResources = false,
@@ -241,8 +245,17 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
         var roundTripped = JsonSerializer.Deserialize(json, Serialization.SidecarJsonContext.Default.CrawlOptionsDto)!.ToCrawlOptions(out var errors);
 
         Assert.Empty(errors);
-        Assert.Equal(options with { ExtraHeaders = roundTripped.ExtraHeaders, ExtraSitemaps = roundTripped.ExtraSitemaps }, roundTripped);
+        Assert.Equal(options with
+        {
+            ExtraHeaders = roundTripped.ExtraHeaders,
+            ExtraSitemaps = roundTripped.ExtraSitemaps,
+            Signatures = roundTripped.Signatures
+        }, roundTripped);
         Assert.Equal(options.ExtraHeaders, roundTripped.ExtraHeaders);
         Assert.Equal(options.ExtraSitemaps, roundTripped.ExtraSitemaps);
+
+        // A Shopify signature is taken in requests and never given back in a response.
+        Assert.DoesNotContain(SyntheticShopify.KEY_ID, json);
+        Assert.Empty(roundTripped.Signatures);
     }
 }
