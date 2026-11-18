@@ -34,9 +34,9 @@ import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
 import { TextLink } from '../ui/TextLink';
 import { AnalysisNotes, AnalysisProgress, NotAnalysed } from './issues/AnalysisState';
+import { AnswerHeadline } from './issues/AnswerHeadline';
 import {
   analysisTotals,
-  answerSentence,
   checkEntries,
   countedEntries,
   firstCheckToFix,
@@ -406,7 +406,7 @@ export function OverviewScreen() {
  * count opening Issues, where they can be shown.
  */
 function answer(crawlId: string, totals: AnalysisTotals, hidden: HiddenTotals | null): ReactNode {
-  const sentence = answerSentence(totals);
+  const sentence = <AnswerHeadline totals={totals} />;
   if (!hidden) return sentence;
   const words = hiddenWords(hidden);
   return (

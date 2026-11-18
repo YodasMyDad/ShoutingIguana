@@ -64,6 +64,15 @@ public sealed record AnalysisSettings
     /// <summary>A data: image larger than this, decoded, is built into the page.</summary>
     public long InlineImageMaxBytes { get; init; } = 10 * 1024;
 
+    /// <summary>An H1 or H2 longer than this many characters runs on (Screaming Frog's default).</summary>
+    public int HeadingMaxLength { get; init; } = 70;
+
+    /// <summary>An indexable page of at least this many main-content words needs an H2.</summary>
+    public int H2MinWords { get; init; } = 500;
+
+    /// <summary>English text whose Flesch reading ease is under this is very difficult to read (Flesch's own line).</summary>
+    public int ReadabilityMinScore { get; init; } = 30;
+
     public long LargePageBytes { get; init; } = 1024 * 1024;
 
     public int SlowResponseMs { get; init; } = 1_000;
@@ -119,6 +128,11 @@ public sealed record AnalysisSettings
         if (ResponsiveImageMinWidth < 1 || LegacyImageMinBytes < 1 || InlineImageMaxBytes < 1)
         {
             errors.Add("The image width and size limits must be positive.");
+        }
+
+        if (HeadingMaxLength < 1 || H2MinWords < 1 || ReadabilityMinScore is < 0 or > 100)
+        {
+            errors.Add("The heading length and word limits must be positive, and the reading ease between 0 and 100.");
         }
 
         return errors;

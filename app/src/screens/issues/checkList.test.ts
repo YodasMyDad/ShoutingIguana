@@ -13,6 +13,7 @@ import {
   rankChecksToFix,
   sortChecks,
   causeWords,
+  answerParts,
   relatedChecks,
   type CheckListFilters,
 } from './checkList';
@@ -95,6 +96,9 @@ describe('what each check came to', () => {
       skipped: 2,
       causes: null,
       templateCauses: 0,
+      fixCauses: null,
+      fixTemplateCauses: 0,
+      noticeCauses: null,
     });
   });
 });
@@ -118,6 +122,9 @@ describe('hidden checks', () => {
       skipped: 2,
       causes: null,
       templateCauses: 0,
+      fixCauses: null,
+      fixTemplateCauses: 0,
+      noticeCauses: null,
     });
     expect(hiddenTotals(entries)).toEqual({ checks: 3, found: 2, issues: 274 });
     expect(hiddenTotals(checkEntries(CHECKS, ANALYSIS))).toBeNull();
@@ -427,25 +434,45 @@ describe('things to change', () => {
       skipped: 2,
       causes: 97,
       templateCauses: 1,
+      // What moves the score: the errors' and warnings' alone, the links again the 404s' job; then the notices.
+      fixCauses: 9,
+      fixTemplateCauses: 0,
+      noticeCauses: 88,
     });
     // With the 404s hidden, the links are a job of their own again.
     const hidden = checkEntries(CHECKS, COUNTED, new Set(['internal-client-error']));
     expect(analysisTotals(countedEntries(hidden)).causes).toBe(91);
   });
 
-  it('lead the answer when the analysis counts them', () => {
-    expect(answerSentence({ found: 19, issues: 933, passed: 63, skipped: 3, causes: 40, templateCauses: 3 })).toBe(
-      'About 40 things to change, 3 of them in the site’s template: 19 checks found 933 issues on this crawl. 63 passed and 3 were skipped.',
+  it('lead the answer with what moves the score, then the notices’ things in the same unit, then the counts', () => {
+    const totals = { found: 21, issues: 1_124, passed: 112, skipped: 4, causes: 852, templateCauses: 3 };
+    // Things, then more things: the units agree; the checks and issues are named as such.
+    expect(answerSentence({ ...totals, fixCauses: 77, fixTemplateCauses: 3, noticeCauses: 775 })).toBe(
+      'About 77 things to fix, 3 of them in the site’s template · about 775 more worth a look · 21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
     );
-    expect(answerSentence({ found: 2, issues: 14, passed: 80, skipped: 0, causes: 14, templateCauses: 0 })).toBe(
-      'About 14 things to change: 2 checks found 14 issues on this crawl. 80 passed.',
+    expect(answerParts({ ...totals, fixCauses: 1, fixTemplateCauses: 0, noticeCauses: 1 })).toEqual({
+      fix: '1 thing to fix',
+      notices: '1 more worth a look',
+      counts: '21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
+    });
+    // Only notices: nothing to fix, and their things follow, named.
+    expect(
+      answerSentence({ ...totals, found: 2, issues: 14, fixCauses: 0, fixTemplateCauses: 0, noticeCauses: 9 }),
+    ).toBe(
+      'Nothing to fix · about 9 things worth a look · 2 checks found 14 issues on this crawl. 112 passed and 4 were skipped.',
     );
-    expect(answerSentence({ found: 1, issues: 264, passed: 80, skipped: 0, causes: 1, templateCauses: 1 })).toBe(
-      '1 thing to change, in the site’s template: 1 check found 264 issues on this crawl. 80 passed.',
-    );
-    // Nothing found: nothing to change, as before.
-    expect(answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0, causes: 0, templateCauses: 0 })).toBe(
+    // No notices: none said.
+    expect(answerParts({ ...totals, fixCauses: 5, fixTemplateCauses: 0, noticeCauses: 0 }).notices).toBeNull();
+    // Nothing found, or an earlier sidecar's analysis: the counts alone, as before.
+    expect(answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0, fixCauses: 0, noticeCauses: 0 })).toBe(
       answerSentence({ found: 0, issues: 0, passed: 82, skipped: 0 }),
+    );
+    expect(answerSentence({ ...totals, fixCauses: null })).toBe(
+      '21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
+    );
+    // Only notices found something, on an analysis that counts no things: not "nothing to fix", the counts alone.
+    expect(answerSentence({ ...totals, causes: null, fixCauses: 0, noticeCauses: null })).toBe(
+      '21 checks found 1,124 issues on this crawl. 112 passed and 4 were skipped.',
     );
   });
 
@@ -455,6 +482,7 @@ describe('things to change', () => {
     expect(causeWords(1_204, 2)).toBe('about 1,204 things to change, 2 of them in the site’s template');
     expect(causeWords(2, 2)).toBe('about 2 things to change, all of them in the site’s template');
     expect(causeWords(1, 1)).toBe('1 thing to change, in the site’s template');
+    expect(causeWords(38, 4, 'fix')).toBe('about 38 things to fix, 4 of them in the site’s template');
   });
 });
 

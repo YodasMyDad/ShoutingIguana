@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { GARDEN_ANALYSIS } from '../../test/simpleSidecar';
-import { BROKEN_LINKS_CLEARED, gardenComparison } from '../../test/fixLoopSidecar';
-import { comparedGroups, comparedRows, itemChangesOf, recheckKindsOf, scenarioFixed, siteKeyOf } from './fixLoop';
+import { BROKEN_LINKS_CLEARED, gardenComparison, recheckRecord, recheckResult } from '../../test/fixLoopSidecar';
+import {
+  comparedGroups,
+  comparedRows,
+  itemChangesOf,
+  recheckKindsOf,
+  scenarioFixed,
+  siteKeyOf,
+  standInCleared,
+  standInRecheckRows,
+} from './fixLoop';
 
 describe('the mock sidecar’s fix loop', () => {
   it('keys a site as the sidecar does: the host without www, and a port of its own', () => {
@@ -119,5 +128,35 @@ describe('the mock sidecar’s fix loop', () => {
       comparedRows([{ id: 1, url: 'a' }], gardenComparison({ comparable: 'countsOnly' }), 'broken-internal-links')[0]
         ?.change,
     ).toBeNull();
+  });
+});
+
+describe('never a count over an empty list (round 4)', () => {
+  it('gives every check fixed since rows of its own, as many as its count then, split as the comparison splits them', () => {
+    const comparison = gardenComparison({ splits: { 'title-missing': { fixed: 2, gone: 0, notChecked: 1 } } });
+    for (const change of comparison.checks.filter((each) => each.state === 'fixed' || each.state === 'fewer')) {
+      const rows = standInCleared(change, 'https://www.example.com');
+      expect(rows).toHaveLength((change.fixed ?? 0) + (change.gone ?? 0) + (change.notChecked ?? 0));
+    }
+    const titles = standInCleared(
+      comparison.checks.find((each) => each.checkId === 'title-missing')!,
+      'https://a.example',
+    );
+    expect(titles.map((row) => row.state)).toEqual(['fixed', 'fixed', 'notChecked']);
+    expect(titles[2]?.reason).toEqual({ code: 'notRead', text: 'Not read this time' });
+  });
+
+  it('gives a settled recheck rows of its own, as many as each of its counts', () => {
+    const recheck = recheckRecord({
+      judged: 9,
+      result: recheckResult({ fixed: 3, still: 4, notChecked: 1, notRechecked: 1, new: 2 }),
+    });
+    const rows = standInRecheckRows(recheck, 'https://www.example.com');
+    const count = (outcome: string) => rows.filter((row) => row.outcome === outcome).length;
+    expect([count('fixed'), count('still'), count('notChecked'), count('notRechecked'), count('new')]).toEqual([
+      3, 4, 1, 1, 2,
+    ]);
+    // The URLs it judged (the flagged ones), and beside them those that have it now and didn't.
+    expect(rows.filter((row) => row.outcome !== 'new')).toHaveLength(9);
   });
 });

@@ -12,6 +12,8 @@ export const FIXED_SECTION = 'fixed-since';
 /** A check in the group: the check, and what to say of it then. */
 export interface FixedEntry {
   check: Check;
+  /** Its severity: the group counts problems, then things worth a look, as Simple's headline does. */
+  severity: Severity;
   /** "9 addresses on 3 Nov", "3 pages before the recheck on 17 Nov". */
   then: string;
 }
@@ -33,8 +35,7 @@ export function fixedSinceEntries(
         ? [{ check, then: fixedThenWords(check, change.then, comparison.with.startedAt), severity: check.severity }]
         : [];
     })
-    .sort((a, b) => ORDER[a.severity] - ORDER[b.severity])
-    .map(({ check, then }) => ({ check, then }));
+    .sort((a, b) => ORDER[a.severity] - ORDER[b.severity]);
 }
 
 /**
@@ -61,6 +62,7 @@ export function clearedByRechecks(
     const noun = pages ? (before === 1 ? 'page' : 'pages') : before === 1 ? 'address' : 'addresses';
     entries.push({
       check,
+      severity: check.severity,
       then: `${formatCount(before)} ${noun} before the recheck ${onWords(recheck.endedAt ?? recheck.startedAt)}`,
     });
   }

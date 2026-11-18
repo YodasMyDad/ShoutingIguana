@@ -6,7 +6,7 @@ import { copyText } from '../lib/clipboard';
 import { openInBrowser } from '../shell/os';
 import { IconButton } from './IconButton';
 import { Tooltip } from './Tooltip';
-import { fileLabelOf, middleTruncate, openLabel, originLength, urlDisplay } from './urlText';
+import { fileLabelOf, middleTruncate, openLabel, originLength, splitExtension, urlDisplay } from './urlText';
 
 /** How long "Copied" stays in the tooltip after a click. */
 const COPIED_MS = 1_500;
@@ -146,6 +146,7 @@ export function Url({
 }: UrlProps) {
   const display = urlDisplay(url, siteOrigin);
   const file = label === 'file' ? fileLabelOf(url, siteOrigin) : null;
+  const name = file ? splitExtension(file.name) : null;
   const { rootRef, shownRef, shown } = useMiddleTruncate(
     display.shown,
     display.origin.length,
@@ -168,7 +169,10 @@ export function Url({
       <span ref={shownRef} className={clsx('si-url__shown', file && 'si-url__shown--file')} aria-hidden="true">
         {file ? (
           <>
-            <span className="si-url__file">{file.name}</span>
+            <span className="si-url__file">
+              <span className="si-url__stem">{name?.stem}</span>
+              {name?.ext ? <span className="si-url__ext">{name.ext}</span> : null}
+            </span>
             {file.rest ? <span className="si-url__rest">{file.rest}</span> : null}
           </>
         ) : truncate === 'wrap' ? null : (

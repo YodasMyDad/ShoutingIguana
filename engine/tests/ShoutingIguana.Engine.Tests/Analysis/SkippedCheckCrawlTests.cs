@@ -35,6 +35,47 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// The crawl doesn't follow hreflang by default. Where a version only hreflang names was left unread for that, the
+    /// versions nothing else leads to can't be told, so hreflang-unlinked is skipped, saying why; on the synthetic site,
+    /// whose versions are all read, it runs.
+    /// </summary>
+    [Fact]
+    public async Task AVersionLeftUnreadBecauseHreflangIsntFollowedSkipsTheUnlinkedCheck()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
+        var analysis = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 });
+        Assert.DoesNotContain(analysis.Skipped, skip => skip.CheckId == IssueCatalog.HREFLANG_UNLINKED.Id);
+        var url = Assert.Single(IssueReader.ReadAll(_path, IssueCatalog.HREFLANG_UNLINKED.Id)).Url;
+
+        // As a crawl that never read it: only hreflang names it now, and the crawl doesn't follow hreflang.
+        using (var connection = new SqliteConnection($"Data Source={_path};Pooling=False"))
+        {
+            connection.Open();
+            using var find = connection.CreateCommand();
+            find.CommandText = "SELECT id FROM urls WHERE url = $url";
+            find.Parameters.AddWithValue("$url", url);
+            var version = Convert.ToInt64(find.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+            using var command = connection.CreateCommand();
+            command.CommandText = $"""
+                DELETE FROM responses WHERE url_id = {version};
+                DELETE FROM response_details WHERE url_id = {version};
+                DELETE FROM links WHERE from_id = {version} OR (to_id = {version} AND kind <> {(int)ShoutingIguana.Engine.Parsing.Models.LinkKind.Hreflang});
+                UPDATE urls SET state = {(int)ShoutingIguana.Engine.Storage.Models.UrlState.Skipped}, skip_reason = {(int)ShoutingIguana.Engine.Storage.Models.SkipReason.NotFollowedByOption} WHERE id = {version};
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        var again = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
+        Assert.Equal(
+            [
+                new SkippedCheck(IssueCatalog.HREFLANG_UNLINKED.Id, SkippedCheckReasons.HREFLANG_OFF,
+                    "Hreflang links weren't followed in this crawl, and 1 language version they name wasn't read.")
+            ],
+            again.Skipped);
+        Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.HREFLANG_UNLINKED.Id));
+    }
+
     /// <summary>The synthetic site plants every one of these checks, so a check that still ran would store rows.</summary>
     [Fact]
     public async Task ChecksOfWhatTheCrawlDidntFetchAreSkipped()
@@ -54,7 +95,8 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
             IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.IMAGE_NO_SRCSET, IssueCatalog.IMAGE_LEGACY_FORMAT, IssueCatalog.ORPHAN_PAGE,
             IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_ERROR, IssueCatalog.SITEMAP_MISSING, IssueCatalog.SITEMAP_NON_INDEXABLE,
             IssueCatalog.SITEMAP_URL_OTHER_HOST, IssueCatalog.ROBOTS_TXT_NO_SITEMAP, IssueCatalog.SITEMAP_OVER_LIMIT, IssueCatalog.SITEMAP_NEAR_LIMIT,
-            IssueCatalog.SITEMAP_EMPTY, IssueCatalog.SITEMAP_URL_REPEATED, IssueCatalog.SITEMAP_LASTMOD_INVALID
+            IssueCatalog.SITEMAP_EMPTY, IssueCatalog.SITEMAP_URL_REPEATED, IssueCatalog.SITEMAP_LASTMOD_INVALID,
+            IssueCatalog.SOCIAL_IMAGE_BROKEN, IssueCatalog.SOCIAL_IMAGE_TOO_LARGE, IssueCatalog.SOCIAL_IMAGE_TOO_SMALL
         ];
         Assert.True(analysis.IsPartial);
         Assert.Equal(
@@ -147,7 +189,8 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
                 [
                     new SkippedCheck(IssueCatalog.ORPHAN_PAGE.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
                     new SkippedCheck(IssueCatalog.NON_INDEXABLE_INLINKS_ONLY.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
-                    new SkippedCheck(IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason)
+                    new SkippedCheck(IssueCatalog.CANONICAL_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason),
+                    new SkippedCheck(IssueCatalog.HREFLANG_UNLINKED.Id, SkippedCheckReasons.PAGES_UNREAD, reason)
                 ], analysis.Skipped);
             Assert.Contains($"Orphan pages weren't checked: {reason}", analysis.Notes);
             Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id));

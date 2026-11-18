@@ -37,12 +37,12 @@ import { PageHeader } from '../ui/PageHeader';
 import { SeverityMark } from '../ui/SeverityMark';
 import { siteOriginOf } from '../ui/urlText';
 import { AnalysisNotes, AnalysisProgress, IssuesSkeleton, NotAnalysed } from './issues/AnalysisState';
+import { AnswerHeadline } from './issues/AnswerHeadline';
 import { CheckDetail } from './issues/CheckDetail';
 import { showCheckWords } from './issues/showCheckWords';
 import { ChecksList, type SelectedBy, type SeverityFilter } from './issues/ChecksList';
 import {
   analysisTotals,
-  answerSentence,
   buildCheckList,
   categoryTitle,
   checkEntries,
@@ -576,11 +576,14 @@ export function IssuesScreen() {
   const skeleton = useDelayedLoading(loading);
 
   const hiddenNote = hiddenChecks ? hiddenWords(hiddenChecks) : null;
-  const subtitle = totals
-    ? `${answerSentence(totals)}${hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}`
-    : neverAnalysed
-      ? 'No issues to show yet.'
-      : undefined;
+  const subtitle = totals ? (
+    <>
+      <AnswerHeadline totals={totals} />
+      {hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}
+    </>
+  ) : neverAnalysed ? (
+    'No issues to show yet.'
+  ) : undefined;
   let body;
   if (loading || skeleton) {
     body = <IssuesSkeleton visible={skeleton} />;

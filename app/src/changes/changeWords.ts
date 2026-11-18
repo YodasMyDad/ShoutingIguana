@@ -294,6 +294,17 @@ export function fixedGroupTitle(since: string | null, count?: number): string {
 }
 
 /**
+ * How many the Fixed group holds, in the unit of Simple's headline ("6 problems to fix and 22 more worth a look"):
+ * "3 problems and 1 more worth a look", "1 problem", "2 worth a look".
+ */
+export function fixedCountWords(problems: number, notices: number): string {
+  const parts: string[] = [];
+  if (problems > 0) parts.push(formatCountOf(problems, 'problem'));
+  if (notices > 0) parts.push(`${formatCount(notices)}${problems > 0 ? ' more' : ''} worth a look`);
+  return parts.join(' and ');
+}
+
+/**
  * A fixed check in the Fixed group: its count then, "9 addresses on 3 Nov", "14 pages on 3 Nov", "whole site on 3 Nov"
  * for a fault of the whole site.
  */

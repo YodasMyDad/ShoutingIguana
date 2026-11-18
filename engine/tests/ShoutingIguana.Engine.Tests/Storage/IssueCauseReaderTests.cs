@@ -109,8 +109,10 @@ public sealed class IssueCauseReaderTests(GridCrawl crawl)
             related += expected.Count;
         }
 
-        // The synthetic site's 404s are linked from its pages: restoring them clears those links.
+        // The synthetic site's 404s are linked from its pages: restoring them clears those links. Its missing share image is
+        // og-image-broken's only one: restoring it clears that page.
         Assert.Contains(causes["internal-client-error"].Clears, cleared => cleared.CheckId == "broken-internal-links");
+        Assert.Contains(causes["internal-client-error"].Clears, cleared => cleared.CheckId == "social-image-broken" && cleared.Pages == 1);
         Assert.True(related > 0);
     }
 

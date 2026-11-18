@@ -45,6 +45,9 @@ internal sealed record PageSpec
 
     public bool OpenGraph { get; init; } = true;
 
+    /// <summary>The template's X card, a large one, filled from the Open Graph tags (batch 9).</summary>
+    public bool TwitterCard { get; init; } = true;
+
     /// <summary>The site's header, menu and footer around the content; false leaves the page with only its own links.</summary>
     public bool Chrome { get; init; } = true;
 }

@@ -338,6 +338,66 @@ export function comparedRows(rows: readonly IssueRow[], comparison: CrawlCompari
   }));
 }
 
+// ------------------------------------------------------------------------------------------- Never an empty list
+
+/**
+ * Stand-ins for what a check flagged then and not now, where a story's sidecar has no rows of its own: as many as the
+ * comparison counts, split as it splits them (fixed, no longer found, not checked this time), on the site, each its own
+ * cause. Never a count over an empty list (round 4).
+ */
+export function standInCleared(change: CheckChange, site: string): ClearedIssue[] {
+  const rows: ClearedIssue[] = [];
+  const add = (state: ClearedIssue['state'], count: number) => {
+    for (let index = 0; index < count; index++) {
+      const n = rows.length + 1;
+      rows.push({
+        url: `${site}/example-page-${n}/`,
+        urlId: state === 'gone' ? null : 20_000 + n,
+        thenUrlId: 30_000 + n,
+        state,
+        reason: state === 'notChecked' ? { code: 'notRead', text: 'Not read this time' } : null,
+        detailThen: null,
+        relatedUrlThen: `${site}/example-cause-${n}/`,
+      });
+    }
+  };
+  add('fixed', change.fixed ?? 0);
+  add('gone', change.gone ?? 0);
+  add('notChecked', change.notChecked ?? 0);
+  return rows;
+}
+
+/**
+ * Stand-ins for a settled recheck's URLs, where a story's sidecar has none of its own: the URLs it judged, as many with
+ * each outcome as its result counts, and those that have it now and didn't. Never a count over an empty list.
+ */
+export function standInRecheckRows(recheck: Recheck, site: string): RecheckRow[] {
+  const result = recheck.result;
+  if (!result) return [];
+  const rows: RecheckRow[] = [];
+  const add = (outcome: RecheckRow['outcome'], count: number, flaggedBefore: boolean) => {
+    for (let index = 0; index < count; index++) {
+      const n = rows.length + 1;
+      rows.push({
+        urlId: 40_000 + n,
+        url: `${site}/example-page-${n}/`,
+        role: 'judged',
+        outcome,
+        flaggedBefore,
+        detailBefore: flaggedBefore ? 'As the check found it' : null,
+        detailAfter: outcome === 'still' || outcome === 'new' ? 'As the recheck found it' : null,
+        statusCode: outcome === 'notChecked' ? null : 200,
+      });
+    }
+  };
+  add('still', result.still, true);
+  add('fixed', result.fixed, true);
+  add('notChecked', result.notChecked, true);
+  add('notRechecked', result.notRechecked, true);
+  add('new', result.new, false);
+  return rows;
+}
+
 // ------------------------------------------------------------------------------------------- The garden's made-up past
 
 /** The garden crawl of two weeks before, made up for the mock: the site's previous crawl. */

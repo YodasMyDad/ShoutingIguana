@@ -55,7 +55,10 @@ describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
 
   it('folds the checks fixed since below the severities, each with its count then', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
-    const toggle = await screen.findByRole('button', { name: /^Fixed since your last check on 17 Oct \(4\)/ });
+    // Counted as the headline counts: problems, then the things worth a look.
+    const toggle = await screen.findByRole('button', {
+      name: 'Fixed since your last check on 17 Oct (3 problems and 1 more worth a look)',
+    });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     const fixed = screen.getByRole('list', { name: 'Fixed since your last check on 17 Oct' });
@@ -114,7 +117,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
     await open(gardenItem({ previous: null, changes: null }), [
       ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/rechecks$/, () => json({ rechecks: [notCleared, cleared] })],
     ]);
-    const toggle = await screen.findByRole('button', { name: /^Fixed by a recheck \(1\)/ });
+    const toggle = await screen.findByRole('button', { name: 'Fixed by a recheck (1 problem)' });
     fireEvent.click(toggle);
     const fixed = screen.getByRole('list', { name: 'Fixed by a recheck' });
     expect(within(fixed).getByRole('link')).toHaveTextContent('Pages with no title');

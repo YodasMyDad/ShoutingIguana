@@ -234,9 +234,11 @@ describe.skipIf(TABLE_STUBBED)('Fixed it?, after a recheck', () => {
   it('says a stopped recheck as what it got through', async () => {
     await open({
       rechecks: [recheckRecord({ status: 'stopped', result: recheckResult({ fixed: 2, still: 1, notRechecked: 2 }) })],
-      rows: [],
     });
-    expect(await (await card()).findByText('Stopped: 3 of 5 rechecked. 2 fixed, 1 still has it.')).toBeInTheDocument();
+    const fixed = await card();
+    // The one that still has it is listed under it: never a count over an empty list.
+    expect(await fixed.findByText('Stopped: 3 of 5 rechecked. 2 fixed, 1 still has it:')).toBeInTheDocument();
+    expect(fixed.getByText('/example-page-1/')).toBeInTheDocument();
   });
 
   it('says one the app’s closing cut short as such, never as fixed', async () => {

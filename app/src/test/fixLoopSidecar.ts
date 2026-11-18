@@ -23,6 +23,8 @@ import {
   itemChangesOf,
   scenarioComparison,
   scenarioFixed,
+  standInCleared,
+  standInRecheckRows,
   type ComparisonScenario,
 } from '../api/mock/fixLoop';
 import type { ProblemBody } from '../api/errors';
@@ -188,8 +190,13 @@ export function fixedRoute(
   return [
     'POST',
     /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([^/]+)\/fixed$/,
-    (request, match) =>
-      json(scenarioFixed(match[1] ?? '', comparison, rowsByCheck[match[1] ?? ''] ?? [], request.body ?? {})),
+    (request, match) => {
+      const checkId = match[1] ?? '';
+      const change = comparison?.checks.find((each) => each.checkId === checkId);
+      // A check without rows of its own gets stand-ins, as many as the comparison counts: never a count over an empty list.
+      const rows = rowsByCheck[checkId] ?? (change ? standInCleared(change, SITE) : []);
+      return json(scenarioFixed(checkId, comparison, rows, request.body ?? {}));
+    },
   ];
 }
 
@@ -289,7 +296,7 @@ export const RECHECK_ROWS: readonly RecheckRow[] = [
 export function recheckRoutes({
   plan = recheckPlan(),
   rechecks = [],
-  rows = RECHECK_ROWS,
+  rows,
   start,
 }: {
   plan?: RecheckPlan | 'never';
@@ -298,6 +305,15 @@ export function recheckRoutes({
   /** What starting one answers: by default 202 with the next number and the plan. */
   start?: (request: unknown) => Response;
 } = {}): FakeRoute[] {
+  // A recheck's URLs: those given; else the broken links' (one still has it, four fixed) for its 4-of-5 result; else as
+  // many stand-ins with each outcome as its result counts. Never a count over an empty list.
+  const rowsOf = (recheck: Recheck | undefined): readonly RecheckRow[] => {
+    if (rows) return rows;
+    if (!recheck?.result) return RECHECK_ROWS;
+    const { fixed, still, notChecked, notRechecked, new: added } = recheck.result;
+    if (fixed === 4 && still === 1 && notChecked + notRechecked + added === 0) return RECHECK_ROWS;
+    return standInRecheckRows(recheck, SITE);
+  };
   const nextId = Math.max(0, ...rechecks.map((each) => each.id)) + 1;
   return [
     [
@@ -325,9 +341,9 @@ export function recheckRoutes({
     [
       'POST',
       /^\/api\/crawls\/[0-9a-f]{16}\/rechecks\/(\d+)\/rows$/,
-      (request) => {
+      (request, match) => {
         const query = (request.body ?? {}) as RecheckRowsQuery;
-        const matching = rows.filter(
+        const matching = rowsOf(rechecks.find((each) => each.id === Number(match[1]))).filter(
           (row) =>
             (!query.outcomes || (row.outcome !== null && query.outcomes.includes(row.outcome))) &&
             (!query.roles || query.roles.includes(row.role)),

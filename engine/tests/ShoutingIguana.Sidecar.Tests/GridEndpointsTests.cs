@@ -19,6 +19,48 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     private TestSidecar Sidecar => grid.Sidecar;
 
     /// <summary>
+    /// Never a count over an empty list (round 4): every check that found something, in the whole catalog, lists its URLs.
+    /// Its first page of rows isn't empty and matches its count; a grouped check has groups, as many URLs as its count
+    /// in them (a check grouped by the other URL has a page in a group per URL it names, so at least its count).
+    /// </summary>
+    [Fact]
+    public async Task EveryCheckThatFoundSomethingListsItsUrls()
+    {
+        var counts = (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis"))["counts"]!.AsArray()
+            .Select(count => ((string)count!["checkId"]!, (long)count["count"]!)).Where(count => count.Item2 > 0).ToList();
+        Assert.True(counts.Count >= 40, $"only {counts.Count} checks found something on the synthetic site");
+        foreach (var (checkId, count) in counts)
+        {
+            var rows = await PostOkAsync($"api/crawls/{grid.Id}/issues/{checkId}/rows", JsonNode.Parse("""{"limit":5}"""));
+            Assert.True(rows["rows"]!.AsArray().Count > 0, $"{checkId}: {count} flagged, no rows");
+            Assert.True((long)rows["matching"]! == count, $"{checkId}: {count} flagged, {rows["matching"]} rows");
+
+            var grouping = IssueCatalog.Find(checkId)!.Grouping;
+            if (grouping == IssueGrouping.None)
+            {
+                continue;
+            }
+
+            long pages = 0;
+            long groupCount = 0;
+            for (var offset = 0; ; offset += 1_000)
+            {
+                var groups = await PostOkAsync($"api/crawls/{grid.Id}/issues/{checkId}/groups", JsonNode.Parse($$"""{"offset":{{offset}},"limit":1000}"""));
+                Assert.Equal(count, (long)groups["total"]!);
+                groupCount = (long)groups["groupCount"]!;
+                pages += groups["groups"]!.AsArray().Sum(group => (long)group!["pages"]!);
+                if (offset + 1_000 >= groupCount)
+                {
+                    break;
+                }
+            }
+
+            Assert.True(groupCount > 0, $"{checkId}: {count} flagged, no groups");
+            Assert.True(grouping == IssueGrouping.RelatedUrl ? pages >= count : pages == count, $"{checkId}: {count} flagged, {pages} in its groups");
+        }
+    }
+
+    /// <summary>
     /// The analysis says what each check comes to as work, and what a fix of it clears, as the engine counts them; the
     /// catalog says which checks a fix can clear.
     /// </summary>

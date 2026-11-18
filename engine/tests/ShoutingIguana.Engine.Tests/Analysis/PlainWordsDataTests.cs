@@ -118,7 +118,7 @@ public sealed partial class PlainWordsDataTests
         Assert.Equal("These pages took more than {limit:slowResponseMs} to arrive when the check asked for them.", IssuePlainTexts.Find("slow-response")!.What[0]);
         Assert.Equal("These pages took more than 1 second to arrive when the check asked for them.", PlainLimits.Fill(IssuePlainTexts.Find("slow-response"), defaults)!.What[0]);
 
-        // Seventeen checks name a limit, nineteen times, and no other text does: a number a setting holds is never typed.
+        // Eighteen checks name a limit, twenty times, and no other text does: a number a setting holds is never typed.
         var naming = IssuePlainTexts.All
             .Select(check => (check.Key, Limits: Limit().Matches(Everything(check.Value)).Select(match => match.Groups[1].Value).ToList()))
             .Where(check => check.Limits.Count > 0)
@@ -142,7 +142,8 @@ public sealed partial class PlainWordsDataTests
                 ["slow-external-links"] = "slowExternalLinkMs",
                 ["image-no-srcset"] = "responsiveImageMinWidth",
                 ["image-legacy-format"] = "legacyImageMinBytes",
-                ["image-inline-large"] = "inlineImageMaxBytes"
+                ["image-inline-large"] = "inlineImageMaxBytes",
+                ["heading-too-long"] = "headingMaxLength"
             }, naming);
     }
 

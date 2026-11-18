@@ -145,8 +145,14 @@ export function rowsPage(rows: IssueRow[], total: number): GridPage<IssueRow> {
   };
 }
 
-/** The routes Simple's screens read: the library, the item, the catalog, the analysis, and no groups by default. */
+/**
+ * The routes Simple's screens read: the library, the item, the catalog, the analysis, and by default no groups but a
+ * check's flagged URLs as rows (stand-ins on the crawl's site), as many as the analysis counts: never a count over an
+ * empty list (round 4). A test or story that needs a check's real groups or rows gives its own routes first.
+ */
 export function simpleRoutes(item: CrawlListItem, analysis: Analysis | 'not-analyzed'): FakeRoute[] {
+  const countOf = (checkId: string) =>
+    analysis === 'not-analyzed' ? 0 : (analysis.counts.find((count) => count.checkId === checkId)?.count ?? 0);
   return [
     ['GET', /^\/api\/crawls$/, () => json([item])],
     ['GET', /^\/api\/crawls\/([0-9a-f]{16})$/, () => json(item)],
@@ -168,7 +174,26 @@ export function simpleRoutes(item: CrawlListItem, analysis: Analysis | 'not-anal
     [
       'POST',
       /^\/api\/crawls\/[0-9a-f]{16}\/issues\/[^/]+\/groups$/,
-      (_request, match) => json(groupPage(match[0].split('/')[5] ?? '', [], 0)),
+      (_request, match) => {
+        const checkId = match[0].split('/')[5] ?? '';
+        return json(groupPage(checkId, [], countOf(checkId)));
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/issues\/[^/]+\/rows$/,
+      (request, match) => {
+        const total = countOf(match[0].split('/')[5] ?? '');
+        const limit = (request.body as { limit?: number } | undefined)?.limit ?? 200;
+        const rows = Array.from({ length: Math.min(total, limit) }, (_, index) => ({
+          id: 10_000 + index,
+          url: `${SITE}/example-page-${index + 1}/`,
+          title: null,
+          detail: null,
+          relatedUrl: null,
+        }));
+        return json(rowsPage(rows, total));
+      },
     ],
     [
       'GET',

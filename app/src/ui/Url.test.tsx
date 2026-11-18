@@ -71,6 +71,9 @@ describe('Url', () => {
     const image = `${SITE}/media/5265/harpswell-metal-patio-set-9.jpg?width=896`;
     const { container } = render(<Url url={image} siteOrigin={SITE} label="file" />);
     expect(container.querySelector('.si-url__file')).toHaveTextContent('harpswell-metal-patio-set-9.jpg');
+    // The stem is what's cut where the name doesn't fit, never its extension (the stylesheet cuts the stem at its end).
+    expect(container.querySelector('.si-url__stem')).toHaveTextContent(/^harpswell-metal-patio-set-9$/);
+    expect(container.querySelector('.si-url__ext')).toHaveTextContent(/^\.jpg$/);
     expect(container.querySelector('.si-url__rest')).toHaveTextContent('?width=896');
     // Never cut in the middle: the name leads, and what doesn't fit is cut at its end.
     expect(shownText(container)).not.toContain(ELLIPSIS);

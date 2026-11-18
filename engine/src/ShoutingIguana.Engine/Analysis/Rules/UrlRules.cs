@@ -31,7 +31,51 @@ internal sealed class UrlRules(AnalysisSettings settings) : IPageRule
         {
             yield return new IssueHit(IssueCatalog.URL_TOO_LONG, page.UrlId, RuleText.Over(RuleText.Characters(length), settings.MaxUrlLength));
         }
+
+        if (path.Contains("//", StringComparison.Ordinal))
+        {
+            yield return new IssueHit(IssueCatalog.URL_MULTIPLE_SLASHES, page.UrlId);
+        }
+
+        var decodedPath = Uri.UnescapeDataString(path);
+        if (decodedPath.Contains(' ', StringComparison.Ordinal))
+        {
+            yield return new IssueHit(IssueCatalog.URL_SPACE, page.UrlId);
+        }
+
+        if (!Ascii(decodedPath) || !Ascii(Uri.UnescapeDataString(page.Uri.Query)))
+        {
+            yield return new IssueHit(IssueCatalog.URL_NON_ASCII, page.UrlId);
+        }
+
+        // A search results page is its own check, and not one with parameters too.
+        var parameters = ParameterNames(page.Uri.Query);
+        if (IsInternalSearch(path, parameters))
+        {
+            yield return new IssueHit(IssueCatalog.URL_INTERNAL_SEARCH, page.UrlId, parameters.Count > 0 ? RuleText.Fit(string.Join(", ", parameters)) : null);
+        }
+        else if (parameters.Count > 0)
+        {
+            yield return new IssueHit(IssueCatalog.URL_PARAMETERS, page.UrlId, RuleText.Fit(string.Join(", ", parameters)));
+        }
     }
+
+    /// <summary>A query's parameter names, decoded, in order, each once ("sort, page").</summary>
+    internal static List<string> ParameterNames(string query) =>
+    [
+        .. query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => Uri.UnescapeDataString(pair.Split('=', 2)[0].Replace('+', ' ')).Trim()).Where(name => name.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+    ];
+
+    /// <summary>The site's own search: a path segment "search", or a query that asks something (s, q, query, search, keyword).</summary>
+    internal static bool IsInternalSearch(string path, IReadOnlyList<string> parameters) =>
+        path.Split('/').Any(segment => segment.Equals("search", StringComparison.OrdinalIgnoreCase)) ||
+        parameters.Any(name => SEARCH_PARAMETERS.Contains(name));
+
+    private static readonly HashSet<string> SEARCH_PARAMETERS = new(StringComparer.OrdinalIgnoreCase) { "s", "q", "query", "search", "keyword", "keywords" };
+
+    private static bool Ascii(string text) => text.All(char.IsAscii);
 
     /// <summary>
     /// A URL's length as <see cref="IssueCatalog.URL_TOO_LONG"/> judges it against <see cref="AnalysisSettings.MaxUrlLength"/>:

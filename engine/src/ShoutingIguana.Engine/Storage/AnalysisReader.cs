@@ -121,7 +121,7 @@ internal sealed class AnalysisReader : IDisposable
         var statuses = new UrlStatus[maxId + 1];
         var startId = 0;
         long read = 0;
-        var pixelWidth = HasColumn("responses", "pixel_width") ? "r.pixel_width" : "NULL";
+        var pixels = HasColumn("responses", "pixel_width") ? "r.pixel_width, r.pixel_height" : "NULL, NULL";
         // A URL failed without a request, because its host had stopped answering, was never checked: links to it can't
         // be judged, so it counts as unfetched.
         Rows($"""
@@ -129,7 +129,7 @@ internal sealed class AnalysisReader : IDisposable
                    r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
                    r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type,
                    COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0),
-                   COALESCE(r.response_ms, 0), {pixelWidth}
+                   COALESCE(r.response_ms, 0), {pixels}
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -164,7 +164,8 @@ internal sealed class AnalysisReader : IDisposable
                 ContentClass: outcome == FetchOutcome.Success && fetched ? ResourceTypes.ClassOf(contentType) : ContentClass.None,
                 IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri),
                 PixelWidth: fetched && !reader.IsDBNull(17) ? reader.GetInt32(17) : null,
-                IsLegacyImage: ContentTypeHeader.MediaTypeOf(contentType) is "image/jpeg" or "image/png" or "image/gif" or "image/bmp" or "image/x-ms-bmp");
+                IsLegacyImage: ContentTypeHeader.MediaTypeOf(contentType) is "image/jpeg" or "image/png" or "image/gif" or "image/bmp" or "image/x-ms-bmp",
+                PixelHeight: fetched && !reader.IsDBNull(18) ? reader.GetInt32(18) : null);
             read++;
             progress?.Advance(read);
         });
@@ -394,6 +395,24 @@ internal sealed class AnalysisReader : IDisposable
             SizeBytes = reader.IsDBNull(7) ? null : reader.GetInt64(7)
         }));
         return sitemaps;
+    }
+
+    /// <summary>
+    /// The internal URLs an hreflang link names that the crawl left unread because it doesn't follow their kind of link
+    /// (hreflang, unless the crawl was told to).
+    /// </summary>
+    public long ReadUnreadHreflangTargets() => Convert.ToInt64(CrawlDatabase.Scalar(_connection, $"""
+        SELECT COUNT(*) FROM urls u
+        WHERE u.is_internal = 1 AND u.state = {(int)UrlState.Skipped} AND u.skip_reason = {(int)SkipReason.NotFollowedByOption}
+          AND EXISTS (SELECT 1 FROM links l WHERE l.to_id = u.id AND l.kind = {(int)LinkKind.Hreflang})
+        """), CultureInfo.InvariantCulture);
+
+    /// <summary>Every internal URL the crawl has, with its id, in id order.</summary>
+    public List<(int Id, string Url)> ReadInternalUrls()
+    {
+        List<(int Id, string Url)> internalUrls = [];
+        Rows("SELECT id, url FROM urls WHERE is_internal = 1 ORDER BY id", reader => internalUrls.Add((reader.GetInt32(0), reader.GetString(1))));
+        return internalUrls;
     }
 
     /// <summary>Whether the crawl's sitemap entries have their lastmod (an engine from before it didn't read it).</summary>

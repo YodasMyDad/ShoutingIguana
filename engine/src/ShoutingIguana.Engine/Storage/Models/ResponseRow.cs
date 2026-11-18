@@ -19,6 +19,12 @@ internal sealed record ResponseRow
 
     /// <inheritdoc cref="PixelWidth"/>
     public int? PixelHeight { get; init; }
+
+    /// <summary>A page's share title (og:title, else twitter:title); null without one.</summary>
+    public string? ShareTitle { get; init; }
+
+    /// <summary>A page's share description (og:description, else twitter:description); null without one.</summary>
+    public string? ShareDescription { get; init; }
     public int TimeToFirstByteMs { get; init; }
     public int ResponseMs { get; init; }
     public string? HttpVersion { get; init; }

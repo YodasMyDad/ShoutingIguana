@@ -33,6 +33,7 @@ import {
   scenarioComparison,
   scenarioFixed,
   siteKeyOf,
+  standInCleared,
 } from './fixLoop';
 import type { CompareWith, CrawlComparison, FixedQuery } from '../fixLoop';
 import { sitemapsRobotsRoutes } from './sitemapsRobots';
@@ -1220,7 +1221,10 @@ export function createMockTransport(): Transport {
         const query = (request.body ?? {}) as FixedQuery;
         const comparison = await comparisonFor(id, query.compareWith ?? 'previous');
         const site = item.startUrl ? new URL(item.startUrl).origin : '';
-        const rows = checkId === 'broken-internal-links' ? gardenClearedRows(site) : [];
+        const change = comparison?.checks.find((each) => each.checkId === checkId);
+        // The garden's broken links as the earlier check had them; any other check's stand-ins, never an empty list.
+        const rows =
+          checkId === 'broken-internal-links' ? gardenClearedRows(site) : change ? standInCleared(change, site) : [];
         return json(scenarioFixed(checkId, comparison, rows, query));
       },
     ],
