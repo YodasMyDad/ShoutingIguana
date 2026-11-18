@@ -125,8 +125,9 @@ export const StatusCodes = memo(function StatusCodes({
       />
       <ul aria-label="Status codes by class" className="-mx-2.5 flex flex-col">
         {split.segments.map((segment) => {
-          // What it's made of, then how many are other sites' URLs: the crawl checks the links that lead off the site.
-          const parts = [partsText(segment.parts, formatCount), externalWords(segment)].filter(Boolean).join(' · ');
+          // How many are other sites' URLs (the crawl checks the links that lead off the site), first, where a narrow row
+          // still shows it, then what it's made of.
+          const parts = [externalWords(segment), partsText(segment.parts, formatCount)].filter(Boolean).join(' · ');
           const row = {
             icon: (
               <span className="si-legend__swatch" aria-hidden="true">

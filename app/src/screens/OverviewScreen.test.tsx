@@ -366,7 +366,7 @@ describe('the Overview of an analysed crawl', () => {
     sidecar({ external: { classes: { '2xx': 120, noResponse: 2 }, blocked: 2 } });
     await open();
     const rows = within(await region('Status codes').findByRole('list', { name: 'Status codes by class' }));
-    expect(await rows.findByText('Refused by robots.txt × 2 · All on other sites')).toBeVisible();
+    expect(await rows.findByText('All on other sites · Refused by robots.txt × 2')).toBeVisible();
     expect(rows.getByRole('link', { name: /^Blocked/ })).toHaveTextContent('All on other sites');
     expect(rows.getByRole('link', { name: /^2xx/ })).toHaveTextContent('120 on other sites');
     expect(rows.getByRole('link', { name: /^4xx/ })).not.toHaveTextContent('other sites');
