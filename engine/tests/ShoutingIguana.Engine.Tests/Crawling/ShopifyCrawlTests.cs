@@ -214,7 +214,8 @@ public sealed class ShopifyCrawlTests : IDisposable
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(ordinaryPath);
         var mixed = IssueReader.ReadResults(ordinaryPath)!;
         Assert.Equal(2, mixed.Counts[IssueCatalog.COOKIES_INSECURE.Id]);
-        Assert.Equal([IssueCatalog.SECURITY_HEADERS_MISSING.Id], mixed.PlatformOwned.Keys);
+        // Its home page also sends a weak X-Content-Type-Options (the synthetic site's security-headers-weak plant).
+        Assert.Equal([IssueCatalog.SECURITY_HEADERS_MISSING.Id, IssueCatalog.SECURITY_HEADERS_WEAK.Id], mixed.PlatformOwned.Keys.Order(StringComparer.Ordinal));
         Assert.Contains(IssueCatalog.COOKIES_INSECURE.Id, mixed.FixFirst);
     }
 

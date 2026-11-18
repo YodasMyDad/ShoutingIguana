@@ -4,7 +4,8 @@
 // so both are unit-tested; the reads are useWhereFound.ts's.
 import type { IssueTarget, IssueTargetsOfUrl, LinkRow, SitemapRef, UrlFoundOn } from '../../api/inspector';
 import type { Check, CheckReferences } from '../../api/types';
-import { FACT_GAP, targetFactParts } from '../../crawl/evidence';
+import { affectedWords } from '../../crawl/checkSubject';
+import { FACT_GAP, noStatusWords, targetFactParts } from '../../crawl/evidence';
 import { KIND_WORDS, POSITION_WORDS } from '../../inspector/words';
 import { formatCount } from '../../lib/format';
 import { urlDisplay } from '../../ui/urlText';
@@ -72,7 +73,7 @@ export const isPageItself = (named: Pick<IssueTargetsOfUrl, 'urlId'>, target: Pi
 export function targetsSummary(
   named: IssueTargetsOfUrl,
   siteOrigin: string | null,
-  check: Pick<Check, 'id'>,
+  check: Pick<Check, 'id'> & Partial<Pick<Check, 'category'>>,
   /** The URL to name first where the page names it: the group's own, under a group of that URL. */
   first_: number | null = null,
 ): string {
@@ -112,22 +113,29 @@ export function targetLineWords(
 }
 
 /** How a page refers to its target, as the check means it: links to it, uses it as its canonical, shows the image. */
-export function targetVerb(check: Pick<Check, 'id'>, target: Pick<IssueTarget, 'kind'>): string {
-  if (check.id.startsWith('canonical')) return 'Canonical';
+export function targetVerb(
+  check: Pick<Check, 'id'> & Partial<Pick<Check, 'category'>>,
+  target: Pick<IssueTarget, 'kind'>,
+): string {
+  if (check.category === 'canonicals' || check.id.startsWith('canonical')) return 'Canonical';
   if (check.id.startsWith('hreflang')) return 'Hreflang';
   if (check.id.startsWith('image') || target.kind === 'image') return 'Shows';
   if (check.id === 'mixed-content') return 'Loads';
   return 'Links to';
 }
 
-/** " (404)", or how the request ended where there's no status. */
+/** " (404)", or how the request ended where there's no status, in the words every view of it uses. */
 function statusSuffix(target: Pick<IssueTarget, 'statusCode' | 'outcome'>): string {
   if (target.statusCode !== null) return ` (${target.statusCode})`;
-  return target.outcome === 'robotsDisallowed' ? ' (blocked by robots.txt)' : target.outcome ? ' (no answer)' : '';
+  return target.outcome ? ` (${noStatusWords(target.outcome).toLowerCase()})` : '';
 }
 
-/** Where on its page a link is, and what it says: "Footer · “Old range”", "Image in the content · alt “Sofa”". */
+/**
+ * Where on its page a link is, and what it says: "Footer · “Old range”", "Image in the content · alt “Sofa”"; a
+ * redirect, which is on no page, "Redirects here".
+ */
 export function linkPlaceWords(link: Pick<LinkRow, 'kind' | 'position' | 'text'>): string {
+  if (link.kind === 'redirect') return 'Redirects here';
   const where = link.position ? POSITION_WORDS[link.position] : null;
   const place =
     link.kind && link.kind !== 'hyperlink'
@@ -259,4 +267,39 @@ export function templateLinkWords(link: Pick<IssueTarget, 'kind' | 'position'> |
         ? 'a link'
         : `a ${KIND_WORDS[link.kind].toLowerCase()}`;
   return where ? `It’s ${what}${where}` : link.position === 'content' ? `It’s ${what} in the content` : null;
+}
+
+/**
+ * Whether a page's detail says more than its line under a group of the URL it names: a count of what the line names
+ * ("Links to 2 URLs", "2 images over 200 KB, the largest 1.8 MB") says nothing more; a sentence of its own ("Names /fr/
+ * as “fr-CA”; /fr/ calls itself “fr”", "The canonical URL redirects back to this page") does.
+ */
+export function detailSaysMore(detail: string): boolean {
+  return !/^(?:[A-Z][a-z]+ (?:to )?)?[\d,]+ [\w\s.,]+$/.test(detail.trim());
+}
+
+/** The categories whose URLs a link's fix clears: a broken URL, a redirect. Fixing the links there is the fix. */
+const FIXED_BY_THEIR_LINKS: ReadonlySet<string> = new Set(['links', 'responseCodes', 'redirects']);
+
+/**
+ * Advanced's callout for the one page most of a check's first URLs are linked from (`sharedSource`): the fact, "/blog/x/
+ * links to 5 of these 8 URLs", where on it the links are, and, for a check whose URLs a link's fix clears (a broken
+ * URL, a redirect), to fix or remove the links there first. Any other check (a page blocked by robots.txt) gets the fact
+ * alone: removing the links there isn't its fix.
+ */
+export function sharedSourceCallout(
+  shared: NonNullable<ReturnType<typeof sharedSource>>,
+  check: Pick<Check, 'id' | 'category' | 'subject'>,
+  count: number,
+  siteOrigin: string | null,
+): { title: string; body: string } {
+  const words = affectedWords(check);
+  const of = `${shared.of >= count ? 'these' : 'the first'} ${formatCount(shared.of)} ${shared.of === 1 ? words.noun : words.plural}`;
+  const where =
+    shared.position && shared.position !== 'content' ? `its ${POSITION_WORDS[shared.position].toLowerCase()}` : 'there';
+  const fix = FIXED_BY_THEIR_LINKS.has(check.category) ? ': fix or remove the links there first.' : '.';
+  return {
+    title: `${shown(shared.url, siteOrigin)} links to ${formatCount(shared.urls)} of ${of}`,
+    body: `Most of them are linked from ${where}${fix}`,
+  };
 }

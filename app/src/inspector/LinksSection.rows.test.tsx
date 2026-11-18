@@ -3,7 +3,7 @@
 import { createMemoryHistory } from '@tanstack/react-router';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LinkRow } from '../api/inspector';
 import { gridPagesOf } from '../api/queries';
 import { setTransport } from '../api/transport';
@@ -30,6 +30,7 @@ beforeEach(() => {
 afterEach(() => {
   uninstall();
   setTransport(fakeSidecar([]));
+  vi.restoreAllMocks();
 });
 
 const cursorRowText = (grid: HTMLElement) =>
@@ -72,5 +73,57 @@ describe('a URL’s inlinks under a running crawl', () => {
     await act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
     await within(grid).findByText('New sofa');
     await waitFor(() => expect(cursorRowText(grid)).toMatch(/Garden sets/));
+  });
+});
+
+describe('a URL’s links in the inspector docked at the side', () => {
+  it('show each link’s anchor and where it is on the page beside its URL, with nothing to scroll sideways for', async () => {
+    // The inspector's grid at 1,440 px, docked on the right: about 380 px.
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(380);
+    setTransport(
+      fakeSidecar([
+        ...inspectorRoutes({
+          urls: { 2: testUrlDetail() },
+          inlinks: {
+            2: [
+              testLinkRow({
+                id: 1,
+                url: 'https://example.com/blog/best-rattan-patio-sets/',
+                text: 'Buy Now',
+                position: 'content',
+              }),
+              testLinkRow({
+                id: 3,
+                url: 'https://example.com/',
+                text: null,
+                kind: 'image',
+                position: 'header',
+                followed: null,
+              }),
+            ],
+          },
+        }),
+        ...issuesRoutes(),
+      ]),
+    );
+    const queryClient = createQueryClient();
+    const router = createAppRouter(
+      queryClient,
+      createMemoryHistory({ initialEntries: [`/crawls/${TEST_CRAWL_ID}/urls?inspect=2`] }),
+    );
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    const user = userEvent.setup();
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const grid = await within(inspector).findByRole('grid', { name: 'Inlinks' });
+    await within(grid).findByText('Buy Now');
+    const rows = within(grid).getAllByRole('row');
+    // Every column within the grid's width: the header row is as wide as its columns.
+    expect(Number.parseFloat(rows[0]!.style.width)).toBeLessThanOrEqual(380);
+    // The link's cell holds its URL, its anchor and its position; another kind says its kind, and that it has no text.
+    const [first, second] = rows.slice(1).map((row) => within(row).getAllByRole('gridcell')[0]!);
+    expect(first).toHaveTextContent(/best-rattan-patio-sets.*Buy Now.*Content/);
+    expect(second).toHaveTextContent(/No text.*Header.*Image/);
   });
 });

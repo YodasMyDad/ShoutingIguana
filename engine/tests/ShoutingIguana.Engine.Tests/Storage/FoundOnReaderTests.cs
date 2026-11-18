@@ -40,7 +40,7 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "broken-resources", "links-to-localhost", "generic-anchor-text",
             "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable",
             "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "hreflang-inconsistent-code",
-            "social-image-broken", "social-image-too-large", "social-image-too-small"
+            "social-image-broken", "social-image-too-large", "social-image-too-small", "protocol-relative-links"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
@@ -184,7 +184,68 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         Assert.Null(target.Fragment);
         Assert.Equal(LinkFlags.ImageLink | LinkFlags.SamePage, target.Flags);
         Assert.Equal(LinkPosition.Content, target.Position);
-        Assert.True(target.Links >= 3, $"{target.Links} links to itself");
+
+        // Its links are the one the check flags: the jumps within the page are links to it, but not ones without text.
+        Assert.Equal(1, target.Links);
+        Assert.Equal(["3"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {page} AND kind = {(int)LinkKind.Hyperlink}"));
+    }
+
+    /// <summary>
+    /// A page's link to a missing section is the one named: on /plants/fragments, the link to fragment-target#missing, not
+    /// the working one to #present written before it. Its links are the page's links there that miss: that one.
+    /// </summary>
+    [Fact]
+    public void ABrokenFragmentIsNamedByTheLinkWhoseSectionIsMissing()
+    {
+        var page = Flagged("broken-fragment-links").Single(id => Url(id).EndsWith("/plants/fragments", StringComparison.Ordinal));
+        var target = Assert.Single(FoundOnReader.ReadTargets(crawl.Path, "broken-fragment-links", [page])!.Single().Targets);
+        Assert.EndsWith("/plants/fragment-target", target.Url, StringComparison.Ordinal);
+        Assert.Equal(("missing", "Missing section", 1), (target.Fragment, target.Text, target.Links));
+        Assert.Equal(["2"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {target.Id}"));
+    }
+
+    /// <summary>
+    /// A page linking a URL twice, once with nofollow, names the nofollow link, and counts it alone: the followed one is fine.
+    /// </summary>
+    [Fact]
+    public void ANofollowTargetIsNamedAndCountedByItsNofollowLinksOnly()
+    {
+        var page = Flagged("internal-nofollow-links").Single(id => Url(id).EndsWith("/plants/nofollow-link", StringComparison.Ordinal));
+        var named = FoundOnReader.ReadTargets(crawl.Path, "internal-nofollow-links", [page], FoundOnReader.MAX_LISTED)!.Single();
+        var thin = Assert.Single(named.Targets, target => target.Url.EndsWith("/plants/thin", StringComparison.Ordinal));
+        Assert.Equal((LinkFlags.NoFollow, 1), (thin.Flags, thin.Links));
+        Assert.Equal(["2"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {thin.Id}"));
+    }
+
+    /// <summary>
+    /// A page linking a URL with words of its own and with generic text names a generic link, with where on the page it
+    /// is, and counts the generic ones alone.
+    /// </summary>
+    [Fact]
+    public void AGenericAnchorTargetIsNamedByItsGenericLinks()
+    {
+        var page = Flagged("generic-anchor-text").Single(id => Url(id).EndsWith("/plants/generic-anchors", StringComparison.Ordinal));
+        var thin = Assert.Single(FoundOnReader.ReadTargets(crawl.Path, "generic-anchor-text", [page])!.Single().Targets);
+        Assert.Equal(("Click here", LinkPosition.Content, 2), (thin.Text, thin.Position, thin.Links));
+        Assert.Equal(["3"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {thin.Id}"));
+    }
+
+    /// <summary>
+    /// A page writing URLs without their scheme names each one it links to or loads: its script, and the thin page, which
+    /// it also links with the scheme written. The thin page's link is the one written //, counted alone. Its resource hint
+    /// is no link, so the page is in the group naming no URL as well.
+    /// </summary>
+    [Fact]
+    public void AUrlWrittenWithoutItsSchemeIsNamedByTheLinkWrittenSo()
+    {
+        var page = Flagged("protocol-relative-links").Single(id => Url(id).EndsWith("/plants/protocol-relative", StringComparison.Ordinal));
+        var named = FoundOnReader.ReadTargets(crawl.Path, "protocol-relative-links", [page], FoundOnReader.MAX_LISTED)!.Single();
+        Assert.Equal(["/static/app.js", "/plants/thin"], named.Targets.Select(target => new Uri(target.Url).AbsolutePath));
+        var thin = named.Targets[1];
+        Assert.Equal(("The thin page, written without its scheme", 1), (thin.Text, thin.Links));
+        Assert.Equal(LinkFlags.ProtocolRelative, thin.Flags);
+        Assert.Equal(["2"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {thin.Id}"));
+        Assert.Equal(["1"], Query($"SELECT COUNT(*) FROM issue_targets WHERE issue = 'protocol-relative-links' AND url_id = {page} AND related_url_id = 0"));
     }
 
     [Fact]
@@ -220,10 +281,11 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         Assert.Equal(FoundOnReader.ReadFoundOn(crawl.Path, [broken]).Single().Links, FoundOnReader.ReadFoundOn(neverAnalysed, [broken]).Single().Links);
     }
 
-    /// <summary>Checks the synthetic site plants only when served over HTTPS (a linked redirect to http, a page loading http resources).</summary>
     /// <summary>
-    /// Checks the synthetic site can't plant: the HTTPS ones (it's served over HTTP here), and links to private addresses, as
-    /// the site and its partner are both on 127.0.0.1, one machine's addresses.
+    /// Checks the synthetic site doesn't plant here. Most it plants only when served over HTTPS (it's served over HTTP here):
+    /// a linked redirect to http, a page loading http resources, and a nofollow link to a private address, planted there
+    /// only as the plain-HTTP site is crawled once following nofollow links, which would ask the test machine's network.
+    /// The partner site is on 127.0.0.1 too, a private address like the crawl's own, so its images aren't judged hotlinked.
     /// </summary>
     private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page" or "links-to-localhost" or "image-hotlinked";
 

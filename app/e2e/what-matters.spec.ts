@@ -3,7 +3,7 @@
 // of it also clears; the answer and Overview's cards as things to change; and Simple's What to fix ordered and
 // folded, a problem saying what fixing it also fixes. Every expectation is worked out from the sidecar's own answer.
 import { expect, test, type Page } from '@playwright/test';
-import { expectNoViolations, read, seededCrawl } from './support';
+import { expectNoViolations, read, seededCrawl, showChecks } from './support';
 
 interface Cleared {
   checkId: string;
@@ -63,7 +63,7 @@ test.describe('Advanced', () => {
   }) => {
     const { crawl, analysis, found } = await facts();
     await page.goto(`/crawls/${crawl.id}/issues`);
-    await expect(page.getByRole('listbox', { name: 'Checks' })).toBeVisible();
+    await showChecks(page);
     await expect.poll(() => partOf(page, 'Found issues')).toEqual(analysis.fixFirst);
 
     await page.getByRole('button', { name: 'Sort: Fix first' }).click();
@@ -75,6 +75,7 @@ test.describe('Advanced', () => {
     await expect.poll(() => partOf(page, 'Found issues')).toEqual(byCount);
 
     await page.reload();
+    await showChecks(page);
     await expect(page.getByRole('button', { name: 'Sort: Most URLs' })).toBeVisible();
     await expect.poll(() => partOf(page, 'Found issues')).toEqual(byCount);
     await expectNoViolations(page);

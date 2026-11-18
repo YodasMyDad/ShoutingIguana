@@ -30,9 +30,10 @@ public sealed class EvidenceCatalogTests
                 check.Id);
         }
 
-        // 51: the fix-it pass gave not-in-sitemap its pages' title and depth (+2), and took heading-too-long's H1 (-1).
-        Assert.Equal(51, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
-        Assert.Equal(42, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
+        // 51: the fix-it pass gave not-in-sitemap its pages' title and depth (+2), and took heading-too-long's H1 (-1); 50 since redirect-loop's detail says its chain.
+        // 43 target facts since protocol-relative-links names its URLs.
+        Assert.Equal(50, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
+        Assert.Equal(43, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
         Assert.All(IssueCatalog.All.Where(check => check.References == IssueReferences.Targets), check => Assert.NotEmpty(check.TargetFacts));
     }
 

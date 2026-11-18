@@ -33,6 +33,24 @@ export const IMAGE_COLUMNS: readonly string[] = [
 /** The largest image file first. */
 export const IMAGE_SORT: readonly GridSort[] = [{ column: 'to.sizeBytes', desc: true }];
 
+/**
+ * The links a check counts (the links grid's `check` filter), with hyperlinks alone: exactly the links the link checks
+ * count, each on the page that holds it. A target's status class says less: another site's 403 is often only sent to
+ * crawlers, and the check lets it go; a target that didn't answer at all (a DNS failure) has no status, and is broken;
+ * a URL that redirects to an error is broken too, though it answered 3xx; a temporary redirect isn't one to change a
+ * link for; and a redirect's hop is a link of the redirect's, never of a page anyone can edit.
+ */
+const linksCountedBy = (...checks: string[]): readonly GridFilter[] => [
+  { column: 'kind', op: 'in', values: ['hyperlink'] },
+  { column: 'check', op: 'in', values: checks },
+];
+
+/** Links to broken URLs, on the site and off it: `broken-internal-links` and `broken-external-links`. */
+export const BROKEN_LINKS = linksCountedBy('broken-internal-links', 'broken-external-links');
+
+/** Links to the site's URLs that redirect for good to a working page: `links-to-redirects`. */
+export const LINKS_TO_REDIRECTS = linksCountedBy('links-to-redirects');
+
 export const ALL_LINKS: LinkPreset = {
   id: 'all',
   title: 'All links',
@@ -45,14 +63,14 @@ export const LINK_PRESETS: readonly LinkPreset[] = [
   {
     id: 'broken',
     title: 'Broken links',
-    hint: 'Links whose target answered 4xx or 5xx',
-    filters: [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }],
+    hint: 'Links to URLs that fail or don’t answer, as the broken link checks count them, each on the page that holds it',
+    filters: BROKEN_LINKS,
   },
   {
     id: 'redirects',
     title: 'Links to redirects',
-    hint: 'Links whose target answered 3xx',
-    filters: [{ column: 'to.statusClass', op: 'in', values: ['3xx'] }],
+    hint: 'Links to the site’s URLs that redirect for good to a working page, as the check counts them',
+    filters: LINKS_TO_REDIRECTS,
   },
   {
     id: 'nofollow',

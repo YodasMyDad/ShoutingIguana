@@ -361,6 +361,17 @@ describe('the Overview of an analysed crawl', () => {
     expect(main().getByRole('link', { name: '4,521 URLs' })).toBeVisible();
   });
 
+  it('says which of each class’s URLs are other sites’, the links the crawl checked', async () => {
+    // The garden crawl: its 2 URLs with no response and its 2 blocked are links to other sites.
+    sidecar({ external: { classes: { '2xx': 120, noResponse: 2 }, blocked: 2 } });
+    await open();
+    const rows = within(await region('Status codes').findByRole('list', { name: 'Status codes by class' }));
+    expect(await rows.findByText('All on other sites · Refused by robots.txt × 2')).toBeVisible();
+    expect(rows.getByRole('link', { name: /^Blocked/ })).toHaveTextContent('All on other sites');
+    expect(rows.getByRole('link', { name: /^2xx/ })).toHaveTextContent('120 on other sites');
+    expect(rows.getByRole('link', { name: /^4xx/ })).not.toHaveTextContent('other sites');
+  });
+
   it('doesn’t wait for the crawl’s stats, which are slow on a big crawl', async () => {
     sidecar({ stats: 'pending' });
     await open();

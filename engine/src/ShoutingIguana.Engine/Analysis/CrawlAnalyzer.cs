@@ -283,13 +283,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var hreflang = new HreflangRules(urls, reader.ReadUrl);
             var indexability = new IndexabilityRules();
             var robotsToken = UserAgents.Resolve(options.UserAgent, options.CustomUserAgent).RobotsToken;
+
+            // The HSTS the home page sends keeps browsers off an HTTP copy of the site's HTTPS pages.
+            var hsts = reader.ReadUrl(urls.HomeId) is { } homeUrl ? HstsPolicy.Of(new Uri(homeUrl), reader.ReadHeaders(urls.HomeId)) : null;
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
                 new ImageRules(settings, urls, reader.ReadUrlId, scope, PrivateNetworkGuard.IsPrivateLiteral(new Uri(startUrl)), reader.ReadUrl),
                 new TextStructureRules(settings), new SocialRules(urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
                 new DirectiveRules(urls, robotsToken), new LinkStructureRules(settings, urls, reader.ReadUrl, new Uri(startUrl)), hreflang, new StructuredDataRules(),
-                new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings), new HtmlRules()
+                new SecurityRules(urls, hsts), new UrlRules(settings), new PerformanceRules(settings), new HtmlRules()
             ];
 
             // An instant meta refresh makes the page a redirect: nobody sees it, so only the refresh itself is reported.

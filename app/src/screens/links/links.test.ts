@@ -1,8 +1,8 @@
 // The Links screen's pure rules: its words, presets, facets, which reads are slow, what each state says, its columns
 // and where other screens land in it.
 import { describe, expect, it } from 'vitest';
-import type { GridFilter, LinkRow } from '../../api/grids';
-import { LINK_COLUMNS, answerLinkFacets, answerLinkQuery } from '../../api/mock/linkGrid';
+import type { GridFilter, LinkRow, UrlRow } from '../../api/grids';
+import { LINK_COLUMNS, answerLinkFacets, answerLinkQuery, linkRows, type LinkFacts } from '../../api/mock/linkGrid';
 import { filterSentences } from '../../grid/filterSentence';
 import { LINKS_COUNTS, testLinkRows } from '../../test/linksSidecar';
 import { urlStatusWords } from '../urls/urlColumns';
@@ -17,6 +17,8 @@ import {
   linkFollowWords,
   linkGridColumns,
   linkQueryColumns,
+  fittedLinkWidths,
+  linkColumnNeeds,
   sharedUrlWidth,
   shownLinkColumns,
 } from './linkColumns';
@@ -116,7 +118,12 @@ describe('the links’ words', () => {
         (part) => part.value,
       ),
     ).toEqual(['a check']);
+    // A link's own check filter: the links the checks count.
+    expect(sentence({ column: 'check', op: 'in', values: ['internal-client-error', 'title-too-long'] })).toBe(
+      'Check is Internal URL returns 4xx or Title too long',
+    );
     // Which filters need the catalog read.
+    expect(namesCheck([{ column: 'check', op: 'in', values: ['x'] }])).toBe(true);
     expect(namesCheck([{ column: 'to.check', op: 'in', values: ['x'] }])).toBe(true);
     expect(namesCheck([{ column: 'from.check', op: 'notIn', values: ['x'] }])).toBe(true);
     expect(namesCheck([{ column: 'to.statusClass', op: 'in', values: ['4xx'] }])).toBe(false);
@@ -157,6 +164,83 @@ describe('the links’ words', () => {
   });
 });
 
+describe('the link checks’ presets', () => {
+  // A crawl as the link checks see it: a page linking to an internal 404, to another site's 403 (a status many sites
+  // send only to crawlers, which the check lets go), to another site that didn't answer (a DNS failure, which it
+  // counts), to a permanent redirect and to a temporary one; and the redirect's hop, a link of kind redirect from a
+  // URL that isn't a page, to the 404.
+  const urlRow = (id: number, address: string, facts: Partial<UrlRow>): UrlRow => ({
+    id,
+    url: address,
+    fetched: true,
+    isInternal: true,
+    source: 'link',
+    depth: 1,
+    type: 'page',
+    statusCode: 200,
+    statusClass: '2xx',
+    outcome: 'success',
+    indexable: true,
+    indexability: 'none',
+    ...facts,
+  });
+  const redirect = (code: number) =>
+    ({ statusCode: code, statusClass: '3xx', outcome: 'redirect', indexability: 'redirected' }) as const;
+  const urls: UrlRow[] = [
+    urlRow(1, 'https://example.com/', {}),
+    urlRow(2, 'https://example.com/gone', { statusCode: 404, statusClass: '4xx', outcome: 'clientError' }),
+    urlRow(3, 'https://other.example/', {
+      isInternal: false,
+      statusCode: 403,
+      statusClass: '4xx',
+      outcome: 'clientError',
+    }),
+    urlRow(4, 'https://nowhere.example/', {
+      isInternal: false,
+      statusCode: null,
+      statusClass: 'noResponse',
+      outcome: 'networkError',
+    }),
+    urlRow(5, 'https://example.com/moved', redirect(301)),
+    urlRow(6, 'https://example.com/sign-in', redirect(302)),
+    urlRow(7, 'http://example.com/gone', redirect(301)),
+  ];
+  const facts = (fromId: number, toId: number, kind: LinkFacts['kind'] = 'hyperlink'): LinkFacts => ({
+    fromId,
+    toId,
+    kind,
+    text: kind === 'hyperlink' ? 'A link' : null,
+    position: kind === 'hyperlink' ? 'content' : null,
+    noFollow: false,
+    sponsored: false,
+    ugc: false,
+    imageLink: false,
+    fragment: null,
+  });
+  const checked = linkRows(
+    [facts(1, 2), facts(1, 3), facts(1, 4), facts(1, 5), facts(1, 6), facts(7, 2, 'redirect')],
+    urls,
+  );
+  const shown = (id: string) => {
+    const preset = LINK_PRESETS.find((candidate) => candidate.id === id)!;
+    const answer = answerLinkQuery(
+      checked,
+      { filters: [...preset.filters], sort: [], limit: 50, columns: ['from.id', 'to.id'] },
+      READY,
+    );
+    if (!answer.ok) throw new Error(JSON.stringify(answer.problem));
+    return answer.page.rows.map((row) => `${row['from.id']}→${row['to.id']}`);
+  };
+
+  it('Broken links are the links the broken link checks count, each on the page that holds it', () => {
+    expect(shown('broken')).toEqual(['1→2', '1→4']);
+  });
+
+  it('Links to redirects are the links to permanent redirects, as the check counts them', () => {
+    expect(shown('redirects')).toEqual(['1→5']);
+  });
+});
+
 describe('the links’ presets', () => {
   it('each lands on the links its name says', () => {
     const counts = Object.fromEntries(LINK_PRESETS.map((preset) => [preset.id, count(preset.filters)]));
@@ -175,10 +259,17 @@ describe('the links’ presets', () => {
     expect(activePreset([], undefined)).toBe(ALL_LINKS);
     const noText = LINK_PRESETS.find((preset) => preset.id === 'no-text')!;
     expect(activePreset([...noText.filters].reverse(), undefined)).toBe(noText);
-    expect(activePreset([{ column: 'to.statusClass', op: 'in', values: ['5xx', '4xx'] }], undefined)?.id).toBe(
-      'broken',
-    );
-    expect(activePreset([{ column: 'to.statusClass', op: 'in', values: ['4xx'] }], undefined)).toBeNull();
+    expect(
+      activePreset(
+        [
+          { column: 'check', op: 'in', values: ['broken-external-links', 'broken-internal-links'] },
+          { column: 'kind', op: 'in', values: ['hyperlink'] },
+        ],
+        undefined,
+      )?.id,
+    ).toBe('broken');
+    expect(activePreset([{ column: 'check', op: 'in', values: ['broken-internal-links'] }], undefined)).toBeNull();
+    expect(activePreset([{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }], undefined)).toBeNull();
     expect(
       activePreset([...noText.filters, { column: 'position', op: 'in', values: ['footer'] }], undefined),
     ).toBeNull();
@@ -526,6 +617,57 @@ describe('the links’ columns', () => {
     expect(sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 600)).toBe(160);
     // The default view fits a 1280 px window beside the sidebar.
     expect(sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 980)).toBeGreaterThanOrEqual(160);
+  });
+
+  it('gives the URLs and the anchor the room their values in view take, before cutting any URL in the middle', () => {
+    // The garden crawl's broken link at 1,440 px: two paths of about 30 characters, a short anchor, and the room the
+    // grid has beside the sidebar.
+    const shown = DEFAULT_LINK_COLUMNS;
+    const page: LinkRow[] = [
+      {
+        id: 1,
+        'from.url': 'https://www.example.co.uk/blog/best-rattan-patio-sets/',
+        'to.url': 'https://www.example.co.uk/3-pieces-patio-furniture-set/',
+        kind: 'hyperlink',
+        text: 'Buy Now',
+      },
+    ];
+    // A character of a URL as 7.25 px, of text as 7 px: the grid's fonts, near enough.
+    const measure = (text: string, face: 'url' | 'text') => text.length * (face === 'url' ? 7.25 : 7);
+    const needs = linkColumnNeeds(page, shown, 'https://www.example.co.uk', measure);
+    const widths = fittedLinkWidths(shown, LINK_COLUMNS, 1_116, {}, needs)!;
+    // Each URL whole, with its cell's padding and the open button's room.
+    expect(widths['from.url']).toBeGreaterThanOrEqual(needs['from.url']!);
+    expect(widths['to.url']).toBeGreaterThanOrEqual(needs['to.url']!);
+    // "Buy Now" doesn't take 176 px the paths could use; and the columns fill the grid, no more.
+    expect(widths.text).toBeLessThan(176);
+    const columns = linkGridColumns(shown, LINK_COLUMNS, {
+      siteOrigin: null,
+      onOpen: () => undefined,
+      sort: [],
+      widths,
+    });
+    const used = columns.reduce((sum, column) => sum + column.width, 0);
+    expect(used).toBeLessThanOrEqual(1_116);
+    expect(used).toBeGreaterThan(1_110);
+
+    // Short of room, each URL is cut in proportion to what it wants past its least, never under it.
+    const long: LinkRow[] = [{ ...page[0]!, 'to.url': `https://www.example.co.uk/${'very-long-path/'.repeat(12)}` }];
+    const squeezed = fittedLinkWidths(
+      shown,
+      LINK_COLUMNS,
+      1_000,
+      {},
+      linkColumnNeeds(long, shown, 'https://www.example.co.uk', measure),
+    )!;
+    expect(squeezed['to.url']).toBeGreaterThan(squeezed['from.url']!);
+    expect(squeezed['from.url']).toBeGreaterThanOrEqual(160);
+    // A width the user gave a column is theirs; with nothing in view, the URLs share the room as they did.
+    expect(fittedLinkWidths(shown, LINK_COLUMNS, 1_116, { 'from.url': 400 }, needs)!['from.url']).toBeUndefined();
+    expect(fittedLinkWidths(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 1_600, {}, {})!['to.url']).toBe(
+      sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 1_600),
+    );
+    expect(fittedLinkWidths(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, null, {}, needs)).toBeUndefined();
   });
 
   it('offers every column to show, grouped, the follow column in place of the flags it shows', () => {

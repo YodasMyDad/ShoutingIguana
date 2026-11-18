@@ -37,8 +37,10 @@ internal sealed class LinkStructureRules(AnalysisSettings settings, UrlTable url
     {
         if (page.Facts.UncrawlableLinks is { Count: > 0 } uncrawlable)
         {
+            // Each says where on the page it is, as a page parsed since positions were noted gives it.
             var examples = uncrawlable.Examples.Select(example =>
-                $"{(example.Text.Length > 0 ? RuleText.Quote(example.Text, EXAMPLE_TEXT_MAX) : "no text")} ({example.Why})");
+                $"{(example.Text.Length > 0 ? RuleText.Quote(example.Text, EXAMPLE_TEXT_MAX) : "no text")} " +
+                $"({example.Why}{(example.Position is { } position ? $", {PositionWord(position)}" : string.Empty)})");
             var more = uncrawlable.Count > uncrawlable.Examples.Count ? " …" : string.Empty;
             yield return new IssueHit(IssueCatalog.UNCRAWLABLE_LINKS, page.UrlId,
                 RuleText.Fit($"{RuleText.Count(uncrawlable.Count, "link", "links")}: {string.Join(", ", examples)}{more}"));
@@ -165,8 +167,7 @@ internal sealed class LinkStructureRules(AnalysisSettings settings, UrlTable url
         var count = 0;
         foreach (var link in hyperlinks)
         {
-            if (link.ToId == page.UrlId || link.Flags.HasFlag(LinkFlags.ImageLink) || link.Flags.HasFlag(LinkFlags.SamePage) ||
-                !urls[link.ToId].IsInternal || link.Text is not { } text || !GENERIC_TEXTS.Contains(Normalise(text)))
+            if (link.ToId == page.UrlId || !urls[link.ToId].IsInternal || link.Text is not { } text || !IsGeneric(text, link.Flags))
             {
                 continue;
             }
@@ -195,6 +196,24 @@ internal sealed class LinkStructureRules(AnalysisSettings settings, UrlTable url
         return new IssueHit(IssueCatalog.GENERIC_ANCHOR_TEXT, page.UrlId, RuleText.Fit($"{RuleText.Count(count, "link", "links")}: {string.Join(", ", listed)}"),
             targets.First) { Targets = targets.Ids };
     }
+
+    /// <summary>
+    /// Whether a hyperlink's text says nothing of where it goes, as the check judges it: one of the generic texts, written
+    /// on the link itself (an image link's alt text and a jump within the page don't count).
+    /// </summary>
+    internal static bool IsGeneric(string text, LinkFlags flags) =>
+        !flags.HasFlag(LinkFlags.ImageLink) && !flags.HasFlag(LinkFlags.SamePage) && GENERIC_TEXTS.Contains(Normalise(text));
+
+    /// <summary>Where on the page a link is, as a detail says it: "header".</summary>
+    private static string PositionWord(LinkPosition position) => position switch
+    {
+        LinkPosition.Navigation => "navigation",
+        LinkPosition.Header => "header",
+        LinkPosition.Footer => "footer",
+        LinkPosition.Sidebar => "sidebar",
+        LinkPosition.Head => "head",
+        _ => "content"
+    };
 
     /// <summary>Lowercase, with the spaces and punctuation round it taken off: "Read more…" is "read more".</summary>
     private static string Normalise(string text) =>

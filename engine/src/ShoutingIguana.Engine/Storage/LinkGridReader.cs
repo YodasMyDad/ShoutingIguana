@@ -34,6 +34,13 @@ public static class LinkGridReader
     /// <summary>The facets <see cref="Facets"/> counts, in order.</summary>
     public static readonly IReadOnlyList<string> FACETS = ["kind", "position", "follow", "to.statusClass", "to.isInternal"];
 
+    /// <summary>
+    /// The filter by checks (no column): the links a check counts, each from a page it flagged to a URL that page's issue
+    /// names (<c>issue_targets</c>). Taken with <c>in</c> and the checks' ids. With hyperlinks alone, the link checks'
+    /// links (broken, to redirects) are exactly what it holds, so a view of them agrees with the checks.
+    /// </summary>
+    public const string CHECK = "check";
+
     /// <summary>What a page shows when it asks for no columns.</summary>
     private static readonly string[] DEFAULT_COLUMNS = ["from.url", "to.url", "kind", "text"];
 
@@ -698,6 +705,10 @@ public static class LinkGridReader
             {
                 UrlQueryCompiler.Add(errors, field, "Give a filter: a column, an operator and what it takes.");
             }
+            else if (filter.Column == CHECK)
+            {
+                ValidateCheck(filter, field, errors);
+            }
             else if (LinkColumns.Own(filter.Column) is { } own)
             {
                 if (filter.Group is not null)
@@ -728,6 +739,24 @@ public static class LinkGridReader
         {
             UrlQueryCompiler.Add(errors, "search", $"Search for at most {UrlQueryCompiler.MAX_TEXT:N0} characters.");
         }
+    }
+
+    /// <summary>The filter by checks: the URL grid's check filter, with <c>in</c> alone and no group (a link has no group of its own).</summary>
+    private static void ValidateCheck(UrlFilter filter, string field, Dictionary<string, List<string>> errors)
+    {
+        if (filter.Operator != FilterOperator.In)
+        {
+            UrlQueryCompiler.Add(errors, $"{field}.op", $"'{CHECK}' takes in: the links the checks count.");
+            return;
+        }
+
+        if (filter.Group is not null)
+        {
+            UrlQueryCompiler.Add(errors, $"{field}.group", "A link's check filter takes no group: filter by the target's id instead.");
+            return;
+        }
+
+        UrlQueryCompiler.ValidateFilter(filter with { Column = UrlColumns.CHECK }, field, GridScope.AllUrls, errors);
     }
 
     // ---- The filters, compiled.
@@ -809,7 +838,11 @@ public static class LinkGridReader
         for (var index = 0; index < filters.Count; index++)
         {
             var filter = filters[index];
-            if (LinkColumns.Own(filter.Column) is { } own)
+            if (filter.Column == CHECK)
+            {
+                conditions.AddRange(Counted(context, filter, index));
+            }
+            else if (LinkColumns.Own(filter.Column) is { } own)
             {
                 conditions.Add(Own(context, filter, own, index));
             }
@@ -930,6 +963,19 @@ public static class LinkGridReader
             return matched.Seal(GridPlanner.ID_SET_CAP);
         });
 
+        yield return EndCondition(context, prefix, key, set);
+    }
+
+    /// <summary>
+    /// The links whose end is among some URLs: a few listed by id, so the links' index on that end finds their links, or
+    /// one named outright, whose links a walk follows in crawl order; any more tested link by link against the set.
+    /// </summary>
+    /// <param name="list">What a list of ids is bound as, where there may be another list of the same end in the read.</param>
+    private static Condition EndCondition(GridReadContext context, string prefix, string key, UrlIdSet set, string? list = null)
+    {
+        var end = prefix == LinkColumns.TO ? "to_id" : "from_id";
+        var inSummary = prefix == LinkColumns.TO;
+
         // A page's links are stored together, so the links of a twentieth of the URLs are read through the index by source
         // sooner than every link is tested; a target's are anywhere, so only a few targets are listed.
         var listed = inSummary ? set.Count <= ListedEnds : ListedEnds > 0 && set.Count * 20 <= UrlCount(context);
@@ -937,19 +983,51 @@ public static class LinkGridReader
         {
             // One URL, named outright: a walk of its links follows the end's index, in crawl order.
             var id = one[1..^1];
-            yield return new Condition(key, $"l.{end} IN ({id})", inSummary ? $"c.{end} IN ({id})" : null, [], Direct: true, OnTarget: inSummary, Indexed: inSummary, Single: true);
+            return new Condition(key, $"l.{end} IN ({id})", inSummary ? $"c.{end} IN ({id})" : null, [], Direct: true, OnTarget: inSummary, Indexed: inSummary, Single: true);
         }
-        else if (listed && set.Json is { } json)
+
+        if (listed && set.Json is { } json)
         {
-            var name = prefix == LinkColumns.TO ? "$toIds" : "$fromIds";
-            yield return new Condition(key, $"l.{end} IN (SELECT value FROM json_each({name}))", inSummary ? $"c.{end} IN (SELECT value FROM json_each({name}))" : null,
+            var name = list ?? (prefix == LinkColumns.TO ? "$toIds" : "$fromIds");
+            return new Condition(key, $"l.{end} IN (SELECT value FROM json_each({name}))", inSummary ? $"c.{end} IN (SELECT value FROM json_each({name}))" : null,
                 [new(name, json)], Direct: true, OnTarget: inSummary, Indexed: inSummary);
         }
-        else
+
+        var test = $"{ReaderFunctions.IN_SET}({Slot(context, set)}, ";
+        return new Condition(key, $"{test}l.{end})", inSummary ? $"{test}c.{end})" : null, [], OnTarget: inSummary, Indexed: inSummary);
+    }
+
+    /// <summary>
+    /// The filter by checks, as two conditions: the link's target is one the checks name, which the link summary and the
+    /// links' index by target answer as any filter on the target does; and the link's page is one that names it, tested
+    /// on the key of what the analysis stored, link by link among those. Without what it stored (an analysis from before
+    /// it, or none), refused as a filter on what only an analysis counts is.
+    /// </summary>
+    private static IEnumerable<Condition> Counted(GridReadContext context, UrlFilter filter, int index)
+    {
+        if (!context.HasIssueTargets)
         {
-            var test = $"{ReaderFunctions.IN_SET}({Slot(context, set)}, ";
-            yield return new Condition(key, $"{test}l.{end})", inSummary ? $"{test}c.{end})" : null, [], OnTarget: inSummary, Indexed: inSummary);
+            throw new NeedsAnalysisException(
+                context.Summary.Reason ?? (context.Analysis is null ? SummaryUnavailableReason.NotAnalyzed : SummaryUnavailableReason.EngineChanged), [CHECK]);
         }
+
+        var checks = filter.Values!.Select(value => value.Text!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        List<KeyValuePair<string, object>> parameters =
+            [.. checks.Select((check, at) => new KeyValuePair<string, object>(string.Create(CultureInfo.InvariantCulture, $"$k{index}_{at}"), check))];
+        var named = string.Join(", ", parameters.Select(parameter => parameter.Key));
+        var key = $"{CHECK} in [{string.Join(",", checks)}]";
+        var targets = HeldLarge(context, "linkcheck|" + key, () =>
+        {
+            var matched = UrlIds(context);
+            using var command = context.Command(
+                $"SELECT COUNT({ReaderFunctions.ADD_TO_SET}({Slot(context, matched)}, t.related_url_id)) FROM issue_targets t WHERE t.issue IN ({named})", parameters);
+            command.ExecuteScalar();
+            return matched.Seal(GridPlanner.ID_SET_CAP);
+        });
+
+        yield return EndCondition(context, LinkColumns.TO, LinkColumns.TO + key, targets, string.Create(CultureInfo.InvariantCulture, $"$checked{index}"));
+        yield return new Condition(key,
+            $"EXISTS (SELECT 1 FROM issue_targets t WHERE t.issue IN ({named}) AND t.related_url_id = l.to_id AND t.url_id = l.from_id)", null, parameters);
     }
 
     /// <summary>The link's text, or either end's URL, contains the text: the URLs that do are read into a set first.</summary>

@@ -73,7 +73,8 @@ and is in the group without a related URL.
   `contentType`, `pixelWidth`, `pixelHeight` (the file), `responseMs` (its own answer's time), `redirectKind` (what its own
   redirect changes), `img` (the `<img>` as the page writes it: `width`, `height`,
   `alt`, `hasAlt`, `altLength`, `srcset`, `loading`), and the page's link to it: `kind`, `text` (anchor, alt or
-  hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it). For a `sources` check
+  hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it; for `empty-anchor-text`,
+  `internal-nofollow-links`, `protocol-relative-links`, `generic-anchor-text` and `broken-fragment-links`, only the ones at fault, the first of which is the link named). For a `sources` check
   they describe the group's related URL only (its rows' sources are the found-on read, which already has the linking
   page, kind, text, position and flags).
 - **Detail**: before → after. "Same" is unchanged. A limit is shown at its default ("over 115"); a detail names the
@@ -93,14 +94,14 @@ and is in the group without a related URL.
 | 3 | `internal-unreachable` | U/RD/S | `type`, `fetchError`, `responseMs` | – | Same ("Timed out", "Connection failed": the group stays one per kind; the column says which failure) | use · pages |
 | 4 | `internal-blocked` | U/RD/S | `type` | – | Same (the protection). Since the polite crawl a 429 isn't this check's: it's held back, asked again, and stored as not checked if it never gets through | use · pages |
 | 114 | `content-type-mismatch` (new) | U/RD/S | `type`, `contentType` | – | `Used as a script, sent as text/html` (each way it's used; "sent with no Content-Type") | use · pages |
-| 5 | `soft-404` | P/N/– | `title`, `h1`, `wordCount` | – | "The title or H1 says the page wasn't found" → `The title reads as an error: "Page not found – Example" · 120 words, under 300` (or "The H1 reads as an error: …"; the quoted text is the field that matched) | imp · – |
+| 5 | `soft-404` | P/N/– | `title`, `h1` | – | "The title or H1 says the page wasn't found" → `The title reads as an error: "Page not found – Example" · 120 words, under 300` (or "The H1 reads as an error: …"; the quoted text is the field that matched) | imp · – |
 
 ### Redirects
 
 | # | Check | S/G/R | Evidence columns | Target facts | Detail before → after | Rows · groups |
 | --- | --- | --- | --- | --- | --- | --- |
 | 6 | `redirect-chain` | U/RU/S | `redirectChain`, `redirectKind` | `statusCode`, `indexability` (the final URL the group is named by) | Same ("3 redirects") | use · pages |
-| 7 | `redirect-loop` | U/N/S | `redirectChain` | – | "3 hops" → `3 hops: /a/ (301) → /a (301) → back to /a/` (paths on the URL's own host, full URLs elsewhere) | use · – |
+| 7 | `redirect-loop` | U/N/S | – | – | "3 hops" → `3 hops: /a/ (301) → /a (301) → back to /a/` (paths on the URL's own host, full URLs elsewhere) | use · – |
 | 8 | `redirect-broken` | U/RD/S | `redirectChain`, `redirectKind` | `statusCode` (the URL it ends at) | Same ("Ends at a URL that returns 404 Not Found") | use · pages |
 | 9 | `redirect-temporary` | U/RD/S | `redirectChain`, `redirectKind` | `statusCode` (the target) | Same ("302 Found") | use · pages |
 | 115 | `redirect-temporary-cached` (new) | U/RD/S | `redirectChain`, `redirectKind` | – | `302 Found, cached for 30 days` | use · pages |
@@ -118,7 +119,7 @@ and is in the group without a related URL.
 | 16 | `empty-anchor-text` | P/RU/T | – | `statusCode`, `position`, `flags` (`imageLink`: an image link whose image has no alt), `links`. A link to the page itself (a home page's logo, since the check audit) names the page: its target is the page, read as its link without text and without a fragment, and the app says "this same page" | Same ("Links to 2 URLs") | imp · pages |
 | 17 | `broken-fragment-links` | P/RU/T | – | `statusCode`, `fragment`, `text`, `position`, `links` | "2 links" → `2 links to missing sections: /faq/#specs, #top` (a fragment alone is on the page itself) | imp · pages |
 | 18 | `orphan-page` | P/N/S | – | – | Same ("Only found in a sitemap"), or `Only nofollow links lead here` (a sitemap page only nofollow links lead to, since the new checks) | imp · – |
-| 101 | `uncrawlable-links` (new) | P/N/– | – | – | `3 links: "Shop" (javascript:), "Next" (onclick) …` (the first three, what makes each uncrawlable; only links that lead somewhere: script that navigates, a routerLink, a URL on a `<span>`). Template hint | imp · – |
+| 101 | `uncrawlable-links` (new) | P/N/– | – | – | `3 links: "Shop" (javascript:, header), "Next" (onclick, content) …` (the first three, what makes each uncrawlable and where on the page it is; only links that lead somewhere: script that navigates, a routerLink, a URL on a `<span>`). Template hint | imp · – |
 | 102 | `broken-resources` (new) | P/RU/T | – | `statusCode`, `final`, `kind`, `position`, `links` | `2 broken files (the first returns 404 Not Found)` | imp · pages |
 | 103 | `links-to-localhost` (new) | P/RU/T | – | `statusCode`, `text`, `position` | `2 links, such as http://localhost:3000/shop`; on a crawl started at a private address, that machine's own addresses don't count | imp · pages |
 | 104 | `few-internal-outlinks` (new) | P/N/– | `outlinks` | – | `No links to other pages`, `2 links to other pages, under 3` | imp · – |
@@ -195,8 +196,8 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 42 | `title-missing` | P/N/– | – | – | Same (none) | imp · – |
 | 43 | `title-multiple` | P/N/– | – | – | "2 titles" → `2 titles: "Sofas \| Example" · "Example"` | imp · – |
-| 44 | `title-too-long` | P/N/– | `title`, `titleInResults`, `titleWidth`, `titleLength` | – | "78 characters" → `78 characters, over 60`, and since [pixel widths](v2-pixel-widths.md) `780 px, over 580 (78 characters)` | imp · – |
-| 45 | `title-too-short` | P/N/– | `title`, `titleWidth`, `titleLength` | – | "10 characters" → `10 characters, under 30`, and since pixel widths `98 px, under 200 (10 characters)` | imp · – |
+| 44 | `title-too-long` | P/N/– | `title`, `titleInResults` | – | "78 characters" → `78 characters, over 60`, and since [pixel widths](v2-pixel-widths.md) `780 px, over 580 (78 characters)` | imp · – |
+| 45 | `title-too-short` | P/N/– | `title` | – | "10 characters" → `10 characters, under 30`, and since pixel widths `98 px, under 200 (10 characters)` | imp · – |
 | 46 | `title-duplicate` | P/RU/– | `title` | – | Same ("2 other pages"). The group is named by its `sharedText`, the title | imp · pages |
 
 ### Meta descriptions
@@ -205,8 +206,8 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 47 | `description-missing` | P/N/– | – | – | Same (none) | imp · – |
 | 48 | `description-multiple` | P/N/– | – | – | "2 meta descriptions" → `2 meta descriptions: "Garden sofas for…" · "Shop online"` | imp · – |
-| 49 | `description-too-long` | P/N/– | `description`, `descriptionInResults`, `descriptionWidth`, `descriptionLength` | – | "183 characters" → `183 characters, over 155`, and since pixel widths `1,084 px, over 985 (183 characters)` | imp · – |
-| 50 | `description-too-short` | P/N/– | `description`, `descriptionWidth`, `descriptionLength` | – | "10 characters" → `10 characters, under 70`, and since pixel widths `63 px, under 400 (10 characters)` | imp · – |
+| 49 | `description-too-long` | P/N/– | `description`, `descriptionInResults` | – | "183 characters" → `183 characters, over 155`, and since pixel widths `1,084 px, over 985 (183 characters)` | imp · – |
+| 50 | `description-too-short` | P/N/– | `description` | – | "10 characters" → `10 characters, under 70`, and since pixel widths `63 px, under 400 (10 characters)` | imp · – |
 | 51 | `description-duplicate` | P/RU/– | `description` | – | Same. The group is named by its `sharedText` | imp · pages |
 
 ### Headings
@@ -290,7 +291,7 @@ and is in the group without a related URL.
 | 138 | `security-headers-weak` (new) | P/N/– | – | – | `HSTS max-age 86400 (1 day), under a year; X-Content-Type-Options "none"` | once |
 | 139 | `cookies-insecure` (new) | P/PD/– | – | – | `sessionid: no Secure, no HttpOnly` (each cookie at fault, what it lacks) | imp · pages |
 | 140 | `form-not-secure` (new) | P/PD/– | – | – | `Sends to http://x/subscribe`, `A password form on an http:// page` | imp · pages |
-| 141 | `protocol-relative-links` (new) | P/N/– | – | – | `3 URLs, such as //cdn.example.com/app.js` | imp · – |
+| 141 | `protocol-relative-links` (new) | P/**RU**/**T** | – | `kind`, `position`, `links` | `3 URLs, such as //cdn.example.com/app.js`; with any in no link, `3 URLs, such as //cdn.example.com/app.js; 1 in a tag that isn't a link or file, such as //fonts.example.net` | imp · pages |
 
 ### URLs
 
@@ -430,6 +431,20 @@ What Stage B built differs from the contract above only where this says so; the 
   text that ended a head says so without a line, which the parser doesn't give for text (`Text "Welcome" ended the head
   early`); a page with one hreflang entry says `Its one entry doesn't name this URL`. A quoted text is cut at 40
   characters, a soft 404's at 60, and every detail at 120, each with "…".
+- **Evidence the detail already says is dropped** (the site-owner audit of 2026-11-18): the four title and description
+  length checks show the text (and, for one too long, where results cut it), not `titleWidth`, `titleLength`,
+  `descriptionWidth` or `descriptionLength`, which their detail gives (`742 px, over 580 (78 characters)`); `soft-404`
+  shows the title and the H1, not `wordCount` (its detail quotes the field that reads as an error and counts the
+  words; which field matched varies, so both stay); and `redirect-loop` shows no column, as its detail is the chain
+  (`2 hops: /a (301) → /b (301) → back to /a`). The columns are still the grid's, to add.
+- **`protocol-relative-links` names its URLs** (the site-owner audit of 2026-11-18, where a detail said "19 URLs, such
+  as //…favicon_32x32.png" and nothing listed the other 18): the parser marks each link written without its scheme
+  (link flag `protocolRelative`, from collection 6), so each URL the page links to or loads that way is a target,
+  grouped by it: a favicon written `//` on every page is one group with the template hint. A value in no link (a
+  resource hint such as `preconnect`, a `<base>`) has no URL to name: the detail counts it and names the first, and the
+  page is in the group naming no URL as well. A page parsed before collection 6 names none, its issue in that group, as
+  before. An HTTPS page isn't flagged where the home page's HSTS (a max-age above 0, over HTTPS) covers its host, or a
+  subdomain with includeSubDomains. Analysis version 16.
 - **Rows by importance keep the URL as their last key**: on the 100k benchmark crawl, the biggest check's rows
   (`title-duplicate`, 5,152) read by importance in 18.1 ms at p95 (by inlinks alone, 14.3 ms), its groups in 16.1 ms,
   against the 75 ms gate of a check's reads; no fallback to crawl order was needed.

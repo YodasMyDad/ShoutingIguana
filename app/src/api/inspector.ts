@@ -307,7 +307,8 @@ export interface UrlDetail extends UrlRef {
 }
 
 export type LinkPosition = 'content' | 'navigation' | 'header' | 'footer' | 'sidebar' | 'head';
-export type LinkFlag = 'noFollow' | 'sponsored' | 'ugc' | 'imageLink' | 'outsideHead' | 'samePage' | 'fromHttpHeader';
+export type LinkFlag =
+  'noFollow' | 'sponsored' | 'ugc' | 'imageLink' | 'outsideHead' | 'samePage' | 'fromHttpHeader' | 'protocolRelative';
 
 export interface LinksQuery {
   /** Every kind when left out. At most 12. */

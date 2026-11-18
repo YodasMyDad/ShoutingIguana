@@ -76,7 +76,12 @@ internal sealed class LinkReference
         List<Func<Link, bool>> tests = [];
         foreach (var filter in filters)
         {
-            if (filter.Column.StartsWith("from.", StringComparison.Ordinal) || filter.Column.StartsWith("to.", StringComparison.Ordinal))
+            if (filter.Column == "check")
+            {
+                // The links a check counts: from a page it flagged, to a URL that page's issue names.
+                tests.Add(link => filter.Values!.Any(check => _urls.Targets.TryGetValue((check.Text!, link.From), out var targets) && targets.Contains(link.To)));
+            }
+            else if (filter.Column.StartsWith("from.", StringComparison.Ordinal) || filter.Column.StartsWith("to.", StringComparison.Ordinal))
             {
                 var from = filter.Column.StartsWith("from.", StringComparison.Ordinal);
                 var urls = _urls.Matching([filter with { Column = filter.Column[(from ? 5 : 3)..] }]).ToHashSet();

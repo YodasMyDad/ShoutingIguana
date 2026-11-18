@@ -56,6 +56,12 @@ public sealed partial class SyntheticSite
         ["Referrer-Policy"] = "strict-origin-when-cross-origin"
     };
 
+    /// <summary>The home page's: X-Content-Type-Options misspelt, which sets nothing (security-headers-weak).</summary>
+    private static readonly Dictionary<string, string> HOME_HEADERS = new(SECURITY_HEADERS, StringComparer.OrdinalIgnoreCase)
+    {
+        ["X-Content-Type-Options"] = "no-sniff"
+    };
+
     private static readonly string FILLER_STYLES = BuildFillerStyles();
     private static readonly byte[] IMAGE_BYTES = BuildImage(2_048, IMAGE_WIDTH, IMAGE_HEIGHT);
 
@@ -151,7 +157,7 @@ public sealed partial class SyntheticSite
 
         if (path == "/")
         {
-            return Html(RenderHome()) with { Headers = Revision >= 1 ? HOME_HEADERS_AFTER : SECURITY_HEADERS };
+            return Html(RenderHome()) with { Headers = Revision == 0 ? HOME_HEADERS : IsHttps ? HOME_HEADERS_AFTER_HTTPS : HOME_HEADERS_AFTER };
         }
 
         // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do. The HTTPS site's plain-HTTP side
@@ -453,6 +459,13 @@ public sealed partial class SyntheticSite
         // Revision 1 drops a security header from the home page, and mends the plain-HTTP side of the HTTPS site.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
 
+        // The home page's X-Content-Type-Options is misspelt ("no-sniff") until revision 1 mends it. Over HTTPS, revision 1
+        // sends HSTS for a day, under a year.
+        if (Revision == 0 || IsHttps)
+        {
+            Flag("security-headers-weak", "/");
+        }
+
         // The tracked link's URL: the thin page, canonicalised to itself without the tag.
         Flag("url-tracking-parameters", PLANTS_PATH + "thin?utm_source=newsletter");
         Flag("canonicalised-page", PLANTS_PATH + "thin?utm_source=newsletter");
@@ -551,7 +564,8 @@ public sealed partial class SyntheticSite
             // Over HTTPS, revision 1's plain-HTTP home page, which the crawler probes as another version of the site, redirects.
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400) + (IsHttps && Revision >= 1 ? 1 : 0),
             RobotsDisallowed: disallowed.Count + _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: false }),
-            NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
+            // Over HTTPS, a nofollow link names a private address too.
+            NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length + (IsHttps ? 1 : 0),
             ExternalOk: externalOk.Count,
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
@@ -562,7 +576,7 @@ public sealed partial class SyntheticSite
             ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
             IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal))
         {
-            NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length,
+            NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length + (IsHttps ? 1 : 0),
             PartnerRobotsDisallowed = _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: true }),
             Unreachable = _plants.Count(plant => plant is { Status: 0, OnPartnerSite: false }),
             NotChecked = _options is { DeadTwin: true, Sitemaps: true } ? DEAD_TWIN_UNCHECKED : 0,

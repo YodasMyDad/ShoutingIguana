@@ -1,16 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams, useRouter, useSearch } from '@tanstack/react-router';
+import clsx from 'clsx';
+import { ChevronDown, ChevronUp, ListChecks } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { api } from '../api/client';
-import { GRID_PAGE_SIZE, type CheckGroupRef, type GridPage, type GridSort, type IssueGroup } from '../api/grids';
-import {
-  analysisQuery,
-  checksQuery,
-  crawlQuery,
-  groupsAsGridPage,
-  issueGroupPlaceQuery,
-  queryKeys,
-} from '../api/queries';
+import { GRID_PAGE_SIZE, type CheckGroupRef, type GridSort } from '../api/grids';
+import { analysisQuery, checksQuery, crawlQuery, issueGroupPlaceQuery, queryKeys } from '../api/queries';
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
@@ -26,12 +22,14 @@ import { ExportButton } from '../export/ExportButton';
 import { CRAWL_FILE_COMMANDS, useExportCommand } from '../export/useExportCommand';
 import { useCommands } from '../keyboard/registry';
 import { useMode } from '../mode/mode';
-import { formatCountOf } from '../lib/format';
+import { formatCount, formatCountOf } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { getSettings, updateSettings, useSettings } from '../settings/settingsStore';
 import { useInspector } from '../routing/inspector';
 import { openInBrowser } from '../shell/os';
+import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { IconButton } from '../ui/IconButton';
 import { EmptyState } from '../ui/EmptyState';
 import { PageHeader } from '../ui/PageHeader';
 import { SeverityMark } from '../ui/SeverityMark';
@@ -56,7 +54,7 @@ import {
   type CheckSort,
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
-import { groupRefOf } from './issues/groupTree';
+import { groupRefOf, groupsGridPageOf, type GroupsGridPage } from './issues/groupTree';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { hiddenScopeOf, setCheckHidden, useHiddenChecks, type HiddenScope } from '../settings/hiddenChecks';
@@ -115,6 +113,13 @@ export function IssuesScreen() {
   const [copies, setCopies] = useState<ReadonlySet<string>>(() => new Set());
   const filterRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  // When a check is open, the check is the work: in a main area too narrow for the list beside it (under a 1600 px
+  // window, or with the inspector open), the list is behind "All checks" (tokens.css `--container-checks-beside`). The
+  // bar with that button shows only then, so whether it's drawn says whether the list is behind it.
+  const [checksOpen, setChecksOpen] = useState(false);
+  const checksBarRef = useRef<HTMLDivElement>(null);
+  const checksListId = useId();
+  const checksBehindButton = () => (checksBarRef.current?.getClientRects().length ?? 0) > 0;
 
   // The filter answers each key at once; the route follows, replaced, so back doesn't step through every letter. The
   // route's value is taken up only when it's not one this field sent (back, forward, a link, clearing the filters).
@@ -266,8 +271,8 @@ export function IssuesScreen() {
   const groupsPage = useQuery({
     // The groups grid's own key, the comparison in it, so the two read one page.
     queryKey: [...queryKeys.issueGroupsGrid(crawlId, checkId ?? ''), groupsCompareWith ?? 'none', GRID_PAGE_SIZE, 0],
-    queryFn: async ({ signal }): Promise<GridPage<IssueGroup>> =>
-      groupsAsGridPage(
+    queryFn: async ({ signal }): Promise<GroupsGridPage> =>
+      groupsGridPageOf(
         await api.issueGroups(
           crawlId,
           checkId ?? '',
@@ -317,13 +322,19 @@ export function IssuesScreen() {
   };
   const clearCategory = () => setSearch({ category: undefined });
 
-  const onGroupChange = (group: CheckGroupRef | null) =>
+  const router = useRouter();
+  const onGroupChange = (group: CheckGroupRef | null) => {
+    // A check's only group opens by itself once its groups are read: by then another check may have been picked (a
+    // hide, J), and the group isn't that one's.
+    const path = router.latestLocation.pathname.replace(/\/$/, '');
+    if (checkId && !path.endsWith(`/issues/${checkId}`)) return;
     void navigate({
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, group: group ?? undefined }),
       replace: true,
       state: true,
     });
+  };
   const onSortChange = (next: GridSort[]) =>
     void navigate({
       params: { crawl: crawlId, check: checkId },
@@ -421,13 +432,24 @@ export function IssuesScreen() {
     if (url) void openInBrowser(url);
   };
 
-  const moveBy = (step: number) => {
+  /** The check `step` places from the selected one in the list, or null where there's none to move to. */
+  const entryBy = (step: number): CheckEntry | null => {
     const visible = list?.visible ?? [];
-    if (visible.length === 0) return;
+    if (visible.length === 0) return null;
     const at = visible.findIndex((entry) => entry.check.id === checkId);
     const next = visible[Math.max(0, Math.min(visible.length - 1, at < 0 ? 0 : at + step))];
-    if (!next || next.check.id === checkId) return;
-    selectTakingFocus(next);
+    return !next || next.check.id === checkId ? null : next;
+  };
+  const moveBy = (step: number) => {
+    const next = entryBy(step);
+    if (next) selectTakingFocus(next);
+  };
+  // The bar's Previous and Next: focus stays on the button pressed, and the check it moved to is announced.
+  const stepBy = (step: number) => {
+    const next = entryBy(step);
+    if (!next) return;
+    choose(next.check.id, 'key');
+    announce(checkWords(next));
   };
 
   // Analysing from here, with where focus goes as the progress banner comes and goes (useAnalysisControl).
@@ -442,7 +464,15 @@ export function IssuesScreen() {
 
   useCommands(
     () => [
-      searchCommand({ id: 'issues.filter', title: 'Filter the checks', group: 'Issues', field: filterRef }),
+      {
+        ...searchCommand({ id: 'issues.filter', title: 'Filter the checks', group: 'Issues', field: filterRef }),
+        // The list behind "All checks" comes out first, so its field can take the keys.
+        run: () => {
+          if (checksBehindButton()) flushSync(() => setChecksOpen(true));
+          filterRef.current?.focus();
+          filterRef.current?.select();
+        },
+      },
       {
         id: 'issues.next',
         title: 'Next check',
@@ -575,6 +605,24 @@ export function IssuesScreen() {
     { group: 'Issues', title: 'Export…', choices: CRAWL_FILE_COMMANDS },
   );
 
+  // A check picked from the list behind "All checks" (a click, Enter): the list goes back behind it and the check takes
+  // the width, with focus on its title. The arrow keys only move through the list, which stays out.
+  const onListSelect = (next: string, by: SelectedBy) => {
+    choose(next, by);
+    if (by !== 'click' || !checksBehindButton()) return;
+    setChecksOpen(false);
+    if (next === checkId) titleRef.current?.focus();
+    else focusTitleOf.current = next;
+  };
+  const onListOpen = () => {
+    if (checksBehindButton()) setChecksOpen(false);
+    requestAnimationFrame(() => titleRef.current?.focus());
+  };
+  // The list is behind its button only while a check is open: with none, the list is what there is to pick from.
+  const listBehind = selected !== null && !checksOpen;
+  const visibleChecks = list?.visible ?? [];
+  const checkAt = visibleChecks.findIndex((entry) => entry.check.id === checkId);
+
   const loading = (checks.isPending || (analysis.isPending && !rereading)) && !checks.error && !analysis.error;
   const skeleton = useDelayedLoading(loading);
 
@@ -635,18 +683,27 @@ export function IssuesScreen() {
           canAnalyse={canAnalyse}
           onAnalyse={analyse}
         />
-        <div className="grid min-h-0 flex-1 grid-cols-(--issues-columns) gap-4 @max-split:flex-none @max-split:grid-cols-1">
+        <div
+          className={clsx(
+            'grid min-h-0 flex-1 grid-cols-(--issues-columns) gap-4 @max-split:flex-none @max-split:grid-cols-1',
+            listBehind && '@max-checks-beside:grid-cols-1',
+          )}
+        >
           <Card
             as="section"
+            id={checksListId}
             aria-label="Checks"
             aria-busy={refreshing}
-            className="relative flex min-h-0 flex-col overflow-hidden"
+            className={clsx(
+              'relative flex min-h-0 flex-col overflow-hidden',
+              listBehind && '@max-checks-beside:hidden',
+            )}
           >
             <ChecksList
               list={list}
               selectedId={checkId}
-              onSelect={choose}
-              onOpen={() => requestAnimationFrame(() => titleRef.current?.focus())}
+              onSelect={onListSelect}
+              onOpen={onListOpen}
               q={q}
               onQueryChange={onQueryChange}
               severity={severity}
@@ -674,6 +731,48 @@ export function IssuesScreen() {
           </Card>
           <Card data-check-detail className="min-h-0 overflow-auto @max-split:overflow-visible">
             {selected ? (
+              // The list's way back, while it's behind its button: the check's place among those listed, and the
+              // checks on either side of it.
+              <div
+                ref={checksBarRef}
+                className="flex items-center gap-2 border-b border-border-subtle px-4 py-2 @min-checks-beside:hidden"
+              >
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={ListChecks}
+                  aria-expanded={checksOpen}
+                  aria-controls={checksListId}
+                  onClick={() => setChecksOpen((open) => !open)}
+                >
+                  All checks
+                </Button>
+                {checkAt >= 0 ? (
+                  <span className="text-13 text-text-muted tabular-nums">
+                    {formatCount(checkAt + 1)} of {formatCount(visibleChecks.length)}
+                  </span>
+                ) : null}
+                <span className="ml-auto flex items-center gap-1">
+                  <IconButton
+                    size="sm"
+                    icon={ChevronUp}
+                    label="Previous check"
+                    command="issues.previous"
+                    disabled={checkAt <= 0}
+                    onClick={() => stepBy(-1)}
+                  />
+                  <IconButton
+                    size="sm"
+                    icon={ChevronDown}
+                    label="Next check"
+                    command="issues.next"
+                    disabled={checkAt < 0 || checkAt >= visibleChecks.length - 1}
+                    onClick={() => stepBy(1)}
+                  />
+                </span>
+              </div>
+            ) : null}
+            {selected ? (
               <CheckDetail
                 key={selected.check.id}
                 crawlId={crawlId}
@@ -682,6 +781,7 @@ export function IssuesScreen() {
                 analysis={analysis.data}
                 related={entries ? relatedChecks(entries, selected, points) : undefined}
                 groupCount={groupsPage.data?.matching ?? null}
+                groupOrder={groupsPage.data?.sort ?? null}
                 siteOrigin={siteOriginOf(item?.startUrl)}
                 group={search.group}
                 onGroupChange={onGroupChange}

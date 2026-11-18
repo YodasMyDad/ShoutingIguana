@@ -321,6 +321,11 @@ export interface OverviewSidecarOptions extends IssuesSidecarOptions {
   startUrl?: UrlRow | null;
   /** E3c: the crawler's probes of the site's other versions, as the URL grid lists them (`source` in `siteVersion`). */
   probes?: UrlRow[];
+  /**
+   * Of the status classes, the URLs on other sites (`isInternal` false): what wasn't blocked, by class, and how many
+   * were blocked. None unless said.
+   */
+  external?: { classes: Partial<Record<string, number>>; blocked: number };
   onPause?: () => void;
   onResume?: () => void;
   onStop?: () => void;
@@ -341,6 +346,18 @@ export function overviewRoutes(options: OverviewSidecarOptions = {}): FakeRoute[
     }
     const wanted = query.facets ?? [];
     const status = facets.status ?? OVERVIEW_FACETS.status;
+    // The status breakdown's reads of other sites' URLs: by class, and the blocked.
+    if (
+      query.filters?.some((filter) => filter.column === 'isInternal' && 'value' in filter && filter.value === false)
+    ) {
+      const external = options.external ?? { classes: {}, blocked: 0 };
+      if (query.filters.some((filter) => filter.column === 'outcome' && filter.op === 'in')) {
+        return json(page(external.blocked, status.total, {}));
+      }
+      const buckets = Object.entries(external.classes).map(([key, count]) => bucket('statusClass', key, count ?? 0));
+      const matching = buckets.reduce((sum, item) => sum + item.count, 0);
+      return json(page(matching, status.total, { statusClass: buckets }));
+    }
     // The status breakdown's second read: only the URLs that weren't checked, of which it takes the count.
     if (query.filters?.some((filter) => filter.column === 'outcome' && filter.op === 'in')) {
       const count = options.notChecked ?? 0;

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ChevronRight, Layers } from 'lucide-react';
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -6,9 +6,9 @@ import { api } from '../../api/client';
 import type { CheckGroupRef, IssueGroup, IssueRow } from '../../api/grids';
 import {
   LOCATE_GROUP_LIMIT,
-  groupsAsGridPage,
   issueGroupPlaceQuery,
   issueGroupRowsQuery,
+  issueTargetsQuery,
   queryKeys,
   type GroupPlace,
 } from '../../api/queries';
@@ -27,8 +27,9 @@ import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
 import {
   FACT_GAP,
-  evidenceValueWords,
+  evidenceLineParts,
   namesFileSize,
+  noStatusWords,
   pixelsWords,
   quoted,
   relatedFactParts,
@@ -48,7 +49,6 @@ import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { followWords } from '../../inspector/links';
-import { OUTCOME_WORDS } from '../../inspector/words';
 import { StatusCode } from '../../ui/StatusCode';
 import { linksOfUrl } from '../links/linkPlaces';
 import { imagesOfPage } from '../links/presets';
@@ -58,6 +58,7 @@ import {
   childRows,
   groupFilter,
   groupRefOf,
+  groupsGridPageOf,
   pageChildren,
   treeLayout,
   type ChildPlace,
@@ -71,7 +72,9 @@ import { saysShownAt, useGroupShownAt } from './useShownAt';
 import { useTemplateLink, useWhereFoundOf } from './useWhereFound';
 import { WhereFoundLine } from './WhereFoundLine';
 import {
+  SOURCES_SHOWN,
   allWords,
+  detailSaysMore,
   foundOnRows,
   linkPlaceWords,
   referencesOf,
@@ -167,8 +170,13 @@ const NARROW_ROOM = 420;
 const MIN_TEXT_WIDTH = 200;
 /** The frame's edges and the room a scrollbar may take. */
 const FRAME_SLACK = 24;
-/** A group without a detail, in the grid's Detail column: the chips' "Detail is none", in a cell's case. */
-const NO_DETAIL_SHOWN = 'None';
+/**
+ * A group without a detail, in the grid's Detail column: the chips' "Detail is none", in a cell's case; for a check
+ * whose detail names what a page has, what the page lacks.
+ */
+function noDetailShown(check: Pick<Check, 'id'>): string {
+  return check.id === 'h1-missing' ? 'No H1' : 'None';
+}
 /** A group's chip this short keeps its words beside the check's. */
 const SHORT_CHIP = 32;
 
@@ -240,16 +248,16 @@ function relatedStatus(group: IssueGroup, check: Check): { code: number | null; 
   const related = group.related;
   if (!related || !(check.targetFacts ?? []).includes('statusCode')) return null;
   if (related.statusCode !== null) return related.statusCode >= 300 ? { code: related.statusCode } : null;
-  return related.outcome ? { code: null, reason: OUTCOME_WORDS[related.outcome] } : null;
+  return related.outcome ? { code: null, reason: noStatusWords(related.outcome) } : null;
 }
 
 /** A page's evidence in one line, where its column headers aren't beside it: "→ /b/ 302 → /c/ 200", "“Sofas” · 12 inlinks". */
 function evidenceLine(row: IssueRow, check: Check, siteOrigin: string | null): string {
-  const values = row as unknown as Record<string, string | number | boolean | object | null | undefined>;
-  return evidenceOf(check)
-    .map((column) => evidenceValueWords(column, values[column], siteOrigin))
-    .filter((words): words is string => words !== null)
-    .join(FACT_GAP);
+  const values = row as unknown as { url?: string | null } & Record<
+    string,
+    string | number | boolean | object | null | undefined
+  >;
+  return evidenceLineParts(values, evidenceOf(check), siteOrigin).join(FACT_GAP);
 }
 
 export interface IssueGroupsProps {
@@ -304,7 +312,7 @@ export function IssueGroups({
   );
   const fetchPage = useCallback(
     async (offset: number, limit: number, signal: AbortSignal) =>
-      groupsAsGridPage(
+      groupsGridPageOf(
         await api.issueGroups(crawlId, check.id, { offset, limit, ...(compareWith ? { compareWith } : {}) }, signal),
       ),
     [crawlId, check.id, compareWith],
@@ -338,6 +346,19 @@ export function IssueGroups({
     if (missing) dropMissing(missing);
   }, [missing, openRef?.detail, openRef?.relatedUrlId]);
 
+  // A check's only group is what there is to see: it opens by itself, once, as the route names no group. Closed after,
+  // it stays closed.
+  const onlyGroup = groupCount === 1 ? groups.firstPage?.rows[0] : undefined;
+  const openedByItself = useRef(open !== undefined);
+  useEffect(() => {
+    if (openedByItself.current || open !== undefined || !onlyGroup) return;
+    openedByItself.current = true;
+    const ref = groupRefOf(onlyGroup);
+    const placed: GroupPlace = { index: 0, group: onlyGroup };
+    queryClient.setQueryData(queryKeys.issueGroupPlace(crawlId, check.id, ref), placed);
+    onOpenChange(ref);
+  }, [open, onlyGroup, queryClient, crawlId, check.id, onOpenChange]);
+
   const firstRows = useQuery({
     ...issueGroupRowsQuery(
       crawlId,
@@ -362,12 +383,44 @@ export function IssueGroups({
   const expandedId = openKey !== null && expanded?.group === openKey ? expanded.page : null;
   const expandedAt = expandedId !== null && loadedRows ? loadedRows.findIndex((row) => row.id === expandedId) : -1;
   const where = useWhereFoundOf(crawlId, check, expandedAt >= 0 ? expandedId : null);
+  // Under a group of the URL a page names, the page's line says its link to that URL: what opens under it is the other
+  // URLs it names, and a page that names no other has nothing to open.
+  const ownTarget =
+    grouping === 'relatedUrl' && references === 'targets' ? (openGroup?.group.relatedUrlId ?? null) : null;
+  // The pages that name another URL, as one string (the same string while they don't change).
+  const namingOthers = useQueries({
+    queries: (ownTarget !== null ? (loadedRows ?? []) : []).map((row) =>
+      issueTargetsQuery(crawlId, check.id, row.id, SOURCES_SHOWN),
+    ),
+    combine: (results) =>
+      results
+        .flatMap((result) =>
+          result.data && result.data.total > (result.data.targets.some((target) => target.id === ownTarget) ? 1 : 0)
+            ? [result.data.urlId]
+            : [],
+        )
+        .join(','),
+  });
+  const namesOthers = useMemo(
+    () => new Set(namingOthers === '' ? [] : namingOthers.split(',').map(Number)),
+    [namingOthers],
+  );
   const whereRows = useMemo<WhereRow[] | null>(() => {
     if (where.foundOn) return foundOnRows(where.foundOn);
-    if (where.targets) return targetRows(where.targets, check, siteOrigin);
+    if (where.targets) {
+      const others =
+        ownTarget === null
+          ? where.targets
+          : {
+              ...where.targets,
+              targets: where.targets.targets.filter((target) => target.id !== ownTarget),
+              total: Math.max(0, where.targets.total - 1),
+            };
+      return targetRows(others, check, siteOrigin);
+    }
     if (where.error) return [{ kind: 'nothing', words: 'Where it’s found couldn’t be read' }];
     return null;
-  }, [where.foundOn, where.targets, where.error, check, siteOrigin]);
+  }, [where.foundOn, where.targets, where.error, check, siteOrigin, ownTarget]);
   // While its rows are read, one row stands in for them (drawn as a placeholder).
   const openPage: OpenPage | null = expandedAt >= 0 ? { page: expandedAt, rows: whereRows?.length ?? 1 } : null;
   const openChildren = openGroup
@@ -484,7 +537,8 @@ export function IssueGroups({
         const child = childAt(place.child);
         if (references === 'none' || child.kind !== 'page') return undefined;
         const row = loadedRows?.[child.page];
-        return row ? row.id === expandedId : undefined;
+        if (!row || (ownTarget !== null && !namesOthers.has(row.id))) return undefined;
+        return row.id === expandedId;
       },
       parent: (index) => {
         const place = layout.place(index);
@@ -531,6 +585,8 @@ export function IssueGroups({
       loadedRows,
       expandedId,
       openKey,
+      ownTarget,
+      namesOthers,
     ],
   );
 
@@ -580,7 +636,17 @@ export function IssueGroups({
   const showShownAt = grouping === 'relatedUrl' && saysShownAt(check);
   const images = groupsAreImages(check);
   const pagesWidth = images ? IMAGE_PAGES_WIDTH : PAGES_WIDTH;
-  const shareWidth = images ? ((width ?? 720) < IMAGE_SHARE_FROM ? 0 : IMAGE_SHARE_WIDTH) : SHARE_WIDTH;
+  // A share bar compares groups: with one group, or groups of one page each, every bar says the same and none says
+  // anything the count doesn't.
+  const firstGroups = groups.firstPage?.rows ?? [];
+  const sharesSaySomething = groupCount !== 1 && firstGroups.some((group) => group.pages > 1);
+  const shareWidth = !sharesSaySomething
+    ? 0
+    : images
+      ? (width ?? 720) < IMAGE_SHARE_FROM
+        ? 0
+        : IMAGE_SHARE_WIDTH
+      : SHARE_WIDTH;
   const inColumns = useMemo(
     () => [...(showSize ? ['sizeBytes'] : []), ...(showPixels ? ['pixelWidth', 'pixelHeight'] : [])],
     [showSize, showPixels],
@@ -618,22 +684,8 @@ export function IssueGroups({
     );
     // The URL, then what's wrong with it: its status where that's the fault, and the check's facts about it.
     const relatedCell = (group: IssueGroup) => {
-      if (group.sharedText) {
-        return (
-          <span className="flex min-w-0 items-baseline gap-2">
-            <span className="min-w-0 shrink truncate">{quoted(group.sharedText, 120)}</span>
-            {group.relatedUrl ? (
-              <Url
-                url={group.relatedUrl}
-                siteOrigin={siteOrigin}
-                copyable={false}
-                tabbable={false}
-                className="max-w-1/3 min-w-0 shrink text-text-muted"
-              />
-            ) : null}
-          </span>
-        );
-      }
+      // What the pages share names the group: its first page is one of the pages under it, said there.
+      if (group.sharedText) return <span className="min-w-0 truncate">{quoted(group.sharedText, 120)}</span>;
       if (!group.relatedUrl) return <span className="text-text-muted">No other URL</span>;
       const status = relatedStatus(group, check);
       const facts = images && room < IMAGE_FACTS_ROOM ? '' : relatedFactsWords(group, check, siteOrigin, inColumns);
@@ -672,7 +724,7 @@ export function IssueGroups({
     const relatedText = (group: IssueGroup) =>
       [
         group.sharedText ? quoted(group.sharedText, 120) : null,
-        group.relatedUrl,
+        group.sharedText ? null : group.relatedUrl,
         relatedFactsWords(group, check, siteOrigin),
       ]
         .filter((part) => part)
@@ -707,7 +759,7 @@ export function IssueGroups({
               cell: (row) => {
                 const group = text(row);
                 if (!group) return null;
-                const detail = group.detail ?? NO_DETAIL_SHOWN;
+                const detail = group.detail ?? noDetailShown(check);
                 return groupTitle(row, detail, detail);
               },
               text: (row) =>
@@ -886,9 +938,10 @@ export function IssueGroups({
       if (row.kind === 'group') return null;
       if (row.kind === 'page') {
         const evidence = evidenceLine(row.row, check, siteOrigin);
+        const opens = references !== 'none' && (ownTarget === null || namesOthers.has(row.row.id));
         return (
           <span className="flex min-w-0 items-center gap-3">
-            {references === 'none' ? null : (
+            {!opens ? null : (
               <span data-tree-toggle aria-hidden="true" className="si-tree-toggle -me-2">
                 <Icon icon={ChevronRight} size="sm" />
               </span>
@@ -915,13 +968,25 @@ export function IssueGroups({
                 className="max-w-1/2 shrink"
               />
             )}
-            {row.row.detail && row.row.detail !== row.group.detail && !linesSayDetail ? (
+            {row.row.detail &&
+            row.row.detail !== row.group.detail &&
+            (!linesSayDetail || detailSaysMore(row.row.detail)) ? (
               // The detail gives way first: the where line beside it says what the page names.
               <span className="max-w-1/4 min-w-0 shrink-3 truncate text-text-muted" title={row.row.detail}>
                 {row.row.detail}
               </span>
             ) : null}
-            <Icon icon={ChevronRight} size="sm" className="shrink-0 text-text-muted" />
+            {/* Inspects the page, as Enter and a double-click on its row do. */}
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={`Inspect ${row.row.url ?? 'the page'}`}
+              title="Inspect it"
+              className="-me-1 inline-flex shrink-0 cursor-pointer rounded-sm p-0.5 text-text-muted hover:bg-surface-hover hover:text-text"
+              onClick={() => onInspect(row.row.id)}
+            >
+              <Icon icon={ChevronRight} size="sm" />
+            </button>
           </span>
         );
       }
@@ -962,7 +1027,7 @@ export function IssueGroups({
         </span>
       );
     },
-    [crawlId, check, grouping, siteOrigin, references, linesSayDetail],
+    [crawlId, check, grouping, siteOrigin, references, linesSayDetail, ownTarget, namesOthers, onInspect],
   );
 
   // The insight: the open group when it's probably the template's, else the largest group that is.
@@ -1119,7 +1184,11 @@ function WhereCell({
             tabbable={false}
             className="min-w-0 flex-1"
           />
-          <StatusCode code={where.target.statusCode} className="shrink-0" />
+          <StatusCode
+            code={where.target.statusCode}
+            {...(where.target.statusCode === null ? { reason: noStatusWords(where.target.outcome) } : {})}
+            className="shrink-0"
+          />
           {place ? (
             <span className="max-w-3/5 shrink truncate text-text-muted" title={place}>
               {place}

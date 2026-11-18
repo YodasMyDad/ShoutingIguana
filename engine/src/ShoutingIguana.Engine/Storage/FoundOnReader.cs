@@ -176,19 +176,19 @@ public static class FoundOnReader
             var (status, _, fetched, outcome, join) = UrlInspectorReader.OtherEnd(context);
             var preferred = (int)PreferredKind(checkId);
 
-            // A broken fragment is in a link that has one. A link without text is one with none outside the head, as the
-            // check counts them, and the page's link to itself is one written without a fragment: its skip and #top links
-            // are jumps within it, which the check passes. Any other check's link is the first of its kind.
-            var flagged = checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id
-                ? "CASE WHEN l.fragment IS NULL THEN 1 ELSE 0 END, "
-                : checkId == IssueCatalog.EMPTY_ANCHOR_TEXT.Id
-                    ? $"CASE WHEN COALESCE(TRIM(l.text), '') = '' AND l.position <> {(int)LinkPosition.Head} THEN 0 ELSE 1 END, CASE WHEN l.fragment IS NULL THEN 0 ELSE 1 END, "
-                    : string.Empty;
+            // Where only some of a page's links to a target are at fault, the target's link is the first of those and its
+            // links count those alone. Broken fragments and generic texts are judged in code below; until then, a broken
+            // fragment's is the first link with a fragment. Any other check's link is the first of its kind, and every link
+            // to it counts.
+            var flagged = FlaggedLinks(checkId);
+            var flaggedFirst = flagged is null ? string.Empty : $"CASE WHEN {flagged} THEN 0 ELSE 1 END, ";
+            var fragmentFirst = checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id ? "CASE WHEN l.fragment IS NULL THEN 1 ELSE 0 END, " : string.Empty;
+            var counted = flagged is null ? string.Empty : $" AND {flagged}";
             using var command = context.Command($"""
                 SELECT o.id, o.url, {status}, {fetched}, {outcome},
                        (SELECT l.rowid FROM links l WHERE l.from_id = $id AND +l.to_id = o.id
-                        ORDER BY CASE WHEN l.kind = {preferred} THEN 0 ELSE 1 END, {flagged}l.rowid LIMIT 1) AS link,
-                       (SELECT COUNT(*) FROM links l WHERE l.from_id = $id AND +l.to_id = o.id) AS links
+                        ORDER BY {flaggedFirst}CASE WHEN l.kind = {preferred} THEN 0 ELSE 1 END, {fragmentFirst}l.rowid LIMIT 1) AS link,
+                       (SELECT COUNT(*) FROM links l WHERE l.from_id = $id AND +l.to_id = o.id{counted}) AS links
                 FROM ({named}) t
                 JOIN urls o ON o.id = t.target
                 {join}
@@ -210,6 +210,11 @@ public static class FoundOnReader
                 }
             }
 
+            if (AtFault(context, checkId, urlId) is { } atFault)
+            {
+                found = [.. found.Select(entry => atFault(entry.Target.Id) is (var link, var count) ? (entry.Target with { Links = count }, link) : entry)];
+            }
+
             var facts = UrlFactsReader.Read(context, [.. found.Select(entry => entry.Target.Id)]);
             var images = new PageImages(context, urlId);
             var imageCheck = IssueCatalog.Find(checkId)?.Category == IssueCategory.Images;
@@ -221,6 +226,96 @@ public static class FoundOnReader
         }
 
         return new IssueTargetsOfUrl(urlId, total, targets);
+    }
+
+    /// <summary>
+    /// The page's links to a target the check flags, as SQL, for the checks where some of them can be fine: a link without
+    /// text (outside the head; to the page itself, one not written as a fragment, as its skip and #top links are jumps
+    /// within it), a nofollow link (a followed one beside it isn't), and a link written without its scheme (one written
+    /// with it isn't). Null for the others.
+    /// </summary>
+    private static string? FlaggedLinks(string checkId)
+    {
+        var hyperlink = $"l.kind = {(int)LinkKind.Hyperlink}";
+        var samePage = $"(l.to_id = l.from_id OR (l.flags & {(int)LinkFlags.SamePage}) <> 0)";
+        if (checkId == IssueCatalog.EMPTY_ANCHOR_TEXT.Id)
+        {
+            return $"({hyperlink} AND COALESCE(TRIM(l.text), '') = '' AND l.position <> {(int)LinkPosition.Head} AND (l.fragment IS NULL OR NOT {samePage}))";
+        }
+
+        if (checkId == IssueCatalog.PROTOCOL_RELATIVE_LINKS.Id)
+        {
+            return $"((l.flags & {(int)LinkFlags.ProtocolRelative}) <> 0)";
+        }
+
+        return checkId == IssueCatalog.INTERNAL_NOFOLLOW_LINKS.Id
+            ? $"({hyperlink} AND (l.flags & {(int)LinkFlags.NoFollow}) <> 0 AND NOT {samePage})"
+            : null;
+    }
+
+    /// <summary>
+    /// For the checks that judge a page's links in code, not SQL, the page's links to a target the check flags: the first,
+    /// and how many; null for a target where none is (a file analysed before the page changed), so the first link SQL
+    /// orders first stands. A link to a section the target has no id for (<see cref="FragmentRules.Misses"/>, against the
+    /// target's stored ids), and a link whose text is generic (<see cref="LinkStructureRules.IsGeneric"/>). Null for the
+    /// other checks.
+    /// </summary>
+    private static Func<int, (long Link, int Count)?>? AtFault(GridReadContext context, string checkId, int pageId)
+    {
+        if (checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id)
+        {
+            return target => StoredFacts(context, target) is { } facts
+                ? FirstAtFault(context, pageId, target, "l.fragment IS NOT NULL", link => FragmentRules.Misses(link.Fragment!, facts.AnchorIds))
+                : null;
+        }
+
+        return checkId == IssueCatalog.GENERIC_ANCHOR_TEXT.Id
+            ? target => FirstAtFault(context, pageId, target, $"l.text IS NOT NULL AND l.position <> {(int)LinkPosition.Head}",
+                link => LinkStructureRules.IsGeneric(link.Text!, link.Flags))
+            : null;
+    }
+
+    /// <summary>The page's hyperlinks to a target, of those <paramref name="where"/> picks, that are at fault: the first, and how many.</summary>
+    private static (long Link, int Count)? FirstAtFault(GridReadContext context, int pageId, int targetId, string where,
+        Func<(string? Text, string? Fragment, LinkFlags Flags), bool> atFault)
+    {
+        long? first = null;
+        var count = 0;
+        using var command = context.Command($"""
+            SELECT l.rowid, l.text, l.fragment, l.flags FROM links l
+            WHERE l.from_id = $id AND +l.to_id = $target AND l.kind = {(int)LinkKind.Hyperlink} AND {where}
+            ORDER BY l.rowid
+            """, [new("$id", pageId), new("$target", targetId)]);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (atFault((reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), (LinkFlags)reader.GetInt64(3))))
+            {
+                first ??= reader.GetInt64(0);
+                count++;
+            }
+        }
+
+        return first is { } link ? (link, count) : null;
+    }
+
+    /// <summary>A page's stored facts, or null when it has none or they can't be read (a damaged blob).</summary>
+    private static PageFacts? StoredFacts(GridReadContext context, int urlId)
+    {
+        using var command = context.Command("SELECT data FROM response_details WHERE url_id = $id", [new("$id", urlId)]);
+        if (command.ExecuteScalar() is not byte[] data)
+        {
+            return null;
+        }
+
+        try
+        {
+            return BlobCodec.DecodeDetails(data).Page;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -268,24 +363,8 @@ public static class FoundOnReader
                 : null;
         }
 
-        private IReadOnlyList<ImageFact> Read()
-        {
-            using var command = context.Command("SELECT data FROM response_details WHERE url_id = $id", [new("$id", pageId)]);
-            if (command.ExecuteScalar() is not byte[] data)
-            {
-                return [];
-            }
-
-            try
-            {
-                return BlobCodec.DecodeDetails(data).Page?.Images ?? [];
-            }
-            catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException)
-            {
-                // A damaged blob names no image: the targets are still listed.
-                return [];
-            }
-        }
+        // A damaged blob names no image: the targets are still listed.
+        private IReadOnlyList<ImageFact> Read() => StoredFacts(context, pageId)?.Images ?? [];
     }
 
     /// <summary>The kind of link a check is about, where a page can link to its target more than one way.</summary>

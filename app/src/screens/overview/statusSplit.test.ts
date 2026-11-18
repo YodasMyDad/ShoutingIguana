@@ -11,6 +11,7 @@ import {
   splitFilters,
   statusSplit,
   statusSplitFromFacets,
+  externalWords,
   type StatusFacets,
 } from './statusSplit';
 
@@ -248,6 +249,28 @@ describe('a finished crawl’s breakdown, from the URL facets', () => {
       count: 1765,
       link: { to: 'urls', filters: [{ column: 'statusClass', op: 'isEmpty' }] },
     });
+  });
+
+  it('says how many of each class are other sites’ URLs, the links the crawl checked', () => {
+    // The garden crawl: a DNS failure and a refused request on other sites, 2 bot challenges there, a 403 among the 4xx.
+    const split = statusSplitFromFacets({
+      ...facets,
+      external: { '2xx': 120, '4xx': 1, noResponse: 1, blocked: 2 },
+    });
+    expect(split.segments.map((segment) => [segment.label, segment.external])).toEqual([
+      ['2xx', 120],
+      ['3xx', 0],
+      ['4xx', 1],
+      ['5xx', 0],
+      ['No response', 1],
+      ['Blocked', 2],
+    ]);
+    expect(externalWords(split.segments.find((segment) => segment.key === 'noResponse')!)).toBe('1 on other sites');
+    expect(externalWords(split.segments.find((segment) => segment.key === 'blocked')!)).toBe('All on other sites');
+    expect(externalWords(split.segments.find((segment) => segment.key === '3xx')!)).toBeNull();
+    // Not known (an earlier read, or live): nothing said.
+    expect(statusSplitFromFacets(facets).segments.every((segment) => segment.external === null)).toBe(true);
+    expect(externalWords(statusSplitFromFacets(facets).segments[0]!)).toBeNull();
   });
 
   it('says why there was no response once the crawl’s stats arrive, and not before', () => {

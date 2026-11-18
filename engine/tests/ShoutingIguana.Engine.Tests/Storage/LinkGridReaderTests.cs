@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
@@ -94,7 +96,12 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         ["search within hyperlinks"] = ([Names("kind", FilterOperator.In, "hyperlink")], "/p/2"),
         ["content hyperlinks that work"] = ([Names("kind", FilterOperator.In, "hyperlink"), Names("position", FilterOperator.In, "content"), Names("to.statusClass", FilterOperator.In, "2xx")], null),
         ["nofollowed to the site"] = ([Boolean("followed", false), Boolean("to.isInternal", true)], null),
-        ["nothing"] = ([Names("kind", FilterOperator.In, "icon"), Boolean("noFollow", true)], null)
+        ["nothing"] = ([Names("kind", FilterOperator.In, "icon"), Boolean("noFollow", true)], null),
+        ["counted by a check"] = ([Names("check", FilterOperator.In, "broken-internal-links")], null),
+        ["hyperlinks counted by the broken link checks"] =
+            ([Names("kind", FilterOperator.In, "hyperlink"), Names("check", FilterOperator.In, "broken-internal-links", "broken-external-links")], null),
+        ["counted by a check, in the content"] = ([Names("check", FilterOperator.In, "links-to-redirects"), Names("position", FilterOperator.In, "content")], null),
+        ["counted by a check, searched"] = ([Names("check", FilterOperator.In, "broken-internal-links", "empty-anchor-text")], "/p/")
     };
 
     [Fact]
@@ -192,7 +199,48 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         }
 
         Assert.NotEmpty(Reference.Matching(FilterSets()["nofollowed to the site"].Filters));
+        Assert.NotEmpty(Reference.Matching(FilterSets()["counted by a check, in the content"].Filters));
         Assert.Empty(Reference.Matching(FilterSets()["nothing"].Filters));
+    }
+
+    /// <summary>
+    /// A filter by a check (<c>check</c>) holds the links the check counts: each link from a page it flagged to a URL that
+    /// page's issue names. With hyperlinks alone, as the Links screen's "Broken links" and "Links to redirects" ask, those
+    /// are exactly the links the link checks count, and the pages they're on exactly the pages those checks flagged: no
+    /// redirect hop is the page a link is on, a working target is never in it, and a broken one on another site only when
+    /// the check counts it.
+    /// </summary>
+    [Theory]
+    [InlineData("broken-internal-links", "broken-external-links")]
+    [InlineData("links-to-redirects")]
+    public void AFilterByLinkChecksHoldsTheLinksTheyCount(params string[] checks)
+    {
+        var listed = string.Join(", ", checks.Select(check => $"'{check}'"));
+        var expected = TestCrawls.Rows(crawl.Path, $"""
+            SELECT DISTINCT l.rowid, l.from_id FROM links l
+            JOIN issue_targets t ON t.url_id = l.from_id AND t.related_url_id = l.to_id
+            WHERE t.issue IN ({listed}) AND l.kind = {(int)LinkKind.Hyperlink}
+            """);
+        var flagged = TestCrawls.Rows(crawl.Path, $"SELECT DISTINCT url_id FROM issues WHERE issue IN ({listed})");
+        Assert.NotEmpty(flagged);
+
+        var query = new UrlQuery { Filters = [Names("kind", FilterOperator.In, "hyperlink"), Names("check", FilterOperator.In, checks)], Columns = ["from.id"], Limit = PAGE };
+        var page = LinkGridReader.Query(crawl.Path, query);
+        Assert.Equal(expected.Count, page.Matching);
+        var rows = page.Rows.Select(row => string.Create(CultureInfo.InvariantCulture, $"{row.Id} | {row.Values[1]}")).Order(StringComparer.Ordinal);
+        Assert.Equal(expected, rows);
+        Assert.Equal(flagged, page.Rows.Select(row => Convert.ToString(row.Values[1], CultureInfo.InvariantCulture)!).Distinct().Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>A filter by a check reads what the analysis stored of each issue's URLs: a crawl without them is refused, as a column the analysis fills is.</summary>
+    [Fact]
+    public void AFilterByACheckNeedsTheIssuesURLs()
+    {
+        var copy = crawl.Copy();
+        Change(copy, "DROP TABLE issue_targets");
+        var refused = Assert.Throws<NeedsAnalysisException>(() =>
+            LinkGridReader.Query(copy, new UrlQuery { Filters = [Names("check", FilterOperator.In, "broken-internal-links")] }));
+        Assert.Equal("check", Assert.Single(refused.Columns));
     }
 
     /// <summary>
@@ -1105,6 +1153,10 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         AssertRefused(new UrlQuery { Filters = [Names("kind", FilterOperator.In, "anchor")] }, "filters[0].values");
         AssertRefused(new UrlQuery { Filters = [Text("to.statusCode", FilterOperator.Contains, "4")] }, "filters[0].op", "'to.statusCode'");
         AssertRefused(new UrlQuery { Filters = [Names("to.check", FilterOperator.In, "no-such-check")] }, "filters[0].values");
+        AssertRefused(new UrlQuery { Filters = [Names("check", FilterOperator.In, "no-such-check")] }, "filters[0].values");
+        AssertRefused(new UrlQuery { Filters = [Names("check", FilterOperator.NotIn, "broken-internal-links")] }, "filters[0].op");
+        AssertRefused(new UrlQuery { Filters = [Text("check", FilterOperator.Eq, "broken-internal-links")] }, "filters[0].op");
+        AssertRefused(new UrlQuery { Filters = [Names("check", FilterOperator.In, "broken-internal-links") with { Group = new IssueGroupKey(null, 3) }] }, "filters[0].group");
         AssertRefused(new UrlQuery { Filters = [Text("from.metaRobots", FilterOperator.Contains, "noindex")] }, "filters[0].column", "'from.metaRobots'");
         AssertRefused(new UrlQuery { Filters = [Text("text", FilterOperator.Regex, "(a")] }, "filters[0].value");
         AssertRefused(new UrlQuery { Sort = [new UrlSort("text")] }, "sort[0].column");

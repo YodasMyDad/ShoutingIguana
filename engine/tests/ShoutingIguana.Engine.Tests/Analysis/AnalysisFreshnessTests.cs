@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(18, AnalysisFreshness.VERSION);
+        Assert.Equal(19, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -105,7 +105,18 @@ public sealed class AnalysisFreshnessTests
     public void AnAnalysisFromBeforeTheQuotedDetailsIsOutOfDate()
     {
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 17 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 18 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 19 (the links part's) names each URL <c>protocol-relative-links</c> counts as the issue's targets, doesn't
+    /// flag an HTTPS page the home page's HSTS covers, and says where each uncrawlable link is. An analysis 18 stored is
+    /// out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeProtocolRelativeTargetsIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 18 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 19 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

@@ -368,7 +368,9 @@ Links · **Warning**: what's reached only through them is invisible to search en
   audit:* only links that lead somewhere count: a `javascript:` href or onclick whose script navigates (sets the location
   or an href, opens a window, calls navigate or goto, or quotes a path or URL), a routerLink, an href with a URL on another
   element. A review widget's `<span href="javascript:void(0)">` and a theme's `<a href="">Read more</a>` were flagged, and
-  lead nowhere a search engine could go (an empty href is the page itself).
+  lead nowhere a search engine could go (an empty href is the page itself). *Changed by the site-owner audit
+  (2026-11-18):* each says where on the page it is (content, navigation, header, footer or sidebar),
+  `“Shop” (onclick, header)`, from collection 7's facts; a page parsed before doesn't.
 - **Standard:** Google, "Make your links crawlable": Google "can only crawl your link if it's an `<a>` HTML element with an
   href attribute"; `<a onclick>`, `<span href>`, `<a routerLink>` and `javascript:` hrefs are "not recommended".
 - **Data:** `PageFacts.UncrawlableLinks` (new).
@@ -399,15 +401,16 @@ Links · **Warning**: every visitor gets a dead link; it's a development address
 
 - **Simple:** "Links to a test copy that only works for whoever built it"
 - **Rule:** a page linking (any kind) to a host that is `localhost`, ends `.localhost`, or is a loopback (127.0.0.0/8, ::1)
-  or private (10/8, 172.16/12, 192.168/16, fc00::/7) address. Skipped, saying why, when the start URL's own host is one:
-  a crawl of a development copy can't tell. Detail: `2 links, such as http://localhost:3000/shop`.
+  or private (10/8, 172.16/12, 192.168/16, fc00::/7) address. On a crawl that started at such an address, that machine's
+  own addresses (its host, or loopback for loopback) aren't counted. Detail: `2 links, such as http://localhost:3000/shop`.
 - **Standard:** none needed.
 - **Data:** `Links`, the target's URL text (`readUrl`, for external targets only).
 - **Evidence:** target facts `statusCode`, `text`, `position`.
-- **Plant:** none: the synthetic site and its partner are on 127.0.0.1, so the rule skips there. A rule test with a page
-  on `https://example.com` linking `http://localhost:3000/` proves it; the whole-table test proves the skip. Expected
-  **0**. *For the crawler, not this check:* a link to a private address makes the crawler ask the user's own machine or
-  network; whether it should fetch such links at all is worth deciding.
+- **Plant (HTTPS site only):** `private-address-link`: `<a href="http://192.168.0.10:3000/shop" rel="nofollow">`.
+  The site and its partner are on 127.0.0.1, so loopback addresses are the crawl's own machine; a private address
+  elsewhere counts, but a crawl started on a private address asks private ones, so the link is nofollow to keep the
+  crawler from asking the test machine's network, and planted over HTTPS only, as one crawl of the plain-HTTP site
+  follows nofollow links (`OptionsChangeWhatIsFollowed`). Expected **1** on HTTPS, **0** on HTTP.
 - **From:** Screaming Frog Links "Outlinks To Localhost".
 
 #### 17. `few-internal-outlinks`: Page with few or no internal links
@@ -1173,7 +1176,9 @@ Security · **Notice**, as `security-headers-missing` · Low · P/N/– (reporte
 - **Standard:** hstspreload.org: "The max-age must be at least 31536000 seconds (1 year)"; MDN: browsers ignore HSTS
   over HTTP; `nosniff` is the header's one directive.
 - **Data:** `Headers`. Nothing new.
-- **Plant:** none: the synthetic home page must pass. A rule test. Expected **0**.
+- **Plant:** the synthetic home page's `X-Content-Type-Options: no-sniff` (misspelt). Expected **1**, on `/`. Revision 1
+  mends it, so **0** over HTTP; over HTTPS its home page turns HSTS on with `max-age=86400`, so **1** still (a day,
+  under a year).
 - **From:** backlog ("weak HSTS"; "the nosniff value").
 
 #### 67. `cookies-insecure`: Cookies without Secure or HttpOnly
@@ -1206,14 +1211,22 @@ Security · **Warning**: what people type travels unencrypted, and browsers warn
 
 #### 69. `protocol-relative-links`: Protocol-relative (//) URLs
 
-Security · **Notice** · Low · P/N/–
+Security · **Notice** · Low · P/RU/T
 
 - **Simple:** "Links written in an old shortcut style"
-- **Rule:** a page with any `href` or `src` that starts `//`. Detail: `3 URLs, such as //cdn.example.com/app.js`.
+- **Rule:** a page with any `href` or `src` that starts `//`, except an HTTPS page where the home page's
+  Strict-Transport-Security covers its host (sent over HTTPS with a max-age above 0; a subdomain only with
+  `includeSubDomains`): browsers that have been to the site never load an HTTP copy there, which is the risk. Detail:
+  `3 URLs, such as //cdn.example.com/app.js`, and with values in no link,
+  `…; 1 in a tag that isn't a link or file, such as //fonts.example.net`. The issue's targets are the URLs the page
+  links to or loads written that way (grouped by them); one in no link puts the page in the group naming no URL too.
 - **Standard:** none read *(unverified)*: on an HTTPS page they load over HTTPS anyway, so the fault is only that an
-  HTTP copy of the page would load them insecurely.
-- **Data:** `PageFacts.ProtocolRelativeUrls` (new).
-- **Plant:** `protocol-relative`: `<script src="//{host}/static/app.js">`. Expected **1**.
+  HTTP copy of the page would load them insecurely. HSTS: RFC 6797.
+- **Data:** `PageFacts.ProtocolRelativeUrls` (new; `Unlinked` and `FirstUnlinked` from collection 7), and the link flag
+  `ProtocolRelative` (collection 7). A page parsed before names no URL.
+- **Plant:** `protocol-relative`: `<script src="//{host}/static/app.js">`, a `<link rel="preconnect">` to the partner
+  site written `//`, and a link to the thin page written `//` beside one written with its scheme. Expected **1**; over
+  HTTPS, **0** at revision 1, whose home page sends HSTS.
 - **From:** Screaming Frog Security "Protocol-Relative Resource Links".
 
 ### URLs

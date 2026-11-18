@@ -54,7 +54,11 @@ test.beforeAll(async () => {
   expect(crawl).not.toBe('');
 });
 
-const BROKEN: Filter[] = [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }];
+/** The Broken links preset's filters: the hyperlinks the broken link checks count. */
+const BROKEN: Filter[] = [
+  { column: 'kind', op: 'in', values: ['hyperlink'] },
+  { column: 'check', op: 'in', values: ['broken-internal-links', 'broken-external-links'] },
+];
 const IMAGES: Filter[] = [{ column: 'kind', op: 'in', values: ['image'] }];
 const groups = (filters: Filter[], more: Record<string, unknown> = {}) =>
   api<GroupsPage>(`/api/crawls/${crawl}/links/groups`, { filters, limit: 50, ...more });

@@ -19,17 +19,44 @@ export function importanceColumn(check: Pick<Check, 'subject'>): 'inlinks' | 'us
   return check.subject === 'url' ? 'usedOn' : 'inlinks';
 }
 
-/** What the engine's order puts first, for the line above a flat list: "most linked first", "most used first". */
-export function importanceWords(check: Pick<Check, 'subject'>): string {
+/**
+ * What the engine's order puts first, for the line above a flat list: "most linked first", "most used first"; "fewest
+ * links first" for a check whose rows come the other way (pages missing from the sitemaps, where a sitemap helps most).
+ */
+export function importanceWords(check: Pick<Check, 'subject' | 'rowOrder'>): string {
+  if (check.rowOrder === 'fewestLinksFirst') return 'fewest links first';
   return importanceColumn(check) === 'usedOn' ? 'most used first' : 'most linked first';
 }
 
-/** What a flat list of a check's rows asks for: the URL, the detail, its evidence, then what orders them. */
-export function flatRowColumns(check: Pick<Check, 'evidence' | 'subject'>): string[] {
+/**
+ * What a flat list of a check's rows asks for: the URL, the detail, its evidence, then what orders them. A check whose
+ * URLs other pages refer to has its "Found on" column, which says how many pages it's on: its own count beside it
+ * would say it twice, and differently (a redirect hop is found on a page but used on none).
+ */
+export function flatRowColumns(check: Pick<Check, 'evidence' | 'subject' | 'references'>): string[] {
   const evidence = evidenceOf(check);
   const importance = importanceColumn(check);
-  return ['url', 'detail', ...evidence, ...(evidence.includes(importance) ? [] : [importance])];
+  const ordered = check.references === 'sources' || evidence.includes(importance) ? [] : [importance];
+  return ['url', 'detail', ...evidence, ...ordered];
 }
+
+/** The text an owner has to change, wrapped rather than cut: how many lines each takes at most. */
+const WRAPPED: Readonly<Record<string, number>> = {
+  title: 2,
+  titleInResults: 2,
+  h1: 2,
+  h2: 2,
+  description: 4,
+  descriptionInResults: 4,
+};
+
+/** How many lines a flat check's rows take: one, or as many as its longest wrapped text needs. */
+export function wrappedLines(columns: readonly string[]): number {
+  return Math.max(1, ...columns.map((column) => WRAPPED[column] ?? 1));
+}
+
+/** Whether a column's text wraps in a flat check's rows. */
+export const wrapsText = (column: string): boolean => column in WRAPPED;
 
 /** What a group's pages ask for: the URL, the detail, the other URL, and the check's evidence. */
 export function groupRowColumns(check: Pick<Check, 'evidence'>): string[] {

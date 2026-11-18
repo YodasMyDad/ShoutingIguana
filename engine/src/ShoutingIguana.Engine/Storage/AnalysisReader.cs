@@ -322,6 +322,13 @@ internal sealed class AnalysisReader : IDisposable
         return command.ExecuteScalar() as string;
     }
 
+    /// <summary>The response headers stored for one URL, or none when it has no stored response.</summary>
+    public IReadOnlyList<ResponseHeader> ReadHeaders(int urlId)
+    {
+        _detailsUrlId.Value = urlId;
+        return _details.ExecuteScalar() is byte[] data ? BlobCodec.DecodeDetails(data).Headers : [];
+    }
+
     /// <summary>The stored facts of one URL, or null when it has none (not HTML, not internal, or not fetched).</summary>
     public PageFacts? ReadFacts(int urlId)
     {

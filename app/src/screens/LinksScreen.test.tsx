@@ -293,10 +293,10 @@ describe('the Links filter bar', () => {
     const bar = screen.getByRole('group', { name: 'Filters' });
     await user.click(within(bar).getByRole('button', { name: 'Target is on another site' }));
     expect(await screen.findByRole('dialog', { name: 'Change the filter' })).toBeVisible();
-    // Back, with the editor open: the view is "Broken links" again, whose one filter is in the same place.
+    // Back, with the editor open: the view is "Broken links" again, whose first filter is in the same place.
     act(() => router.history.back());
     await counted('3 of 13 links');
-    expect(within(bar).getByRole('button', { name: 'Target status class is 4xx or 5xx' })).toBeVisible();
+    expect(within(bar).getByRole('button', { name: 'Kind is Hyperlink' })).toBeVisible();
     // Its editor isn't open: nobody asked to change that filter.
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });

@@ -279,11 +279,11 @@ Built in stages:
   What a fix clears **on a crawl** is counted, never assumed: the analysis's `counts[].clears`. Only how a check is
   shown: not stored with an analysis, nor in the checks' fingerprint.
 - **`evidence`** (evidence) is the URL columns that show what the check found, in the order to show them, beside each
-  row's `url` and `detail`: `["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
-  `["metaRobots", "xRobotsTag"]` for `noindex-page` (where the noindex comes from), `["redirectChain"]` for the
-  redirect checks, `["robotsRule"]` for `blocked-by-robots`. Each is a column of [`/rows`](#issue-groups-e3a) and
+  row's `url` and `detail`: `["title", "titleInResults"]` for `title-too-long` (its detail gives the width and the
+  length), `["metaRobots", "xRobotsTag"]` for `noindex-page` (where the noindex comes from), `["redirectChain"]` for
+  the redirect checks but `redirect-loop` (whose detail is its chain), `["robotsRule"]` for `blocked-by-robots`. Each is a column of [`/rows`](#issue-groups-e3a) and
   of [the URL grid](#urls-e3a), so a view asks `/rows` for `url`, `detail` and these. Empty for a check whose URL and
-  detail say it all (27 checks have some); [the per-check table](v2-evidence.md#the-checks) has every one. A column
+  detail say it all (50 checks have some); [the per-check table](v2-evidence.md#the-checks) has every one. A column
   that needs the URL summary has no values without one, and is listed in `/rows`' `unavailable`, as any is.
 - **`targetFacts`** (evidence) is what to say about each URL the check's issues name, in the order to say it: the
   fields of a target on [`/issues/{checkId}/targets`](#where-a-url-is-found-found-on), and of a group's `related` URL
@@ -1635,7 +1635,8 @@ page's links to itself left out, in the order they were found:
   `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`, `socialImage` (an og:image or twitter:image given as a full URL); every kind by default).
 - `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
   is `content`, `navigation`, `header`, `footer`, `sidebar` or `head`. `flags` are among `noFollow`, `sponsored`,
-  `ugc`, `imageLink`, `outsideHead`, `samePage` and `fromHttpHeader`; `followed` is whether search engines follow a
+  `ugc`, `imageLink`, `outsideHead`, `samePage`, `fromHttpHeader` and `protocolRelative` (written without its scheme,
+  `//cdn.example.com/app.js`; noted by pages parsed since 2026-11-18); `followed` is whether search engines follow a
   hyperlink, which a nofollow on its page stops too.
 - Paging is as the URL grid's: `offset`, `limit` (1 to 1,000), and `after` with the `next` cursor. Name each kind once:
   one named twice, or a null, is a field error (`kinds[2]`).
@@ -1792,8 +1793,8 @@ with `matching` the rows the filters match and `total` the check's flagged URLs,
   on 200 pages first), then `depth`, then `url`. Without a URL summary, which `inlinks` and `usedOn` need, it is
   `depth`, then `url`. So a group's pages, a check's export and the report's examples come in the same order. Crawl
   order is still there to ask for: `[{ "column": "id" }]`. A cursor is of the order its page was read in, as always.
-- **A check's evidence** is asked for as any columns are: `"columns": ["url", "detail", "title", "titleInResults",
-  "titleWidth", "titleLength"]` for `title-too-long`, the check's `evidence` from [`/checks`](#checks-e1).
+- **A check's evidence** is asked for as any columns are: `"columns": ["url", "detail", "title", "titleInResults"]`
+  for `title-too-long`, the check's `evidence` from [`/checks`](#checks-e1).
 
 ```json
 {"group":{"detail":null,"relatedUrlId":1},"columns":["url","inlinks","detail"],"sort":[{"column":"inlinks","desc":true}],"limit":100}
@@ -1894,10 +1895,14 @@ the page without opening anything:
   - `canonical` is the URL it's canonicalised to, `{ id, url, statusCode, outcome }`, when its canonical names
     another URL; null otherwise. For a canonical chain, this is the chain's next hop.
 - **How the page links to it**: `kind`, `text` and `position` as before, of the page's first link to it of the
-  check's kind; `fragment` that link's `#fragment`, as written after the `#` (for `broken-fragment-links`, the first
-  link to it that has one); `flags` its flags, as a link's (`noFollow`, `imageLink`, `fromHttpHeader`, …); and
-  `links`, how many links of any kind the page has to it (a nav link and a footer link to the same 404 are 2). All
-  null, and `flags` empty, where the page has no stored link to it.
+  check's kind; `fragment` that link's `#fragment`, as written after the `#`; `flags` its flags, as a link's
+  (`noFollow`, `imageLink`, `fromHttpHeader`, …); and `links`, how many links of any kind the page has to it (a nav
+  link and a footer link to the same 404 are 2). Where only some of the page's links to it are at fault, the link is
+  the first of those and `links` counts those alone: for `empty-anchor-text` the links with nothing to read (not ones
+  written as a fragment to the page itself), for `internal-nofollow-links` the nofollow ones, for
+  `protocol-relative-links` the ones written without a scheme, for `generic-anchor-text` the ones with generic text,
+  and for `broken-fragment-links` the ones to a section the target lacks (a working `#present` beside a broken
+  `#missing` names `#missing`, and counts 1). All null, and `flags` empty, where the page has no stored link to it.
 - **`img`** is the `<img>` as the page writes it, for a target the page shows as an image: `width` and `height` the
   attributes as written (`"400"`, `"100%"`, null when missing), `alt` its alt text (null when it has none), `hasAlt`
   whether the attribute is there at all (`alt=""` is there, and fine), `altLength` its length as `image-alt-too-long`
@@ -1945,6 +1950,13 @@ snapshot per call, a request given up stops its read, reads queue, and an analys
   URL grid, because the same code reads them: a filter on them is run as a URL grid filter, and a link matches when
   its end is one of the URLs that filter matches. A filter or sort on one that needs the URL summary, without one, is
   refused with `needs-analysis`, the column named as it was asked for (`to.inlinks`).
+- **`check`** (step 3b, a filter, no column) holds **the links a check counts**: each link from a page the check
+  flagged to a URL that page's issue names (the analysis's `issue_targets`). It takes `in` and 1 to 100 check ids, and
+  no group. With `kind` `hyperlink` beside it, `check` in `broken-internal-links` and `broken-external-links` is exactly
+  the links those checks count (the Links screen's "Broken links": no external 403 the check lets go, a DNS failure it
+  counts, and never a redirect hop as the page a link is on), and `links-to-redirects` theirs ("Links to redirects").
+  A crawl whose analysis stored no issue targets (none yet, or an engine's from before them) is refused with
+  `needs-analysis` naming `check`.
 
   | Column | Type | Sorts | Is |
   | --- | --- | --- | --- |
@@ -2605,6 +2617,7 @@ was found" and "Other address". The two lists (E7) write their screens' columns,
     | The image checks | "Images (addresses)", "Images"; and for `image-too-large` "Largest image (bytes)", a number, so the sheet sorts by it | `https://x/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300; content, alt “Sofa”)`; without alt `… ; no alt`; without a height `… ; no height; the file is 1200×800 px` |
     | The hreflang checks | "Alternates (addresses)", "Alternates" | `https://x/de/ (404; “de”)`, `https://x/de/ (200; noindex; “de”)` |
     | `mixed-content` | "HTTP resources (addresses)", "HTTP resources" | `http://x/a.js (200; script in the head)` |
+    | `protocol-relative-links` | "URLs without a scheme (addresses)", "URLs without a scheme" | `https://cdn.x/app.js (200; script in the head)` |
 
     Up to 10 a cell, then "and N more", as before. [The per-check table](v2-evidence.md#what-the-exports-carry) has
     which check is which.

@@ -4,7 +4,7 @@
 // with its counts (`pagesAnalyzed`, `crawledUrlCount`), and no check's count is more than it. Overview's "Fix first"
 // and the inspector word the same counts the same way, and six-digit counts keep their room. Nothing here waits on a clock: every expectation is of what the screen says in the end.
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTab, siteRow } from './support';
+import { chooseTab, showChecks, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -138,7 +138,7 @@ async function openIssues(page: Page) {
     .click();
   await expect(page.getByRole('heading', { name: 'Issues', level: 1 })).toBeVisible();
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/issues\/[a-z0-9-]+/);
-  await expect(page.getByRole('listbox', { name: 'Checks' })).toBeVisible();
+  await showChecks(page);
 }
 
 /**
@@ -215,6 +215,8 @@ test('every check’s count is called what the check flags, as a share of the AP
   for (const check of checks) {
     await test.step(`${check.id} (${check.subject})`, async () => {
       const option = list.locator(`[role="option"][data-check="${check.id}"]`);
+      // A check picked puts the list back behind "All checks" where the check has the width: out again for the next.
+      await showChecks(page);
       await option.click();
       await expect(page).toHaveURL(new RegExp(`/issues/${check.id}(\\?|$)`));
       await expect(detail.getByRole('heading', { name: check.title, level: 2, exact: true })).toBeVisible();
@@ -254,6 +256,7 @@ test('every check’s count is called what the check flags, as a share of the AP
           /^Reach\s*Whole site\s*A fault of the whole site, whatever its count$/,
         );
         await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await showChecks(page);
         await expect(option).toHaveAccessibleName(new RegExp(`, the whole site$`));
         return;
       }
@@ -263,6 +266,7 @@ test('every check’s count is called what the check flags, as a share of the AP
           /^Reach\s*Whole site\s*Checked once for the whole site, not URL by URL$/,
         );
         await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await showChecks(page);
         await expect(option).toHaveAccessibleName(new RegExp(`, checked once for the whole site$`));
         return;
       }
@@ -285,9 +289,10 @@ test('every check’s count is called what the check flags, as a share of the AP
       if (check.grouping === 'none') {
         await expect(detail.getByRole('grid')).toHaveAccessibleName(`${check.title}: affected ${words.many}`);
         await expect(listed.locator('xpath=..')).toHaveText(
-          // Then the order the engine gives them in (evidence): the most linked first, or the most used.
+          // Then the order the engine gives them in (evidence): the most linked first, the most used, or the fewest
+          // links first (pages missing from the sitemaps).
           new RegExp(
-            `^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))}(, most (linked|used) first)?$`,
+            `^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))}(, (most (linked|used)|fewest links) first)?$`,
           ),
         );
       } else {
@@ -298,6 +303,7 @@ test('every check’s count is called what the check flags, as a share of the AP
         await expect(groups.getByRole('columnheader', { name: words.Many, exact: true })).toBeVisible();
       }
       // Its row in the list says the same.
+      await showChecks(page);
       await expect(option).toHaveAccessibleName(
         // Then its share of the site, "% of total" (round 5): of the pages analysed, the URLs crawled, or the whole site.
         new RegExp(
@@ -489,8 +495,9 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   await page.goto(`/crawls/${item.id}/issues/${BIG.page}`);
   await expect(figure(page, 'Pages affected')).toHaveText(/^Pages affected\s*654,321\s*Open them in URLs$/);
   await expect(figure(page, 'Share of pages')).toHaveText(/^Share of pages\s*66%\s*of the 987,654 pages analysed$/);
-  // The count, then the order the engine gives the pages in (evidence).
-  await expect(detail.getByText('654,321 pages, most linked first', { exact: true })).toBeVisible();
+  // The count, then the order the engine gives the pages in (evidence): pages missing from the sitemaps come with the
+  // fewest links first, where a sitemap helps most.
+  await expect(detail.getByText('654,321 pages, fewest links first', { exact: true })).toBeVisible();
   await expectFiguresFit(page, 'a page check at 1280x720');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-page-check.png') });
 
@@ -507,6 +514,7 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   await expect(inspector).toBeHidden();
 
   // A check that can flag any URL: a share of the URLs crawled, a seven-digit count.
+  await showChecks(page);
   await page.getByRole('listbox', { name: 'Checks' }).locator(`[role="option"][data-check="${BIG.url}"]`).click();
   await expect(figure(page, 'URLs affected')).toHaveText(/^URLs affected\s*312,876\s*Open them in URLs$/);
   await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs crawled$/);
@@ -533,6 +541,7 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs crawled$/);
   await expectFiguresFit(page, 'a URL check at 200% zoom');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-url-check-zoomed.png') });
+  await showChecks(page);
   await page.getByRole('listbox', { name: 'Checks' }).locator(`[role="option"][data-check="${BIG.page}"]`).click();
   await expect(figure(page, 'Share of pages')).toHaveText(/^Share of pages\s*66%\s*of the 987,654 pages analysed$/);
   await expectFiguresFit(page, 'a page check at 200% zoom');

@@ -41,13 +41,15 @@ internal static class WhereFoundColumns
     /// </summary>
     private static ExportExtraColumns TargetColumns(ExportRun run, IssueDefinition check)
     {
-        var noun = check.Category switch
-        {
-            IssueCategory.Images => "Images",
-            IssueCategory.Hreflang => "Alternates",
-            IssueCategory.Security => "HTTP resources",
-            _ => "Links to"
-        };
+        var noun = check == IssueCatalog.PROTOCOL_RELATIVE_LINKS
+            ? "URLs without a scheme"
+            : check.Category switch
+            {
+                IssueCategory.Images => "Images",
+                IssueCategory.Hreflang => "Alternates",
+                IssueCategory.Security => "HTTP resources",
+                _ => "Links to"
+            };
 
         if (check.Category == IssueCategory.Canonicals)
         {
@@ -141,7 +143,8 @@ internal static class WhereFoundColumns
             }
 
             List<string> link = [];
-            if (check == IssueCatalog.MIXED_CONTENT && target.Kind is { } kind)
+            // What the page loads or links at the URL, and where: a resource of mixed content's, any of a // URL's.
+            if ((check == IssueCatalog.MIXED_CONTENT || check == IssueCatalog.PROTOCOL_RELATIVE_LINKS) && target.Kind is { } kind)
             {
                 link.Add($"{KindWord(kind)} in the {PositionWord(target.Position ?? LinkPosition.Content)}");
             }

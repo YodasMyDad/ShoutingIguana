@@ -30,6 +30,9 @@ public sealed partial class SyntheticSite
     /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
     private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
 
+    /// <summary>The private address the HTTPS site links with nofollow, so never fetched (links-to-localhost).</summary>
+    private const string PRIVATE_ADDRESS = "http://192.168.0.10:3000/shop";
+
     private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024, LARGE_IMAGE_WIDTH, LARGE_IMAGE_HEIGHT);
 
     /// <summary>A 1,200 × 800 PNG of 4 KB, shown without srcset: image-no-srcset.</summary>
@@ -152,11 +155,19 @@ public sealed partial class SyntheticSite
                 () => new SyntheticResponse(200, HTML, Render(page), null, null, SECURITY_HEADERS), Url: url));
         }
 
-        // A session cookie without HttpOnly (and on HTTPS without Secure); a script written without its scheme.
+        // A session cookie without HttpOnly (and on HTTPS without Secure).
         Page("insecure-cookie", "Insecure cookie", ["cookies-insecure"], headers: new Dictionary<string, string> { ["Set-Cookie"] = "sessionid=planted; Path=/" });
-        Page("protocol-relative", "Protocol-relative script", ["protocol-relative-links"], page => page with
+
+        // A script and a link written without their scheme (the link beside one to the same page written with it), and a
+        // resource hint naming the partner site's origin so, which is no link. Over HTTPS, revision 1's home page sends
+        // HSTS: browsers that have been there never load the page over HTTP, so it isn't flagged.
+        var schemeless = _base[_base.IndexOf("//", StringComparison.Ordinal)..];
+        Page("protocol-relative", "Protocol-relative script", IsHttps && Revision >= 1 ? [] : ["protocol-relative-links"], page => page with
         {
-            ExtraHead = $"<script src=\"{_base[_base.IndexOf("//", StringComparison.Ordinal)..]}/static/app.js\" defer></script>"
+            ExtraHead = $"<script src=\"{schemeless}/static/app.js\" defer></script>" +
+                        $"<link rel=\"preconnect\" href=\"{_external[_external.IndexOf("//", StringComparison.Ordinal)..]}\">",
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">The thin page</a> " +
+                      $"<a href=\"{schemeless}{PLANTS_PATH}thin\">The thin page, written without its scheme</a></p>"
         });
 
         // A link tagged for ad tracking to the thin page, which canonicalises to itself without the tag (expected beside the
@@ -557,7 +568,8 @@ public sealed partial class SyntheticSite
         Page("dead-end", "Dead end", ["few-internal-outlinks"], page => page with { Chrome = false });
         Page("generic-anchors", "Links with generic text", ["generic-anchor-text"], page => page with
         {
-            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">Click here</a> <a href=\"{PLANTS_PATH}thin\">Read more…</a></p>"
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">The thin page</a> <a href=\"{PLANTS_PATH}thin\">Click here</a> " +
+                      $"<a href=\"{PLANTS_PATH}thin\">Read more…</a></p>"
         });
 
         // A page only a noindex page links to.
@@ -587,11 +599,13 @@ public sealed partial class SyntheticSite
             IsPage: false, OnPartnerSite: true));
 
         // A sitemap page only a nofollow link leads to is all but an orphan. Without sitemaps nothing leads the crawl there.
+        // The page also links the thin page twice, once with nofollow: that link is the one at fault.
         if (_options.Sitemaps)
         {
             Page("nofollow-link", "Nofollow link to a listed page", ["internal-nofollow-links"], page => page with
             {
-                Content = page.Content + $"<p><a href=\"{PLANTS_PATH}nofollow-only\" rel=\"nofollow\">Listed page</a></p>"
+                Content = page.Content + $"<p><a href=\"{PLANTS_PATH}nofollow-only\" rel=\"nofollow\">Listed page</a></p>" +
+                          $"<p><a href=\"{PLANTS_PATH}thin\">The thin page</a> <a href=\"{PLANTS_PATH}thin\" rel=\"nofollow\">The thin page, not followed</a></p>"
             });
             Page("nofollow-only", "Only nofollow links lead here", ["orphan-page"], linked: false);
         }
@@ -981,6 +995,14 @@ public sealed partial class SyntheticSite
                 Content = page.Content + $"<img src=\"{_external}/ext/img/1.jpg\" alt=\"A photo served over plain HTTP\" width=\"400\" height=\"300\">"
             });
             Other("downgrade", 301, linked: true, ["redirect-downgrade"], () => Redirect(301, $"{_external}/ext/plain-http"));
+
+            // A development copy's address left in content: private, and not the crawl's own machine (the site is on
+            // loopback). The crawl started on a private address, so it may ask private ones: the link is nofollow so that it
+            // never does, and it's planted over HTTPS only, as one crawl of the plain-HTTP site follows nofollow links.
+            Page("private-address-link", "Link to a private address", ["links-to-localhost"], page => page with
+            {
+                Content = page.Content + $"<p><a href=\"{PRIVATE_ADDRESS}\" rel=\"nofollow\">The development shop</a></p>"
+            });
         }
 
         // The hub links to redirects, and to the unreachable URL, the redirect loop and the redirect to a 404, which are

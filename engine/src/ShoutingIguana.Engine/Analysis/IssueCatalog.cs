@@ -100,7 +100,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
-        Evidence = ["title", "h1", "wordCount"]
+        Evidence = ["title", "h1"]
     };
 
 
@@ -132,7 +132,6 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
-        Evidence = ["redirectChain"],
         Clears = ["broken-internal-links", "canonical-broken"]
     };
 
@@ -1078,7 +1077,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
-        Evidence = ["title", "titleInResults", "titleWidth", "titleLength"]
+        Evidence = ["title", "titleInResults"]
     };
 
     public static readonly IssueDefinition TITLE_TOO_SHORT = new("title-too-short", IssueCategory.Titles, IssueSeverity.Notice,
@@ -1091,7 +1090,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
-        Evidence = ["title", "titleWidth", "titleLength"]
+        Evidence = ["title"]
     };
 
     public static readonly IssueDefinition TITLE_DUPLICATE = new("title-duplicate", IssueCategory.Titles, IssueSeverity.Warning,
@@ -1143,7 +1142,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
-        Evidence = ["description", "descriptionInResults", "descriptionWidth", "descriptionLength"]
+        Evidence = ["description", "descriptionInResults"]
     };
 
     public static readonly IssueDefinition DESCRIPTION_TOO_SHORT = new("description-too-short", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
@@ -1156,7 +1155,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.None,
-        Evidence = ["description", "descriptionWidth", "descriptionLength"]
+        Evidence = ["description"]
     };
 
     public static readonly IssueDefinition DESCRIPTION_DUPLICATE = new("description-duplicate", IssueCategory.MetaDescriptions, IssueSeverity.Notice,
@@ -1827,14 +1826,16 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition PROTOCOL_RELATIVE_LINKS = new("protocol-relative-links", IssueCategory.Security, IssueSeverity.Notice,
         "Protocol-relative (//) URLs",
-        """The page has href or src values written without their scheme, starting // (such as //cdn.example.com/app.js), which take the page's own: on an HTTP copy of the page they load over HTTP. The detail counts them and gives the first. A crawl made before the crawler noted them isn't checked.""",
+        """The page has href or src values written without their scheme, starting // (such as //cdn.example.com/app.js), which take the page's own: on an HTTP copy of the page they load over HTTP. An HTTPS page isn't flagged where the home page's Strict-Transport-Security (HSTS) header covers its host, as browsers that have been to the site never load an HTTP copy there. Each one a link or a file the page loads is listed with it; the detail counts them all, and names any in a tag that isn't a link or file, such as a resource hint. A crawl made before the crawler noted them isn't checked.""",
         """Write each with https:// in front, now that every browser and most hosts support it.""")
     {
-        Why = """They were a way to load the same file over HTTP and HTTPS. On an HTTPS page they load securely anyway, so the risk is only an HTTP copy of the page, but they're an old habit worth replacing, and some tools misread them.""",
+        Why = """They were a way to load the same file over HTTP and HTTPS. On an HTTPS page they load securely anyway, so the risk is an HTTP copy of the page, which HSTS rules out for browsers that have visited. Without HSTS they're worth replacing, and they're an old habit some tools misread.""",
         LearnMore = "https://www.paulirish.com/2010/the-protocol-relative-url/",
+        References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.RelatedUrl,
+        TargetFacts = ["kind", "position", "links"]
     };
 
 

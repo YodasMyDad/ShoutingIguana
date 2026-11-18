@@ -6,6 +6,7 @@ import type { IndexabilityReason, RelatedFacts, RobotsRule, UrlOutcome } from '.
 import type { ImgFacts, IssueTarget, LinkFlag, RedirectChain, TargetEnd, UrlTarget } from '../api/inspector';
 import type { TargetFact } from '../api/types';
 import { FLAG_WORDS, KIND_WORDS, POSITION_WORDS } from '../inspector/words';
+import { failureOf } from '../lib/failure';
 import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { urlDisplay } from '../ui/urlText';
 
@@ -117,26 +118,62 @@ export function imgParts(img: ImgFacts, checkId?: string): string[] {
   return parts.filter((part): part is string => part !== null);
 }
 
+/**
+ * A URL that has no status, in a pill's words, as Advanced says it everywhere (a group's URL, a row under a page, a
+ * line): "No response" for one that didn't answer, never "Network error" in one place and "no answer" in another.
+ */
+export function noStatusWords(outcome: UrlOutcome | null | undefined): string {
+  switch (outcome) {
+    case 'robotsDisallowed':
+      return 'Blocked by robots.txt';
+    case 'timeout':
+      return 'Timed out';
+    case 'blocked':
+      return 'Blocked';
+    case 'notChecked':
+      return 'Not checked';
+    case 'processingError':
+      return 'Couldn’t be read';
+    default:
+      return 'No response';
+  }
+}
+
 /** A status for a fact: the code, or what happened instead in a word or two. */
 export function statusWords(statusCode: number | null | undefined, outcome?: UrlOutcome | null): string {
   if (typeof statusCode === 'number') return String(statusCode);
   switch (outcome) {
-    case 'robotsDisallowed':
-      return 'blocked by robots.txt';
-    case 'timeout':
-      return 'timed out';
-    case 'networkError':
-      return 'no answer';
-    case 'blocked':
-      return 'blocked';
-    case 'notChecked':
-      return 'not checked';
     case undefined:
     case null:
       return 'not crawled';
-    default:
+    case 'robotsDisallowed':
+      return 'blocked by robots.txt';
+    case 'success':
+    case 'redirect':
+    case 'clientError':
+    case 'serverError':
       return 'no status';
+    default:
+      return noStatusWords(outcome).toLowerCase();
   }
+}
+
+/**
+ * The .NET text of a request that failed before any answer, when it says no more: the connection itself failed (a
+ * socket closed, reset or unreachable).
+ */
+const CONNECTION_FAILED = /^an error occurred while sending the request\.?$/i;
+
+/**
+ * How a request that got no answer failed (a URL's `fetchError`), in words: "The connection failed", "It timed out",
+ * "The DNS name wasn’t found", "The connection was refused". Text it can't place is the engine's own, as it is.
+ */
+export function fetchErrorWords(text: string): string {
+  const said = text.trim();
+  if (CONNECTION_FAILED.test(said)) return 'The connection failed';
+  const failure = failureOf(said);
+  if (!failure || failure.kind === 'other' || failure.kind === 'status') return said;
+  return failure.words.charAt(0).toUpperCase() + failure.words.slice(1);
 }
 
 /** Where a URL's redirects end: "→ /new/ 200", "→ /new/ 200 after 3 redirects", "a redirect loop". */
@@ -174,6 +211,8 @@ export function linkPositionWords(
   /** Leave out the kind where the check says it already (an image check's images). */
   sayKind = true,
 ): string | null {
+  // A redirect isn't on a page: the URL redirects to the one it names.
+  if (link.kind === 'redirect') return 'redirects here';
   const where = link.position ? POSITION_WORDS[link.position].toLowerCase() : null;
   const kind = sayKind && link.kind && link.kind !== 'hyperlink' ? KIND_WORDS[link.kind] : null;
   if (kind && where) return `${kind} in the ${where}`;
@@ -447,11 +486,45 @@ export function evidenceValueWords(column: string, value: EvidenceValue, siteOri
       return `canonical → ${shown(value, siteOrigin)}`;
     case 'finalUrl':
       return `→ ${shown(value, siteOrigin)}`;
+    case 'fetchError':
+      return fetchErrorWords(value);
+    case 'type':
+      return value in TYPE_WORDS ? (TYPE_WORDS[value] ?? value) : value;
     case 'indexability':
       return value in INDEXABILITY_WORDS ? indexabilityWords(value as IndexabilityReason) : value;
     default:
       return value;
   }
+}
+
+/** A URL's type, as the URL grid names it. */
+const TYPE_WORDS: Readonly<Record<string, string>> = {
+  page: 'Page',
+  image: 'Image',
+  script: 'Script',
+  stylesheet: 'Stylesheet',
+  font: 'Font',
+  media: 'Media file',
+  pdf: 'PDF',
+  other: 'File',
+};
+
+/**
+ * A row's evidence as the facts of one line, in its columns' order, where its column headers aren't beside it: what
+ * each column says (`evidenceValueWords`), less what isn't so for this row. A URL that never answered (a `fetchError`)
+ * took no time to answer; a final URL or canonical that is the row's own URL is said by nothing ("→ itself").
+ */
+export function evidenceLineParts(
+  row: { url?: string | null } & Record<string, EvidenceValue>,
+  columns: readonly string[],
+  siteOrigin: string | null,
+): string[] {
+  const failed = typeof row.fetchError === 'string' && row.fetchError.trim() !== '';
+  return columns
+    .filter((column) => !(column === 'responseMs' && failed))
+    .filter((column) => !((column === 'finalUrl' || column === 'canonicalUrl') && row[column] === row.url))
+    .map((column) => evidenceValueWords(column, row[column], siteOrigin))
+    .filter((words): words is string => words !== null);
 }
 
 // ------------------------------------------------------------------------------- The size pages show an image at

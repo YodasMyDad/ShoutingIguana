@@ -18,8 +18,12 @@ public sealed record PageFacts
     /// placeholder, sentences and syllables, and the whole body's words. 5 is batch 9's: whether a meta tag is written as
     /// property= only, and share images as links of their own. 6 is the fixit page's: an image without a URL's class and
     /// place, a lazy-loaded srcset (data-srcset) counted as a srcset, and the line of each structure error.
+    /// 7 is the fixit links' part's: which links are
+    /// written without a scheme (<see cref="LinkFlags.ProtocolRelative"/>), how many such values are in no link
+    /// (<see cref="ProtocolRelativeFact.Unlinked"/>), and where on the page each link search engines can't follow is
+    /// (<see cref="UncrawlableLinkFact.Position"/>).
     /// </summary>
-    public const int CURRENT_COLLECTION = 6;
+    public const int CURRENT_COLLECTION = 7;
 
     /// <summary>
     /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed

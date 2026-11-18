@@ -98,7 +98,7 @@ public sealed class ImageCheckTests
         Assert.Equal((null, (LinkPosition?)LinkPosition.Footer), (images[1].Class, images[1].Position));
         Assert.Equal((null, (LinkPosition?)null), (images[2].Class, images[2].Position));
         Assert.Equal((100, (LinkPosition?)LinkPosition.Sidebar), (images[3].Class!.Length, images[3].Position));
-        Assert.Equal(6, PageFacts.CURRENT_COLLECTION);
+        Assert.Equal(7, PageFacts.CURRENT_COLLECTION); // 6 noted these; 7 is the links part's collection.
     }
 
     [Fact]

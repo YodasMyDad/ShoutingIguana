@@ -14,7 +14,7 @@ import { TextLink } from '../../ui/TextLink';
 import { outcomeWord } from '../../ui/severity';
 import { causeWords, type AnalysisTotals, type CheckEntry } from '../issues/checkList';
 import { CountWithReach } from '../issues/CountWithReach';
-import { categoryFigures, fixFirst, severityFigures, skippedGroups } from './answer';
+import { categoryFigures, clearedWords, fixFirst, severityFigures, skippedGroups } from './answer';
 import { linkProps } from './overviewLinks';
 
 const SEVERITY_LABELS = { error: 'Errors', warning: 'Warnings', notice: 'Notices' } as const;
@@ -166,7 +166,7 @@ export function FixFirst({
           </p>
         ) : (
           <ol className="-mx-2.5 flex flex-col">
-            {list.checks.map(({ entry, link }) => (
+            {list.checks.map(({ entry, link, cleared }) => (
               <li key={entry.check.id}>
                 <ListRow
                   asChild
@@ -178,7 +178,15 @@ export function FixFirst({
                     </>
                   }
                   meta={withWas(affected(entry, totals ?? null), wasWords(changeOf?.(entry.check.id)))}
-                  description={<span className="line-clamp-1">{entry.check.description}</span>}
+                  description={
+                    <>
+                      <span className="line-clamp-1">{entry.check.description}</span>
+                      {cleared.length > 0 ? (
+                        // One job: what its fix also clears, named here rather than listed as another thing to do.
+                        <span className="block text-text-secondary">{clearedWords(cleared)}</span>
+                      ) : null}
+                    </>
+                  }
                 >
                   <Link {...linkProps(crawlId, link)} />
                 </ListRow>

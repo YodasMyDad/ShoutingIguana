@@ -593,7 +593,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
 
         // What each check shows, and a group's URL and order.
         var tooLong = checks.Single(check => (string?)check!["id"] == "title-too-long")!;
-        Assert.Equal("""["title","titleInResults","titleWidth","titleLength"]""", tooLong["evidence"]!.ToJsonString());
+        Assert.Equal("""["title","titleInResults"]""", tooLong["evidence"]!.ToJsonString());
         Assert.Equal("[]", tooLong["targetFacts"]!.ToJsonString());
         var groups = await PostOkAsync($"api/crawls/{grid.Id}/issues/image-too-large/groups");
         Assert.Equal(("size", false), ((string?)groups["sort"], (bool)groups["likelyTemplate"]!));

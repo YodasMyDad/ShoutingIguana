@@ -64,8 +64,12 @@ public static class AnalysisFreshness
     /// tag, which image has no source or is inline, the line of a second &lt;head&gt; or &lt;body&gt;, and which JSON-LD block
     /// failed, on which line and where (counted from 1); and groups <c>heading-levels-skipped</c>, <c>social-tags-multiple</c>
     /// and <c>html-structure-errors</c> by the fault their detail shows (each from its <see cref="Models.IssueDefinition.FaultsSince"/>).
+    /// 19 (the links part's) names each URL
+    /// <c>protocol-relative-links</c> counts as the issue's targets (on pages parsed from collection 7 on), names in its detail
+    /// any in a tag that isn't a link or file, and doesn't flag an HTTPS page the home page's HSTS covers; and
+    /// <c>uncrawlable-links</c>' detail says where on the page each example is.
     /// </summary>
-    public const int VERSION = 18;
+    public const int VERSION = 19;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

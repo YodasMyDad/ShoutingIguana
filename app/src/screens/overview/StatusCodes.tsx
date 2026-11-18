@@ -5,7 +5,7 @@ import { ListRow } from '../../ui/ListRow';
 import { StatusSplit as StatusSplitBar, type SplitTone, type StatusSplitPart } from '../../ui/StatusSplit';
 import { TextLink } from '../../ui/TextLink';
 import { linkProps } from './overviewLinks';
-import { partsText, type SplitClass, type SplitSegment, type StatusSplit } from './statusSplit';
+import { externalWords, partsText, type SplitClass, type SplitSegment, type StatusSplit } from './statusSplit';
 
 const TONES: Record<SplitClass, SplitTone> = {
   '2xx': '2xx',
@@ -125,7 +125,9 @@ export const StatusCodes = memo(function StatusCodes({
       />
       <ul aria-label="Status codes by class" className="-mx-2.5 flex flex-col">
         {split.segments.map((segment) => {
-          const parts = partsText(segment.parts, formatCount);
+          // How many are other sites' URLs (the crawl checks the links that lead off the site), first, where a narrow row
+          // still shows it, then what it's made of.
+          const parts = [externalWords(segment), partsText(segment.parts, formatCount)].filter(Boolean).join(' · ');
           const row = {
             icon: (
               <span className="si-legend__swatch" aria-hidden="true">

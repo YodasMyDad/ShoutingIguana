@@ -9,7 +9,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { readCsv, readXlsx } from './files';
 import { gridInView } from './gridView';
-import { chooseTab, colourTweensEnd, expectNoViolations, read, seededCrawl } from './support';
+import { chooseTab, colourTweensEnd, expectNoViolations, read, seededCrawl, showChecks } from './support';
 
 interface UrlPage {
   rows: Record<string, string | number | boolean | null>[];
@@ -278,6 +278,7 @@ test('leaves a check hidden in this crawl out of the workbook, and exports an Is
   await page.goto(`/crawls/${crawl}/issues/${hidden.id}`);
   await page.getByRole('button', { name: 'Hide this check' }).click();
   await page.getByRole('menuitem', { name: /Hide in this crawl/ }).click();
+  await showChecks(page);
   await expect(page.getByRole('button', { name: /Show 1 hidden check/ })).toBeVisible();
 
   const everything = await exportChoice(page, /Every check/, path.join(folder, 'everything.xlsx'));
@@ -291,7 +292,7 @@ test('leaves a check hidden in this crawl out of the workbook, and exports an Is
     (id) => id !== hidden.id && checks.find((check) => check.id === id)?.severity === 'error',
   );
   await page.goto(`/crawls/${crawl}/issues?severity=${encodeURIComponent(JSON.stringify(['error']))}`);
-  await expect(page.getByRole('listbox')).toBeVisible();
+  await showChecks(page);
   const listed = await exportChoice(page, /The checks listed/, path.join(folder, 'errors.xlsx'));
   expect(readXlsx(listed).length).toBe(errors.length + 1);
 });

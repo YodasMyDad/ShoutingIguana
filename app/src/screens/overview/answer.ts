@@ -4,6 +4,7 @@
 // figure carries the link to exactly what it counts. Pure.
 import type { FacetBucket, FacetsPage, GridFilter } from '../../api/grids';
 import type { Checks, Severity } from '../../api/types';
+import { formatCountOf } from '../../lib/format';
 import { SEVERITIES } from '../../ui/severity';
 import { analysisTotals, rankChecksToFix, type CheckEntry } from '../issues/checkList';
 import { ANSWERED_SITE_PAGES, CRAWLED_SITE_PAGES, urlsLink, type IssuesLink, type UrlsLink } from './links';
@@ -50,17 +51,34 @@ export function severityFigures(entries: readonly CheckEntry[]): SeverityFigure[
 /** How many checks "Fix first" lists before it points to Issues for the rest. */
 export const FIX_FIRST_LIMIT = 8;
 
+/** A check another's fix clears entirely, listed with it: its pages, every one it flagged. */
+export interface ClearedWith {
+  entry: CheckEntry;
+  pages: number;
+}
+
+export interface FixFirstItem {
+  entry: CheckEntry;
+  link: IssuesLink;
+  /** The checks its fix clears entirely (the analysis's `counts[].clears` with `all`), listed with it, not apart. */
+  cleared: ClearedWith[];
+}
+
 export interface FixFirst {
-  /** The checks to fix first, in order: the engine's (`fixFirst`), or the most severe then the most affected. */
-  checks: { entry: CheckEntry; link: IssuesLink }[];
-  /** Checks with issues that aren't listed. */
+  /**
+   * The jobs to do first, in order: the engine's (`fixFirst`), or the most severe then the most affected. A check
+   * another's fix clears entirely is in that one's job, at the place of whichever of them comes first.
+   */
+  checks: FixFirstItem[];
+  /** Jobs with issues that aren't listed. */
   more: number;
 }
 
 /**
  * The checks to fix first among the ones that aren't hidden. With every check that found issues hidden there's none
  * to list: Issues still opens on one of them (it has to open on something), but here they'd sit beside figures that
- * say no check found an issue.
+ * say no check found an issue. A check whose fix clears another entirely (fixing the 4xx URLs clears every page of
+ * broken links to them) is one job with it: the cleared check is named in its clearer's item, never listed apart.
  */
 export function fixFirst(
   entries: readonly CheckEntry[],
@@ -72,10 +90,46 @@ export function fixFirst(
     entries.filter((entry) => !entry.hidden),
     order,
   );
+  const byId = new Map(ranked.map((entry) => [entry.check.id, entry]));
+  // Each check cleared entirely goes with the first listed check that clears it, unless that one is itself cleared.
+  const clearer = new Map<string, string>();
+  for (const entry of ranked) {
+    for (const cleared of entry.clears) {
+      if (
+        cleared.all &&
+        cleared.checkId !== entry.check.id &&
+        byId.has(cleared.checkId) &&
+        !clearer.has(cleared.checkId)
+      ) {
+        clearer.set(cleared.checkId, entry.check.id);
+      }
+    }
+  }
+  for (const id of [...clearer.keys()]) {
+    if (clearer.has(clearer.get(id) ?? '')) clearer.delete(id);
+  }
+  const jobs: (FixFirstItem & { place: number })[] = [];
+  ranked.forEach((entry, place) => {
+    if (clearer.has(entry.check.id)) return;
+    const cleared = entry.clears.flatMap((item) => {
+      const other = byId.get(item.checkId);
+      return other && clearer.get(item.checkId) === entry.check.id ? [{ entry: other, pages: item.pages }] : [];
+    });
+    const first = Math.min(place, ...cleared.map((item) => ranked.indexOf(item.entry)));
+    jobs.push({ entry, link: { to: 'issues', check: entry.check.id }, cleared, place: first });
+  });
+  jobs.sort((a, b) => a.place - b.place);
   return {
-    checks: ranked.slice(0, limit).map((entry) => ({ entry, link: { to: 'issues', check: entry.check.id } })),
-    more: Math.max(0, ranked.length - limit),
+    checks: jobs.slice(0, limit).map(({ place: _place, ...job }) => job),
+    more: Math.max(0, jobs.length - limit),
   };
+}
+
+/** "Fixing it also clears Links to broken internal URLs on 4 pages.", for the checks a fix clears entirely. */
+export function clearedWords(cleared: readonly ClearedWith[]): string {
+  const parts = cleared.map((item) => `${item.entry.check.title} on ${formatCountOf(item.pages, 'page')}`);
+  const listed = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1) ?? ''}` : (parts[0] ?? '');
+  return `Fixing it also clears ${listed}.`;
 }
 
 // ---------------------------------------------------------------------------------------------------------- Categories
