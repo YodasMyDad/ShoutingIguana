@@ -412,8 +412,8 @@ export function sharedUrlWidth(
   return Math.max(URL_MIN_WIDTH, Math.floor((available - others) / urls.length));
 }
 
-/** The least the anchor or alt text is given where the room is shared by what the view's values take. */
-const TEXT_MIN_WIDTH = 120;
+/** The least the anchor or alt text is given where the room is shared by what the view's values take: its header whole. */
+const TEXT_MIN_WIDTH = 140;
 /** The most a URL column, or the anchor or alt text, asks for: past it, a value is cut, and its tooltip has it. */
 const URL_MAX_NEED = 720;
 const TEXT_MAX_NEED = 360;
