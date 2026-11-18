@@ -91,6 +91,22 @@ function words(
         action: SLOWER,
         more: BLOCKED_MORE,
       };
+    case 'shopify-unsigned':
+      return {
+        title: 'Shopify limits crawlers without a signature',
+        detail: `${where} is a Shopify store, and it refused pages (429 Too Many Requests). The crawl asks for them again at its end; any still refused are listed as not checked, not broken.`,
+        advice:
+          'Add a Shopify signature, then recheck those pages. Its owner creates one in Shopify admin: Online Store › Preferences › Crawler access › Create signature.',
+        action: { kind: 'newCrawl', label: 'Crawl again with a signature', again: true, focus: 'shopify' },
+      };
+    case 'shopify-signature-refused':
+      return {
+        title: 'Shopify refused the signature',
+        detail: `${where} refused pages even with the Shopify signature (429 Too Many Requests).`,
+        advice:
+          'The signature may be invalid, expired or for another domain, and a new one can take up to an hour to start working.',
+        action: null,
+      };
     case 'start-redirects-away':
       return {
         title: 'The start URL redirects to another site',

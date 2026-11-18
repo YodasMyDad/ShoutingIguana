@@ -14,6 +14,7 @@ export const ENGINE_DEFAULTS = {
   customUserAgent: null,
   acceptLanguage: 'en-US,en;q=0.9',
   extraHeaders: {},
+  signatures: {},
   respectRobotsTxt: true,
   respectCrawlDelay: false,
   checkResources: true,

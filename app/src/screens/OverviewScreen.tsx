@@ -14,6 +14,7 @@ import {
 import { isCrawling, type Checks, type CrawlListItem, type CrawlStatus } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
+import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
 import { ErrorState } from '../feedback/ErrorState';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useFocusRescue } from '../feedback/useFocusRescue';
@@ -348,6 +349,7 @@ export function OverviewScreen() {
             </h2>
             <CrawlFacts crawlId={crawlId} item={item} crawled={crawled} />
           </div>
+          <ShopifyPrompt crawlId={crawlId} mode="advanced" />
           {empty ? (
             <StatusCodesCard crawlId={crawlId} facets={facets} />
           ) : (

@@ -50,6 +50,7 @@ const LISTED: Record<Exclude<FormSection, 'start'>, CrawlFormField[]> = {
   limits: ['maxUrls', 'maxDepth', 'maxHtmlMb'],
   robots: ['respectRobotsTxt', 'respectCrawlDelay', 'discoverSitemaps', 'extraSitemaps'],
   network: ['userAgent', 'customUserAgent', 'acceptLanguage', 'headers', 'proxyUrl', 'useCookies'],
+  shopify: ['signatures'],
   advanced: [
     'requestTimeoutSeconds',
     'maxRetries',

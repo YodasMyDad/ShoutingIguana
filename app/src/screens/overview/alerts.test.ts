@@ -60,6 +60,35 @@ describe('alerts', () => {
     expect(sitemaps).toMatchObject({ title: 'Sitemaps read', detail: '1 sitemap lists 4,200 URLs.', advice: null });
   });
 
+  it('says Shopify’s limit on crawlers without a signature, and a signature Shopify refused, with what to do', () => {
+    const [unsigned, refused] = alertEntries([
+      alert({
+        code: 'shopify-unsigned',
+        at: '2026-11-01T10:01:00.000Z',
+        data: { host: 'shop.example', reason: '429 Too Many Requests' },
+      }),
+      alert({
+        code: 'shopify-signature-refused',
+        id: 2,
+        data: { host: 'shop.example', reason: '429 Too Many Requests' },
+      }),
+    ]);
+
+    expect(unsigned).toMatchObject({
+      title: 'Shopify limits crawlers without a signature',
+      detail:
+        'shop.example is a Shopify store, and it refused pages (429 Too Many Requests). The crawl asks for them again at its end; any still refused are listed as not checked, not broken.',
+      action: { kind: 'newCrawl', label: 'Crawl again with a signature', again: true, focus: 'shopify' },
+    });
+    expect(unsigned?.advice).toContain('Online Store › Preferences › Crawler access › Create signature');
+    expect(refused).toMatchObject({
+      title: 'Shopify refused the signature',
+      advice:
+        'The signature may be invalid, expired or for another domain, and a new one can take up to an hour to start working.',
+      action: null,
+    });
+  });
+
   it('shows the engine’s message only for a code this app doesn’t know', () => {
     const [unknown] = alertEntries([alert({ code: 'from-the-future', message: 'Something new happened.' })]);
     expect(unknown).toMatchObject({ title: 'A note from the crawl', detail: 'Something new happened.', action: null });

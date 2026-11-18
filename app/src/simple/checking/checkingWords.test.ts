@@ -53,6 +53,26 @@ describe('what’s in the way', () => {
     expect(entries[2]?.actions).toEqual([{ kind: 'stop', label: 'Stop' }]);
   });
 
+  it('says a Shopify shop turns away checks without a signature, in plain words, once', () => {
+    const entries = inTheWay({
+      ...base,
+      alerts: [
+        alert('shopify-unsigned', '2026-11-01T10:00:00Z', { host: 'shop.example' }, 1),
+        alert('shopify-signature-refused', '2026-11-01T10:01:00Z', { host: 'shop.example' }, 2),
+      ],
+    });
+
+    expect(entries.map((entry) => entry.text)).toEqual([
+      'Shopify turned the check away even with the signature. It may be wrong, ended, or for another domain, and a new one can take up to an hour to start working.',
+    ]);
+    expect(
+      inTheWay({ ...base, alerts: [alert('shopify-unsigned', '2026-11-01T10:00:00Z', { host: 'shop.example' })] })[0]
+        ?.text,
+    ).toBe(
+      'This is a Shopify shop, and Shopify turns away checks that don’t carry a signature, so some product pages are waiting. Any it still won’t show are listed when the check ends, with how to add one.',
+    );
+  });
+
   it('says the slowdown and the Crawl-delay, from the waits, with nothing to do', () => {
     const entries = inTheWay({
       ...base,

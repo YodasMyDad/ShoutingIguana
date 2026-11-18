@@ -47,6 +47,7 @@ import { useSharedSource } from './useSharedSource';
 import { pathOrigin } from './whereWords';
 import { useTemplateLink } from '../screens/issues/useWhereFound';
 import { firstGroupQuery } from './useOneFix';
+import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
 
 const FIX = '/crawls/$crawl/issues/{-$check}';
 
@@ -447,6 +448,7 @@ function FoundProblem({
           {sharedSourceWords(pathOf(shared.url, item), shared.position)}
         </Callout>
       ) : null}
+      <ShopifyPrompt crawlId={crawlId} mode="simple" className="mt-4" />
       <WhereItIs
         crawlId={crawlId}
         item={item}

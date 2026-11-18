@@ -25,6 +25,7 @@ import {
 } from './form';
 import { ProxyTest } from './ProxyTest';
 import { RememberSecrets, type RememberSecretsProps } from './RememberSecrets';
+import { ShopifyAccessFields } from './ShopifyAccessFields';
 import type { FormErrors } from './useValidation';
 import { FIELD_WORDS, SIMPLE_WORDS, USER_AGENT_NAMES, sectionSummary, speedTitle, speedWords } from './words';
 
@@ -44,6 +45,8 @@ export interface CrawlOptionsFormProps {
   onTouch?: ((field: CrawlFormField) => void) | undefined;
   /** Put focus on the start URL when the form opens. */
   autoFocusStart?: boolean | undefined;
+  /** Now, for a Shopify signature's expiry: tests and stories give a fixed one. */
+  now?: Date | undefined;
   /**
    * The option to remember the proxy's password and the headers' values (step 3b), where the form's secrets are kept:
    * with the proxy in Advanced; in Simple, which shows neither, only when the form holds one (from the defaults).
@@ -86,15 +89,27 @@ export function CrawlOptionsForm(props: CrawlOptionsFormProps) {
 
 // ---------------------------------------------------------------------------------------------------- Simple
 
+/** Simple's words for a signature the engine refused: its own words name Advanced's terms. */
+function simpleSignatureMessage(errors: FormErrors): string | null {
+  const message = first(errors, 'signatures');
+  if (message === null) return null;
+  if (/expired/i.test(message)) return 'This signature has ended. Make a new one in Shopify and paste it here.';
+  if (/isn't a domain/i.test(message)) return 'Type the domain as shop.example.com.';
+  return 'Shopify’s values aren’t right yet. Copy both again from Shopify and paste them here.';
+}
+
 function SimpleQuestions({
   form,
   onChange,
   presets,
   errors,
   withStartUrl = true,
+  open,
+  onOpenChange,
   onTouch,
   autoFocusStart,
   remember,
+  now,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -205,6 +220,29 @@ function SimpleQuestions({
           />
         </div>
       </fieldset>
+      <Fold
+        name="shopify"
+        level={3}
+        title={SIMPLE_WORDS.shopify.label}
+        summary={sectionSummary('shopify', form, 'simple')}
+        attention={first(errors, 'signatures') ? '1 to change' : null}
+        open={open.has('shopify')}
+        onOpenChange={(next) => onOpenChange('shopify', next)}
+        className="si-card"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-13">{SIMPLE_WORDS.shopify.help}</p>
+          <ShopifyAccessFields
+            value={form.signatures}
+            onChange={(signatures) => onChange({ ...form, signatures })}
+            startUrl={form.startUrl}
+            error={simpleSignatureMessage(errors)}
+            mode="simple"
+            onTouch={() => onTouch?.('signatures')}
+            now={now}
+          />
+        </div>
+      </Fold>
       {remember && formHasSecrets(form) ? <RememberSecrets {...remember} /> : null}
     </div>
   );
@@ -234,6 +272,7 @@ function AdvancedSections({
   onTouch,
   autoFocusStart,
   remember,
+  now,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -378,6 +417,24 @@ function AdvancedSections({
             <ProxyTest proxyUrl={form.proxyUrl} startUrl={withStartUrl ? form.startUrl : null} />
             {remember ? <RememberSecrets {...remember} /> : null}
             {toggle('useCookies')}
+          </>,
+        )}
+        {fold(
+          'shopify',
+          <>
+            <p className="text-13 text-text-secondary">{FIELD_WORDS.signatures.help}</p>
+            <ShopifyAccessFields
+              value={form.signatures}
+              onChange={(signatures) => onChange({ ...form, signatures })}
+              startUrl={form.startUrl}
+              error={first(errors, 'signatures')}
+              mode="advanced"
+              onTouch={() => onTouch?.('signatures')}
+              now={now}
+            />
+            {remember && formHasSecrets({ ...form, proxyUrl: '', headers: [] }) ? (
+              <RememberSecrets {...remember} />
+            ) : null}
           </>,
         )}
         {fold(

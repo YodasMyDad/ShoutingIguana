@@ -339,6 +339,30 @@ describe('fetchState', () => {
       kind: 'notChecked',
       why: 'The site kept asking the crawler to slow down (429 Too Many Requests), even when it was asked again at the end of the crawl.',
     });
+    // A Shopify store's refusal says Shopify's reason, without a signature and with one.
+    const shopify = (ending: string) =>
+      after({
+        ...base,
+        content: null,
+        response: testResponse({
+          outcome: 'notChecked',
+          statusCode: null,
+          fetched: false,
+          error: `Not checked: the site asked the crawler to slow down (429 Too Many Requests): ${ending}`,
+        }),
+      });
+    expect(shopify('Shopify limits crawlers without a signature')).toMatchObject({
+      kind: 'notChecked',
+      why: 'Shopify limits crawlers without a signature (429 Too Many Requests), so it wasn’t read: no fault of the page’s. Add a Shopify signature, then recheck it.',
+    });
+    expect(
+      shopify(
+        "Shopify refused the crawler's signature, which may be invalid, expired or for another domain (a new one can take up to an hour to start working)",
+      ),
+    ).toMatchObject({
+      kind: 'notChecked',
+      why: 'Shopify refused it even with the signature (429 Too Many Requests). The signature may be invalid, expired or for another domain, and a new one can take up to an hour to start working.',
+    });
     const privateAddress = after({
       ...base,
       content: null,

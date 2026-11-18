@@ -3,6 +3,7 @@
 // a problem's pages fetched again into the same crawl file ("Recheck these 5 pages": "4 of 5 fixed"). The shapes are
 // the sidecar's as built (S1, S2), written by hand as the app's other types are. Ids and enums the engine may extend
 // are typed as their known values; every count is the engine's, hidden checks included: the app leaves those out.
+import type { CrawlSignature } from './types';
 import type { OutOfDateReason, ScoreSummary, Severity } from './types';
 
 // ------------------------------------------------------------------------------------------- The library's part
@@ -396,6 +397,8 @@ export interface RecheckPlan {
 export interface StartRecheckRequest extends RecheckAsk {
   extraHeaders?: Record<string, string>;
   proxyUrl?: string;
+  /** Shopify crawler signatures, by host: a crawl file keeps none, so a recheck sends only those given here. */
+  signatures?: Record<string, CrawlSignature>;
   skipMissingHeaders?: boolean;
 }
 

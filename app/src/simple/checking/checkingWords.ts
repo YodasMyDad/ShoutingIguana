@@ -27,7 +27,7 @@ export interface SimpleAlert {
 }
 
 /** What gives a site's alert its kind: a wait and an alert of one kind say the same thing, so it's said once. */
-type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'note';
+type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'shopify' | 'note';
 
 const SLOW = 'The site asked the check to slow down, so it has. It will take longer.';
 const SECTION_SLOW =
@@ -92,6 +92,20 @@ function alertWords(
           { kind: 'copy', label: 'What to tell whoever runs the site', text: blockedMessage(site, pages) },
           { kind: 'crawlSettings', label: 'More ways in Advanced', focus: 'headers' },
         ],
+      };
+    case 'shopify-unsigned':
+      return {
+        kind: 'shopify',
+        level: 'warning',
+        text: 'This is a Shopify shop, and Shopify turns away checks that don’t carry a signature, so some product pages are waiting. Any it still won’t show are listed when the check ends, with how to add one.',
+        actions: [],
+      };
+    case 'shopify-signature-refused':
+      return {
+        kind: 'shopify',
+        level: 'warning',
+        text: 'Shopify turned the check away even with the signature. It may be wrong, ended, or for another domain, and a new one can take up to an hour to start working.',
+        actions: [],
       };
     case 'start-redirects-away': {
       const url = alert.data?.url;
