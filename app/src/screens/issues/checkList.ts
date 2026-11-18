@@ -5,7 +5,7 @@
 // - checks that passed are listed only when asked for, and each category says how many passed;
 // - the severity and text filters narrow what's listed, and hidden checks stay out unless shown.
 import type { CheckChange } from '../../api/fixLoop';
-import type { Analysis, Check, CheckCategory, Checks, ClearedCheck, Severity } from '../../api/types';
+import type { Analysis, Check, CheckCategory, Checks, ClearedCheck, PlatformOwner, Severity } from '../../api/types';
 import { CHANGED_STATES, countDrop } from '../../changes/changes';
 import type { ChangeFilterSearch } from '../../routing/search';
 import { formatCount, formatCountOf } from '../../lib/format';
@@ -31,6 +31,11 @@ export interface CheckEntry {
   templateCauses: number | null;
   /** The checks a fix of it also clears, with the pages it clears there (the analysis's `clears`). */
   clears: ClearedCheck[];
+  /**
+   * The platform that owns its fix, and why (Shopify's cookies): it's listed and filtered as any check, but isn't
+   * among the things the owner has to fix. Null or left out where the owner can make the fix.
+   */
+  platform?: PlatformOwner | null;
 }
 
 export interface CheckCategoryEntry {
@@ -181,6 +186,7 @@ export function checkEntries(
         causes: null,
         templateCauses: null,
         clears: [],
+        platform: null,
       };
     }
     const found = ran.count > 0;
@@ -193,6 +199,7 @@ export function checkEntries(
       causes: found ? (ran.causes ?? null) : null,
       templateCauses: found ? (ran.templateCauses ?? null) : null,
       clears: found ? (ran.clears ?? []) : [],
+      platform: found ? (ran.platform ?? null) : null,
     };
   });
 }
@@ -259,7 +266,10 @@ export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
     }
   }
   const all = workOf(entries);
-  const fix = workOf(entries.filter((entry) => entry.outcome === 'error' || entry.outcome === 'warning'));
+  // A fix the platform owns (Shopify's cookies) isn't one of the owner's things to fix.
+  const fix = workOf(
+    entries.filter((entry) => (entry.outcome === 'error' || entry.outcome === 'warning') && !entry.platform),
+  );
   const notices = workOf(entries.filter((entry) => entry.outcome === 'notice'));
   return {
     found,

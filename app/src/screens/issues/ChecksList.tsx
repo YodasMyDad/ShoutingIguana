@@ -422,9 +422,16 @@ function CheckOption({
       icon={<SeverityMark severity={outcome} decorative={skipped || outcome === 'passed'} />}
       title={check.title}
       meta={
-        entry.hidden ? (
+        entry.hidden || entry.platform ? (
           <span className="inline-flex items-center gap-2">
-            <Badge variant="outline">Hidden</Badge>
+            {entry.hidden ? <Badge variant="outline">Hidden</Badge> : null}
+            {/* Who owns the fix, quietly: the reason, as the engine gives it, on hover and to a screen reader. */}
+            {entry.platform ? (
+              <span className="text-12 text-text-muted" title={entry.platform.reason}>
+                Set by {entry.platform.name}
+                <span className="sr-only">: {entry.platform.reason}</span>
+              </span>
+            ) : null}
             {meta}
           </span>
         ) : (

@@ -462,6 +462,17 @@ export interface CheckCount {
    * analysis from before files were stored (show the page then); left out by a sidecar from before it.
    */
   files?: CheckFile[] | null;
+  /**
+   * The site's platform, where it owns the fix (Shopify sets a store's cookies and headers): who, and why, to show as
+   * given. Null where the owner can make the fix; left out by a sidecar from before it.
+   */
+  platform?: PlatformOwner | null;
+}
+
+/** A platform that owns a check's fix, and why, in words to show as they are. */
+export interface PlatformOwner {
+  name: string;
+  reason: string;
 }
 
 /** A robots.txt or sitemap a check of the site's own files is about. */
