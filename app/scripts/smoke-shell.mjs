@@ -259,7 +259,10 @@ try {
     await library.getByRole('link').first().click();
     await main.getByRole('heading', { name: 'Fix first' }).waitFor({ timeout: 30_000 });
     await picture('02-overview');
-    return (await main.getByText(/^\d+ checks found [\d,]+ issues on this crawl\./).innerText()).slice(0, 80);
+    // The answer leads with what to fix, then the counts in a part of their own ("About 79 things to fix · about 149
+    // more worth a look · 151 checks found 242 issues on this crawl."): the counts' part, read with the line it's in.
+    const counts = main.getByText(/\d+ checks found [\d,]+ issues on this crawl\./).first();
+    return (await counts.locator('xpath=..').innerText()).replace(/\s+/g, ' ').slice(0, 120);
   });
 
   await walk.step('a status class opens exactly its URLs', async () => {
@@ -420,13 +423,25 @@ try {
   await walk.step('Issues shows a check: what is wrong, why it matters, how to fix it', async () => {
     await page.keyboard.press('Control+2');
     await page.waitForURL(/\/issues/);
-    await page.getByRole('listbox', { name: 'Checks' }).getByRole('option').first().click();
+    // Issues opens on a check, and under a 1344 px main area the open check takes the width, with the list behind
+    // "All checks": bring the list out first, as e2e's showChecks does. Picking from it puts the list back behind.
+    const checks = page.getByRole('listbox', { name: 'Checks' });
+    const allChecks = page.getByRole('button', { name: 'All checks' });
+    const until = Date.now() + 15_000;
+    while (!(await checks.isVisible())) {
+      expectThat(Date.now() < until, 'the checks list never showed, nor came out from behind "All checks"');
+      if ((await allChecks.isVisible()) && (await allChecks.getAttribute('aria-expanded')) === 'false')
+        await allChecks.click();
+      await sleep(250);
+    }
+    await checks.getByRole('option').first().click();
     for (const text of ['What’s wrong', 'Why it matters', 'How to fix it'])
       await main.getByText(text).first().waitFor();
     await picture('06-issues');
-    return (
-      await page.getByRole('listbox', { name: 'Checks' }).getByRole('option', { selected: true }).innerText()
-    ).replace(/\s+/g, ' ');
+    return (await main.locator('[data-check-detail]').getByRole('heading', { level: 2 }).first().innerText()).replace(
+      /\s+/g,
+      ' ',
+    );
   });
 
   await walk.step('an export’s toast: Open folder shows the file in Explorer, Open file opens it', async () => {
