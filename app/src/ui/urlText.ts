@@ -150,7 +150,15 @@ export function fileNameOf(url: string): string {
 /** The most of a query a file's label shows after its name: the rest is in the full URL, on hover and copy. */
 const MAX_QUERY = 60;
 
-/** A file's label: its name, then what tells it from others of the name, muted (its query, or its folder). */
+/**
+ * The usual names of a cache-buster: a parameter that only makes a browser fetch the file afresh (Shopify's
+ * `?v=1761041746`, WordPress's `?ver=6.4.2`, jQuery's `?_=1700000000000`), so it tells no file from another.
+ */
+const CACHE_BUSTERS: ReadonlySet<string> = new Set(['v', 'ver', 'version', '_', 'cb', 't', 'ts', 'rnd', 'timestamp']);
+/** A cache-buster's value: a number, a version ("6.4.2"), or a hash (six or more letters and digits, a digit among them). */
+const CACHE_BUSTER_VALUE = /^(?:\d+(?:\.\d+)*|(?=[A-Za-z]*\d)[A-Za-z0-9]{6,})$/;
+
+/** A file's label: its name, then what tells it from others of the name, muted (its host, folder and query). */
 export interface FileLabel {
   name: string;
   rest: string | null;
@@ -165,12 +173,24 @@ const decoded = (text: string): string => {
 };
 
 /**
- * How a file a page loads (an image, a stylesheet, a script) is named where it's a row's label: by the file's name, the
- * last segment of its path, percent-decoded and without its query (`harpswell-metal-patio-set-9.jpg`), then its query
- * where it has one (what tells `?width=896` from `?width=480`), else its folder; another host than the site's leads
- * that. A path that ends in `/` is named by its last folder, one with none by its host. The whole URL is never lost:
- * it's what hover, copy and a screen reader get. Text that isn't a URL is its own name.
+ * A query as a file's label shows it: decoded, without its cache-busters, and cut after `MAX_QUERY` characters. Null
+ * when nothing is left.
  */
+function labelQuery(search: string): string | null {
+  const kept = search
+    .slice(1)
+    .split('&')
+    .filter((pair) => {
+      if (pair === '') return false;
+      const at = pair.indexOf('=');
+      const name = decoded(at < 0 ? pair : pair.slice(0, at)).toLowerCase();
+      return !(CACHE_BUSTERS.has(name) && at >= 0 && CACHE_BUSTER_VALUE.test(decoded(pair.slice(at + 1))));
+    });
+  if (kept.length === 0) return null;
+  const query = decoded(`?${kept.join('&')}`);
+  return query.length > MAX_QUERY ? `${query.slice(0, MAX_QUERY)}${ELLIPSIS}` : query;
+}
+
 /**
  * A file's name in two parts, so a name too long for its room is cut at the end of its stem and its extension always
  * shows: "harpswell-metal-pat….jpg", never "harpswell-metal-patio-set-9.j…". An extension is a dot and one to five
@@ -181,6 +201,15 @@ export function splitExtension(name: string): { stem: string; ext: string } {
   return { stem: name.slice(0, name.length - ext.length), ext };
 }
 
+/**
+ * How a file a page loads (an image, a stylesheet, a script) is named where it's a row's label: by the file's name, the
+ * last segment of its path, percent-decoded and without its query (`harpswell-metal-patio-set-9.jpg`), then where it
+ * is, its host (another than the site's) and folder (`/media/5265/`), and its query where it has one (what tells
+ * `?width=896` from `?width=480`), less any cache-buster (`?v=1761041746`), which tells no file from another. Ten
+ * files called `2.png?width=896` in ten folders are ten labels. A path that ends in `/` is named by its last folder,
+ * one with none by its host. The whole URL is never lost: it's what hover, copy, opening and a screen reader get. Text
+ * that isn't a URL is its own name.
+ */
 export function fileLabelOf(url: string, siteOrigin?: string | null): FileLabel {
   if (/^data:/i.test(url)) {
     const type = /^data:([^;,]*)/i.exec(url)?.[1]?.toLowerCase() ?? '';
@@ -193,11 +222,7 @@ export function fileLabelOf(url: string, siteOrigin?: string | null): FileLabel 
     return { name: url, rest: null };
   }
   const other = siteOrigin && originOf(siteOrigin) !== parsed.origin ? parsed.host : null;
-  const query = parsed.search
-    ? parsed.search.length > MAX_QUERY
-      ? `${decoded(parsed.search).slice(0, MAX_QUERY)}${ELLIPSIS}`
-      : decoded(parsed.search)
-    : null;
+  const query = parsed.search ? labelQuery(parsed.search) : null;
   const segments = parsed.pathname.split('/');
   const trailing = segments.at(-1) === '';
   const segment = (trailing ? segments.at(-2) : segments.at(-1)) ?? '';
@@ -207,8 +232,9 @@ export function fileLabelOf(url: string, siteOrigin?: string | null): FileLabel 
   }
   const name = `${decoded(segment)}${trailing ? '/' : ''}`;
   const folder = parsed.pathname.slice(0, parsed.pathname.length - segment.length - (trailing ? 1 : 0));
-  const said = query ?? (folder === '/' ? null : decoded(folder));
-  const rest = [other, said].filter((part): part is string => part !== null).join(' ');
+  // Where it is: another host and the folder on it, read as one ("cdn.example.net/assets/"); the site's root says nothing.
+  const place = `${other ?? ''}${folder === '/' ? '' : decoded(folder)}`;
+  const rest = [place, query].filter((part): part is string => part !== null && part !== '').join(' ');
   return { name, rest: rest || null };
 }
 

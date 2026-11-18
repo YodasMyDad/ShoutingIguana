@@ -35,7 +35,7 @@ import {
   wholesOf,
   type ShareWords,
 } from './plainWords';
-import { flatOneFixSentences, oneFixSentences } from './oneFixWords';
+import { flatOneFixSentences, oneFixSentences, oneFixTitle } from './oneFixWords';
 import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
@@ -44,7 +44,7 @@ import { ChangeFact, FixedSinceNote } from './ProblemSince';
 import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
 import { isRecheckRunning, useRecheckRun } from '../crawl/recheck';
 import { useSharedSource } from './useSharedSource';
-import { pathOrigin } from './whereWords';
+import { pathOrigin, sharedSourceAdvice } from './whereWords';
 import { useTemplateLink } from '../screens/issues/useWhereFound';
 import { firstGroupQuery } from './useOneFix';
 
@@ -419,10 +419,7 @@ function FoundProblem({
         </section>
       </Card>
       {template ? (
-        <Callout
-          className="mt-4"
-          title={`One fix clears ${(template.urls ?? template.pages).toLocaleString('en-GB')} of these ${count.toLocaleString('en-GB')} ${noun}`}
-        >
+        <Callout className="mt-4" title={oneFixTitle(template.urls ?? template.pages, count, noun)}>
           <OneFixWords
             check={check}
             item={item}
@@ -434,7 +431,7 @@ function FoundProblem({
           />
         </Callout>
       ) : flatTemplate ? (
-        <Callout className="mt-4" title={`One fix clears all ${count.toLocaleString('en-GB')} of these ${noun}`}>
+        <Callout className="mt-4" title={oneFixTitle(count, count, noun)}>
           {flatOneFixSentences(count, analysis.pagesAnalyzed).lead}{' '}
           {check.plainOneFix ?? 'That’s almost certainly in the part of the site every page shares.'}{' '}
           {flatOneFixSentences(count, analysis.pagesAnalyzed).fix}
@@ -444,7 +441,7 @@ function FoundProblem({
           className="mt-4"
           title={`One page links to ${shared.urls.toLocaleString('en-GB')} of ${shared.of >= count ? 'these' : 'the first'} ${shared.of.toLocaleString('en-GB')} ${noun}`}
         >
-          {sharedSourceWords(pathOf(shared.url, item), shared.position)}
+          {sharedSourceWords(pathOf(shared.url, item), shared.position, sharedSourceAdvice(check))}
         </Callout>
       ) : null}
       <WhereItIs
@@ -523,13 +520,15 @@ function OneFixWords({
   );
 }
 
-/** "/garden-furniture/ links to most of them, from its footer. Fix or remove the links there first." */
-function sharedSourceWords(path: string, position: LinkPosition | null): ReactNode {
+/**
+ * "/garden-furniture/ links to most of them, from its footer. Fix or remove the links there first.": then what to do
+ * there, by the check (whereWords' sharedSourceAdvice).
+ */
+function sharedSourceWords(path: string, position: LinkPosition | null, advice: string | null): ReactNode {
   const where = position && position !== 'content' ? `, from its ${position === 'navigation' ? 'menu' : position}` : '';
   return (
     <>
-      <span className="font-mono text-14">{path}</span> links to most of them{where}. Fix or remove the links there
-      first.
+      <span className="font-mono text-14">{path}</span> links to most of them{where}.{advice ? ` ${advice}` : null}
     </>
   );
 }

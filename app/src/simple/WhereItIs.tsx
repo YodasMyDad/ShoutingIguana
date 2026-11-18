@@ -24,7 +24,8 @@ import { fileLabelOf } from '../ui/urlText';
 import { isBrokenImage } from '../ui/imageFacts';
 import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
-import { pathOrigin, shownWords } from './whereWords';
+import { oneFixTitle } from './oneFixWords';
+import { causeName, causeWords, causesWords, pathOrigin, rowDetailSaysMore, shownWords } from './whereWords';
 
 /** Causes (or pages, for a check that doesn't group) shown at a time. */
 export const WHERE_STEP = 25;
@@ -158,13 +159,12 @@ function PageLine({ row, origin }: { row: IssueRow; origin: string | null }) {
   );
 }
 
+/** The table's headings: what its causes hold and the pages they're on, or a check's pages and what each has. */
 function headings(check: Check): [string, string] {
   const pages = (check.subject ?? 'page') === 'page';
   if (check.grouping === 'none') return [pages ? 'Page' : 'Address', 'What was found'];
-  return [
-    check.grouping === 'relatedUrl' ? 'What it’s about' : 'What was found',
-    pages ? 'On these pages' : 'At these addresses',
-  ];
+  const words = causeWords(check);
+  return [words.heading, words.pagesHeading];
 }
 
 /**
@@ -222,14 +222,21 @@ export function WhereItIs({
   const causes = grouped ? (groups.data?.groupCount ?? null) : null;
   const listed = grouped ? (groups.data?.groups.length ?? 0) : (rows.data?.rows.length ?? 0);
   const all = grouped ? (causes ?? 0) : total;
-  const meta =
-    causes === null
-      ? `${formatCount(total)} ${noun(total)}`
-      : `${causes === 1 ? '1 cause' : `${formatCount(causes)} causes`}, on ${formatCount(total)} ${noun(total)}`;
+  // What it counts, by what its causes are, on the pages the headline counts: "129 images on 60 pages".
+  const meta = causes === null ? `${formatCount(total)} ${noun(total)}` : causesWords(check, causes, total);
+  const causeWord = causeWords(check);
+  const cause = (count: number) => (count === 1 ? causeWord.one : causeWord.many);
   const error = grouped ? groups.error : rows.error;
   // How many are shown, and the ways to more, only once the list is read: before then a grouped check's count of
   // causes isn't known, and "All 0 are shown" would be false.
   const read = (grouped ? groups.data : rows.data) !== undefined && !error;
+  // A check that lists its pages says what was found on each, unless nothing was: no detail and no evidence (the fixit
+  // index audit's X5). Then the column goes, never a column of blanks. Kept while the pages are read.
+  const saysFound =
+    grouped ||
+    rows.data === undefined ||
+    evidenceOf(check).length > 0 ||
+    rows.data.rows.some((row) => Boolean(plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail));
 
   return (
     <Card as="section" aria-labelledby="where-it-is" className="mt-4 overflow-hidden">
@@ -254,7 +261,7 @@ export function WhereItIs({
           <thead>
             <tr>
               <th scope="col">{left}</th>
-              <th scope="col">{right}</th>
+              {saysFound ? <th scope="col">{right}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -265,6 +272,7 @@ export function WhereItIs({
                     crawlId={crawlId}
                     check={check}
                     group={group}
+                    total={total}
                     origin={origin}
                     noun={noun}
                     since={since}
@@ -277,11 +285,13 @@ export function WhereItIs({
                       {row.change ? <ChangeLine words={rowChangeWords(row.change.state, since, 'simple')} /> : null}
                       <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                     </td>
-                    <td className="text-text-secondary">
-                      {/* The engine's detail, unless the check says it plainly ("Google will likely cut…"). */}
-                      {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? ''}
-                      <EvidenceLines row={row} check={check} origin={origin} />
-                    </td>
+                    {saysFound ? (
+                      <td className="text-text-secondary">
+                        {/* The engine's detail, unless the check says it plainly ("Google will likely cut…"). */}
+                        {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? ''}
+                        <EvidenceLines row={row} check={check} origin={origin} />
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
           </tbody>
@@ -296,6 +306,7 @@ export function WhereItIs({
               listed,
               all,
               noun,
+              cause,
               origin,
               shortened: origin !== null && (firstUrl ?? '').startsWith(origin),
             })}
@@ -326,6 +337,7 @@ function GroupRow({
   crawlId,
   check,
   group,
+  total,
   origin,
   noun,
   since,
@@ -333,6 +345,8 @@ function GroupRow({
   crawlId: string;
   check: Check;
   group: IssueGroup;
+  /** The check's count: One fix clears the problem only where the cause is on all of them. */
+  total: number;
   origin: string | null;
   noun: (count: number) => string;
   /** The fix loop: when the site's last check was, for the cause's "Still there since 3 Nov". */
@@ -353,7 +367,8 @@ function GroupRow({
   const perPage =
     references === 'sources' ||
     (references === 'targets' && (check.targetFacts ?? []).length > 0) ||
-    evidenceOf(check).some((column) => column !== 'title');
+    evidenceOf(check).some((column) => column !== 'title') ||
+    rows.some((row) => rowDetailSaysMore(check, group, row));
   // What the cause is, in plain words: the image's file, where a forwarding address ends, how it answered. An
   // oversized image says the size its pages show it at, against the file's: how much smaller to make it.
   const shownAt = useShownAt(
@@ -369,12 +384,18 @@ function GroupRow({
   // An image is known by sight before by its address.
   const image = check.grouping === 'relatedUrl' && check.id.startsWith('image-') && group.relatedUrl !== null;
   const broken = isBrokenImage(group.related ?? {});
-  // Each page's own facts in plain words: the engine's detail is Advanced's words, so these lines say it instead.
+  // Each page's own facts in plain words: the engine's detail is Advanced's words, so these lines say it instead, but
+  // where the detail says more than they do (the codes that disagree, the instance of the fault), it says it too.
   const pageLines = (row: IssueRow) => (
     <>
       <PageLine row={row} origin={origin} />
       <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
       <TargetWords crawlId={crawlId} check={check} urlId={row.id} cause={group.relatedUrlId} />
+      {rowDetailSaysMore(check, group, row) ? (
+        <span className="si-row-detail mt-0.5 block text-13 text-text-secondary">
+          {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail}
+        </span>
+      ) : null}
       <EvidenceLines row={row} check={check} origin={origin} />
     </>
   );
@@ -409,7 +430,8 @@ function GroupRow({
             </span>
           </span>
         ) : (
-          <span>{group.detail ?? ''}</span>
+          // Its detail, said plainly; one the engine leaves empty is named by the check ("No main heading").
+          <span>{causeName(check, group.detail)}</span>
         )}
         {group.change ? (
           <ChangeLine words={groupChangeWords(group.change, group.urls ?? group.pages, since, 'simple')} />
@@ -419,7 +441,13 @@ function GroupRow({
         {many ? (
           <span className="mb-1 flex flex-wrap items-center gap-2 font-medium">
             {formatCount(count)} {noun(count)}
-            {group.likelyTemplate ? <OneFixTag /> : null}
+            {/* One fix, where it clears the whole problem; else how much of it one fix covers. */}
+            {group.likelyTemplate && count >= total ? <OneFixTag /> : null}
+            {group.likelyTemplate && count < total ? (
+              <span className="text-13 font-regular text-text-secondary">
+                {oneFixTitle(count, total, (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses')}
+              </span>
+            ) : null}
           </span>
         ) : null}
         {many && !open && perPage ? (

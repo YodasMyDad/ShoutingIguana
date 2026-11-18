@@ -13,8 +13,10 @@ export const firstGroupQuery = (crawlId: string, checkId: string) => ({
 });
 
 /**
- * The checks of a list whose largest group is the engine's `likelyTemplate`: one cause, in the part of the site every
- * page shares, so one fix clears it. Their rows carry "One fix". A check that doesn't group has no cause to name.
+ * The checks of a list whose largest group is the engine's `likelyTemplate` and is on every page the check flagged: one
+ * cause, in the part of the site every page shares, so one fix clears the whole problem. Their rows carry "One fix". A
+ * shared cause on most of the pages (195 of 225) doesn't: the problem's page says how many it covers. A check that
+ * doesn't group has no cause to name.
  */
 export function useOneFix(crawlId: string, entries: readonly CheckEntry[]): ReadonlySet<string> {
   const grouped = entries.filter((entry) => entry.check.grouping !== 'none' && (entry.count ?? 0) > 0);
@@ -22,9 +24,12 @@ export function useOneFix(crawlId: string, entries: readonly CheckEntry[]): Read
     queries: grouped.map((entry) => firstGroupQuery(crawlId, entry.check.id)),
     combine: (results) =>
       new Set(
-        results.flatMap((result, index) =>
-          result.data?.groups[0]?.likelyTemplate ? [grouped[index]?.check.id ?? ''] : [],
-        ),
+        results.flatMap((result, index) => {
+          const entry = grouped[index];
+          const largest = result.data?.groups[0];
+          if (!entry || !largest?.likelyTemplate) return [];
+          return (largest.urls ?? largest.pages) >= (entry.count ?? 0) ? [entry.check.id] : [];
+        }),
       ),
   });
 }

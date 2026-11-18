@@ -137,7 +137,8 @@ test('a problem opens at its top from a scrolled What to fix, and Back finds the
   // Where it is counts what it lists, and says where its shortened addresses are.
   await expect(
     main(page).getByText(
-      /(The one (cause|page|address) is shown|All [\d,]+ \w+ are shown|Showing [\d,]+ of [\d,]+ \w+)\./,
+      // What it counts is a cause's noun ("image", "kind of problem"), or the page or address.
+      /(The one \w+(?:[ -]\w+)* is shown|All [\d,]+ \w+(?:[ -]\w+)* are shown|Showing [\d,]+ of [\d,]+ \w+(?:[ -]\w+)*)\./,
     ),
   ).toBeVisible();
   await expect(main(page).getByText(/It is shown\.|Addresses are on /)).toHaveCount(0);

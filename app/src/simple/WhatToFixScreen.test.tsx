@@ -150,7 +150,13 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
   });
 
   it('shows three things worth a look while anything needs fixing, then all of them; Nothing wrong is folded', async () => {
-    await open(FIX);
+    // The logo's link on every one of the 265 pages: One fix (one on 264 of them isn't: useOneFix.test.tsx).
+    const everyPage: FakeRoute = [
+      'POST',
+      /\/issues\/empty-anchor-text\/groups$/,
+      () => json(groupPage('empty-anchor-text', [{ ...HOME_GROUP, pages: 265, urls: 265, share: 1 }], 265)),
+    ];
+    await open(FIX, GARDEN_ANALYSIS, [], [everyPage]);
     await whatToFix();
     const looks = () => within(main().getByRole('region', { name: 'Worth a look 22' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
@@ -291,7 +297,9 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(main().getByText('Doesn’t change the score')).toBeVisible();
     expect(main().getByText('Usually fixed by you or your developer')).toBeVisible();
     expect(main().getByRole('heading', { name: 'How to fix it' })).toBeVisible();
-    expect(await main().findByText('One fix clears 264 of these 265 pages')).toBeVisible();
+    expect(
+      await main().findByText('One fix covers 264 of 265 pages', { selector: '.si-callout__title' }),
+    ).toBeVisible();
     expect(main().getByText(/almost certainly your logo/)).toBeVisible();
   });
 
@@ -341,14 +349,14 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(
       within(where).getAllByText('/outdoor-pe-rattan-dining-set-with-fire-pit-table/', { exact: false })[0],
     ).toBeVisible();
-    expect(within(where).queryByText(/0 causes/)).toBeNull();
+    expect(within(where).queryByText(/\b0 kinds of problem\b/)).toBeNull();
   });
 
   it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {
     await open(`${FIX}/empty-anchor-text`);
     await problem('Links with nothing to read');
     const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('2 causes, on 265 pages')).toBeVisible();
+    expect(await where.findByText('2 addresses on 265 pages')).toBeVisible();
     expect(await where.findByText('Your home page')).toBeVisible();
     // A check that names what its pages link to lists its first pages one by one, each with its own line (where its
     // link is: ProblemScreen.evidence.test.tsx), then how many more.
@@ -359,7 +367,7 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(await where.findByText('Page 199')).toBeVisible();
     expect(where.getByRole('button', { name: 'See all 264 in Advanced' })).toBeVisible();
     expect(
-      where.getByText('All 2 causes are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
+      where.getByText('All 2 addresses are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
     ).toBeVisible();
   });
 

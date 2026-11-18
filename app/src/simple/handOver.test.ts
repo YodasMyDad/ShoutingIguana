@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { CheckGroupRef, IssueGroup, IssueRow } from '../api/grids';
 import { setTransport } from '../api/transport';
+import { onAnnounce } from '../feedback/announce';
 import { closeExportDialog, defaultFileName, getExportDialog } from '../export/exportFlow';
 import { liveStore } from '../live/liveStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
@@ -23,13 +25,116 @@ afterEach(() => {
   liveStore.reset();
 });
 
+const group = (overrides: Partial<IssueGroup> & Pick<IssueGroup, 'pages'>): IssueGroup => ({
+  detail: null,
+  relatedUrlId: null,
+  relatedUrl: null,
+  urls: overrides.pages,
+  share: 0,
+  likelyTemplate: false,
+  related: null,
+  sharedText: null,
+  ...overrides,
+});
+
+const image = (id: number, path: string, sizeBytes: number | null, pixels: [number, number] | null): IssueGroup =>
+  group({
+    relatedUrlId: id,
+    relatedUrl: `https://example.com${path}`,
+    pages: 1,
+    related: {
+      statusCode: 200,
+      outcome: 'success',
+      contentType: 'image/png',
+      sizeBytes,
+      pixelWidth: pixels?.[0] ?? null,
+      pixelHeight: pixels?.[1] ?? null,
+      final: null,
+      indexability: null,
+      canonical: null,
+    },
+  });
+
+/** A sidecar answering a check's groups a page at a time, and each group's rows a page at a time, as the real one does. */
+function groupedSidecar(
+  checkId: string,
+  groups: IssueGroup[],
+  rowsOf: (group: CheckGroupRef | null) => IssueRow[],
+  asked: TransportRequest[] = [],
+) {
+  return fakeSidecar([
+    [
+      'POST',
+      new RegExp(`/issues/${checkId}/groups$`),
+      (request: TransportRequest) => {
+        asked.push(request);
+        const { offset, limit } = request.body as { offset: number; limit: number };
+        return json({
+          checkId,
+          grouping: groups[0]?.relatedUrlId === null ? 'detail' : 'relatedUrl',
+          total: 0,
+          groupCount: groups.length,
+          offset,
+          groups: groups.slice(offset, offset + limit),
+        });
+      },
+    ],
+    [
+      'POST',
+      new RegExp(`/issues/${checkId}/rows$`),
+      (request: TransportRequest) => {
+        asked.push(request);
+        const query = request.body as { group?: CheckGroupRef; after?: string; limit: number; columns: string[] };
+        const all = rowsOf(query.group ?? null);
+        const start = query.after ? Number(query.after) : 0;
+        const rows = all.slice(start, start + query.limit);
+        const end = start + rows.length;
+        return json({
+          columns: ['id', ...query.columns],
+          rows,
+          offset: query.after ? null : 0,
+          matching: all.length,
+          total: all.length,
+          next: end < all.length ? String(end) : null,
+          summary: { available: true, reason: null },
+          unavailable: [],
+        });
+      },
+    ],
+  ]);
+}
+
+async function copied(checkId: string, words: string[] = []): Promise<string> {
+  let text = '';
+  const stop = onAnnounce((message) => words.push(message));
+  try {
+    await copyProblemList({ ...context, check: check(checkId) }, (list) => {
+      text = list;
+      return Promise.resolve(true);
+    });
+  } finally {
+    stop();
+  }
+  return text;
+}
+
 describe('Copy the list', () => {
   it('writes both titles, the site and date, how to fix it, then each cause with its full addresses', () => {
-    const text = problemListText(context, [
-      { id: 1, url: 'https://example.com/', relatedUrl: 'https://example.com/gone/' },
-      { id: 2, url: 'https://example.com/blog/', relatedUrl: 'https://example.com/gone/' },
-      { id: 3, url: 'https://example.com/shop/', relatedUrl: 'https://example.com/old/' },
-    ]);
+    const page = (id: number, url: string) => ({ id, url, relatedUrl: 'https://example.com/gone/' });
+    const text = problemListText(
+      context,
+      [],
+      [
+        {
+          group: group({ relatedUrlId: 7, relatedUrl: 'https://example.com/gone/', pages: 2 }),
+          rows: [page(1, 'https://example.com/'), page(2, 'https://example.com/blog/')],
+        },
+        {
+          group: group({ relatedUrlId: 8, relatedUrl: 'https://example.com/old/', pages: 1 }),
+          rows: [page(3, 'https://example.com/shop/')],
+        },
+      ],
+    );
     expect(text.split('\n')).toEqual([
       'Links that lead to broken pages (Links to broken internal URLs)',
       'gardenfurnituresets.co.uk, checked on 31 October 2026',
@@ -45,6 +150,87 @@ describe('Copy the list', () => {
       'https://example.com/old/',
       '  https://example.com/shop/',
     ]);
+  });
+
+  // The fixit audit's item 5: each page went under its first image only, so the garden's list named 60 of its 129
+  // large images, and no sizes.
+  it('hands over every image, each with its size and pixels and every page it’s on', async () => {
+    const images = [
+      image(812, '/media/4369/nice-garden.png', 2_202_009, [4000, 3000]),
+      image(813, '/media/6965/2.png?width=896', 412_000, null),
+      image(814, '/media/6790/2.png?width=896', null, null),
+    ];
+    const blog = 'https://example.com/blog/how-to-clean-garden-stones/';
+    // The blog post shows all three: it's under each, not only under its first.
+    const rowsOf = (ref: CheckGroupRef | null): IssueRow[] =>
+      ref?.relatedUrlId === 812
+        ? [
+            { id: 1, url: blog, relatedUrl: images[0]!.relatedUrl },
+            { id: 2, url: 'https://example.com/', relatedUrl: images[0]!.relatedUrl },
+          ]
+        : [{ id: 1, url: blog, relatedUrl: images[0]!.relatedUrl }];
+    setTransport(groupedSidecar('image-too-large', images, rowsOf));
+    const said: string[] = [];
+    const text = await copied('image-too-large', said);
+    expect(text.slice(text.indexOf('Where it is:')).split('\n')).toEqual([
+      'Where it is:',
+      'https://example.com/media/4369/nice-garden.png (2.1 MB, 4000×3000 pixels)',
+      `  ${blog}`,
+      '  https://example.com/',
+      'https://example.com/media/6965/2.png?width=896 (402.3 KB)',
+      `  ${blog}`,
+      'https://example.com/media/6790/2.png?width=896',
+      `  ${blog}`,
+    ]);
+    expect(said).toEqual(['Copied the list: 3 images on 2 pages']);
+  });
+
+  it('reads every cause and every page of each, a page at a time', async () => {
+    const many = Array.from({ length: 1_002 }, (_, index) => image(1_000 + index, `/img/${index}.jpg`, 300_000, null));
+    const pages = (ref: CheckGroupRef | null): IssueRow[] =>
+      ref?.relatedUrlId === 1_000
+        ? Array.from({ length: 1_001 }, (_, index) => ({ id: index + 1, url: `https://example.com/p/${index}/` }))
+        : [{ id: 1, url: 'https://example.com/p/0/' }];
+    const asked: TransportRequest[] = [];
+    setTransport(groupedSidecar('image-too-large', many, pages, asked));
+    const lines = (await copied('image-too-large')).split('\n');
+    expect(lines).toContain('https://example.com/img/1001.jpg (293 KB)');
+    expect(lines).toContain('  https://example.com/p/1000/');
+    expect(lines.filter((line) => line.startsWith('https://example.com/img/'))).toHaveLength(1_002);
+    // Two reads of the groups, and the largest's pages read on from where the first read stopped.
+    const groupReads = asked.filter((request) => request.path.endsWith('/groups'));
+    expect(groupReads.map((request) => (request.body as { offset: number }).offset)).toEqual([0, 1_000]);
+    expect(asked.some((request) => (request.body as { after?: string }).after === '1000')).toBe(true);
+  });
+
+  it('names a cause the engine leaves without a detail, and says a heading’s plainly', async () => {
+    const kinds = [group({ detail: null, pages: 2 }), group({ detail: 'The H1 has no text', pages: 1 })];
+    const rowsOf = (ref: CheckGroupRef | null): IssueRow[] =>
+      ref?.detail === null
+        ? [
+            { id: 1, url: 'https://example.com/faqs/', detail: null },
+            { id: 2, url: 'https://example.com/ccpa/', detail: null },
+          ]
+        : [{ id: 3, url: 'https://example.com/about/', detail: 'The H1 has no text' }];
+    setTransport(groupedSidecar('h1-missing', kinds, rowsOf));
+    const said: string[] = [];
+    const text = await copied('h1-missing', said);
+    expect(text.slice(text.indexOf('Where it is:')).split('\n')).toEqual([
+      'Where it is:',
+      'No main heading',
+      '  https://example.com/faqs/',
+      '  https://example.com/ccpa/',
+      'The main heading has no text',
+      '  https://example.com/about/',
+    ]);
+    expect(said).toEqual(['Copied the list: 2 kinds of problem on 3 pages']);
+  });
+
+  it('lists a check whose groups come back empty flat, as Where it is does', async () => {
+    const rows = [{ id: 1, url: 'https://example.com/a/', detail: '404 Not Found' }];
+    setTransport(groupedSidecar('internal-client-error', [], () => rows));
+    const text = await copied('internal-client-error');
+    expect(text.endsWith('Where it is:\nhttps://example.com/a/ (404 Not Found)')).toBe(true);
   });
 
   it('lists a check that doesn’t group flat, with what was measured', () => {
