@@ -7,6 +7,7 @@ using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -79,12 +80,10 @@ public sealed class CollectedFactsTests : IAsyncLifetime
                 new SkippedCheck(IssueCatalog.HTML_STRUCTURE_ERRORS.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT),
                 new SkippedCheck(IssueCatalog.MOBILE_ALTERNATE.Id, SkippedCheckReasons.EARLIER_VERSION, TEXT)
             ], analysis.Skipped);
-        // One note for each collection the page predates: the new checks' first (1), the images' (2), the forms' (3), the
-        // text measures' (4), and the share tags' (5), which also has four.
-        Assert.Contains($"9 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
-        Assert.Contains($"3 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
-        Assert.Contains($"2 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
-        Assert.Contains($"4 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.", analysis.Notes);
+        // One note for them all, though they need five collections the page predates: the new checks' first (9 checks), the
+        // images' (3), the forms' (2), the text measures' (4) and the share tags' (4).
+        Assert.Equal($"22 checks weren't run: {WHY}, which didn't record what they need. Crawl again to run them.",
+            Assert.Single(analysis.Notes, note => note.Contains("earlier version", StringComparison.Ordinal)));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.UNCRAWLABLE_LINKS.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.PAGINATION_SEQUENCE_ERROR.Id));
@@ -93,6 +92,41 @@ public sealed class CollectedFactsTests : IAsyncLifetime
 
         // The rest of the canonical checks still ran.
         Assert.Single(IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_FRAGMENT.Id));
+    }
+
+    /// <summary>
+    /// A crawl an earlier version made, with neither the facts the new checks need, the whole content fingerprint nor the
+    /// sitemaps' lastmods, has one note for every check that wasn't run for it, not one for each thing it didn't record (the
+    /// garden crawl of 31 October had seven, five of them worded the same).
+    /// </summary>
+    [Fact]
+    public async Task ACrawlAnEarlierVersionMadeHasOneNoteForEveryCheckItCouldntRun()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 }, _path)))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
+        }
+
+        EveryPageParsedBefore();
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var older = connection.CreateCommand();
+            older.CommandText = "UPDATE responses SET simhash_1 = NULL, simhash_2 = NULL, simhash_3 = NULL; ALTER TABLE sitemap_urls DROP COLUMN lastmod;";
+            older.ExecuteNonQuery();
+        }
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
+
+        const string TEXT = "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.";
+        var skipped = analysis.Skipped.Where(skip => skip.Reason == SkippedCheckReasons.EARLIER_VERSION).ToList();
+        Assert.Equal(24, skipped.Count);
+        Assert.All(skipped, skip => Assert.Equal(TEXT, skip.Text));
+        Assert.Contains(skipped, skip => skip.CheckId == IssueCatalog.NEAR_DUPLICATE_CONTENT.Id);
+        Assert.Contains(skipped, skip => skip.CheckId == IssueCatalog.SITEMAP_LASTMOD_INVALID.Id);
+        Assert.Equal("24 checks weren't run: this crawl was made by an earlier version, which didn't record what they need. Crawl again to run them.",
+            Assert.Single(analysis.Notes, note => note.Contains("earlier version", StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -113,6 +147,37 @@ public sealed class CollectedFactsTests : IAsyncLifetime
         Assert.Empty(facts.CharsetDeclarations);
         Assert.Null(facts.UncrawlableLinks);
         Assert.Null(facts.MobileAlternate);
+    }
+
+    /// <summary>Stores every page's facts as they'd read had an earlier version parsed them: with no collection.</summary>
+    private void EveryPageParsedBefore()
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ToString());
+        connection.Open();
+        using var read = connection.CreateCommand();
+        read.CommandText = "SELECT url_id, data FROM response_details";
+        List<(long Id, ResponseDetails Details)> pages = [];
+        using (var reader = read.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var details = BlobCodec.DecodeDetails((byte[])reader.GetValue(1));
+                if (details.Page is not null)
+                {
+                    pages.Add((reader.GetInt64(0), details));
+                }
+            }
+        }
+
+        Assert.NotEmpty(pages);
+        foreach (var (id, details) in pages)
+        {
+            using var write = connection.CreateCommand();
+            write.CommandText = "UPDATE response_details SET data = $data WHERE url_id = $id";
+            write.Parameters.AddWithValue("$data", BlobCodec.EncodeDetails(details with { Page = details.Page! with { CollectedVersion = 0 } }));
+            write.Parameters.AddWithValue("$id", id);
+            Assert.Equal(1, write.ExecuteNonQuery());
+        }
     }
 
     /// <summary>Stores a page's facts as they'd read had an earlier version parsed it: with no collection.</summary>

@@ -8,7 +8,8 @@ namespace ShoutingIguana.Engine.Parsing;
 /// <summary>
 /// A page's Microdata as the structured data checks read JSON-LD (change C5 of docs/v2-new-checks.md): each top-level item
 /// (an <c>itemscope</c> that isn't some item's property) as a JSON-LD-shaped object, its schema.org types by their local
-/// names and its properties' values as the HTML standard reads them. An item without an <c>itemtype</c> has no vocabulary
+/// names and its properties' values as the HTML standard reads them, with a <c>content</c> attribute the value on any
+/// element, as schema.org writes it (<see cref="ValueOf"/>). An item without an <c>itemtype</c> has no vocabulary
 /// to judge it by, so only typed top-level items are kept.
 /// </summary>
 internal static class MicrodataReader
@@ -136,16 +137,29 @@ internal static class MicrodataReader
         }
     }
 
-    /// <summary>A property's value as the HTML standard reads it: an attribute for a media element, link, meta, time or data, else the text.</summary>
+    /// <summary>
+    /// A property's value (one that isn't an item): its <c>content</c> attribute on any element, else as the HTML standard
+    /// reads it, an attribute for a media element, link, object, data, meter or time, else the text. The standard names
+    /// <c>content</c> for meta alone, but schema.org's examples put it on a span ("<c>&lt;span itemprop="priceCurrency"
+    /// content="USD"&gt;$&lt;/span&gt;</c>") and Google reads it there. It wins over the element's own attribute too: on any
+    /// element but meta it means nothing but the value, while an href, src, datetime or value has a job of its own on the
+    /// page, and RDFa, where the attribute comes from, puts <c>@content</c> before <c>@href</c>, <c>@src</c> and
+    /// <c>@datetime</c> alike.
+    /// </summary>
     private static string ValueOf(IElement element, Uri baseUri)
     {
         string? Url(string attribute) => element.GetAttribute(attribute) is { } value && UrlNormalizer.TryResolve(baseUri, value, out var resolved)
             ? resolved.AbsoluteUri
             : element.GetAttribute(attribute) ?? string.Empty;
 
+        if (element.GetAttribute("content") is { } content)
+        {
+            return content;
+        }
+
         return element.LocalName switch
         {
-            "meta" => element.GetAttribute("content") ?? string.Empty,
+            "meta" => string.Empty,
             "audio" or "embed" or "iframe" or "img" or "source" or "track" or "video" => Url("src") ?? string.Empty,
             "a" or "area" or "link" => Url("href") ?? string.Empty,
             "object" => Url("data") ?? string.Empty,
