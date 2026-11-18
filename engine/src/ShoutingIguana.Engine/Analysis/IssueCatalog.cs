@@ -545,7 +545,7 @@ public static class IssueCatalog
         Recheck = [RecheckKind.RobotsTxt],
         Grouping = IssueGrouping.None,
         SiteWide = true,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.RobotsTxt
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN = new("robots-txt-unreachable-other-origin", IssueCategory.Indexability, IssueSeverity.Warning,
@@ -559,7 +559,7 @@ public static class IssueCatalog
         Recheck = [RecheckKind.RobotsTxt],
         Grouping = IssueGrouping.None,
         SiteWide = true,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.RobotsTxt
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
@@ -572,7 +572,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.RobotsTxt],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.RobotsTxt
     };
 
     public static readonly IssueDefinition SITE_HIDDEN_FROM_SEARCH = new("site-hidden-from-search", IssueCategory.Indexability, IssueSeverity.Error,
@@ -933,7 +933,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.Sitemap
     };
 
     public static readonly IssueDefinition SITEMAP_MISSING = new("sitemap-missing", IssueCategory.Sitemaps, IssueSeverity.Notice,
@@ -946,7 +946,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.Sitemap
     };
 
     public static readonly IssueDefinition SITEMAP_URL_OTHER_HOST = new("sitemap-url-other-host", IssueCategory.Sitemaps, IssueSeverity.Warning,
@@ -973,7 +973,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.RobotsTxt, RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.RobotsTxt
     };
 
     public static readonly IssueDefinition SITEMAP_OVER_LIMIT = new("sitemap-over-limit", IssueCategory.Sitemaps, IssueSeverity.Warning,
@@ -986,7 +986,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.Sitemap
     };
 
     public static readonly IssueDefinition SITEMAP_NEAR_LIMIT = new("sitemap-near-limit", IssueCategory.Sitemaps, IssueSeverity.Notice,
@@ -999,7 +999,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.Sitemap
     };
 
     public static readonly IssueDefinition SITEMAP_EMPTY = new("sitemap-empty", IssueCategory.Sitemaps, IssueSeverity.Notice,
@@ -1012,7 +1012,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.Sitemap
     };
 
     public static readonly IssueDefinition SITEMAP_URL_REPEATED = new("sitemap-url-repeated", IssueCategory.Sitemaps, IssueSeverity.Notice,
@@ -1038,7 +1038,7 @@ public static class IssueCatalog
         Subject = IssueSubject.Url,
         Recheck = [RecheckKind.Sitemaps],
         Grouping = IssueGrouping.None,
-        ReportedOnce = true
+        ReportedOnce = true, About = IssueAbout.Sitemap
     };
 
 

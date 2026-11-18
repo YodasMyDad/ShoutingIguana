@@ -98,6 +98,12 @@ public sealed record IssueDefinition(
     public bool ReportedOnce { get; init; }
 
     /// <summary>
+    /// The kind of file a check of the whole site is about (robots.txt, a sitemap), whose rule names the files at fault
+    /// (<see cref="IssueHit.Files"/>); null for a check of pages or URLs. Only how the check is shown.
+    /// </summary>
+    public IssueAbout? About { get; init; }
+
+    /// <summary>
     /// The check in plain words (<see cref="IssuePlainTexts"/>), or null while it has none, as written: a limit in them
     /// is still its token, which <see cref="PlainLimits"/> fills from an analysis's settings. Not part of
     /// <see cref="AnalysisFreshness.ChecksFingerprint"/>, nor of what an analysis stores.

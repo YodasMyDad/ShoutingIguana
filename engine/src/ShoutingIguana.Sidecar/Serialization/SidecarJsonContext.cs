@@ -55,6 +55,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
         // Links, sitemaps and robots.txt (E3b).
         typeof(CamelCaseEnumConverter<IssueSubject>),
         typeof(CamelCaseEnumConverter<IssueReferences>),
+        typeof(CamelCaseEnumConverter<IssueAbout>),
         typeof(CamelCaseEnumConverter<SitemapDiscovery>),
         typeof(CamelCaseEnumConverter<SitemapSource>),
         typeof(CamelCaseEnumConverter<SitemapState>),
