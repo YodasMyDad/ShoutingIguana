@@ -23,6 +23,7 @@ import {
   scenarioFixed,
   type ComparisonScenario,
 } from '../api/mock/fixLoop';
+import type { ProblemBody } from '../api/errors';
 import type { CrawlListItem } from '../api/types';
 import { json, problem, type FakeRoute } from './fakeSidecar';
 import { GARDEN_ANALYSIS, SIMPLE_CHECKS, gardenItem } from './simpleSidecar';
@@ -342,4 +343,4 @@ export const RECHECK_NEEDS_SECRETS = {
   status: 409,
   missingHeaders: ['Authorization'],
   proxyCredentials: false,
-} as const;
+} satisfies ProblemBody;

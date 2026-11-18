@@ -104,13 +104,15 @@ export function crawlControls(status: CrawlStatus | null, item: CrawlListItem | 
   return {
     canPause: status === 'running',
     canResume: status === 'paused',
-    canStop: status === 'running' || status === 'paused',
+    // A recheck is a run of the crawl: the crawl's Stop stops it (docs/v2-fix-loop.md, "Pacing, secrets, concurrency").
+    canStop: status === 'running' || status === 'paused' || status === 'rechecking',
     // Continue reads the file: none for one that isn't there any more (round 5 review R1-11).
     canContinue: (status === 'stopped' || status === 'interrupted') && item?.missing !== true,
     canAnalyse:
       status !== null &&
       !isCrawling(status) &&
       status !== 'analyzing' &&
+      status !== 'rechecking' &&
       status !== 'interrupted' &&
       status !== 'inUse' &&
       status !== 'unreadable' &&

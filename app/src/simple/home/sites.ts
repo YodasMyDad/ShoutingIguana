@@ -1,7 +1,10 @@
 // Your sites (docs/v2-ui-simple.md, Home): the library as Simple shows it, a row a site with the newest check first,
 // the older checks of a site folded under it, and the checks running now pinned above. What each row says of its
 // check, from the library's item. Pure.
-import type { CrawlListItem, CrawlStatus, IssueCounts, ScoreSummary } from '../../api/types';
+import { isLive, type CrawlListItem, type CrawlStatus, type IssueCounts, type ScoreSummary } from '../../api/types';
+import { changeCounts, countedItemChanges, type SeverityOf } from '../../changes/changes';
+import { homeChangeLine, homeScoreLine } from '../../changes/changeWords';
+import { rechecksMetaWords } from '../../changes/recheckWords';
 import { crawlName } from '../../crawl/status';
 import { formatCount, formatCountOf } from '../../lib/format';
 
@@ -76,7 +79,7 @@ export type RowKind =
   | 'scored';
 
 export function rowKind(item: CrawlListItem, status: CrawlStatus): RowKind {
-  if (status === 'running' || status === 'paused' || status === 'stopping' || status === 'analyzing') return 'live';
+  if (isLive(status)) return 'live';
   if (item.missing) return 'missing';
   if (status === 'unreadable') return 'unreadable';
   if (!item.analyzedAt && !item.issues) return 'notAnalysed';
@@ -104,9 +107,13 @@ export function scoredPages(item: Pick<CrawlListItem, 'pageCount' | 'pagesAnalyz
   return item.pagesAnalyzed ?? item.pageCount;
 }
 
-/** The line under the site's name: "265 pages", "Stopped early · 312 pages read", "File not found". */
+/**
+ * The line under the site's name: "265 pages", "Stopped early · 312 pages read", "File not found"; with the latest
+ * recheck once it has ended (the fix loop): "265 pages · rechecked 5 on 17 Nov".
+ */
 export function rowMeta(item: CrawlListItem, status: CrawlStatus, earlier: number): string {
-  const more = earlier > 0 ? ` · ${formatCountOf(earlier, 'earlier check')}` : '';
+  const rechecked = item.rechecks?.last.endedAt ? ` · ${rechecksMetaWords(item.rechecks.last)}` : '';
+  const more = `${rechecked}${earlier > 0 ? ` · ${formatCountOf(earlier, 'earlier check')}` : ''}`;
   const count = scoredPages(item);
   const pages = `${formatCount(count)} ${count === 1 ? 'page' : 'pages'}`;
   switch (rowKind(item, status)) {
@@ -115,7 +122,13 @@ export function rowMeta(item: CrawlListItem, status: CrawlStatus, earlier: numbe
     case 'unreadable':
       return `The file can’t be read${more}`;
     case 'live':
-      return status === 'analyzing' ? 'Working out the results' : status === 'paused' ? 'Paused' : 'Checking now';
+      return status === 'analyzing'
+        ? 'Working out the results'
+        : status === 'paused'
+          ? 'Paused'
+          : status === 'rechecking'
+            ? 'Rechecking some pages'
+            : 'Checking now';
     default:
       break;
   }
@@ -123,6 +136,40 @@ export function rowMeta(item: CrawlListItem, status: CrawlStatus, earlier: numbe
   if (stoppedEarly(status)) return `Stopped early · ${pages} read${more}`;
   if (item.score?.partial) return `Stopped at its limit · ${pages} read${more}`;
   return `${pages}${more}`;
+}
+
+/** What a site's row says changed since its last check: beside the score, and under what to fix. */
+export interface RowChanges {
+  /** "▲14 since 3 Nov", "Same as 3 Nov", with "so far" for a check stopped early; null when there's none to say. */
+  score: string | null;
+  /** "3 fixed · 1 new since 3 Nov": problems, the hidden ones left out; null when nothing moved or it isn't known. */
+  fixes: string | null;
+}
+
+/**
+ * The fix loop on Home (docs/v2-fix-loop.md, "Home, Your sites"): what changed since the site's last check, from the
+ * item's cached changes. Nothing for a first check, for a comparison by other rules until the Summary has the last
+ * check worked out again, or for counts only without a score change. `severityOf` is the catalog's: null while it's
+ * read, which leaves the problems' line out.
+ */
+export function rowChanges(
+  item: CrawlListItem,
+  status: CrawlStatus,
+  severityOf: SeverityOf | null,
+  hidden: ReadonlySet<string>,
+): RowChanges {
+  const none = { score: null, fixes: null };
+  const { previous, changes } = item;
+  if (!previous || !changes || previous.needsAnalysis) return none;
+  if (previous.comparable === 'countsOnly' && changes.score === null) return none;
+  const partial = changes.partial || stoppedEarly(status);
+  const score = homeScoreLine(changes.score, previous.startedAt, partial);
+  if (!severityOf) return { score, fixes: null };
+  const line = homeChangeLine(
+    changeCounts(countedItemChanges(changes, severityOf, hidden, 'simple')),
+    previous.startedAt,
+  );
+  return { score, fixes: line && partial ? `${line} so far` : line };
 }
 
 /** Problems by severity, as Simple counts them: the checks with issues that are Serious or Worth fixing. */

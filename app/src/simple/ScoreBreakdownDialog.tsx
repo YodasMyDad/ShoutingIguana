@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useRouter, useRouterState, useSearch } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
-import { analysisQuery, checksQuery } from '../api/queries';
+import { useState, type ReactNode } from 'react';
+import { comparisonOf, type ScoreChange } from '../api/fixLoop';
+import { analysisQuery, changesQuery, checksQuery, crawlQuery } from '../api/queries';
 import type { Analysis, Checks, Score, ScoreLine, Severity } from '../api/types';
 import { isProblem } from '../api/errors';
 import { ErrorState } from '../feedback/ErrorState';
+import { changeDate, pointsThenWords } from '../changes/changeWords';
 import { formatCount } from '../lib/format';
+import { Fold } from '../ui/Fold';
+import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { SeverityMark } from '../ui/SeverityMark';
@@ -13,6 +17,7 @@ import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount } from '../ui/severity';
 import { coverageSentences, lineShareWords, plainTitle } from './plainWords';
 import { ScoreRing } from '../ui/ScoreRing';
+import { Check as Tick } from 'lucide-react';
 import './scoreHistory';
 
 const OVERVIEW = '/crawls/$crawl/overview';
@@ -61,6 +66,7 @@ export function ScoreBreakdownDialog({ crawlId, open, onOpenChange, onCloseAutoF
   const checks = useQuery({ ...checksQuery(), enabled: open });
   const analysis = useQuery({ ...analysisQuery(crawlId), enabled: open });
   const score = analysis.data?.score ?? null;
+  const since = useScoreSince(crawlId, open);
   return (
     <Dialog
       open={open}
@@ -78,7 +84,7 @@ export function ScoreBreakdownDialog({ crawlId, open, onOpenChange, onCloseAutoF
       }
     >
       {score && checks.data && analysis.data ? (
-        <Breakdown crawlId={crawlId} score={score} checks={checks.data} analysis={analysis.data} />
+        <Breakdown crawlId={crawlId} score={score} checks={checks.data} analysis={analysis.data} since={since} />
       ) : analysis.data && !score ? (
         <p className="text-14 text-text-secondary">
           There’s no score for this site check: {noScoreWords(analysis.data)}
@@ -101,6 +107,21 @@ export function ScoreBreakdownDialog({ crawlId, open, onOpenChange, onCloseAutoF
       )}
     </Dialog>
   );
+}
+
+/**
+ * The fix loop: the score then and now, line by line, from the comparison with the site's last check, for each line's
+ * points then and the lines fixed since. Null for a first check, while it comes, and when the two can't be compared
+ * like for like (other rules, or scored another way).
+ */
+function useScoreSince(crawlId: string, open: boolean): { change: ScoreChange; startedAt: string | null } | null {
+  const item = useQuery({ ...crawlQuery(crawlId), enabled: open }).data;
+  const changes = useQuery({ ...changesQuery(crawlId), enabled: open && Boolean(item?.previous) }).data;
+  const comparison = comparisonOf(changes);
+  if (!comparison || comparison.previousNeedsAnalysis.length > 0) return null;
+  const { score } = comparison;
+  if (score?.change == null) return null;
+  return { change: score, startedAt: comparison.with.startedAt };
 }
 
 function noScoreWords(analysis: Analysis): string {
@@ -126,13 +147,19 @@ function Breakdown({
   score,
   checks,
   analysis,
+  since,
 }: {
   crawlId: string;
   score: Score;
   checks: Checks;
   analysis: Analysis;
+  since: { change: ScoreChange; startedAt: string | null } | null;
 }) {
   const costing = score.lines.filter((line) => line.points > 0);
+  const pointsThen = new Map(since?.change.lines.map((line) => [line.checkId, line.then]) ?? []);
+  const fixedSince = (since?.change.lines ?? [])
+    .filter((line) => line.then > 0 && line.now === 0)
+    .sort((a, b) => b.then - a.then);
   const notices = score.lines.filter((line) => line.severity === 'notice');
   const free = score.lines.filter((line) => line.severity !== 'notice' && line.points === 0);
   const titleOf = (line: ScoreLine) => {
@@ -171,7 +198,10 @@ function Breakdown({
                 </Link>
               </th>
               <td>{lineShareWords(line)}</td>
-              <td className="si-score-table__num">−{formatCount(line.points)}</td>
+              <td className="si-score-table__num">
+                −{formatCount(line.points)}
+                {since ? <PointsThen then={pointsThen.get(line.checkId) ?? 0} now={line.points} /> : null}
+              </td>
             </tr>
           ))}
           {costing.length === 0 ? (
@@ -192,6 +222,17 @@ function Breakdown({
           </tr>
         </tfoot>
       </table>
+      {since && fixedSince.length > 0 ? (
+        <FixedSince
+          crawlId={crawlId}
+          startedAt={since.startedAt}
+          lines={fixedSince}
+          titleOf={(checkId) => {
+            const check = checks.checks.find((candidate) => candidate.id === checkId);
+            return check ? plainTitle(check) : checkId;
+          }}
+        />
+      ) : null}
       {score.heldBySerious ? (
         <p className="text-14 text-text-secondary">
           Held at {score.value} while a serious problem stands ({score.beforeCeiling} otherwise).
@@ -211,6 +252,49 @@ function Breakdown({
       </section>
 
       {score.version === 1 ? <PointsTable /> : null}
+    </div>
+  );
+}
+
+/** A line's points then, after its points now: " · was −7", " · none then". Nothing where they're the same. */
+function PointsThen({ then, now }: { then: number; now: number }) {
+  const words = pointsThenWords(then, now);
+  return words ? <span className="text-text-muted"> · {words}</span> : null;
+}
+
+/** The lines that took points then and none now: folded under the table, each with a tick and its points then. */
+function FixedSince({
+  crawlId,
+  startedAt,
+  lines,
+  titleOf,
+}: {
+  crawlId: string;
+  startedAt: string | null;
+  lines: readonly { checkId: string; then: number }[];
+  titleOf: (checkId: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const title = `Fixed since ${changeDate(startedAt) || 'your last check'}`;
+  return (
+    <div className="rounded-md border border-border-subtle">
+      <Fold title={`${title} (${formatCount(lines.length)})`} open={open} onOpenChange={setOpen} level={3}>
+        <ul aria-label={title} className="flex flex-col gap-1.5 px-4 pb-3 text-14">
+          {lines.map((line) => (
+            <li key={line.checkId} className="flex items-center gap-2">
+              <Icon icon={Tick} size="sm" className="text-text-secondary" />
+              <Link
+                to="/crawls/$crawl/issues/{-$check}"
+                params={{ crawl: crawlId, check: line.checkId }}
+                className="si-link si-link--inline"
+              >
+                {titleOf(line.checkId)}
+              </Link>
+              <span className="text-text-muted">· −{formatCount(line.then)} then</span>
+            </li>
+          ))}
+        </ul>
+      </Fold>
     </div>
   );
 }

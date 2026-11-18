@@ -4,13 +4,14 @@
 import type { CrawlStatus } from '../api/types';
 import type { Mode } from '../mode/mode';
 
-type Doing = 'crawling' | 'paused' | 'stopping' | 'analysing';
+type Doing = 'crawling' | 'paused' | 'stopping' | 'analysing' | 'rechecking';
 
 /** A crawl whose status hasn't arrived yet counts as crawling: it's live because it was started. */
 function doing(status: CrawlStatus | null | undefined): Doing {
   if (status === 'paused') return 'paused';
   if (status === 'stopping') return 'stopping';
   if (status === 'analyzing') return 'analysing';
+  if (status === 'rechecking') return 'rechecking';
   return 'crawling';
 }
 
@@ -19,6 +20,8 @@ const SIMPLE: Record<Doing, string> = {
   paused: 'Paused',
   stopping: 'Stopping',
   analysing: 'Working out the results',
+  // A recheck checks some of the site's pages again: its row says "Rechecking" itself (the fix loop).
+  rechecking: 'Checking now',
 };
 
 /**
@@ -32,7 +35,7 @@ export function runningTitle(statuses: readonly (CrawlStatus | null | undefined)
     const [only] = counts.keys();
     return counts.size === 1 && only ? SIMPLE[only] : SIMPLE.crawling;
   }
-  return (['crawling', 'paused', 'stopping', 'analysing'] as const)
+  return (['crawling', 'paused', 'stopping', 'analysing', 'rechecking'] as const)
     .filter((state) => counts.has(state))
     .map((state) => `${counts.get(state)} ${state}`)
     .join(', ');

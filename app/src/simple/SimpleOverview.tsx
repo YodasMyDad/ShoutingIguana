@@ -1,6 +1,7 @@
 import { useParams } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import type { CrawlStatus } from '../api/types';
+import { isRecheckRunning, useRecheckRun } from '../crawl/recheck';
 import { useCrawlState } from '../crawl/useCrawlState';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { useCommands } from '../keyboard/registry';
@@ -21,7 +22,11 @@ export const HAND_OVER_GRACE_MS = 1_500;
  */
 export function SimpleOverview() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
-  const { item, status, crawling, analysing } = useCrawlState(crawlId);
+  const { item, status, crawling, analysing: working } = useCrawlState(crawlId);
+  // The fix loop: a recheck's analyses (before and after it) are the recheck's, not a check of the site: the Summary
+  // stays, with the top bar and the sidebar saying what runs, and its results change in place when it's done.
+  const rechecking = isRecheckRunning(useRecheckRun(crawlId));
+  const analysing = working && !rechecking;
   const handingOver = useHandOver(crawlId, status, crawling, analysing);
   const checking = crawling || analysing || handingOver;
   // A first analysis cancelled leaves no results: the library's item says whether there were any before it.

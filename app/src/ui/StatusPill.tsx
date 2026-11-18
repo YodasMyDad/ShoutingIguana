@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 import { LiveDot } from './LiveBadge';
 
 /** Busy states: the accent, with the live dot. */
-const LIVE: ReadonlySet<CrawlStatus> = new Set(['running', 'analyzing', 'stopping']);
+const LIVE: ReadonlySet<CrawlStatus> = new Set(['running', 'analyzing', 'stopping', 'rechecking']);
 
 /** The quiet states' icons: each a shape of its own, so the word isn't the only difference. */
 const ICONS: Partial<Record<CrawlStatus, LucideIcon>> = {
