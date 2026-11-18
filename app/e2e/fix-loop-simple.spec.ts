@@ -161,7 +161,15 @@ test('a second check says what changed since the first, on the Summary, What to 
   if (fixed.length > 0) {
     const toggle = main(page).getByRole('button', { name: /^Fixed since your last check on / });
     await expect(toggle).toHaveAttribute('aria-expanded', 'true', { timeout: 15_000 });
-    await expect(toggle).toContainText(`(${fixed.length})`);
+    // Counted as Simple's headline counts: problems, then the things worth a look.
+    const looks = fixed.length - fixedProblems;
+    const words = [
+      fixedProblems > 0 ? `${fixedProblems} ${fixedProblems === 1 ? 'problem' : 'problems'}` : '',
+      looks > 0 ? `${looks}${fixedProblems > 0 ? ' more' : ''} worth a look` : '',
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    await expect(toggle).toContainText(`(${words})`);
     const list = main(page).getByRole('list', { name: /^Fixed since your last check on / });
     await expect(list.getByRole('link')).toHaveCount(fixed.length);
     await expectNoViolations(page);

@@ -6,7 +6,7 @@ import { Link } from '@tanstack/react-router';
 import { ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 import { useId, type Ref } from 'react';
-import { formatCount } from '../lib/format';
+import { fixedCountWords } from '../changes/changeWords';
 import { Card } from '../ui/Card';
 import { Icon } from '../ui/Icon';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
@@ -33,6 +33,7 @@ export function FixedSince({
 }) {
   const listId = useId();
   if (entries.length === 0) return null;
+  const problems = entries.filter((entry) => entry.severity !== 'notice').length;
   return (
     <section aria-labelledby={FIXED_SECTION} className="mb-6">
       <h2 id={FIXED_SECTION} ref={headingRef} tabIndex={-1} className="si-simple-h2 scroll-mt-4">
@@ -46,7 +47,7 @@ export function FixedSince({
           <span className={clsx('inline-flex text-text-muted transition-transform', open && 'rotate-90')}>
             <Icon icon={ChevronRight} size="md" />
           </span>
-          {title} <span className="si-simple-h2__count">({formatCount(entries.length)})</span>
+          {title} <span className="si-simple-h2__count">({fixedCountWords(problems, entries.length - problems)})</span>
         </button>
       </h2>
       {open ? (

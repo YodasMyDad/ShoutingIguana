@@ -11,6 +11,7 @@ import {
   copyChangeWords,
   cautionLine,
   differenceWords,
+  fixedCountWords,
   fixedGroupTitle,
   fixedThenWords,
   groupChangeWords,
@@ -173,6 +174,11 @@ describe('a check’s change', () => {
 
   it('heads What to fix’s Fixed group, each check with its count then', () => {
     expect(fixedGroupTitle(SINCE, 3)).toBe('Fixed since your last check on 3 Nov (3)');
+    // Counted in the unit of Simple's headline: problems, then the things worth a look ("6 problems to fix and 22 more
+    // worth a look").
+    expect(fixedCountWords(3, 1)).toBe('3 problems and 1 more worth a look');
+    expect(fixedCountWords(1, 0)).toBe('1 problem');
+    expect(fixedCountWords(0, 2)).toBe('2 worth a look');
     expect(fixedThenWords({ subject: 'url' }, 9, SINCE)).toBe('9 addresses on 3 Nov');
     expect(fixedThenWords({ subject: 'page' }, 14, SINCE)).toBe('14 pages on 3 Nov');
     expect(fixedThenWords({ subject: 'page' }, 1, SINCE)).toBe('1 page on 3 Nov');
