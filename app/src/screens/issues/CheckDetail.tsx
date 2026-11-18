@@ -100,7 +100,9 @@ export function CheckDetail({
   // The share is of the analysis's own totals: the pages it ran on, or the URLs crawled when it ran (`checkShare`); a
   // fault of the whole site is the whole site, as Simple says, never "1 page, <0.1%" (`checkReach`).
   const share = found ? checkReach(check, count, analysis) : null;
-  const groups = check.grouping !== 'none';
+  // A grouped check lists its groups, unless its groups come back empty though it flagged URLs (a file its reader can't
+  // group): then its URLs list flat, so a count is never over an empty list (round 4).
+  const groups = check.grouping !== 'none' && !(groupCount === 0 && (count ?? 0) > 0);
   // A check that doesn't group, on nearly every page analysed: probably the site's template (the engine's judgement).
   const likelyTemplate =
     !groups && analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;

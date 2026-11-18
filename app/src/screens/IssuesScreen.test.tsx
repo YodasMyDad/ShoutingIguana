@@ -323,6 +323,19 @@ describe('the Issues screen', () => {
     );
   });
 
+  it('never shows a count over an empty list: a grouped check whose groups come back empty lists its URLs flat', async () => {
+    // The 404s' groups read finds none though the check flagged 2 (a crawl file the reader can't group, say): the URLs
+    // still list, flat, each with its detail, and no "0 groups" is said.
+    sidecar({ groups: { ...ISSUE_GROUPS, 'internal-client-error': [] } });
+    await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    const grid = await screen.findByRole('grid', { name: /Internal URL returns 4xx: affected URLs/ });
+    expect(await within(grid).findByText('https://example.com/old/', { exact: false })).toBeVisible();
+    expect(within(grid).getByText('https://example.com/gone/', { exact: false })).toBeVisible();
+    expect(screen.queryByText(/in 0 groups/)).toBeNull();
+    expect(screen.queryByText('Groups', { selector: '.si-stat__label' })).toBeNull();
+  });
+
   it('puts what the check flags ahead of why it matters and how to fix it, a button away', async () => {
     sidecar();
     await open(`${ISSUES}/title-too-long`);

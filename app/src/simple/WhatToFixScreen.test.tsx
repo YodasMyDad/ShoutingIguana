@@ -310,6 +310,40 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     );
   });
 
+  it('never shows a count over an empty list: with no groups to show, the addresses list on their own', async () => {
+    // The 404s' groups read finds none though the check flagged 9: the addresses still list, each found where it is.
+    await open(
+      `${FIX}/internal-client-error`,
+      GARDEN_ANALYSIS,
+      [],
+      [
+        ['POST', /\/issues\/internal-client-error\/groups$/, () => json(groupPage('internal-client-error', [], 9))],
+        [
+          'POST',
+          /\/issues\/internal-client-error\/rows$/,
+          () =>
+            json(
+              rowsPage(
+                [
+                  { ...page(35, '/edale-4-seater-sofa-set/', null), detail: '404 Not Found' },
+                  { ...page(186, '/outdoor-pe-rattan-dining-set-with-fire-pit-table/', null), detail: '404 Not Found' },
+                ],
+                9,
+              ),
+            ),
+        ],
+      ],
+    );
+    await problem("Pages or files that can't be found");
+    const where = main().getByRole('region', { name: 'Where it is' });
+    // Each address listed (a page without a title is named by its address, which may show twice in its line).
+    expect((await within(where).findAllByText('/edale-4-seater-sofa-set/', { exact: false }))[0]).toBeVisible();
+    expect(
+      within(where).getAllByText('/outdoor-pe-rattan-dining-set-with-fire-pit-table/', { exact: false })[0],
+    ).toBeVisible();
+    expect(within(where).queryByText(/0 causes/)).toBeNull();
+  });
+
   it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {
     await open(`${FIX}/empty-anchor-text`);
     await problem('Links with nothing to read');

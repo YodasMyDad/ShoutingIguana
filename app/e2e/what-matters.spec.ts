@@ -131,6 +131,46 @@ test.describe('Advanced', () => {
   });
 });
 
+test.describe('Never a count over an empty list (round 4)', () => {
+  test('Advanced: the 404s list every URL, in groups adding up to the count, each found where it is linked', async ({
+    page,
+  }) => {
+    const { crawl, found } = await facts();
+    const count = found.find((entry) => entry.checkId === 'internal-client-error')?.count ?? 0;
+    test.skip(count === 0, 'The seeded crawl has no 404s');
+    const groups = await read<{ total: number; groups: { pages: number }[] }>(
+      `/api/crawls/${crawl.id}/issues/internal-client-error/groups`,
+      { limit: 1000 },
+    );
+    expect(groups.groups.reduce((sum, group) => sum + group.pages, 0)).toBe(count);
+    await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
+    const grid = page.getByRole('treegrid', { name: /Internal URL returns 4xx: affected URLs/ });
+    await expect(grid).toBeVisible();
+    await expect(page.getByText(/in 0 groups/)).toHaveCount(0);
+    await grid.focus();
+    await page.keyboard.press('ArrowRight');
+    // The group's URLs, each a row with its address (the group's own link to all of them in URLs is a row of its own).
+    const urls = grid.locator('[role="row"][aria-level="2"]').filter({ has: page.locator('.si-url') });
+    await expect(urls.first()).toBeVisible();
+    expect(await urls.count()).toBe(Math.min(count, groups.groups[0]!.pages));
+    await expect(urls.filter({ hasText: /Found on/ }).first()).toBeVisible();
+  });
+});
+
+test.describe('Never a count over an empty list, in Simple (round 4)', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('Simple: the 404s say where they are, each address linked from a page', async ({ page }) => {
+    const { crawl, found } = await facts();
+    const count = found.find((entry) => entry.checkId === 'internal-client-error')?.count ?? 0;
+    test.skip(count === 0, 'The seeded crawl has no 404s');
+    await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
+    const where = page.getByRole('region', { name: 'Where it is' });
+    await expect(where).toContainText(`on ${number(count)} ${count === 1 ? 'address' : 'addresses'}`);
+    await expect(where.getByText(/Linked from/).first()).toBeVisible();
+  });
+});
+
 test.describe('Simple', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
