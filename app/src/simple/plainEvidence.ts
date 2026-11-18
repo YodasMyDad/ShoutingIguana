@@ -9,7 +9,7 @@ import type { ShownAt } from '../crawl/evidence';
 import { reasonPhrase } from '../inspector/words';
 import { formatBytes, formatCount } from '../lib/format';
 import { sourcePages } from '../screens/issues/whereFound';
-import { plainFetchError, plainFileKind, plainSeconds } from './plainAnswers';
+import { plainCodeClause, plainFailureClause, plainFetchError, plainFileKind, plainSeconds } from './plainAnswers';
 import { plainDetailWords } from './plainDetails';
 
 /** An address as Simple names it: its path on the site's own origin, else in full. */
@@ -64,22 +64,30 @@ export function plainAlt(img: Pick<ImgFacts, 'alt' | 'hasAlt' | 'altLength'>, wi
   return `Alt text: ${quote(alt, 60)}${length}`;
 }
 
-/** How an address answered, as a clause: "works", "is missing (404 Not Found)", "didn’t answer". */
-export function plainStatus(statusCode: number | null | undefined, outcome?: UrlOutcome | null): string {
+/**
+ * How an address answered, as a clause: "works", "is missing (404 Not Found)", "didn’t answer", "couldn’t be reached".
+ * Where the crawl recorded why a request failed (`error`), it says that: "is on a site that couldn’t be found".
+ */
+export function plainStatus(
+  statusCode: number | null | undefined,
+  outcome?: UrlOutcome | null,
+  error?: string | null,
+): string {
   if (typeof statusCode === 'number') {
-    const code = `${statusCode}${reasonPhrase(statusCode) ? ` ${reasonPhrase(statusCode)}` : ''}`;
-    if (statusCode < 300) return 'works';
-    if (statusCode < 400) return `forwards (${code})`;
-    if (statusCode === 404 || statusCode === 410) return `is missing (${code})`;
-    if (statusCode < 500) return `can’t be opened (${code})`;
-    return `has a server error (${code})`;
+    return plainCodeClause(
+      statusCode,
+      `${statusCode}${reasonPhrase(statusCode) ? ` ${reasonPhrase(statusCode)}` : ''}`,
+    );
   }
+  const failed = outcome === 'timeout' || outcome === 'networkError' ? plainFailureClause(error) : null;
+  if (failed) return failed;
   switch (outcome) {
     case 'robotsDisallowed':
       return 'is kept out by the rules file';
     case 'timeout':
-    case 'networkError':
       return 'didn’t answer';
+    case 'networkError':
+      return 'couldn’t be reached';
     case 'blocked':
       return 'turned the check away';
     default:

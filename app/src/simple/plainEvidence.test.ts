@@ -96,6 +96,25 @@ describe('what a cause is, in plain words', () => {
     expect(plainStatus(null, 'timeout')).toBe('didn’t answer');
     expect(plainStatus(null, 'robotsDisallowed')).toBe('is kept out by the rules file');
   });
+
+  it('tells a connection that failed from one that timed out, and a site that couldn’t be found from both', () => {
+    expect(plainStatus(null, 'networkError')).toBe('couldn’t be reached');
+    expect(plainStatus(null, 'networkError', 'DNS lookup failed')).toBe('is on a site that couldn’t be found');
+    expect(
+      plainStatus(
+        null,
+        'networkError',
+        'Could not connect: No connection could be made because the target machine actively refused it.',
+      ),
+    ).toBe('refused the connection');
+    expect(plainStatus(null, 'networkError', 'TLS handshake failed: Cannot determine the frame size.')).toBe(
+      'couldn’t be opened securely',
+    );
+    expect(plainStatus(null, 'networkError', 'An error occurred while sending the request.')).toBe(
+      'couldn’t be reached',
+    );
+    expect(plainStatus(null, 'timeout', 'No response within 20 seconds')).toBe('didn’t answer');
+  });
 });
 
 describe('how a page has a cause, in plain words', () => {
