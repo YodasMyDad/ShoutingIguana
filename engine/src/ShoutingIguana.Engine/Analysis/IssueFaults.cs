@@ -120,6 +120,35 @@ internal static partial class IssueFaults
     /// </summary>
     public static string StructureFaults(string detail) => StructureLine().Replace(detail, string.Empty);
 
+    /// <summary>
+    /// A canonical loop as one fault, whichever of its pages it's on: each page's detail lists the loop from that page
+    /// ("A loop of 2: /b → /a → back to /b" on /b), and the fault lists it from the step that sorts first ("A loop of 2:
+    /// /a → /b → back to /a" on both), so the pages of one loop are one group. A detail that can't be read as a loop (cut
+    /// short) is its own fault.
+    /// </summary>
+    public static string CanonicalLoop(string detail)
+    {
+        if (CanonicalLoopLine().Match(detail) is not { Success: true } loop)
+        {
+            return detail;
+        }
+
+        var steps = loop.Groups["steps"].Value.Split(" → ");
+        var count = loop.Groups["count"].Value;
+        if (steps.Length < 2 || steps[0] != loop.Groups["back"].Value || int.TryParse(count, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var length) && length != steps.Length)
+        {
+            return detail;
+        }
+
+        var start = Enumerable.Range(0, steps.Length).MinBy(index => steps[index], StringComparer.Ordinal);
+        string[] rotated = [.. steps[start..], .. steps[..start]];
+        return $"A loop of {count}: {string.Join(" → ", rotated)} → back to {rotated[0]}";
+    }
+
+    /// <summary>A canonical loop's detail: "A loop of 3: /a → /b → /c → back to /a".</summary>
+    [GeneratedRegex(@"^A loop of (?<count>[0-9][0-9,]*): (?<steps>.+) → back to (?<back>.+)$", RegexOptions.CultureInvariant)]
+    private static partial Regex CanonicalLoopLine();
+
     /// <summary>A structure error's line: " (on line 2)", " (the second on line 1,204)".</summary>
     [GeneratedRegex(@" \((?:the second )?on line [0-9][0-9,]*\)", RegexOptions.CultureInvariant)]
     private static partial Regex StructureLine();

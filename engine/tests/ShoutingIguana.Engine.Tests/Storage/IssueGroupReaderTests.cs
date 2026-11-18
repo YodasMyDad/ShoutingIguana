@@ -20,6 +20,16 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     /// <summary>A check's rows in crawl order, asked for: without an order they come by importance (<see cref="EvidenceReadTests"/>).</summary>
     private static readonly IReadOnlyList<UrlSort> CRAWL_ORDER = [new UrlSort("id")];
 
+    /// <summary>The synthetic site's one canonical loop (canonical-loop-a and -b, each the other's canonical) is one group of both.</summary>
+    [Fact]
+    public void ACanonicalLoopIsOneGroup()
+    {
+        var page = IssueGroupReader.ReadGroups(crawl.Path, IssueCatalog.CANONICAL_LOOP.Id, 0, 100, IssueGroupSort.Pages)!;
+        var group = Assert.Single(page.Groups);
+        Assert.Equal(2, group.Pages);
+        Assert.Matches("^A loop of 2: /plants/canonical-loop-a → /plants/canonical-loop-b → back to /plants/canonical-loop-a$", group.Detail);
+    }
+
     [Fact]
     public void EveryCheckGroupsAsTheCatalogSays()
     {
@@ -85,14 +95,6 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                     var first = Assert.Single(targets);
                     Assert.True(first <= issue.Url && crawl.Reference.Targets[(check, first)].SequenceEqual([first]), $"{check} on URL {issue.Url} names {first}");
                 }
-                else if (check == "canonical-loop")
-                {
-                    // A loop is one group: each of its pages names the loop's first page (its lowest id), which names
-                    // itself, while showing the page its own canonical names.
-                    var first = Assert.Single(targets);
-                    Assert.True(first <= issue.Url && crawl.Reference.Targets[(check, first)].SequenceEqual([first]), $"{check} on URL {issue.Url} names {first}");
-                    Assert.NotNull(issue.Related);
-                }
                 else if (issue.Related is { } related)
                 {
                     Assert.Contains(related, targets);
@@ -111,10 +113,6 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                 }
             }
         }
-
-        // The synthetic site's one loop (canonical-loop-a and -b) is one group.
-        Assert.Equal(2, Flagged("canonical-loop").Count);
-        Assert.Single(Flagged("canonical-loop").Select(issue => crawl.Reference.Targets[("canonical-loop", issue.Url)].Single()).Distinct());
 
         // Every internal URL a page links to that answers with an error is named, as many as its detail counts, and nothing it
         // doesn't link to (a redirect to an error, a loop and a timeout are broken too).

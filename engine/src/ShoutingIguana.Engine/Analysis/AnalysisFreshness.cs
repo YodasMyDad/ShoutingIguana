@@ -69,8 +69,8 @@ public static class AnalysisFreshness
     /// any in a tag that isn't a link or file, and doesn't flag an HTTPS page the home page's HSTS covers; and
     /// <c>uncrawlable-links</c>' detail says where on the page each example is. 20 reads a security header sent twice, or
     /// with its repeats joined by commas, as browsers do (<c>X-Content-Type-Options: nosniff, nosniff</c> is nosniff, and
-    /// frame-ancestors in any Content-Security-Policy line stands in for X-Frame-Options), and names the first page of a
-    /// canonical loop as each of its pages' <c>canonical-loop</c> target, so a loop is one group.
+    /// frame-ancestors in any Content-Security-Policy line stands in for X-Frame-Options), and groups
+    /// <c>canonical-loop</c> by the loop (<see cref="IssueFaults.CanonicalLoop"/>), so the pages of one loop are one group.
     /// </summary>
     public const int VERSION = 20;
 

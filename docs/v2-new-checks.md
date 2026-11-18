@@ -282,13 +282,15 @@ disaster when a template points every canonical at a staging host · High · P/R
 
 #### 9. `canonical-loop`: Canonical loop
 
-Canonicals · **Warning**: Google has to choose a page itself, and may choose neither one the owner meant · Medium · P/RU/T
+Canonicals · **Warning**: Google has to choose a page itself, and may choose neither one the owner meant · Medium · P/PD/T
 
 - **Simple:** "Pages that point Google at each other in a circle"
 - **Rule:** follow each analysed page's first honoured canonical to another URL, page to page and through redirects, at
   most 10 steps. If it comes back to a page already passed, every page on the cycle is flagged, related to the page its
   canonical names. **Exclusive with `canonical-to-non-indexable`** for those pages (which would say "the canonical URL is
-  canonicalised"); `canonicalised-page` still flags them. Detail: `A loop of 2: /a/ → /b/ → back to /a/`.
+  canonicalised"); `canonicalised-page` still flags them. Detail: `A loop of 2: /a/ → /b/ → back to /a/`. One loop is
+  one group (the 3b polish, analysis 20): grouped by the loop listed from the step that sorts first, not by the page each
+  canonical names, which split a 2-page loop into two groups.
 - **Standard:** none names loops. The old app's rule (`Canonical/CanonicalTask.cs:417-481`, which depended on order;
   this doesn't).
 - **Data:** a map of page id to canonical target id, built in `Observe` (8 bytes a canonicalised page).

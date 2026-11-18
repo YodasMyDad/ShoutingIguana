@@ -262,8 +262,9 @@ public sealed class IndexingCheckTests
     }
 
     /// <summary>
-    /// One loop is one fault, so its pages share one group: each names the loop's first page (its lowest id) as the URL its
-    /// issue is about, while still showing the page its own canonical names as the other URL involved.
+    /// One loop is one fault, so its pages share one group: the fault is the loop as its detail lists it, from the step
+    /// that comes first, so each page's detail (which starts from that page) reads as the same loop. Each page still names
+    /// the page its own canonical names.
     /// </summary>
     [Fact]
     public void ThePagesOfOneCanonicalLoopAreOneGroup()
@@ -278,11 +279,15 @@ public sealed class IndexingCheckTests
         var urls = site.Table(canonicals: [(a.UrlId, b.UrlId), (b.UrlId, c.UrlId), (c.UrlId, a.UrlId), (x.UrlId, y.UrlId), (y.UrlId, x.UrlId)]);
         var rules = new CanonicalRules(urls, site.UrlOf);
         IssueHit Loop(AnalyzedPage page) => rules.Check(page).Single(hit => hit.Issue == IssueCatalog.CANONICAL_LOOP);
+        string Fault(AnalyzedPage page) => IssueCatalog.CANONICAL_LOOP.FaultOf!(Loop(page).Detail!);
 
+        Assert.Equal(IssueGrouping.PageDetail, IssueCatalog.CANONICAL_LOOP.Grouping);
+        Assert.Equal("A loop of 3: /c → /a → /b → back to /c", Loop(c).Detail);
+        Assert.Equal(["A loop of 3: /a → /b → /c → back to /a"], new[] { a, b, c }.Select(Fault).Distinct());
+        Assert.Equal(["A loop of 2: /x → /y → back to /x"], new[] { x, y }.Select(Fault).Distinct());
         Assert.Equal([b.UrlId, c.UrlId, a.UrlId], new[] { a, b, c }.Select(page => Loop(page).RelatedUrlId));
-        Assert.All(new[] { a, b, c }, page => Assert.Equal([a.UrlId], Loop(page).AllTargets));
-        Assert.Equal([y.UrlId, x.UrlId], new[] { x, y }.Select(page => Loop(page).RelatedUrlId));
-        Assert.All(new[] { x, y }, page => Assert.Equal([x.UrlId], Loop(page).AllTargets));
+        // A detail cut short, which can't be read as a loop, is its own fault.
+        Assert.Equal("A loop of 9: /p → /q → …", IssueCatalog.CANONICAL_LOOP.FaultOf!("A loop of 9: /p → /q → …"));
     }
 
     [Fact]
