@@ -95,14 +95,26 @@ test.describe('Advanced', () => {
     const causes = moves
       .filter((count) => !sameJob.has(count.checkId))
       .reduce((sum, count) => sum + (count.causes ?? 0), 0);
-    const notices = found.length - moves.length;
+    // The notices' things, in the same unit, a notice another notice's fix clears entirely being its job.
+    const noticeChecks = found.filter((count) => byId.get(count.checkId)?.severity === 'notice');
+    const noticeIds = new Set(noticeChecks.map((count) => count.checkId));
+    const noticeJob = new Set(
+      related
+        .filter(({ fixer, cleared }) => cleared.all && noticeIds.has(fixer.checkId) && noticeIds.has(cleared.checkId))
+        .map(({ cleared }) => cleared.checkId),
+    );
+    const notices = noticeChecks
+      .filter((count) => !noticeJob.has(count.checkId))
+      .reduce((sum, count) => sum + (count.causes ?? 0), 0);
     expect(found.every((count) => count.causes !== null && count.causes <= count.count)).toBe(true);
 
     await page.goto(`/crawls/${crawl.id}/overview`);
     const lead =
       causes === 0 ? 'Nothing to fix' : causes === 1 ? '1 thing to fix' : `About ${number(causes)} things to fix`;
     const noticesWords =
-      notices === 0 ? '' : ` · ${number(notices)} ${notices === 1 ? 'notice' : 'notices'} worth a look`;
+      notices === 0
+        ? ''
+        : ` · ${notices === 1 ? '1' : `about ${number(notices)}`} ${causes > 0 ? 'more' : notices === 1 ? 'thing' : 'things'} worth a look`;
     await expect(page.getByRole('main').locator('.si-page-header__subtitle')).toHaveText(
       new RegExp(`^${lead}[^·]*${noticesWords} · [0-9]+ checks found`),
     );
@@ -128,6 +140,46 @@ test.describe('Advanced', () => {
         await why.elementHandle(),
       ),
     ).toBe(true);
+  });
+});
+
+test.describe('Never a count over an empty list (round 4)', () => {
+  test('Advanced: the 404s list every URL, in groups adding up to the count, each found where it is linked', async ({
+    page,
+  }) => {
+    const { crawl, found } = await facts();
+    const count = found.find((entry) => entry.checkId === 'internal-client-error')?.count ?? 0;
+    test.skip(count === 0, 'The seeded crawl has no 404s');
+    const groups = await read<{ total: number; groups: { pages: number }[] }>(
+      `/api/crawls/${crawl.id}/issues/internal-client-error/groups`,
+      { limit: 1000 },
+    );
+    expect(groups.groups.reduce((sum, group) => sum + group.pages, 0)).toBe(count);
+    await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
+    const grid = page.getByRole('treegrid', { name: /Internal URL returns 4xx: affected URLs/ });
+    await expect(grid).toBeVisible();
+    await expect(page.getByText(/in 0 groups/)).toHaveCount(0);
+    await grid.focus();
+    await page.keyboard.press('ArrowRight');
+    // The group's URLs, each a row with its address (the group's own link to all of them in URLs is a row of its own).
+    const urls = grid.locator('[role="row"][aria-level="2"]').filter({ has: page.locator('.si-url') });
+    await expect(urls.first()).toBeVisible();
+    expect(await urls.count()).toBe(Math.min(count, groups.groups[0]!.pages));
+    await expect(urls.filter({ hasText: /Found on/ }).first()).toBeVisible();
+  });
+});
+
+test.describe('Never a count over an empty list, in Simple (round 4)', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('Simple: the 404s say where they are, each address linked from a page', async ({ page }) => {
+    const { crawl, found } = await facts();
+    const count = found.find((entry) => entry.checkId === 'internal-client-error')?.count ?? 0;
+    test.skip(count === 0, 'The seeded crawl has no 404s');
+    await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
+    const where = page.getByRole('region', { name: 'Where it is' });
+    await expect(where).toContainText(`on ${number(count)} ${count === 1 ? 'address' : 'addresses'}`);
+    await expect(where.getByText(/Linked from/).first()).toBeVisible();
   });
 });
 

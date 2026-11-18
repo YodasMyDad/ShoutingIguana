@@ -154,12 +154,15 @@ export function WhereItIs({
 }) {
   const router = useRouter();
   const [limit, setLimit] = useState(WHERE_STEP);
-  const grouped = check.grouping !== 'none';
+  const groupedCheck = check.grouping !== 'none';
   const groups = useQuery({
     ...groupsQuery(crawlId, check.id, limit),
-    enabled: grouped,
+    enabled: groupedCheck,
     placeholderData: keepPreviousData,
   });
+  // Its groups, unless they come back empty though the check flagged addresses (a file its reader can't group): then the
+  // addresses list on their own, so a count is never over an empty list (round 4).
+  const grouped = groupedCheck && !(groups.data?.groupCount === 0 && total > 0);
   const rows = useQuery({
     ...rowsQuery(crawlId, check, null, limit),
     enabled: !grouped,
