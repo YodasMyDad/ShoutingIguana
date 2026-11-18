@@ -130,23 +130,54 @@ export function problemsMovedWords(counts: Pick<ChangeCounts, 'fixed' | 'new'>):
   return null;
 }
 
+/** The Summary's change line in parts, so a screen can make the counts links: each part's words, or null. */
+export interface SummaryChangeParts {
+  /** "Since your last check on 3 Nov" (the colon follows). */
+  lead: string;
+  /** "score 71 → 85"; null without a score change (scored another way). */
+  score: string | null;
+  /** "3 problems fixed", "1 problem fixed"; null for none. */
+  fixed: string | null;
+  /** "1 new" after the fixed ones, "2 new problems" alone; null for none. */
+  added: string | null;
+  /** "no problems fixed or new" when neither moved; null otherwise. */
+  none: string | null;
+  /** " so far" for a comparison either side of which didn't read all it set out to; empty otherwise. */
+  soFar: string;
+}
+
+export function summaryChangeParts(args: {
+  since: string | null;
+  score: { then: number; now: number } | null;
+  counts: Pick<ChangeCounts, 'fixed' | 'new'>;
+  partial: boolean;
+}): SummaryChangeParts {
+  const { since, score, counts, partial } = args;
+  const { fixed, new: added } = counts;
+  return {
+    lead: `Since your last check ${onWords(since)}`,
+    score: score ? `score ${thenNow(score.then, score.now)}` : null,
+    fixed: fixed > 0 ? `${formatCountOf(fixed, 'problem')} fixed` : null,
+    added:
+      added > 0
+        ? fixed > 0
+          ? `${formatCount(added)} new`
+          : `${formatCount(added)} new ${added === 1 ? 'problem' : 'problems'}`
+        : null,
+    none: fixed === 0 && added === 0 ? 'no problems fixed or new' : null,
+    soFar: partial ? ' so far' : '',
+  };
+}
+
 /**
  * The Summary's change line: "Since your last check on 3 Nov: score 71 → 85, 3 problems fixed, 1 new." Without a score
  * change (scored another way), the problems alone; with nothing moved, "no problems fixed or new"; "so far" for a
  * comparison either side of which didn't read all it set out to.
  */
-export function summaryChangeLine(args: {
-  since: string | null;
-  score: { then: number; now: number } | null;
-  counts: Pick<ChangeCounts, 'fixed' | 'new'>;
-  partial: boolean;
-}): string {
-  const { since, score, counts, partial } = args;
-  const lead = `Since your last check ${onWords(since)}`;
-  const scorePart = score ? `score ${thenNow(score.then, score.now)}` : null;
-  const moved = problemsMovedWords(counts) ?? 'no problems fixed or new';
-  const body = [scorePart, moved].filter(Boolean).join(', ');
-  return `${lead}: ${body}${partial ? ' so far' : ''}.`;
+export function summaryChangeLine(args: Parameters<typeof summaryChangeParts>[0]): string {
+  const parts = summaryChangeParts(args);
+  const body = [parts.score, parts.fixed, parts.added, parts.none].filter(Boolean).join(', ');
+  return `${parts.lead}: ${body}${parts.soFar}.`;
 }
 
 /** The tooltip and the report's note when the previous crawl was analysed again first (like for like). */

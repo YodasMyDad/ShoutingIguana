@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
 import type { Score, Severity } from '../api/types';
+import type { ReactNode } from 'react';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -36,7 +37,18 @@ const FIX = '/crawls/$crawl/issues/{-$check}';
  * The score: its ring, its word, the sentence and what it covers, with "How the score is worked out"; beside it, five
  * counts, each opening its part of What to fix.
  */
-export function ScoreHero({ crawlId, score, results }: { crawlId: string; score: Score; results: PlainResults }) {
+export function ScoreHero({
+  crawlId,
+  score,
+  results,
+  change,
+}: {
+  crawlId: string;
+  score: Score;
+  results: PlainResults;
+  /** The fix loop: what changed since the site's last check, under the sentence (./SummaryChange). */
+  change?: ReactNode;
+}) {
   const band = bandWord(score.band, score.partial);
   const sentence = summarySentence({
     band: score.band,
@@ -69,6 +81,7 @@ export function ScoreHero({ crawlId, score, results }: { crawlId: string; score:
             {band}
           </h2>
           <p className="mt-2 max-w-(--measure-explain) text-18 text-text">{sentence}</p>
+          {change}
           <p className="mt-3 text-14 leading-body text-text-secondary">{coverageSentences(score.covers).join(' ')}</p>
           <p className="mt-2 text-14">
             <Link

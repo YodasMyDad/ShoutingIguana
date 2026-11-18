@@ -37,6 +37,7 @@ import { plainResults } from './results';
 import { ScoreBreakdownFromRoute } from './ScoreBreakdownDialog';
 import { ScoreRing } from '../ui/ScoreRing';
 import { scoredPages } from './home/sites';
+import { SummaryChange } from './SummaryChange';
 import { FixFirstCard, ScoreHero, SummaryCards } from './SummaryParts';
 import { useHiddenChecks } from '../settings/hiddenChecks';
 
@@ -182,7 +183,12 @@ function Summary({
           failure={failure}
         />
         {score ? (
-          <ScoreHero crawlId={crawlId} score={score} results={results} />
+          <ScoreHero
+            crawlId={crawlId}
+            score={score}
+            results={results}
+            change={<SummaryChange crawlId={crawlId} item={item} status={status} hidden={hidden} />}
+          />
         ) : (
           <NoScoreYet
             canAnalyse={controls.canAnalyse}

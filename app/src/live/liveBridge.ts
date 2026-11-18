@@ -11,6 +11,7 @@ import { getTransport } from '../api/transport';
 import type { CrawlEvent, CrawlListItem, CrawlStatus, IssueCounts } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
 import { analyseCrawl, continueCrawl } from '../crawl/actions';
+import { forgetQuietAnalysis, isQuietAnalysis } from '../crawl/quietAnalyses';
 import { askedRecheck, forgetRecheckAsked } from '../crawl/rechecks';
 import { changeCounts, countedItemChanges, severitiesOf } from '../changes/changes';
 import { recheckToastTitle } from '../changes/recheckWords';
@@ -236,7 +237,8 @@ export function startLiveBridge({
       void queryClient.invalidateQueries(comparisonReads(), { cancelRefetch: false });
     }
     if (status === 'rechecking') rechecking.add(crawlId);
-    dismissStaleToasts(event);
+    const quiet = isQuietAnalysis(crawlId);
+    if (!quiet) dismissStaleToasts(event);
     if (status === 'completed' || status === 'stopped' || status === 'failed') {
       gridRefreshedAt.delete(crawlId);
       // Everything of the crawl is read again below: nothing is left to catch up on when the window is shown.
@@ -250,6 +252,11 @@ export function startLiveBridge({
       if (isCrawling(status) && (previous === undefined || !isCrawling(previous))) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.history(crawlId) });
       }
+    }
+    // An analysis the app started by itself (like for like) is no news: no toast, no announcement.
+    if (quiet) {
+      if (!isLive(status)) forgetQuietAnalysis(crawlId);
+      return;
     }
     void announceStatus(crawlId, status);
     decideToast(event, previous);

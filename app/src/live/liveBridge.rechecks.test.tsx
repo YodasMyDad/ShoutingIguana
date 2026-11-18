@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../api/queries';
 import { setTransport, type Transport } from '../api/transport';
 import type { CrawlListItem } from '../api/types';
+import { isQuietAnalysis, noteQuietAnalysis } from '../crawl/quietAnalyses';
 import { forgetRecheckAsked, noteRecheckAsked, resetRechecksAskedForTests } from '../crawl/rechecks';
 import { AppToaster } from '../feedback/AppToaster';
 import { dismissToast } from '../feedback/notify';
@@ -219,6 +220,23 @@ describe('a check’s end, with what changed since the last one', () => {
     expect(await screen.findByText('gardenfurnituresets.co.uk is checked')).toBeInTheDocument();
     // A thing worth a look fixed isn't a problem fixed, as Simple counts them.
     expect(screen.getByText('Score 85 (▲14 since 3 Nov): 1 problem fixed, 1 new')).toBeInTheDocument();
+    stop();
+  });
+});
+
+describe('the last check worked out again by itself (like for like)', () => {
+  it('is no news: no toast when its analysis ends', async () => {
+    replaceSettings({ mode: 'simple' });
+    render(<AppToaster />);
+    const { stop, status } = setup('/');
+    noteQuietAnalysis(ID);
+    status('analyzing');
+    item = { ...item, analyzedAt: '2026-11-18T09:00:00Z' };
+    status('completed');
+    await act(frame);
+    await act(frame);
+    expect(screen.queryByText(/are updated|is checked/)).toBeNull();
+    expect(isQuietAnalysis(ID)).toBe(false);
     stop();
   });
 });
