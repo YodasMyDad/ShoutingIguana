@@ -84,8 +84,8 @@ const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
 // Every column fits beside the URL in the pane, at 1440 px and at the window's least (stacked there): a few words in
 // each, the whole of it behind them on hover and for a screen reader.
-const WHY_WIDTH = 168;
-const LINKED_WIDTH = 104;
+const WHY_WIDTH = 152;
+const LINKED_WIDTH = 128;
 const SITEMAP_WIDTH = 112;
 const CONFLICT_WIDTH = 128;
 const MIN_URL_WIDTH = 140;
