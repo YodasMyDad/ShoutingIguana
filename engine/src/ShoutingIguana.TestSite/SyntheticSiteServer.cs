@@ -35,13 +35,15 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
 
     private readonly WebApplication _app;
     private readonly SyntheticRateLimiter? _limiter;
+    private readonly SyntheticShopifyStore? _store;
     private readonly SiteHolder _holder;
 
     private SyntheticSiteServer(WebApplication app, SiteHolder holder, Uri baseUri, Uri externalBaseUri, X509Certificate2? certificate,
-        SyntheticRequestLog requests, SyntheticRateLimiter? limiter, string controlToken)
+        SyntheticRequestLog requests, SyntheticRateLimiter? limiter, SyntheticShopifyStore? store, string controlToken)
     {
         _app = app;
         _limiter = limiter;
+        _store = store;
         _holder = holder;
         BaseUri = baseUri;
         ExternalBaseUri = externalBaseUri;
@@ -76,6 +78,18 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
     /// <summary>The 429s the product pages' rate limit (<see cref="SyntheticSiteOptions.RateLimit"/>) has answered with.</summary>
     public long RateLimited => _limiter?.Limited ?? 0;
 
+    /// <summary>As a Shopify store (<see cref="SyntheticSiteOptions.Shopify"/>): the requests that carried a signature to the store under its own name.</summary>
+    public long ShopifySigned => _store?.Signed ?? 0;
+
+    /// <summary>As a Shopify store: the product requests it refused with 429.</summary>
+    public long ShopifyRefused => _store?.Refused ?? 0;
+
+    /// <summary>
+    /// As a Shopify store: the requests that carried a signature anywhere else, to the external site or to the store under
+    /// another host's name (<c>localhost</c>). A crawler must never send one.
+    /// </summary>
+    public long ShopifySignedElsewhere => _store?.SignedElsewhere ?? 0;
+
     /// <summary>The self-signed certificate of an HTTPS site, for the crawler to trust. Null over plain HTTP.</summary>
     public X509Certificate2? Certificate { get; }
 
@@ -86,6 +100,11 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         int externalPort = 0,
         CancellationToken cancellationToken = default)
     {
+        if (options.Shopify is not null && !options.Https)
+        {
+            throw new ArgumentException("A Shopify store is served over https: set Https too.", nameof(options));
+        }
+
         var certificate = options.Https ? CreateCertificate() : null;
         ListenOptions? site = null, external = null;
         ConnectionDelegate? plainHttp = null;
@@ -143,8 +162,9 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         var boundExternalPort = 0;
         var requests = new SyntheticRequestLog();
         var limiter = options.RateLimit is { } limit ? new SyntheticRateLimiter(limit, TimeProvider.System) : null;
+        var store = options.Shopify is { } shopify ? new SyntheticShopifyStore(shopify, TimeProvider.System) : null;
         var controlToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        app.Run(context => RespondAsync(context, holder, boundExternalPort, requests, limiter, controlToken));
+        app.Run(context => RespondAsync(context, holder, boundExternalPort, requests, limiter, store, controlToken));
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
         var sitePort = ((IPEndPoint)site!.EndPoint).Port;
@@ -152,7 +172,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         var baseUri = new Uri($"{(certificate is null ? "http" : "https")}://127.0.0.1:{sitePort}/");
         var externalBaseUri = new Uri($"http://127.0.0.1:{boundExternalPort}/");
         holder.Current = new SyntheticSite(options, baseUri, externalBaseUri);
-        return new SyntheticSiteServer(app, holder, baseUri, externalBaseUri, certificate, requests, limiter, controlToken);
+        return new SyntheticSiteServer(app, holder, baseUri, externalBaseUri, certificate, requests, limiter, store, controlToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -163,7 +183,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
     }
 
     private static async Task RespondAsync(HttpContext context, SiteHolder holder, int externalPort, SyntheticRequestLog requests,
-        SyntheticRateLimiter? limiter, string controlToken)
+        SyntheticRateLimiter? limiter, SyntheticShopifyStore? store, string controlToken)
     {
         var path = context.Request.Path.Value ?? "/";
         var site = holder.Current;
@@ -175,6 +195,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
 
         if (context.Connection.LocalPort == externalPort)
         {
+            store?.SawExternal(context.Request);
             await ServeAsync(context, site.Handle(path, external: true)).ConfigureAwait(false);
             return;
         }
@@ -182,11 +203,14 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         requests.Started(context.Request);
         try
         {
-            var response = limiter?.IsOverTheLimit(path) == true
+            var sitePort = context.Connection.LocalPort;
+            var response = store?.Refuse(context.Request, $"127.0.0.1:{sitePort}") ?? (limiter?.IsOverTheLimit(path) == true
                 ? new SyntheticResponse(429, "text/html; charset=utf-8", "<html><body>Too many requests</body></html>", null, null,
                     new Dictionary<string, string> { ["Retry-After"] = limiter.RetryAfter })
-                : site.Handle(path, external: false, plainHttp: !context.Request.IsHttps);
-            await ServeAsync(context, response).ConfigureAwait(false);
+                : store is not null && path == SyntheticShopify.AWAY_PATH
+                    ? SyntheticShopifyStore.Away(sitePort)
+                    : site.Handle(path, external: false, plainHttp: !context.Request.IsHttps));
+            await ServeAsync(context, store?.Dress(response, path, sitePort) ?? response).ConfigureAwait(false);
         }
         finally
         {

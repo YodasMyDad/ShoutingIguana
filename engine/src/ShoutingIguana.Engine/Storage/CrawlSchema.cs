@@ -273,6 +273,26 @@ internal static class CrawlSchema
     public const string FAVICON_COLUMNS = "id,url,content_type,width,height,fetched_at,body";
 
     /// <summary>
+    /// What the site runs on, as the crawl found it: one row at most, kept by the writer the first time a response or a
+    /// page of the site says it is a Shopify store's (<c>Fetching.ShopifySignals</c>), and never changed after. <c>host</c>
+    /// is the authority of the URL that said so (<c>url_id</c>), <c>signal</c> what said so. A crawl-time table the
+    /// writer creates when it first keeps a row, so a file of an ordinary site, and one from before, has none; a recheck
+    /// reads it to say a refusal is Shopify's limit. Never anything of the crawl's signature: that is never kept.
+    /// </summary>
+    public const string SITE_PLATFORM = """
+        CREATE TABLE IF NOT EXISTS site_platform (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            name TEXT NOT NULL,
+            host TEXT NOT NULL,
+            signal TEXT NOT NULL,
+            url_id INTEGER
+        );
+        """;
+
+    /// <summary>The site_platform table's columns in order, as <see cref="SITE_PLATFORM"/> creates them: anything else is another program's.</summary>
+    public const string SITE_PLATFORM_COLUMNS = "id,name,host,signal,url_id";
+
+    /// <summary>
     /// The columns of <see cref="RUN_TIME"/>, in order. A table of any other shape is another program's: the writer then
     /// keeps no time (a crawl matters more than how long it took), and readers don't know the crawl's.
     /// </summary>

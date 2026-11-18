@@ -30,6 +30,12 @@ internal sealed record ResponseRow
     public string? HttpVersion { get; init; }
     public string? BlockReason { get; init; }
     public string? Error { get; init; }
+
+    /// <summary>
+    /// The request carried the crawl's signature for its host. Not stored: the writer says it in the error of a URL the
+    /// site refused anyway (<c>Fetching.ShopifySignals.SIGNED_REFUSAL</c>).
+    /// </summary>
+    public bool Signed { get; init; }
     public bool IsHtml { get; init; }
     public string? Title { get; init; }
     public int TitleCount { get; init; }

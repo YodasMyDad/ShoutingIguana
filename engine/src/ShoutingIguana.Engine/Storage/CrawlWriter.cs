@@ -93,6 +93,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     private int _claimedInternal;
     private bool _urlLimitReached;
 
+    // What the site runs on, once a response or page has said so (or the file did): kept once, and said in refusals.
+    private SitePlatform? _platform;
+
     private CrawlWriter(SqliteConnection connection, CrawlFileLock fileLock, CrawlOptions options, CrawlCounters counters, ILogger logger)
     {
         _connection = connection;
@@ -101,6 +104,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
         _counters = counters;
         _logger = logger;
         _statements = new WriterStatements(connection);
+
+        // A crawl continued or rechecked knows its site from before: a refusal then is said in the platform's words too.
+        _platform = SitePlatformReader.Read(connection, transaction: null);
     }
 
     /// <summary>Completes when the write loop ends; faults if the database failed.</summary>
@@ -519,6 +525,12 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             }
         }
 
+        if (record.ShopifySignal is { } signal && _platform is null)
+        {
+            KeepPlatform(item, signal);
+        }
+
+        response = ExplainRefusal(response);
         _statements.InsertResponse(response, redirectId, canonicalId, outlinkCount);
         if (record.Details is not null)
         {
@@ -537,6 +549,44 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
         _counters.OnRecorded(new RecordedResponse(response.Outcome, response.StatusCode, IsPage(item.IsInternal, item.Url, response),
             IsSiteUrl: item.IsInternal && !entry.IsProbe, IsNotChecked(response), DownloadedBytes(response.SizeBytes, response.BodyBytes), entry.IsProbe));
         PropagateDepths();
+    }
+
+    /// <summary>
+    /// Keeps the site's platform the first time a record says it (<see cref="CrawlSchema.SITE_PLATFORM"/>), in the batch
+    /// under way. A table of another program's that refuses the row costs the crawl the fact in the file, never the crawl:
+    /// this run still says refusals in Shopify's words.
+    /// </summary>
+    private void KeepPlatform(FrontierItem item, string signal)
+    {
+        _platform = new SitePlatform(ShopifySignals.PLATFORM, WebBotSignature.AuthorityOf(new Uri(item.Url)), signal, item.Id);
+        try
+        {
+            RunTime(CrawlSchema.SITE_PLATFORM, _transaction);
+            RunTime("INSERT OR IGNORE INTO site_platform (id, name, host, signal, url_id) VALUES (1, $name, $host, $signal, $urlId)", _transaction,
+                ("$name", _platform.Name), ("$host", _platform.Host), ("$signal", _platform.Signal), ("$urlId", item.Id));
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode is raw.SQLITE_CONSTRAINT or raw.SQLITE_MISMATCH or raw.SQLITE_ERROR)
+        {
+            _logger.LogWarning(exception, "What the site runs on couldn't be kept in the crawl file");
+        }
+    }
+
+    /// <summary>
+    /// A URL the site refused with 429 is not checked; on a Shopify store, that is Shopify's limit on crawlers without a
+    /// signature, and with one, the signature may be at fault. Said at the end of the stored error, so everything that
+    /// tells a refusal by the error's start (<see cref="RetryingFetcher.RATE_LIMITED_ERROR"/>) still does.
+    /// </summary>
+    private ResponseRow ExplainRefusal(ResponseRow response)
+    {
+        if (response.Error is not { } error || !error.StartsWith(RetryingFetcher.RATE_LIMITED_ERROR, StringComparison.Ordinal) ||
+            error.EndsWith(ShopifySignals.UNSIGNED_REFUSAL, StringComparison.Ordinal) || error.EndsWith(ShopifySignals.SIGNED_REFUSAL, StringComparison.Ordinal))
+        {
+            return response;
+        }
+
+        return response.Signed ? response with { Error = $"{error}: {ShopifySignals.SIGNED_REFUSAL}" }
+            : _platform is not null ? response with { Error = $"{error}: {ShopifySignals.UNSIGNED_REFUSAL}" }
+            : response;
     }
 
     /// <summary>

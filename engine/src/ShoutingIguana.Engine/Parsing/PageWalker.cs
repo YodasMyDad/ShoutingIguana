@@ -29,6 +29,10 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
 
+    /// <summary>The theme object a Shopify storefront's inline script sets, and Shopify's CDN for a storefront's own files.</summary>
+    private const string SHOPIFY_THEME = "Shopify.theme";
+    private const string SHOPIFY_CDN = "cdn.shopify.com";
+
     /// <summary>The forms a page's facts keep: enough for any page's search, sign-up and log-in.</summary>
     private const int MAX_FORMS = 20;
     private const int MAX_PAGINATION_LINKS = 20;
@@ -99,6 +103,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     public int ProtocolRelativeCount { get; private set; }
 
     public string? FirstProtocolRelative { get; private set; }
+
+    /// <summary>The first sign in the markup that this is a Shopify store's page (<see cref="PageFacts.ShopifyMarkup"/>).</summary>
+    public string? ShopifyMarkup { get; private set; }
 
     /// <summary>The first separate mobile version the page names (<see cref="PageFacts.MobileAlternate"/>).</summary>
     public string? MobileAlternate { get; private set; }
@@ -537,6 +544,10 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         var flags = context.InHead ? LinkFlags.None : LinkFlags.OutsideHead;
         var position = context.InHead ? LinkPosition.Head : context.Position;
         var tokens = rel.AsSpan();
+        if (rel.Contains("stylesheet", StringComparison.OrdinalIgnoreCase))
+        {
+            NoteShopifyCdn(href);
+        }
 
         foreach (var range in tokens.SplitAny(WHITESPACE))
         {
@@ -622,7 +633,24 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             return;
         }
 
-        AddLink(element.GetAttribute("src"), LinkKind.Script, LinkFlags.None, context.InHead ? LinkPosition.Head : context.Position, null);
+        var source = element.GetAttribute("src");
+        if (ShopifyMarkup is null && source is null && element.TextContent.Contains(SHOPIFY_THEME, StringComparison.Ordinal))
+        {
+            ShopifyMarkup = SHOPIFY_THEME;
+        }
+
+        NoteShopifyCdn(source);
+        AddLink(source, LinkKind.Script, LinkFlags.None, context.InHead ? LinkPosition.Head : context.Position, null);
+    }
+
+    /// <summary>A script or stylesheet from Shopify's own CDN is a storefront's: a buy button on another site loads from shopifycdn.com.</summary>
+    private void NoteShopifyCdn(string? source)
+    {
+        if (ShopifyMarkup is null && source is not null && UrlNormalizer.TryResolve(baseUri, source, out var target) &&
+            target.Host.Equals(SHOPIFY_CDN, StringComparison.OrdinalIgnoreCase))
+        {
+            ShopifyMarkup = SHOPIFY_CDN;
+        }
     }
 
     private void AddAnchor(IElement element, WalkContext context)

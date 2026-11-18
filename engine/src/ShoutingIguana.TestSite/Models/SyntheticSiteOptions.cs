@@ -66,6 +66,13 @@ public sealed record SyntheticSiteOptions
     public SyntheticRateLimit? RateLimit { get; init; }
 
     /// <summary>
+    /// The site as a Shopify store (<see cref="SyntheticShopify"/>): Shopify's headers and theme object, and product pages
+    /// that refuse an unsigned crawler with 429 beyond a small allowance and let a signed one through. Needs
+    /// <see cref="Https"/>, as a store and a signature do. Null, the default, for an ordinary site.
+    /// </summary>
+    public SyntheticShopify? Shopify { get; init; }
+
+    /// <summary>
     /// Which version of the site to serve: 0, the site as it has always been, or 1, the same site "after the fixes",
     /// for the fix loop's tests. Revision 1 fixes some planted problems, leaves others, and plants a few new ones, each
     /// on its own URLs, so a comparison of a crawl of each finds every state exactly
