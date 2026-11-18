@@ -21,6 +21,9 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
     private const int LISTED_FAILURES = 3;
     private const int LISTED_FILES = 3;
 
+    /// <summary>The sitemaps a repeated URL's detail names before "and N more".</summary>
+    private const int LISTED_REPEATS = 2;
+
     /// <summary>Google's and sitemaps.org's limits for one file: 50,000 URLs (or sitemaps, for an index), 50 MB uncompressed.</summary>
     internal const int MAX_ENTRIES = 50_000;
 
@@ -74,7 +77,7 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
 
             if (url.IsInternal && _entries.Repeated.TryGetValue(id, out var listings))
             {
-                yield return new IssueHit(IssueCatalog.SITEMAP_URL_REPEATED, id, $"In {listings:N0} sitemaps");
+                yield return new IssueHit(IssueCatalog.SITEMAP_URL_REPEATED, id, Repeated(listings));
             }
 
             if (!url.IsInternal)
@@ -113,32 +116,35 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
         {
             var listed = string.Join(", ", failed.Take(LISTED_FAILURES).Select(sitemap => $"{sitemap.Url} ({HttpStatusNames.NameIn(sitemap.Error!)})"));
             var more = failed.Count > LISTED_FAILURES ? $" and {failed.Count - LISTED_FAILURES:N0} more" : string.Empty;
-            yield return new IssueHit(IssueCatalog.SITEMAP_ERROR, urls.HomeId, listed + more);
+            yield return new IssueHit(IssueCatalog.SITEMAP_ERROR, urls.HomeId, listed + more) { Files = [.. failed.Select(sitemap => sitemap.Url)] };
         }
 
         var anyFound = sitemaps.Any(sitemap => !sitemap.IsProbe || sitemap.Error is null);
         if (crawlComplete && options.DiscoverSitemaps && !anyFound)
         {
-            yield return new IssueHit(IssueCatalog.SITEMAP_MISSING, urls.HomeId);
+            // Where the crawler looked: the conventional /sitemap.xml it tried, which the Sitemaps screen lists.
+            var tried = sitemaps.Where(sitemap => sitemap.IsProbe).Select(sitemap => sitemap.Url).ToList();
+            yield return new IssueHit(IssueCatalog.SITEMAP_MISSING, urls.HomeId) { Files = tried.Count > 0 ? tried : null };
         }
 
         var read = sitemaps.Where(sitemap => sitemap.IsRead).ToList();
-        if (Files(read.Where(sitemap => SizeWords(sitemap, MAX_ENTRIES, MAX_BYTES) is not null), MAX_ENTRIES, MAX_BYTES) is { } over)
+        var overFiles = read.Where(sitemap => SizeWords(sitemap, MAX_ENTRIES, MAX_BYTES) is not null).ToList();
+        if (Files(overFiles, MAX_ENTRIES, MAX_BYTES) is { } over)
         {
-            yield return new IssueHit(IssueCatalog.SITEMAP_OVER_LIMIT, urls.HomeId, over);
+            yield return new IssueHit(IssueCatalog.SITEMAP_OVER_LIMIT, urls.HomeId, over) { Files = [.. overFiles.Select(sitemap => sitemap.Url)] };
         }
 
-        if (Files(read.Where(sitemap => SizeWords(sitemap, MAX_ENTRIES, MAX_BYTES) is null && SizeWords(sitemap, NEAR_ENTRIES - 1, NEAR_BYTES - 1) is not null),
-                NEAR_ENTRIES - 1, NEAR_BYTES - 1) is { } near)
+        var nearFiles = read.Where(sitemap => SizeWords(sitemap, MAX_ENTRIES, MAX_BYTES) is null && SizeWords(sitemap, NEAR_ENTRIES - 1, NEAR_BYTES - 1) is not null).ToList();
+        if (Files(nearFiles, NEAR_ENTRIES - 1, NEAR_BYTES - 1) is { } near)
         {
-            yield return new IssueHit(IssueCatalog.SITEMAP_NEAR_LIMIT, urls.HomeId, near);
+            yield return new IssueHit(IssueCatalog.SITEMAP_NEAR_LIMIT, urls.HomeId, near) { Files = [.. nearFiles.Select(sitemap => sitemap.Url)] };
         }
 
         // An index's <sitemap> entries are counted from this version on; a sitemap an earlier one read as an index isn't empty.
         var empty = read.Where(sitemap => sitemap is { UrlCount: 0, IsIndex: false, ListedSitemaps: null or 0 }).Select(sitemap => sitemap.Url).ToList();
         if (empty.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.SITEMAP_EMPTY, urls.HomeId, Listed(empty));
+            yield return new IssueHit(IssueCatalog.SITEMAP_EMPTY, urls.HomeId, Listed(empty)) { Files = empty };
         }
 
         if (_entries.Lastmods.Count > 0)
@@ -156,9 +162,42 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
                 kinds.Add($"{unreadable:N0} unreadable");
             }
 
+            var total = future + unreadable;
             yield return new IssueHit(IssueCatalog.SITEMAP_LASTMOD_INVALID, urls.HomeId,
-                $"{RuleText.Count((int)Math.Min(future + unreadable, int.MaxValue), "entry", "entries")}: {string.Join(", ", kinds)} ({Listed([.. _entries.Lastmods.Select(fault => fault.SitemapUrl)])})");
+                $"{RuleText.Count((int)Math.Min(total, int.MaxValue), "entry", "entries")}: {string.Join(", ", kinds)} ({Listed([.. _entries.Lastmods.Select(fault => fault.SitemapUrl)])})" +
+                FirstWrongLastmod(_entries.Lastmods[0], total))
+            {
+                Files = [.. _entries.Lastmods.Select(fault => fault.SitemapUrl)]
+            };
         }
+    }
+
+    /// <summary>
+    /// The first wrong entry, to look at: ": https://x/p/1, lastmod 3000-01-01" for the only one, "; first: https://x/p/9,
+    /// lastmod not a date" for the first of several; nothing where it isn't known.
+    /// </summary>
+    private static string FirstWrongLastmod(SitemapLastmodFaults first, long total)
+    {
+        if (first is not { FirstUrl: { } url, FirstLastmod: { } lastmod })
+        {
+            return string.Empty;
+        }
+
+        var says = lastmod == Sitemaps.SitemapLastmod.UNREADABLE
+            ? "not a date"
+            : lastmod > DateTimeOffset.MaxValue.ToUnixTimeSeconds() || lastmod < 0
+                ? "past the year 9999"
+                : DateTimeOffset.FromUnixTimeSeconds(lastmod).UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        return total == 1 ? $": {url}, lastmod {says}" : $"; first: {url}, lastmod {says}";
+    }
+
+    /// <summary>"In 2 sitemaps: https://x/a.xml and https://x/b.xml", "In 4 sitemaps: https://x/1.xml, https://x/2.xml and 2 more".</summary>
+    private static string Repeated(IReadOnlyList<string> sitemaps)
+    {
+        var shown = sitemaps.Take(LISTED_REPEATS).ToList();
+        var more = sitemaps.Count - shown.Count;
+        var names = more > 0 ? $"{string.Join(", ", shown)} and {more:N0} more" : string.Join(" and ", shown);
+        return $"In {sitemaps.Count:N0} sitemaps: {names}";
     }
 
     /// <summary>"https://x/a.xml (62,113 URLs), https://x/b.xml (51.2 MB) and 2 more"; null for none.</summary>

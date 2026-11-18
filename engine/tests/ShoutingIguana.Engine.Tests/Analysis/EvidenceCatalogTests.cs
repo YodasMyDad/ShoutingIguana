@@ -30,7 +30,9 @@ public sealed class EvidenceCatalogTests
                 check.Id);
         }
 
-        Assert.Equal(50, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
+        // 52 since the fix-it pass gave not-in-sitemap its pages' title and depth, 51 since redirect-loop's detail says its chain;
+        // 43 target facts since protocol-relative-links names its URLs.
+        Assert.Equal(51, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
         Assert.Equal(43, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
         Assert.All(IssueCatalog.All.Where(check => check.References == IssueReferences.Targets), check => Assert.NotEmpty(check.TargetFacts));
     }

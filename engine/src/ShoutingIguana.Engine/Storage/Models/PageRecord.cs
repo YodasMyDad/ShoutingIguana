@@ -10,4 +10,11 @@ internal sealed record PageRecord(
     IReadOnlyList<OutLink> Links,
     bool PageNoFollow,
     byte[]? Details,
-    byte[]? Html);
+    byte[]? Html)
+{
+    /// <summary>
+    /// What in the response or the page said its site is a Shopify store's (<c>Fetching.ShopifySignals</c>), or null. The
+    /// writer keeps the first as a fact of the crawl (<see cref="Storage.SitePlatformReader"/>).
+    /// </summary>
+    public string? ShopifySignal { get; init; }
+}

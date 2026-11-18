@@ -28,6 +28,12 @@ internal static class WorkbookExport
 
     private static readonly string[] CHECK_TITLES = ["Address", "Page title", "What was found", "Other address"];
 
+    /// <summary>A check of the site's own files: the robots.txt or sitemaps it's about, and what was found.</summary>
+    private static readonly string[] FILE_TITLES = ["File", "What was found"];
+
+    /// <summary>The evidence columns that name another URL, left empty where it's the address itself, and out when it always is.</summary>
+    private static readonly string[] ELSEWHERE_COLUMNS = ["finalUrl", "canonicalUrl"];
+
     private static readonly double[] SUMMARY_WIDTHS = [26, 34, 16, 14, 12, 48, 44, 34, 20, 12, 12, 16, 10, 12, 60, 12, 16];
 
     /// <summary>The sheet of what the check flagged then and doesn't now (the fix loop): which check, the URL, how it moved, and what was found then.</summary>
@@ -163,13 +169,46 @@ internal static class WorkbookExport
 
     /// <summary>
     /// A check's sheet: its own four columns, then its evidence (each under its title, but the page's title, which is there
-    /// already), then where to fix it. Its rows come by importance, as the check's grid gives them.
+    /// already), then where to fix it. Its rows come by importance, as the check's grid gives them. A column empty on every
+    /// row is left out, and so is "Other address" where where-to-fix names the same URLs; a final URL or canonical that is
+    /// the address itself is left empty, and out when it always is. A check of the site's own files names them instead of
+    /// the home page it's reported on (<see cref="WriteFileSheet"/>).
     /// </summary>
     private static void WriteSheet(ExportRun run, ITableWriter table, string name, string checkId)
     {
-        var evidence = (IssueCatalog.Find(checkId)?.Evidence ?? []).Where(id => !CHECK_COLUMNS.Contains(id) && COLUMNS.ContainsKey(id)).Select(id => COLUMNS[id]).ToList();
-        GridExport.WriteGrid(run, table, name, [.. CHECK_COLUMNS.Select(id => COLUMNS[id]), .. evidence], links: false, checkId, sitemapId: null,
-            [.. CHECK_TITLES, .. evidence.Select(GridExport.Title)], query: new UrlQuery(), extra: WhereFoundColumns.For(run, checkId));
+        var check = IssueCatalog.Find(checkId);
+        if (check?.About is not null && IssueFileReader.Read(run.CrawlPath, run.Settings.Cache, run.Token)?.Checks.GetValueOrDefault(checkId) is { Count: > 0 } files)
+        {
+            WriteFileSheet(run, table, name, checkId, files);
+            return;
+        }
+
+        var used = IssueSheetReader.Read(run.CrawlPath, checkId, run.Settings.Cache, run.Token);
+        bool[] keep = [true, used.Titles, used.Details, used.RelatedUrls && check?.References != IssueReferences.Targets];
+        bool Elsewhere(string column) => column switch
+        {
+            "finalUrl" => used.FinalUrlsElsewhere,
+            "canonicalUrl" => used.CanonicalsElsewhere,
+            _ => true
+        };
+
+        var own = CHECK_COLUMNS.Where((_, index) => keep[index]).Select(id => COLUMNS[id]).ToList();
+        var evidence = (check?.Evidence ?? []).Where(id => !CHECK_COLUMNS.Contains(id) && COLUMNS.ContainsKey(id) && Elsewhere(id)).Select(id => COLUMNS[id]).ToList();
+        List<UrlColumnInfo> columns = [.. own, .. evidence];
+        GridExport.WriteGrid(run, table, name, columns, links: false, checkId, sitemapId: null,
+            [.. CHECK_TITLES.Where((_, index) => keep[index]), .. evidence.Select(GridExport.Title)], query: new UrlQuery(), extra: WhereFoundColumns.For(run, checkId),
+            rewrite: (index, cell, row) => ELSEWHERE_COLUMNS.Contains(columns[index].Id) && Equals(cell, row[0]) ? null : cell);
+    }
+
+    /// <summary>
+    /// The sheet of a check of the site's robots.txt or sitemaps: the files it's about, one a line, where its row would name
+    /// the home page, and what was found. One row, as the check has.
+    /// </summary>
+    private static void WriteFileSheet(ExportRun run, ITableWriter table, string name, string checkId, IReadOnlyList<IssueFile> files)
+    {
+        var text = string.Join('\n', files.Select(file => file.Url));
+        GridExport.WriteGrid(run, table, name, [COLUMNS["url"], COLUMNS["detail"]], links: false, checkId, sitemapId: null, FILE_TITLES, query: new UrlQuery(),
+            rewrite: (index, cell, _) => index == 0 ? text : cell);
     }
 
     private static void WriteSummary(XlsxWriter workbook, string name, ReportModel model, IReadOnlyList<string> sheets)

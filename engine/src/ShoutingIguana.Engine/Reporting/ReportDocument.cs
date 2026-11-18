@@ -796,19 +796,33 @@ internal static class ReportDocument
         var caption = more > 0 ? $"The first {rows.Count} of {Number(problem.Count)}" : problem.Count == 1 ? "Where it is" : $"All {problem.Count}";
         var isUrl = problem.Check.Subject == IssueSubject.Url;
         var whereFound = problem.Check.References is IssueReferences.Sources or IssueReferences.Targets;
+
+        // A check of the site's own files names them where its row would name the home page it's reported on.
+        var files = problem.Files;
         html.Append(compact ? "<table class=\"examples examples--one\">" : whereFound ? "<table class=\"examples examples--where\">" : "<table class=\"examples\">")
             .Append("\n          <caption>").Append(caption).Append("</caption>\n");
         if (!compact)
         {
-            html.Append("          <thead><tr><th scope=\"col\">").Append(isUrl ? "Address" : "Page").Append("</th><th scope=\"col\">What was found</th>")
-                .Append(whereFound ? "<th scope=\"col\">Where to fix it</th>" : string.Empty).Append("</tr></thead>\n");
+            html.Append("          <thead><tr><th scope=\"col\">").Append(files is not null ? "File" : isUrl ? "Address" : "Page").Append("</th><th scope=\"col\">What was found</th>")
+                .Append(whereFound ? $"<th scope=\"col\">{WhereTitle(problem.Check)}</th>" : string.Empty).Append("</tr></thead>\n");
         }
 
         html.Append("          <tbody>");
         foreach (var row in rows)
         {
             html.Append("<tr><td>");
-            Url(html, model, row.Url);
+            if (files is not null)
+            {
+                for (var index = 0; index < files.Count; index++)
+                {
+                    html.Append(index == 0 ? string.Empty : "<br>");
+                    Url(html, model, files[index]);
+                }
+            }
+            else
+            {
+                Url(html, model, row.Url);
+            }
             if (compact)
             {
                 if (row.Detail is not null || row.RelatedUrl is not null)
@@ -860,6 +874,17 @@ internal static class ReportDocument
             html.Append("<p class=\"more\">And ").Append(Number(more)).Append(" more: the full list is on sheet ").Append(problem.Number).Append(" of the spreadsheet.</p>");
         }
     }
+
+    /// <summary>
+    /// The heading of the column that says where to fix it: the pages linking to an address; but for a page's canonical or
+    /// hreflang, what it names, as the fix is the page's own tag, not that URL.
+    /// </summary>
+    private static string WhereTitle(IssueDefinition check) => (check.References, check.Category) switch
+    {
+        (IssueReferences.Targets, IssueCategory.Canonicals) => "Main address it names",
+        (IssueReferences.Targets, IssueCategory.Hreflang) => "Language versions it names",
+        _ => "Where to fix it"
+    };
 
     /// <summary>What was found on a page, the check's evidence for it, and the other URL it's about (where the URLs it names aren't listed beside it).</summary>
     private static void Found(StringBuilder html, ReportModel model, ReportExample row)

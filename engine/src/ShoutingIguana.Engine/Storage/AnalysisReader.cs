@@ -459,8 +459,12 @@ internal sealed class AnalysisReader : IDisposable
         }
 
         using var command = _connection.CreateCommand();
+        // Each sitemap's first faulty entry in crawl order, with what its lastmod says, so the detail can name one to look at.
+        var faulty = $"(f.lastmod > $latest OR f.lastmod = {Sitemaps.SitemapLastmod.UNREADABLE})";
         command.CommandText = $"""
-            SELECT s.url, SUM(su.lastmod > $latest), SUM(su.lastmod = {Sitemaps.SitemapLastmod.UNREADABLE})
+            SELECT s.url, SUM(su.lastmod > $latest), SUM(su.lastmod = {Sitemaps.SitemapLastmod.UNREADABLE}),
+                   (SELECT u.url FROM sitemap_urls f JOIN urls u ON u.id = f.url_id WHERE f.sitemap_id = s.id AND {faulty} ORDER BY f.url_id LIMIT 1),
+                   (SELECT f.lastmod FROM sitemap_urls f WHERE f.sitemap_id = s.id AND {faulty} ORDER BY f.url_id LIMIT 1)
             FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id
             WHERE su.lastmod > $latest OR su.lastmod = {Sitemaps.SitemapLastmod.UNREADABLE}
             GROUP BY s.id ORDER BY s.id
@@ -469,19 +473,32 @@ internal sealed class AnalysisReader : IDisposable
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            faults.Add(new SitemapLastmodFaults(reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2)));
+            faults.Add(new SitemapLastmodFaults(reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetInt64(4)));
         }
 
         return faults;
     }
 
-    /// <summary>The URLs more than one sitemap file lists, with how many do.</summary>
-    public Dictionary<int, int> ReadRepeatedSitemapEntries()
+    /// <summary>The URLs more than one sitemap file lists, with the sitemaps that do, in the order the crawl found them.</summary>
+    public Dictionary<int, IReadOnlyList<string>> ReadRepeatedSitemapEntries()
     {
-        Dictionary<int, int> repeated = [];
-        Rows("SELECT url_id, COUNT(DISTINCT sitemap_id) FROM sitemap_urls GROUP BY url_id HAVING COUNT(DISTINCT sitemap_id) > 1",
-            reader => repeated[reader.GetInt32(0)] = reader.GetInt32(1));
-        return repeated;
+        Dictionary<int, List<string>> repeated = [];
+        Rows("""
+            SELECT su.url_id, s.url FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id
+            WHERE su.url_id IN (SELECT url_id FROM sitemap_urls GROUP BY url_id HAVING COUNT(DISTINCT sitemap_id) > 1)
+            GROUP BY su.url_id, s.id ORDER BY su.url_id, s.id
+            """, reader =>
+        {
+            var id = reader.GetInt32(0);
+            if (!repeated.TryGetValue(id, out var sitemaps))
+            {
+                repeated[id] = sitemaps = [];
+            }
+
+            sitemaps.Add(reader.GetString(1));
+        });
+        return repeated.ToDictionary(entry => entry.Key, entry => (IReadOnlyList<string>)entry.Value);
     }
 
     /// <summary>

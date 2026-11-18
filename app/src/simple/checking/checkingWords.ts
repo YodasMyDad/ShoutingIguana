@@ -3,6 +3,7 @@
 import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait, HistoryPoint, ProgressEvent } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { formatCount, formatCountOf } from '../../lib/format';
+import { simpleReason } from '../../shopify/refusals';
 
 /** What a plain alert offers. Each lands where Advanced's alert does; one to an Advanced-only screen says so. */
 export type SimpleAlertAction =
@@ -24,10 +25,12 @@ export interface SimpleAlert {
   level: AlertLevel;
   text: string;
   actions: SimpleAlertAction[];
+  /** Shopify's steps to a signature follow the text, its button names quoted (lane shopify). */
+  shopifySteps?: boolean;
 }
 
 /** What gives a site's alert its kind: a wait and an alert of one kind say the same thing, so it's said once. */
-type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'note';
+type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'shopify' | 'note';
 
 const SLOW = 'The site asked the check to slow down, so it has. It will take longer.';
 const SECTION_SLOW =
@@ -77,7 +80,7 @@ export function pagesWhenRaised(points: readonly HistoryPoint[] | undefined, at:
 function alertWords(
   alert: AlertEvent,
   { site, pages }: { site: string; pages: number | null },
-): { kind: Kind; level: AlertLevel; text: string; actions: SimpleAlertAction[] } | null {
+): { kind: Kind; level: AlertLevel; text: string; actions: SimpleAlertAction[]; shopifySteps?: boolean } | null {
   switch (alert.code) {
     case 'blocked':
     case 'mostly-forbidden':
@@ -92,6 +95,33 @@ function alertWords(
           { kind: 'copy', label: 'What to tell whoever runs the site', text: blockedMessage(site, pages) },
           { kind: 'crawlSettings', label: 'More ways in Advanced', focus: 'headers' },
         ],
+      };
+    case 'shopify-unsigned': {
+      const count = alert.data?.count;
+      const reason = alert.data?.reason;
+      return {
+        kind: 'shopify',
+        level: 'warning',
+        text: [
+          `This site runs on Shopify, and Shopify is turning some pages away because the check isn’t signed${
+            count === undefined ? '' : `: ${formatCountOf(count, 'page')} so far`
+          }.`,
+          reason ? simpleReason(reason) : '',
+          'They’ll be marked not checked, not broken.',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        actions: [{ kind: 'crawlSettings', label: 'Add a Shopify signature, in Advanced', focus: 'shopify' }],
+        shopifySteps: true,
+      };
+    }
+    case 'shopify-signature-refused':
+      return {
+        kind: 'shopify',
+        level: 'warning',
+        text: `Shopify turned the check away even with the signature. ${simpleReason(alert.data?.reason ?? '')} They’ll be marked not checked, not broken.`,
+        actions: [{ kind: 'crawlSettings', label: 'Change the signature, in Advanced', focus: 'shopify' }],
+        shopifySteps: true,
       };
     case 'start-redirects-away': {
       const url = alert.data?.url;

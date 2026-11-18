@@ -4,6 +4,7 @@
 import type { SpeedPreset, UserAgentPreset } from '../../api/types';
 import { formatCount } from '../../lib/format';
 import type { CrawlForm, CrawlFormField, FormSection, SpeedId } from './form';
+import { endsOn, signatureHost, signatureState } from './shopifySignature';
 
 export interface FieldWords {
   label: string;
@@ -62,6 +63,10 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
     help: 'An http://, https:// or socks5:// proxy for every request, with its user name and password in the address if it needs them (socks5://user:password@host:port). The crawl file and your saved defaults never keep the password; it’s remembered only if you tick Remember below.',
   },
   useCookies: { label: 'Keep cookies', help: 'Send back the cookies the site sets, as a browser would.' },
+  signatures: {
+    label: 'Shopify crawler access',
+    help: 'Shopify limits crawlers that don’t send a signature, so a store refuses its product pages (429 Too Many Requests). Its owner creates one in Shopify admin; it’s sent with every request to that domain only, over https, and never kept in the crawl file. The values are remembered only if you tick Remember.',
+  },
   requestTimeoutSeconds: { label: 'Timeout', help: 'Seconds to wait for an answer before a request counts as failed.' },
   maxRetries: { label: 'Retries', help: 'How many more times a request that failed is tried.' },
   concurrency: { label: 'At a time', help: 'Requests to the site at once.' },
@@ -147,6 +152,10 @@ export const SIMPLE_WORDS = {
     label: 'Images and other files',
     help: 'So broken and oversized images are found. Turn it off for a quicker look at pages only.',
   },
+  shopify: {
+    label: 'A Shopify shop?',
+    help: 'Shopify turns away checks that don’t carry a signature, so many product pages can’t be read without one. A signature is a pass the shop’s owner makes in Shopify.',
+  },
 } as const;
 
 export const SPEED_TITLES: Record<SpeedId, string> = { polite: 'Polite', standard: 'Standard', fast: 'Fast' };
@@ -206,7 +215,11 @@ function headerCount(form: CrawlForm): number {
 }
 
 /** A folded section's values, in a line: "No URL limit, any depth, HTML up to 8 MB". */
-export function sectionSummary(section: FormSection, form: CrawlForm): string {
+export function sectionSummary(
+  section: FormSection,
+  form: CrawlForm,
+  mode: 'simple' | 'advanced' = 'advanced',
+): string {
   switch (section) {
     case 'scope':
       return [
@@ -249,6 +262,15 @@ export function sectionSummary(section: FormSection, form: CrawlForm): string {
       ]
         .filter(Boolean)
         .join(', ');
+    }
+    case 'shopify': {
+      const state = signatureState(form.signatures, new Date());
+      const host = signatureHost(form.signatures, form.startUrl);
+      if (state.kind === 'empty')
+        return mode === 'simple' ? 'Add its signature, so every page can be read' : 'No signature';
+      if (state.kind === 'expired') return `Ended on ${endsOn(state.expires)}`;
+      const ends = 'expires' in state && state.expires ? `, until ${endsOn(state.expires)}` : '';
+      return `A signature${host ? ` for ${host}` : ''}${ends}`;
     }
     case 'advanced':
       return [
@@ -303,6 +325,12 @@ export function settingValue(field: CrawlFormField, form: CrawlForm): string {
     }
     case 'proxyUrl':
       return form.proxyUrl.trim() || 'None';
+    case 'signatures': {
+      const host = signatureHost(form.signatures, form.startUrl);
+      return form.signatures.signature.trim() !== '' && host
+        ? `A signature for ${host}`
+        : 'None kept: a crawl file never keeps one';
+    }
     default:
       return typeof value === 'string' ? value || '–' : '';
   }

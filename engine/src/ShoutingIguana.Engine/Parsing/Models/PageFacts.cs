@@ -148,4 +148,13 @@ public sealed record PageFacts
     /// </summary>
     [JsonIgnore]
     public IReadOnlyList<IconFact> Icons { get; init; } = [];
+
+    /// <summary>
+    /// What in the markup says the page is a Shopify store's (<c>Fetching.ShopifySignals</c>): <c>Shopify.theme</c>, the
+    /// theme object only a Shopify storefront's inline script sets, or <c>cdn.shopify.com</c>, a script or stylesheet of
+    /// the storefront's from Shopify's CDN. Null for neither. A fact of the crawl, which the writer keeps once for the
+    /// site, not of the page: not stored with the rest.
+    /// </summary>
+    [JsonIgnore]
+    public string? ShopifyMarkup { get; init; }
 }

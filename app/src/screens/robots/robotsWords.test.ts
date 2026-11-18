@@ -249,10 +249,11 @@ describe('the answer over the origins', () => {
 });
 
 describe('why a URL was blocked', () => {
-  it('names the line that decided it, with the line’s text', () => {
+  it('names the line that decided it, with the line’s text, the rule in its cell', () => {
+    // The fix-it pass: "Line 50" alone sent the owner hunting through the file for the rule.
     expect(blockedWhy({ reason: 'rule', line: 6, rule: 'Disallow: /admin/', error: null })).toEqual({
       short: 'Line 6: Disallow: /admin/',
-      cell: 'Line 6',
+      cell: 'Disallow: /admin/',
       sentence: 'Line 6 refused it: Disallow: /admin/',
       recorded: null,
     });
@@ -337,6 +338,11 @@ describe('what blocking a URL costs', () => {
     expect(linkedFromWords(1)).toBe('1 page');
     expect(linkedFromWords(12_480)).toBe('12,480 pages');
     expect(linkedFromWords(0)).toBe('No pages');
+    // A file pages load (a script, an image) that no page links to: the pages that use it, not "No pages".
+    expect(linkedFromWords(0, 9)).toBe('Used by 9 pages');
+    expect(linkedFromWords(0, 1)).toBe('Used by 1 page');
+    expect(linkedFromWords(3, 9)).toBe('3 pages');
+    expect(linkedFromWords(0, 0)).toBe('No pages');
     expect(linkedFromWords(null)).toBeNull();
     expect(linkedFromWords(undefined)).toBeNull();
   });

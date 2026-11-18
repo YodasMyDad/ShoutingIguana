@@ -121,7 +121,10 @@ public sealed class SitemapCheckTests
         var urls = site.Table();
         var entries = new SitemapEntryFacts
         {
-            Repeated = new Dictionary<int, int> { [listed] = 3, [elsewhere] = 2 },
+            Repeated = new Dictionary<int, IReadOnlyList<string>>
+            {
+                [listed] = ["https://example.com/a.xml", "https://example.com/b.xml", "https://example.com/c.xml"], [elsewhere] = ["https://example.com/a.xml", "https://example.com/b.xml"]
+            },
             Lastmods = [new SitemapLastmodFaults("https://example.com/a.xml", 1_200, 3), new SitemapLastmodFaults("https://example.com/b.xml", 0, 1)]
         };
 
@@ -129,7 +132,7 @@ public sealed class SitemapCheckTests
 
         // Only the site's own URLs: another site's is another check's.
         var repeated = Assert.Single(hits, hit => hit.Issue == IssueCatalog.SITEMAP_URL_REPEATED);
-        Assert.Equal((listed, "In 3 sitemaps"), (repeated.UrlId, repeated.Detail));
+        Assert.Equal((listed, "In 3 sitemaps: https://example.com/a.xml, https://example.com/b.xml and 1 more"), (repeated.UrlId, repeated.Detail));
         Assert.Equal("1,204 entries: 1,200 in the future, 4 unreadable (https://example.com/a.xml and 1 more)", Detail(hits, IssueCatalog.SITEMAP_LASTMOD_INVALID));
         Assert.Equal("1 entry: 1 unreadable (https://example.com/b.xml)",
             Detail(new SitemapRules(urls, [], new CrawlOptions { StartUrl = site.Site }, crawlComplete: true,
@@ -164,7 +167,7 @@ public sealed class SitemapCheckTests
 
         Assert.Equal("https://example.com/robots.txt has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml",
             Detail([new("https://example.com", 200, "User-agent: *\nDisallow: /cart/\n# Sitemap: commented out", null, 0)], probed));
-        Assert.Equal("https://example.com/robots.txt has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml",
+        Assert.Equal("https://example.com/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml",
             Detail([new("https://example.com", 200, string.Empty, null, 0)], probed));
 
         // A Sitemap: line on either main origin, in any case, names it; robots.txt that didn't answer, or no sitemap read, says nothing.

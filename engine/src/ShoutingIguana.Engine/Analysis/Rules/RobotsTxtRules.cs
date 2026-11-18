@@ -39,18 +39,21 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
         var unreachable = own.Where(file => file.StatusCode is >= 500 or 429 || (file.StatusCode is null && !TooManyRedirects(file))).ToLookup(file => mainOrigins.Contains(file.Origin));
         if (unreachable[true].Any())
         {
-            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE, urls.HomeId, string.Join(", ", unreachable[true].Select(Describe)));
+            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE, urls.HomeId, string.Join(", ", unreachable[true].Select(Describe))) { Files = FilesOf(unreachable[true]) };
         }
 
         if (unreachable[false].Any())
         {
-            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, urls.HomeId, string.Join(", ", unreachable[false].Select(Describe)));
+            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, urls.HomeId, string.Join(", ", unreachable[false].Select(Describe)))
+            {
+                Files = FilesOf(unreachable[false])
+            };
         }
 
         var missing = own.Where(file => file.StatusCode is >= 400 and < 500 and not 429 || TooManyRedirects(file)).ToList();
         if (missing.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_MISSING, urls.HomeId, string.Join(", ", missing.Select(Describe)));
+            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_MISSING, urls.HomeId, string.Join(", ", missing.Select(Describe))) { Files = FilesOf(missing) };
         }
 
         // A sitemap found anyway (the probe of /sitemap.xml, or the settings) that no main origin's robots.txt names. With
@@ -58,10 +61,19 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
         var answered = own.Where(file => mainOrigins.Contains(file.Origin) && file.StatusCode is >= 200 and < 300).ToList();
         if (sitemaps?.FirstOrDefault(sitemap => sitemap.IsRead) is { } found && answered.Count > 0 && !answered.Any(file => NamesSitemap(file.Content)))
         {
+            // An empty file is the commonest case, and says what to do: there's nothing in it yet to add the line to.
+            var file = answered[0];
+            var empty = string.IsNullOrWhiteSpace(file.Content?.Replace("\uFEFF", string.Empty, StringComparison.Ordinal));
             yield return new IssueHit(IssueCatalog.ROBOTS_TXT_NO_SITEMAP, urls.HomeId,
-                $"{answered[0].Origin}/robots.txt has no Sitemap: line; the sitemap was found at {found.Url}");
+                $"{file.Origin}/robots.txt {(empty ? "is empty, so it has" : "has")} no Sitemap: line; the sitemap was found at {found.Url}")
+            {
+                Files = [$"{file.Origin}/robots.txt"]
+            };
         }
     }
+
+    /// <summary>The robots.txt URLs of these origins, as the detail names them.</summary>
+    private static string[] FilesOf(IEnumerable<RobotsRecord> files) => [.. files.Select(file => $"{file.Origin}/robots.txt")];
 
     /// <summary>A robots.txt line that names a sitemap: "Sitemap:" at its start, in any case (RFC 9309, Google).</summary>
     internal static bool NamesSitemap(string? content) =>

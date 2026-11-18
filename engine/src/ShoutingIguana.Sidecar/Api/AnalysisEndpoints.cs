@@ -25,6 +25,12 @@ internal static class AnalysisEndpoints
         api.MapGet("/api/crawls/{id}/stats", async (string id, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.StatsAsync(id, cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.CrawlStatsDto));
 
+        // JSON null for any other site, said as such: an empty body would read as no answer.
+        api.MapGet("/api/crawls/{id}/shopify", async (string id, GridData data, CancellationToken cancellationToken) =>
+            await data.ShopifyAsync(id, cancellationToken).ConfigureAwait(false) is { } access
+                ? Results.Json(access, SidecarJsonContext.Default.ShopifyAccessDto)
+                : Results.Content("null", "application/json"));
+
         api.MapGet("/api/crawls/{id}/issues/{checkId}", (string id, string checkId, HttpRequest request, CrawlData data) =>
             TypedResults.Json(data.Issues(id, checkId, request.Query), SidecarJsonContext.Default.IssuesPageDto));
     }

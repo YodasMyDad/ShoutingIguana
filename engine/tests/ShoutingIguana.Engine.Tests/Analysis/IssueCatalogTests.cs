@@ -255,18 +255,31 @@ public sealed class IssueCatalogTests
                 var cleared = IssueCatalog.Find(id);
                 Assert.True(cleared is not null, $"{check.Id} clears {id}, which isn't a check");
                 Assert.NotEqual(check.Id, id);
+
+                // A check of the pages naming the URL (links to a 404), or of the URL itself for another reason: the sitemap
+                // entry that fails with a server error (the fix-it pass), cleared where it's the fixed URL.
+                if (id == IssueCatalog.SITEMAP_NON_INDEXABLE.Id)
+                {
+                    Assert.Equal(IssueSubject.Url, cleared!.Subject);
+                    Assert.NotEqual(IssueReferences.Targets, cleared.References);
+                    continue;
+                }
+
                 Assert.Equal(IssueReferences.Targets, cleared!.References);
                 Assert.Equal(IssueSubject.Page, cleared.Subject);
                 Assert.Equal(IssueGrouping.RelatedUrl, cleared.Grouping);
             }
         }
 
+        // Only a server error's fix is sure to clear its sitemap entry: a 404's is often a redirect, which is still no page.
+        Assert.Equal([IssueCatalog.INTERNAL_SERVER_ERROR.Id], related.Where(check => check.Clears.Contains(IssueCatalog.SITEMAP_NON_INDEXABLE.Id)).Select(check => check.Id));
+
         Assert.Equal(["links-to-redirects", "pagination-broken"], IssueCatalog.REDIRECT_CHAIN.Clears);
         // A share image that 404s, or redirects to a URL that does, is social-image-broken's as an image is image-broken's (batch 9).
         Assert.Equal(
             ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken", "social-image-broken"],
             IssueCatalog.INTERNAL_CLIENT_ERROR.Clears);
-        Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_SERVER_ERROR.Clears);
+        Assert.Equal([.. IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, "sitemap-non-indexable"], IssueCatalog.INTERNAL_SERVER_ERROR.Clears);
         Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_UNREACHABLE.Clears);
         Assert.Equal(["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "social-image-broken"], IssueCatalog.REDIRECT_BROKEN.Clears);
 

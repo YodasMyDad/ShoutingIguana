@@ -42,6 +42,7 @@ import { Kbd } from '../ui/Kbd';
 import { PageHeader } from '../ui/PageHeader';
 import { Skeleton } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
+import { useLastShopifyRefusal } from '../shopify/useLastShopifyRefusal';
 
 /**
  * New crawl (docs/v2-ui-simple.md, New crawl in each mode; docs/v2-ui-ia.md, New crawl): one form and one route. Simple
@@ -185,6 +186,15 @@ function NewCrawlForm({
     setForm(next);
     setStartErrors(null);
   };
+
+  // The site's last crawl was a Shopify store that refused pages: its Shopify part opens by itself, and says so,
+  // until it's folded.
+  const lastRefused = useLastShopifyRefusal(form.startUrl);
+  const [shopifyFolded, setShopifyFolded] = useState(false);
+  const shownOpen = useMemo(
+    () => (lastRefused !== null && !shopifyFolded && !open.has('shopify') ? new Set(open).add('shopify') : open),
+    [lastRefused, shopifyFolded, open],
+  );
   const touch = (field: CrawlFormField) => setTouched((current) => new Set(current).add(field));
 
   // A link asked for one setting: its section opens (above), and focus goes to it once it's drawn. In Simple, a
@@ -355,18 +365,20 @@ function NewCrawlForm({
         view={mode}
         presets={defaults.speedPresets}
         errors={shown}
-        open={open}
-        onOpenChange={(section, next) =>
+        open={shownOpen}
+        onOpenChange={(section, next) => {
+          if (section === 'shopify' && !next) setShopifyFolded(true);
           setOpen((current) => {
             const updated = new Set(current);
             if (next) updated.add(section);
             else updated.delete(section);
             return updated;
-          })
-        }
+          });
+        }}
         onTouch={touch}
         autoFocusStart={!focus}
         remember={{ checked: remember, onCheckedChange: setRemember, mode }}
+        shopifyLastRefused={lastRefused}
       />
 
       {mode === 'simple' && hiddenErrors.length > 0 ? (

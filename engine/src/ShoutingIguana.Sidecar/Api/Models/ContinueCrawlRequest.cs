@@ -13,6 +13,9 @@ internal sealed record ContinueCrawlRequest
     /// <summary>The headers to send from now on, with their values: crawl files keep only the names.</summary>
     public IReadOnlyDictionary<string, string>? ExtraHeaders { get; init; }
 
+    /// <summary>The Shopify crawler signatures to send from now on, by host: crawl files keep none.</summary>
+    public IReadOnlyDictionary<string, CrawlSignatureDto>? Signatures { get; init; }
+
     /// <summary>Needed again when the stored proxy had a user name and password.</summary>
     public string? ProxyUrl { get; init; }
 

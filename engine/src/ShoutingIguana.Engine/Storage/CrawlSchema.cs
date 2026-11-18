@@ -276,6 +276,26 @@ internal static class CrawlSchema
     public const string FAVICON_COLUMNS = "id,url,content_type,width,height,fetched_at,body";
 
     /// <summary>
+    /// What the site runs on, as the crawl found it: one row at most, kept by the writer the first time a response or a
+    /// page of the site says it is a Shopify store's (<c>Fetching.ShopifySignals</c>), and never changed after. <c>host</c>
+    /// is the authority of the URL that said so (<c>url_id</c>), <c>signal</c> what said so. A crawl-time table the
+    /// writer creates when it first keeps a row, so a file of an ordinary site, and one from before, has none; a recheck
+    /// reads it to say a refusal is Shopify's limit. Never anything of the crawl's signature: that is never kept.
+    /// </summary>
+    public const string SITE_PLATFORM = """
+        CREATE TABLE IF NOT EXISTS site_platform (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            name TEXT NOT NULL,
+            host TEXT NOT NULL,
+            signal TEXT NOT NULL,
+            url_id INTEGER
+        );
+        """;
+
+    /// <summary>The site_platform table's columns in order, as <see cref="SITE_PLATFORM"/> creates them: anything else is another program's.</summary>
+    public const string SITE_PLATFORM_COLUMNS = "id,name,host,signal,url_id";
+
+    /// <summary>
     /// The columns of <see cref="RUN_TIME"/>, in order. A table of any other shape is another program's: the writer then
     /// keeps no time (a crawl matters more than how long it took), and readers don't know the crawl's.
     /// </summary>
@@ -463,6 +483,17 @@ internal static class CrawlSchema
             PRIMARY KEY (issue, fault, url_id)
         ) WITHOUT ROWID;
 
+        -- The files a check of the site's own files is about (IssueDefinition.About: its robots.txt, its sitemaps), in the
+        -- order the issue's detail names them, as full URLs: they aren't URLs of the crawl. The issue stays on the home page,
+        -- where it's reported; a view names the file instead. Only for those checks, from analysis 16 on.
+        CREATE TABLE IF NOT EXISTS issue_files (
+            issue TEXT NOT NULL,
+            url_id INTEGER NOT NULL,
+            position INTEGER NOT NULL,
+            file TEXT NOT NULL,
+            PRIMARY KEY (issue, url_id, position)
+        ) WITHOUT ROWID;
+
         -- Indexability as the analysis judged it, only where that differs from responses.indexability_reason: an
         -- instant meta refresh is a redirect, and a canonical leading back to the page or to a broken URL is ignored.
         -- Read COALESCE(e.indexability_reason, r.indexability_reason) for what search engines will see.
@@ -478,6 +509,12 @@ internal static class CrawlSchema
     /// then group by the issues' own detail and first other URL, as that engine did.
     /// </summary>
     public const int ISSUE_TARGETS_SINCE = 4;
+
+    /// <summary>
+    /// The first <see cref="Analysis.AnalysisFreshness.VERSION"/> that stores <c>issue_files</c>. An earlier one's analysis
+    /// has none (or left a later one's behind), so its file checks name no file, and views show the page they're on.
+    /// </summary>
+    public const int ISSUE_FILES_SINCE = 16;
 
     /// <summary>
     /// The links to each URL by kind, which an analysis adds (a crawl doesn't need it, and a crawl continued since keeps it

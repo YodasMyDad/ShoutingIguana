@@ -153,6 +153,18 @@ export interface Check {
    */
   recheck?: RecheckKind[];
   /**
+   * The kind of file a check of the whole site is about (the fix-it pass, X4): its robots.txt or its sitemaps. The
+   * analysis's count for the check names the files (`CheckCount.files`), to show in place of the home page the issue is
+   * reported on. Null for a check of pages or URLs; left out by a sidecar from before it.
+   */
+  about?: 'robotsTxt' | 'sitemap' | null;
+  /**
+   * The order the check's rows come in when none is asked for: `importance` (the most linked page, or the URL the most
+   * pages use, first) or `fewestLinksFirst` (the pages links lead to least first: pages missing from the sitemaps, where a
+   * sitemap helps most). Left out by a sidecar from before it, which reads as importance.
+   */
+  rowOrder?: 'importance' | 'fewestLinksFirst';
+  /**
    * Evidence (step 3b): the URL columns that show what the check found, in the order to show them, beside each row's
    * `url` and `detail` (`["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
    * `["redirectChain"]` for the redirect checks).
@@ -221,6 +233,11 @@ export interface CrawlOptions {
   acceptLanguage?: string | null;
   /** Header name to value. Stored crawls and saved defaults keep the names with empty values. */
   extraHeaders?: Record<string, string> | null;
+  /**
+   * Shopify crawler signatures, by the host each was made for. Sent in requests only: no response, crawl file or saved
+   * default ever holds one.
+   */
+  signatures?: Record<string, CrawlSignature> | null;
   respectRobotsTxt?: boolean | null;
   respectCrawlDelay?: boolean | null;
   checkResources?: boolean | null;
@@ -371,6 +388,28 @@ export interface CrawlListItem {
 
 // --------------------------------------------------------------------------------------------------- Crawl control
 
+/** A Shopify crawler signature's two values, as the store's admin gives them to copy. A secret. */
+export interface CrawlSignature {
+  signatureInput: string;
+  signature: string;
+}
+
+/**
+ * `GET /api/crawls/{id}/shopify`: a Shopify store's crawl, as far as its crawler access goes; null for any other site.
+ * `notCheckedUnsigned`: the site's URLs Shopify refused for want of a signature; `notCheckedSigned`: those it refused
+ * though one was sent; `urlIds`: both kinds, most important first, at most 1,000 (what "Recheck these pages" asks for).
+ */
+export interface ShopifyAccess {
+  host: string;
+  /** What told it was a store (`powered-by: Shopify`, `Shopify.theme`); null when only a refused signature did. */
+  signal: string | null;
+  notCheckedUnsigned: number;
+  notCheckedSigned: number;
+  urlIds: number[];
+  /** What was wrong with the crawl's signature, where it could tell: "the signature for shop.example expired on 1 March 2027". */
+  reasons: string[];
+}
+
 export interface StartCrawlRequest {
   options: CrawlOptions;
   /** True unless false is given. A crawl that stops isn't analysed by itself. */
@@ -386,6 +425,8 @@ export interface ContinueCrawlRequest {
   extraHeaders?: Record<string, string>;
   /** Needed again when the stored proxy had a user name and password. */
   proxyUrl?: string;
+  /** The Shopify crawler signatures to send from now on, by host: crawl files keep none. */
+  signatures?: Record<string, CrawlSignature>;
   /** Continue without the stored headers that weren't given again, instead of asking for them. */
   skipMissingHeaders?: boolean;
 }
@@ -415,6 +456,23 @@ export interface CheckCount {
    * clears there. Empty when none; left out by a sidecar from before it.
    */
   clears?: ClearedCheck[];
+  /**
+   * For a check of the site's own files (`about` on the check): every robots.txt or sitemap it found at fault, in the order
+   * its detail names them, to name in place of the home page its issue is reported on. Null for any other check, and for an
+   * analysis from before files were stored (show the page then); left out by a sidecar from before it.
+   */
+  files?: CheckFile[] | null;
+}
+
+/** A robots.txt or sitemap a check of the site's own files is about. */
+export interface CheckFile {
+  /** The file's full URL. */
+  url: string;
+  /**
+   * The sitemap's id, for `/crawls/{id}/sitemaps/{sitemapId}`; null for a robots.txt, which opens at
+   * `/crawls/{id}/robots/{origin}` (its URL without "/robots.txt").
+   */
+  sitemapId: number | null;
 }
 
 /** Another check a fix of one clears (related checks). */

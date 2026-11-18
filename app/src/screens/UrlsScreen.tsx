@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { FacetId, GridFilter, SummaryReason, UrlRow } from '../api/grids';
-import { checksQuery, crawlQuery, urlColumnsQuery, urlGridFacetsQuery } from '../api/queries';
+import { analysisQuery, checksQuery, crawlQuery, urlColumnsQuery, urlGridFacetsQuery } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
@@ -203,6 +203,10 @@ export function UrlsScreen() {
     [filters, q, endsPart],
   );
   const facetsRead = useQuery({ ...urlGridFacetsQuery(crawlId, facetsQuery), enabled: openFacet !== null });
+  // The not-in-sitemap check's pages, offered in the Sitemaps menu in one click (the fix-it pass): its count is the
+  // analysis's, read only once the menu is opened, as the facets are.
+  const analysisRead = useQuery({ ...analysisQuery(crawlId), enabled: openFacet === 'inSitemap' });
+  const notInSitemap = analysisRead.data?.counts.find((count) => count.checkId === 'not-in-sitemap')?.count ?? null;
   const facets = useMemo(
     () =>
       facetsRead.data
@@ -211,9 +215,10 @@ export function UrlsScreen() {
             filters,
             crawling,
             (column) => catalogue.data?.find((entry) => entry.id === column)?.valueTitles,
+            q || linkEnds ? null : notInSitemap,
           )
         : null,
-    [facetsRead.data, filters, crawling, catalogue.data],
+    [facetsRead.data, filters, crawling, catalogue.data, q, linkEnds, notInSitemap],
   );
   const facetsUnavailable = (id: FacetId) => {
     const reason = facetsRead.data?.unavailable.includes(id)

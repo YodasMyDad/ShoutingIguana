@@ -32,6 +32,9 @@ internal sealed class PageProcessor(
 {
     private const int FORBIDDEN_SAMPLE_SIZE = 20;
 
+    /// <summary>How often the alert that a Shopify store is refusing an unsigned crawl is said again, with its count, while it grows.</summary>
+    internal static readonly TimeSpan SHOPIFY_COUNT_EVERY = TimeSpan.FromSeconds(30);
+
     // What the workers are doing, kept in one value so progress reads all three counts at once: URLs being fetched in
     // the lowest bits, the site's URLs waiting for robots.txt above them, other sites' at the top. Each count is at most
     // the crawl's workers, far below the 21 bits it has.
@@ -48,6 +51,18 @@ internal sealed class PageProcessor(
     private int _forbiddenReported;
     private int _startLeftReported;
     private long _work;
+
+    // The first of the site's hosts that answered 429 to a request without a signature, with what was wrong with the
+    // signature the crawl had for it, if it had one; the count of refused URLs last said, and when; and whether a
+    // signature Shopify refused has been said.
+    private readonly Lock _shopifySync = new();
+    private (string Host, string? Detail)? _unsignedRefusal;
+    private int _refusedSaid;
+    private DateTimeOffset _refusedSaidAt;
+    private int _signatureRefusedReported;
+
+    /// <summary>The site's hosts found to be a Shopify store's this run, and whether the crawl can sign its requests to one.</summary>
+    public ShopifyWatch Shopify { get; } = new(new SignatureBook(options.Signatures, timeProvider));
 
     /// <summary>URLs waiting for their origin's robots.txt, and URLs being fetched, as one moment has them.</summary>
     public WorkInProgress Work
@@ -122,19 +137,29 @@ internal sealed class PageProcessor(
             Interlocked.Add(ref _work, -FETCHING);
         }
 
+        // The site's own responses say whether it's a Shopify store, a 429's as much as a page's.
+        var shopifySignal = item.IsInternal ? ShopifySignals.FromHeaders(response.Headers) : null;
+        string? refusalNote = null;
         if (item.IsInternal)
         {
+            ObserveShopify(uri, shopifySignal);
             WatchForBlocking(uri, response);
+            if (response.IsRateLimited)
+            {
+                refusalNote = NoteShopifyRefusal(item, uri, response);
+            }
         }
 
         // A 429 says nothing about the URL: it is stored as not checked, and the site's own get one more try at the end.
         return response.IsRateLimited
-            ? Failed(item, fetchedAt, FetchOutcome.NetworkError, $"{RetryingFetcher.RATE_LIMITED_ERROR} ({HttpStatusNames.Describe(429)})")
-            : Build(item, uri, response, fetchedAt);
+            ? Failed(item, fetchedAt, FetchOutcome.NetworkError, $"{RetryingFetcher.RATE_LIMITED_ERROR} ({HttpStatusNames.Describe(429)})", refusalNote)
+                with { ShopifySignal = shopifySignal }
+            : Build(item, uri, response, fetchedAt, shopifySignal);
     }
 
     /// <summary>A record for a URL that produced no usable response.</summary>
-    public static PageRecord Failed(FrontierItem item, long fetchedAt, FetchOutcome outcome, string? error)
+    /// <param name="refusalNote">For a 429: what the crawl's signature had to do with it, which the writer adds to the error.</param>
+    public static PageRecord Failed(FrontierItem item, long fetchedAt, FetchOutcome outcome, string? error, string? refusalNote = null)
     {
         var row = new ResponseRow
         {
@@ -142,6 +167,7 @@ internal sealed class PageProcessor(
             FetchedAt = fetchedAt,
             Outcome = outcome,
             Error = error,
+            RefusalNote = refusalNote,
             Indexability = Indexability.NonIndexable,
             IndexabilityReason = outcome == FetchOutcome.RobotsDisallowed ? IndexabilityReason.BlockedByRobots : IndexabilityReason.Unreachable
         };
@@ -149,7 +175,7 @@ internal sealed class PageProcessor(
         return new PageRecord(item, row, [], false, null, null);
     }
 
-    private PageRecord Build(FrontierItem item, Uri uri, FetchResponse response, long fetchedAt)
+    private PageRecord Build(FrontierItem item, Uri uri, FetchResponse response, long fetchedAt, string? shopifySignal)
     {
         ParsedPage? parsed = null;
         if (response.Outcome == FetchOutcome.Success && item.IsInternal)
@@ -220,7 +246,99 @@ internal sealed class PageProcessor(
 
         var details = item.IsInternal ? BlobCodec.EncodeDetails(new ResponseDetails(response.Headers, facts)) : null;
         var html = options.StoreHtml && isParsedHtml ? BlobCodec.CompressText(response.Body!) : null;
-        return new PageRecord(item, row, outLinks, facts?.Robots.NoFollow ?? false, details, html);
+
+        // A page's markup can say it's a Shopify store's where its headers didn't.
+        if (item.IsInternal && shopifySignal is null && facts?.ShopifyMarkup is { } markup)
+        {
+            shopifySignal = markup;
+            ObserveShopify(uri, shopifySignal);
+        }
+
+        return new PageRecord(item, row, outLinks, facts?.Robots.NoFollow ?? false, details, html) { ShopifySignal = shopifySignal };
+    }
+
+    /// <summary>Notes what a response said of its host; the first sign of a store may be what makes Shopify's limit worth saying.</summary>
+    private void ObserveShopify(Uri uri, string? signal)
+    {
+        if (Shopify.Observe(uri, signal))
+        {
+            SayShopifyLimitsUnsignedCrawlers();
+        }
+    }
+
+    /// <summary>
+    /// A 429 from the site, as far as Shopify goes: what the crawl's signature had to do with it (its note, for the stored
+    /// error), and the alert that says it as it happens. A signature Shopify refused is said once, with which problem it
+    /// is when that can be told. A store refusing an unsigned crawl is said at its first refusal, once the site is known to
+    /// be a store, whichever comes second, and said again with its count while that grows, at most every
+    /// <see cref="SHOPIFY_COUNT_EVERY"/>: one alert for the crawl, never one a page.
+    /// </summary>
+    private string? NoteShopifyRefusal(FrontierItem item, Uri uri, FetchResponse response)
+    {
+        var host = scope.HostName(UrlNormalizer.GetHost(uri));
+        var situation = Shopify.Explain(uri);
+        if (response.Signed && situation.Kind != SignatureSituationKind.Signed)
+        {
+            // It expired between the request and now: it was signed.
+            situation = situation with { Kind = SignatureSituationKind.Signed, At = null };
+        }
+
+        var note = ShopifySignals.Explain(situation, timeProvider.GetUtcNow());
+        if (situation.Kind == SignatureSituationKind.Signed)
+        {
+            if (Interlocked.Exchange(ref _signatureRefusedReported, 1) == 0)
+            {
+                var why = note![(ShopifySignals.SIGNED_REFUSAL.Length)..].TrimStart(',', ':', ' ');
+                observer.OnNotice(new CrawlNotice(
+                    CrawlNoticeLevel.Warning,
+                    "shopify-signature-refused",
+                    $"{host} runs on Shopify, and Shopify refused pages even with the signature: {why}. The crawl asks again for them at its end; any still refused are marked not checked, not broken.")
+                {
+                    Data = new CrawlNoticeData(Host: host, Reason: why)
+                });
+            }
+
+            return note;
+        }
+
+        var detail = note?[ShopifySignals.UNSIGNED_REFUSAL.Length..].TrimStart(':', ' ');
+        lock (_shopifySync)
+        {
+            _unsignedRefusal ??= (host, detail);
+        }
+
+        Shopify.NoteRefused(item.Id);
+        SayShopifyLimitsUnsignedCrawlers();
+        return note;
+    }
+
+    private void SayShopifyLimitsUnsignedCrawlers()
+    {
+        CrawlNotice notice;
+        lock (_shopifySync)
+        {
+            var now = timeProvider.GetUtcNow();
+            var count = Shopify.Refused;
+            if (_unsignedRefusal is not { } refusal || !(Shopify.IsDetected || refusal.Detail is not null) || count <= _refusedSaid ||
+                _refusedSaid > 0 && now - _refusedSaidAt < SHOPIFY_COUNT_EVERY)
+            {
+                return;
+            }
+
+            _refusedSaid = count;
+            _refusedSaidAt = now;
+            var pages = count == 1 ? "1 so far" : $"{count:N0} so far";
+            var because = refusal.Detail is { } detail ? $"the crawl isn't signed ({detail})" : "the crawl isn't signed";
+            notice = new CrawlNotice(
+                CrawlNoticeLevel.Warning,
+                "shopify-unsigned",
+                $"{refusal.Host} runs on Shopify, and Shopify is refusing some of its pages because {because}: {pages}. They'll be marked not checked, not broken. To fix it, in Shopify admin go to Online Store › Preferences › Crawler access, choose Create signature, then add it to the crawl as Shopify crawler access.")
+            {
+                Data = new CrawlNoticeData(Host: refusal.Host, Reason: refusal.Detail, Count: count)
+            };
+        }
+
+        observer.OnNotice(notice);
     }
 
     private static IndexabilityReason IndexabilityOf(string url, FetchOutcome outcome, PageFacts? facts) => outcome switch

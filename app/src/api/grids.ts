@@ -805,6 +805,11 @@ export interface RobotsBlockedUrl extends UrlRef {
   // analysis (or was never analysed), and absent from a sidecar built before step 3b.
   /** The pages that link to it, a page's links to itself left out. */
   linkingPages?: number | null;
+  /**
+   * The fix-it pass: the pages that use it by any kind of link (load it as a script, show it as an image), as the URL
+   * summary's `usedOn` counts them. Null as `linkingPages` is; absent from a sidecar before it.
+   */
+  usedOn?: number | null;
   /** A sitemap lists it; false only when every sitemap was read and none does. */
   inSitemap?: boolean | null;
   /** How many sitemaps list it, where one does. */

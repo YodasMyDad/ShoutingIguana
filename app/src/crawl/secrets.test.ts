@@ -13,6 +13,7 @@ import {
   withSecrets,
   type SecretsStore,
 } from './secrets';
+import { resetPendingRechecks, startRecheck } from './recheck';
 
 const CRAWL = '0123456789abcdef';
 
@@ -64,6 +65,20 @@ describe('the secrets a crawl is given (gap 18: the credential store)', () => {
     expect(other.proxyUrl).toBe('http://***@elsewhere.example.com:8080/');
     expect(other.hasRedactedProxyCredentials).toBe(true);
     expect(withSecrets(stored, null)).toBe(stored);
+  });
+
+  it('keeps a Shopify signature with both values, and gives it back to stored options, Continue and nothing else', () => {
+    const signature = { signatureInput: 'sig1=("@authority");expires=4102444800', signature: 'sig1=:FAKE:' };
+    expect(
+      secretsOf({ signatures: { 'shop.example': signature, 'half.example': { signatureInput: 'x', signature: '' } } }),
+    ).toEqual({
+      signatures: { 'shop.example': signature },
+    });
+    const kept = { signatures: { 'shop.example': signature } };
+    // A crawl file keeps none: the kept one comes back whole, and a request's own wins.
+    expect(withSecrets({ startUrl: 'https://shop.example/' }, kept).signatures).toEqual(kept.signatures);
+    expect(continueWithSecrets({}, kept)).toEqual({ signatures: kept.signatures });
+    expect(continueWithSecrets({ signatures: {} }, kept).signatures).toEqual({});
   });
 
   it('continues with what was kept, unless the request gives its own', () => {
@@ -193,6 +208,19 @@ describe('the API client with the credential store', () => {
     });
     await api.continueCrawl(CRAWL);
     expect(bodyOf(1)).toEqual({ proxyUrl: 'http://me:pw@proxy:3128', extraHeaders: { Authorization: 'Basic eDp5' } });
+  });
+
+  it('remembers a Shopify signature a crawl starts with only when asked, and a recheck sends it', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(Response.json({ id: CRAWL, recheckId: 1 })));
+    const signatures = { 'shop.example': { signatureInput: 'sig1=("@authority")', signature: 'sig1=:FAKE:' } };
+    await api.startCrawl({ options: { startUrl: 'https://shop.example/', signatures } }, { remember: true });
+    await vi.waitFor(() => expect(store.kept.get(`crawl:${CRAWL}`)).toBeDefined());
+    resetSessionSecretsForTests();
+    expect(JSON.parse(store.kept.get(`crawl:${CRAWL}`) ?? '{}')).toEqual({ signatures });
+
+    await startRecheck(CRAWL, { urlIds: [7] });
+    expect(bodyOf(1)).toEqual({ urlIds: [7], signatures });
+    resetPendingRechecks();
   });
 
   it('saves the defaults without secrets to the engine, and keeps them in the store', async () => {

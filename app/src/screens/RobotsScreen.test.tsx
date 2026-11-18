@@ -290,8 +290,9 @@ describe('robots.txt: one origin’s file', () => {
     // The URL and what blocking it costs lead; the rule is the fifth column (the file shows it for the cursor's row).
     const why = (url: string) => rowOf(url).querySelector('[aria-colindex="5"]');
     // The column says the line; the rule's text is behind it, and in the file beside the list.
-    expect(why(`${SITE}/admin/users`)).toHaveTextContent(/^Line 6$/);
-    expect(within(rowOf(`${SITE}/admin/users`)).getByText('Line 6')).toHaveAttribute(
+    // The rule itself, its line in the tooltip (the fix-it pass).
+    expect(why(`${SITE}/admin/users`)).toHaveTextContent(/^Disallow: \/admin\/$/);
+    expect(within(rowOf(`${SITE}/admin/users`)).getByText('Disallow: /admin/')).toHaveAttribute(
       'title',
       'Line 6 refused it: Disallow: /admin/',
     );

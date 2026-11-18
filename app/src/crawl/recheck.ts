@@ -7,11 +7,13 @@ import type { QueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import type { RecheckAsk, RecheckEvent, RecheckResult, RecheckStatus, StartedRecheck } from '../api/fixLoop';
+import type { CrawlSignature } from '../api/types';
 import { queryKeys } from '../api/queries';
 import { isLive } from '../api/types';
 import { crawlToast, notifyError, notifyResult } from '../feedback/notify';
 import { EMPTY_TRAIL, liveStore, useLiveCrawl, type LiveCrawl, type LiveStore } from '../live/liveStore';
 import { openSettingsAction } from './actions';
+import { keptSecrets } from './secrets';
 
 // ---------------------------------------------------------------------------------------------------------- Starting
 
@@ -68,17 +70,20 @@ watchPendingRechecks();
  * Starts a recheck. When the crawl file doesn't keep what it needs (header values, a proxy's password), says so as
  * Continue does, with "Recheck without" for headers alone, or the crawl's settings; any other refusal (`site-busy`,
  * `recheck-not-latest`...) in the sidecar's plain words, with Retry where trying again can work. The started recheck,
- * or null when it didn't start.
+ * or null when it didn't start. A Shopify store's signature goes with it: the one given, else the one kept for the
+ * crawl (a crawl file keeps none), so a recheck reads the pages the store refuses an unsigned crawler.
  */
 export async function startRecheck(
   crawlId: string,
   ask: RecheckAsk,
-  options: { skipMissingHeaders?: boolean } = {},
+  options: { skipMissingHeaders?: boolean; signatures?: Record<string, CrawlSignature> } = {},
 ): Promise<StartedRecheck | null> {
   try {
+    const signatures = options.signatures ?? (await keptSecrets(`crawl:${crawlId}`))?.signatures;
     const started = await api.startRecheck(crawlId, {
       ...ask,
       ...(options.skipMissingHeaders ? { skipMissingHeaders: true } : {}),
+      ...(signatures && Object.keys(signatures).length > 0 ? { signatures } : {}),
     });
     setPending(crawlId, { recheckId: started.recheckId, ask, ended: false, error: null });
     return started;

@@ -159,7 +159,7 @@ public static class RobotsReader
     /// links to it where there's none). Two lookups a blocked URL, by key, never a pass over the links. Null when the crawl
     /// has changed since its analysis, whose counts would then be of another crawl. Kept as the origin's list is.
     /// </summary>
-    private static Dictionary<int, (long? LinkingPages, bool? InSitemap, bool InMenu)>? Costs(GridReadContext context, string name)
+    private static Dictionary<int, (long? LinkingPages, long? UsedOn, bool? InSitemap, bool InMenu)>? Costs(GridReadContext context, string name)
     {
         if (context.Mode != GridMode.Summary)
         {
@@ -173,29 +173,30 @@ public static class RobotsReader
             : $"EXISTS (SELECT 1 FROM link_summary ls WHERE ls.to_id = u.id AND ls.kind = {hyperlink} AND ls.position = {navigation} AND ls.self = 0)";
         return context.CachedLarge("robots|costs|" + name, () =>
         {
-            Dictionary<int, (long? LinkingPages, bool? InSitemap, bool InMenu)> costs = [];
+            Dictionary<int, (long? LinkingPages, long? UsedOn, bool? InSitemap, bool InMenu)> costs = [];
             using var command = context.Command($"""
-                SELECT u.id, s.linking_pages, s.in_sitemap, {menu}
+                SELECT u.id, s.linking_pages, s.used_on, s.in_sitemap, {menu}
                 FROM urls u JOIN responses r ON r.url_id = u.id LEFT JOIN url_summary s ON s.url_id = u.id
                 WHERE u.url >= $origin || '/' AND u.url < $origin || '0' AND r.outcome = {(int)FetchOutcome.RobotsDisallowed}
                 """, [new("$origin", name)]);
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                costs[reader.GetInt32(0)] = (reader.IsDBNull(1) ? null : reader.GetInt64(1), reader.IsDBNull(2) ? null : reader.GetBoolean(2), reader.GetBoolean(3));
+                costs[reader.GetInt32(0)] = (reader.IsDBNull(1) ? null : reader.GetInt64(1), reader.IsDBNull(2) ? null : reader.GetInt64(2),
+                    reader.IsDBNull(3) ? null : reader.GetBoolean(3), reader.GetBoolean(4));
             }
 
             return costs;
         });
     }
 
-    private static bool IsConflict((long? LinkingPages, bool? InSitemap, bool InMenu) cost) => cost.InSitemap == true || cost.InMenu;
+    private static bool IsConflict((long? LinkingPages, long? UsedOn, bool? InSitemap, bool InMenu) cost) => cost.InSitemap == true || cost.InMenu;
 
     /// <summary>
     /// A blocked URL of the page with what blocking it costs, and the sitemaps that list it, which are looked up for the
     /// page's rows alone: a lookup by key in each sitemap's list.
     /// </summary>
-    private static RobotsBlockedUrl Costed(GridReadContext context, RobotsBlockedUrl url, Dictionary<int, (long? LinkingPages, bool? InSitemap, bool InMenu)>? costs)
+    private static RobotsBlockedUrl Costed(GridReadContext context, RobotsBlockedUrl url, Dictionary<int, (long? LinkingPages, long? UsedOn, bool? InSitemap, bool InMenu)>? costs)
     {
         if (costs is null || !costs.TryGetValue(url.Id, out var cost))
         {
@@ -206,6 +207,7 @@ public static class RobotsReader
         return url with
         {
             LinkingPages = cost.LinkingPages,
+            UsedOn = cost.UsedOn,
             InSitemap = cost.InSitemap,
             Sitemaps = listed?.Total,
             Sitemap = listed?.Sitemaps.FirstOrDefault(),

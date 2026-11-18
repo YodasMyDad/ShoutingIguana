@@ -300,6 +300,9 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
                     first is null ? null : new SitemapRef(int.Parse(first[0], System.Globalization.CultureInfo.InvariantCulture), first[1]),
                     (bool?)((bool?)Row(row.Id, "inSitemap") == true)),
                 (row.LinkingPages, row.InSitemap, row.InMenu, row.Sitemaps, row.Sitemap, row.Conflict));
+
+            // And the pages that use it by any kind of link, so a script pages load isn't "linked from no pages" (the fix-it pass).
+            Assert.Equal((long?)(long)Row(row.Id, "usedOn")!, row.UsedOn);
         }
 
         // The planted cases: pages link to the private area, and a sitemap lists one private URL nothing links to.

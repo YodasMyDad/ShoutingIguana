@@ -139,7 +139,7 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 19 | `noindex-page` | P/N/– | `metaRobots`, `xRobotsTag` | – | Same (none) | imp · – |
 | 20 | `nofollow-page` | P/N/– | `metaRobots`, `xRobotsTag` | – | Same (none) | imp · – |
-| 21 | `blocked-by-robots` | U/RD/S | `robotsRule` | – | Same (none, or "robots.txt couldn't be read") | use · pages |
+| 21 | `blocked-by-robots` | U/RD/S | `robotsRule` | – | Since the fix-it pass, the rule and its line, so each rule is a group: `Disallow: /checkout, line 50` (or "robots.txt couldn't be read") | use · pages |
 | 22 | `snippet-blocked` | P/PD/– | `metaRobots`, `xRobotsTag` | – | Same ("nosnippet") | imp · pages |
 | 23 | `robots-txt-unreachable` | U/N/– | – | – | Same | once |
 | 24 | `robots-txt-unreachable-other-origin` | U/N/– | – | – | Same | once |
@@ -179,16 +179,16 @@ and is in the group without a related URL.
 | # | Check | S/G/R | Evidence columns | Target facts | Detail before → after | Rows · groups |
 | --- | --- | --- | --- | --- | --- | --- |
 | 37 | `sitemap-non-indexable` | U/RD/S | `indexability`, `finalUrl`, `canonicalUrl` (the URL to list instead) | – | Same ("The URL redirects (301 Moved Permanently)") | use · pages |
-| 38 | `not-in-sitemap` | P/N/– | – | – | Same (none) | imp · – |
+| 38 | `not-in-sitemap` | P/N/– | `title`, `depth` (the fix-it pass) | – | Same (none) | fewest links first (`rowOrder`) · – |
 | 39 | `sitemap-error` | U/N/– | – | – | Same | once |
 | 40 | `sitemap-missing` | U/N/– | – | – | Same | once |
 | 41 | `sitemap-url-other-host` | U/RD/S | `finalUrl` (the URL on the sitemap's own host to list instead) | – | Same ("The URL redirects (301 Moved Permanently)"), and since change C4 `The URL is http://, the sitemap https://` for a URL on another scheme | use · pages |
-| 123 | `robots-txt-no-sitemap` (new) | U/N/– | – | – | `https://x/robots.txt has no Sitemap: line; the sitemap was found at https://x/sitemap.xml` | once |
+| 123 | `robots-txt-no-sitemap` (new) | U/N/– | – | – | `https://x/robots.txt has no Sitemap: line; the sitemap was found at https://x/sitemap.xml`; `… is empty, so it has no Sitemap: line; …` for an empty file (the fix-it pass) | once |
 | 124 | `sitemap-over-limit` (new) | U/N/– | – | – | `https://x/a.xml (62,113 URLs), https://x/b.xml (50.5 MB), https://x/index.xml (50,001 sitemaps) and 1 more` | once |
 | 125 | `sitemap-near-limit` (new) | U/N/– | – | – | As `sitemap-over-limit`: `https://x/a.xml (46,200 URLs)` | once |
 | 126 | `sitemap-empty` (new) | U/N/– | – | – | `https://x/empty.xml and 2 more` | once |
-| 127 | `sitemap-url-repeated` (new) | U/N/S | – | – | `In 2 sitemaps` (its found-on lists them) | imp · – |
-| 128 | `sitemap-lastmod-invalid` (new) | U/N/– | – | – | `1,204 entries: 1,200 in the future, 4 unreadable (https://x/sitemap.xml and 1 more)` | once |
+| 127 | `sitemap-url-repeated` (new) | U/N/S | – | – | `In 2 sitemaps: https://x/a.xml and https://x/b.xml` (the fix-it pass; "… and N more" past two) | imp · – |
+| 128 | `sitemap-lastmod-invalid` (new) | U/N/– | – | – | `1,204 entries: 1,200 in the future, 4 unreadable (https://x/sitemap.xml and 1 more); first: https://x/p/9, lastmod not a date` (the fix-it pass names the first wrong entry; one alone: `…: https://x/p/1, lastmod 3000-01-01`) | once |
 
 ### Titles
 
@@ -242,7 +242,8 @@ and is in the group without a related URL.
 | 60 | `image-alt-too-long` | P/**RU**/**T** | – | `img` (`alt`, `altLength`), `position` | Same ("2 images") | imp · pages |
 | 61 | `image-missing-dimensions` | P/**RU**/**T** | – | `img` (`width`, `height`: which is missing), `pixelWidth`, `pixelHeight` (what to write), `position` | Same ("5 images") | imp · pages |
 | 62 | `image-broken` | P/RU/T | – | `statusCode`, `final`, `text`, `position`, `links` | Same ("1 image") | imp · pages |
-| 63 | `image-too-large` | P/RU/T | – | `sizeBytes`, `contentType`, `pixelWidth`, `pixelHeight`, `img` (the size it's shown at, `srcset`, `loading`), `statusCode`, `final`, `position`, `links` | "2 images over 200 KB" → `2 images over 200 KB, the largest 1.8 MB` | imp · **size** |
+| 63 | `image-too-large` | P/RU/T | – | `sizeBytes`, `contentType`, `pixelWidth`, `pixelHeight`, `img` (the size it's shown at, `srcset`, `loading`), `statusCode`, `final`, `position`, `links` | "2 images over 200 KB" → `2 images over 200 KB, the largest 1.8 MB` | imp · **size** |
+
 | 132 | `image-missing-src` (new) | P/N/– | – | – | `2 images` | imp · – |
 | 133 | `image-no-srcset` (new) | P/RU/T | – | `img` (`srcset`, `width`), `pixelWidth`, `pixelHeight`, `sizeBytes` | `1 image, 2,400 px wide`, `2 images, the widest 2,400 px` | imp · pages |
 | 134 | `image-legacy-format` (new) | P/RU/T | – | `contentType`, `sizeBytes`, `pixelWidth`, `pixelHeight` | `1 image: 312 KB`, `2 images, the largest 312 KB` | imp · pages |
@@ -285,7 +286,8 @@ and is in the group without a related URL.
 | 74 | `no-https` | P/N/– | – | – | Same | once |
 | 75 | `http-page` | P/N/**S** | – | – | Same (none). Its found-on gives the links to update | imp · – |
 | 76 | `mixed-content` | P/RU/T | – | `kind`, `statusCode`, `contentType`, `position`, `links` | Same ("2 HTTP resources") | imp · pages |
-| 77 | `security-headers-missing` | P/N/– | – | – | Same ("Missing X-Content-Type-Options, Referrer-Policy") | once |
+| 77 | `security-headers-missing` | P/N/– | – | – | Same ("Missing X-Content-Type-Options, Referrer-Policy") | once |
+
 | 138 | `security-headers-weak` (new) | P/N/– | – | – | `HSTS max-age 86400 (1 day), under a year; X-Content-Type-Options "none"` | once |
 | 139 | `cookies-insecure` (new) | P/PD/– | – | – | `sessionid: no Secure, no HttpOnly` (each cookie at fault, what it lacks) | imp · pages |
 | 140 | `form-not-secure` (new) | P/PD/– | – | – | `Sends to http://x/subscribe`, `A password form on an http:// page` | imp · pages |
@@ -297,7 +299,8 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 78 | `url-uppercase` | P/N/**S** | – | – | Same (none). Its found-on gives the links to update if it's renamed | imp · – |
 | 79 | `url-underscores` | P/N/**S** | – | – | Same (none). As 78 | imp · – |
-| 80 | `url-too-long` | P/N/– | – | – | "132 characters" → `132 characters, over 115` | imp · – |
+| 80 | `url-too-long` | P/N/– | – | – | "132 characters" → `132 characters, over 115` | imp · – |
+
 | 142 | `url-tracking-parameters` (new) | U/N/S | – | – | The parameters: `utm_source, utm_medium` (its found-on lists the linking pages) | use · – |
 | 143 | `url-multiple-slashes` (new) | P/N/S | – | – | – | imp · – |
 | 144 | `url-space` (new) | P/N/S | – | – | – | imp · – |
