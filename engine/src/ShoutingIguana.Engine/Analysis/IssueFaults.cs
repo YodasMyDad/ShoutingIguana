@@ -87,6 +87,16 @@ internal static partial class IssueFaults
         return line > 0 ? cause[..line] + " ended the head early" : cause;
     }
 
+    /// <summary>
+    /// A skipped heading level's step, without the heading it quotes: "H1 → H4: "Out Of Stock"" is "H1 → H4", which a
+    /// template that skips the same level on every page writes whatever its headings say.
+    /// </summary>
+    public static string HeadingStep(string detail)
+    {
+        var quote = detail.IndexOf(": \"", StringComparison.Ordinal);
+        return quote < 0 ? detail : detail[..quote];
+    }
+
     public static string HreflangCodes(string detail) =>
         string.Join(", ", detail.Split("; ").Select(part => (part.IndexOf(": ", StringComparison.Ordinal) is var colon and >= 0 ? part[..colon] : part).TrimEnd('…'))
             .Where(code => code.Length > 0));

@@ -17,6 +17,9 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
     private const int READABILITY_MIN_SENTENCES = 5;
     private const string PLACEHOLDER = "lorem ipsum";
 
+    /// <summary>The most characters of the heading skipped to a detail quotes.</summary>
+    private const int SKIPPED_HEADING_MAX = 60;
+
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         if (!page.IsIndexable)
@@ -27,9 +30,12 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
         var facts = page.Facts;
         var headings = facts.Headings;
         var h1 = headings.FirstOrDefault(heading => heading.Level == 1);
-        if (h1 is not null && SkippedLevel(headings) is { } skipped)
+        if (h1 is not null && SkippedHeading(headings) is { } skipped)
         {
-            yield return new IssueHit(IssueCatalog.HEADING_LEVELS_SKIPPED, page.UrlId, skipped);
+            // The heading skipped to, quoted: the step alone is the fault its group is (IssueFaults.HeadingStep).
+            yield return new IssueHit(IssueCatalog.HEADING_LEVELS_SKIPPED, page.UrlId, string.IsNullOrWhiteSpace(skipped.Heading.Text)
+                ? skipped.Step
+                : $"{skipped.Step}: {RuleText.Quote(skipped.Heading.Text, SKIPPED_HEADING_MAX)}");
         }
 
         if (h1 is { FromImageAlt: true })
@@ -73,7 +79,10 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
     }
 
     /// <summary>From the first H1 on, the first heading more than one level below the one before it ("H2 → H4").</summary>
-    internal static string? SkippedLevel(IReadOnlyList<Parsing.Models.HeadingFact> headings)
+    internal static string? SkippedLevel(IReadOnlyList<Parsing.Models.HeadingFact> headings) => SkippedHeading(headings)?.Step;
+
+    /// <summary>The step <see cref="SkippedLevel"/> names ("H2 → H4"), with the heading it skips to; null with none.</summary>
+    internal static (string Step, Parsing.Models.HeadingFact Heading)? SkippedHeading(IReadOnlyList<Parsing.Models.HeadingFact> headings)
     {
         // From the first H1 on: headings before it (a theme's hidden cart, a menu's column titles) skip no level of the
         // page's outline, and the rule cited doesn't forbid them (ruled after the real-site audit).
@@ -92,7 +101,7 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
         {
             if (headings[index].Level > headings[index - 1].Level + 1)
             {
-                return $"H{headings[index - 1].Level} → H{headings[index].Level}";
+                return ($"H{headings[index - 1].Level} → H{headings[index].Level}", headings[index]);
             }
         }
 

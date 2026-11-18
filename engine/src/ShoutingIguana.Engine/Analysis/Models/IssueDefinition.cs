@@ -112,4 +112,11 @@ public sealed record IssueDefinition(
     /// detail itself.
     /// </summary>
     internal Func<string, string>? FaultOf { get; init; }
+
+    /// <summary>
+    /// The first <see cref="AnalysisFreshness.VERSION"/> that stores the faults of this check (<see cref="FaultOf"/>): an
+    /// analysis an earlier engine stored kept none for it, its details being the fault, so it's grouped by its issues' own
+    /// detail. The version the faults were first stored in for a check that always had one.
+    /// </summary>
+    internal int FaultsSince { get; init; } = Storage.CrawlSchema.ISSUE_TARGETS_SINCE;
 }

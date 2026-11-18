@@ -1211,14 +1211,14 @@ public static class IssueCatalog
     };
     public static readonly IssueDefinition HEADING_LEVELS_SKIPPED = new("heading-levels-skipped", IssueCategory.Headings, IssueSeverity.Notice,
         "Heading levels skipped",
-        """On this indexable page, which has an H1, a heading after the H1 is more than one level below the one before it (an H2, then an H4). Headings in menus and footers after the H1 count, as screen readers list them all; headings before the H1, such as a theme's hidden cart or a menu's column titles, aren't judged. The detail gives the first such step.""",
+        """On this indexable page, which has an H1, a heading after the H1 is more than one level below the one before it (an H2, then an H4). Headings in menus and footers after the H1 count, as screen readers list them all; headings before the H1, such as a theme's hidden cart or a menu's column titles, aren't judged. The detail gives the first such step and quotes the heading it skips to.""",
         """Use the next level down for each subsection (H2 under the H1, H3 under an H2), and style a heading by CSS, not by picking a smaller level.""")
     {
         Why = """Screen reader users move through a page by its headings, and a skipped level suggests a missing section. HTML asks for each heading to be at most one level below the one before. Search engines cope either way, so this is about structure and accessibility.""",
         LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.HeadingStep, FaultsSince = 16
     };
 
     public static readonly IssueDefinition H1_IMAGE_ONLY = new("h1-image-only", IssueCategory.Headings, IssueSeverity.Notice,

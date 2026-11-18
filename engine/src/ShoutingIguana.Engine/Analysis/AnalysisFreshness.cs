@@ -57,7 +57,7 @@ public static class AnalysisFreshness
     /// (<c>H1 → H4: "…"</c>), the values of a repeated share tag, which image has no source or is inline, the line of a
     /// second &lt;head&gt; or &lt;body&gt;, and which JSON-LD block failed, on which line and where (counted from 1); and
     /// groups <c>heading-levels-skipped</c>, <c>social-tags-multiple</c> and <c>html-structure-errors</c> by the fault their
-    /// detail shows.
+    /// detail shows (each from its <see cref="Models.IssueDefinition.FaultsSince"/>).
     /// </summary>
     public const int VERSION = 16;
 
