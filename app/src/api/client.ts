@@ -471,7 +471,8 @@ export const api = {
       body: { ...request, ...continueWithSecrets(request, await keptSecrets(`crawl:${id}`)) },
     });
     if (request.proxyUrl !== undefined || request.extraHeaders !== undefined) {
-      keepCrawlSecrets(id, { proxyUrl: request.proxyUrl ?? null, extraHeaders: request.extraHeaders ?? null });
+      // Where the crawl's secrets already were: remembered, or this session's (as Continue keeps them).
+      await keepCrawlSecrets(id, { proxyUrl: request.proxyUrl ?? null, extraHeaders: request.extraHeaders ?? null });
     }
     return started;
   },

@@ -149,6 +149,7 @@ export function ProblemRow({
   oneFix,
   points,
   nested = false,
+  change,
   ref,
   ...rest
 }: {
@@ -162,6 +163,8 @@ export function ProblemRow({
   points?: number | null | undefined;
   /** Folded under the row above: a fix of that one clears it. */
   nested?: boolean | undefined;
+  /** The fix loop: its change since the site's last check, under its count ("9 on 3 Nov"); left out or null, none. */
+  change?: string | null | undefined;
   ref?: React.Ref<HTMLAnchorElement> | undefined;
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
   const share = rowCountWords(entry.check, entry.count ?? 0);
@@ -192,6 +195,12 @@ export function ProblemRow({
               <span className="si-plain-row__points">{back}</span>
             </>
           ) : null}
+          {change ? (
+            <>
+              {' '}
+              <span className="si-plain-row__change">{change}</span>
+            </>
+          ) : null}
         </>
       }
     >
@@ -205,10 +214,13 @@ export function FixFirstCard({
   crawlId,
   results,
   score,
+  changeOf = () => null,
 }: {
   crawlId: string;
   results: PlainResults;
   score: Score | null;
+  /** The fix loop: a check's change since the site's last check, for its count's second line ("9 on 3 Nov"). */
+  changeOf?: ((checkId: string) => string | null) | undefined;
 }) {
   const problems = results.counts.error + results.counts.warning;
   const notices = results.counts.notice;
@@ -236,6 +248,7 @@ export function FixFirstCard({
                 number={index + 1}
                 oneFix={oneFix.has(entry.check.id)}
                 points={score?.lines.find((line) => line.checkId === entry.check.id)?.points}
+                change={changeOf(entry.check.id)}
               />
             </li>
           ))}
@@ -257,7 +270,13 @@ export function FixFirstCard({
             <PlainCheckList className="border-t border-border-subtle">
               {worthALook.map((entry) => (
                 <li key={entry.check.id}>
-                  <ProblemRow crawlId={crawlId} entry={entry} results={results} oneFix={oneFix.has(entry.check.id)} />
+                  <ProblemRow
+                    crawlId={crawlId}
+                    entry={entry}
+                    results={results}
+                    oneFix={oneFix.has(entry.check.id)}
+                    change={changeOf(entry.check.id)}
+                  />
                 </li>
               ))}
             </PlainCheckList>

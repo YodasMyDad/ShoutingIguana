@@ -40,6 +40,8 @@ import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
 import { RecheckCard } from './RecheckCard';
+import { ChangeFact, FixedSinceNote } from './ProblemSince';
+import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
 import { isRecheckRunning, useRecheckRun } from '../crawl/recheck';
 import { useSharedSource } from './useSharedSource';
 import { pathOrigin } from './whereWords';
@@ -79,6 +81,8 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
     const points = new Map((analysis.data.score?.lines ?? []).map((line) => [line.checkId, line.points]));
     return relatedChecks(checkEntries(checks.data, analysis.data), entry, points);
   }, [checks.data, analysis.data, entry]);
+  // The fix loop: what changed since the site's last check, for the head's count and a fixed problem's good news.
+  const changes = useSimpleChanges(crawlId, item, status);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => titleRef.current);
@@ -133,7 +137,7 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
       />
     );
   } else if (entry.outcome === 'passed') {
-    body = <PassedProblem titleRef={titleRef} check={check} />;
+    body = <PassedProblem titleRef={titleRef} crawlId={crawlId} item={item} check={check} changes={changes} />;
   } else {
     body = (
       <FoundProblem
@@ -144,6 +148,7 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
         entry={entry}
         analysis={analysis.data}
         related={related}
+        changes={changes}
       />
     );
   }
@@ -300,6 +305,7 @@ function FoundProblem({
   entry,
   analysis,
   related,
+  changes,
 }: {
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   crawlId: string;
@@ -309,6 +315,8 @@ function FoundProblem({
   analysis: Analysis;
   /** The problems related to this one by a fix: what fixing it also fixes, and what fixing another fixes here. */
   related: { clears: readonly RelatedCheck[]; clearedBy: readonly RelatedCheck[] } | null;
+  /** The fix loop: what changed since the site's last check. */
+  changes: SimpleChanges;
 }) {
   const wholes = wholesOf(analysis);
   const count = entry.count ?? 0;
@@ -370,6 +378,7 @@ function FoundProblem({
         facts={
           <>
             <ShareFact share={share} />
+            <ChangeFact changes={changes} checkId={check.id} />
             {points ? (
               <Fact icon={Gauge}>
                 {points.points === null ? (
@@ -438,7 +447,15 @@ function FoundProblem({
           {sharedSourceWords(pathOf(shared.url, item), shared.position)}
         </Callout>
       ) : null}
-      <WhereItIs crawlId={crawlId} item={item} check={check} total={count} onCopy={copyList} onSave={saveSheet} />
+      <WhereItIs
+        crawlId={crawlId}
+        item={item}
+        check={check}
+        total={count}
+        onCopy={copyList}
+        onSave={saveSheet}
+        changes={changes}
+      />
       {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard). */}
       <RecheckCard crawlId={crawlId} item={item} check={check} />
     </>
@@ -558,10 +575,24 @@ function SkippedProblem({
 }
 
 /** A check that found nothing: its good news, and what it looks for. */
-function PassedProblem({ titleRef, check }: { titleRef: React.RefObject<HTMLHeadingElement | null>; check: Check }) {
+function PassedProblem({
+  titleRef,
+  crawlId,
+  item,
+  check,
+  changes,
+}: {
+  titleRef: React.RefObject<HTMLHeadingElement | null>;
+  crawlId: string;
+  item: CrawlListItem;
+  check: Check;
+  /** The fix loop: a problem fixed since the site's last check says so, with what was fixed. */
+  changes: SimpleChanges;
+}) {
   return (
     <>
       <ProblemHead titleRef={titleRef} outcome="passed" title={passedWords(check)} />
+      <FixedSinceNote crawlId={crawlId} item={item} check={check} changes={changes} />
       <Card className="flex flex-col gap-4 px-7 py-6">
         {/* What it looks for, never its words of what's wrong: it found nothing wrong. */}
         <section aria-labelledby="problem-looks-for">
@@ -571,6 +602,8 @@ function PassedProblem({ titleRef, check }: { titleRef: React.RefObject<HTMLHead
           <p className="mt-1 text-16 text-text">{looksForWords(check)}</p>
         </section>
       </Card>
+      {/* A recheck that cleared it: what it found stays in view ("All 5 fixed. This problem is gone from the list."). */}
+      <RecheckCard crawlId={crawlId} item={item} check={check} resultOnly />
     </>
   );
 }

@@ -13,6 +13,9 @@ import { replaceSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem, type FakeRoute, type FakeSidecar } from '../test/fakeSidecar';
 import {
   RECHECK_NEEDS_SECRETS,
+  changesRoute,
+  comparedGardenItem,
+  fixedRoute,
   recheckPlan,
   recheckRecord,
   recheckResult,
@@ -249,5 +252,53 @@ describe('Fixed it?, after a recheck', () => {
     const fixed = await card();
     expect(await fixed.findByText('3 of 5 fixed.')).toBeInTheDocument();
     expect(fixed.getByText('2 couldn’t be rechecked.')).toBeInTheDocument();
+  });
+});
+
+describe('one problem, since the last check', () => {
+  it('adds what it was to the count: "was 9 on 17 Oct"', async () => {
+    await open({}, PROBLEM, [
+      changesRoute(),
+      ['GET', /^\/api\/crawls\/([0-9a-f]{16})$/, () => json(comparedGardenItem())],
+    ]);
+    expect(await screen.findByText('was 9 on 17 Oct')).toBeInTheDocument();
+  });
+
+  it('says a problem fixed since as such, with what was fixed, and what wasn’t checked this time apart', async () => {
+    await open({}, `/crawls/${TEST_CRAWL_ID}/issues/internal-server-error`, [
+      changesRoute(),
+      fixedRoute(),
+      ['GET', /^\/api\/crawls\/([0-9a-f]{16})$/, () => json(comparedGardenItem())],
+    ]);
+    const note = within(await screen.findByRole('region', { name: 'Fixed since your last check on 17 Oct' }));
+    expect(note.getByText('It found 2 addresses then, and none now.')).toBeInTheDocument();
+    const fixed = await note.findByRole('list', { name: 'What was fixed' });
+    expect(within(fixed).getByText('/checkout/')).toBeInTheDocument();
+    expect(fixed).toHaveTextContent('· Fixed');
+    // Not checked this time: never fixed, folded apart with why.
+    expect(fixed).not.toHaveTextContent('/basket/');
+    fireEvent.click(note.getByRole('button', { name: 'Not checked this time (1)' }));
+    expect(note.getByRole('list', { name: 'Not checked this time' })).toHaveTextContent(
+      '/basket/· Not checked this time: It didn’t answer properly this time.',
+    );
+  });
+
+  it('keeps a recheck’s result in view once it cleared the problem', async () => {
+    await open(
+      {
+        rechecks: [
+          recheckRecord({
+            checkId: 'title-missing',
+            judged: 3,
+            countBefore: 3,
+            result: recheckResult({ fixed: 3, still: 0 }),
+          }),
+        ],
+      },
+      `/crawls/${TEST_CRAWL_ID}/issues/title-missing`,
+    );
+    const fixed = await card();
+    expect(await fixed.findByText('All 3 fixed. This problem is gone from the list.')).toBeInTheDocument();
+    expect(fixed.queryByRole('button', { name: 'Recheck again' })).toBeNull();
   });
 });

@@ -287,9 +287,10 @@ export function copyChangeWords(change: Pick<CheckChange, 'state' | 'then'>, sin
   return '';
 }
 
-/** The heading of What to fix's Fixed group: "Fixed since your last check on 3 Nov (3)". */
-export function fixedGroupTitle(since: string | null, count: number): string {
-  return `Fixed since your last check ${onWords(since)} (${formatCount(count)})`;
+/** The heading of What to fix's Fixed group: "Fixed since your last check on 3 Nov (3)"; the words alone without a count. */
+export function fixedGroupTitle(since: string | null, count?: number): string {
+  const title = `Fixed since your last check ${onWords(since)}`;
+  return count === undefined ? title : `${title} (${formatCount(count)})`;
 }
 
 /**
