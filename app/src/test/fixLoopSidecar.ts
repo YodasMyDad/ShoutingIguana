@@ -18,12 +18,15 @@ import type {
 import {
   GARDEN_THEN,
   GARDEN_THEN_POINTS,
+  comparedGroups,
+  comparedRows,
   itemChangesOf,
   scenarioComparison,
   scenarioFixed,
   type ComparisonScenario,
 } from '../api/mock/fixLoop';
 import type { ProblemBody } from '../api/errors';
+import type { GridPage, IssueGroupPage, IssueRow } from '../api/grids';
 import type { CrawlListItem } from '../api/types';
 import { json, problem, type FakeRoute } from './fakeSidecar';
 import { GARDEN_ANALYSIS, SIMPLE_CHECKS, gardenItem } from './simpleSidecar';
@@ -344,3 +347,34 @@ export const RECHECK_NEEDS_SECRETS = {
   missingHeaders: ['Authorization'],
   proxyCredentials: false,
 } satisfies ProblemBody;
+
+/**
+ * The given routes, with a check's groups and rows compared when asked (`compareWith`), as the sidecar answers them:
+ * each group and row gains its `change` and the page `compared` (the mock's `comparedGroups` and `comparedRows`).
+ */
+export function compared(routes: readonly FakeRoute[], comparison: CrawlComparison = gardenComparison()): FakeRoute[] {
+  return routes.map(([method, pattern, answer]): FakeRoute => {
+    if (method !== 'POST' || !/issues.*(groups|rows)\$$/.test(pattern.source)) return [method, pattern, answer];
+    return [
+      method,
+      pattern,
+      async (request, match) => {
+        const response = await answer(request, match);
+        const body = request.body as { compareWith?: string } | undefined;
+        if (!body?.compareWith || !response.ok) return response;
+        const page = (await response.json()) as IssueGroupPage | GridPage<IssueRow>;
+        if ('groups' in page) return json(comparedGroups(page, comparison));
+        const checkId = /\/issues\/([^/]+)\/rows$/.exec(request.path)?.[1] ?? '';
+        return json({
+          ...page,
+          rows: comparedRows(page.rows, comparison, checkId),
+          compared: {
+            with: comparison.with.id,
+            startedAt: comparison.with.startedAt,
+            comparable: comparison.comparable,
+          },
+        });
+      },
+    ];
+  });
+}

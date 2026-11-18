@@ -447,7 +447,15 @@ function FoundProblem({
           {sharedSourceWords(pathOf(shared.url, item), shared.position)}
         </Callout>
       ) : null}
-      <WhereItIs crawlId={crawlId} item={item} check={check} total={count} onCopy={copyList} onSave={saveSheet} />
+      <WhereItIs
+        crawlId={crawlId}
+        item={item}
+        check={check}
+        total={count}
+        onCopy={copyList}
+        onSave={saveSheet}
+        changes={changes}
+      />
       {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard). */}
       <RecheckCard crawlId={crawlId} item={item} check={check} />
     </>

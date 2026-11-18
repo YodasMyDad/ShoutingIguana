@@ -6,6 +6,7 @@ import { TEST_CRAWL_ID, json, type FakeRoute } from '../test/fakeSidecar';
 import {
   RECHECK_ROWS,
   changesRoute,
+  compared,
   comparedGardenItem,
   fixedRoute,
   gardenComparison,
@@ -27,7 +28,8 @@ const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 const SUMMARY = `${CRAWL}/overview`;
 
 function own(item: CrawlListItem, extra: FakeRoute[] = [], analysis: Analysis = GARDEN_ANALYSIS) {
-  ownSidecar([...extra, ...problemRoutes(), ...simpleRoutes(item, analysis)]);
+  // A check's groups and rows compared when asked, as the sidecar answers them.
+  ownSidecar([...extra, ...compared(problemRoutes()), ...simpleRoutes(item, analysis)]);
 }
 
 const summary = (item: CrawlListItem, extra: FakeRoute[] = [], before?: () => void): Story => ({
@@ -40,13 +42,13 @@ const summary = (item: CrawlListItem, extra: FakeRoute[] = [], before?: () => vo
   render: () => <ScreenApp path={SUMMARY} mode="simple" />,
 });
 
-const compared = (comparison: CrawlComparison) =>
+const comparedSummary = (comparison: CrawlComparison) =>
   summary(comparedGardenItem({}, comparison), [changesRoute(comparison)]);
 
 // ---------------------------------------------------------------------------------------------------- The Summary
 
 /** Since the last check: "score 72 → 86, 3 problems fixed, 1 new", each a link, and See what changed. */
-export const SummarySinceLastCheck: Story = compared(gardenComparison());
+export const SummarySinceLastCheck: Story = comparedSummary(gardenComparison());
 
 /** A site's first check: nothing at all, no line and no zeros. */
 export const SummaryFirstCheck: Story = summary(gardenItem({ previous: null, changes: null }), [
@@ -57,12 +59,12 @@ export const SummaryFirstCheck: Story = summary(gardenItem({ previous: null, cha
 export const SummaryComparisonLoading: Story = summary(comparedGardenItem(), [changesRoute('never')]);
 
 /** Partial: the last check read far more of the site; one caution line. */
-export const SummaryPartial: Story = compared(
+export const SummaryPartial: Story = comparedSummary(
   gardenComparison({ comparable: 'partial', differences: [{ code: 'coverage', then: 265, now: 50 }] }),
 );
 
 /** Counts only: the start address moved to HTTPS, so only the totals are compared. */
-export const SummaryCountsOnly: Story = compared(
+export const SummaryCountsOnly: Story = comparedSummary(
   gardenComparison({
     comparable: 'countsOnly',
     differences: [

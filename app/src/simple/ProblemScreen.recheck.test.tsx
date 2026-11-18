@@ -257,7 +257,10 @@ describe('Fixed it?, after a recheck', () => {
 
 describe('one problem, since the last check', () => {
   it('adds what it was to the count: "was 9 on 17 Oct"', async () => {
-    await open({}, PROBLEM, [changesRoute(), ['GET', /^\/api\/crawls\/([0-9a-f]{16})$/, () => json(comparedGardenItem())]]);
+    await open({}, PROBLEM, [
+      changesRoute(),
+      ['GET', /^\/api\/crawls\/([0-9a-f]{16})$/, () => json(comparedGardenItem())],
+    ]);
     expect(await screen.findByText('was 9 on 17 Oct')).toBeInTheDocument();
   });
 
@@ -284,7 +287,12 @@ describe('one problem, since the last check', () => {
     await open(
       {
         rechecks: [
-          recheckRecord({ checkId: 'title-missing', judged: 3, countBefore: 3, result: recheckResult({ fixed: 3, still: 0 }) }),
+          recheckRecord({
+            checkId: 'title-missing',
+            judged: 3,
+            countBefore: 3,
+            result: recheckResult({ fixed: 3, still: 0 }),
+          }),
         ],
       },
       `/crawls/${TEST_CRAWL_ID}/issues/title-missing`,
