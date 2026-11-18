@@ -86,7 +86,12 @@ export function CrawlMenu({
           detail={compare.why}
           onSelect={() => {
             if (compare.choice !== null) setCompareChoice(compare.latestId, compare.choice);
-            void navigate({ to: '/crawls/$crawl/overview', params: { crawl: compare.latestId } });
+            // The latest crawl itself: its Overview with Compare with… open, to pick there.
+            void navigate({
+              to: '/crawls/$crawl/overview',
+              params: { crawl: compare.latestId },
+              search: compare.choice === null ? { compare: 1 } : {},
+            });
           }}
         >
           Compare with…
