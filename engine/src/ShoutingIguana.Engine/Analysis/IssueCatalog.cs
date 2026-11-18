@@ -509,7 +509,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition BLOCKED_BY_ROBOTS = new("blocked-by-robots", IssueCategory.Indexability, IssueSeverity.Notice,
         "Blocked by robots.txt",
-        """The crawler didn't fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn't be read, which crawlers treat as disallowing everything: the detail then says so. Not checked on a crawl that was told to ignore robots.txt.""",
+        """The crawler didn't fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn't be read, which crawlers treat as disallowing everything. The detail names the rule that refused it and its line, or says robots.txt couldn't be read. Not checked on a crawl that was told to ignore robots.txt.""",
         """If the URL should be crawled, change or remove the Disallow rule that matches it. If it's meant to be blocked, avoid linking to it from crawlable pages where you can, and if it must stay out of search, allow crawling and use noindex instead.""")
     {
         Why = """Search engines that obey robots.txt can't read the page, so its content, links and any noindex on it go unseen, yet Google can still index the URL without its content, with no description, if links point to it. Blocking is right for URLs with no search value, such as baskets, internal search or filter combinations. It's a problem when a broad rule catches pages you want in search, or the CSS and JavaScript that pages need to render.""",
@@ -1018,7 +1018,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SITEMAP_URL_REPEATED = new("sitemap-url-repeated", IssueCategory.Sitemaps, IssueSeverity.Notice,
         "URL listed in more than one sitemap",
-        """More than one of the site's sitemap files lists this URL. The detail says how many; where it's found lists them.""",
+        """More than one of the site's sitemap files lists this URL. The detail names the sitemaps that list it.""",
         """Keep each URL in one sitemap, usually the one for its kind of page. Repeats often come from two sitemap plugins at once, or a page listed under two sections.""")
     {
         Why = """The sitemaps protocol allows it and search engines cope, so this is housekeeping: repeated entries make sitemaps bigger and harder to keep right, and can give one URL two different lastmod dates.""",
@@ -1031,7 +1031,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SITEMAP_LASTMOD_INVALID = new("sitemap-lastmod-invalid", IssueCategory.Sitemaps, IssueSeverity.Notice,
         "Sitemap lastmod invalid or in the future",
-        """Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind and names the sitemaps. A crawl made before the crawler read lastmod isn't checked.""",
+        """Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind, names the sitemaps, and gives the first wrong entry with what its lastmod says. A crawl made before the crawler read lastmod isn't checked.""",
         """Have the sitemap give each URL's real last change in W3C Datetime, as most CMS sitemap plugins do when left to themselves. Don't set every entry to today's date, or any to a date in the future.""")
     {
         Why = """Google uses lastmod only when it's consistently and verifiably accurate. Dates it can't read, or that haven't happened yet, show it they aren't, so it may ignore the sitemap's dates and find changed pages later.""",
