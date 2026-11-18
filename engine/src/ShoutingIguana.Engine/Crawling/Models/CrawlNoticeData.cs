@@ -5,7 +5,7 @@ namespace ShoutingIguana.Engine.Crawling.Models;
 /// <list type="bullet">
 /// <item><c>blocked</c>: Host, Reason (the firewall or challenge), Count (the host's responses blocked: 1 as raised, so far when read from the file).</item>
 /// <item><c>rate-limited</c>: Host, Reason (429 Too Many Requests), Duration (the pause it asked for, when it did).</item>
-/// <item><c>rate-limited-unchecked</c>: Host (of the first such URL), Reason (429 Too Many Requests), Count (the site's URLs stored as not checked).</item>
+/// <item><c>rate-limited-unchecked</c>: Host (of the first such URL), Reason (429 Too Many Requests), Count (the site's URLs stored as not checked: refused, or never asked).</item>
 /// <item><c>shopify-unsigned</c>: Host (the first to refuse an unsigned request), Count (the site's URLs refused so far; said again as it grows), Reason (why the crawl's signature wasn't sent, when it had one: expired, or for the www twin or bare domain; else null).</item>
 /// <item><c>shopify-signature-refused</c>: Host, Reason (which problem the signature may have: made under an hour ago, or not active yet, expired or for another domain).</item>
 /// <item><c>mostly-forbidden</c>: Host, Count (the 403s), Sampled (the site's first URLs fetched).</item>

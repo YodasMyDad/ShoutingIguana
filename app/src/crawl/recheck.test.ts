@@ -196,6 +196,19 @@ describe('recheckRunOf: where a recheck stands', () => {
     });
   });
 
+  it('ends a recheck whose run failed, with the sidecar’s reason: it stored nothing, so nothing is worked out after it', () => {
+    const failed = recheckEvent({ recheckId: 2, status: 'failed', result: null });
+    expect(recheckRunOf(live({ status: 'rechecking', recheck: failed }), started())).toMatchObject({
+      stage: 'ended',
+      status: 'failed',
+      error: null,
+    });
+    const reason = 'The recheck failed: the disk is full';
+    const run = recheckRunOf(live({ status: 'completed', recheck: failed, error: reason }), started());
+    expect(run).toMatchObject({ stage: 'ended', status: 'failed', error: reason });
+    expect(isRecheckRunning(run)).toBe(false);
+  });
+
   it('isRecheckRunning: under way until settled or ended', () => {
     expect(isRecheckRunning(null)).toBe(false);
     expect(isRecheckRunning(recheckRunOf(live({ status: 'rechecking' }), started()))).toBe(true);

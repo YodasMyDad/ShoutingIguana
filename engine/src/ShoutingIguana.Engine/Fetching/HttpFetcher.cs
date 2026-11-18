@@ -29,6 +29,7 @@ internal sealed class HttpFetcher : IDisposable
     private const string ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
     private readonly HttpClient _client;
+    private long _requests;
     private readonly CrawlOptions _options;
     private readonly CrawlScope _scope;
     private readonly bool _startsOnHttps;
@@ -85,6 +86,14 @@ internal sealed class HttpFetcher : IDisposable
 
     /// <summary>What keeps a crawl of a public site off private network addresses.</summary>
     public PrivateNetworkGuard Guard { get; }
+
+    /// <summary>
+    /// The requests the sites were sent so far, every kind (pages, robots.txt, sitemaps, the icon), each try counted: those
+    /// answered, and those sent that got none (a timeout, a connection dropped part-way). None for a URL failed without one,
+    /// nor for a connection that couldn't be made (the name didn't resolve, nothing listened, the proxy or TLS failed), which
+    /// asked the site nothing. Read from any thread.
+    /// </summary>
+    public long Requests => Interlocked.Read(ref _requests);
 
     public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null)
     {
@@ -210,7 +219,21 @@ internal sealed class HttpFetcher : IDisposable
             throw new HttpRequestException(PrivateNetworkGuard.ERROR, new PrivateNetworkAddressException(uri.IdnHost));
         }
 
-        return await _client.SendAsync(CreateRequest(uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var response = await _client.SendAsync(CreateRequest(uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            Interlocked.Increment(ref _requests);
+            return response;
+        }
+        catch (Exception exception) when (exception is not HttpRequestException
+                                          {
+                                              HttpRequestError: HttpRequestError.NameResolutionError or HttpRequestError.ConnectionError or
+                                              HttpRequestError.SecureConnectionError or HttpRequestError.ProxyTunnelError
+                                          })
+        {
+            Interlocked.Increment(ref _requests);
+            throw;
+        }
     }
 
     /// <summary>

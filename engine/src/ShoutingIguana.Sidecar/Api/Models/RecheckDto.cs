@@ -20,9 +20,10 @@ internal sealed record RecheckDto(
     int Judged,
     int Fetched,
     long? CountBefore,
-    RecheckResult? Result)
+    RecheckResult? Result,
+    RecheckAnswerCounts? Answers)
 {
     public static RecheckDto From(RecheckRecord recheck) => new(recheck.Id, recheck.Status, recheck.StartedAt.UtcDateTime, recheck.EndedAt?.UtcDateTime,
         recheck.SettledAt?.UtcDateTime, recheck.CrawlingMs, recheck.CheckId, recheck.Group, recheck.UrlList, recheck.Kinds, recheck.Judged, recheck.Fetched,
-        recheck.CountBefore, recheck.Result);
+        recheck.CountBefore, recheck.Result, recheck.Answers);
 }

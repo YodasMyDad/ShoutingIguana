@@ -110,6 +110,7 @@ public static class RecheckReader
 
     private static List<RecheckRecord> Records(SqliteConnection connection, SqliteTransaction snapshot, string sql, int? id = null)
     {
+        var answers = Answers(connection, snapshot, id);
         List<RecheckRecord> records = [];
         using var command = Command(connection, snapshot, sql, id);
         using var reader = command.ExecuteReader();
@@ -136,10 +137,55 @@ public static class RecheckReader
                 reader.IsDBNull(13) ? null : reader.GetInt64(13),
                 settledAt is null ? null
                     : new RecheckResult(Int(reader, 14) ?? 0, Int(reader, 15) ?? 0, Int(reader, 16) ?? 0, Int(reader, 17) ?? 0, Int(reader, 18) ?? 0,
-                        Int(reader, 19), Int(reader, 20))));
+                        Int(reader, 19), Int(reader, 20)))
+            {
+                Answers = answers.TryGetValue(reader.GetInt32(0), out var counts)
+                    ? new RecheckAnswerCounts(counts.Read, counts.RateLimited, counts.Blocked, counts.RobotsTxt, counts.NoAnswer,
+                        counts.NotAsked + Math.Max(0, reader.GetInt32(11) - counts.Rows))
+                    : null
+            });
         }
 
         return records;
+    }
+
+    /// <summary>
+    /// How the site answered each recheck (or the one asked for) for the URLs it judges, counted: the judged URLs past its
+    /// cap have no row, and count as never asked. None for a recheck whose rows have no answer (an earlier engine's), nor
+    /// in a file whose table has no column for it.
+    /// </summary>
+    private static Dictionary<int, (int Read, int RateLimited, int Blocked, int RobotsTxt, int NoAnswer, int NotAsked, int Rows)> Answers(
+        SqliteConnection connection, SqliteTransaction snapshot, int? id)
+    {
+        Dictionary<int, (int Read, int RateLimited, int Blocked, int RobotsTxt, int NoAnswer, int NotAsked, int Rows)> answers = [];
+        if (Scalar(connection, snapshot, "SELECT COUNT(*) FROM pragma_table_info('recheck_urls') WHERE name = 'answer'") is not > 0L)
+        {
+            return answers;
+        }
+
+        using var command = Command(connection, snapshot, $"""
+            SELECT recheck_id, answer, COUNT(*) FROM recheck_urls
+            WHERE role = {(int)RecheckRole.Judged} AND answer IS NOT NULL{(id is null ? string.Empty : " AND recheck_id = $id")}
+            GROUP BY recheck_id, answer
+            """, id);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var recheck = reader.GetInt32(0);
+            var count = reader.GetInt32(2);
+            var (read, rateLimited, blocked, robotsTxt, noAnswer, notAsked, rows) = answers.GetValueOrDefault(recheck);
+            answers[recheck] = (RecheckAnswer)reader.GetInt32(1) switch
+            {
+                RecheckAnswer.Read => (read + count, rateLimited, blocked, robotsTxt, noAnswer, notAsked, rows + count),
+                RecheckAnswer.RateLimited => (read, rateLimited + count, blocked, robotsTxt, noAnswer, notAsked, rows + count),
+                RecheckAnswer.Blocked => (read, rateLimited, blocked + count, robotsTxt, noAnswer, notAsked, rows + count),
+                RecheckAnswer.RobotsTxt => (read, rateLimited, blocked, robotsTxt + count, noAnswer, notAsked, rows + count),
+                RecheckAnswer.NoAnswer => (read, rateLimited, blocked, robotsTxt, noAnswer + count, notAsked, rows + count),
+                _ => (read, rateLimited, blocked, robotsTxt, noAnswer, notAsked + count, rows + count)
+            };
+        }
+
+        return answers;
     }
 
     private static object? Scalar(SqliteConnection connection, SqliteTransaction? transaction, string sql, int? id = null)

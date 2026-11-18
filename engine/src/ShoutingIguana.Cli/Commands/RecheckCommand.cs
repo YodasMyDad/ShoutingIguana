@@ -2,6 +2,7 @@ using System.CommandLine;
 using ShoutingIguana.Cli.Output;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -12,10 +13,16 @@ namespace ShoutingIguana.Cli.Commands;
 
 /// <summary>
 /// <c>si recheck</c>: the fix loop's "Recheck these N pages". Fetches a check's URLs again (or a group's, or a list's)
-/// into the same crawl file, analyses the crawl, and says what it found: "4 of 5 fixed".
+/// into the same crawl file, analyses the crawl, and says what it found: "4 of 5 fixed", and how the site answered the
+/// URLs asked for (read, refused again and why, never asked). Its progress prints as a crawl's does: in place in a
+/// terminal, a line every few seconds when its output is redirected. A recheck that fails stores nothing, so nothing is
+/// analysed: it says why, and the crawl is as it was.
 /// </summary>
 internal static class RecheckCommand
 {
+    /// <summary>Tests only: makes the recheck's run fail at a stage (<see cref="RecheckStage"/>).</summary>
+    internal static Action<RecheckStage>? AtStage { get; set; }
+
     public static Command Create()
     {
         var database = new Argument<string>("db") { Description = "A .sicrawl file: the site's latest crawl." };
@@ -146,16 +153,24 @@ internal static class RecheckCommand
             }
 
             CrawlSummary run;
-            await using (var job = new CrawlEngine(loggerFactory).Recheck(new RecheckRequest(path, plan, resume.Options)))
+            var observer = new ConsoleCrawlObserver(quiet: false);
+            await using (var job = new CrawlEngine(loggerFactory).Recheck(new RecheckRequest(path, plan, resume.Options) { AtStage = AtStage }, observer))
             {
                 await using var stop = cancellationToken.Register(() => job.StopAsync());
                 run = await job.Completion;
             }
 
+            observer.EndProgressLine();
+            if (run.Status == CrawlStatus.Failed)
+            {
+                Console.Error.WriteLine($"The recheck failed: {run.Error ?? "unknown error"}. Nothing it fetched was kept: the crawl is as it was.");
+                return 1;
+            }
+
             await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(path, settings, CancellationToken.None);
             var recheck = RecheckReader.Read(path, run.RecheckId!.Value)!;
             Console.WriteLine(Describe(recheck));
-            return run.Status == CrawlStatus.Failed ? 1 : 0;
+            return 0;
         }));
 
         return command;
@@ -180,7 +195,11 @@ internal static class RecheckCommand
         return $"Rechecking {string.Join(", and ", parts)}.";
     }
 
-    /// <summary>The recheck's result in a line or two: "4 of 5 fixed. 1 still has it."</summary>
+    /// <summary>
+    /// The recheck's result in a few lines: "4 of 5 fixed. 1 still has it.", and how the site answered the URLs asked for:
+    /// "Asked for 7 URLs: 1 read, 2 refused again (the site asked the crawler to slow down, 429 Too Many Requests), 4 never
+    /// asked."
+    /// </summary>
     internal static string Describe(RecheckRecord recheck)
     {
         if (recheck.Result is not { } result)
@@ -188,12 +207,20 @@ internal static class RecheckCommand
             return $"Recheck {recheck.Id}: {recheck.Status}, not settled yet.";
         }
 
-        var lines = new List<string>
+        List<string> lines = [];
+        if (recheck.CheckId is not null)
         {
-            recheck.CheckId is null
-                ? $"Rechecked {Format.Count(recheck.Fetched, "URL", "URLs")}."
-                : $"{result.Fixed:N0} of {recheck.Judged:N0} fixed.{(result.Still > 0 ? $" {result.Still:N0} still {(result.Still == 1 ? "has" : "have")} it." : string.Empty)}"
-        };
+            lines.Add($"{result.Fixed:N0} of {recheck.Judged:N0} fixed.{(result.Still > 0 ? $" {result.Still:N0} still {(result.Still == 1 ? "has" : "have")} it." : string.Empty)}");
+        }
+
+        if (recheck.Answers is { } answers)
+        {
+            lines.Add((lines.Count > 0 ? "  " : string.Empty) + Answered(recheck.Judged, answers));
+        }
+        else if (recheck.CheckId is null)
+        {
+            lines.Add($"Rechecked {Format.Count(recheck.Judged, "URL", "URLs")}.");
+        }
         if (result.NotChecked > 0)
         {
             lines.Add($"  {Format.Count(result.NotChecked, "URL", "URLs")} couldn't be checked (an error, a block or a redirect in place of an answer the check can judge).");
@@ -216,6 +243,36 @@ internal static class RecheckCommand
 
         lines.Add($"  {Format.Count(recheck.Fetched, "request", "requests")}{(recheck.CrawlingMs is { } ms ? $" in {Format.Duration(TimeSpan.FromMilliseconds(ms))}" : string.Empty)}. Other pages are as the crawl found them.");
         return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// "Asked for 7 URLs: 1 read, 2 refused again (the site asked the crawler to slow down, 429 Too Many Requests), 4 never
+    /// asked." With refusals of more than one kind, each is counted: "(1 blocked by a firewall or bot check, 1 disallowed by
+    /// robots.txt)".
+    /// </summary>
+    internal static string Answered(int judged, RecheckAnswerCounts answers)
+    {
+        List<string> parts = [$"{answers.Read:N0} read"];
+        if (answers.Refused > 0)
+        {
+            (int Count, string One, string Each)[] reasons =
+            [
+                (answers.RateLimited, $"the site asked the crawler to slow down, {HttpStatusNames.Describe(429)}", "told to slow down (429)"),
+                (answers.Blocked, "blocked by a firewall or bot check", "blocked by a firewall or bot check"),
+                (answers.RobotsTxt, "disallowed by robots.txt, or robots.txt couldn't be read", "disallowed by robots.txt"),
+                (answers.NoAnswer, "no answer", "not answered")
+            ];
+            var given = reasons.Where(reason => reason.Count > 0).ToList();
+            var why = given.Count == 1 ? given[0].One : string.Join(", ", given.Select(reason => $"{reason.Count:N0} {reason.Each}"));
+            parts.Add($"{answers.Refused:N0} refused again ({why})");
+        }
+
+        if (answers.NotAsked > 0)
+        {
+            parts.Add($"{answers.NotAsked:N0} never asked");
+        }
+
+        return $"Asked for {Format.Count(judged, "URL", "URLs")}: {string.Join(", ", parts)}.";
     }
 
     private static int Fail(string message)

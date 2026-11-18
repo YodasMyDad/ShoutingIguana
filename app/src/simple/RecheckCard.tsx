@@ -18,6 +18,7 @@ import {
   recheckScoreWords,
   recheckedWhenWords,
   refusalWords,
+  refusedAgainWords,
   simpleResultWords,
   NEEDS_FULL_CHECK_WORDS,
 } from '../changes/recheckWords';
@@ -197,6 +198,11 @@ function CardBody({
           />
           {state.kind === 'refused' ? (
             <Refused crawlId={crawlId} checkId={check.id} item={item} refused={state.refused} />
+          ) : state.failed ? (
+            // It ran and failed: nothing it read was kept, so the results are as they were.
+            <p className="text-14 leading-body text-text-secondary" role="status">
+              The recheck couldn’t finish, so nothing it read was kept: the results are as they were. Try it again.
+            </p>
           ) : state.ended ? (
             // The last one asked didn't run: refused once its analysis first was done, or stopped then.
             <p className="text-14 leading-body text-text-secondary" role="status">
@@ -371,6 +377,7 @@ function Result({
     subject: check.subject,
     cleared: result.fixed === recheck.judged && result.new === 0,
     listed,
+    notCheckedWhy: refusedAgainWords(recheck.answers),
   });
   const meta = [recheckScoreWords(result), recheckedWhenWords(recheck.endedAt ?? recheck.settledAt)].filter(Boolean);
   const refused = plan?.refused ?? null;

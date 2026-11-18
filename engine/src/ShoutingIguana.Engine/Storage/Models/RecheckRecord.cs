@@ -23,4 +23,8 @@ public sealed record RecheckRecord(
     int Judged,
     int Fetched,
     long? CountBefore,
-    RecheckResult? Result);
+    RecheckResult? Result)
+{
+    /// <summary>How the site answered it for the URLs it judges, as its run ended; null for a recheck by an engine before that was kept.</summary>
+    public RecheckAnswerCounts? Answers { get; init; }
+}

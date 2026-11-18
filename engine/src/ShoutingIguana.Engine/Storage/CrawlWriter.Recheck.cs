@@ -15,15 +15,20 @@ namespace ShoutingIguana.Engine.Storage;
 /// The writer in a recheck's run (the fix loop's "Recheck these N pages"): the crawl file opened as a continue opens it,
 /// to fetch some of its URLs again and store each over its old record, never touching the crawl's queue or its status.
 /// <list type="bullet">
-/// <item>Opening stores the recheck and its "before" (the check's issues and targets on its URLs, its count, the score)
-/// and stamps the crawl row, so the analysis is out of date until the one after it.</item>
+/// <item>Opening brings the file up to this engine's schema (<see cref="CrawlSchemaUpgrade"/>), then begins the one
+/// transaction the whole recheck is stored in: its "before" (the check's issues and targets on its URLs, its count, the
+/// score) and the crawl row's stamp, so the analysis is out of date once it's stored, until the one after it.</item>
 /// <item>Only the recheck's own URLs are handed out: its scope, the redirects they lead to (followed to their end), and
 /// URLs the crawl didn't have that its scope's pages now link to, fetched one step. What those link to that the crawl
 /// doesn't have is recorded as skipped (<see cref="SkipReason.Recheck"/>), and nothing else is queued.</item>
 /// <item>A URL fetched again has its response, details, HTML and outgoing links replaced in the batch that stores it.</item>
-/// <item>At the end, URLs nothing the crawl still has leads to are let go (<see cref="RecheckLetGo"/>), and the recheck
-/// row is ended with how its run ended.</item>
+/// <item>At the end, URLs nothing the crawl still has leads to are let go (<see cref="RecheckLetGo"/>), the recheck row is
+/// ended with how its run ended and the requests it sent, each URL it judges with how the site answered it, and it all
+/// commits at once.</item>
 /// </list>
+/// A recheck is all or nothing: one that fails anywhere (the file, the network, the run) is rolled back whole, so the
+/// crawl file is as it was before it, its analysis still current, and no recheck is recorded. One stopped keeps what it
+/// fetched. A process that dies part-way leaves the file as it was, too.
 /// </summary>
 internal sealed partial class CrawlWriter
 {
@@ -36,13 +41,16 @@ internal sealed partial class CrawlWriter
     public int? RecheckId => _recheck?.Id;
 
     /// <summary>
-    /// Locks the crawl file and opens it for a recheck: its URLs are read back as a continue reads them, the recheck and its
-    /// "before" are stored, and the crawl row is stamped, its status left as it was. Then starts the write loop.
+    /// Locks the crawl file and opens it for a recheck: the file is brought up to this engine's schema, its URLs are read
+    /// back as a continue reads them, and the recheck's transaction begins with its "before" and the crawl row's stamp, its
+    /// status left as it was. Then starts the write loop.
     /// </summary>
+    /// <param name="atStage">Tests only: called at each <see cref="RecheckStage"/>, to fail the recheck there.</param>
     /// <exception cref="InvalidOperationException">
     /// The file is in use, isn't a crawl this engine can read, or was interrupted (it must be continued first).
     /// </exception>
-    public static CrawlWriter OpenForRecheck(string databasePath, CrawlOptions options, RecheckPlan plan, CrawlCounters counters, ILogger logger)
+    public static CrawlWriter OpenForRecheck(string databasePath, CrawlOptions options, RecheckPlan plan, CrawlCounters counters, ILogger logger,
+        Action<RecheckStage>? atStage = null)
     {
         if (!File.Exists(databasePath))
         {
@@ -64,19 +72,12 @@ internal sealed partial class CrawlWriter
                 throw new InvalidOperationException("This crawl was interrupted. Continue it (or stop it) before rechecking it.");
             }
 
-            CrawlDatabase.Execute(connection, CrawlSchema.NOTICES);
-            CheckNoticesTable(connection, databasePath);
-            CrawlDatabase.Execute(connection, CrawlSchema.RUN_TIME);
-            AddMissingColumns(connection, "responses", CrawlSchema.RESPONSE_COLUMNS);
-            AddMissingColumns(connection, "sitemaps", CrawlSchema.SITEMAP_COLUMNS);
-            CrawlDatabase.Execute(connection, CrawlSchema.FAVICON);
-            CrawlDatabase.Execute(connection, CrawlSchema.RECHECKS);
+            CrawlSchemaUpgrade.Apply(connection, databasePath);
 
             // A recheck never fetches the site's icon: the crawl has it, or found none.
-            var writer = new CrawlWriter(connection, fileLock, options, counters, logger) { _recheck = new RecheckRun(plan), _hasFavicon = true };
+            var writer = new CrawlWriter(connection, fileLock, options, counters, logger) { _recheck = new RecheckRun(plan), _hasFavicon = true, _atStage = atStage };
             var earlier = CrawlRunReader.Read(connection, transaction: null);
-            writer.RestoreForRecheck(timed: earlier is not null);
-            writer.RestoreRunTime(earlier);
+            writer.RestoreForRecheck(earlier);
             writer.BeginRecheck();
             writer._loop = Task.Run(writer.RunAsync);
             return writer;
@@ -106,28 +107,25 @@ internal sealed partial class CrawlWriter
 
     /// <summary>
     /// Reads the crawl's URLs back as a continue does, without putting anything back on its queue or marking it running:
-    /// a URL claimed and never stored when its last run stopped stays as it was, for that run's continue. Stamps the crawl
-    /// row, as every run does.
+    /// a URL claimed and never stored when its last run stopped stays as it was, for that run's continue. Then begins the
+    /// recheck's transaction, and in it stamps the crawl row, as every run does, and takes up the time the file keeps.
     /// </summary>
-    /// <param name="timed">The file knows the time every run so far spent crawling, and must go on knowing it.</param>
-    private void RestoreForRecheck(bool timed)
+    /// <param name="earlier">The time the file knows of, read before the stamp: null when a run so far went untimed.</param>
+    private void RestoreForRecheck(CrawlRuns? earlier)
     {
-        using (var transaction = _connection.BeginTransaction())
+        RestoreKnownUrls();
+        BeginTransaction();
+        CrawlDatabase.Execute(_connection, $"UPDATE crawl SET updated_at = MAX({DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}, updated_at + 1) WHERE id = 1", _transaction);
+        if (earlier is not null)
         {
-            CrawlDatabase.Execute(_connection, $"UPDATE crawl SET updated_at = MAX({DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}, updated_at + 1) WHERE id = 1", transaction);
-            if (timed)
-            {
-                PassStampOn(transaction);
-            }
-
-            transaction.Commit();
+            PassStampOn(_transaction);
         }
 
-        RestoreKnownUrls();
+        RestoreRunTime(earlier, _transaction);
     }
 
     /// <summary>
-    /// Stores the recheck and its "before", in one transaction: its row, the URLs it judges and names as they stood (flagged
+    /// Stores the recheck and its "before", in its transaction: its row, the URLs it judges and names as they stood (flagged
     /// or not, the issue's detail and other URL), the check's targets on them; then hands out its first phase, the URLs the
     /// crawl fetched (a URL it never fetched, a nofollow link's say, stays as it is).
     /// </summary>
@@ -136,7 +134,7 @@ internal sealed partial class CrawlWriter
         var recheck = _recheck!;
         var plan = recheck.Plan;
         recheck.StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        using var transaction = _connection.BeginTransaction();
+        var transaction = _transaction;
         recheck.Id = Convert.ToInt32(RunTime("SELECT COALESCE(MAX(id), 0) + 1 FROM rechecks", transaction), System.Globalization.CultureInfo.InvariantCulture);
         RunTime("""
             INSERT INTO rechecks (id, run, started_at, status, check_id, group_detail, group_related_url_id, url_list, kinds, judged, count_before, score_before)
@@ -173,7 +171,6 @@ internal sealed partial class CrawlWriter
                 """, transaction, ("$id", recheck.Id));
         }
 
-        transaction.Commit();
         _logger.LogInformation("Rechecking {Phase1} URLs of the crawl ({Judged} judged), recheck {Id}", plan.Phase1, plan.Judged, recheck.Id);
     }
 
@@ -256,6 +253,7 @@ internal sealed partial class CrawlWriter
             }
         }
 
+        _atStage?.Invoke(RecheckStage.PageStoring);
         _statements.InsertResponse(response, redirectId, canonicalId, outlinkCount);
         if (record.Details is not null)
         {
@@ -355,12 +353,30 @@ internal sealed partial class CrawlWriter
     }
 
     /// <summary>
-    /// The run is over: the URLs nothing leads to any more are let go, the crawl row is stamped (its status as it was), and
-    /// the recheck row is ended with how the run ended.
+    /// The run is over. One that failed is rolled back whole: the file is as it was before the recheck, and nothing more
+    /// is stored. Otherwise the URLs nothing leads to any more are let go, the crawl row is stamped (its status as it was),
+    /// each URL judged gets how the site answered it, and the recheck row is ended with how the run ended and the requests
+    /// it sent; the batch under way then commits it all.
     /// </summary>
-    private void EndRecheck(CrawlStatus status)
+    /// <param name="requests">The requests the run sent the site: its pages, robots.txt and sitemaps.</param>
+    private void EndRecheck(CrawlStatus status, long requests)
     {
         var recheck = _recheck!;
+        recheck.Ended = true;
+        if (status == CrawlStatus.Failed)
+        {
+            DiscardRecheck();
+            return;
+        }
+
+        foreach (var url in recheck.Plan.Scope.Where(url => url.Role == RecheckRole.Judged))
+        {
+            RunTime("UPDATE recheck_urls SET answer = $answer WHERE recheck_id = $id AND url_id = $url", _transaction,
+                ("$answer", (int)recheck.AnswerOf(url.Id, status == CrawlStatus.Completed)), ("$id", recheck.Id), ("$url", url.Id));
+        }
+
+        // A sitemap whose read never came back (it was stopped) is as the crawl read it.
+        KeepUnreadSitemaps();
 
         // A URL it found and didn't get to (it was stopped) is recorded as found by it, not queued: the crawl's queue is as it was.
         foreach (var id in recheck.Found.Where(id => !recheck.Fetched.Contains(id)))
@@ -381,14 +397,30 @@ internal sealed partial class CrawlWriter
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         RunTime("UPDATE crawl SET updated_at = MAX($now, updated_at + 1) WHERE id = 1", _transaction, ("$now", now));
         _crawlStamped = true;
-        var ended = status switch
-        {
-            CrawlStatus.Completed => RecheckStatus.Completed,
-            CrawlStatus.Failed => RecheckStatus.Failed,
-            _ => RecheckStatus.Stopped
-        };
+        var ended = status == CrawlStatus.Completed ? RecheckStatus.Completed : RecheckStatus.Stopped;
         RunTime("UPDATE rechecks SET ended_at = $now, status = $status, fetched = $fetched WHERE id = $id", _transaction,
-            ("$now", now), ("$status", (int)ended), ("$fetched", recheck.Done), ("$id", recheck.Id));
+            ("$now", now), ("$status", (int)ended), ("$fetched", requests), ("$id", recheck.Id));
+    }
+
+    /// <summary>
+    /// The recheck failed: everything it stored is rolled back, and whatever reaches the writer from here on (its last
+    /// notices, the time it spent) is let go, so the file is as it was before it.
+    /// </summary>
+    private void DiscardRecheck()
+    {
+        var recheck = _recheck!;
+        if (recheck.Discarded)
+        {
+            return;
+        }
+
+        recheck.Ended = true;
+        recheck.Discarded = true;
+        RollBackTransaction();
+        _notices.Clear();
+        _runTime.Clear();
+        _crawlStamped = false;
+        _logger.LogWarning("Recheck {Id} failed: nothing it fetched was stored, and the crawl file is as it was", recheck.Id);
     }
 
     /// <summary>
@@ -416,28 +448,96 @@ internal sealed partial class CrawlWriter
     }
 
     /// <summary>
-    /// A sitemap the recheck reads again (the sitemaps kind): its entries as read now replace those read before, which go
-    /// as it is registered, before its URLs come.
+    /// A robots.txt the recheck reads again: stored over the crawl's when the site answered. One it gave no answer to (the
+    /// connection failed, or it timed out) says nothing new of the file, so the crawl's stays; unless the check is whether
+    /// robots.txt can be read, which that is the answer to.
+    /// </summary>
+    private void ApplyRecheckRobots(RobotsRecord record)
+    {
+        if (record.StatusCode is null && !Analysis.Rules.RobotsTxtRules.TooManyRedirects(record) && !_recheck!.JudgesRobotsReach)
+        {
+            _recheck.Unanswered++;
+            return;
+        }
+
+        _statements.UpsertRobots(record);
+    }
+
+    /// <summary>
+    /// A sitemap the recheck reads again (the sitemaps kind): its entries as read now replace those read before, which are
+    /// put aside as it is registered (their sitemap's id negated), before its URLs come, and go once it's read.
     /// </summary>
     private int RegisterRecheckSitemap(string url, int? parentId)
     {
+        var known = RunTime("SELECT id FROM sitemaps WHERE url = $url", _transaction, ("$url", url)) is not null;
         var id = _statements.RegisterSitemap(url, parentId);
         if (_recheck!.SitemapsRead.Add(id))
         {
-            RunTime("DELETE FROM sitemap_urls WHERE sitemap_id = $id", _transaction, ("$id", id));
+            if (!known)
+            {
+                _recheck.SitemapsNew.Add(id);
+            }
+
+            RunTime("UPDATE sitemap_urls SET sitemap_id = -sitemap_id WHERE sitemap_id = $id", _transaction, ("$id", id));
+            _atStage?.Invoke(RecheckStage.SitemapCleared);
         }
 
         return id;
     }
 
     /// <summary>
+    /// A sitemap read again came back. Answered, its entries as read now stand and those put aside go. Given no answer (the
+    /// connection failed, or it timed out), it says nothing new: it is as the crawl read it.
+    /// </summary>
+    private void ApplyRecheckSitemap(SitemapRecord record)
+    {
+        var recheck = _recheck!;
+        recheck.SitemapsDone.Add(record.Id);
+        if (record.StatusCode is null)
+        {
+            recheck.Unanswered++;
+            KeepSitemapAsItWas(record.Id);
+            return;
+        }
+
+        RunTime("DELETE FROM sitemap_urls WHERE sitemap_id = $parked", _transaction, ("$parked", -record.Id));
+        _statements.UpdateSitemap(record);
+    }
+
+    /// <summary>A sitemap the recheck couldn't read again: what came of it goes, and its entries are put back; one the crawl didn't have goes.</summary>
+    private void KeepSitemapAsItWas(int id)
+    {
+        RunTime("DELETE FROM sitemap_urls WHERE sitemap_id = $id", _transaction, ("$id", id));
+        if (_recheck!.SitemapsNew.Contains(id))
+        {
+            RunTime("DELETE FROM sitemaps WHERE id = $id", _transaction, ("$id", id));
+            return;
+        }
+
+        RunTime("UPDATE sitemap_urls SET sitemap_id = -sitemap_id WHERE sitemap_id = $parked", _transaction, ("$parked", -id));
+    }
+
+    /// <summary>The sitemaps registered whose read never came back are as the crawl read them.</summary>
+    private void KeepUnreadSitemaps()
+    {
+        var recheck = _recheck!;
+        foreach (var id in recheck.SitemapsRead.Where(id => recheck.SitemapsDone.Add(id)).ToList())
+        {
+            KeepSitemapAsItWas(id);
+        }
+    }
+
+    /// <summary>
     /// The sitemaps were read again in full: one the crawl had that nothing lists any more (a file dropped from the index)
-    /// is no sitemap of the site's now, and goes, with its entries.
+    /// is no sitemap of the site's now, and goes, with its entries. Only when every read got an answer: a robots.txt or
+    /// index that didn't may list what wasn't read.
     /// </summary>
     private void DropSitemapsNotReadAgain()
     {
-        var read = _recheck!.SitemapsRead;
-        if (read.Count == 0)
+        KeepUnreadSitemaps();
+        var recheck = _recheck!;
+        var read = recheck.SitemapsRead.Where(id => !recheck.SitemapsNew.Contains(id) || recheck.SitemapsDone.Contains(id)).ToList();
+        if (read.Count == 0 || recheck.Unanswered > 0)
         {
             return;
         }
@@ -466,11 +566,6 @@ internal sealed partial class CrawlWriter
             }
         }
     }
-
-    /// <summary>A failed recheck's row says so; the crawl's status is left as it was.</summary>
-    private void RecordRecheckFailure() =>
-        RunTime("UPDATE rechecks SET ended_at = $now, status = $status, fetched = $fetched WHERE id = $id", transaction: null,
-            ("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()), ("$status", (int)RecheckStatus.Failed), ("$fetched", _recheck!.Done), ("$id", _recheck.Id));
 
     /// <summary>Where a stored URL's links go, by id.</summary>
     private HashSet<int> LinkTargets(int fromId)

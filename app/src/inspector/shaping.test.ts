@@ -369,6 +369,22 @@ describe('fetchState', () => {
       kind: 'notChecked',
       why: 'Shopify refused it even with the signature (429 Too Many Requests). It may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain.',
     });
+    // One given up on before its turn in a section the site limits was never asked: said so, not "asked again".
+    const neverAsked = after({
+      ...base,
+      content: null,
+      response: testResponse({
+        outcome: 'notChecked',
+        statusCode: null,
+        fetched: false,
+        error:
+          'Not checked: the site asked the crawler to slow down (429 Too Many Requests), and the crawl gave up on the pages it limits before this URL had its turn',
+      }),
+    });
+    expect(neverAsked).toMatchObject({
+      kind: 'notChecked',
+      why: 'The site asked the crawler to slow down (429 Too Many Requests) on pages like this one, and the time for them ran out before this one’s turn, so it wasn’t asked.',
+    });
     const privateAddress = after({
       ...base,
       content: null,

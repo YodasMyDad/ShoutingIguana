@@ -116,6 +116,16 @@ describe('the recheck card’s state', () => {
         pending: pending({ ended: true, error: 'A check of this site is running.' }),
         run: run({ stage: 'ended', status: null, progress: null, error: 'A check of this site is running.' }),
       }),
-    ).toMatchObject({ kind: 'ready', ended: 'A check of this site is running.' });
+    ).toMatchObject({ kind: 'ready', ended: 'A check of this site is running.', failed: false });
+  });
+
+  it('says the one asked here failed, and nothing it read was kept, and offers it again', () => {
+    expect(
+      recheckCardState({
+        ...base,
+        pending: pending(),
+        run: run({ stage: 'ended', status: 'failed', progress: null, error: 'The recheck failed: the disk is full' }),
+      }),
+    ).toMatchObject({ kind: 'ready', ended: 'The recheck failed: the disk is full', failed: true });
   });
 });

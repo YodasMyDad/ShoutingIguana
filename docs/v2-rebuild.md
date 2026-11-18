@@ -430,16 +430,46 @@ machine):
   - B7: repeated notes.
   - Session cookies counted as new on a recheck.
   - The owner's installed app predates the fix loop, so none of the owner's files can have been touched.
+- **Jitsunami, crawl 5, at the owner's word (2026-11-18, `-c 1 --rate 1 --no-external`):** 46 URLs, 9 pages, the same 8
+  not checked, 20:47. Shopify refused the products from about 35 s in, after roughly 25 requests, and for the whole
+  cap. Going slower doesn't get an unsigned crawler through.
+- **Shopify, researched (2026-11-18).** The brief, with sources, is
+  [`handoff/2026-11-18/lane-shopify-brief.md`](handoff/2026-11-18/lane-shopify-brief.md).
+  - Shopify limits crawlers "most strictly when unsigned", storefront pages included since 30 May 2026. The sanctioned
+    way through is a crawler signature (Web Bot Auth): the store owner makes one under Online Store › Preferences ›
+    Crawler access, one domain each, for up to 3 months. Screaming Frog, Sitebulb and Semrush all take one.
+  - No reputable tool rotates user agents, headers or proxies to get past it, and Shopify treats that as evasion. We
+    don't build it.
+  - **Lane `ui/3b-shopify`, phase A, under way:** a per-host signature that goes only to the host it was made for;
+    Shopify detected from headers and markup; refused pages "not checked: Shopify limits crawlers without a
+    signature", never broken; `--signature-file` on crawl and recheck; the app's form in both modes, kept in
+    Credential Manager only when Remember is ticked; and a test site that acts like Shopify.
+  - The owner (2026-11-18): "The app should be smart enough to tell the user if it's a Shopify site and it's being
+    rejected and how to fix it." So: a live alert at the first refusal, with the fix in Shopify's own button names;
+    the signature can be added while the crawl runs; the next crawl of the site opens the Shopify part by itself; and
+    a signed crawl that's still refused says why.
+  - **Phase B, after the recheck fixes merge:** on an unsigned Shopify store, one retry after `Retry-After`, then
+    finish, instead of waiting out the 20-minute cap.
+  - The owner is asked to save a signature for `jitsunami.com` to `%USERPROFILE%\.shouting-iguana\shopify\`, never in
+    chat. One signed crawl is the real proof.
 
 Next:
 
-- Merge `ui/3b-recheck-fixes`.
+- Merge `ui/3b-recheck-fixes`, then `ui/3b-shopify`, then phase B.
+- **Then the "can I fix it from this?" pass (the owner, 2026-11-18):** every check that fires on copies of the real
+  crawls and on the synthetic site, opened in the app in both modes and judged as a site owner. Does it show where
+  the problem is (the URL, the element or snippet, the page linking to it), the value against the limit, and what to
+  do? "Not just display random data that doesn't help you find where the issues are." Fix whatever fails, before the
+  gates.
 - Then the round's gates on a quiet machine:
   - readbench first (if the links search misses again, it's investigated, not waved through);
   - the full app verify and `e2e:filled`;
   - the stories in forced colours and reduced motion;
   - the release build, `smoke:shell`, the installer and `smoke:tauri`.
 - Then gallery 7 and the owner's look. Any further real crawl or recheck needs the owner's word again.
+- **Last, the owner's plan:** upgrade the owner's install (setup `/S`, only while the app is closed), open the app, and
+  tell the owner what to enter so they add the Jitsunami signature themselves. Then one real signed crawl, together.
+  The signature is never pasted in chat.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.

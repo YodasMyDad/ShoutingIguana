@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { RecheckPlan, RecheckResult } from '../api/fixLoop';
+import type { RecheckAnswers, RecheckPlan, RecheckResult } from '../api/fixLoop';
 import {
   aboutWords,
+  advancedEndedWords,
   advancedResultWords,
   recheckButtonWords,
   recheckIntroWords,
@@ -13,6 +14,7 @@ import {
   rechecksCountWords,
   rechecksMetaWords,
   refusalWords,
+  refusedAgainWords,
   simpleResultWords,
 } from './recheckWords';
 
@@ -217,6 +219,39 @@ describe('what a recheck found', () => {
     ]);
   });
 
+  it('says why the site refused them again, in plain words', () => {
+    const answers = (patch: Partial<RecheckAnswers>): RecheckAnswers => ({
+      read: 0,
+      rateLimited: 0,
+      blocked: 0,
+      robotsTxt: 0,
+      noAnswer: 0,
+      notAsked: 0,
+      refused: 0,
+      ...patch,
+    });
+    expect(refusedAgainWords(null)).toBeNull();
+    expect(refusedAgainWords(answers({ read: 5 }))).toBeNull();
+    expect(refusedAgainWords(answers({ read: 3, rateLimited: 2, refused: 2 }))).toBe(
+      'the site turned them away again: it asked us to slow down',
+    );
+    expect(refusedAgainWords(answers({ read: 4, blocked: 1, refused: 1 }))).toBe(
+      'the site turned it away again: its security stopped us',
+    );
+    expect(refusedAgainWords(answers({ robotsTxt: 1, noAnswer: 1, refused: 2 }))).toBe(
+      'the site turned them away again, or didn’t answer',
+    );
+    expect(
+      simpleResultWords({
+        status: 'completed',
+        judged: 5,
+        result: result({ fixed: 3, still: 0, notChecked: 2 }),
+        subject: 'page',
+        notCheckedWhy: refusedAgainWords(answers({ read: 3, rateLimited: 2, refused: 2 })),
+      }),
+    ).toEqual(['3 of 5 fixed.', '2 couldn’t be rechecked: the site turned them away again: it asked us to slow down.']);
+  });
+
   it('reads a stopped recheck as what it got through', () => {
     expect(
       simpleResultWords({
@@ -258,6 +293,27 @@ describe('what a recheck found', () => {
         stillPaths: ['/sofas/'],
       }),
     ).toBe('Rechecked 17 Nov 14:02: 4 of 5 fixed, 1 still (/sofas/), 0 new. Score 85 → 88');
+    expect(
+      advancedResultWords({
+        endedAt: null,
+        status: 'completed',
+        judged: 7,
+        result: result({ fixed: 0, still: 0, notChecked: 2, notRechecked: 4, new: 0, scoreBefore: 97, scoreAfter: 97 }),
+        answers: { read: 1, rateLimited: 2, blocked: 0, robotsTxt: 0, noAnswer: 0, notAsked: 4, refused: 2 },
+      }),
+    ).toBe(
+      'Rechecked: 0 of 7 fixed, 0 still, 2 not checked (2 refused again: 429), 4 not rechecked, 0 new. Score 97 → 97',
+    );
+  });
+
+  it('says in Advanced’s banner why one ended without a result: it didn’t run, or it failed and kept nothing', () => {
+    expect(advancedEndedWords(null, 'Recheck works on the site’s latest check.')).toBe(
+      'The recheck didn’t run: Recheck works on the site’s latest check.',
+    );
+    expect(advancedEndedWords('failed', 'The recheck failed: the disk is full')).toBe(
+      'The recheck failed, so nothing it fetched was kept: the disk is full',
+    );
+    expect(advancedEndedWords('failed', null)).toBe('The recheck failed, so nothing it fetched was kept.');
   });
 
   it('titles the toast when it ends', () => {

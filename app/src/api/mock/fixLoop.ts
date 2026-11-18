@@ -637,6 +637,15 @@ export function fixLoopRoutes(mock: FixLoopMock): { routes: FixLoopRoute[]; stop
         fetched: done,
         crawlingMs: done * RECHECK_STEP_MS,
         result,
+        answers: {
+          read: rechecked,
+          rateLimited: 0,
+          blocked: 0,
+          robotsTxt: 0,
+          noAnswer: 0,
+          notAsked: planned.judged - rechecked,
+          refused: 0,
+        },
       };
       rechecks.set(item.id, [settled, ...(rechecks.get(item.id) ?? []).filter((each) => each.id !== record.id)]);
       mock.analyse(item.id, () => {
@@ -797,6 +806,7 @@ export function fixLoopRoutes(mock: FixLoopMock): { routes: FixLoopRoute[]; stop
           fetched: 0,
           countBefore: planned.countBefore,
           result: null,
+          answers: null,
         };
         rechecks.set(id, [record, ...(rechecks.get(id) ?? [])]);
         const rows = planned.checkId ? await mock.issueRows(id, planned.checkId) : [];

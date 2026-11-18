@@ -8,6 +8,11 @@ import { reasonSentence, shopifyReasonOf, shopifyRefusalOf } from '../shopify/re
 
 /** How the engine's error starts for a URL its site answered only with 429 Too Many Requests. */
 const RATE_LIMITED_ERROR = 'Not checked: the site asked the crawler to slow down';
+/**
+ * How it starts for one of those the crawl never asked: given up on before its turn in a section the site limits, the
+ * time for them having run out. It starts as the one above does.
+ */
+const NEVER_ASKED_ERROR = `${RATE_LIMITED_ERROR} (429 Too Many Requests), and the crawl gave up on the pages it limits before this URL had its turn`;
 /** The engine's error for a private network address that a crawl of a public site doesn't ask. */
 const PRIVATE_ADDRESS_ERROR = 'Not checked: private network address';
 
@@ -125,6 +130,13 @@ export function fetchState(subject: Subject, crawling: boolean): FetchState {
             reason ??
               'it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain',
           )}`,
+        );
+      }
+      if (response.error?.startsWith(NEVER_ASKED_ERROR)) {
+        return state(
+          'notChecked',
+          'Not checked',
+          'The site asked the crawler to slow down (429 Too Many Requests) on pages like this one, and the time for them ran out before this one’s turn, so it wasn’t asked.',
         );
       }
       if (response.error?.startsWith(RATE_LIMITED_ERROR)) {

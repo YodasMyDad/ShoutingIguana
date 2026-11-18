@@ -424,6 +424,24 @@ export interface RecheckResult {
   scoreAfter: number | null;
 }
 
+/**
+ * How the site answered a recheck for the URLs it judges, as its run ended: read; refused again, by why; or never asked.
+ * They add up to `judged`; `refused` is the four refusals together.
+ */
+export interface RecheckAnswers {
+  read: number;
+  /** Told to slow down (429). */
+  rateLimited: number;
+  /** A firewall or bot check answered. */
+  blocked: number;
+  /** Disallowed by robots.txt, or it couldn't be read. */
+  robotsTxt: number;
+  noAnswer: number;
+  /** Past the cap, or the run ended before them. */
+  notAsked: number;
+  refused: number;
+}
+
 /** One recheck of a crawl, as its file keeps it. */
 export interface Recheck {
   id: number;
@@ -438,11 +456,13 @@ export interface Recheck {
   urlList: boolean;
   kinds: RecheckKind[];
   judged: number;
-  /** Requests made. */
+  /** The requests it sent the site: its pages, robots.txt and sitemaps; never a URL it didn't ask. */
   fetched: number;
   countBefore: number | null;
   /** Null until the analysis after it settles it. */
   result: RecheckResult | null;
+  /** Null for a recheck by an engine before they were kept. */
+  answers: RecheckAnswers | null;
 }
 
 /** `GET /rechecks`: newest first. */

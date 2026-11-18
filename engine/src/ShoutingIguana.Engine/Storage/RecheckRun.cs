@@ -20,6 +20,9 @@ internal sealed class RecheckRun(RecheckPlan plan)
     // its scope led to, whose own links are recorded and not followed.
     private readonly Dictionary<int, int> _steps = [];
     private readonly Dictionary<int, (FetchOutcome Outcome, int? StatusCode)> _firstAnswers = [];
+
+    // How the site last answered each URL handed out.
+    private readonly Dictionary<int, RecheckAnswer> _answers = [];
     private int _done;
     private int _total;
     private int _phase = 1;
@@ -40,11 +43,31 @@ internal sealed class RecheckRun(RecheckPlan plan)
     /// <summary>The sitemaps it read again, by id: those the crawl had and nothing lists now go once the reading is done.</summary>
     public HashSet<int> SitemapsRead { get; } = [];
 
+    /// <summary>Of those, the ones whose read came back (answered or not), and the ones the crawl didn't have.</summary>
+    public HashSet<int> SitemapsDone { get; } = [];
+
+    public HashSet<int> SitemapsNew { get; } = [];
+
+    /// <summary>The robots.txt and sitemap reads the site gave no answer to: each left the crawl's as it was.</summary>
+    public int Unanswered { get; set; }
+
+    /// <summary>
+    /// Its check is whether robots.txt can be read at all: a robots.txt that gets no answer is what it judges, not a read
+    /// that failed, so it is stored as found.
+    /// </summary>
+    public bool JudgesRobotsReach { get; } = plan.CheckId == IssueCatalog.ROBOTS_TXT_UNREACHABLE.Id || plan.CheckId == IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN.Id;
+
     /// <summary>The URLs the crawl didn't have that it found and handed out, one step from its scope.</summary>
     public HashSet<int> Found { get; } = [];
 
     /// <summary>The URLs it fetched, so a redirect is followed into each once.</summary>
     public HashSet<int> Fetched { get; } = [];
+
+    /// <summary>Its run has said how it ended: from here on, nothing it stores waits for more.</summary>
+    public bool Ended { get; set; }
+
+    /// <summary>It failed, and was rolled back whole: nothing more is stored.</summary>
+    public bool Discarded { get; set; }
 
     public int Phase => Volatile.Read(ref _phase);
 
@@ -53,6 +76,16 @@ internal sealed class RecheckRun(RecheckPlan plan)
     public int Done => Volatile.Read(ref _done);
 
     public int StepOf(int id) => _steps.GetValueOrDefault(id);
+
+    /// <summary>
+    /// How the site answered a URL it judges: as its fetch came back. One it didn't fetch, in a recheck that reads only
+    /// robots.txt, the sitemaps or the site's versions, is judged by those reads: read when it ran to its end and every one
+    /// got an answer, no answer when one didn't; else never asked.
+    /// </summary>
+    public RecheckAnswer AnswerOf(int id, bool completed) =>
+        _answers.TryGetValue(id, out var answer) ? answer
+        : completed && !Plan.Kinds.Contains(RecheckKind.Urls) ? Unanswered > 0 ? RecheckAnswer.NoAnswer : RecheckAnswer.Read
+        : RecheckAnswer.NotAsked;
 
     /// <summary>Hands a URL out at <paramref name="step"/>, once.</summary>
     public bool Enqueue(FrontierItem item, int step)
@@ -84,6 +117,7 @@ internal sealed class RecheckRun(RecheckPlan plan)
     {
         Fetched.Add(item.Id);
         Interlocked.Increment(ref _done);
+        _answers[item.Id] = RecheckAnswers.Of(response);
         if (_phase == 1)
         {
             _firstAnswers.TryAdd(item.Id, (response.Outcome, response.StatusCode));

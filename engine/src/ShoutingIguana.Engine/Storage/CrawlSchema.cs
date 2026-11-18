@@ -202,22 +202,24 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
-    /// The fix loop's rechecks ("Recheck these N pages"): crawl-time tables the writer creates the first time it rechecks a
-    /// file, as it creates <see cref="NOTICES"/> and <see cref="RUN_TIME"/>, so the schema version stays as it is and a
-    /// reader finds none in a file never rechecked.
+    /// The fix loop's rechecks ("Recheck these N pages"): crawl-time tables the writer creates whenever it opens a file, as
+    /// it creates <see cref="NOTICES"/> and <see cref="RUN_TIME"/> (<see cref="CrawlSchemaUpgrade"/>), so the schema version
+    /// stays as it is. A file from before them has none, and a reader finds none there. A recheck's rows are stored all at
+    /// once as its run ends, or not at all: one that failed leaves the file as it was.
     /// <list type="bullet">
     /// <item><c>rechecks</c>: one row a recheck, numbered from 1 in the file. <c>run</c> is the <see cref="RUN_TIME"/> run it
     /// was made in, which the crawl's time spent crawling leaves out. <c>status</c> is <c>Models.RecheckStatus</c>'s number;
-    /// a row left running by a process that died is settled as interrupted. <c>check_id</c> is null for a list of URLs with
+    /// a row an earlier engine left running when its process died is settled as interrupted. <c>check_id</c> is null for a list of URLs with
     /// no check named; <c>url_list</c> says it was a list; <c>kinds</c> what it read again (<c>Analysis.Models.RecheckKind</c>
     /// names, comma separated). <c>judged</c> is how many URLs it gives a result for (all the check's or the group's,
-    /// past the cap too), <c>fetched</c> the requests it made. The "before" (<c>count_before</c>, <c>score_before</c>) is
-    /// stored as it opens, and the result (the counts, <c>score_after</c>, <c>settled_at</c>) by the analysis after it,
+    /// past the cap too), <c>fetched</c> the requests it sent the site (its pages, robots.txt and sitemaps; never a URL it
+    /// didn't ask). The "before" (<c>count_before</c>, <c>score_before</c>) is as it stood when it opened, and the result (the counts, <c>score_after</c>, <c>settled_at</c>) by the analysis after it,
     /// once, never again.</item>
     /// <item><c>recheck_urls</c>: the URLs it set out to judge, as they stood before (flagged or not, the issue's detail and
     /// other URL, and for a duplicate check the text it compares pages by), and the others it fetched or let go, by role
-    /// (<c>Models.RecheckRole</c>); <c>outcome</c> (<c>Models.RecheckOutcome</c>) is set for the judged ones when it's
-    /// settled.</item>
+    /// (<c>Models.RecheckRole</c>). For the judged ones, <c>answer</c> (<c>Models.RecheckAnswer</c>) is how the site answered
+    /// the recheck (read, refused again and why, or never asked), stored as its run ends, with or without a check; and
+    /// <c>outcome</c> (<c>Models.RecheckOutcome</c>) what the check makes of it, set when it's settled.</item>
     /// <item><c>recheck_targets</c>: the check's <c>issue_targets</c> on the judged URLs, before.</item>
     /// </list>
     /// </summary>
@@ -255,6 +257,7 @@ internal static class CrawlSchema
             related_before INTEGER,
             text_before TEXT,
             outcome INTEGER,
+            answer INTEGER,
             PRIMARY KEY (recheck_id, url_id)
         ) WITHOUT ROWID;
 
@@ -352,6 +355,13 @@ internal static class CrawlSchema
     /// keeps its first entry's.
     /// </summary>
     public static readonly (string Name, string Type)[] SITEMAP_URL_COLUMNS = [("lastmod", "INTEGER")];
+
+    /// <summary>
+    /// The <c>recheck_urls</c> columns added since the first rechecks' tables, added as <see cref="RESPONSE_COLUMNS"/> are
+    /// (<see cref="CrawlSchemaUpgrade"/>): <c>text_before</c>, a duplicate check's text as it stood; and <c>answer</c>, how
+    /// the site answered the recheck for a URL it judges (<c>Models.RecheckAnswer</c>), null for a recheck before it.
+    /// </summary>
+    public static readonly (string Name, string Type)[] RECHECK_URL_COLUMNS = [("text_before", "TEXT"), ("answer", "INTEGER")];
 
     /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and

@@ -23,6 +23,8 @@
         <InternalsVisibleTo Include="ShoutingIguana.Sidecar.Tests" />
         <!-- si readbench times the grids' reads as a crawl without a URL summary has them, without changing the file. -->
         <InternalsVisibleTo Include="si" />
+        <!-- si recheck's tests make a recheck fail part-way, by the seam the engine's own tests use. -->
+        <InternalsVisibleTo Include="ShoutingIguana.Cli.Tests" />
     </ItemGroup>
 
 </Project>

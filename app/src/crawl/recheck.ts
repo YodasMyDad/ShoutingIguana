@@ -124,7 +124,9 @@ export async function startRecheck(
  * - `stopping`: Stop was pressed; what was fetched stays;
  * - `analysing`: the run ended (`status`), and the analysis after it works out the result;
  * - `settled`: that analysis settled it: `result`;
- * - `ended`: the crawl came to rest without a run (refused once the analysis first was done, or stopped then).
+ * - `ended`: the crawl came to rest without a run (refused once the analysis first was done, or stopped then), or its
+ *   run failed (`status` failed): a failed run stores nothing, so nothing is worked out after it, and `error` says why
+ *   once the crawl's end does.
  */
 export type RecheckStage = 'starting' | 'analysingFirst' | 'fetching' | 'stopping' | 'analysing' | 'settled' | 'ended';
 
@@ -155,6 +157,8 @@ export function recheckRunOf(live: LiveCrawl | undefined, started: PendingRechec
       event.total > 0 || event.phase !== null ? { phase: event.phase, done: event.done, total: event.total } : null;
     const base = { crawlId: event.crawlId, recheckId: event.recheckId, status: event.status, error: null };
     if (event.result) return { ...base, stage: 'settled', progress: null, result: event.result };
+    if (event.status === 'failed')
+      return { ...base, stage: 'ended', progress: null, result: null, error: live?.error ?? null };
     if (event.status === 'running') {
       return { ...base, stage: status === 'stopping' ? 'stopping' : 'fetching', progress, result: null };
     }
