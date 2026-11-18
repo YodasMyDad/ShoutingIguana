@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SIMPLE_CHECKS } from '../test/simpleSidecar';
-import { causeName, causeWords, causesWords, pathOrigin, shownWords } from './whereWords';
+import { causeName, causeWords, causesWords, pathOrigin, sharedSourceAdvice, shownWords } from './whereWords';
 
 const pages = (count: number) => (count === 1 ? 'page' : 'pages');
 const garden = { site: 'gardenfurnituresets.co.uk', startUrl: 'https://gardenfurnituresets.co.uk/' };
@@ -58,6 +58,34 @@ describe('what Where it is counts', () => {
     });
     expect(causeWords(check('image-too-large')).pagesHeading).toBe('On these pages');
     expect(causeWords(check('internal-client-error')).pagesHeading).toBe('At these addresses');
+  });
+});
+
+// The fixit index audit's X2, and the links audit's item 5.
+describe('what to do at the page linking to most of a check’s addresses', () => {
+  it('fixes or removes the links to broken and forwarding addresses', () => {
+    for (const id of ['internal-client-error', 'internal-unreachable', 'redirect-chain', 'redirect-loop']) {
+      expect(sharedSourceAdvice(check(id))).toBe('Fix or remove the links there first.');
+    }
+  });
+
+  it('adds links for pages that want more of them', () => {
+    expect(sharedSourceAdvice(check('non-indexable-inlinks-only'))).toBe(
+      'It’s kept out of search results itself, so link to these pages from one that shows in search too.',
+    );
+    expect(sharedSourceAdvice(check('orphan-page'))).toMatch(/^Search engines are told not to follow the links there/);
+  });
+
+  it('says nothing for an address whose fault isn’t its links', () => {
+    for (const id of [
+      'blocked-by-robots',
+      'sitemap-non-indexable',
+      'canonical-unlinked',
+      'hreflang-unlinked',
+      'url-uppercase',
+    ]) {
+      expect(sharedSourceAdvice(check(id))).toBeNull();
+    }
   });
 });
 

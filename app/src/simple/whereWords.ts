@@ -77,6 +77,33 @@ export function causesWords(
   return `${formatCount(causes)} ${causes === 1 ? words.one : words.many} on ${formatCount(pages)} ${noun}`;
 }
 
+/**
+ * The categories whose addresses are fixed where they're linked from: a broken address, or one that forwards, is
+ * mended by the links to it. An address search engines are told not to visit, or a page with a fault of its own, isn't
+ * (the fixit audit's X2: the problem page told an owner to remove the Checkout and Cart links).
+ */
+const FIXED_WHERE_LINKED: ReadonlySet<string> = new Set(['links', 'responseCodes', 'redirects']);
+
+/** The Links checks whose pages want more links, not fewer: what to do at the page linking to most of them. */
+const SHARED_SOURCE_ADVICE: Record<string, string> = {
+  'non-indexable-inlinks-only':
+    'It’s kept out of search results itself, so link to these pages from one that shows in search too.',
+  'orphan-page':
+    'Search engines are told not to follow the links there, so make them ordinary links, or link to these pages from where they belong.',
+};
+
+/**
+ * What the problem page tells the owner to do at the one page linking to most of a check's addresses, after "… links
+ * to most of them": "Fix or remove the links there first." for a broken or forwarding address, a line of its own for
+ * a Links check whose pages want more links. Null for every other check: it gets no such callout.
+ */
+export function sharedSourceAdvice(check: Pick<Check, 'id' | 'category'>): string | null {
+  return (
+    SHARED_SOURCE_ADVICE[check.id] ??
+    (FIXED_WHERE_LINKED.has(check.category) ? 'Fix or remove the links there first.' : null)
+  );
+}
+
 /** A detail's own name in Simple, where the engine's words aren't plain. */
 const DETAIL_NAMES: Record<string, Record<string, string>> = {
   'h1-missing': { 'The H1 has no text': 'The main heading has no text' },
