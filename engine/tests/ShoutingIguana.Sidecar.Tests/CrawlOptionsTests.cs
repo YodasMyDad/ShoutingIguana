@@ -29,6 +29,9 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
         Assert.Equal(5, (int?)options["concurrency"]);
         Assert.Equal("shoutingIguana", (string?)options["userAgent"]);
         Assert.Equal(20, (int?)options["requestTimeoutSeconds"]);
+
+        // Signatures as the engine's default, none, the app's copy of the defaults keeps: an empty object, never values.
+        Assert.Equal("{}", options["signatures"]?.ToJsonString());
         Assert.Equal(
             """[{"id":"polite","concurrency":2,"maxRequestsPerSecond":2},{"id":"standard","concurrency":5,"maxRequestsPerSecond":0},{"id":"fast","concurrency":16,"maxRequestsPerSecond":0}]""",
             defaults["speedPresets"]!.ToJsonString());

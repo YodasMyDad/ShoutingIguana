@@ -63,6 +63,8 @@ internal sealed record CrawlOptionsDto
         CustomUserAgent = options.CustomUserAgent,
         AcceptLanguage = options.AcceptLanguage,
         ExtraHeaders = new Dictionary<string, string>(options.ExtraHeaders, StringComparer.OrdinalIgnoreCase),
+        // Never a signature's values in a response: an empty object, as the engine's default reads.
+        Signatures = new Dictionary<string, CrawlSignatureDto>(),
         RespectRobotsTxt = options.RespectRobotsTxt,
         RespectCrawlDelay = options.RespectCrawlDelay,
         CheckResources = options.CheckResources,
