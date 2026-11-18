@@ -47,6 +47,8 @@ export interface CrawlOptionsFormProps {
   autoFocusStart?: boolean | undefined;
   /** Now, for a Shopify signature's expiry: tests and stories give a fixed one. */
   now?: Date | undefined;
+  /** How many pages Shopify refused on the site's last crawl, said in the Shopify part, which opens by itself. */
+  shopifyLastRefused?: number | null | undefined;
   /**
    * The option to remember the proxy's password and the headers' values (step 3b), where the form's secrets are kept:
    * with the proxy in Advanced; in Simple, which shows neither, only when the form holds one (from the defaults).
@@ -110,6 +112,7 @@ function SimpleQuestions({
   autoFocusStart,
   remember,
   now,
+  shopifyLastRefused,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -240,6 +243,7 @@ function SimpleQuestions({
             mode="simple"
             onTouch={() => onTouch?.('signatures')}
             now={now}
+            lastRefused={shopifyLastRefused}
           />
         </div>
       </Fold>
@@ -273,6 +277,7 @@ function AdvancedSections({
   autoFocusStart,
   remember,
   now,
+  shopifyLastRefused,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -431,6 +436,7 @@ function AdvancedSections({
               mode="advanced"
               onTouch={() => onTouch?.('signatures')}
               now={now}
+              lastRefused={shopifyLastRefused}
             />
             {remember && formHasSecrets({ ...form, proxyUrl: '', headers: [] }) ? (
               <RememberSecrets {...remember} />

@@ -555,6 +555,27 @@ export const LiveNotChecked: Story = {
   render: () => <OverviewApp />,
 };
 
+/**
+ * A Shopify store refusing the crawl as it runs (lane shopify): one alert, said again as its count grew, in plain words
+ * with the fix in Shopify's own button names and Add a Shopify signature, which opens the crawl's settings on it.
+ */
+export const LiveShopifyRefusing: Story = {
+  loaders: [
+    () => {
+      running(1_346, POLITE);
+      for (const [id, count, at] of [
+        [5, 1, '2026-11-01T10:30:42.000Z'],
+        [6, 6, '2026-11-01T10:31:12.000Z'],
+      ] as const) {
+        liveStore.ingest(
+          message('alert', alert({ id, code: 'shopify-unsigned', at, data: { host: 'shop.example.com', count } })),
+        );
+      }
+    },
+  ],
+  render: () => <OverviewApp />,
+};
+
 /** Trouble: the site blocks the crawl, its robots.txt can't be read, and requests are held back. Each says what to do. */
 export const LiveWithAlerts: Story = {
   loaders: [

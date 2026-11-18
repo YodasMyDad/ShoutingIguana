@@ -10,6 +10,7 @@ export const SHOPIFY_STORE: ShopifyAccess = {
   notCheckedUnsigned: 8,
   notCheckedSigned: 0,
   urlIds: [11, 12, 13, 14, 15, 16, 17, 18],
+  reasons: [],
 };
 
 /** The same store, which refused 3 pages though the crawl sent a signature. */
@@ -18,6 +19,17 @@ export const SHOPIFY_SIGNATURE_REFUSED: ShopifyAccess = {
   notCheckedUnsigned: 0,
   notCheckedSigned: 3,
   urlIds: [11, 12, 13],
+  reasons: [
+    'it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain',
+  ],
+};
+
+/** The store refused 3 pages because the signature given was for the www twin, which the crawl could tell. */
+export const SHOPIFY_WRONG_DOMAIN: ShopifyAccess = {
+  ...SHOPIFY_STORE,
+  notCheckedUnsigned: 3,
+  urlIds: [11, 12, 13],
+  reasons: ['the signature is for www.shop.example.com, not shop.example.com, and each domain needs its own'],
 };
 
 /** A made-up Signature-Input ending at `expires`, as Shopify's admin shows one to copy. */

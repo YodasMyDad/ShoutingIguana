@@ -5,6 +5,7 @@ import type { AlertEvent, AlertLevel } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { failureOf } from '../../lib/failure';
 import { formatCount, formatCountOf, formatDuration } from '../../lib/format';
+import { reasonSentence } from '../../shopify/refusals';
 
 /** What an alert offers to do about it. The screen turns it into a link or a button. */
 export type AlertAction =
@@ -91,21 +92,33 @@ function words(
         action: SLOWER,
         more: BLOCKED_MORE,
       };
-    case 'shopify-unsigned':
+    case 'shopify-unsigned': {
+      const count = data.count ?? null;
       return {
-        title: 'Shopify limits crawlers without a signature',
-        detail: `${where} is a Shopify store, and it refused pages (429 Too Many Requests). The crawl asks for them again at its end; any still refused are listed as not checked, not broken.`,
+        title: 'Shopify is refusing pages: the crawl isn’t signed',
+        detail: [
+          `${where} runs on Shopify, which refuses crawlers that don’t send a signature${
+            count === null ? '' : `: ${formatCountOf(count, 'page')} so far`
+          }.`,
+          data.reason ? reasonSentence(data.reason) : '',
+          'They’ll be marked not checked, not broken.',
+        ]
+          .filter(Boolean)
+          .join(' '),
         advice:
-          'Add a Shopify signature, then recheck those pages. Its owner creates one in Shopify admin: Online Store › Preferences › Crawler access › Create signature.',
-        action: { kind: 'newCrawl', label: 'Crawl again with a signature', again: true, focus: 'shopify' },
+          'In Shopify admin, go to Online Store › Preferences › Crawler access and choose Create signature. Then stop the crawl and continue it with the signature, or recheck these pages once it ends.',
+        action: { kind: 'crawlSettings', label: 'Add a Shopify signature', focus: 'shopify' },
       };
+    }
     case 'shopify-signature-refused':
       return {
         title: 'Shopify refused the signature',
-        detail: `${where} refused pages even with the Shopify signature (429 Too Many Requests).`,
-        advice:
-          'The signature may be invalid, expired or for another domain, and a new one can take up to an hour to start working.',
-        action: null,
+        detail: `${where} refused pages even with the signature. ${reasonSentence(
+          data.reason ??
+            'it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain',
+        )}`,
+        advice: 'Check it in Shopify admin, or create a new one. They’ll be marked not checked, not broken.',
+        action: { kind: 'crawlSettings', label: 'Change the signature', focus: 'shopify' },
       };
     case 'start-redirects-away':
       return {
@@ -224,12 +237,18 @@ export function alertEntries(...sources: readonly (readonly AlertEvent[] | undef
   }
   const newestFirst = [...byKey.values()].sort((a, b) => raisedAt(b) - raisedAt(a) || (b.id ?? 0) - (a.id ?? 0));
   const blockedHosts = new Set<string>();
+  const shopifyCodes = new Set<string>();
   const entries: AlertEntry[] = [];
   for (const alert of newestFirst) {
     if (alert.code === 'blocked') {
       const host = alert.data?.host ?? '';
       if (blockedHosts.has(host)) continue;
       blockedHosts.add(host);
+    }
+    // Shopify's alert is said again as its count grows: one alert, its newest count.
+    if (alert.code.startsWith('shopify-')) {
+      if (shopifyCodes.has(alert.code)) continue;
+      shopifyCodes.add(alert.code);
     }
     entries.push({
       key: alertKey(alert),

@@ -394,6 +394,8 @@ export interface ShopifyAccess {
   notCheckedUnsigned: number;
   notCheckedSigned: number;
   urlIds: number[];
+  /** What was wrong with the crawl's signature, where it could tell: "the signature for shop.example expired on 1 March 2027". */
+  reasons: string[];
 }
 
 export interface StartCrawlRequest {

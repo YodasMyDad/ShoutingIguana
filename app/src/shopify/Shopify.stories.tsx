@@ -11,6 +11,7 @@ import {
   FAKE_SIGNATURE,
   SHOPIFY_SIGNATURE_REFUSED,
   SHOPIFY_STORE,
+  SHOPIFY_WRONG_DOMAIN,
   fakeSignatureInput,
   shopifyRoute,
 } from '../test/shopifySidecar';
@@ -108,6 +109,12 @@ export const PromptAdvanced: Story = { render: () => <Prompt access={SHOPIFY_STO
 export const PromptSignatureRefused: Story = {
   render: () => <Prompt access={SHOPIFY_SIGNATURE_REFUSED} mode="advanced" />,
 };
+
+/** Advanced, a signature for the www twin: the crawl names which problem it is. */
+export const PromptWrongDomain: Story = { render: () => <Prompt access={SHOPIFY_WRONG_DOMAIN} mode="advanced" /> };
+
+/** Simple, the same: plainly. */
+export const PromptWrongDomainSimple: Story = { render: () => <Prompt access={SHOPIFY_WRONG_DOMAIN} mode="simple" /> };
 
 /** Simple: in plain words, "signature" because Shopify's button says it. */
 export const PromptSimple: Story = { render: () => <Prompt access={SHOPIFY_STORE} mode="simple" /> };

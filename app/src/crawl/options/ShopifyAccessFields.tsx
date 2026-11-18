@@ -8,6 +8,7 @@ import { TextField } from '../../ui/TextField';
 import {
   SHOPIFY_AGENT,
   endsOn,
+  lastRefusedWords,
   hostOf,
   signatureHost,
   signatureState,
@@ -26,6 +27,8 @@ export interface ShopifyAccessFieldsProps {
   onTouch?: (() => void) | undefined;
   /** Now, for the expiry: tests and stories give a fixed one. */
   now?: Date | undefined;
+  /** How many pages Shopify refused on the site's last crawl: said first, so a signature goes in before the start. */
+  lastRefused?: number | null | undefined;
 }
 
 /** Shopify's way to a signature, in its own words: shown in both modes, and in the results' prompt. */
@@ -55,6 +58,7 @@ export function ShopifyAccessFields({
   mode,
   onTouch,
   now,
+  lastRefused,
 }: ShopifyAccessFieldsProps) {
   const id = useId();
   const state = signatureState(value, now ?? new Date());
@@ -69,6 +73,13 @@ export function ShopifyAccessFields({
 
   return (
     <div className="flex flex-col gap-4" data-setting="signatures">
+      {lastRefused ? (
+        <Callout tone="warning" title={lastRefusedWords(lastRefused)}>
+          {simple
+            ? 'This site runs on Shopify, which turns away checks without a signature.'
+            : 'This site runs on Shopify, which refuses crawlers that don’t send a signature.'}
+        </Callout>
+      ) : null}
       <ShopifySteps mode={mode} />
       <TextField
         label={simple ? 'Domain it’s for' : 'Domain'}

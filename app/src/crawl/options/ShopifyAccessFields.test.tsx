@@ -36,6 +36,20 @@ describe('the form’s Shopify crawler access', () => {
     expect(screen.getByText(/Works until 1 September 2026, for shop\.example only\./)).toBeVisible();
   });
 
+  it('says first what Shopify refused on the site’s last crawl', () => {
+    render(
+      <ShopifyAccessFields
+        value={{ domain: '', signatureInput: '', signature: '' }}
+        onChange={() => undefined}
+        startUrl="https://shop.example/"
+        mode="simple"
+        now={NOW}
+        lastRefused={8}
+      />,
+    );
+    expect(screen.getByText('Last time Shopify refused 8 pages. Add a signature before you start.')).toBeVisible();
+  });
+
   it('warns in the signature’s last week, and refuses it once it has ended', () => {
     renderFields({ signatureInput: input(new Date(Date.UTC(2026, 5, 4))), signature: SIGNATURE });
     expect(screen.getByText('This signature ends in 3 days, on 4 June 2026')).toBeVisible();

@@ -57,20 +57,29 @@ describe('what’s in the way', () => {
     const entries = inTheWay({
       ...base,
       alerts: [
-        alert('shopify-unsigned', '2026-11-01T10:00:00Z', { host: 'shop.example' }, 1),
-        alert('shopify-signature-refused', '2026-11-01T10:01:00Z', { host: 'shop.example' }, 2),
+        alert('shopify-unsigned', '2026-11-01T10:00:00Z', { host: 'shop.example', count: 1 }, 1),
+        alert('shopify-unsigned', '2026-11-01T10:00:30Z', { host: 'shop.example', count: 4 }, 2),
       ],
     });
 
     expect(entries.map((entry) => entry.text)).toEqual([
-      'Shopify turned the check away even with the signature. It may be wrong, ended, or for another domain, and a new one can take up to an hour to start working.',
+      'This site runs on Shopify, and Shopify is turning some pages away because the check isn’t signed: 4 pages so far. They’ll be marked not checked, not broken.',
     ]);
-    expect(
-      inTheWay({ ...base, alerts: [alert('shopify-unsigned', '2026-11-01T10:00:00Z', { host: 'shop.example' })] })[0]
-        ?.text,
-    ).toBe(
-      'This is a Shopify shop, and Shopify turns away checks that don’t carry a signature, so some product pages are waiting. Any it still won’t show are listed when the check ends, with how to add one.',
-    );
+    expect(entries[0]?.shopifySteps).toBe(true);
+    expect(entries[0]?.actions).toEqual([
+      { kind: 'crawlSettings', label: 'Add a Shopify signature, in Advanced', focus: 'shopify' },
+    ]);
+    const expired = inTheWay({
+      ...base,
+      alerts: [
+        alert('shopify-unsigned', '2026-11-01T10:00:00Z', {
+          host: 'shop.example',
+          count: 2,
+          reason: 'the signature for shop.example expired on 1 March 2027',
+        }),
+      ],
+    });
+    expect(expired[0]?.text).toContain('The signature ended on 1 March 2027. Make a new one in Shopify.');
   });
 
   it('says the slowdown and the Crawl-delay, from the waits, with nothing to do', () => {

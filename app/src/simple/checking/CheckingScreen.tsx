@@ -5,6 +5,7 @@ import { memo, useCallback, useMemo, useState, type Ref } from 'react';
 import { alertsQuery, checksQuery, historyQuery, statsQuery } from '../../api/queries';
 import type { AnalysisEvent, CrawlListItem, CrawlStatus } from '../../api/types';
 import { continueCrawl, pauseOrResume, stopCrawl } from '../../crawl/actions';
+import { ShopifySteps } from '../../crawl/options/ShopifyAccessFields';
 import { crawlName } from '../../crawl/status';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { announce } from '../../feedback/announce';
@@ -393,6 +394,7 @@ const Obstacles = memo(function Obstacles({
               <li key={entry.key}>
                 <Callout tone={TONES[entry.level]}>
                   <p>{entry.text}</p>
+                  {entry.shopifySteps ? <ShopifySteps mode="simple" /> : null}
                   {entry.actions.length > 0 ? (
                     <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
                       {entry.actions.map((action) => (

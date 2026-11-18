@@ -355,13 +355,19 @@ describe('fetchState', () => {
       kind: 'notChecked',
       why: 'Shopify limits crawlers without a signature (429 Too Many Requests), so it wasn’t read: no fault of the page’s. Add a Shopify signature, then recheck it.',
     });
+    // Which problem the signature had, where the crawl could tell.
+    expect(
+      shopify('Shopify limits crawlers without a signature: the signature for shop.example expired on 1 March 2027'),
+    ).toMatchObject({
+      why: 'Shopify limits crawlers without a signature (429 Too Many Requests), so it wasn’t read: no fault of the page’s. The signature for shop.example expired on 1 March 2027. Add a Shopify signature, then recheck it.',
+    });
     expect(
       shopify(
-        "Shopify refused the crawler's signature, which may be invalid, expired or for another domain (a new one can take up to an hour to start working)",
+        "Shopify refused the crawler's signature: it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain",
       ),
     ).toMatchObject({
       kind: 'notChecked',
-      why: 'Shopify refused it even with the signature (429 Too Many Requests). The signature may be invalid, expired or for another domain, and a new one can take up to an hour to start working.',
+      why: 'Shopify refused it even with the signature (429 Too Many Requests). It may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain.',
     });
     const privateAddress = after({
       ...base,

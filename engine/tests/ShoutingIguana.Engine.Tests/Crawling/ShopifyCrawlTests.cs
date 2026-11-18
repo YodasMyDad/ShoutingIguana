@@ -83,6 +83,10 @@ public sealed class ShopifyCrawlTests : IDisposable
         string[] failures = ["internal-blocked", "internal-client-error", "internal-server-error", "internal-unreachable", "broken-internal-links"];
         Assert.DoesNotContain(IssueReader.ReadAll(path), row => failures.Contains(row.Issue) && (row.Url.Contains("/p/", StringComparison.Ordinal) ||
             row.RelatedUrl?.Contains("/p/", StringComparison.Ordinal) == true));
+
+        // Nor does any other: a page Shopify refused is in no check's count, so it never moves the score.
+        var refusedUrls = TestCrawls.Rows(path, $"SELECT u.url {PRODUCTS} AND r.error LIKE '%{ShopifySignals.UNSIGNED_REFUSAL}%'").ToHashSet(StringComparer.Ordinal);
+        Assert.DoesNotContain(IssueReader.ReadAll(path), row => refusedUrls.Contains(row.Url) || row.RelatedUrl is { } related && refusedUrls.Contains(related));
         Assert.Equal(0, server.ShopifySigned);
     }
 

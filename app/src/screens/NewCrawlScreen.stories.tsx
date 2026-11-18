@@ -6,6 +6,7 @@ import { setSecretsStore } from '../crawl/secrets';
 import type { Mode } from '../mode/mode';
 import { AT_200_PERCENT, GARDEN_CRAWL, ScreenApp, freshStory, ownSidecar } from '../test/ScreenStory';
 import { TEST_CRAWL_ID, json, problem, standardRoutes, testCrawlItem, type FakeRoute } from '../test/fakeSidecar';
+import { SHOPIFY_STORE, shopifyRoute } from '../test/shopifySidecar';
 
 const meta = { title: 'Screens/New crawl' } satisfies Meta;
 export default meta;
@@ -144,6 +145,19 @@ export const AdvancedShopify = at('/new?url=https://shop.example.com/&focus=shop
 /** The same in Simple, under Options. */
 export const SimpleShopify = at('/new?url=https://shop.example.com/&focus=shopify', 'simple');
 
+/**
+ * The site's last crawl was a Shopify store that refused 8 pages (lane shopify): the Shopify part opens by itself and
+ * says so, before the crawl starts.
+ */
+export const AdvancedShopifyLastTime = at('/new?url=https://example.com/', 'advanced', () =>
+  sidecar(ENGINE_DEFAULTS, [shopifyRoute(SHOPIFY_STORE)]),
+);
+
+/** The same in Simple, under Options. */
+export const SimpleShopifyLastTime = at('/new?url=https://example.com/', 'simple', () =>
+  sidecar(ENGINE_DEFAULTS, [shopifyRoute(SHOPIFY_STORE)]),
+);
+
 export const AdvancedOnASetting = at(`/new?from=${TEST_CRAWL_ID}&focus=userAgent`, 'advanced');
 /** "Crawl again with these": the crawl's own settings, and what its file didn't keep, to give again. */
 export const CrawlAgain = at(`/new?from=${TEST_CRAWL_ID}`, 'advanced');
@@ -180,6 +194,12 @@ export const AdvancedAt200 = at('/new?url=https://www.example.co.uk/&focus=heade
 
 /** The crawl's settings: a stopped crawl, to continue with a few settings changed. */
 export const CrawlSettingsStopped = at(`/crawls/${TEST_CRAWL_ID}/settings`, 'advanced');
+/**
+ * The crawl's settings opened from the Shopify alert's Add a Shopify signature (lane shopify): once the crawl has
+ * stopped, Continue carries on with the signature, and the pages Shopify refused are asked again, signed.
+ */
+export const CrawlSettingsShopify = at(`/crawls/${TEST_CRAWL_ID}/settings?focus=shopify`, 'advanced');
+
 /** Continue asked again for the header values its file doesn't keep. */
 export const CrawlSettingsNeedsSecrets: Story = {
   ...at(`/crawls/${TEST_CRAWL_ID}/settings?focus=headers`, 'advanced'),

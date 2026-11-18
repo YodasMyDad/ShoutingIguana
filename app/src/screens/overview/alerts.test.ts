@@ -61,32 +61,62 @@ describe('alerts', () => {
   });
 
   it('says Shopify’s limit on crawlers without a signature, and a signature Shopify refused, with what to do', () => {
-    const [unsigned, refused] = alertEntries([
+    // Said again as its count grew: one alert, the newest count.
+    const entries = alertEntries([
       alert({
         code: 'shopify-unsigned',
+        id: 3,
+        at: '2026-11-01T10:01:30.000Z',
+        data: { host: 'shop.example', count: 6 },
+      }),
+      alert({
+        code: 'shopify-unsigned',
+        id: 2,
         at: '2026-11-01T10:01:00.000Z',
-        data: { host: 'shop.example', reason: '429 Too Many Requests' },
+        data: { host: 'shop.example', count: 1 },
       }),
       alert({
         code: 'shopify-signature-refused',
-        id: 2,
-        data: { host: 'shop.example', reason: '429 Too Many Requests' },
+        id: 1,
+        data: {
+          host: 'shop.example',
+          reason:
+            'it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain',
+        },
       }),
     ]);
+    const [unsigned, refused] = entries;
 
+    expect(entries).toHaveLength(2);
     expect(unsigned).toMatchObject({
-      title: 'Shopify limits crawlers without a signature',
+      title: 'Shopify is refusing pages: the crawl isn’t signed',
       detail:
-        'shop.example is a Shopify store, and it refused pages (429 Too Many Requests). The crawl asks for them again at its end; any still refused are listed as not checked, not broken.',
-      action: { kind: 'newCrawl', label: 'Crawl again with a signature', again: true, focus: 'shopify' },
+        'shop.example runs on Shopify, which refuses crawlers that don’t send a signature: 6 pages so far. They’ll be marked not checked, not broken.',
+      action: { kind: 'crawlSettings', label: 'Add a Shopify signature', focus: 'shopify' },
     });
-    expect(unsigned?.advice).toContain('Online Store › Preferences › Crawler access › Create signature');
+    expect(unsigned?.detail).not.toContain('429');
+    expect(unsigned?.advice).toContain('Online Store › Preferences › Crawler access and choose Create signature');
     expect(refused).toMatchObject({
       title: 'Shopify refused the signature',
-      advice:
-        'The signature may be invalid, expired or for another domain, and a new one can take up to an hour to start working.',
-      action: null,
+      detail:
+        'shop.example refused pages even with the signature. It may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain.',
+      action: { kind: 'crawlSettings', label: 'Change the signature', focus: 'shopify' },
     });
+
+    // When the crawl could tell, which: the signature given is the www twin's.
+    const [twin] = alertEntries([
+      alert({
+        code: 'shopify-unsigned',
+        data: {
+          host: 'shop.example',
+          count: 2,
+          reason: 'the signature is for www.shop.example, not shop.example, and each domain needs its own',
+        },
+      }),
+    ]);
+    expect(twin?.detail).toContain(
+      'The signature is for www.shop.example, not shop.example, and each domain needs its own.',
+    );
   });
 
   it('shows the engine’s message only for a code this app doesn’t know', () => {

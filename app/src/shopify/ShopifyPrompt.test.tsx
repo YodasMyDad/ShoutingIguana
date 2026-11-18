@@ -21,6 +21,7 @@ const STORE: ShopifyAccess = {
   notCheckedUnsigned: 8,
   notCheckedSigned: 0,
   urlIds: [11, 12, 13, 14, 15, 16, 17, 18],
+  reasons: [],
 };
 
 function renderPrompt(access: ShopifyAccess | null, mode: 'simple' | 'advanced') {
@@ -66,12 +67,31 @@ describe('the Shopify prompt in the results', () => {
   });
 
   it('says a signature Shopify refused may be wrong, ended or for another domain', async () => {
-    renderPrompt({ ...STORE, notCheckedUnsigned: 0, notCheckedSigned: 2 }, 'advanced');
+    renderPrompt(
+      {
+        ...STORE,
+        notCheckedUnsigned: 0,
+        notCheckedSigned: 2,
+        reasons: [
+          'it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain',
+        ],
+      },
+      'advanced',
+    );
     expect(await screen.findByText('2 URLs were refused even with the Shopify signature')).toBeVisible();
     expect(
-      screen.getByText(/may be invalid, expired or for another domain, and a new one can take up to an hour/),
+      screen.getByText(/It may not be active yet \(a new one can take up to an hour\), may have expired/),
     ).toBeVisible();
     expect(screen.getByRole('button', { name: 'Change the signature' })).toBeVisible();
+  });
+
+  it('names which problem the signature had when the crawl could tell, in each mode’s words', async () => {
+    const expired = { ...STORE, reasons: ['the signature for shop.example expired on 1 March 2027'] };
+    const { unmount } = renderPrompt(expired, 'advanced');
+    expect(await screen.findByText(/The signature for shop\.example expired on 1 March 2027\./)).toBeVisible();
+    unmount();
+    renderPrompt(expired, 'simple');
+    expect(await screen.findByText(/The signature ended on 1 March 2027\. Make a new one in Shopify\./)).toBeVisible();
   });
 
   it('says nothing for any other site, or a store that refused nothing', async () => {

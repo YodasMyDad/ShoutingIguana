@@ -3,6 +3,7 @@
 // explain it in a line; Advanced's say the status and the engine's terms. Pure.
 import type { ShopifyAccess } from '../api/types';
 import { formatCount } from '../lib/format';
+import { reasonSentence, simpleReason } from './refusals';
 
 export interface ShopifyPromptWords {
   title: string;
@@ -20,6 +21,14 @@ function pages(count: number, mode: 'simple' | 'advanced'): string {
 
 /** Null when the store refused nothing: no prompt. */
 export function shopifyPromptWords(access: ShopifyAccess, mode: 'simple' | 'advanced'): ShopifyPromptWords | null {
+  const words = promptWords(access, mode);
+  if (!words) return null;
+  // Which problem the signature had, where the crawl could tell, in each mode's words.
+  const reasons = access.reasons.map((reason) => (mode === 'simple' ? simpleReason(reason) : reasonSentence(reason)));
+  return reasons.length === 0 ? words : { ...words, body: `${words.body} ${[...new Set(reasons)].join(' ')}` };
+}
+
+function promptWords(access: ShopifyAccess, mode: 'simple' | 'advanced'): ShopifyPromptWords | null {
   const unsigned = access.notCheckedUnsigned;
   const signed = access.notCheckedSigned;
   if (unsigned + signed === 0) return null;
@@ -29,13 +38,13 @@ export function shopifyPromptWords(access: ShopifyAccess, mode: 'simple' | 'adva
     return mode === 'simple'
       ? {
           title: `${pages(signed, mode)} ${was(signed)} turned away even with the signature`,
-          body: 'It may be wrong, ended, or for another domain. A new signature can take up to an hour to start working, so try again later, or make a new one.',
+          body: 'Try again in a while, or make a new one.',
           action: 'Change the signature',
           steps: true,
         }
       : {
           title: `${pages(signed, mode)} ${was(signed)} refused even with the Shopify signature`,
-          body: `${access.host} answered 429 Too Many Requests to signed requests. The signature may be invalid, expired or for another domain, and a new one can take up to an hour to start working. They’re listed as not checked, not broken.`,
+          body: `${access.host} answered 429 Too Many Requests to signed requests. They’re listed as not checked, not broken.`,
           action: 'Change the signature',
           steps: true,
         };

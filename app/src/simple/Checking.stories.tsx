@@ -148,7 +148,7 @@ export const ShopifyTurnsAway: Story = {
             id: 7,
             code: 'shopify-unsigned',
             at: '2026-11-01T10:15:02.000Z',
-            data: { host: 'example.com', reason: '429 Too Many Requests' },
+            data: { host: 'example.com', count: 6 },
           }),
         ),
       );
