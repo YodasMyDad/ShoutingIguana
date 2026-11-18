@@ -85,6 +85,14 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                     var first = Assert.Single(targets);
                     Assert.True(first <= issue.Url && crawl.Reference.Targets[(check, first)].SequenceEqual([first]), $"{check} on URL {issue.Url} names {first}");
                 }
+                else if (check == "canonical-loop")
+                {
+                    // A loop is one group: each of its pages names the loop's first page (its lowest id), which names
+                    // itself, while showing the page its own canonical names.
+                    var first = Assert.Single(targets);
+                    Assert.True(first <= issue.Url && crawl.Reference.Targets[(check, first)].SequenceEqual([first]), $"{check} on URL {issue.Url} names {first}");
+                    Assert.NotNull(issue.Related);
+                }
                 else if (issue.Related is { } related)
                 {
                     Assert.Contains(related, targets);
@@ -103,6 +111,10 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
                 }
             }
         }
+
+        // The synthetic site's one loop (canonical-loop-a and -b) is one group.
+        Assert.Equal(2, Flagged("canonical-loop").Count);
+        Assert.Single(Flagged("canonical-loop").Select(issue => crawl.Reference.Targets[("canonical-loop", issue.Url)].Single()).Distinct());
 
         // Every internal URL a page links to that answers with an error is named, as many as its detail counts, and nothing it
         // doesn't link to (a redirect to an error, a loop and a timeout are broken too).

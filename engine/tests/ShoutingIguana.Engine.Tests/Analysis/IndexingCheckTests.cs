@@ -261,6 +261,30 @@ public sealed class IndexingCheckTests
         Assert.False(urls.IsOnCanonicalLoop(lead.UrlId));
     }
 
+    /// <summary>
+    /// One loop is one fault, so its pages share one group: each names the loop's first page (its lowest id) as the URL its
+    /// issue is about, while still showing the page its own canonical names as the other URL involved.
+    /// </summary>
+    [Fact]
+    public void ThePagesOfOneCanonicalLoopAreOneGroup()
+    {
+        var site = new RuleHarness();
+        var html = (string target) => RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}{target}\">");
+        var a = site.Page($"{site.Site}/a", html("/b"), IndexabilityReason.Canonicalised);
+        var b = site.Page($"{site.Site}/b", html("/c"), IndexabilityReason.Canonicalised);
+        var c = site.Page($"{site.Site}/c", html("/a"), IndexabilityReason.Canonicalised);
+        var x = site.Page($"{site.Site}/x", html("/y"), IndexabilityReason.Canonicalised);
+        var y = site.Page($"{site.Site}/y", html("/x"), IndexabilityReason.Canonicalised);
+        var urls = site.Table(canonicals: [(a.UrlId, b.UrlId), (b.UrlId, c.UrlId), (c.UrlId, a.UrlId), (x.UrlId, y.UrlId), (y.UrlId, x.UrlId)]);
+        var rules = new CanonicalRules(urls, site.UrlOf);
+        IssueHit Loop(AnalyzedPage page) => rules.Check(page).Single(hit => hit.Issue == IssueCatalog.CANONICAL_LOOP);
+
+        Assert.Equal([b.UrlId, c.UrlId, a.UrlId], new[] { a, b, c }.Select(page => Loop(page).RelatedUrlId));
+        Assert.All(new[] { a, b, c }, page => Assert.Equal([a.UrlId], Loop(page).AllTargets));
+        Assert.Equal([y.UrlId, x.UrlId], new[] { x, y }.Select(page => Loop(page).RelatedUrlId));
+        Assert.All(new[] { x, y }, page => Assert.Equal([x.UrlId], Loop(page).AllTargets));
+    }
+
     [Fact]
     public void ACanonicalWithAFragmentOrAnAlternatesAttributesIsFlaggedThoughItNamesThePageItself()
     {

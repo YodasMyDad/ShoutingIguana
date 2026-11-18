@@ -98,7 +98,13 @@ internal sealed partial class CanonicalRules(UrlTable urls, Func<int, string?> r
 
             if (urls.IsOnCanonicalLoop(page.UrlId))
             {
-                yield return new IssueHit(IssueCatalog.CANONICAL_LOOP, page.UrlId, LoopText(page), related);
+                // One loop is one fault: every page of it is grouped under the loop's first page (its lowest id), as a
+                // duplicate is under its cluster's, while showing the page its own canonical names.
+                var first = urls.CanonicalLoop(page.UrlId).Min();
+                yield return new IssueHit(IssueCatalog.CANONICAL_LOOP, page.UrlId, LoopText(page), related)
+                {
+                    Targets = first == related ? null : [first]
+                };
             }
         }
 
