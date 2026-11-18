@@ -14,16 +14,21 @@ internal static partial class IssueFaults
     private static readonly char[] HTML_WHITESPACE = [' ', '\t', '\n', '\f', '\r'];
 
     /// <summary>
-    /// A JSON parser's message without where it failed, and without the character it failed at when it starts with it: a
-    /// missing comma after a product's name fails at a different byte on each product page, and an unescaped quote at a
-    /// different letter. "'B' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 54."
-    /// is "'…' is invalid after a value. Expected either ',', '}', or ']'."
+    /// A JSON parser's message without where it failed, and without the letter or digit it failed at when it starts with
+    /// one: a missing comma after a product's name fails at a different place on each product page, and an unescaped quote
+    /// at a different letter. "Block 2 of 3, line 1, position 55: 'B' is invalid after a value. Expected either ',', '}', or
+    /// ']'." is "'…' is invalid after a value. Expected either ',', '}', or ']'."; a quote or bracket it failed at, the same
+    /// on every page of a template, is kept. An earlier engine's detail, the parser's own message ending "LineNumber: 0 |
+    /// BytePositionInLine: 54.", is read the same.
     /// </summary>
     public static string JsonError(string message)
     {
-        var fault = Position().Replace(message, string.Empty);
-        return LeadingToken().Replace(fault, "'…'");
+        var fault = WithoutPosition(JsonBlock().Replace(message, string.Empty));
+        return LeadingToken().Replace(fault, token => token.Value[1..^1].Any(char.IsLetterOrDigit) ? "'…'" : token.Value);
     }
+
+    /// <summary>System.Text.Json's message without where it failed: "… LineNumber: 0 | BytePositionInLine: 54." without its last part.</summary>
+    public static string WithoutPosition(string message) => Position().Replace(message, string.Empty);
 
     /// <summary>Which form of relative URL a canonical's href is: what one template writes on every page, whatever the page.</summary>
     public static string RelativeCanonical(string href)
@@ -100,6 +105,10 @@ internal static partial class IssueFaults
     public static string HreflangCodes(string detail) =>
         string.Join(", ", detail.Split("; ").Select(part => (part.IndexOf(": ", StringComparison.Ordinal) is var colon and >= 0 ? part[..colon] : part).TrimEnd('…'))
             .Where(code => code.Length > 0));
+
+    /// <summary>Which JSON-LD block of a page failed, and where in it: "Block 2 of 3, line 1, position 55: ".</summary>
+    [GeneratedRegex(@"^Block [\d,]+ of [\d,]+(?:, line [\d,]+, position [\d,]+)?: ", RegexOptions.CultureInvariant)]
+    private static partial Regex JsonBlock();
 
     /// <summary>Where System.Text.Json says a document failed: " LineNumber: 0 | BytePositionInLine: 54.", with the JSON path before it if any.</summary>
     [GeneratedRegex(@"\s*(?:Path: .*? \| )?LineNumber: \d+ \| BytePositionInLine: \d+\.?\s*$", RegexOptions.CultureInvariant)]

@@ -167,13 +167,14 @@ public sealed class IssueTargetsTests : IAsyncLifetime
         Assert.Equal(Enumerable.Range(0, PRODUCTS).Select(index => $"/p/{index}").Order(StringComparer.Ordinal),
             rows.Rows.Select(row => (string)row.Values[1]!).Order(StringComparer.Ordinal));
 
+        // The quote the parser stopped at, where the comma should be, is the template's on every page: the group names it.
         var json = Assert.Single(Groups("structured-data-invalid").Groups);
-        Assert.Equal(("'…' is invalid after a value. Expected either ',', '}', or ']'.", (long)PRODUCTS, true), (json.Detail, json.Pages, json.LikelyTemplate));
+        Assert.Equal(("'\"' is invalid after a value. Expected either ',', '}', or ']'.", (long)PRODUCTS, true), (json.Detail, json.Pages, json.LikelyTemplate));
         var details = IssueGroupReader.ReadRows(_path, "structured-data-invalid", new UrlQuery { Columns = ["detail"] }, new IssueGroupKey(json.Detail, null))!.Page!
             .Rows.Select(row => (string)row.Values[1]!).ToList();
         Assert.Equal(PRODUCTS, details.Count);
         Assert.True(details.Distinct().Count() > 1, "Each page's own message says where its parser stopped");
-        Assert.All(details, detail => Assert.Contains("BytePositionInLine", detail, StringComparison.Ordinal));
+        Assert.All(details, detail => Assert.Matches(@"^Block 1 of 1, line 1, position \d+: '""' is invalid after a value\.", detail));
 
         // A group with another URL holds none of a fault's issues.
         Assert.Empty(IssueGroupReader.ReadRows(_path, "canonical-relative", new UrlQuery(), new IssueGroupKey(relative.Detail, _ids["/"]))!.Page!.Rows);
