@@ -9,6 +9,7 @@ import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { resetSessionSecretsForTests } from '../crawl/secrets';
 import { liveStore } from '../live/liveStore';
 import type { Mode } from '../settings/schema';
 import { replaceSettings, updateSettings } from '../settings/settingsStore';
@@ -21,8 +22,15 @@ export const SYNTHETIC_CRAWL = '5d66706ffdaef5e0';
 
 /** Every story starts clean: nothing hidden, nothing live. */
 export function freshStory(): void {
-  updateSettings({ hiddenChecks: [], hiddenChecksByCrawl: {}, gridColumns: {} });
+  updateSettings({
+    hiddenChecks: [],
+    hiddenChecksByCrawl: {},
+    gridColumns: {},
+    checkSort: { advanced: 'fixFirst', simple: 'fixFirst' },
+  });
   liveStore.reset();
+  // No secrets kept from the story before, as a new run of the app. The credential store is the story’s own to set.
+  resetSessionSecretsForTests();
 }
 
 /** A sidecar of the story's own. */

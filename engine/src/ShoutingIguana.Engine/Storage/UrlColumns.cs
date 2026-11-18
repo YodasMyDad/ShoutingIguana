@@ -136,6 +136,7 @@ internal static class UrlColumns
         {
             Source = ColumnSource.Responses, CrawlSql = $"(SELECT {Status("rs")} FROM responses rs WHERE rs.url_id = r.redirect_url_id)", Sortable = false
         },
+        new(UrlComputedColumns.REDIRECT_KIND, UrlColumnType.Text) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
         new("redirectChain", UrlColumnType.Object) { Source = ColumnSource.Computed, Sortable = false, Filterable = false },
         new("fetchError", UrlColumnType.Text)
         {

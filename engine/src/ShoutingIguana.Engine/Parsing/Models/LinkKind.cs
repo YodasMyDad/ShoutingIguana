@@ -13,5 +13,8 @@ public enum LinkKind : byte
     Hreflang,
     Pagination,
     MetaRefresh,
-    Redirect
+    Redirect,
+
+    /// <summary>An og:image or twitter:image given as a full URL: the image a network shows with a share (batch 9).</summary>
+    SocialImage
 }

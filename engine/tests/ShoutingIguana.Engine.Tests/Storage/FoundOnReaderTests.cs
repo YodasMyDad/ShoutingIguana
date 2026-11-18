@@ -27,7 +27,9 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "internal-client-error", "internal-server-error", "internal-unreachable", "internal-blocked", "redirect-chain", "redirect-loop",
             "redirect-broken", "redirect-temporary", "redirect-downgrade", "orphan-page", "blocked-by-robots", "sitemap-non-indexable",
             "sitemap-url-other-host", "http-page", "url-uppercase", "url-underscores", "canonical-on-redirect", "canonical-unlinked",
-            "non-indexable-inlinks-only", "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit"
+            "non-indexable-inlinks-only", "content-type-mismatch", "redirect-temporary-cached", "resource-past-crawl-limit", "sitemap-url-repeated",
+            "url-tracking-parameters", "url-multiple-slashes", "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search",
+            "hreflang-unlinked"
         ];
         string[] targets =
         [
@@ -36,7 +38,9 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
             "noindex-with-canonical", "image-broken", "image-too-large", "hreflang-missing-return", "hreflang-broken-target",
             "hreflang-to-non-indexable", "mixed-content", "image-missing-alt", "image-alt-too-long", "image-missing-dimensions",
             "canonical-to-first-page", "canonical-other-domain", "canonical-loop", "broken-resources", "links-to-localhost", "generic-anchor-text",
-            "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable"
+            "slow-external-links", "pagination-not-linked", "pagination-broken", "pagination-to-non-indexable",
+            "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "hreflang-inconsistent-code",
+            "social-image-broken", "social-image-too-large", "social-image-too-small"
         ];
         Assert.Equal(sources.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Sources).Select(check => check.Id).Order());
         Assert.Equal(targets.Order(), IssueCatalog.All.Where(check => check.References == IssueReferences.Targets).Select(check => check.Id).Order());
@@ -153,6 +157,18 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
     }
 
     /// <summary>
+    /// A share image the page also shows is named by its share tag: the link the check is about, of the two (batch 9).
+    /// </summary>
+    [Fact]
+    public void AShareImageIsNamedByItsShareTagWhereThePageAlsoShowsIt()
+    {
+        var page = Flagged("social-image-too-small").Single(id => Url(id).EndsWith("/plants/og-image-small", StringComparison.Ordinal));
+        var target = Assert.Single(FoundOnReader.ReadTargets(crawl.Path, "social-image-too-small", [page])!.Single().Targets);
+        Assert.Equal((LinkKind.SocialImage, "og:image", LinkPosition.Head), (target.Kind, target.Text, target.Position));
+        Assert.Equal(["1"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {target.Id} AND kind = {(int)LinkKind.Image}"));
+    }
+
+    /// <summary>
     /// A page's logo linking the page itself, with nothing to read, is named as the page itself, and its link is that one:
     /// not the page's "#" and "#top" links to itself, which are jumps within it that the check passes.
     /// </summary>
@@ -209,7 +225,7 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
     /// Checks the synthetic site can't plant: the HTTPS ones (it's served over HTTP here), and links to private addresses, as
     /// the site and its partner are both on 127.0.0.1, one machine's addresses.
     /// </summary>
-    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page" or "links-to-localhost";
+    private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page" or "links-to-localhost" or "image-hotlinked";
 
     private List<int> Flagged(string check) =>
     [

@@ -162,6 +162,12 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(RobotsOriginsRequest))]
 [JsonSerializable(typeof(LinkEndsRequest))]
 [JsonSerializable(typeof(LinkEndPage))]
+
+// Links grouped by target (step 3b).
+[JsonSerializable(typeof(LinkGroupsRequest))]
+[JsonSerializable(typeof(LinkGroupPageDto))]
+[JsonSerializable(typeof(UrlImagesRequest))]
+[JsonSerializable(typeof(PageImages))]
 [JsonSerializable(typeof(AnalysisSettingsDto))]
 [JsonSerializable(typeof(ResetAnalysisSettingsRequest))]
 [JsonSerializable(typeof(Dictionary<string, JsonElement>))]

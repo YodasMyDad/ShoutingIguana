@@ -6,7 +6,7 @@ import { copyText } from '../lib/clipboard';
 import { openInBrowser } from '../shell/os';
 import { IconButton } from './IconButton';
 import { Tooltip } from './Tooltip';
-import { middleTruncate, openLabel, originLength, urlDisplay } from './urlText';
+import { fileLabelOf, middleTruncate, openLabel, originLength, splitExtension, urlDisplay } from './urlText';
 
 /** How long "Copied" stays in the tooltip after a click. */
 const COPIED_MS = 1_500;
@@ -26,6 +26,12 @@ export interface UrlProps {
   truncate?: 'middle' | 'wrap' | undefined;
   /** In a line of text rather than a cell of its own. */
   inline?: boolean | undefined;
+  /**
+   * `file` names a file a page loads (an image, a stylesheet) by its file's name, then its query or folder muted
+   * (`harpswell-metal-patio-set-9.jpg  ?width=896`), cut at the end where there isn't room, never in the middle, where
+   * the name is. `address` (the default) is the URL itself. Either way hover, copy and a screen reader get the whole URL.
+   */
+  label?: 'address' | 'file' | undefined;
   /**
    * Makes the URL a link that goes somewhere in the app (the inspector walks to it): a click calls this instead of
    * copying. `goHint` says where, in its tooltip ("Inspect").
@@ -132,13 +138,20 @@ export function Url({
   openable = true,
   truncate = 'middle',
   inline = false,
+  label = 'address',
   onGo,
   goHint = 'Inspect',
   tabbable = true,
   className,
 }: UrlProps) {
   const display = urlDisplay(url, siteOrigin);
-  const { rootRef, shownRef, shown } = useMiddleTruncate(display.shown, display.origin.length, truncate === 'middle');
+  const file = label === 'file' ? fileLabelOf(url, siteOrigin) : null;
+  const name = file ? splitExtension(file.name) : null;
+  const { rootRef, shownRef, shown } = useMiddleTruncate(
+    display.shown,
+    display.origin.length,
+    truncate === 'middle' && file === null,
+  );
   const [copied, setCopied] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const web = /^https?:\/\//i.test(url);
@@ -153,8 +166,16 @@ export function Url({
   const text = (
     <>
       <span className="si-url__full">{display.full}</span>
-      <span ref={shownRef} className="si-url__shown" aria-hidden="true">
-        {truncate === 'wrap' ? null : (
+      <span ref={shownRef} className={clsx('si-url__shown', file && 'si-url__shown--file')} aria-hidden="true">
+        {file ? (
+          <>
+            <span className="si-url__file">
+              <span className="si-url__stem">{name?.stem}</span>
+              {name?.ext ? <span className="si-url__ext">{name.ext}</span> : null}
+            </span>
+            {file.rest ? <span className="si-url__rest">{file.rest}</span> : null}
+          </>
+        ) : truncate === 'wrap' ? null : (
           <>
             {muted > 0 ? <span className="si-url__origin">{shown.slice(0, muted)}</span> : null}
             <span className="si-url__path">{shown.slice(muted)}</span>

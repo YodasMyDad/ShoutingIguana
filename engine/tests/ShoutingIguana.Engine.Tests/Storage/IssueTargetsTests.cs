@@ -115,7 +115,8 @@ public sealed class IssueTargetsTests : IAsyncLifetime
     {
         Assert.Equal(["/a", "/b"], Rows("image-too-large", "/big-2.jpg"));
         Assert.Equal(["/a"], Rows("image-too-large", "/big-1.jpg"));
-        Assert.Equal([new CheckCount("image-too-large", 2)], NamedBy("/big-2.jpg"));
+        // A 250 KB JPEG is in an older format too (batch 6's image-legacy-format).
+        Assert.Equal([new CheckCount("image-legacy-format", 2), new CheckCount("image-too-large", 2)], NamedBy("/big-2.jpg"));
     }
 
     /// <summary>

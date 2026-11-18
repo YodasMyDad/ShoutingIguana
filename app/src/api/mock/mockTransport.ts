@@ -20,6 +20,22 @@ import type {
 import { LINK_KINDS, type LinkKind, type LinkPage, type LinksQuery } from '../inspector';
 import type { Transport, TransportRequest } from '../transport';
 import { SYNTHETIC_FAVICON, e6Routes, linkEndIds } from './e6';
+import {
+  EARLIER_GARDEN_ID,
+  GARDEN_THEN,
+  GARDEN_THEN_POINTS,
+  comparedGroups,
+  comparedRows,
+  fixLoopRoutes,
+  gardenClearedRows,
+  itemChangesOf,
+  recheckKindsOf,
+  scenarioComparison,
+  scenarioFixed,
+  siteKeyOf,
+  standInCleared,
+} from './fixLoop';
+import type { CompareWith, CrawlComparison, FixedQuery } from '../fixLoop';
 import { sitemapsRobotsRoutes } from './sitemapsRobots';
 import {
   isCrawling,
@@ -352,7 +368,90 @@ export function createMockTransport(): Transport {
         const item = items.get(id);
         if (item) items.set(id, { ...item, hasFavicon: folder === 'synthetic' });
       }
+
+      // The fix loop: each crawl's site as the sidecar keys it, and a made-up earlier check of the garden site to
+      // compare the garden crawl with (./fixLoop.ts).
+      for (const [id, item] of items) items.set(id, { ...item, siteKey: siteKeyOf(item.startUrl) });
+      const gardenId = [...folders].find(([, folder]) => folder === 'garden')?.[0];
+      const garden = gardenId ? items.get(gardenId) : undefined;
+      if (garden?.startedAt && garden.analyzedAt) {
+        const fortnight = 14 * 24 * 60 * 60 * 1_000;
+        const earlier = (iso: string | null) => (iso ? new Date(Date.parse(iso) - fortnight).toISOString() : null);
+        const earlierScore = garden.score ? { ...garden.score, value: Math.max(0, garden.score.value - 14) } : null;
+        items.set(EARLIER_GARDEN_ID, {
+          ...garden,
+          id: EARLIER_GARDEN_ID,
+          path: garden.path.replace(/\.sicrawl$/, '-earlier.sicrawl'),
+          fileName: garden.fileName.replace(/\.sicrawl$/, '-earlier.sicrawl'),
+          startedAt: earlier(garden.startedAt),
+          finishedAt: earlier(garden.finishedAt),
+          updatedAt: earlier(garden.updatedAt),
+          analyzedAt: earlier(garden.analyzedAt),
+          score: earlierScore,
+          previous: null,
+          changes: null,
+          rechecks: null,
+        });
+        folders.set(EARLIER_GARDEN_ID, 'garden');
+        items.set(garden.id, {
+          ...garden,
+          previous: {
+            id: EARLIER_GARDEN_ID,
+            startedAt: earlier(garden.startedAt),
+            score: earlierScore,
+            comparable: 'full',
+            needsAnalysis: false,
+          },
+        });
+        const comparison = await gardenComparison(garden.id);
+        const withPrevious = items.get(garden.id);
+        if (withPrevious)
+          items.set(garden.id, { ...withPrevious, changes: comparison ? itemChangesOf(comparison) : null });
+      }
     })());
+
+  /** The garden crawl compared with its made-up earlier check: the fixture's counts now, GARDEN_THEN's then. */
+  const gardenComparison = async (id: string): Promise<CrawlComparison | null> => {
+    const item = items.get(id);
+    const earlier = items.get(EARLIER_GARDEN_ID);
+    if (!item?.previous || !earlier) return null;
+    const analysis = adaptAnalysis(await fixture<Record<string, unknown>>(`api/${folderOf(id)}/analysis.json`));
+    const catalog = adaptChecks(await fixture<SavedChecks>('api/checks.json'));
+    return scenarioComparison({
+      crawlId: id,
+      with: {
+        id: earlier.id,
+        startedAt: earlier.startedAt,
+        finishedAt: earlier.finishedAt,
+        status: earlier.status,
+        startUrl: earlier.startUrl,
+        analyzedAt: earlier.analyzedAt,
+        pagesAnalyzed: earlier.pagesAnalyzed ?? earlier.pageCount,
+        crawledUrlCount: earlier.crawledUrlCount ?? earlier.fetchedUrlCount,
+        chosen: 'previous',
+      },
+      now: analysis,
+      then: GARDEN_THEN,
+      thenScore: earlier.score ?? null,
+      thenPoints: GARDEN_THEN_POINTS,
+      catalog: catalog.checks,
+      splits: { 'broken-internal-links': { fixed: 3, gone: 2, still: 4, new: 1 } },
+    });
+  };
+
+  /** A crawl's comparison as `/changes` answers it: null for a crawl with nothing to compare with. */
+  const comparisonFor = async (id: string, withId: string | null): Promise<CrawlComparison | null> => {
+    const item = items.get(id);
+    if (!item?.previous) return null;
+    if (withId !== null && withId !== 'previous' && withId !== item.previous.id) return null;
+    return gardenComparison(id);
+  };
+
+  /** The `compareWith` of a grid's body, or null for none (the grid answers as without it). */
+  const compareWithOf = (body: unknown): CompareWith | null => {
+    const value = (body as { compareWith?: unknown } | undefined)?.compareWith;
+    return typeof value === 'string' ? value : null;
+  };
 
   const folderOf = (id: string): FixtureCrawl => folders.get(id) ?? 'garden';
 
@@ -486,10 +585,47 @@ export function createMockTransport(): Transport {
 
   const live = (id: string) => simulations.get(id);
 
+  // The fix loop's rechecks, played as the sidecar plays them (./fixLoop.ts).
+  const fixLoop = fixLoopRoutes({
+    json,
+    problem,
+    items: async () => {
+      await load();
+      return [...items.values()];
+    },
+    item: async (id) => {
+      await load();
+      return items.get(id) ?? null;
+    },
+    update: (id, patch) => {
+      const item = items.get(id);
+      if (item) items.set(id, { ...item, ...patch });
+    },
+    setStatus: (id, status) => setStatus(id, status),
+    emit,
+    analyse: (id, done) => analyse(id, done),
+    crawling: (id) => live(id) !== undefined,
+    analysis: async (id) =>
+      items.get(id)?.analyzedAt
+        ? adaptAnalysis(await fixture<Record<string, unknown>>(`api/${folderOf(id)}/analysis.json`))
+        : null,
+    checks: async () => adaptChecks(await fixture<SavedChecks>('api/checks.json')).checks,
+    issueRows: (id, checkId) => joinedIssueRows(id, checkId),
+  });
+
   const routes: [method: TransportRequest['method'], pattern: RegExp, handler: Handler][] = [
     ['GET', /^\/api\/health$/, async () => json(await fixture('api/health.json'))],
     ['POST', /^\/api\/shutdown$/, () => Promise.resolve(empty(202))],
-    ['GET', /^\/api\/checks$/, async () => json(adaptChecks(await fixture<SavedChecks>('api/checks.json')))],
+    [
+      'GET',
+      /^\/api\/checks$/,
+      async () => {
+        const catalog = adaptChecks(await fixture<SavedChecks>('api/checks.json'));
+        // The fix loop: what a recheck of each check reads again, as the engine's catalog says.
+        const checks = catalog.checks.map((check) => ({ ...check, recheck: recheckKindsOf(check.id) }));
+        return json({ ...catalog, checks });
+      },
+    ],
     [
       'GET',
       /^\/api\/crawl-options\/defaults$/,
@@ -571,6 +707,7 @@ export function createMockTransport(): Transport {
           path: `C:\\Users\\mock\\Documents\\Shouting Iguana\\${site}-mock.sicrawl`,
           fileName: `${site}-mock.sicrawl`,
           site,
+          siteKey: siteKeyOf(startUrl),
           startUrl,
           status: 'running',
           startedAt: now,
@@ -653,6 +790,8 @@ export function createMockTransport(): Transport {
       'POST',
       /^\/api\/crawls\/([0-9a-f]{16})\/(pause|resume|stop)$/,
       ([, id = '', action]) => {
+        // The fix loop: Stop stops a recheck as it stops a crawl.
+        if (action === 'stop' && fixLoop.stop(id)) return Promise.resolve(empty(202));
         const simulation = live(id);
         if (!simulation) {
           return Promise.resolve(problem({ type: 'crawl-busy', title: 'This crawl isn’t running here.', status: 409 }));
@@ -1000,9 +1139,12 @@ export function createMockTransport(): Transport {
           const limit = typeof body.limit === 'number' ? body.limit : 100;
           const paging = pagingErrors(offset, limit);
           if (Object.keys(paging).length > 0) return problem(invalidQuery(paging));
-          return json(issueGroups(checkId, grouping, skipped ? null : issueRows, offset, limit));
+          const page = issueGroups(checkId, grouping, skipped ? null : issueRows, offset, limit);
+          const withId = compareWithOf(request.body);
+          const comparison = withId === null ? null : await comparisonFor(id, withId);
+          return json(comparison ? comparedGroups(page, comparison) : page);
         }
-        const { linkEnds, ...asked } = (request.body ?? {}) as UrlGridQuery;
+        const { linkEnds, compareWith, ...asked } = (request.body ?? {}) as UrlGridQuery;
         const query = withPagingDefaults(asked);
         if (query.columns === undefined || query.columns.length === 0) query.columns = ['url', 'detail', 'relatedUrl'];
         const errors = queryErrors(query, true);
@@ -1035,9 +1177,58 @@ export function createMockTransport(): Transport {
         const ends = await narrowed(id, item, inGroup, linkEnds);
         if (ends instanceof Response) return ends;
         const answer = answerGridQuery(ends, query, summaryOf(item), { issueRows: true });
-        return answer.ok ? json(answer.page) : problem(answer.problem);
+        if (!answer.ok) return problem(answer.problem);
+        const comparison = compareWith === undefined ? null : await comparisonFor(id, compareWith);
+        if (!comparison) return json(answer.page);
+        return json({
+          ...answer.page,
+          rows: comparedRows(answer.page.rows, comparison, checkId),
+          compared: {
+            with: comparison.with.id,
+            startedAt: comparison.with.startedAt,
+            comparable: comparison.comparable,
+          },
+        });
       },
     ],
+    // The fix loop: the comparison with the site's previous crawl, and what a check no longer flags.
+    [
+      'GET',
+      /^\/api\/crawls\/([0-9a-f]{16})\/changes(?:\?with=([^&]+))?$/,
+      async ([, id = '', withId]) => {
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        if (item.analyzedAt === null) return problem(notAnalyzed());
+        const asked = withId ? decodeURIComponent(withId) : null;
+        const comparison = await comparisonFor(id, asked);
+        if (!comparison && asked !== null && asked !== 'previous') {
+          return problem({
+            type: 'crawl-not-comparable',
+            title: 'That crawl can’t be compared with this one.',
+            status: 409,
+          });
+        }
+        return json(comparison ?? { crawlId: id, with: null });
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/issues\/([a-z0-9-]+)\/fixed$/,
+      async ([, id = '', checkId = ''], request) => {
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        if (item.analyzedAt === null) return problem(notAnalyzed());
+        const query = (request.body ?? {}) as FixedQuery;
+        const comparison = await comparisonFor(id, query.compareWith ?? 'previous');
+        const site = item.startUrl ? new URL(item.startUrl).origin : '';
+        const change = comparison?.checks.find((each) => each.checkId === checkId);
+        // The garden's broken links as the earlier check had them; any other check's stand-ins, never an empty list.
+        const rows =
+          checkId === 'broken-internal-links' ? gardenClearedRows(site) : change ? standInCleared(change, site) : [];
+        return json(scenarioFixed(checkId, comparison, rows, query));
+      },
+    ],
+    ...fixLoop.routes,
     // Sitemaps and robots.txt (E3b): their own file.
     ...sitemapsRobotsRoutes({
       json,

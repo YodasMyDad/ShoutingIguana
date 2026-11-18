@@ -1,6 +1,11 @@
-import { EyeOff } from 'lucide-react';
+import { ArrowDownWideNarrow, Check as Tick, EyeOff } from 'lucide-react';
 import { useEffect, useId, useRef, type KeyboardEvent, type Ref } from 'react';
+import type { CheckChange } from '../../api/fixLoop';
 import type { Severity } from '../../api/types';
+import type { ChangeFilterSearch } from '../../routing/search';
+import { Icon } from '../../ui/Icon';
+import { hasMoved } from '../../changes/changes';
+import { checkChangeCell, periodLabel, type ComparedPeriod } from '../compare/changeCell';
 import { affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { formatCount, formatCountOf } from '../../lib/format';
@@ -12,9 +17,10 @@ import { ListHeading, ListRow } from '../../ui/ListRow';
 import { RefreshLine } from '../../ui/ProgressBar';
 import { SearchField } from '../../ui/SearchField';
 import { SegmentedControl } from '../../ui/SegmentedControl';
+import { Select } from '../../ui/Select';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { Switch } from '../../ui/Switch';
-import type { CheckEntry, CheckList } from './checkList';
+import { CHECK_SORTS, type CheckEntry, type CheckList, type CheckSort } from './checkList';
 import { CountWithReach } from './CountWithReach';
 
 export type SeverityFilter = Severity | 'all';
@@ -32,6 +38,11 @@ export interface ChecksListProps {
   onQueryChange: (q: string) => void;
   severity: SeverityFilter;
   onSeverityChange: (severity: SeverityFilter) => void;
+  /** The list's order (`list` is built in it); left out, the list is by category and offers no choice. */
+  sort?: CheckSort | undefined;
+  onSortChange?: ((sort: CheckSort) => void) | undefined;
+  /** Points off the score by check id: shown on each row while the list is sorted by them. */
+  points?: ReadonlyMap<string, number> | undefined;
   /** Removes the category the list is narrowed to (`list.category`): its chip's ✕. */
   onCategoryClear?: (() => void) | undefined;
   showPassed: boolean;
@@ -51,7 +62,24 @@ export interface ChecksListProps {
   /** The analysis is being read again behind what's shown. */
   refreshing?: boolean;
   filterRef?: Ref<HTMLInputElement>;
+  /**
+   * The fix loop: each check's change since the crawl compared with (`period`), shown on its row; the checks that moved
+   * one way (`change`) a filter of its own, its counts in `changeCounts`. Left out, nothing is compared.
+   */
+  changes?: ReadonlyMap<string, CheckChange> | null | undefined;
+  period?: ComparedPeriod | null | undefined;
+  change?: ChangeFilterSearch | undefined;
+  onChangeFilter?: ((change: ChangeFilterSearch | undefined) => void) | undefined;
+  changeCounts?: Readonly<Record<ChangeFilterSearch, number>> | undefined;
 }
+
+const CHANGE_LABELS: Record<ChangeFilterSearch, string> = {
+  new: 'New',
+  fixed: 'Fixed',
+  fewer: 'Fewer',
+  more: 'More',
+  changed: 'Changed',
+};
 
 const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
 
@@ -69,6 +97,9 @@ export function ChecksList({
   onQueryChange,
   severity,
   onSeverityChange,
+  sort,
+  onSortChange,
+  points,
   onCategoryClear,
   showPassed,
   onShowPassedChange,
@@ -80,7 +111,13 @@ export function ChecksList({
   onClearFilters,
   refreshing = false,
   filterRef,
+  changes = null,
+  period = null,
+  change,
+  onChangeFilter,
+  changeCounts,
 }: ChecksListProps) {
+  const compared = changes !== null && period !== null;
   const id = useId();
   const options = useRef(new Map<string, HTMLDivElement>());
   const listRef = useRef<HTMLDivElement>(null);
@@ -133,8 +170,20 @@ export function ChecksList({
   const categoryChip = list.category ? (
     <FilterChip key="category" field="Category" value={list.category.title} size="sm" onRemove={onCategoryClear} />
   ) : null;
+  // The checks that moved one way since the crawl compared with: a chip that removes itself, as the category's does.
+  const changeChip =
+    compared && change ? (
+      <FilterChip
+        key="change"
+        field={periodLabel(period)}
+        value={CHANGE_LABELS[change].toLowerCase()}
+        size="sm"
+        onRemove={() => onChangeFilter?.(undefined)}
+      />
+    ) : null;
   const filters = [
     categoryChip,
+    changeChip,
     q ? (
       <FilterChip key="q" field="Title" op="contains" value={q} size="sm" onRemove={() => onQueryChange('')} />
     ) : null,
@@ -181,6 +230,16 @@ export function ChecksList({
           ]}
         />
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {sort && onSortChange ? (
+            <Select<CheckSort>
+              label="Sort"
+              size="sm"
+              icon={ArrowDownWideNarrow}
+              options={compared ? CHECK_SORTS : CHECK_SORTS.filter((option) => option.value !== 'change')}
+              value={sort}
+              onValueChange={onSortChange}
+            />
+          ) : null}
           <Switch
             label={
               list.passedCount === 1
@@ -204,9 +263,27 @@ export function ChecksList({
             </Button>
           ) : null}
         </div>
-        {categoryChip && !list.filteredToNothing ? (
+        {compared && !change && onChangeFilter && changeCounts ? (
+          <div role="group" aria-label={periodLabel(period)} className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-12 text-text-secondary">{periodLabel(period)}</span>
+            {(['new', 'fixed', 'fewer', 'more', 'changed'] as const).map((value) => (
+              <Button
+                key={value}
+                size="sm"
+                variant="ghost"
+                disabled={changeCounts[value] === 0}
+                onClick={() => onChangeFilter(value)}
+              >
+                {CHANGE_LABELS[value]}
+                <span className="text-text-muted tabular-nums">{formatCount(changeCounts[value])}</span>
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        {(categoryChip || changeChip) && !list.filteredToNothing ? (
           <div role="group" aria-label="Filters" className="flex flex-wrap gap-2">
             {categoryChip}
+            {changeChip}
           </div>
         ) : null}
       </div>
@@ -257,6 +334,9 @@ export function ChecksList({
                     onOpen={onOpen}
                     notesShown={notesShown}
                     totals={totals}
+                    points={sort === 'points' ? (points?.get(entry.check.id) ?? 0) : null}
+                    change={compared ? (changes.get(entry.check.id) ?? null) : null}
+                    period={period}
                     ref={(element) => {
                       if (element) options.current.set(entry.check.id, element);
                       else options.current.delete(entry.check.id);
@@ -280,31 +360,58 @@ function CheckOption({
   onOpen,
   notesShown,
   totals,
+  points,
+  change,
+  period,
   ref,
 }: {
   entry: CheckEntry;
+  /** The fix loop: its change since the crawl compared with, and when that was. */
+  change: CheckChange | null;
+  period: ComparedPeriod | null;
   selected: boolean;
   tabbable: boolean;
   onSelect: () => void;
   onOpen: () => void;
   notesShown: boolean;
   totals: CrawlCounts | null;
+  /** Its points off the score, shown while the list is sorted by them; null otherwise. */
+  points: number | null;
   ref: Ref<HTMLDivElement>;
 }) {
   const { check, outcome, count, skipReason } = entry;
   const skipped = outcome === 'skipped';
   // What the count is of, for the row's name: pages only for a check that flags nothing else.
   const words = affectedWords(check);
+  // A check whose count and rows didn't move says nothing: only what changed is marked, so the list scans.
+  const cell = change && period && hasMoved(change) ? checkChangeCell(change, period) : null;
+  // The change as text (a tick for a fixed check), never colour alone; its words for a screen reader, its rows' split
+  // in its tooltip.
+  const moved = cell ? (
+    <span className="inline-flex items-center gap-1 text-12 text-text-secondary tabular-nums" title={cell.title}>
+      {change?.state === 'fixed' ? <Icon icon={Tick} size="sm" /> : null}
+      <span aria-hidden="true">{cell.shown}</span>
+      <span className="sr-only">, {cell.spoken}</span>
+    </span>
+  ) : null;
   const meta = skipped ? (
     <Badge variant="dashed">Skipped</Badge>
   ) : outcome === 'passed' ? (
-    <span className="text-12 text-text-muted">Passed</span>
+    (moved ?? <span className="text-12 text-text-muted">Passed</span>)
   ) : (
-    <CountWithReach
-      count={count ?? 0}
-      noun={count === 1 ? words.noun : words.plural}
-      reach={checkReach(check, count, totals)}
-    />
+    <span className="inline-flex items-baseline gap-2">
+      {points !== null ? (
+        <span className="text-12 text-text-muted tabular-nums">
+          {points === 0 ? 'No points' : `−${formatCountOf(points, 'point')}`}
+        </span>
+      ) : null}
+      <CountWithReach
+        count={count ?? 0}
+        noun={count === 1 ? words.noun : words.plural}
+        reach={checkReach(check, count, totals)}
+      />
+      {moved}
+    </span>
   );
   return (
     <ListRow

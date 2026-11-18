@@ -42,6 +42,7 @@ import { Callout } from '../../ui/Callout';
 import { FilterChip } from '../../ui/FilterChip';
 import { Icon } from '../../ui/Icon';
 import { ImageThumb } from '../../ui/ImageThumb';
+import { isBrokenImage } from '../../ui/imageFacts';
 import { ShareBar } from '../../ui/ShareBar';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
@@ -50,6 +51,7 @@ import { followWords } from '../../inspector/links';
 import { OUTCOME_WORDS } from '../../inspector/words';
 import { StatusCode } from '../../ui/StatusCode';
 import { linksOfUrl } from '../links/linkPlaces';
+import { imagesOfPage } from '../links/presets';
 import {
   FIRST_GROUP_ROWS,
   childPlace,
@@ -79,6 +81,9 @@ import {
   type WhereRow,
 } from './whereFound';
 import { evidenceFrameClass } from './evidenceFrame';
+import { changeDate } from '../../changes/changeWords';
+import { groupChangeCell, type ComparedPeriod } from '../compare/changeCell';
+import { recheckable } from '../rechecks/rechecks';
 
 /**
  * A row of the tree: a group, one of the open group's first pages or URLs, a row under the one expanded to show where
@@ -106,6 +111,15 @@ interface ExpandedPage {
 const groupKey = (group: IssueGroup) => `${group.detail ?? ''}|${group.relatedUrlId ?? ''}`;
 
 /** A row's identity in the tree, so the cursor stays on it when the rows are read again (an analysis). */
+/** The fix loop: the groups compared with another crawl, each with its URLs then and how it moved. */
+export interface GroupsCompare {
+  compareWith: string;
+  period: ComparedPeriod;
+}
+
+const THEN_WIDTH = 88;
+const MOVE_WIDTH = 104;
+
 function treeRowKey(row: TreeRow): string {
   switch (row.kind) {
     case 'group':
@@ -199,9 +213,7 @@ function groupsAreImages(check: Check): boolean {
 /** A group's image's thumbnail, not asked for where the image is known not to answer. */
 function GroupThumb({ group }: { group: IssueGroup }) {
   if (!group.relatedUrl) return null;
-  const status = group.related?.statusCode;
-  const broken = typeof status === 'number' ? status >= 400 : Boolean(group.related?.outcome);
-  return <ImageThumb url={group.relatedUrl} broken={broken} className="me-2" />;
+  return <ImageThumb url={group.relatedUrl} broken={isBrokenImage(group.related ?? {})} className="me-2" />;
 }
 
 /** A group's "Shown at" cell: the largest size its first pages show its image at, and how much wider the file is. */
@@ -253,6 +265,8 @@ export interface IssueGroupsProps {
   onInspect: (urlId: number) => void;
   /** While the inspector is open: the page under the grid's cursor, which it follows. */
   onFollow?: ((urlId: number) => void) | undefined;
+  /** The fix loop: each group's URLs then and how it moved. Left out, none. */
+  compare?: GroupsCompare | null | undefined;
 }
 
 /**
@@ -272,7 +286,9 @@ export function IssueGroups({
   onOpenChange,
   onInspect,
   onFollow,
+  compare = null,
 }: IssueGroupsProps) {
+  const compareWith = compare?.compareWith ?? null;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { rowHeight, headerHeight } = useGridMetrics();
@@ -281,11 +297,17 @@ export function IssueGroups({
   // The same object for every check of one subject, so what's memoised on it holds.
   const words = affectedWords(check);
 
-  const queryKey = useMemo(() => queryKeys.issueGroupsGrid(crawlId, check.id), [crawlId, check.id]);
+  // The comparison is part of the key: IssuesScreen reads the first page under the same one.
+  const queryKey = useMemo(
+    () => [...queryKeys.issueGroupsGrid(crawlId, check.id), compareWith ?? 'none'] as const,
+    [crawlId, check.id, compareWith],
+  );
   const fetchPage = useCallback(
     async (offset: number, limit: number, signal: AbortSignal) =>
-      groupsAsGridPage(await api.issueGroups(crawlId, check.id, { offset, limit }, signal)),
-    [crawlId, check.id],
+      groupsAsGridPage(
+        await api.issueGroups(crawlId, check.id, { offset, limit, ...(compareWith ? { compareWith } : {}) }, signal),
+      ),
+    [crawlId, check.id, compareWith],
   );
   const groups = usePagedRows<IssueGroup>({ queryKey, fetchPage, rowHeight });
   const groupCount = groups.rowCount;
@@ -625,6 +647,8 @@ export function IssueGroups({
             siteOrigin={siteOrigin}
             copyable={false}
             tabbable={false}
+            // An image is named by its file: its name leads, never cut in the middle.
+            label={images ? 'file' : 'address'}
             className={(facts || status) && !images ? 'max-w-3/5 min-w-0 shrink-0' : 'min-w-0 flex-1'}
           />
           {status ? (
@@ -779,6 +803,44 @@ export function IssueGroups({
         cell: (row) => (row.kind === 'group' ? formatCount(row.group.pages) : null),
         text: (row) => (row.kind === 'group' ? String(row.group.pages) : ''),
       },
+      // The fix loop: the group's URLs then, and how it moved (New, −3, +1, ±0).
+      ...(compare
+        ? [
+            {
+              id: 'then',
+              header: changeDate(compare.period.iso) || 'Then',
+              width: THEN_WIDTH,
+              numeric: true,
+              cell: (row: TreeRow) =>
+                row.kind === 'group' && row.group.change
+                  ? groupChangeCell(row.group.change, row.group.pages, compare.period).then
+                  : null,
+              text: (row: TreeRow) =>
+                row.kind === 'group' && row.group.change
+                  ? groupChangeCell(row.group.change, row.group.pages, compare.period).then
+                  : '',
+            },
+            {
+              id: 'move',
+              header: 'Change',
+              width: MOVE_WIDTH,
+              cell: (row: TreeRow) => {
+                if (row.kind !== 'group' || !row.group.change) return null;
+                const cell = groupChangeCell(row.group.change, row.group.pages, compare.period);
+                return (
+                  <span>
+                    <span aria-hidden="true">{cell.shown}</span>
+                    <span className="sr-only">{cell.spoken}</span>
+                  </span>
+                );
+              },
+              text: (row: TreeRow) =>
+                row.kind === 'group' && row.group.change
+                  ? groupChangeCell(row.group.change, row.group.pages, compare.period).shown
+                  : '',
+            },
+          ]
+        : []),
       ...(shareWidth > 0
         ? [
             {
@@ -811,6 +873,7 @@ export function IssueGroups({
     siteOrigin,
     total,
     words,
+    compare,
   ]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.groups', columns);
@@ -968,6 +1031,8 @@ export function IssueGroups({
         foundIn={
           menuRow?.kind === 'page' && references === 'sources' ? linksOfUrl('inlinks', menuRow.row.id, 'all') : null
         }
+        imagesIn={menuRow?.kind === 'page' && check.category === 'images' ? imagesOfPage(menuRow.row.id) : null}
+        recheck={{ checkId: check.id, idOf: urlIdOf, fullCheck: !recheckable(check) }}
         group={
           menuRow && (menuRow.kind === 'group' || menuRow.kind === 'more')
             ? {

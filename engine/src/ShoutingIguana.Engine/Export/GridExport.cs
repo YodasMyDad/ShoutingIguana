@@ -224,20 +224,23 @@ internal static class GridExport
     }
 
     /// <summary>
-    /// An origin's blocked URLs, in crawl order, with why each was refused. The list is worked out once per origin and
+    /// An origin's blocked URLs, in crawl order, with why each was refused and what blocking it costs (the pages linking to
+    /// it, the first sitemap listing it, a menu linking to it, and whether that conflicts), as its list shows them; empty
+    /// where those aren't known, a crawl changed since its analysis. The list is worked out once per origin and
     /// kept, so it's read by its places; a running crawl adds to its end, and the export stops where the list ended when
     /// it began.
     /// </summary>
     private static void WriteBlocked(ExportRun run, ITableWriter table)
     {
         var request = run.Request;
-        var cells = new object?[5];
+        var cells = new object?[BLOCKED_TITLES.Length];
         long? expected = null;
         var offset = 0;
         while (expected is null || offset < expected)
         {
             run.Token.ThrowIfCancellationRequested();
-            var page = RobotsReader.ReadBlocked(run.CrawlPath, request.Origin!, request.Line, request.Reason, offset, UrlGridReader.MAX_LIMIT, run.Settings.Cache, run.Token)
+            var page = RobotsReader.ReadBlocked(run.CrawlPath, request.Origin!, request.Line, request.Reason, offset, UrlGridReader.MAX_LIMIT, run.Settings.Cache, run.Token,
+                           conflict: request.Conflict)
                        ?? throw new ExportException(ExportFailure.OriginNotFound, "This crawl has no robots.txt for that origin.");
             if (expected is null)
             {
@@ -248,7 +251,7 @@ internal static class GridExport
                 }
 
                 run.Expect(page.Matching);
-                table.Begin("Blocked URLs", ["Blocked URL", "Blocked by", "Line", "Rule", "Error"]);
+                table.Begin("Blocked URLs", BLOCKED_TITLES);
             }
 
             if (page.Rows.Count == 0)
@@ -264,11 +267,16 @@ internal static class GridExport
                 {
                     RobotsBlockReason.Rule => "A rule",
                     RobotsBlockReason.Unreachable => "robots.txt couldn’t be read",
-                    _ => "No rule kept"
+                    _ => "No matching rule"
                 };
                 cells[2] = url.Line is { } line ? (long)line : null;
                 cells[3] = url.Rule;
                 cells[4] = url.Error;
+                cells[5] = url.LinkingPages;
+                cells[6] = YesOrNo(url.InSitemap);
+                cells[7] = url.Sitemap?.Url;
+                cells[8] = YesOrNo(url.InMenu);
+                cells[9] = RobotsOriginWords.Conflict(url);
                 table.WriteRow(cells);
             }
 
@@ -278,6 +286,12 @@ internal static class GridExport
 
         table.End();
     }
+
+    /// <summary>An origin's blocked URLs' columns, under the list's titles.</summary>
+    private static readonly string[] BLOCKED_TITLES =
+        ["Blocked URL", "Blocked by", "Line", "Rule", "Error", "Linked from (pages)", "In a sitemap", "Sitemap", "In a menu", "Conflict"];
+
+    private static string? YesOrNo(bool? value) => value is { } known ? known ? ColumnWords.YES : ColumnWords.NO : null;
 
     /// <summary>The columns to write: those asked for, or the grid's own, each as the grid describes it.</summary>
     private static List<UrlColumnInfo> Columns(IReadOnlyList<string> asked, string[] defaults, Dictionary<string, UrlColumnInfo> known) =>

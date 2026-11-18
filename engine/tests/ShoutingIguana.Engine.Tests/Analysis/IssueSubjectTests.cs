@@ -97,7 +97,12 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         // The one page the crawl read (a sitemap led to it) is noindex. A site hidden from search is one whose home page
         // is noindex, and this one has no home page, so that check reports nothing here: what it flags is always a page.
         var hidden = site.Page($"{site.Site}/listed", RuleHarness.Html("<meta name=\"robots\" content=\"noindex\">"), IndexabilityReason.Noindex);
+
+        // A file linked with ad tracking parameters, and one at a path that repeats: URLs, not pages (batch 7).
+        var tracked = site.Fetched($"{site.Site}/brochure.pdf?utm_source=news", FetchOutcome.Success, 200, contentType: "application/pdf");
+        var repeated = site.Fetched($"{site.Site}/files/files/a.pdf", FetchOutcome.Success, 200, contentType: "application/pdf");
         var urls = site.Table();
+        urls.CountInlinks(site.Page($"{site.Site}/links", RuleHarness.Html(body: "<a href=\"/brochure.pdf?utm_source=news\">Brochure</a>")));
         Assert.Equal(start, urls.HomeId);
         var visibility = new SiteVisibilityRules(urls);
         visibility.Observe(hidden);
@@ -121,7 +126,16 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
             .. new RobotsTxtRules(urls, [new("https://example.com", 404, null, null, 0)], scope, new HashSet<string> { "https://example.com" }).Finish(),
             .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 200, false, 2, null), new($"{site.Site}/old.xml", 500, false, 0, "HTTP 500")], options,
                 crawlComplete: true).Finish(),
-            .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)], options, crawlComplete: true).Finish()
+            .. new SitemapRules(urls, [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)], options, crawlComplete: true).Finish(),
+            .. new SitemapRules(urls,
+                [
+                    new($"{site.Site}/big.xml", 200, false, 60_000, null), new($"{site.Site}/near.xml", 200, false, 46_000, null),
+                    new($"{site.Site}/empty.xml", 200, false, 0, null) { ListedSitemaps = 0 }
+                ], options, crawlComplete: true,
+                entries: new SitemapEntryFacts { Repeated = new Dictionary<int, int> { [blocked] = 2 }, Lastmods = [new($"{site.Site}/big.xml", 1, 0)] }).Finish(),
+            .. new RobotsTxtRules(urls, [new("https://example.com", 200, string.Empty, null, 0)], scope, new HashSet<string> { "https://example.com" },
+                sitemaps: [new($"{site.Site}/sitemap.xml", 200, false, 2, null, IsProbe: true)]).Finish(),
+            .. new UrlTextRules(urls, [(tracked, $"{site.Site}/brochure.pdf?utm_source=news"), (repeated, $"{site.Site}/files/files/a.pdf")]).Finish()
         ];
 
         var onNonPages = hits.Where(hit => !urls[hit.UrlId].IsPage).Select(hit => hit.Issue).Distinct().ToList();

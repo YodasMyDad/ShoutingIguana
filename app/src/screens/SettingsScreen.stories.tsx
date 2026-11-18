@@ -36,6 +36,35 @@ const at = (path: string, mode: Mode, setup: () => void = freshStory, at200 = fa
   render: () => <ScreenApp path={path} mode={mode} size={at200 ? AT_200_PERCENT : undefined} />,
 });
 
+/** Opens a folded section of the form once the screen has drawn it (its settings are read first). */
+async function openFold(root: HTMLElement, title: string) {
+  for (let tries = 0; tries < 50; tries++) {
+    const fold = [...root.querySelectorAll('button')].find((button) => button.textContent.startsWith(title));
+    if (fold) {
+      fold.click();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/**
+ * Step 3b: the proxy and headers of the crawl defaults, with the option to remember their secrets in Windows
+ * Credential Manager, off until chosen. The same words in both modes, as all of Settings is.
+ */
+export const CrawlDefaultsSecrets: Story = {
+  ...at('/settings/crawl-defaults', 'advanced'),
+  play: async ({ canvasElement }) => {
+    await openFold(canvasElement, 'Headers and network');
+  },
+};
+export const CrawlDefaultsSecretsSimple: Story = {
+  ...at('/settings/crawl-defaults', 'simple'),
+  play: async ({ canvasElement }) => {
+    await openFold(canvasElement, 'Headers and network');
+  },
+};
+
 /** Simple: Mode, Theme and Density, and every section there is, as in Advanced. */
 export const GeneralSimple = at('/settings', 'simple');
 /** Advanced: the same. */

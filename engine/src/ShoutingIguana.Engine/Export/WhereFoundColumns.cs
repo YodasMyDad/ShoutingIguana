@@ -5,6 +5,7 @@ using ShoutingIguana.Engine.Export.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Export;
 
@@ -129,6 +130,11 @@ internal static class WhereFoundColumns
                 parts.Add(target.Facts.Canonical is { } canonical ? $"canonicalised to {canonical.Url}" : ReasonWord(reason));
             }
 
+            if (check.TargetFacts.Contains("redirectKind") && RedirectKindWords(target.Facts?.RedirectKind) is { } redirectKind)
+            {
+                parts.Add(redirectKind);
+            }
+
             if (check.TargetFacts.Contains("responseMs") && target.Facts?.ResponseMs is { } responseMs)
             {
                 parts.Add(string.Create(CultureInfo.InvariantCulture, $"answered in {responseMs / 1000d:0.0} s"));
@@ -167,6 +173,22 @@ internal static class WhereFoundColumns
 
         return string.Join("; ", parts.Where(part => part.Length > 0));
     }
+
+    /// <summary>What a redirect changes, in words: "HTTP to HTTPS, adds www", "adds a trailing slash", "moves elsewhere".</summary>
+    internal static string? RedirectKindWords(string? kinds) => kinds is null
+        ? null
+        : string.Join(", ", kinds.Split(',').Select(kind => kind switch
+        {
+            RedirectKinds.HTTP_TO_HTTPS => "HTTP to HTTPS",
+            RedirectKinds.HTTPS_TO_HTTP => "HTTPS to HTTP",
+            RedirectKinds.ADDS_WWW => "adds www",
+            RedirectKinds.REMOVES_WWW => "removes www",
+            RedirectKinds.OTHER_HOST => "to another host",
+            RedirectKinds.ADDS_SLASH => "adds a trailing slash",
+            RedirectKinds.REMOVES_SLASH => "removes the trailing slash",
+            RedirectKinds.CHANGES_CASE => "changes case",
+            _ => "moves elsewhere"
+        }));
 
     /// <summary>A target's URL as a cell shows it: with the missing #fragment for a broken fragment link.</summary>
     internal static string TargetUrl(IssueDefinition check, IssueTarget target) =>
@@ -255,6 +277,7 @@ internal static class WhereFoundColumns
         LinkKind.Pagination => "pagination",
         LinkKind.MetaRefresh => "meta refresh",
         LinkKind.Redirect => "redirect",
+        LinkKind.SocialImage => "share image",
         _ => "link"
     };
 

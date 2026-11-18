@@ -252,6 +252,8 @@ describe('the URL grid’s row menu', () => {
       'Filter by this valueURL is https://example.com/a',
       'Exclude this valueURL is not https://example.com/a',
       'Show its inlinks in Links',
+      // The fix loop: the row, or the selection, fetched again into the crawl.
+      'Recheck this URL',
     ]);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());

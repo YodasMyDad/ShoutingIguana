@@ -55,11 +55,11 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
   },
   headers: {
     label: 'Extra headers',
-    help: 'Sent with every request to the site, never to others: a header its firewall lets through, say. Their values aren’t kept with the crawl or your defaults.',
+    help: 'Sent with every request to the site, never to others: a header its firewall lets through, say. The crawl file and your saved defaults keep only their names; the values are remembered only if you tick Remember below.',
   },
   proxyUrl: {
     label: 'Proxy',
-    help: 'An http://, https:// or socks5:// proxy for every request. Its user name and password aren’t kept with the crawl or your defaults.',
+    help: 'An http://, https:// or socks5:// proxy for every request, with its user name and password in the address if it needs them (socks5://user:password@host:port). The crawl file and your saved defaults never keep the password; it’s remembered only if you tick Remember below.',
   },
   useCookies: { label: 'Keep cookies', help: 'Send back the cookies the site sets, as a browser would.' },
   requestTimeoutSeconds: { label: 'Timeout', help: 'Seconds to wait for an answer before a request counts as failed.' },
@@ -88,6 +88,43 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
 };
 
 /** Simple's words for the settings it asks about (docs/v2-ui-simple.md, New crawl in each mode). */
+/**
+ * The option to remember a proxy's password and the headers' values (step 3b): off until the user ticks it. What
+ * happens either way, in each mode's words: Simple's are plain, with no jargon.
+ */
+export function rememberWords(mode: 'simple' | 'advanced', checked: boolean): FieldWords {
+  const label = 'Remember in Windows Credential Manager';
+  if (mode === 'simple') {
+    return {
+      label,
+      help: checked
+        ? 'Windows keeps your sign-in details safe for next time, so you won’t need to type them again.'
+        : 'Your sign-in details are forgotten when you close Shouting Iguana. They’re never saved with your results.',
+    };
+  }
+  return {
+    label,
+    help: checked
+      ? 'The proxy’s user name and password and the header values are kept in Windows Credential Manager, so they’re filled in next time and a stopped crawl continues without asking. Never in the crawl file or your saved defaults.'
+      : 'Kept for this session only: once the app is closed they’re gone, and you’ll type them again. Never in the crawl file or your saved defaults.',
+  };
+}
+
+/** What "Save as my defaults" did with the proxy password and the header values, as its toast says. */
+export function savedDefaultsWords({ secrets, remember }: { secrets: boolean; remember: boolean }): string {
+  const saved = 'Every new crawl starts with these settings.';
+  if (!secrets) return saved;
+  return remember
+    ? `${saved} The proxy password and header values are remembered in Windows Credential Manager, not in your defaults.`
+    : `${saved} The proxy password and header values are kept until you close the app, not in your defaults.`;
+}
+
+/** Why "Crawl again with these" asks for a crawl's secrets again: its file never had them, and nothing kept them. */
+export function secretsAgainWords(mode: 'simple' | 'advanced'): string {
+  const why = 'The crawl file doesn’t keep header values or a proxy’s password, and these weren’t remembered.';
+  return mode === 'simple' ? `${why} They’re Advanced settings.` : `${why} Type them again under Headers and network.`;
+}
+
 export const SIMPLE_WORDS = {
   startUrl: {
     label: 'Web address',

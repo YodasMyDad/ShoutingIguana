@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage.Models;
@@ -125,9 +126,13 @@ public static class RobotsReader
     /// <param name="line">Only the URLs this line refused.</param>
     /// <param name="reason">Only the URLs refused for this reason.</param>
     /// <param name="urlId">Only this URL: the page then holds it, with why it was refused, or nothing when the origin didn't block it.</param>
+    /// <param name="conflict">
+    /// Only the URLs that a sitemap lists or a menu links to (true), or only the others (false): none while what blocking
+    /// them costs isn't known (<see cref="RobotsBlockedUrl.Conflict"/>).
+    /// </param>
     /// <inheritdoc cref="ReadOrigins(string, RobotsOriginQuery, ReadCache?, CancellationToken)" path="/exception"/>
     public static RobotsBlockedPage? ReadBlocked(string databasePath, string origin, int? line = null, RobotsBlockReason? reason = null, int offset = 0,
-        int limit = UrlGridReader.DEFAULT_LIMIT, ReadCache? cache = null, CancellationToken cancellationToken = default, int? urlId = null)
+        int limit = UrlGridReader.DEFAULT_LIMIT, ReadCache? cache = null, CancellationToken cancellationToken = default, int? urlId = null, bool? conflict = null)
     {
         ThrowIfInvalid(offset, limit);
         return GridReadContext.Read(databasePath, cache, cancellationToken, context =>
@@ -138,9 +143,75 @@ public static class RobotsReader
             }
 
             var blocked = Read(context, origin).Blocked;
-            var matching = blocked.Where(url => (line is null || url.Line == line) && (reason is null || url.Reason == reason) && (urlId is null || url.Id == urlId)).ToList();
-            return new RobotsBlockedPage(origin, blocked.Count, matching.Count, offset, [.. matching.Skip(offset).Take(limit)]);
+            var costs = Costs(context, origin);
+            var matching = blocked.Where(url => (line is null || url.Line == line) && (reason is null || url.Reason == reason) && (urlId is null || url.Id == urlId) &&
+                                                (conflict is null || (costs?.TryGetValue(url.Id, out var cost) == true && IsConflict(cost) == conflict))).ToList();
+            return new RobotsBlockedPage(origin, blocked.Count, matching.Count, offset, [.. matching.Skip(offset).Take(limit).Select(url => Costed(context, url, costs))])
+            {
+                Conflicts = costs?.Values.LongCount(IsConflict)
+            };
         });
+    }
+
+    /// <summary>
+    /// What blocking each of an origin's blocked URLs costs, by URL id, as the analysis counted it: the pages linking to it
+    /// and whether a sitemap lists it (from the URL summary), and whether a menu links to it (from the link summary, or the
+    /// links to it where there's none). Two lookups a blocked URL, by key, never a pass over the links. Null when the crawl
+    /// has changed since its analysis, whose counts would then be of another crawl. Kept as the origin's list is.
+    /// </summary>
+    private static Dictionary<int, (long? LinkingPages, bool? InSitemap, bool InMenu)>? Costs(GridReadContext context, string name)
+    {
+        if (context.Mode != GridMode.Summary)
+        {
+            return null;
+        }
+
+        var hyperlink = (int)LinkKind.Hyperlink;
+        var navigation = (int)LinkPosition.Navigation;
+        var menu = context.LinkSummary is null
+            ? $"EXISTS (SELECT 1 FROM links l WHERE l.to_id = u.id AND l.kind = {hyperlink} AND l.position = {navigation} AND l.from_id <> u.id)"
+            : $"EXISTS (SELECT 1 FROM link_summary ls WHERE ls.to_id = u.id AND ls.kind = {hyperlink} AND ls.position = {navigation} AND ls.self = 0)";
+        return context.CachedLarge("robots|costs|" + name, () =>
+        {
+            Dictionary<int, (long? LinkingPages, bool? InSitemap, bool InMenu)> costs = [];
+            using var command = context.Command($"""
+                SELECT u.id, s.linking_pages, s.in_sitemap, {menu}
+                FROM urls u JOIN responses r ON r.url_id = u.id LEFT JOIN url_summary s ON s.url_id = u.id
+                WHERE u.url >= $origin || '/' AND u.url < $origin || '0' AND r.outcome = {(int)FetchOutcome.RobotsDisallowed}
+                """, [new("$origin", name)]);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                costs[reader.GetInt32(0)] = (reader.IsDBNull(1) ? null : reader.GetInt64(1), reader.IsDBNull(2) ? null : reader.GetBoolean(2), reader.GetBoolean(3));
+            }
+
+            return costs;
+        });
+    }
+
+    private static bool IsConflict((long? LinkingPages, bool? InSitemap, bool InMenu) cost) => cost.InSitemap == true || cost.InMenu;
+
+    /// <summary>
+    /// A blocked URL of the page with what blocking it costs, and the sitemaps that list it, which are looked up for the
+    /// page's rows alone: a lookup by key in each sitemap's list.
+    /// </summary>
+    private static RobotsBlockedUrl Costed(GridReadContext context, RobotsBlockedUrl url, Dictionary<int, (long? LinkingPages, bool? InSitemap, bool InMenu)>? costs)
+    {
+        if (costs is null || !costs.TryGetValue(url.Id, out var cost))
+        {
+            return url;
+        }
+
+        var listed = cost.InSitemap == true ? UrlInspectorReader.ListedIn(context, url.Id) : null;
+        return url with
+        {
+            LinkingPages = cost.LinkingPages,
+            InSitemap = cost.InSitemap,
+            Sitemaps = listed?.Total,
+            Sitemap = listed?.Sitemaps.FirstOrDefault(),
+            InMenu = cost.InMenu,
+            Conflict = IsConflict(cost)
+        };
     }
 
     /// <summary>What an origin's stored answer meant to the crawl, as its cache took it and the analysis's robots.txt checks do.</summary>

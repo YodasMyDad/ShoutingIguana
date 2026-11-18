@@ -2,14 +2,15 @@
 // and the Issues screen's own, "Show the page in URLs", the URL grid narrowed to that one URL with the inspector on
 // it. A group's row has its own: its pages in URLs, as its "Show all" link has them.
 import { useNavigate } from '@tanstack/react-router';
-import { ClipboardList, Copy, Link2, ListFilter } from 'lucide-react';
-import type { GridFilter } from '../../api/grids';
+import { ClipboardList, Copy, Image, Link2, ListFilter } from 'lucide-react';
+import type { GridFilter, GridSort } from '../../api/grids';
 import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
 import { copyRowUrls, rowMenuLabel, type RowMenuState } from '../../grid/rowMenuState';
 import { formatCount } from '../../lib/format';
 import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { urlDisplay } from '../../ui/urlText';
 import { oneUrlFilter } from '../urls/urlPlaces';
+import { RecheckMenuItem } from '../rechecks/RecheckMenuItem';
 
 export interface IssuePageMenuProps<Row> {
   crawlId: string;
@@ -31,6 +32,13 @@ export interface IssuePageMenuProps<Row> {
    * "Show where it's found in Links" opens. Null or left out for any other row.
    */
   foundIn?: GridFilter[] | null | undefined;
+  /**
+   * Step 3b: for a page an image check flagged, the images it shows in Links' Images view (its filters, columns and
+   * order), which "Show its images in Links" opens. Null or left out for any other row.
+   */
+  imagesIn?: { filter: GridFilter[]; cols: string[]; sort: GridSort[] } | null | undefined;
+  /** The fix loop: Recheck the row or the selection, judged by this check; each row's URL id. */
+  recheck?: { checkId: string; idOf: (row: Row) => number | null; fullCheck?: boolean } | null | undefined;
 }
 
 export function IssuePageMenu<Row>({
@@ -43,6 +51,8 @@ export function IssuePageMenu<Row>({
   urlOf,
   onInspect,
   foundIn,
+  imagesIn,
+  recheck,
 }: IssuePageMenuProps<Row>) {
   const navigate = useNavigate();
   const count = state?.menu.indices.length ?? 1;
@@ -83,6 +93,26 @@ export function IssuePageMenu<Row>({
               }
             >
               Show where it’s found in Links
+            </MenuItem>
+          ) : null}
+          {recheck && state ? (
+            <RecheckMenuItem<Row>
+              crawlId={crawlId}
+              checkId={recheck.checkId}
+              count={count}
+              rows={() => state.menu.rows()}
+              idOf={recheck.idOf}
+              fullCheck={recheck.fullCheck}
+            />
+          ) : null}
+          {imagesIn ? (
+            <MenuItem
+              icon={Image}
+              onSelect={() =>
+                void navigate({ to: '/crawls/$crawl/links', params: { crawl: crawlId }, search: imagesIn })
+              }
+            >
+              Show its images in Links
             </MenuItem>
           ) : null}
         </>

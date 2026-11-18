@@ -28,7 +28,7 @@ import { useCommands } from '../keyboard/registry';
 import { useMode } from '../mode/mode';
 import { formatCountOf } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import { getSettings, useSettings } from '../settings/settingsStore';
+import { getSettings, updateSettings, useSettings } from '../settings/settingsStore';
 import { useInspector } from '../routing/inspector';
 import { openInBrowser } from '../shell/os';
 import { Card } from '../ui/Card';
@@ -37,12 +37,12 @@ import { PageHeader } from '../ui/PageHeader';
 import { SeverityMark } from '../ui/SeverityMark';
 import { siteOriginOf } from '../ui/urlText';
 import { AnalysisNotes, AnalysisProgress, IssuesSkeleton, NotAnalysed } from './issues/AnalysisState';
+import { AnswerHeadline } from './issues/AnswerHeadline';
 import { CheckDetail } from './issues/CheckDetail';
 import { showCheckWords } from './issues/showCheckWords';
 import { ChecksList, type SelectedBy, type SeverityFilter } from './issues/ChecksList';
 import {
   analysisTotals,
-  answerSentence,
   buildCheckList,
   categoryTitle,
   checkEntries,
@@ -51,13 +51,22 @@ import {
   hiddenTotals,
   hiddenWords,
   isInCategory,
+  relatedChecks,
   type CheckEntry,
+  type CheckSort,
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { hiddenScopeOf, setCheckHidden, useHiddenChecks, type HiddenScope } from '../settings/hiddenChecks';
+import { comparisonCounts, countedChecks, marksRows } from '../changes/changes';
+import type { ChangeFilterSearch } from '../routing/search';
+import { periodLabel, type ComparedPeriod } from './compare/changeCell';
+import { useComparison } from './compare/useComparison';
+import type { CheckCompare } from './issues/CheckDetail';
+import { useThingsMoved } from './compare/useThingsMoved';
+import { thingsMovedWords } from './compare/thingsMoved';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -122,6 +131,39 @@ export function IssuesScreen() {
   // the list, never text in the filter field, which would match other categories' checks by their titles.
   const category = search.category;
   const sort = useMemo<GridSort[]>(() => search.sort ?? [], [search.sort]);
+  // The list's order, remembered for Advanced: the order to fix them in until another is chosen.
+  const checkSort = useSettings((settings) => settings.checkSort.advanced);
+  const onCheckSortChange = (next: CheckSort) =>
+    updateSettings((settings) => ({ checkSort: { ...settings.checkSort, advanced: next } }));
+  const points = useMemo(
+    () => new Map((analysis.data?.score?.lines ?? []).map((line) => [line.checkId, line.points])),
+    [analysis.data?.score?.lines],
+  );
+
+  // The fix loop (docs/v2-fix-loop.md, Advanced, "Issues"): the checks compared with the crawl compared with, each with
+  // its change; the checks fixed since then listed apart; the Change sort and the New, Fixed, Fewer, More filters.
+  const comparison = useComparison(crawlId);
+  const compared =
+    comparison.stage.kind === 'shown' || comparison.stage.kind === 'needsAnalysis' ? comparison.stage.comparison : null;
+  const period = useMemo<ComparedPeriod | null>(
+    () =>
+      comparison.comparing.kind === 'none'
+        ? null
+        : { iso: comparison.comparing.startedAt, later: comparison.comparing.later },
+    [comparison.comparing],
+  );
+  const changes = useMemo(
+    () => (compared && period ? new Map(compared.checks.map((change) => [change.checkId, change])) : null),
+    [compared, period],
+  );
+  const changeFilter: ChangeFilterSearch | undefined = changes ? search.change : undefined;
+  const changeCounts = useMemo(() => {
+    if (!compared) return undefined;
+    const tally = comparisonCounts(countedChecks(compared, hidden, 'advanced'));
+    return { ...tally, changed: tally.new + tally.fixed + tally.fewer + tally.more };
+  }, [compared, hidden]);
+  const listSort = checkSort === 'change' && !changes ? 'fixFirst' : checkSort;
+  const things = useThingsMoved(crawlId, comparison);
 
   const entries = useMemo(
     () => (checks.data && analysis.data ? checkEntries(checks.data, analysis.data, hidden) : null),
@@ -130,16 +172,43 @@ export function IssuesScreen() {
   const list = useMemo(
     () =>
       checks.data && entries
-        ? buildCheckList(checks.data, entries, {
-            severity: severity === 'all' ? [] : [severity],
-            q,
-            category,
-            showPassed,
-            showHidden,
-            hidden,
-          })
+        ? buildCheckList(
+            checks.data,
+            entries,
+            {
+              severity: severity === 'all' ? [] : [severity],
+              q,
+              category,
+              showPassed,
+              showHidden,
+              hidden,
+              changes,
+              fixedTitle: period
+                ? `Fixed ${periodLabel(period)
+                    .replace(/^Since/, 'since')
+                    .replace(/^Until/, 'by')}`
+                : undefined,
+              change: changeFilter,
+            },
+            { sort: listSort, fixFirst: analysis.data?.fixFirst, points, changes },
+          )
         : null,
-    [checks.data, entries, severity, q, category, showPassed, showHidden, hidden],
+    [
+      checks.data,
+      entries,
+      severity,
+      q,
+      category,
+      showPassed,
+      showHidden,
+      hidden,
+      listSort,
+      analysis.data?.fixFirst,
+      points,
+      changes,
+      period,
+      changeFilter,
+    ],
   );
   // The answer counts the checks that aren't hidden, as the list, its severities and the Overview do, and says what
   // it left out.
@@ -147,7 +216,10 @@ export function IssuesScreen() {
   const hiddenChecks = entries ? hiddenTotals(entries) : null;
   // The first to fix among the checks the filters keep: landing on Errors picks an error.
   // In the engine's order to fix them (the analysis's `fixFirst`), the app's own for an earlier engine's analysis.
-  const first = list ? firstCheckToFix(list.matching, analysis.data?.fixFirst) : null;
+  // With a change filter that keeps only checks fixed since then (none to fix), the first of them.
+  const first = list
+    ? (firstCheckToFix(list.matching, analysis.data?.fixFirst) ?? (changeFilter ? (list.visible[0] ?? null) : null))
+    : null;
   const selected = entries?.find((entry) => entry.check.id === checkId) ?? null;
   const found = selected !== null && selected.outcome !== 'passed' && selected.outcome !== 'skipped';
   // Arriving on a check that's hidden (a link from the inspector, the palette) shows the hidden checks, so the
@@ -163,7 +235,8 @@ export function IssuesScreen() {
   const outOfSeverity =
     selected !== null &&
     ((severity !== 'all' && selected.check.severity !== severity) ||
-      (category !== undefined && checks.data !== undefined && !isInCategory(checks.data, selected.check, category)));
+      (category !== undefined && checks.data !== undefined && !isInCategory(checks.data, selected.check, category)) ||
+      (changeFilter !== undefined && list !== null && !list.visible.includes(selected)));
 
   // No check in the path, or one the severity leaves out: the first to fix, replacing the address so back doesn't
   // bounce here again.
@@ -177,11 +250,31 @@ export function IssuesScreen() {
     });
   }, [checkId, outOfSeverity, first, crawlId, navigate]);
 
+  // What the selected check is compared with, for its head, its Fixed tab and its grids.
+  const checkCompare: CheckCompare | null =
+    compared && period && comparison.compareWith && checkId
+      ? {
+          change: changes?.get(checkId) ?? null,
+          period,
+          compareWith: comparison.compareWith,
+          marksRows: marksRows(compared.comparable),
+        }
+      : null;
+  const groupsCompareWith = checkCompare?.marksRows ? checkCompare.compareWith : null;
+
   // The groups' first page, shared with the groups grid (the same query): the header's group count comes from it.
   const groupsPage = useQuery({
-    queryKey: [...queryKeys.issueGroupsGrid(crawlId, checkId ?? ''), GRID_PAGE_SIZE, 0],
+    // The groups grid's own key, the comparison in it, so the two read one page.
+    queryKey: [...queryKeys.issueGroupsGrid(crawlId, checkId ?? ''), groupsCompareWith ?? 'none', GRID_PAGE_SIZE, 0],
     queryFn: async ({ signal }): Promise<GridPage<IssueGroup>> =>
-      groupsAsGridPage(await api.issueGroups(crawlId, checkId ?? '', { offset: 0, limit: GRID_PAGE_SIZE }, signal)),
+      groupsAsGridPage(
+        await api.issueGroups(
+          crawlId,
+          checkId ?? '',
+          { offset: 0, limit: GRID_PAGE_SIZE, ...(groupsCompareWith ? { compareWith: groupsCompareWith } : {}) },
+          signal,
+        ),
+      ),
     enabled: found && selected.check.grouping !== 'none',
     staleTime: Infinity,
     gcTime: GRID_PAGE_GC_MS,
@@ -201,6 +294,7 @@ export function IssuesScreen() {
     severity?: Severity[] | undefined;
     q?: string | undefined;
     category?: string | undefined;
+    change?: ChangeFilterSearch | undefined;
   }) =>
     void navigate({
       params: { crawl: crawlId, check: checkId },
@@ -219,7 +313,7 @@ export function IssuesScreen() {
   const clearFilters = () => {
     setQ('');
     sentQ.current.add('');
-    setSearch({ q: undefined, severity: undefined, category: undefined });
+    setSearch({ q: undefined, severity: undefined, category: undefined, change: undefined });
   };
   const clearCategory = () => setSearch({ category: undefined });
 
@@ -485,11 +579,23 @@ export function IssuesScreen() {
   const skeleton = useDelayedLoading(loading);
 
   const hiddenNote = hiddenChecks ? hiddenWords(hiddenChecks) : null;
-  const subtitle = totals
-    ? `${answerSentence(totals)}${hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}`
-    : neverAnalysed
-      ? 'No issues to show yet.'
-      : undefined;
+  const movedLine = things && period ? thingsMovedWords(things) : null;
+  const subtitle = totals ? (
+    <>
+      <AnswerHeadline totals={totals} />
+      {hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}
+      {/* The fix loop: what moved since the crawl compared with, in the headline's unit. */}
+      {movedLine && period ? (
+        <span className="mt-1 block">
+          <span className="text-text-secondary">{periodLabel(period)}: </span>
+          {movedLine.charAt(0).toLowerCase()}
+          {movedLine.slice(1)}
+        </span>
+      ) : null}
+    </>
+  ) : neverAnalysed ? (
+    'No issues to show yet.'
+  ) : undefined;
   let body;
   if (loading || skeleton) {
     body = <IssuesSkeleton visible={skeleton} />;
@@ -545,6 +651,14 @@ export function IssuesScreen() {
               onQueryChange={onQueryChange}
               severity={severity}
               onSeverityChange={onSeverityChange}
+              sort={listSort}
+              onSortChange={onCheckSortChange}
+              changes={changes}
+              period={period}
+              change={changeFilter}
+              onChangeFilter={(next) => setSearch({ change: next })}
+              changeCounts={changeCounts}
+              points={points}
               onCategoryClear={clearCategory}
               showPassed={showPassed}
               onShowPassedChange={setShowPassed}
@@ -566,6 +680,7 @@ export function IssuesScreen() {
                 entry={selected}
                 categoryTitle={categoryTitle(checks.data, selected.check)}
                 analysis={analysis.data}
+                related={entries ? relatedChecks(entries, selected, points) : undefined}
                 groupCount={groupsPage.data?.matching ?? null}
                 siteOrigin={siteOriginOf(item?.startUrl)}
                 group={search.group}
@@ -581,6 +696,11 @@ export function IssuesScreen() {
                 onHideScopeChange={(scope) => onHideScopeChange(scope, true)}
                 onLearnMore={onLearnMore}
                 titleRef={titleRef}
+                compare={checkCompare}
+                recheckGroup={
+                  placed ? { detail: placed.detail, relatedUrlId: placed.relatedUrlId, urls: placed.pages } : null
+                }
+                titleOf={(id) => checks.data.checks.find((entry) => entry.id === id)?.title ?? null}
               />
             ) : checkId ? (
               <EmptyState title="This check isn’t in this version of Shouting Iguana" level={2} panel>

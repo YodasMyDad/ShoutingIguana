@@ -37,6 +37,8 @@ import { plainResults } from './results';
 import { ScoreBreakdownFromRoute } from './ScoreBreakdownDialog';
 import { ScoreRing } from '../ui/ScoreRing';
 import { scoredPages } from './home/sites';
+import { SummaryChange } from './SummaryChange';
+import { useSimpleChanges } from './useSimpleChanges';
 import { FixFirstCard, ScoreHero, SummaryCards } from './SummaryParts';
 import { useHiddenChecks } from '../settings/hiddenChecks';
 
@@ -80,6 +82,8 @@ function Summary({
     () => (checks.data && analysis.data ? plainResults(checks.data, analysis.data, hidden) : null),
     [checks.data, analysis.data, hidden],
   );
+  // The fix loop: each of Fix these first's rows says what changed since the site's last check.
+  const changes = useSimpleChanges(crawlId, item, status);
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => control.titleRef.current);
   // Ctrl+E saves the report (docs/v2-ui-simple.md, Keys): the export dialog on the report, as Open the report's
@@ -182,7 +186,12 @@ function Summary({
           failure={failure}
         />
         {score ? (
-          <ScoreHero crawlId={crawlId} score={score} results={results} />
+          <ScoreHero
+            crawlId={crawlId}
+            score={score}
+            results={results}
+            change={<SummaryChange crawlId={crawlId} item={item} status={status} hidden={hidden} />}
+          />
         ) : (
           <NoScoreYet
             canAnalyse={controls.canAnalyse}
@@ -191,7 +200,7 @@ function Summary({
             action="Update the results"
           />
         )}
-        <FixFirstCard crawlId={crawlId} results={results} score={score} />
+        <FixFirstCard crawlId={crawlId} results={results} score={score} changeOf={changes.wordsOf} />
         <SummaryCards crawlId={crawlId} results={results} />
       </>
     );

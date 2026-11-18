@@ -273,7 +273,15 @@ describe('Home’s library, as designed (the closing audit’s gap 4)', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent),
-    ).toEqual(['Open', 'Crawl again…', 'Analyse again', 'Remove from library', 'Delete file…']);
+    ).toEqual([
+      'Open',
+      'Crawl again…',
+      'Analyse again',
+      // The fix loop: a site's only crawl has nothing to compare with, so it's there but disabled, saying why.
+      'Compare with…No other crawl',
+      'Remove from library',
+      'Delete file…',
+    ]);
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete file…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Delete the crawl file of garden.example?' });
     expect(dialog).toHaveTextContent('garden.example-a000000000000002.sicrawl is deleted from the disk');

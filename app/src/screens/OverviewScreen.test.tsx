@@ -165,6 +165,35 @@ describe('the Overview of an analysed crawl', () => {
     expect(figures.getByText('1 was skipped, with why below')).toBeVisible();
   });
 
+  it('leads with the things to fix when the analysis counts them, then the notices, and each severity says its own', async () => {
+    sidecar({
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        counts: ISSUES_ANALYSIS.counts.map((count) => ({
+          ...count,
+          causes: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : count.count,
+          templateCauses: count.count === 0 ? null : count.checkId === 'empty-anchor-text' ? 1 : 0,
+          clears: [],
+        })),
+      },
+    });
+    await open();
+    // What moves the score leads (the 404s' 2 things to fix), then, quieter, the notices' 4 things in the same unit, then
+    // the counts of checks and issues.
+    const fix = await main().findByText('About 2 things to fix');
+    expect(fix.parentElement).toHaveTextContent(
+      'About 2 things to fix · about 4 more worth a look · 3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.',
+    );
+    expect(main().getByText('· about 4 more worth a look')).toHaveClass('text-text-muted');
+    const figures = region('Issues by severity');
+    expect(await figures.findByRole('link', { name: /Errors/ })).toHaveTextContent(
+      'About 2 things to fix, from 2 issues',
+    );
+    expect(figures.getByRole('link', { name: /Notices/ })).toHaveTextContent(
+      'About 4 things to change, 1 of them in the site’s template, from 9 issues',
+    );
+  });
+
   it('lists what to fix first, the most severe then the most pages or URLs, each opening its check', async () => {
     sidecar();
     await open();

@@ -33,6 +33,9 @@ internal sealed class HttpFetcher : IDisposable
     private readonly string _userAgent;
     private readonly TimeSpan _timeout;
 
+    /// <summary>The proxy's address has a user name and password, which a SOCKS5 proxy's refusal is told against.</summary>
+    private readonly bool _proxyHasLogin;
+
     public HttpFetcher(CrawlOptions options, ResolvedUserAgent userAgent, CrawlScope scope, TimeProvider timeProvider)
     {
         _options = options;
@@ -42,6 +45,8 @@ internal sealed class HttpFetcher : IDisposable
         _userAgent = userAgent.Header;
         _timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         Guard = new PrivateNetworkGuard(options.StartUrl);
+        var proxy = ProxyFactory.Create(options.ProxyUrl);
+        _proxyHasLogin = proxy?.Credentials is not null;
 
         var handler = new SocketsHttpHandler
         {
@@ -55,7 +60,7 @@ internal sealed class HttpFetcher : IDisposable
             MaxConnectionsPerServer = 64,
             EnableMultipleHttp2Connections = true,
             UseProxy = options.ProxyUrl is not null,
-            Proxy = ProxyFactory.Create(options.ProxyUrl)
+            Proxy = proxy
         };
 
         // Connecting by itself, the crawl sees the addresses a name resolves to; through a proxy it would see the proxy's.
@@ -168,6 +173,12 @@ internal sealed class HttpFetcher : IDisposable
         catch (HttpRequestException exception) when (exception.InnerException is PrivateNetworkAddressException)
         {
             return PrivateNetworkGuard.NotChecked(uri);
+        }
+        catch (HttpRequestException exception) when (SocksRefusals.Of(exception) is { } socks)
+        {
+            // A SOCKS5 proxy said no: in its words, and only asked again where that could help (not a login refused).
+            return Failed(uri, FetchOutcome.NetworkError, SocksRefusals.Describe(socks.Refusal, socks.Message, _proxyHasLogin), SocksRefusals.IsTransient(socks.Refusal),
+                stopwatch);
         }
         catch (HttpRequestException exception)
         {

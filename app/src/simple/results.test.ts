@@ -27,9 +27,9 @@ const ids = (entries: readonly { check: Check }[]) => entries.map((entry) => ent
 describe('Simple’s results on the garden crawl', () => {
   const results = plainResults(SIMPLE_CHECKS, GARDEN_ANALYSIS, NONE);
 
-  it('counts the garden’s problems: 2 serious, 4 worth fixing, 14 worth a look, 13 couldn’t run', () => {
-    expect(results.counts).toEqual({ error: 2, warning: 4, notice: 14 });
-    expect(results.skippedCount).toBe(13);
+  it('counts the garden’s problems: 2 serious, 4 worth fixing, 22 worth a look, 27 couldn’t run', () => {
+    expect(results.counts).toEqual({ error: 2, warning: 4, notice: 22 });
+    expect(results.skippedCount).toBe(27);
     expect(results.passed.length + results.counts.error + results.counts.warning + results.counts.notice).toBe(
       results.ran,
     );
@@ -76,7 +76,21 @@ describe('Simple’s results on the garden crawl', () => {
             'pagination-to-non-indexable',
             'pagination-sequence-error',
             'canonical-invalid-attribute',
+            'sitemap-lastmod-invalid',
+            'h1-image-only',
             'near-duplicate-content',
+            'placeholder-text',
+            'readability-low',
+            'boilerplate-heavy',
+            'image-missing-src',
+            'image-no-srcset',
+            'image-inline-large',
+            'form-not-secure',
+            'protocol-relative-links',
+            'x-card-incomplete',
+            'social-image-broken',
+            'social-image-too-large',
+            'social-image-too-small',
             'head-tags-in-body',
             'html-structure-errors',
             'mobile-alternate',
@@ -99,8 +113,8 @@ describe('Simple’s results on the garden crawl', () => {
       'Your site is in good shape. There are 2 serious problems and 4 problems worth fixing.',
     );
     expect(coverageSentences(score.covers)).toEqual([
-      'The score covers all 265 pages and 109 of 122 checks.',
-      '13 checks couldn’t run.',
+      'The score covers all 265 pages and 143 of 170 checks.',
+      '27 checks couldn’t run.',
     ]);
     expect(ifFixedLead(5)).toBe('Fixing these five takes the score from');
   });
@@ -175,7 +189,7 @@ describe('the Summary’s sentence in every state', () => {
     );
     expect(bandWord('good', true)).toBe('Good so far');
     expect(coverageSentences(STOPPED_ANALYSIS.score!.covers)[0]).toBe(
-      'The score covers the 265 pages read before the check was stopped, and 109 of 122 checks.',
+      'The score covers the 265 pages read before the check was stopped, and 143 of 170 checks.',
     );
   });
 

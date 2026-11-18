@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
-import { useCallback, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   alertsQuery,
   analysisQuery,
@@ -34,9 +34,9 @@ import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
 import { TextLink } from '../ui/TextLink';
 import { AnalysisNotes, AnalysisProgress, NotAnalysed } from './issues/AnalysisState';
+import { AnswerHeadline } from './issues/AnswerHeadline';
 import {
   analysisTotals,
-  answerSentence,
   checkEntries,
   countedEntries,
   firstCheckToFix,
@@ -63,6 +63,14 @@ import { TotalsRow } from './overview/TotalsRow';
 import { crawledCount } from './overview/statusSplit';
 import { useCrawlFacets } from './overview/useCrawlFacets';
 import { useHiddenChecks } from '../settings/hiddenChecks';
+import type { CheckChange } from '../api/fixLoop';
+import { checkChangeOf } from '../changes/changes';
+import { rechecksCountWords } from '../changes/recheckWords';
+import { ComparisonCard, type ChangeLink } from './compare/ComparisonCard';
+import { CompareWithMenu } from './compare/CompareWithMenu';
+import { useComparison } from './compare/useComparison';
+import { RechecksCard } from './rechecks/RechecksCard';
+import { useThingsMoved } from './compare/useThingsMoved';
 
 const ROUTE = '/crawls/$crawl/overview';
 
@@ -80,6 +88,7 @@ const TWO_COLUMNS_BELOW = 720;
 export function OverviewScreen() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
   const navigate = useNavigate({ from: ROUTE });
+  const askedToCompare = useSearch({ from: ROUTE, select: (search) => search.compare === 1 });
   const scoreRef = useRef<HTMLAnchorElement>(null);
   const item = useQuery(crawlQuery(crawlId)).data;
   // Only the live crawl's status and its analysis's progress here: the figures are LiveOverview's, so the answer
@@ -112,6 +121,39 @@ export function OverviewScreen() {
 
   const hiddenIds = useHiddenChecks(crawlId);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
+
+  // The fix loop: what this crawl is compared with, and the comparison (docs/v2-fix-loop.md, Advanced, "Overview").
+  const comparison = useComparison(crawlId);
+  // What moved, in the headline's unit (things), when both analyses counted theirs.
+  const things = useThingsMoved(crawlId, comparison);
+  const shownComparison =
+    comparison.stage.kind === 'shown' || comparison.stage.kind === 'needsAnalysis' ? comparison.stage.comparison : null;
+  const changeOf = useCallback(
+    (checkId: string): CheckChange | null => checkChangeOf(shownComparison, checkId),
+    [shownComparison],
+  );
+  // Compare with… open: from the library's row menu (`?compare=1`), or its own button.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const onPickerOpenChange = (open: boolean) => {
+    setPickerOpen(open);
+    if (!open && askedToCompare) {
+      void navigate({ search: (previous) => ({ ...previous, compare: undefined }), replace: true });
+    }
+  };
+  const compareLink: ChangeLink = (state, children) => (
+    <TextLink
+      to="/crawls/$crawl/issues/{-$check}"
+      params={{ crawl: crawlId }}
+      search={{ change: state }}
+      variant="inline"
+    >
+      {children}
+    </TextLink>
+  );
+  const titleOf = useCallback(
+    (checkId: string) => checks.data?.checks.find((check) => check.id === checkId)?.title ?? null,
+    [checks.data],
+  );
   const entries = useMemo(
     () => (checks.data && analysis.data ? checkEntries(checks.data, analysis.data, hidden) : null),
     [checks.data, analysis.data, hidden],
@@ -203,6 +245,31 @@ export function OverviewScreen() {
       <>
         {/* The totals before anything else (round 5, gap 16), whatever the crawl's state: they need no analysis. */}
         <TotalsRow crawlId={crawlId} />
+        {/* Not compared, with a crawl of the site to pick (after Don't compare, or a first crawl with later ones): a line
+            with Compare with…, where the card would be. A site's only crawl has nothing to pick: no line. */}
+        {!empty && analysis.data && comparison.comparing.kind === 'none' && comparison.candidates.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-13 text-text-secondary">
+            {comparison.comparing.why === 'off'
+              ? 'Not compared with another crawl.'
+              : 'No earlier crawl of this site to compare with.'}
+            <CompareWithMenu
+              crawlId={crawlId}
+              comparison={comparison}
+              open={pickerOpen || askedToCompare}
+              onOpenChange={onPickerOpenChange}
+            />
+          </div>
+        ) : null}
+        {empty ? null : (
+          <ComparisonCard
+            crawlId={crawlId}
+            comparison={comparison}
+            linkTo={compareLink}
+            pickerOpen={pickerOpen || askedToCompare}
+            onPickerOpenChange={onPickerOpenChange}
+            things={things}
+          />
+        )}
         {analysing && !neverAnalysed ? (
           <AnalysisProgress
             event={analysisEvent}
@@ -269,8 +336,10 @@ export function OverviewScreen() {
             hiddenFound={hiddenChecks?.found ?? 0}
             order={analysis.data?.fixFirst}
             counts={analysis.data ?? null}
+            changeOf={shownComparison ? changeOf : undefined}
           />
         )}
+        {empty ? null : <RechecksCard crawlId={crawlId} titleOf={titleOf} />}
 
         <section aria-labelledby="overview-crawl-title" className="flex flex-col gap-4 pt-2">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -341,7 +410,7 @@ export function OverviewScreen() {
  * count opening Issues, where they can be shown.
  */
 function answer(crawlId: string, totals: AnalysisTotals, hidden: HiddenTotals | null): ReactNode {
-  const sentence = answerSentence(totals);
+  const sentence = <AnswerHeadline totals={totals} />;
   if (!hidden) return sentence;
   const words = hiddenWords(hidden);
   return (
@@ -364,6 +433,7 @@ function Answer({
   hiddenFound,
   order,
   counts,
+  changeOf,
 }: {
   crawlId: string;
   checks: Checks;
@@ -375,6 +445,8 @@ function Answer({
   order: readonly string[] | undefined;
   /** The analysis's own totals, which Fix first's shares are of. */
   counts: CrawlCounts | null;
+  /** The fix loop: each check's change since the crawl compared with, for Fix first's "was 9". */
+  changeOf?: ((checkId: string) => CheckChange | null) | undefined;
 }) {
   const [widthRef, width] = useElementWidth();
   return (
@@ -386,7 +458,14 @@ function Answer({
         columns={width !== null && width > 0 && width < TWO_COLUMNS_BELOW ? 2 : 4}
       />
       <div className="grid grid-cols-(--overview-columns) gap-4 @max-split:grid-cols-1">
-        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} order={order} totals={counts} />
+        <FixFirst
+          crawlId={crawlId}
+          entries={entries}
+          hiddenFound={hiddenFound}
+          order={order}
+          totals={counts}
+          changeOf={changeOf}
+        />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
           <Categories crawlId={crawlId} checks={checks} entries={entries} />
@@ -587,6 +666,7 @@ function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlLi
       </TextLink>{' '}
       crawled, {formatCountOf(item.pageCount, 'page')} read
       {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.{crawlingWords(item.crawlingMs)}
+      {item.rechecks ? ` ${rechecksCountWords(item.rechecks.count, item.rechecks.last.endedAt)}.` : ''}
     </p>
   );
 }

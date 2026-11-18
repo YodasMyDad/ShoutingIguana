@@ -39,7 +39,8 @@ export const URL_SUBJECT = new Set(['internal-client-error', 'internal-server-er
   'redirect-chain', 'redirect-loop', 'redirect-broken', 'redirect-temporary', 'redirect-downgrade', 'blocked-by-robots',
   'robots-txt-unreachable', 'robots-txt-unreachable-other-origin', 'robots-txt-missing', 'sitemap-non-indexable',
   'sitemap-error', 'sitemap-missing', 'sitemap-url-other-host', 'duplicate-site-version', 'canonical-on-redirect', 'content-type-mismatch',
-  'redirect-temporary-cached', 'resource-past-crawl-limit']);
+  'redirect-temporary-cached', 'resource-past-crawl-limit', 'robots-txt-no-sitemap', 'sitemap-over-limit', 'sitemap-near-limit',
+  'sitemap-empty', 'sitemap-url-repeated', 'sitemap-lastmod-invalid', 'url-tracking-parameters', 'url-repetitive-path']);
 
 // "Fix first": the checks that found something, in the order to fix them. The most severe first; within a severity a
 // fault of the whole site leads, however small its count (among themselves, in the order given); then the most

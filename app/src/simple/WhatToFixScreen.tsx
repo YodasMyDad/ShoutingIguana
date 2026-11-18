@@ -1,9 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
-import { ChevronDown, Copy, FileText } from 'lucide-react';
+import { ArrowDownWideNarrow, ChevronDown, Copy, FileText } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
-import { isCrawling, type Severity } from '../api/types';
+import { analysisQuery, checksQuery, crawlQuery, rechecksQuery } from '../api/queries';
+import type { Recheck } from '../api/fixLoop';
+import { isRecheckRunning, useRecheckRun } from '../crawl/recheck';
+import { fixedGroupTitle } from '../changes/changeWords';
+import { FixedSince } from './FixedSince';
+import { FIXED_SECTION, clearedByRechecks, fixedSinceEntries, type FixedEntry } from './fixedSinceEntries';
+import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
+import { isCrawling, type Analysis, type Check, type Severity } from '../api/types';
 import { crawlName, crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -15,22 +21,33 @@ import { useCommands } from '../keyboard/registry';
 import { copyText } from '../lib/clipboard';
 import { formatCount } from '../lib/format';
 import { useLive } from '../live/liveStore';
-import type { CheckEntry } from '../screens/issues/checkList';
+import type { CheckEntry, PlainCheckSort } from '../screens/issues/checkList';
 import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Select } from '../ui/Select';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS, fixSectionOf } from './fixSections';
-import { checksWord, looksForWords, passedWords, plainSummary, plainTitle, shareWords } from './plainWords';
+import {
+  checksWord,
+  looksForWords,
+  passedWords,
+  plainSummary,
+  plainTitle,
+  rowCountWords,
+  rowPointsWords,
+} from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
 import { useKeepsPlace } from './scrollPlace';
 import { plainResults, type PlainResults } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
+import { updateSettings, useSettings } from '../settings/settingsStore';
+import { fixRows, PLAIN_CHECK_SORTS, type FixRow } from './fixRows';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -61,15 +78,19 @@ const HEADINGS: Record<CheckOutcome, string> = {
 
 /**
  * What to fix (docs/v2-ui-simple.md, "What to fix"): Serious, Worth fixing and Worth a look, each in the engine's
- * order to fix them; then Couldn't check, always listed with its reasons, and Nothing wrong, folded. J and K move
- * through the problems and Enter opens one. Checks hidden in Advanced stay out, with a line to show them.
+ * order to fix them, or the most points back or the most found first (remembered for Simple); a problem a fix of
+ * another clears entirely folded under it; then Couldn't check, always listed with its reasons, and Nothing wrong,
+ * folded. J and K move through the problems and Enter opens one. Checks hidden in Advanced stay out, with a line to
+ * show them.
  */
 function WhatToFix({ crawlId }: { crawlId: string }) {
   const item = useQuery(crawlQuery(crawlId)).data;
   const liveStatus = useLive((state) => state.crawls[crawlId]?.status);
   const status = effectiveStatus(item, liveStatus === undefined ? undefined : { status: liveStatus });
   const crawling = status !== null && isCrawling(status);
-  const analysing = status === 'analyzing';
+  // A recheck's analyses (before and after it) are the recheck's: the list stays, and changes in place when it's done.
+  const rechecking = isRecheckRunning(useRecheckRun(crawlId));
+  const analysing = status === 'analyzing' && !rechecking;
   const controls = crawlControls(status, item);
   const readable = item !== undefined && status !== 'unreadable';
   const checks = useQuery(checksQuery());
@@ -77,6 +98,9 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   const { neverAnalysed, rereading } = useAnalysisAnswer(crawlId, analysis, { crawling, analysing });
   const { titleRef, analyse } = useAnalysisControl(crawlId, analysing, neverAnalysed);
   const hiddenIds = useHiddenChecks(crawlId);
+  const sort = useSettings((settings) => settings.checkSort.simple);
+  const onSortChange = (next: PlainCheckSort) =>
+    updateSettings((settings) => ({ checkSort: { ...settings.checkSort, simple: next } }));
   const [showHidden, setShowHidden] = useState(false);
   const hidden = useMemo(() => new Set(showHidden ? [] : hiddenIds), [hiddenIds, showHidden]);
   const results = useMemo(
@@ -88,6 +112,14 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   const hiddenCount = showHidden
     ? (checks.data?.checks.filter((check) => hiddenIds.includes(check.id)).length ?? 0)
     : (results?.hidden.length ?? 0);
+  // The fix loop: what changed since the site's last check; a first check's rechecks for its Fixed group.
+  const changes = useSimpleChanges(crawlId, item, status);
+  const firstCheck = item !== undefined && !item.previous;
+  const rechecks = useQuery({ ...rechecksQuery(crawlId), enabled: firstCheck && Boolean(item.analyzedAt) });
+  const fixed = useMemo(
+    () => fixedOf(changes, rechecks.data?.rechecks, checks.data?.checks, results, hidden),
+    [changes, rechecks.data, checks.data, results, hidden],
+  );
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => titleRef.current);
 
@@ -166,8 +198,10 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
         {problems === 0
           ? 'Nothing to fix'
           : `${problems === 1 ? '1 problem' : `${formatCount(problems)} problems`} to fix`}
+        {/* The same unit as the problems before it (round 4): "6 problems to fix and 22 more worth a look", never "things",
+            which Advanced's answer counts in. */}
         {results.counts.notice > 0
-          ? ` and ${results.counts.notice === 1 ? '1 thing' : `${formatCount(results.counts.notice)} things`} worth a look`
+          ? ` and ${formatCount(results.counts.notice)}${problems > 0 ? ' more' : ''} worth a look`
           : ''}{' '}
         on {site}, from {checksWord(results.ran)} on{' '}
         {analysis.data.pagesAnalyzed === 1 ? '1 page' : `${formatCount(analysis.data.pagesAnalyzed)} pages`}.
@@ -177,17 +211,21 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
       <FixLists
         crawlId={crawlId}
         results={results}
+        analysis={analysis.data}
+        sort={sort}
         hiddenCount={hiddenCount}
         showHidden={showHidden}
         onShowHidden={setShowHidden}
         onUnhide={() => showAllHidden(crawlId)}
+        changes={changes}
+        fixed={fixed}
       />
     );
   }
 
   const copyList = () => {
-    if (!results || !item) return;
-    void copyWhatToFix(results, crawlName(item));
+    if (!results || !item || !analysis.data) return;
+    void copyWhatToFix(results, partsOf(results, analysis.data, sort), crawlName(item), changes.copyWordsOf);
   };
 
   return (
@@ -202,6 +240,13 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
           </div>
           {results ? (
             <div className="flex flex-wrap items-center gap-2">
+              <Select<PlainCheckSort>
+                label="Order"
+                icon={ArrowDownWideNarrow}
+                options={PLAIN_CHECK_SORTS}
+                value={sort}
+                onValueChange={onSortChange}
+              />
               <Button icon={Copy} onClick={copyList}>
                 Copy this list
               </Button>
@@ -219,24 +264,67 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   );
 }
 
+/** The Fixed group: what's fixed since the last check, or, for a first check, what its rechecks cleared. */
+function fixedOf(
+  changes: SimpleChanges,
+  rechecks: readonly Recheck[] | undefined,
+  checks: readonly Check[] | undefined,
+  results: PlainResults | null,
+  hidden: ReadonlySet<string>,
+): { title: string; entries: FixedEntry[] } | null {
+  if (!checks || !results) return null;
+  if (changes.comparison) {
+    return { title: fixedGroupTitle(changes.since), entries: fixedSinceEntries(changes.comparison, checks, hidden) };
+  }
+  if (!rechecks) return null;
+  const passed = new Set(results.passed.map((entry) => entry.check.id));
+  return { title: 'Fixed by a recheck', entries: clearedByRechecks(rechecks, checks, passed, hidden) };
+}
+
+/** The parts' rows, in the order asked for, related problems folded (`fixRows`). */
+function partsOf(results: PlainResults, analysis: Analysis, sort: PlainCheckSort): Record<Severity, FixRow[]> {
+  const points = new Map((analysis.score?.lines ?? []).map((line) => [line.checkId, line.points]));
+  const order = { sort, fixFirst: analysis.fixFirst, points };
+  return {
+    error: fixRows(results.found.error, order),
+    warning: fixRows(results.found.warning, order),
+    notice: fixRows(results.found.notice, order),
+  };
+}
+
 /** The groups, each with its rows, and J, K and Enter over the problems. */
 function FixLists({
   crawlId,
   results,
+  analysis,
+  sort,
   hiddenCount,
   showHidden,
   onShowHidden,
   onUnhide,
+  changes,
+  fixed,
 }: {
   crawlId: string;
   results: PlainResults;
+  analysis: Analysis;
+  sort: PlainCheckSort;
   hiddenCount: number;
   showHidden: boolean;
   onShowHidden: (show: boolean) => void;
   onUnhide: () => void;
+  /** The fix loop: each row's change since the site's last check. */
+  changes: SimpleChanges;
+  /** The fix loop: the Fixed group, or null for none. */
+  fixed: { title: string; entries: FixedEntry[] } | null;
 }) {
   const hash = useRouterState({ select: (state) => state.location.hash });
   const landed = fixSectionOf(hash);
+  // The fix loop: the Summary's "3 problems fixed" lands on the Fixed group (it opens), its "1 new" on the new problems.
+  const landedOnFixed = hash.replace(/^#/, '') === FIXED_SECTION;
+  const landedOnNew = hash.replace(/^#/, '') === 'new-since';
+  const [fixedOpen, setFixedOpen] = useState(landedOnFixed);
+  const fixedHeading = useRef<HTMLHeadingElement>(null);
   const nothingAbove = results.counts.error + results.counts.warning === 0;
   const [allLooks, setAllLooks] = useState(landed === 'notice');
   const [passedOpen, setPassedOpen] = useState(landed === 'passed');
@@ -246,6 +334,7 @@ function FixLists({
     setLastHash(hash);
     if (landed === 'notice') setAllLooks(true);
     if (landed === 'passed') setPassedOpen(true);
+    if (hash.replace(/^#/, '') === FIXED_SECTION) setFixedOpen(true);
   }
   const headings = useRef(new Map<CheckOutcome, HTMLHeadingElement>());
   useLayoutEffect(() => {
@@ -255,8 +344,10 @@ function FixLists({
     heading?.focus({ preventScroll: true });
   }, [landed, hash]);
 
-  const looks = nothingAbove || allLooks ? results.found.notice : results.found.notice.slice(0, LOOK_FIRST);
-  const shown = [...results.found.error, ...results.found.warning, ...looks];
+  const parts = partsOf(results, analysis, sort);
+  const looks = nothingAbove || allLooks ? parts.notice : parts.notice.slice(0, LOOK_FIRST);
+  // Every problem the keys move through, a folded one after the one it's folded under.
+  const shown = [...parts.error, ...parts.warning, ...looks].flatMap((row) => [row.entry, ...row.nested]);
   const oneFix = useOneFix(crawlId, shown);
 
   // J and K: the problem the keys are on, and its link, which Enter opens.
@@ -279,14 +370,37 @@ function FixLists({
   useEffect(() => {
     links.current.length = shown.length;
   }, [shown.length]);
+  // Landing on the Fixed group: it comes into view with focus, once it's there to land on.
+  const fixedShown = (fixed?.entries.length ?? 0) > 0;
+  useLayoutEffect(() => {
+    if (!landedOnFixed || !fixedShown) return;
+    fixedHeading.current?.scrollIntoView({ block: 'start' });
+    fixedHeading.current?.focus({ preventScroll: true });
+  }, [landedOnFixed, fixedShown, hash]);
+  // Landing on the new problems: the keys are on the first, as J would put them, once the changes are read.
+  const firstNew = shown.findIndex((entry) => changes.changeOf(entry.check.id)?.state === 'new');
+  const [newLandedOn, setNewLandedOn] = useState<string | null>(null);
+  if (landedOnNew && firstNew >= 0 && newLandedOn !== hash) {
+    setNewLandedOn(hash);
+    setCurrent(firstNew);
+  }
+  useLayoutEffect(() => {
+    if (!landedOnNew || firstNew < 0) return;
+    const link = links.current[firstNew];
+    link?.scrollIntoView({ block: 'center' });
+    link?.focus({ preventScroll: true });
+  }, [landedOnNew, firstNew, hash]);
 
-  const rowFor = (entry: CheckEntry, index: number) => (
-    <li key={entry.check.id}>
+  const rowFor = (entry: CheckEntry, index: number, points: number | null, nested = false) => (
+    <li key={entry.check.id} className={nested ? 'si-plain-list__nested' : undefined}>
       <ProblemRow
         crawlId={crawlId}
         entry={entry}
         results={results}
         oneFix={oneFix.has(entry.check.id)}
+        points={points}
+        nested={nested}
+        change={changes.wordsOf(entry.check.id)}
         ref={(element: HTMLAnchorElement | null) => {
           links.current[index] = element;
         }}
@@ -295,6 +409,12 @@ function FixLists({
       />
     </li>
   );
+  // A row, then what's folded under it: one job, with the points of both on the row.
+  const rowsFor = (rows: readonly FixRow[]) =>
+    rows.flatMap((row) => [
+      rowFor(row.entry, index++, row.points),
+      ...row.nested.map((nested) => rowFor(nested, index++, null, true)),
+    ]);
 
   const sectionHead = (outcome: CheckOutcome, count: number) => (
     <>
@@ -341,7 +461,7 @@ function FixLists({
           <section key={severity} aria-labelledby={FIX_SECTIONS[severity]} className="mb-6">
             {sectionHead(severity, results.found[severity].length)}
             <Card className="overflow-hidden">
-              <PlainCheckList>{results.found[severity].map((entry) => rowFor(entry, index++))}</PlainCheckList>
+              <PlainCheckList>{rowsFor(parts[severity])}</PlainCheckList>
             </Card>
           </section>
         ) : null,
@@ -350,8 +470,8 @@ function FixLists({
         <section aria-labelledby={FIX_SECTIONS.notice} className="mb-6">
           {sectionHead('notice', results.found.notice.length)}
           <Card className="overflow-hidden">
-            <PlainCheckList>{looks.map((entry) => rowFor(entry, index++))}</PlainCheckList>
-            {looks.length < results.found.notice.length ? (
+            <PlainCheckList>{rowsFor(looks)}</PlainCheckList>
+            {looks.length < parts.notice.length ? (
               <div className="border-t border-border-subtle bg-surface-sunken px-6 py-3">
                 <Button variant="ghost" size="sm" icon={ChevronDown} onClick={() => setAllLooks(true)}>
                   Show all {plainSeverityCount('notice', results.found.notice.length)}
@@ -360,6 +480,16 @@ function FixLists({
             ) : null}
           </Card>
         </section>
+      ) : null}
+      {fixed ? (
+        <FixedSince
+          crawlId={crawlId}
+          title={fixed.title}
+          entries={fixed.entries}
+          open={fixedOpen}
+          onOpenChange={setFixedOpen}
+          headingRef={fixedHeading}
+        />
       ) : null}
       {results.skippedCount > 0 ? (
         <section aria-labelledby={FIX_SECTIONS.skipped} className="mb-6">
@@ -440,21 +570,31 @@ function OutcomeMark({ outcome }: { outcome: CheckOutcome }) {
   );
 }
 
-/** Copy this list: the titles, counts and one-line summaries, as text. */
-async function copyWhatToFix(results: PlainResults, site: string): Promise<void> {
+/**
+ * Copy this list: the titles, counts, points back and one-line summaries, as text, in the list's order, a folded
+ * problem under the one it's folded under.
+ */
+async function copyWhatToFix(
+  results: PlainResults,
+  parts: Record<Severity, FixRow[]>,
+  site: string,
+  changeOf: (checkId: string) => string = () => '',
+): Promise<void> {
   const lines = [`What to fix on ${site}`, ''];
-  const parts: [CheckOutcome, CheckEntry[]][] = [
-    ['error', results.found.error],
-    ['warning', results.found.warning],
-    ['notice', results.found.notice],
-  ];
-  for (const [outcome, entries] of parts) {
-    if (entries.length === 0) continue;
-    lines.push(`${HEADINGS[outcome]} (${formatCount(entries.length)})`);
-    for (const entry of entries) {
+  const severities: Severity[] = ['error', 'warning', 'notice'];
+  for (const severity of severities) {
+    if (results.found[severity].length === 0) continue;
+    lines.push(`${HEADINGS[severity]} (${formatCount(results.found[severity].length)})`);
+    for (const row of parts[severity]) {
+      const back = rowPointsWords(row.points);
       lines.push(
-        `- ${plainTitle(entry.check)}: ${shareWords(entry.check, entry.count ?? 0, results.wholes).text}. ${plainSummary(entry.check)}`,
+        `- ${plainTitle(row.entry.check)}: ${rowCountWords(row.entry.check, row.entry.count ?? 0).text}${changeOf(row.entry.check.id)}${back ? `, ${back}` : ''}. ${plainSummary(row.entry.check)}`,
       );
+      for (const nested of row.nested) {
+        lines.push(
+          `  - Fixed along with it: ${plainTitle(nested.check)}, ${rowCountWords(nested.check, nested.count ?? 0).text}${changeOf(nested.check.id)}.`,
+        );
+      }
     }
     lines.push('');
   }

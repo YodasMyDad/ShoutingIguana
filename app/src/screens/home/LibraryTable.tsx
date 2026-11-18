@@ -11,7 +11,8 @@ import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
 import { useVisibleIssueCounts } from '../../crawl/visibleIssues';
 import { crawledUrls, effectiveStatus } from '../../crawl/status';
-import { siteName } from '../../simple/home/sites';
+import { moveGlyph, moveSpoken, onWords, sinceWords } from '../../changes/changeWords';
+import { rowScore, siteName } from '../../simple/home/sites';
 import { formatBytes, formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
 import { useLiveCrawl } from '../../live/liveStore';
@@ -60,6 +61,7 @@ export function LibraryTable({
               Pages
             </LibraryHeader>
             <LibraryHeader>Checks with issues</LibraryHeader>
+            <LibraryHeader>Score</LibraryHeader>
             <LibraryHeader folds>Started</LibraryHeader>
             <LibraryHeader>
               <span className="sr-only">Actions</span>
@@ -130,10 +132,12 @@ function SiteRows({
   const [open, setOpen] = useState(false);
   const olderId = useId();
   const older = group.earlier.length;
+  const site = { latest: group.latest, crawls: older + 1 };
   return (
     <>
       <CrawlRow
         item={group.latest}
+        site={site}
         runningId={runningId}
         runningNewer={
           runningId && runningStartedAt
@@ -161,7 +165,7 @@ function SiteRows({
       />
       {open
         ? group.earlier.map((item, index) => (
-            <CrawlRow key={item.id} item={item} nested id={index === 0 ? olderId : undefined} />
+            <CrawlRow key={item.id} item={item} site={site} nested id={index === 0 ? olderId : undefined} />
           ))
         : null}
     </>
@@ -181,6 +185,7 @@ function RunningBadge({ id, newer }: { id: string; newer: boolean | undefined })
 
 function CrawlRow({
   item,
+  site,
   nested = false,
   runningId,
   runningNewer,
@@ -188,6 +193,8 @@ function CrawlRow({
   id,
 }: {
   item: CrawlListItem;
+  /** The site's latest crawl in the table, and how many it has: for Compare with…. */
+  site: { latest: CrawlListItem; crawls: number };
   /** An older crawl of its site, under the site's latest. */
   nested?: boolean;
   /** Another crawl of the site running now, in a card above: the row says what it's doing. */
@@ -262,6 +269,9 @@ function CrawlRow({
       <td className={CELL_BOX}>
         <IssuesCell item={item} status={status} />
       </td>
+      <td className={CELL_BOX}>
+        <ScoreCell item={item} status={status} />
+      </td>
       <td className={clsx(CELL_BOX, FOLDS)}>
         <span className="flex flex-col items-start whitespace-nowrap">
           <span className="text-text-secondary">
@@ -271,7 +281,7 @@ function CrawlRow({
         </span>
       </td>
       <td className={clsx('text-right', CELL)}>
-        <CrawlMenu item={item} status={status} older={nested} />
+        <CrawlMenu item={item} status={status} older={nested} site={site} />
       </td>
     </tr>
   );
@@ -362,6 +372,52 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
     );
   }
   return <span className="text-text-muted">Not analysed yet</span>;
+}
+
+/**
+ * The crawl's score (the fix loop: the audit's library gap), "86 ▲16": its change since the crawl's previous crawl as
+ * text with a glyph, neutral as score movement is everywhere; a screen reader hears it in words ("up 16 points since
+ * 3 Nov"). "so far" under a score of a crawl that didn't read all of the site. No score, or a file that can't say, is
+ * "–", never 0. Each older crawl has its own, against its own previous crawl.
+ */
+function ScoreCell({ item, status }: { item: CrawlListItem; status: CrawlStatus }) {
+  const score = status === 'unreadable' || item.missing ? null : rowScore(item, status);
+  if (!score) {
+    return (
+      <span className="text-text-muted">
+        <span aria-hidden="true">–</span>
+        <span className="sr-only">No score</span>
+      </span>
+    );
+  }
+  const change = item.changes?.score ?? null;
+  const since = item.previous?.startedAt ?? null;
+  const then = item.previous?.score?.value;
+  return (
+    <span
+      className="flex flex-col items-start whitespace-nowrap"
+      title={then === undefined ? undefined : `Score ${then} ${onWords(since)}, ${score.value} now`}
+    >
+      <span>
+        <span className="figures font-medium text-text">{formatCount(score.value)}</span>
+        {change === null ? null : change === 0 ? (
+          <span className="sr-only">, no change {sinceWords(since)}</span>
+        ) : (
+          <>
+            {' '}
+            <span aria-hidden="true" className="figures text-text-secondary">
+              {moveGlyph(change)}
+            </span>
+            <span className="sr-only">
+              , {moveSpoken(change)} {sinceWords(since)}
+              {item.changes?.partial ? ' so far' : ''}
+            </span>
+          </>
+        )}
+      </span>
+      {score.partial ? <span className="text-12 text-text-muted">so far</span> : null}
+    </span>
+  );
 }
 
 /**

@@ -24,8 +24,9 @@ public sealed class ReportedOnceTests
     {
         Assert.Equal(
         [
-            "duplicate-site-version", "no-https", "robots-txt-missing", "robots-txt-unreachable", "robots-txt-unreachable-other-origin",
-            "security-headers-missing", "site-hidden-from-search", "sitemap-error", "sitemap-missing"
+            "duplicate-site-version", "no-https", "robots-txt-missing", "robots-txt-no-sitemap", "robots-txt-unreachable", "robots-txt-unreachable-other-origin",
+            "security-headers-missing", "security-headers-weak", "site-hidden-from-search", "sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing",
+            "sitemap-near-limit", "sitemap-over-limit"
         ], IssueCatalog.All.Where(check => check.ReportedOnce).Select(check => check.Id).Order(StringComparer.Ordinal));
 
         // A fault of the whole site is always reported once; a check reported once needn't be a fault of the whole site.
@@ -49,7 +50,9 @@ public sealed class ReportedOnceTests
 
         // An HTTPS site of four pages, every one noindex, the home page among them, and none sending a security header.
         var site = new RuleHarness();
-        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+        // Its home page sends two security headers, both too weakly.
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex,
+            [new("strict-transport-security", "max-age=60"), new("x-content-type-options", "none")]);
         AnalyzedPage[] pages =
         [
             home,
@@ -88,12 +91,27 @@ public sealed class ReportedOnceTests
         StoredSitemap[] none = [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)];
         hits.AddRange(new SitemapRules(urls, none, options, crawlComplete: true).Finish().Where(hit => hit.Issue == IssueCatalog.SITEMAP_MISSING));
 
+        // Four files over the limits, three near them, three empty, and dates wrong in two: one issue each.
+        StoredSitemap[] files =
+        [
+            .. Enumerable.Range(1, 4).Select(number => new StoredSitemap($"{site.Site}/big-{number}.xml", 200, false, 60_000, null)),
+            .. Enumerable.Range(1, 3).Select(number => new StoredSitemap($"{site.Site}/near-{number}.xml", 200, false, 46_000, null)),
+            .. Enumerable.Range(1, 3).Select(number => new StoredSitemap($"{site.Site}/empty-{number}.xml", 200, false, 0, null) { ListedSitemaps = 0 })
+        ];
+        var lastmods = new SitemapEntryFacts { Lastmods = [new($"{site.Site}/big-1.xml", 10, 2), new($"{site.Site}/big-2.xml", 0, 5)] };
+        hits.AddRange(new SitemapRules(urls, files, options, crawlComplete: true, entries: lastmods).Finish()
+            .Where(hit => hit.Issue != IssueCatalog.SITEMAP_ERROR && hit.Issue != IssueCatalog.SITEMAP_MISSING));
+
+        // robots.txt answers on both main origins, and neither names the sitemap the crawler found anyway.
+        RobotsRecord[] silent = [new("https://example.com", 200, "User-agent: *", null, 0), new("https://www.example.com", 200, string.Empty, null, 0)];
+        hits.AddRange(new RobotsTxtRules(urls, silent, scope, new HashSet<string> { "https://example.com", "https://www.example.com" }, sitemaps: files).Finish());
+
         // Each of these, however many pages or origins or files are at fault, is one issue, on the home page.
         var onHome = hits.Where(hit => hit.Issue.ReportedOnce).ToList();
         Assert.Equal(
         [
-            "robots-txt-missing", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "security-headers-missing", "site-hidden-from-search",
-            "sitemap-error", "sitemap-missing"
+            "robots-txt-missing", "robots-txt-no-sitemap", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "security-headers-missing",
+            "security-headers-weak", "site-hidden-from-search", "sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing", "sitemap-near-limit", "sitemap-over-limit"
         ], onHome.Select(hit => hit.Issue.Id).Order(StringComparer.Ordinal));
         Assert.All(onHome, hit => Assert.Equal(home.UrlId, hit.UrlId));
         Assert.Equal("https://example.com/robots.txt (503 Service Unavailable), https://www.example.com/robots.txt (500 Internal Server Error)",

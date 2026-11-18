@@ -5,7 +5,7 @@
 import type { FacetBucket, FacetsPage, GridFilter } from '../../api/grids';
 import type { Checks, Severity } from '../../api/types';
 import { SEVERITIES } from '../../ui/severity';
-import { rankChecksToFix, type CheckEntry } from '../issues/checkList';
+import { analysisTotals, rankChecksToFix, type CheckEntry } from '../issues/checkList';
 import { ANSWERED_SITE_PAGES, CRAWLED_SITE_PAGES, urlsLink, type IssuesLink, type UrlsLink } from './links';
 
 // ------------------------------------------------------------------------------------------------- Issues by severity
@@ -16,18 +16,30 @@ export interface SeverityFigure {
   checks: number;
   /** Their issues: one check on one URL. */
   issues: number;
+  /**
+   * The separate things to change their issues come to, and of those, how many are likely in the site's template
+   * (`analysisTotals`); null when the analysis doesn't count them.
+   */
+  causes: number | null;
+  templateCauses: number;
   /** Issues, listing this severity's checks. */
   link: IssuesLink;
 }
 
-/** Checks that found issues and their issues, per severity. Hidden checks are left out, as the sidebar leaves them. */
+/**
+ * Checks that found issues, their issues and the things to change they come to, per severity. Hidden checks are left
+ * out, as the sidebar leaves them.
+ */
 export function severityFigures(entries: readonly CheckEntry[]): SeverityFigure[] {
   return SEVERITIES.map((severity) => {
     const found = entries.filter((entry) => entry.outcome === severity && !entry.hidden);
+    const totals = analysisTotals(found);
     return {
       severity,
       checks: found.length,
-      issues: found.reduce((sum, entry) => sum + (entry.count ?? 0), 0),
+      issues: totals.issues,
+      causes: found.length === 0 ? 0 : (totals.causes ?? null),
+      templateCauses: totals.templateCauses ?? 0,
       link: { to: 'issues', severity },
     };
   });

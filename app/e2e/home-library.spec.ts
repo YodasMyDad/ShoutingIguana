@@ -127,6 +127,8 @@ test('a crawl’s actions are in its menu: Remove puts it back with Undo, Delete
     'Open',
     'Crawl again…',
     'Analyse again',
+    // The fix loop: a site's only crawl has nothing to compare with, so it's there but disabled, saying why.
+    'Compare with…No other crawl',
     'Remove from library',
     'Delete file…',
   ]);

@@ -105,6 +105,8 @@ describe('progress', () => {
     // The two lists count what they list.
     expect(progressWords(job({ kind: 'sitemaps', rowsWritten: 3, rowsExpected: 12 }))).toBe('3 of 12 sitemaps');
     expect(progressWords(job({ kind: 'robotsOrigins', rowsWritten: 0, rowsExpected: 1 }))).toBe('0 of 1 origin');
+    // Step 3b: the links grouped by target count their targets.
+    expect(progressWords(job({ kind: 'linkGroups', rowsWritten: 2, rowsExpected: 9 }))).toBe('2 of 9 targets');
     expect(progressWords(job())).toBeNull();
     expect(progressWords(job({ kind: 'report' }))).toBeNull();
   });

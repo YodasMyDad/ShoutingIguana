@@ -134,7 +134,9 @@ describe('the Links grid', () => {
       nofollow: LINKS_COUNTS.nofollow,
       'no-text': LINKS_COUNTS.noText,
       external: LINKS_COUNTS.external,
+      images: LINKS_COUNTS.images,
     };
+    const bar = screen.getByRole('group', { name: 'Filters' });
     for (const preset of LINK_PRESETS.filter((candidate) => candidate.id !== 'all')) {
       await user.click(within(views).getByRole('button', { name: preset.title }));
       const landed = expected[preset.id]!;
@@ -142,9 +144,8 @@ describe('the Links grid', () => {
       expect(filtersOf(router)).toEqual(preset.filters);
       expect(within(views).getByRole('button', { name: preset.title })).toHaveAttribute('aria-pressed', 'true');
       expect(within(views).getByRole('button', { name: 'All links' })).toHaveAttribute('aria-pressed', 'false');
+      if (preset.id === 'external') expect(within(bar).getByText('another site')).toBeVisible();
     }
-    const bar = screen.getByRole('group', { name: 'Filters' });
-    expect(within(bar).getByText('another site')).toBeVisible();
     await user.click(within(views).getByRole('button', { name: 'All links' }));
     await counted('13 links');
     expect(filtersOf(router)).toBeUndefined();

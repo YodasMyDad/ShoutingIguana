@@ -14,6 +14,9 @@ internal static class AnalysisLimits
 {
     private const string CHARACTERS = "characters";
     private const string PIXELS = "pixels";
+
+    /// <summary>An image's width: pixels of a picture, which have no characters to compare with, unlike a title's.</summary>
+    private const string IMAGE_PIXELS = "px";
     private const string WORDS = "words";
     private const string BYTES = "bytes";
 
@@ -65,6 +68,18 @@ internal static class AnalysisLimits
             settings => settings.ImageAltMaxLength, (settings, value) => settings with { ImageAltMaxLength = (int)value }),
         new("largeImageBytes", BYTES, 1, MAX_BYTES, "An image larger than this is flagged as too large.",
             settings => settings.LargeImageBytes, (settings, value) => settings with { LargeImageBytes = value }),
+        new("responsiveImageMinWidth", IMAGE_PIXELS, 1, MAX_PIXELS, "An image file at least this wide, without srcset or a picture's sources, is flagged as sent to phones whole.",
+            settings => settings.ResponsiveImageMinWidth, (settings, value) => settings with { ResponsiveImageMinWidth = (int)value }),
+        new("legacyImageMinBytes", BYTES, 1, MAX_BYTES, "A JPEG, PNG, GIF or BMP image at least this large is flagged as one a newer format would shrink.",
+            settings => settings.LegacyImageMinBytes, (settings, value) => settings with { LegacyImageMinBytes = value }),
+        new("inlineImageMaxBytes", BYTES, 1, MAX_BYTES, "A data: image larger than this, decoded, is flagged as built into the page.",
+            settings => settings.InlineImageMaxBytes, (settings, value) => settings with { InlineImageMaxBytes = value }),
+        new("headingMaxLength", CHARACTERS, 1, MAX_CHARACTERS, "An H1 or H2 longer than this is flagged as running on.",
+            settings => settings.HeadingMaxLength, (settings, value) => settings with { HeadingMaxLength = (int)value }),
+        new("h2MinWords", "words", 1, 100_000, "An indexable page with at least this many words of its own and no H2 is flagged.",
+            settings => settings.H2MinWords, (settings, value) => settings with { H2MinWords = (int)value }),
+        new("readabilityMinScore", "points", 0, 100, "English text whose Flesch reading ease is under this is flagged as very hard to read.",
+            settings => settings.ReadabilityMinScore, (settings, value) => settings with { ReadabilityMinScore = (int)value }),
         new("largePageBytes", BYTES, 1, MAX_BYTES, "A page whose HTML is larger than this is flagged as too large.",
             settings => settings.LargePageBytes, (settings, value) => settings with { LargePageBytes = value }),
         new("slowResponseMs", "ms", 1, 3_600_000, "A page that takes longer than this to answer is flagged as slow.",

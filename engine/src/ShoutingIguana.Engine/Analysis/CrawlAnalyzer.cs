@@ -30,7 +30,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     private const string RULE_FAILED_TEXT = "The check failed during the analysis, so it has no results. The log says why.";
 
     /// <summary>Checks besides the orphans' that need every page that could link to a page, sitemaps aside: skipped as orphans are when the crawl didn't read them all.</summary>
-    private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY];
+    private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY, IssueCatalog.HREFLANG_UNLINKED];
 
     /// <summary>The orphan check is skipped once 1 in this many of the pages the crawl tried to read couldn't be read (<see cref="SkippedCheckReasons.PAGES_UNREAD"/>).</summary>
     private const int UNREAD_PAGES_ONE_IN = 20;
@@ -113,6 +113,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 Skip(notes, skipped, note: null, SkippedCheckReasons.CRAWL_UNFINISHED, "The crawl didn't finish.", LinkingPageChecks);
             }
             incomplete = WhyIncomplete(status, limitSkips);
+            if (options.DiscoverSitemaps && !reader.HasSitemapLastmods())
+            {
+                Skip(notes, skipped,
+                    $"{IssueCatalog.SITEMAP_LASTMOD_INVALID.Title} wasn't checked: this crawl was made by an earlier version, which didn't record what the check needs. Crawl again to check it.",
+                    SkippedCheckReasons.EARLIER_VERSION, "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
+                    IssueCatalog.SITEMAP_LASTMOD_INVALID);
+            }
             if (!options.DiscoverSitemaps)
             {
                 Skip(notes, skipped, "Sitemaps weren't read in this crawl, so orphan pages and the sitemap checks weren't run.",
@@ -163,11 +170,24 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     IssueCatalog.BROKEN_EXTERNAL_LINKS, IssueCatalog.SLOW_EXTERNAL_LINKS);
             }
 
+            // A version only hreflang names is never read when hreflang isn't followed, so which are unlinked can't be told;
+            // unless the check is skipped already, for pages the crawl didn't read at all.
+            if (!options.CrawlHreflang && !skipped.ContainsKey(IssueCatalog.HREFLANG_UNLINKED) &&
+                reader.ReadUnreadHreflangTargets() is > 0 and var unread)
+            {
+                var versions = unread == 1 ? "1 language version" : string.Create(CultureInfo.InvariantCulture, $"{unread:N0} language versions");
+                Skip(notes, skipped, $"Hreflang links weren't followed in this crawl, so language versions nothing else leads to weren't looked for.",
+                    SkippedCheckReasons.HREFLANG_OFF,
+                    $"Hreflang links weren't followed in this crawl, and {versions} they name {(unread == 1 ? "wasn't" : "weren't")} read.",
+                    IssueCatalog.HREFLANG_UNLINKED);
+            }
+
             if (!options.CheckResources)
             {
                 Skip(notes, skipped, "Images weren't fetched in this crawl, so broken and oversized images weren't looked for.",
                     SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.",
-                    IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE);
+                    IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.IMAGE_NO_SRCSET, IssueCatalog.IMAGE_LEGACY_FORMAT,
+                    IssueCatalog.SOCIAL_IMAGE_BROKEN, IssueCatalog.SOCIAL_IMAGE_TOO_LARGE, IssueCatalog.SOCIAL_IMAGE_TOO_SMALL);
                 Skip(notes, skipped, note: null,
                     SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl.",
                     IssueCatalog.BROKEN_RESOURCES, IssueCatalog.CONTENT_TYPE_MISMATCH, IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT);
@@ -245,13 +265,14 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 }
             }
 
-            var hreflang = new HreflangRules(urls);
+            var hreflang = new HreflangRules(urls, reader.ReadUrl);
             var indexability = new IndexabilityRules();
             var robotsToken = UserAgents.Resolve(options.UserAgent, options.CustomUserAgent).RobotsToken;
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls, reader.ReadUrlId), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
+                new ImageRules(settings, urls, reader.ReadUrlId, scope, PrivateNetworkGuard.IsPrivateLiteral(new Uri(startUrl)), reader.ReadUrl),
+                new TextStructureRules(settings), new SocialRules(urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
                 new DirectiveRules(urls, robotsToken), new LinkStructureRules(settings, urls, reader.ReadUrl, new Uri(startUrl)), hreflang, new StructuredDataRules(),
                 new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings), new HtmlRules()
             ];
@@ -263,10 +284,20 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             [
                 new InlinkRules(urls, linksComplete, everyLinkingPage), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks, reader.ReadUrl), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls, reader.ReadUrl),
-                new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
-                new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
+                new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList()),
+                    new SitemapEntryFacts
+                    {
+                        Repeated = reader.ReadRepeatedSitemapEntries(),
+                        // Not one on the site's own scheme: a sitemap declared on http:// that redirects to https:// lists
+                        // https:// URLs, which is right.
+                        OtherScheme = reader.ReadOtherSchemeSitemapEntries().Where(entry => mainUrls.All(uri => uri.Scheme != entry.Value.Url))
+                            .ToDictionary(),
+                        Lastmods = reader.ReadSitemapLastmodFaults(LatestLastmod(reader))
+                    }),
+                new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins(), sitemaps), siteVersions,
                 new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl),
-                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType)
+                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType),
+                new UrlTextRules(urls, reader.ReadInternalUrls())
             ];
 
             // Pages parsed before each collection of facts that a check needs (CollectedFacts), counted as they're read.
@@ -422,6 +453,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     /// </summary>
     /// <param name="collections">Each collection a check needs, in order.</param>
     /// <param name="parsedBefore">For each, how many of the pages read were parsed before it.</param>
+    /// <summary>
+    /// The latest a sitemap's lastmod may be, in Unix seconds: a day after the crawl last ran, so a time zone or a clock a
+    /// little ahead isn't "the future".
+    /// </summary>
+    private static long LatestLastmod(AnalysisReader reader) =>
+        (reader.ReadCrawlUpdatedAt() ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) / 1000 + 86_400;
+
     private void SkipChecksNeedingNewerFacts(IssueWriter writer, List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, int[] collections,
         long[] parsedBefore, long pages)
     {

@@ -1,4 +1,5 @@
 import type { ExportJob } from './exports';
+import type { CrawlChanges, PreviousCrawl, RecheckEvent, RecheckKind, RechecksBrief } from './fixLoop';
 import type { CheckGrouping } from './grids';
 
 // The sidecar's JSON, as docs/v2-sidecar-api.md defines it (E1 and E2; the grids' E3a shapes are in grids.ts and
@@ -14,6 +15,8 @@ export type CrawlStatus =
   | 'paused'
   | 'stopping'
   | 'analyzing'
+  /** The fix loop: a recheck is fetching some of the crawl's URLs again, here; `analyzing` follows it. */
+  | 'rechecking'
   | 'stopped'
   | 'interrupted'
   | 'completed'
@@ -26,6 +29,7 @@ export const CRAWL_STATUSES: readonly CrawlStatus[] = [
   'paused',
   'stopping',
   'analyzing',
+  'rechecking',
   'stopped',
   'interrupted',
   'completed',
@@ -42,8 +46,11 @@ export function isCrawlStatus(value: unknown): value is CrawlStatus {
 /** Statuses that mean this sidecar is crawling it right now. */
 export const CRAWLING_STATUSES: readonly CrawlStatus[] = ['running', 'paused', 'stopping'];
 
-/** Statuses that mean this sidecar is working on it: crawling or analysing. */
-export const LIVE_STATUSES: readonly CrawlStatus[] = ['running', 'paused', 'stopping', 'analyzing'];
+/**
+ * Statuses that mean this sidecar is working on it: crawling, analysing, or (the fix loop) rechecking some of its URLs,
+ * which is a short run of the crawl followed by its analysis.
+ */
+export const LIVE_STATUSES: readonly CrawlStatus[] = ['running', 'paused', 'stopping', 'analyzing', 'rechecking'];
 
 export function isCrawling(status: CrawlStatus): boolean {
   return CRAWLING_STATUSES.includes(status);
@@ -140,6 +147,12 @@ export interface Check {
    */
   plainLooksFor?: string | null;
   /**
+   * The fix loop: what a recheck of the check reads again. Empty for a check only a full crawl can settle (`orphan-page`,
+   * `no-https`, `canonical-unlinked`, `non-indexable-inlinks-only`, `deep-page`): offer "Check the site again" in its
+   * place. Left out by a sidecar from before the fix loop, which offers no recheck.
+   */
+  recheck?: RecheckKind[];
+  /**
    * Evidence (step 3b): the URL columns that show what the check found, in the order to show them, beside each row's
    * `url` and `detail` (`["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
    * `["redirectChain"]` for the redirect checks).
@@ -153,6 +166,12 @@ export interface Check {
    * check that names no URL; left out by a sidecar from before it.
    */
   targetFacts?: TargetFact[];
+  /**
+   * Related checks (step 3b): the checks a fix of this one also clears, by id, as the catalog declares them (a 404's
+   * fix clears the links to it). What it clears on a crawl is the analysis's `counts[].clears`. Left out by a sidecar
+   * from before it, which reads as empty.
+   */
+  clears?: string[];
 }
 
 /**
@@ -272,8 +291,14 @@ export interface CrawlListItem {
   id: string;
   path: string;
   fileName: string;
-  /** The start URL's host without a leading `www.`; the library groups by it. */
+  /** The start URL's host without a leading `www.`: the site's name. */
   site: string | null;
+  /**
+   * The fix loop: the site as the library groups it, and as the sidecar picks the previous crawl by: `site`, then
+   * `:port` when the start URL has a port of its own (`127.0.0.1:5001`). The app groups by it and never works it out
+   * itself, so the two can't disagree. Null for a file with no start URL. Left out by a sidecar from before the fix loop.
+   */
+  siteKey?: string | null;
   startUrl: string | null;
   status: CrawlStatus;
   startedAt: string | null;
@@ -330,6 +355,18 @@ export interface CrawlListItem {
   missing: boolean;
   /** Why the file couldn't be read, in plain words: only when the status is `unreadable`. */
   error: string | null;
+  /**
+   * The fix loop: the crawl this one is compared with by default (the site's last before it that can be), or null for a
+   * site's first crawl or one never analysed. Left out by a sidecar from before the fix loop.
+   */
+  previous?: PreviousCrawl | null;
+  /**
+   * The fix loop: what changed since `previous`, check by check, from cached summaries. Null with no `previous`, and
+   * while the crawl is live here, interrupted, in use elsewhere or unreadable. Every check is in it: leave out the hidden.
+   */
+  changes?: CrawlChanges | null;
+  /** The fix loop: the crawl's rechecks, how many and the latest; null for a crawl never rechecked. */
+  rechecks?: RechecksBrief | null;
 }
 
 // --------------------------------------------------------------------------------------------------- Crawl control
@@ -365,6 +402,28 @@ export interface CheckCount {
    * say it instead. Left out by a sidecar from before it.
    */
   likelyTemplate?: boolean;
+  /**
+   * Headline counts (step 3b): the separate things to change its issues come to. A group that shares a cause (one
+   * broken target, one large image) or is likely the template is one; every other URL is one of its own. Null for a
+   * check that found nothing, and when the analysis changed while it was read; left out by a sidecar from before it.
+   */
+  causes?: number | null;
+  /** Of `causes`, those likely in the site's template: one fix each. */
+  templateCauses?: number | null;
+  /**
+   * Related checks (step 3b): the checks a fix of this one also clears that found something, each with the pages it
+   * clears there. Empty when none; left out by a sidecar from before it.
+   */
+  clears?: ClearedCheck[];
+}
+
+/** Another check a fix of one clears (related checks). */
+export interface ClearedCheck {
+  checkId: string;
+  /** Its pages whose every target is a URL the fixed check flagged: the pages the fix clears there. */
+  pages: number;
+  /** They are every page it flagged: the fix clears it entirely. */
+  all: boolean;
 }
 
 export interface SkipReason {
@@ -392,7 +451,8 @@ export type OutOfDateReason = 'crawlChanged' | 'engineChanged' | 'settingsChange
 
 // ----------------------------------------------------------------------------------------- Analysis settings (E6)
 
-export type AnalysisLimitUnit = 'characters' | 'pixels' | 'words' | 'bits' | 'bytes' | 'ms' | 'links' | 'clicks';
+export type AnalysisLimitUnit =
+  'characters' | 'pixels' | 'px' | 'words' | 'bits' | 'bytes' | 'ms' | 'links' | 'clicks' | 'points';
 
 /** One limit an analysis judges by ("a title wider than this is too long"), with what Settings needs to show it. */
 export interface AnalysisLimit {
@@ -634,7 +694,8 @@ export interface HelloEvent {
   exports?: string[];
 }
 
-/** E4: what a crawl is doing as a whole. Whether it's paused is its status. */
+/** E4: what a crawl is doing as a whole. Whether it's paused is its status. A recheck's
+ * progress says `rechecking`, which is read as no phase: its status says it. */
 export type CrawlPhase = 'starting' | 'readingRobotsTxt' | 'crawling' | 'readingSitemaps' | 'retrying' | 'finishing';
 
 export const CRAWL_PHASES: readonly CrawlPhase[] = [
@@ -876,7 +937,9 @@ export type SidecarEvent =
   | { type: 'library'; data: Record<string, never> }
   | { type: 'analysis'; data: AnalysisEvent }
   /** E5: an export as it stands, whole (./exports): as it starts, as it goes on, and as it ends. */
-  | { type: 'export'; data: ExportJob };
+  | { type: 'export'; data: ExportJob }
+  /** The fix loop: a recheck's own progress, its end, and (with `result`) once the analysis after it settled it. */
+  | { type: 'recheck'; data: RecheckEvent };
 
 /** Round 5: what one fetch through a proxy found (`POST /api/proxy/test`). */
 export type ProxyTestOutcome =

@@ -92,6 +92,9 @@ public static class CrawlExporter
                 RobotsReader.ValidateSearch(request.Query.Search, errors);
                 UrlGridReader.ThrowIfInvalid(errors);
                 break;
+            case ExportKind.LinkGroups:
+                LinkGroupsExport.Check(request);
+                break;
         }
     }
 
@@ -153,6 +156,10 @@ public static class CrawlExporter
                 case ExportKind.RobotsOrigins:
                     table = Table(request.Format, target);
                     ListExport.WriteOrigins(run, table);
+                    break;
+                case ExportKind.LinkGroups:
+                    table = Table(request.Format, target);
+                    LinkGroupsExport.Write(run, table);
                     break;
                 default:
                     table = Table(request.Format, target);

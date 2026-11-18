@@ -21,6 +21,7 @@ import {
   testResponse,
   testUrlDetail,
   type InspectorSidecarOptions,
+  testPageImage,
 } from '../test/inspectorSidecar';
 import { ISSUES_ANALYSIS, ISSUES_CHECKS, issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
 import { resetLinkKinds } from './links';
@@ -1059,4 +1060,51 @@ export const GoToUrlNotInTheCrawl: Story = {
     },
   ],
   render: () => <InspectorApp path={URLS} />,
+};
+
+// ------------------------------------------------------------------------------------------------ Images (step 3b)
+
+/** A garden product page's images: each file once, the largest first, with its size, pixels, alt text and where. */
+export const GardenImages: Story = {
+  loaders: [() => fresh('images')],
+  render: () => <InspectorApp path={`${GARDEN}?inspect=119`} />,
+};
+
+const IMAGES = [
+  testPageImage(),
+  testPageImage(
+    {
+      id: 41,
+      url: 'https://example.com/wp-content/uploads/harpswell-side-1024x768.webp',
+      text: 'The set from the side',
+    },
+    { contentType: 'image/webp', sizeBytes: 148_204, pixelWidth: 1024, pixelHeight: 768 },
+  ),
+  testPageImage(
+    { id: 42, url: 'https://example.com/icons/basket.svg', text: null, links: 2, positions: ['header', 'footer'] },
+    { contentType: 'image/svg+xml', sizeBytes: 1_210, pixelWidth: null, pixelHeight: null },
+  ),
+  testPageImage(
+    { id: 43, url: 'https://example.com/wp-content/uploads/old-banner.jpg', text: 'Summer sale' },
+    {
+      statusCode: 404,
+      outcome: 'clientError',
+      contentType: 'text/html',
+      sizeBytes: null,
+      pixelWidth: null,
+      pixelHeight: null,
+    },
+  ),
+];
+
+/** A page's images: one over the analysis's limit flagged, one with no alt text, one shown twice, one that's gone. */
+export const Images: Story = {
+  loaders: [() => own({ ...SITE, images: { 2: IMAGES } }, { section: 'images' })],
+  render: () => inspect(2),
+};
+
+/** A page that shows no image: said plainly, never an empty grid. */
+export const NoImages: Story = {
+  loaders: [() => own(SITE, { section: 'images' })],
+  render: () => inspect(2),
 };

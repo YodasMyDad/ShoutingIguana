@@ -15,9 +15,10 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// the site links to. Their robots.txt is left out: a dead www twin's would fail on nearly every crawl.
 /// </param>
 internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> robots, CrawlScope scope, IReadOnlySet<string> mainOrigins,
-    IReadOnlySet<string>? siteVersionOnlyOrigins = null) : ISiteRule
+    IReadOnlySet<string>? siteVersionOnlyOrigins = null, IReadOnlyList<StoredSitemap>? sitemaps = null) : ISiteRule
 {
-    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, IssueCatalog.ROBOTS_TXT_MISSING];
+    public IReadOnlyList<IssueDefinition> Checks { get; } =
+        [IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, IssueCatalog.ROBOTS_TXT_MISSING, IssueCatalog.ROBOTS_TXT_NO_SITEMAP];
 
     public void Observe(AnalyzedPage page)
     {
@@ -51,7 +52,20 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
         {
             yield return new IssueHit(IssueCatalog.ROBOTS_TXT_MISSING, urls.HomeId, string.Join(", ", missing.Select(Describe)));
         }
+
+        // A sitemap found anyway (the probe of /sitemap.xml, or the settings) that no main origin's robots.txt names. With
+        // none found, sitemap-missing says so; a robots.txt that didn't answer says nothing either way.
+        var answered = own.Where(file => mainOrigins.Contains(file.Origin) && file.StatusCode is >= 200 and < 300).ToList();
+        if (sitemaps?.FirstOrDefault(sitemap => sitemap.IsRead) is { } found && answered.Count > 0 && !answered.Any(file => NamesSitemap(file.Content)))
+        {
+            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_NO_SITEMAP, urls.HomeId,
+                $"{answered[0].Origin}/robots.txt has no Sitemap: line; the sitemap was found at {found.Url}");
+        }
     }
+
+    /// <summary>A robots.txt line that names a sitemap: "Sitemap:" at its start, in any case (RFC 9309, Google).</summary>
+    internal static bool NamesSitemap(string? content) =>
+        content is not null && content.Split('\n').Any(line => line.Trim().TrimStart('\uFEFF').StartsWith("sitemap:", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>RobotsCache records a robots.txt behind too many redirects without a status, and allows everything.</summary>
     private static bool TooManyRedirects(RobotsRecord file) =>

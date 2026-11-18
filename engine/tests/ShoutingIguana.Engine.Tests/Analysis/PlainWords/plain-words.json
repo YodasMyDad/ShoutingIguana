@@ -1047,6 +1047,91 @@
       "fixer": "either",
       "plainPassed": "No sitemap lists an address outside its own website"
     },
+    "robots-txt-no-sitemap": {
+      "plainTitle": "Your rules file doesn't say where your sitemap is",
+      "plainWhat": [
+        "Your site's rules file for search engines (its \"robots.txt\") doesn't give your sitemap's address.",
+        "The check found the sitemap anyway, where search engines look first, so most will find it too.",
+        "Naming it in the rules file makes sure every search engine does, wherever the sitemap is."
+      ],
+      "plainFix": [
+        "Look in your site's SEO settings or plugin for an option to add the sitemap to the \"robots.txt\" file.",
+        "Ask your developer to add a line to the \"robots.txt\" file that names your sitemap's full address, if there's no such option."
+      ],
+      "fixer": "either",
+      "plainPassed": "Your rules file for search engines names your sitemap"
+    },
+    "sitemap-over-limit": {
+      "plainTitle": "A sitemap too big for Google to read",
+      "plainWhat": [
+        "A sitemap on your site lists more than 50,000 addresses, or is bigger than 50 MB.",
+        "That's more than one sitemap file may hold, and search engines may not read the addresses past the limit.",
+        "Those pages then aren't put forward to search engines by the sitemap."
+      ],
+      "plainFix": [
+        "Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.",
+        "Ask your developer to split the sitemap into several smaller ones, listed in one sitemap of sitemaps, if there's no such setting."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap is too big for search engines to read"
+    },
+    "sitemap-near-limit": {
+      "plainTitle": "A sitemap close to the size Google can read",
+      "plainWhat": [
+        "A sitemap on your site lists between 45,000 and 50,000 addresses, or is nearly 50 MB.",
+        "That's close to what one sitemap file may hold, and nothing is lost yet.",
+        "As you add pages it will pass the limit, and search engines may then not read the addresses past it."
+      ],
+      "plainFix": [
+        "Look in your site's SEO settings or plugin for the number of addresses in each sitemap, and lower it.",
+        "Ask your developer to split the sitemap into several smaller ones before it grows, if there's no such setting."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap is close to the size search engines can read"
+    },
+    "sitemap-empty": {
+      "plainTitle": "A sitemap with nothing in it",
+      "plainWhat": [
+        "A sitemap on your site loads without an error but lists no pages.",
+        "That does no harm by itself, but it usually means a sitemap that should list pages doesn't.",
+        "Or it's an old one left behind, which search engines keep fetching for nothing."
+      ],
+      "plainFix": [
+        "Open the sitemap's address from the list in your browser, to see what's in it.",
+        "Check your site's SEO settings or plugin, in case that part of the sitemap is switched off.",
+        "If the sitemap isn't needed, ask your developer to remove it and the line that names it."
+      ],
+      "fixer": "either",
+      "plainPassed": "No sitemap is empty"
+    },
+    "sitemap-url-repeated": {
+      "plainTitle": "Addresses listed in more than one sitemap",
+      "plainWhat": [
+        "These pages are listed in more than one of your sitemaps.",
+        "Search engines cope with that, so this is tidying rather than a problem.",
+        "Repeats make sitemaps bigger, and the copies can disagree about when a page last changed."
+      ],
+      "plainFix": [
+        "Look for two SEO plugins or settings that both make a sitemap, and switch one off.",
+        "Otherwise keep each page in the one sitemap for its kind of page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page is listed in more than one sitemap"
+    },
+    "sitemap-lastmod-invalid": {
+      "plainTitle": "Sitemap dates that are wrong",
+      "plainWhat": [
+        "Your sitemap gives some pages a last-changed date that isn't a date, or that hasn't happened yet.",
+        "Google uses these dates only when they're accurate, so it may ignore them all.",
+        "Pages you change may then show up changed in search later."
+      ],
+      "plainFix": [
+        "Check your site's SEO settings or plugin: most fill in each page's real last-changed date when left to themselves.",
+        "Ask your developer to correct the dates, if your sitemap is made some other way."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every sitemap date is a real date in the past"
+    },
     "title-missing": {
       "plainTitle": "Pages with no title",
       "plainWhat": [
@@ -1246,6 +1331,56 @@
       "plainPassed": "No two pages share a main heading",
       "plainOneFix": "That's almost certainly one heading in your page design, such as your site's name, marked as the main heading of every page."
     },
+    "heading-levels-skipped": {
+      "plainTitle": "Headings that jump levels",
+      "plainWhat": [
+        "These pages have headings that jump a level, such as a main section heading followed by a sub-sub-heading.",
+        "People who use screen readers move through a page by its headings, and a jump suggests a section is missing."
+      ],
+      "plainFix": [
+        "Edit each page and use the next heading size down for each smaller section.",
+        "Change how a heading looks with your site's styles, not by picking a smaller heading."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page's headings jump a level"
+    },
+    "h1-image-only": {
+      "plainTitle": "Main headings that are pictures",
+      "plainWhat": [
+        "These pages' main heading is a picture, such as your logo, with no words of its own.",
+        "It says the same on every page, your site's name, rather than what the page is about."
+      ],
+      "plainFix": [
+        "Give each page a main heading in words that says what the page is about.",
+        "Keep the logo as a picture beside it, or elsewhere on the page."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every main heading is in words"
+    },
+    "heading-too-long": {
+      "plainTitle": "Headings that run on",
+      "plainWhat": [
+        "These pages have a main heading or section heading longer than {limit:headingMaxLength}.",
+        "A long heading is harder to take in at a glance, and on a phone it wraps over several lines."
+      ],
+      "plainFix": [
+        "Shorten each heading to what the section is about, and move the rest into the text below it."
+      ],
+      "fixer": "you",
+      "plainPassed": "No heading runs on"
+    },
+    "h2-missing": {
+      "plainTitle": "Long pages with no subheadings",
+      "plainWhat": [
+        "These long pages have no subheadings to break up their text.",
+        "Readers find it hard to scan a long page without them, and to find the part they want."
+      ],
+      "plainFix": [
+        "Divide each page's text into sections, each under a subheading that says what it covers."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every long page has subheadings"
+    },
     "low-word-count": {
       "plainTitle": "Pages with very little text",
       "plainWhat": [
@@ -1308,6 +1443,44 @@
       ],
       "fixer": "developer",
       "plainPassed": "The site answers at one address only"
+    },
+    "placeholder-text": {
+      "plainTitle": "Pages with dummy \"lorem ipsum\" text",
+      "plainWhat": [
+        "These pages have the dummy text \"lorem ipsum\" on them, which designers use until the real words are written.",
+        "Every visitor sees it, and the site looks unfinished, and Google may show it under the page in search."
+      ],
+      "plainFix": [
+        "Replace the dummy text with the page's real words, or remove the part it's in.",
+        "Check other pages made from the same design for it too."
+      ],
+      "fixer": "you",
+      "plainPassed": "No page has dummy text"
+    },
+    "readability-low": {
+      "plainTitle": "Writing that's very hard to read",
+      "plainWhat": [
+        "These pages' English text uses long sentences of long words, which makes it very hard to read.",
+        "Many readers give up before they reach the point, on phones above all."
+      ],
+      "plainFix": [
+        "Shorten long sentences, split ones that say several things, and use everyday words where they mean the same."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every page's writing is readable"
+    },
+    "boilerplate-heavy": {
+      "plainTitle": "Pages that are mostly menus and footers",
+      "plainWhat": [
+        "Less than a quarter of the words on these pages are their own: the rest are menus, footers and sidebars.",
+        "Search engines see little on them that's different from your other pages."
+      ],
+      "plainFix": [
+        "Add more of each page's own text about what it offers.",
+        "Trim menus and footers that repeat long lists of links on every page."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page has enough words of its own"
     },
     "image-missing-alt": {
       "plainTitle": "Images with no description",
@@ -1385,6 +1558,85 @@
       ],
       "fixer": "you",
       "plainPassed": "No image is too big to load quickly"
+    },
+    "image-missing-src": {
+      "plainTitle": "Images with no picture file named",
+      "plainWhat": [
+        "These pages have image spaces that don't say which picture to show.",
+        "Nothing appears there, for visitors or in Google's image search.",
+        "It's usually an empty slot in a page design, or code that fills pictures in a way that isn't standard."
+      ],
+      "plainFix": [
+        "Open each page and find the empty picture space.",
+        "Choose a picture for it in your site's editor, or remove the empty space.",
+        "Ask your developer to check how pictures are loaded, if every page has the problem."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every image names its picture file"
+    },
+    "image-no-srcset": {
+      "plainTitle": "Big images sent to phones at full size",
+      "plainWhat": [
+        "These pages show pictures at least {limit:responsiveImageMinWidth} wide, with no smaller versions for small screens.",
+        "Phones then download the whole picture, which makes the page slower and uses visitors' data."
+      ],
+      "plainFix": [
+        "Upload these pictures through your site's media library, which usually makes smaller versions for phones.",
+        "Ask your developer to offer smaller versions of each picture, if your site doesn't."
+      ],
+      "fixer": "either",
+      "plainPassed": "Big images come in smaller versions for phones"
+    },
+    "image-legacy-format": {
+      "plainTitle": "Images that could be smaller in a newer format",
+      "plainWhat": [
+        "These pages show pictures of {limit:legacyImageMinBytes} or more saved in an older format, such as JPEG or PNG.",
+        "Newer formats (WebP or AVIF) usually make the same picture a quarter to a half smaller, so pages load faster."
+      ],
+      "plainFix": [
+        "Look for an image optimisation setting or plugin that converts pictures to WebP.",
+        "Or save the pictures as WebP before you upload them."
+      ],
+      "fixer": "either",
+      "plainPassed": "No large image is in an older format"
+    },
+    "image-alt-unhelpful": {
+      "plainTitle": "Image descriptions that don't describe anything",
+      "plainWhat": [
+        "These pages have pictures whose descriptions are a file name, a camera's number such as \"IMG_1234\", or a stray letter.",
+        "People using screen readers hear that instead of what the picture shows, and Google learns nothing from it."
+      ],
+      "plainFix": [
+        "Edit each picture in your site's media library and describe what it shows in a few words.",
+        "Leave the description empty for a picture that's only decoration."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every image description says something"
+    },
+    "image-hotlinked": {
+      "plainTitle": "Images shown straight from other websites",
+      "plainWhat": [
+        "These pages show pictures that are stored on other websites, not on yours.",
+        "They can disappear or change whenever the other site moves them, and use that site's resources."
+      ],
+      "plainFix": [
+        "Check you're allowed to use each picture.",
+        "Download the ones you may use and upload them to your own site, then show them from there."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every image is shown from your own site"
+    },
+    "image-inline-large": {
+      "plainTitle": "Pictures built into the page that slow it down",
+      "plainWhat": [
+        "These pages have pictures of more than {limit:inlineImageMaxBytes} written into the page itself, not kept as separate files.",
+        "They come with the page on every visit and can't be saved by the browser, so every view is slower."
+      ],
+      "plainFix": [
+        "Ask your developer to save these pictures as ordinary image files and link to them instead."
+      ],
+      "fixer": "developer",
+      "plainPassed": "No large picture is built into a page"
     },
     "hreflang-invalid-code": {
       "plainTitle": "Language versions labelled with an invalid code",
@@ -1511,6 +1763,70 @@
       "fixer": "developer",
       "plainPassed": "No language version is written in the wrong part of the page"
     },
+    "hreflang-inconsistent-code": {
+      "plainTitle": "Language versions that disagree about their language",
+      "plainWhat": [
+        "These pages point to another language version of themselves, but name its language differently from it.",
+        "Google may then ignore the language settings and show the wrong version."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it gives the two names each pair uses.",
+        "Ask for every version to use the same language name for each page, the one the page uses for itself."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every language version agrees on its language"
+    },
+    "hreflang-header-mismatch": {
+      "plainTitle": "Language versions listed two different ways",
+      "plainWhat": [
+        "These pages list their other language versions twice, in the page and in its server settings, and the two lists differ.",
+        "Google can't tell which list is right."
+      ],
+      "plainFix": [
+        "Ask your developer to list the language versions in one place only, or to make both lists the same."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Language versions are listed one consistent way"
+    },
+    "hreflang-unlinked": {
+      "plainTitle": "Language versions that nothing links to",
+      "plainWhat": [
+        "These pages are another page's version in another language, but no page on your site links to them.",
+        "Visitors can't reach them, and search engines see them as less important."
+      ],
+      "plainFix": [
+        "Add a language switcher, or links between each page's language versions.",
+        "List these pages in your sitemap too."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every language version has links to it"
+    },
+    "hreflang-lang-mismatch": {
+      "plainTitle": "Pages that name two different languages",
+      "plainWhat": [
+        "These pages give one language in their settings for search engines and another in their page code.",
+        "One of them is usually wrong, copied from another language version unchanged."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it gives the two languages each page names.",
+        "Ask them to correct whichever one is wrong."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every page names one language"
+    },
+    "hreflang-self-only": {
+      "plainTitle": "Language settings that list no other language",
+      "plainWhat": [
+        "These pages have language settings for search engines that list only the page itself.",
+        "They do nothing on their own: they only help when they point to versions in other languages."
+      ],
+      "plainFix": [
+        "If your site has other language versions, list them all on every version.",
+        "If it has none, ask your developer to remove the language settings."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page's language settings list its other versions"
+    },
     "structured-data-invalid": {
       "plainTitle": "Details for search engines that can't be read",
       "plainWhat": [
@@ -1542,6 +1858,50 @@
       "fixer": "either",
       "plainPassed": "No details for search engines are missing a needed part",
       "plainOneFix": "That's almost certainly your page design, which leaves the same detail out of every page of one kind."
+    },
+    "structured-data-schema-errors": {
+      "plainTitle": "Product or business details Google can't use",
+      "plainWhat": [
+        "These pages describe a product, article or business for search engines in words that code doesn't have.",
+        "Search engines quietly ignore what they can't read, so those details may do nothing for the page.",
+        "A misspelt name such as \"Organisation\", or a date or currency written the wrong way, is the usual cause."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it gives the first few mistakes on each page.",
+        "If a plugin writes these details, check its settings for dates and currencies, or update it."
+      ],
+      "fixer": "developer",
+      "plainPassed": "All product and business details use words Google knows"
+    },
+    "structured-data-missing-recommended": {
+      "plainTitle": "Product or article details that could be fuller",
+      "plainWhat": [
+        "These pages describe a product, an article or your business for search engines, but leave out details Google asks for.",
+        "Nothing is broken, but Google uses them to show more in search, such as an article's picture or a product's price and stock.",
+        "A product needs a picture to be shown in Google's shopping results at all."
+      ],
+      "plainFix": [
+        "Check the list: it says what each page leaves out.",
+        "Fill in the missing details in your site's SEO or shop settings, such as an article's featured image or a product's stock.",
+        "Ask your developer to add them, if your site has no such settings."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every product and article gives the details Google asks for"
+    },
+    "structured-data-on-noindex": {
+      "plainTitle": "Product or article details on pages hidden from Google",
+      "plainWhat": [
+        "These pages describe a product or an article for search engines, but also ask not to be shown in search.",
+        "Google can't show those details for a page it leaves out, so they do nothing here.",
+        "It's harmless, but often a sign that a page meant to be found is hidden by mistake."
+      ],
+      "plainFix": [
+        "Check whether each page should appear in search results.",
+        "If it should, switch off \"hide from search engines\" for it in your site's settings.",
+        "If it shouldn't, there's nothing to do."
+      ],
+      "fixer": "you",
+      "plainPassed": "No hidden page carries product or article details"
     },
     "no-https": {
       "plainTitle": "Your site isn't secure (no HTTPS)",
@@ -1609,6 +1969,57 @@
       "fixer": "developer",
       "plainPassed": "No recommended security setting is missing"
     },
+    "security-headers-weak": {
+      "plainTitle": "Security settings that are on but too weak",
+      "plainWhat": [
+        "Your site sends some security settings to browsers, but sets them too weakly to do their job.",
+        "One that keeps visitors on the secure version of your site may lapse between visits, for example."
+      ],
+      "plainFix": [
+        "Send the list to your developer or hosting company: it says which settings are too weak.",
+        "Ask them to strengthen each one, as the list describes."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Your site's security settings are strong enough"
+    },
+    "cookies-insecure": {
+      "plainTitle": "Cookies your site sets without basic protection",
+      "plainWhat": [
+        "These pages store small files in visitors' browsers (cookies) without the basic protections browsers offer.",
+        "A login cookie without them could be read by someone else, which is how accounts get taken over."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it names each cookie and what it lacks.",
+        "Ask them to turn on the cookie protections in your site's settings or code."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Your site's cookies are protected"
+    },
+    "form-not-secure": {
+      "plainTitle": "Forms that send what people type without encryption",
+      "plainWhat": [
+        "These pages have forms that send what people type over an unencrypted connection.",
+        "Others on the same network could read it, and browsers warn visitors before they send it."
+      ],
+      "plainFix": [
+        "Ask your developer to make each form send to a secure address, one that starts with https.",
+        "If a form plugin made the form, check its settings for the address it sends to."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every form sends securely"
+    },
+    "protocol-relative-links": {
+      "plainTitle": "Links written in an old shortcut style",
+      "plainWhat": [
+        "These pages load files or link to addresses written without their start (\"//\" instead of \"https://\").",
+        "That shortcut was once common, and still works on a secure page, but it's best replaced."
+      ],
+      "plainFix": [
+        "Ask your developer to write each address in full, starting with \"https://\"."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every address is written in full"
+    },
     "url-uppercase": {
       "plainTitle": "Addresses with capital letters",
       "plainWhat": [
@@ -1654,6 +2065,96 @@
       ],
       "fixer": "either",
       "plainPassed": "No page address is very long"
+    },
+    "url-tracking-parameters": {
+      "plainTitle": "Links between your own pages tagged for ad tracking",
+      "plainWhat": [
+        "Some of your pages link to others with tracking codes meant for ads and emails in the address.",
+        "Each such link is another address for search engines, and it muddles your visitor statistics."
+      ],
+      "plainFix": [
+        "Find the links on the pages the list names, and remove the tracking codes after the \"?\" from each address."
+      ],
+      "fixer": "you",
+      "plainPassed": "No link between your own pages is tagged for tracking"
+    },
+    "url-multiple-slashes": {
+      "plainTitle": "Addresses with a double slash",
+      "plainWhat": [
+        "These pages' addresses have two slashes in a row.",
+        "That makes them different addresses from the single-slash ones, so search engines may see two copies."
+      ],
+      "plainFix": [
+        "Change the links to these pages to use a single slash.",
+        "Ask your developer to forward each double-slash address to the single-slash one."
+      ],
+      "fixer": "either",
+      "plainPassed": "No address has a double slash"
+    },
+    "url-space": {
+      "plainTitle": "Addresses with spaces in them",
+      "plainWhat": [
+        "These pages' addresses have a space in them, which addresses can't hold as typed.",
+        "It shows as \"%20\", reads badly, and breaks when the address is copied into emails."
+      ],
+      "plainFix": [
+        "Rename each page with hyphens in place of the spaces, in your site's editor.",
+        "Ask your developer to forward the old addresses to the new ones."
+      ],
+      "fixer": "either",
+      "plainPassed": "No address has a space in it"
+    },
+    "url-parameters": {
+      "plainTitle": "Pages whose address has a ? part",
+      "plainWhat": [
+        "These pages can appear in search, and their addresses have a \"?\" part, as sorting and filtering often add.",
+        "Each different \"?\" part is another address for search engines to visit, often for the same content."
+      ],
+      "plainFix": [
+        "Check whether each page is worth finding in search on its own.",
+        "If not, ask your developer to point its main address at the version without the \"?\" part."
+      ],
+      "fixer": "either",
+      "plainPassed": "No page that can appear in search has a ? part"
+    },
+    "url-non-ascii": {
+      "plainTitle": "Addresses with accented or non-English letters",
+      "plainWhat": [
+        "These pages' addresses have accented or non-English letters in them.",
+        "Search engines read them fine, but they turn into long codes when copied, which some people and tools get wrong."
+      ],
+      "plainFix": [
+        "Use plain letters, hyphens and numbers in new page addresses.",
+        "Don't rename pages that already do well in search."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every address uses plain letters"
+    },
+    "url-repetitive-path": {
+      "plainTitle": "Addresses that repeat themselves",
+      "plainWhat": [
+        "These addresses repeat part of themselves, such as \"/shop/shop/\".",
+        "It's usually a link written slightly wrong, which builds ever-longer addresses for search engines to follow."
+      ],
+      "plainFix": [
+        "Look at the pages the list names for the link that leads here.",
+        "Ask your developer to correct the link and forward the address to the right page."
+      ],
+      "fixer": "either",
+      "plainPassed": "No address repeats itself"
+    },
+    "url-internal-search": {
+      "plainTitle": "Your site's search results pages show up as pages",
+      "plainWhat": [
+        "Search engines can find and show your site's own search results pages.",
+        "They rarely help anyone arriving from a search engine, and there's no end of them to visit."
+      ],
+      "plainFix": [
+        "Look in your site's SEO settings or plugin for an option to hide search results from search engines.",
+        "Avoid linking to search results from your own pages."
+      ],
+      "fixer": "either",
+      "plainPassed": "Your site's search results stay out of search engines"
     },
     "slow-response": {
       "plainTitle": "Pages that are slow to answer",
@@ -1773,6 +2274,130 @@
       "fixer": "either",
       "plainPassed": "Every page has its sharing preview details",
       "plainOneFix": "That's almost certainly your page design, which leaves the same details out of every page."
+    },
+    "x-card-missing": {
+      "plainTitle": "Pages without a preview card for X",
+      "plainWhat": [
+        "These pages don't say which kind of preview X (Twitter) should show when someone shares them.",
+        "X then shows a plain link, or a small preview, instead of a card with a picture."
+      ],
+      "plainFix": [
+        "Turn on X (Twitter) cards in your SEO plugin or theme settings.",
+        "If there's no setting, ask your developer to add an X card to every page."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page has a preview card for X"
+    },
+    "x-card-incomplete": {
+      "plainTitle": "Preview cards for X that are missing parts",
+      "plainWhat": [
+        "These pages ask X (Twitter) for a preview card, but leave out something the card needs, such as a title or a picture.",
+        "X can't build the card, so people see a plain link instead."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it says what each page's card lacks.",
+        "Ask them to fill in the missing parts, or to write the card the way X reads it."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every preview card for X is complete"
+    },
+    "social-image-relative": {
+      "plainTitle": "Share images given an incomplete address",
+      "plainWhat": [
+        "These pages name the picture to show when they're shared, but give only part of its address.",
+        "Facebook, X and others need the full address, so they may show no picture."
+      ],
+      "plainFix": [
+        "Ask your developer to give the full address of each share picture, starting with https://."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every share picture has its full address"
+    },
+    "og-url-not-canonical": {
+      "plainTitle": "Share links that point to a different page",
+      "plainWhat": [
+        "These pages tell social networks that their address is another page's, often your home page.",
+        "Shares and likes then count toward that page, and people who click the share land there."
+      ],
+      "plainFix": [
+        "Send the list to your developer: it gives the address each page names.",
+        "Ask them to make each page name its own address, or leave the setting out."
+      ],
+      "fixer": "developer",
+      "plainPassed": "Every page names its own address for sharing"
+    },
+    "social-tags-multiple": {
+      "plainTitle": "Share settings given twice with different values",
+      "plainWhat": [
+        "These pages give the same share setting, such as the title to show, twice, with different words.",
+        "Social networks pick one of them, and it may not be the one you want."
+      ],
+      "plainFix": [
+        "Look for two plugins or a plugin and your theme both adding share settings, and turn one of them off.",
+        "If that isn't it, ask your developer to remove the copy."
+      ],
+      "fixer": "either",
+      "plainPassed": "No share setting is given twice"
+    },
+    "og-title-duplicate": {
+      "plainTitle": "Pages that share the same title when shared",
+      "plainWhat": [
+        "These pages have different titles in search, but show the same title when they're shared on social networks.",
+        "People who see the shares can't tell the pages apart."
+      ],
+      "plainFix": [
+        "Give each page its own share title in your SEO plugin, or leave it empty so the page's own title is used."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page has its own share title"
+    },
+    "og-description-duplicate": {
+      "plainTitle": "Pages that share the same summary when shared",
+      "plainWhat": [
+        "These pages have different summaries in search, but show the same summary when they're shared on social networks.",
+        "Each share then says the same thing, whatever the page is about."
+      ],
+      "plainFix": [
+        "Give each page its own share summary in your SEO plugin, or leave it empty so the page's own description is used."
+      ],
+      "fixer": "either",
+      "plainPassed": "Every page has its own share summary"
+    },
+    "social-image-broken": {
+      "plainTitle": "Share images that don't load",
+      "plainWhat": [
+        "The picture these pages name for social networks doesn't load: it's missing, or it isn't a picture.",
+        "Shares of these pages show no picture."
+      ],
+      "plainFix": [
+        "Choose a new share picture for each page in your SEO plugin, or upload the missing one again."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every share picture loads"
+    },
+    "social-image-too-large": {
+      "plainTitle": "Share images too big to show",
+      "plainWhat": [
+        "The picture these pages name for social networks is larger than 5 MB.",
+        "X won't show a picture that large, and other networks are slow to load it."
+      ],
+      "plainFix": [
+        "Save a smaller copy of each picture, under 1 MB is plenty, and choose it as the share picture."
+      ],
+      "fixer": "you",
+      "plainPassed": "No share picture is too big"
+    },
+    "social-image-too-small": {
+      "plainTitle": "Share images too small to show well",
+      "plainWhat": [
+        "The picture these pages name for social networks is smaller than they need.",
+        "Facebook won't use a picture under 200 pixels square, and X shows a small one blurred or not at all."
+      ],
+      "plainFix": [
+        "Choose a larger share picture for each page: 1,200 by 630 pixels suits every network."
+      ],
+      "fixer": "you",
+      "plainPassed": "Every share picture is large enough"
     },
     "head-tags-in-body": {
       "plainTitle": "Page settings that ended up where they're ignored",
@@ -1957,6 +2582,10 @@
     "resources-off": {
       "plainText": "This site check was set not to load images and other files.",
       "plainAction": "Check the site again, with \"Images and other files\" ticked."
+    },
+    "hreflang-off": {
+      "plainText": "This site check was set not to read the other language versions your pages name, and some of them weren't read.",
+      "plainAction": "Tick the setting that reads your other language versions in the check's Advanced settings, then check the site again."
     },
     "robots-txt-ignored": {
       "plainText": "This site check was set to ignore your site's rules files for search engines, so it can't say what they put off limits or whether each can be read.",

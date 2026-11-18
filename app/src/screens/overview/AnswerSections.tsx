@@ -1,4 +1,6 @@
 import { Link } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
+import type { CheckChange } from '../../api/fixLoop';
 import type { Checks } from '../../api/types';
 import { affectedNoun, affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { formatCount, formatCountOf } from '../../lib/format';
@@ -10,12 +12,40 @@ import { SeverityMark } from '../../ui/SeverityMark';
 import { Stat, StatLink, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
 import { outcomeWord } from '../../ui/severity';
-import type { AnalysisTotals, CheckEntry } from '../issues/checkList';
+import { causeWords, type AnalysisTotals, type CheckEntry } from '../issues/checkList';
 import { CountWithReach } from '../issues/CountWithReach';
 import { categoryFigures, fixFirst, severityFigures, skippedGroups } from './answer';
 import { linkProps } from './overviewLinks';
 
 const SEVERITY_LABELS = { error: 'Errors', warning: 'Warnings', notice: 'Notices' } as const;
+
+const capitalised = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
+/** A count, and what it was: "9 URLs · was 12". */
+function withWas(count: ReactNode, was: string | null): ReactNode {
+  return was ? (
+    <span className="inline-flex items-baseline gap-1.5">
+      {count}
+      <span className="text-12 text-text-muted">· {was}</span>
+    </span>
+  ) : (
+    count
+  );
+}
+
+/**
+ * What Fix first adds after a check's count when the crawl is compared with another (the fix loop): "was 9" for a count
+ * that moved, "new" for a check that found nothing then, "new check" for one that didn't run then; nothing otherwise.
+ */
+function wasWords(change: CheckChange | null | undefined): string | null {
+  if (!change) return null;
+  if ((change.state === 'fewer' || change.state === 'more') && change.then !== null) {
+    return `was ${formatCount(change.then)}`;
+  }
+  if (change.state === 'new') return 'new';
+  if (change.state === 'newCheck') return 'new check';
+  return null;
+}
 
 /**
  * Issues by severity: the checks that found issues, and their issues, each opening Issues at that severity; then what
@@ -47,7 +77,11 @@ export function SeverityFigures({
             }
             value={<Num value={figure.checks} noun="check" />}
             context={
-              figure.checks === 0 ? 'None found an issue' : `${formatCountOf(figure.issues, 'issue')} between them`
+              figure.checks === 0
+                ? 'None found an issue'
+                : figure.causes === null
+                  ? `${formatCountOf(figure.issues, 'issue')} between them`
+                  : `${capitalised(causeWords(figure.causes, figure.templateCauses, figure.severity === 'notice' ? 'change' : 'fix'))}, from ${formatCountOf(figure.issues, 'issue')}`
             }
           />
         ))}
@@ -98,6 +132,7 @@ export function FixFirst({
   hiddenFound = 0,
   order,
   totals,
+  changeOf,
 }: {
   crawlId: string;
   entries: readonly CheckEntry[];
@@ -107,6 +142,8 @@ export function FixFirst({
   order?: readonly string[] | undefined;
   /** The analysis's own totals, each count's share is of: the pages it ran on, the URLs crawled when it ran. */
   totals?: CrawlCounts | null | undefined;
+  /** The fix loop: each check's change since the crawl compared with ("was 9"); left out, none is said. */
+  changeOf?: ((checkId: string) => CheckChange | null) | undefined;
 }) {
   const list = fixFirst(entries, undefined, order);
   return (
@@ -140,7 +177,7 @@ export function FixFirst({
                       {entry.check.title}
                     </>
                   }
-                  meta={affected(entry, totals ?? null)}
+                  meta={withWas(affected(entry, totals ?? null), wasWords(changeOf?.(entry.check.id)))}
                   description={<span className="line-clamp-1">{entry.check.description}</span>}
                 >
                   <Link {...linkProps(crawlId, link)} />

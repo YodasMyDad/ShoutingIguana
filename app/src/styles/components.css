@@ -2182,6 +2182,47 @@
     color: var(--color-text);
   }
 
+  /* A file named by its name (an image, a stylesheet): the name leads, its query or folder after it, muted; each cut at
+     its end where there isn't room, the name last of all, and the name at the end of its stem, so its extension always
+     shows ("harpswell-metal-pat….jpg"). The full URL is on hover and copy. */
+  .si-url__shown--file {
+    display: flex;
+    gap: var(--space-1-5);
+    align-items: baseline;
+  }
+
+  .si-url__file {
+    display: flex;
+    flex: 0 0 auto;
+    max-width: 100%;
+    min-width: 0;
+    color: var(--color-text);
+  }
+
+  .si-url__stem {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-url__ext {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .si-url__rest {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-muted);
+    text-overflow: ellipsis;
+  }
+
+  .si-url__go .si-url__file {
+    color: var(--color-accent-text);
+  }
+
   /* The open-in-browser button has its own room at the end, so it never covers the end of the URL. */
   .si-url--openable {
     padding-right: calc(var(--control-height-xs) + var(--space-0-5));
@@ -2716,6 +2757,42 @@
   }
 
   .si-menu-item[data-highlighted] .si-switcher-menu__date {
+    color: var(--color-text-secondary);
+  }
+
+  /* Advanced's score at a crawl's end in the switcher (the fix loop): the number, "so far" under it. */
+  .si-switcher-menu__score {
+    display: inline-flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: var(--space-2);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /* Advanced's Compare with… (the fix loop): a crawl's start over its status, URLs and score, as the switcher's rows. */
+  .si-compare-menu {
+    width: var(--switcher-menu-width);
+    max-width: calc(100vw - 2 * var(--space-2));
+  }
+
+  .si-compare-menu .si-menu-item[role='menuitemradio'] {
+    height: auto;
+    min-height: var(--list-row-height);
+    padding-block: var(--space-1-5);
+  }
+
+  .si-compare-menu__tag,
+  .si-compare-menu__meta {
+    color: var(--color-text-muted);
+  }
+
+  .si-compare-menu__meta {
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-menu-item[data-highlighted] :is(.si-compare-menu__tag, .si-compare-menu__meta) {
     color: var(--color-text-secondary);
   }
 

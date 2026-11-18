@@ -311,8 +311,66 @@ machine):
     cluster is fetched again.
   - Verify on `e208ece` (this merge's tree): engine 1,971, CLI 34, sidecar 287; bench and readbench exit 0.
 
-Next: S1 and S2 (running in the fix-loop lane), then U1 and U2 side by side. Batches 4 to 9 continue in the checks
-lane, which now merges `ui/step-3` for `Recheck`. The views lane is still building.
+- **`1602893`: the fix loop in the sidecar, S1 and S2** (`ui/3b-fixloop-engine` at `4886cac`).
+  - Library items carry `siteKey`, `previous` and `changes` from cached summaries, without opening a file.
+  - Endpoints: `/changes`, `compareWith` on groups and rows, `/fixed`, and `recheck` on `/api/checks`.
+  - The report's "Since your last check"; the workbook's "Fixed since" sheet.
+  - Rechecks: plan, start, reads, the `rechecking` status, events, `needs-secrets`, Stop, and the refusals
+    (`site-busy`, `recheck-not-latest`).
+  - A duplicate is fixed only when its own text changed. Unchanged text that is unflagged only because other pages
+    changed is "not checked".
+  - Verify on the same tree: engine 1,976, CLI 34, sidecar 315, bench exit 0.
+  - Readbench missed one timing gate under the lanes' load: a links search for a common word took 2,529 ms against
+    2,500, where it took 1,281 ms at E4. It is to be rerun on a quiet machine.
+- **`1b714f1`: new checks, batches 4 to 6** (`ui/3b-checks` at `a5e4d53`): sitemaps and robots.txt (changes C2, C4),
+  structured data (C5), images.
+  - The real-site audit, all correct:
+    - garden: `robots-txt-no-sitemap` 1, `image-legacy-format` 240;
+    - aptitude: `image-legacy-format` 28, `image-alt-unhelpful` 7, `image-missing-src` 1, `image-hotlinked` 1.
+  - Two wrong flags were fixed first: `structured-data-schema-errors` on a `www.schema.org` context, and
+    `image-alt-unhelpful` on a logo whose alt is its plain name.
+  - The merged tree (S1 and S2 with batches 4 to 6) was built and tested: engine 2,081, CLI 34, sidecar 315; app
+    typecheck, unit 3,994.
+
+- **`40f5e6b`: the owner's UX audit, screen and settings fixes** (`ui/3b-views` at `9bf5bd3`).
+  - Issues sorted by what matters (Fix first, Most URLs, Most points, Severity, Category; remembered per mode), with
+    the evidence above Why and How.
+  - Related checks as tested catalog data (`IssueDefinition.Clears`) with computed counts: "Fixing this also clears …"
+    in both modes, folded in Simple's What to fix.
+  - Headlines as things to change, and how many are in the template.
+  - Links grouped by target, with a grouped export, an Images preset, file-name labels and thumbnails (the broken
+    glyph only for images that failed), and the inspector's Images tab.
+  - robots.txt blocked URLs with Linked from, In a sitemap and conflicts, fitting at 960 px.
+  - Secrets go to Windows Credential Manager only when the owner ticks Remember; the words are truthful; SOCKS5 with
+    a login is tested.
+  - Checks on this merge's tree: engine 2,107 + 323 + 34; bench and readbench passed; unit 4,214; stories 571; e2e
+    275 passed.
+- **`8ca8a53`: new checks, batches 7 to 9; the catalog is 170** (`ui/3b-checks` at `68dcdd52`).
+  - Security and URLs, headings, content and hreflang, Open Graph and X cards. `title-same-as-h1` is not built, as
+    ruled.
+  - `heading-levels-skipped` judges from the first H1 on (the orchestrator's ruling: hidden theme headings before
+    the H1 aren't a skipped level).
+  - `hreflang-unlinked` flags pages only.
+  - Share-text duplicates never flag the page whose text is its own.
+  - The real-site audit was all correct after those fixes: HSTS under a year, cookies without Secure, heading jumps,
+    lorem ipsum, X cards, `og:url` on page 2s.
+  - `AnalysisFreshness` is 14.
+  - Checks on this merge's tree: engine 2,190, sidecar 323, CLI 34; bench ok; unit 4,214; stories 571 × 2; e2e 13
+    specs.
+  - Readbench missed two timing gates under load (the links search for a common word, 2,694 ms against 2,500; pages
+    by response time, 199 ms against 185). Batch 9 adds a share-image link from every page.
+
+Next:
+
+- U1 and U2 on `ui/3b-fixloop-ui`, now building on the merged views. Then the views lane's headline round: errors and
+  warnings first, notices apart.
+- Then the round's gates on a quiet machine:
+  - readbench first (if the links search misses again, it's investigated, not waved through);
+  - the full app verify and `e2e:filled`;
+  - the stories in forced colours and reduced motion;
+  - the release build, `smoke:shell`, the installer and `smoke:tauri`.
+- Then gallery 7 and the owner's look. Rechecking the garden site for real waits for the owner's word, and so does a
+  third Jitsunami crawl.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.

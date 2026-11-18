@@ -11,7 +11,7 @@ import gardenAnalysis from './simple/garden-analysis.json';
 /** The catalog of 122 checks with their plain words, as `GET /api/checks` answers. */
 export const SIMPLE_CHECKS = engineChecks as Checks;
 
-/** The garden crawl's analysis: 86, Good; 2 serious, 4 worth fixing, 14 worth a look; 13 skipped. */
+/** The garden crawl's analysis: 86, Good; 2 serious, 4 worth fixing, 15 worth a look; 17 skipped. */
 export const GARDEN_ANALYSIS = gardenAnalysis as Analysis;
 
 /** The garden crawl's library item, as the Summary reads it. */
@@ -145,8 +145,14 @@ export function rowsPage(rows: IssueRow[], total: number): GridPage<IssueRow> {
   };
 }
 
-/** The routes Simple's screens read: the library, the item, the catalog, the analysis, and no groups by default. */
+/**
+ * The routes Simple's screens read: the library, the item, the catalog, the analysis, and by default no groups but a
+ * check's flagged URLs as rows (stand-ins on the crawl's site), as many as the analysis counts: never a count over an
+ * empty list (round 4). A test or story that needs a check's real groups or rows gives its own routes first.
+ */
 export function simpleRoutes(item: CrawlListItem, analysis: Analysis | 'not-analyzed'): FakeRoute[] {
+  const countOf = (checkId: string) =>
+    analysis === 'not-analyzed' ? 0 : (analysis.counts.find((count) => count.checkId === checkId)?.count ?? 0);
   return [
     ['GET', /^\/api\/crawls$/, () => json([item])],
     ['GET', /^\/api\/crawls\/([0-9a-f]{16})$/, () => json(item)],
@@ -168,13 +174,63 @@ export function simpleRoutes(item: CrawlListItem, analysis: Analysis | 'not-anal
     [
       'POST',
       /^\/api\/crawls\/[0-9a-f]{16}\/issues\/[^/]+\/groups$/,
-      (_request, match) => json(groupPage(match[0].split('/')[5] ?? '', [], 0)),
+      (_request, match) => {
+        const checkId = match[0].split('/')[5] ?? '';
+        return json(groupPage(checkId, [], countOf(checkId)));
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/issues\/[^/]+\/rows$/,
+      (request, match) => {
+        const total = countOf(match[0].split('/')[5] ?? '');
+        const limit = (request.body as { limit?: number } | undefined)?.limit ?? 200;
+        const rows = Array.from({ length: Math.min(total, limit) }, (_, index) => ({
+          id: 10_000 + index,
+          url: `${SITE}/example-page-${index + 1}/`,
+          title: null,
+          detail: null,
+          relatedUrl: null,
+        }));
+        return json(rowsPage(rows, total));
+      },
     ],
     [
       'GET',
       /^\/api\/health$/,
       () => json({ version: 'test', engineVersion: 'test', dataDir: 'C:\\data', stateDir: 'C:\\state', pid: 1 }),
     ],
+    // The fix loop, as a sidecar with nothing to compare with and no recheck yet answers: what a recheck of a check's
+    // pages would do (all of them, about 20 seconds), no rechecks, and no previous crawl.
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/rechecks\/plan$/,
+      (request) => {
+        const checkId = (request.body as { checkId?: string } | undefined)?.checkId ?? null;
+        const counted =
+          analysis === 'not-analyzed' ? 0 : (analysis.counts.find((count) => count.checkId === checkId)?.count ?? 0);
+        return json({
+          checkId,
+          group: null,
+          urlList: false,
+          kinds: ['urls'],
+          judged: counted,
+          phase1: counted,
+          phase2Max: 0,
+          limit: 1_000,
+          capped: false,
+          notRechecked: 0,
+          estimateMs: 21_000,
+          suggestFullCheck: false,
+          analysisFirst: false,
+          countBefore: counted,
+          secrets: { missingHeaders: [], proxyCredentials: false },
+          refused: null,
+        });
+      },
+    ],
+    ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/rechecks$/, () => json({ rechecks: [] })],
+    ['GET', /^\/api\/crawls\/([0-9a-f]{16})\/changes/, (_request, match) => json({ crawlId: match[1], with: null })],
   ];
 }
 

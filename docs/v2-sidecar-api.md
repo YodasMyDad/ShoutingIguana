@@ -253,7 +253,7 @@ Built in stages:
   `plainTitle` (the score) is the category in Simple's words, such as "Search descriptions";
 - `checks: [{ id, category, severity, title, description, fix, why, learnMore, grouping, subject, siteWide,
   reportedOnce, plainTitle, plainWhat, plainFix, fixer, plainPassed, plainOneFix, plainLooksFor, evidence,
-  targetFacts }]`, in catalog order.
+  targetFacts, clears }]`, in catalog order.
   `description` is what is wrong, `why` is why it matters and `fix` is what to do. `learnMore` is an absolute URL, or
   null when no authoritative page exists. `grouping` (E3a) is how
   the check's issues group: see [Issue groups](#issue-groups-e3a).
@@ -266,6 +266,18 @@ Built in stages:
   **(evidence)** 16 are `sources` and 20 `targets`: `http-page`, `url-uppercase` and `url-underscores` become
   `sources` (the links to update), and `image-missing-alt`, `image-alt-too-long` and `image-missing-dimensions`
   become `targets` (the images at fault: see [Issue groups](#issue-groups-e3a)).
+- **`clears`** (step 3b, related checks) is the checks a fix of this one also clears, by id, as the catalog declares
+  them: this check's `references` is `sources` (it flags URLs others refer to) and each check named is a `targets` check
+  of pages, grouped by `relatedUrl` (it flags the pages that refer to them). `internal-client-error`,
+  `internal-server-error` and `internal-unreachable` clear `broken-internal-links`, `image-broken`, `broken-resources`,
+  `canonical-broken`, `hreflang-broken-target`, `pagination-broken` and `social-image-broken`; `redirect-chain` clears
+  `links-to-redirects` and `pagination-broken`; `redirect-loop` clears `broken-internal-links` and `canonical-broken`;
+  `redirect-broken` `broken-internal-links`, `image-broken`, `broken-resources`, `canonical-broken` and
+  `social-image-broken`. Empty for the rest: a canonical
+  loop's pages aren't also reported as canonicalised to a non-indexable page, and a canonical header on a redirect is
+  the redirect's own fault.
+  What a fix clears **on a crawl** is counted, never assumed: the analysis's `counts[].clears`. Only how a check is
+  shown: not stored with an analysis, nor in the checks' fingerprint.
 - **`evidence`** (evidence) is the URL columns that show what the check found, in the order to show them, beside each
   row's `url` and `detail`: `["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
   `["metaRobots", "xRobotsTag"]` for `noindex-page` (where the noindex comes from), `["redirectChain"]` for the
@@ -384,6 +396,29 @@ The options DTO has every public `CrawlOptions` property. `extraHeaders` is an o
 - `status` is null when no HTTP answer came back. `message` is one plain sentence the UI shows as it is: "The proxy
   answered and the site replied 200 OK in 182 ms.", "The proxy asks for a user name and password (407).", "Nothing
   answered at the proxy's address.".
+
+#### SOCKS5 with a login (step 3b)
+
+A `socks5://user:password@host:port` proxy logs in with that user name and password (RFC 1929), for the proxy test
+and for every request a crawl makes: .NET's own SOCKS5 client does it from the proxy's credentials, which
+`ProxyFactory` takes out of the address. Tested against a SOCKS5 server of the tests' own that requires a login
+(`TestSite/Socks5ProxyServer`): a crawl through it reads the site exactly as a crawl straight to it does, every
+connection logged in with the password as typed; the proxy test answers `ok` through it (`Socks5CrawlTests`,
+`ProxyTesterTests`, `ProxyEndpointTests`). The engine renders no page in a browser, so nothing else needs the login.
+
+A SOCKS5 proxy's refusal comes from .NET as a failed tunnel whatever it was; the engine reads which from the runtime's
+own words (`SocksRefusals`) and says it plainly:
+
+- a wrong user name or password: the proxy test's `proxyAuthRequired`, "The SOCKS5 proxy didn't accept the user name
+  and password."; a crawl stores "The SOCKS5 proxy didn't accept the user name and password" as the request's error
+  (its robots.txt answer's, when the start origin's robots.txt is what it asked first) and doesn't ask again as if it
+  could pass;
+- none given to a proxy that wants one: `proxyAuthRequired`, "The SOCKS5 proxy asks for a user name and password.";
+- a proxy that let the crawler in but couldn't reach the site: `siteUnreachable`, "The SOCKS5 proxy let the test in,
+  but couldn't reach the site." (a crawl: "The SOCKS5 proxy couldn't reach the site", asked again as any network
+  failure is).
+
+Before step 3b both refusals of a login read "The proxy answered, but it couldn't reach the site.".
 
 ### Library (E1)
 
@@ -851,7 +886,10 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 
 ```json
 {"analyzedAt":"…","engineVersion":"…","pagesAnalyzed":265,"durationMs":7012,"isPartial":true,"outOfDate":false,
- "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12,"likelyTemplate":false}],
+ "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12,"likelyTemplate":false,
+   "causes":12,"templateCauses":0,"clears":[]},
+   {"checkId":"internal-client-error","count":9,"likelyTemplate":false,"causes":9,"templateCauses":0,
+    "clears":[{"checkId":"broken-internal-links","pages":5,"all":true}]}],
  "skipped":[{"checkId":"orphan-page","reason":{"code":"no-sitemap","text":"No sitemap could be read.",
    "plainText":"No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
    "plainAction":"Add a sitemap, or fix the one that can't be read, then check the site again."}}],
@@ -869,6 +907,24 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   pages: every page lacks a viewport, or x-default. It is probably the site's template, so one fix: the UI says so. False
   otherwise, and for every other check, whose groups say it instead (`likelyTemplate` on each group). Worked out from
   the counts whenever the analysis is read, so an analysis by any engine has it.
+- **`counts[].causes` and `counts[].templateCauses`** (step 3b, headline counts) say what a check's issues come to as
+  work: the separate things to change, and how many of those are likely in the site's template. They are counted from
+  the check's groups as [Issue groups](#issue-groups-e3a) gives them: a group that shares a cause (one related URL, such
+  as a broken link's target or a large image) or is `likelyTemplate` is one thing; every other flagged URL is one of
+  its own. A check that doesn't group is one thing (in the template) when its `likelyTemplate` is true, else a thing a
+  URL; so is a check grouped by how each URL answered (`internal-client-error`: two 404s are two fixes). **Never more
+  than the URLs it flagged**: a page naming 30 images without dimensions is one page's markup to change at most (the
+  garden crawl's 230 pages name 3,811 such images, mostly from shared templates no group can see), and a page linking
+  to several broken URLs has them counted by the check of those URLs. So the logo link without text on 264 pages is 1,
+  40 titles too long are 40. The UI says "about 40 things to change, 3 of them in the site's template", leaving out a
+  check that another's fix clears entirely (`clears[].all`), as that's the same job. **Null** for a check this engine doesn't know, for a check that found nothing, and when another
+  analysis finished while this one was read (read again). Kept with the grid reads' counts while the file stands still.
+- **`counts[].clears`** (step 3b, related checks) is what a fix of the check also clears: for each check its catalog
+  `clears` names that also found something, **`pages`**, the pages it flagged whose every target is a URL this check
+  flagged (a page that also links to another broken URL keeps its issue, so isn't counted), and **`all`**, true when
+  that is every page it flagged: the fix clears it entirely, and the UI folds it under this one. Only checks with
+  `pages` above 0, in the order the catalog names them. Empty for every other check, and for an analysis from before
+  every target was kept (`AnalysisFreshness.VERSION` 4), which kept only a page's first target and so can't tell.
 - **`isPartial`** (E2) is true when a check was skipped or a rule failed on some pages; the notes say which.
 - **`skipped`** is every catalog check missing from the counts. Its `reason` (E2) has a stable `code` to key on, and
   a `text` to show beside the check ("No sitemap could be read."). A check skipped for several reasons gets the
@@ -970,6 +1026,7 @@ one moment is never set against a total from another, and the app, the report an
 | `start-not-root` | The crawl didn't start at the site's root (its start URL has a path other than `/`), so its first page isn't known to be the site's home page: `site-hidden-from-search` can't be judged |
 | `external-links-off` | The crawl was told not to check links to other sites |
 | `resources-off` | The crawl was told not to fetch images and other files |
+| `hreflang-off` | The crawl wasn't told to follow hreflang links (the default), and a language version they name was left unread, so which versions nothing else leads to can't be told |
 | `robots-txt-ignored` | The crawl was told to ignore robots.txt. It asked for every URL, so none was refused (`blocked-by-robots`); it read no other origin's robots.txt (`robots-txt-unreachable-other-origin`); and it read the site's own only for sitemap discovery, so with sitemaps off `robots-txt-unreachable` and `robots-txt-missing` are skipped too |
 | `site-versions-unchecked` | The site's other versions (www or not, http or https) weren't all checked |
 | `rule-failed` | The check's rule failed once every page was read, so it has no results (the log says why) |
@@ -1002,7 +1059,8 @@ what each analysis stores in its crawl file.
 
 - **`settings`** is each limit's value by name: the body `PUT` and `validate` take. **`limits`** lists every limit in
   the order Settings shows them, each with its `value` (the same number), the engine's `default`, its `unit`
-  (`characters`, `pixels`, `words`, `bits`, `bytes` or `ms`), the `min` and `max` it may be set within, and a
+  (`characters`, `pixels` for text, `px` for an image's width, `words`, `bits`, `bytes`, `ms`, `links`, `clicks` or `points`), the
+  `min` and `max` it may be set within, and a
   `description`: one sentence saying what it does, to show as it is. A width in `pixels` also has
   **`pixelsPerCharacter`** (9.4 for a title, 6.2 for a description; no other limit has the field): an ordinary
   character's width, so the value over it is the characters it holds, rounded to the nearest 5 from 20 on and to the
@@ -1104,6 +1162,7 @@ the checks or thresholds changed keeps its summary, shown behind the out-of-date
 - `/search` (E6);
 - `/links/ends`, and `linkEnds` on the URL grids (E6);
 - `/favicon` (E6);
+- `/links/groups` and `/urls/images` (step 3b);
 - `/export` (E5).
 
 The GET issues endpoint above stays as it is, for scripts and the design fixtures; the Issues screen uses `/rows`.
@@ -1254,7 +1313,7 @@ in a row is the JSON object below, or null; its titles are "Redirect chain" and 
 [export](#export-e5) writes it as one line of text: `301 → https://www.example.com/b/ (301) →
 https://www.example.com/c/ (200)` (the URL's own status, then each hop's URL and status; `(meta refresh)` before a
 hop reached by one; `, a loop` or `, more than 20 hops` at the end), and `Disallow: /cart/ (line 12 of
-https://www.example.com/robots.txt)`, `robots.txt couldn’t be read` or `No rule kept`. A new **`unit`**, `px`, is
+https://www.example.com/robots.txt)`, `robots.txt couldn’t be read` or `No matching rule`. A new **`unit`**, `px`, is
 `pixelWidth`'s and `pixelHeight`'s ("Image width (px)"), and since [pixel widths](v2-pixel-widths.md) `titleWidth`'s
 and `descriptionWidth`'s.
 
@@ -1312,6 +1371,7 @@ inspector chains do.
 | `pixelWidth`, `pixelHeight` (evidence) | number | | An image's own size in pixels, read from the first bytes of its file as the crawl fetched it: PNG, GIF, JPEG, WebP, and AVIF where its header says. Null for anything else (an SVG included), an image whose header couldn't be read, and every URL of a crawl made before the crawler read them. Shown only: they neither sort nor filter, as a crawl made before them has no column to read |
 | `fetchError` (evidence) | text | | What went wrong when the request didn't succeed, as the crawl recorded it ("No response within 20 seconds", "Name not resolved", "robots.txt couldn't be read"). Null for a URL that answered with success, and for an error the crawl recorded no words for. Filters; doesn't sort |
 | `redirectChain` (evidence) | object | | The URL's redirects hop by hop, to where they end, come back on themselves, or stop: exactly the inspector's `redirects`, `{ hops: [{ id, url, statusCode, outcome, via }], final: { id, url, statusCode, outcome }, loop, tooLong }`. Null for a URL that doesn't redirect |
+| `redirectKind` (evidence) | text | | What the URL's redirect changes, from the URL and where it leads: its kinds, comma separated in this order, of `httpToHttps`, `httpsToHttp`, `addsWww`, `removesWww`, `otherHost` (then nothing more is said), `addsSlash`, `removesSlash`, `changesCase`; `other` when the path or query changes some other way (after a scheme or www change, if any). Null for a URL that doesn't redirect. Shown only: it neither sorts nor filters |
 | `robotsRule` (evidence) | object | | For a URL robots.txt refused, why, as the inspector's `robotsTxt` test says it: `{ origin, reason, line, rule }`, `reason` being `rule` (with the stored file's `line` and its text as `rule`), `unreachable` or `unknown`. Null for a URL robots.txt didn't refuse |
 
 - **Sorting.** `url` sorts, and every number, enum and boolean column but those read from each response (`outcome`,
@@ -1543,7 +1603,7 @@ page's links to itself left out, in the order they were found:
   that robots.txt refused, that timed out or that wasn't checked says which, where `statusCode` is null for each of
   them as it is for a URL never fetched (`outcome` null).
   `kinds` filters by the kind of link (`hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`,
-  `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`; every kind by default).
+  `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`, `socialImage` (an og:image or twitter:image given as a full URL); every kind by default).
 - `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
   is `content`, `navigation`, `header`, `footer`, `sidebar` or `head`. `flags` are among `noFollow`, `sponsored`,
   `ugc`, `imageLink`, `outsideHead`, `samePage` and `fromHttpHeader`; `followed` is whether search engines follow a
@@ -1558,6 +1618,33 @@ it's unpacked, a piece at a time, so a view of a 16 MB page holds a few megabyte
 as every answer is (`<` as `<`), so its bytes hold no markup. HTML over 16 MB unpacked is cut there, on a
 character's boundary, and `truncated` says so; `bytes` is its size unpacked, before any cut, or null for a page over
 512 MB, which isn't unpacked that far. A page whose stored HTML is damaged is `file-error`.
+
+#### A page's images (step 3b)
+
+`POST /api/crawls/{id}/urls/images` with `{ "urlId": 119, "limit": 100 }` lists the images the page shows, each image
+file once, **the largest first**: the inspector's Images.
+
+```json
+{"urlId":119,"total":14,"links":17,
+ "rows":[{"id":2210,"url":"https://www.example.com/img/hero.jpg","links":1,"text":"A teak bench","positions":["content"],
+          "target":{"statusCode":200,"outcome":"success","contentType":"image/jpeg","sizeBytes":2202009,
+                    "pixelWidth":4000,"pixelHeight":3000,"final":null,"indexability":null,"canonical":null}}]}
+```
+
+- **`rows`** are the page's image links (`img`, `srcset` candidates, and the rest the links grid calls `image`) to
+  other URLs, grouped by file: **`links`**, how many times the page shows it; **`text`**, the alt text of the first
+  of them that has one (null when none has); **`positions`**, where on the page they sit; **`target`**, what the file
+  is, as a check group's `related` reads: its size and pixels **after any redirects**, which is what
+  `image-too-large` judges it by. The inspector flags one over the analysis settings' `largeImageBytes`
+  (`limits.largeImageBytes` of `/urls/inspect`). In order of size, largest first, those of no known size last, then
+  in the order the page shows them.
+- **`total`** is the image files the page shows, each once, and **`links`** its image links; **`limit`** (1 to 500,
+  default 100) caps the rows. **`pixelSizes`** says whether the crawl measured images' pixel sizes, as
+  `/links/groups`' does.
+- **What it costs**: the page's own image links, on the links' index by source (at most the parser's 10,000 links a
+  page), and each file's facts. No URL summary is needed.
+- Errors: `url-not-found` for a URL the crawl doesn't have, `invalid-query` without a `urlId` or with a `limit` out of
+  range, `bad-request` for a field it doesn't take.
 
 ### Issue groups (E3a)
 
@@ -1769,6 +1856,8 @@ the page without opening anything:
     as the URL grid's columns of those names have them;
   - `responseMs` is how long the URL's own answer took (not its redirects' end's: a slow redirect is slow), as the URL
     grid's column; null when it wasn't fetched. `slow-external-links` names it;
+  - `redirectKind` is what the URL's own redirect changes, as the URL grid's column; null when it doesn't redirect.
+    `links-to-redirects` names it;
   - `final` is where its redirects end, `{ id, url, statusCode, outcome, hops, loop }`, null when it doesn't
     redirect: `hops` the redirects followed, `loop` true when they come back on themselves (then `final` is the URL
     the loop returns to). Meta refreshes count, as the analysis counts them;
@@ -1831,7 +1920,7 @@ snapshot per call, a request given up stops its read, reads queue, and an analys
   | Column | Type | Sorts | Is |
   | --- | --- | --- | --- |
   | `id` | number | Yes | The link's id: the order the crawl stored links in. The default sort |
-  | `kind` | enum | | `hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`, `canonical`, `hreflang`, `pagination`, `metaRefresh` or `redirect` |
+  | `kind` | enum | | `hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`, `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect` or `socialImage` |
   | `text` | text | | The anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link |
   | `position` | enum | | Where on the page: `content`, `navigation`, `header`, `footer`, `sidebar` or `head` |
   | `noFollow`, `sponsored`, `ugc` | boolean | | The link's own `rel` says it |
@@ -1917,6 +2006,74 @@ for a view of more than a page of links, and what [`linkEnds`](#urls-e3a) narrow
   are of the links the crawl had then, and the URL grid narrowed within the same 2 s counts the same URLs.
 - Errors: `invalid-query` on `end`, `filters[…]`, `search`, `offset` and `limit`; `needs-analysis` for a filter that
   needs the URL summary, without one.
+
+#### Links grouped by target (step 3b)
+
+`POST /api/crawls/{id}/links/groups` lists the targets of the links a view matches, one row a target, with what the
+links that lead to it are: a broken footer link is one row, however many pages carry it. It is the Links screen's
+"Group by target", for any filter or preset the grid has.
+
+```json
+{"filters":[{"column":"to.statusClass","op":"in","values":["4xx","5xx"]}],"sort":[{"column":"pages","desc":true}],
+ "offset":0,"limit":100}
+```
+
+```json
+{"total":9,"links":312,"pages":265,"offset":0,"sort":{"column":"pages","desc":true},
+ "rows":[{"id":4410,"url":"https://www.example.com/old-range/","links":265,"pages":265,"text":"Old range","texts":1,
+          "positions":["footer"],"likelyTemplate":true,
+          "target":{"statusCode":404,"outcome":"clientError","contentType":"text/html","sizeBytes":5120,
+                    "pixelWidth":null,"pixelHeight":null,"final":null,"indexability":"clientError","canonical":null}}],
+ "summary":{"available":true,"reason":null}}
+```
+
+- **`filters`** and **`search`** are the links grid's; none of either is every link. **`offset`** and **`limit`**
+  (1 to 200, default 100) page the list; there is no cursor, and a page past the end has no rows.
+- **`sort`** is one key at most: `pages` (the default, descending: the target the most pages link to first),
+  `links`, or a column of the target that the links grid sorts by (`to.url`, `to.statusCode`, `to.sizeBytes`...), in
+  the order that grid's own sort puts the targets (unknown values last, ties by the target's id in the key's
+  direction). By `pages`, ties go by `links` and then by the target's id; by `links`, by `pages` and then the id. A
+  column the links grid doesn't sort by, or more than one key, is a field error (`sort.column`, `sort`); a sort by a
+  target column that needs the URL summary, without one, is `needs-analysis`, as the links grid's is. The answer's
+  `sort` is the order used.
+- **Each row** is a target: `id` and `url`; **`links`**, the view's links to it; **`pages`**, the pages those links
+  are on, each once; **`text`**, the text most of them have (the anchor, an image's alt text), among its first 200
+  matching links in crawl order, the first found on a tie, and null when none of those has any; **`texts`**, how many
+  texts those 200 have between them (none counted as one); **`positions`**, where on their pages its links sit, in
+  the positions' order; **`likelyTemplate`**, linked from at least 10 pages and at least half the pages the view's
+  links are on, as a check's group is called one; and **`target`**, what it is, as a check group's `related` reads
+  (its status, and its type, size and pixels after any redirects, where those end, why it isn't indexable).
+- **`total`** is how many targets there are (`/links/ends`' `total` for the same links), top-level **`links`** the
+  links the view matches (the links grid's `matching`, which the rows' `links` add up to), and **`pages`** the pages
+  the view's links are on, each once (`/links/ends`' `total` with `end` `from`).
+- **What it costs.** A page's links are stored together, one after another, so a target's links from one page come
+  one after another in crawl order: the pages are counted in **one pass over every link in crawl order**, a number
+  a target, never a set of pages, kept per filter set as the view's other counts are, and split over connections as
+  any pass is (the page that straddles two parts is counted once). It never reads the links on an index, which
+  gives a target's links in another order. Then each page of the list reads its rows only: each target's text, on
+  the links' index by target, and its facts. Measured on the 100k crawl's 5 million links (112,609 targets), the
+  first page, half way down and just past it, p95 over ten runs each, on a 32-core desktop other lanes were loading:
+
+  | The view | One connection | Split (eight) | The pass kept |
+  | --- | --- | --- | --- |
+  | Every link, by pages | 822 to 1,039 ms | 249 to 255 | 9 to 16 |
+  | The hyperlinks to 4xx URLs (4,572 targets) | 497 to 539 | 121 to 128 | 4 to 5 |
+  | The images, the largest first (103 targets) | 264 to 277 | 90 to 101 | 10 to 17 |
+  | The links whose text contains a common word | 574 to 926 | 168 to 186 | 11 to 21 |
+  | Every link, by target URL | 836 to 971 | 209 to 227 | 4 to 9 |
+
+  So a grouped view's first read is **inside the 300 ms budget where the sidecar has read slots free, and over it on
+  one connection** (a two-core machine, every slot taken, a running crawl, whose pass is never split), as
+  `/links/ends` for the pages is; every read after it, another page or another order, is a few milliseconds. A
+  filter that names one URL (`to.id`) takes the pass too. Not measured at 1M URLs: the pass grows with the links.
+- **While a crawl runs** an answer is of one moment of it, as the links grid's are.
+- **`pixelSizes`** (round 2) is whether the crawl measured images' pixel sizes: false for a crawl made before they were
+  read, and not continued since, whose `pixelWidth` and `pixelHeight` are all null. `/links` and `/urls/images` say it
+  too. The app then leaves out its pixel size columns and says the dimensions weren't measured.
+- **Export**: the export kind `linkGroups` writes the grouped view one row a target ([Export](#export-e5)).
+- Errors: `invalid-query` on `filters[…]`, `search`, `sort`, `sort.column`, `sort[i].column`, `offset` and `limit`;
+  `needs-analysis` for a filter or sort that needs the URL summary, without one; `bad-request` for a field it doesn't
+  take (`end`, `columns`).
 
 #### How the links are read
 
@@ -2223,6 +2380,47 @@ three are optional:
   `blocked` is the URLs its lines and `unmatched` account for, and `/robots/blocked` lists that many. The list of
   origins is kept apart (for 2 s while a crawl runs): an origin's `blocked` there can be a moment behind its file's.
 
+#### What blocking a URL costs (step 3b)
+
+Each row of `/robots/blocked` also says what blocking the URL costs, as the analysis counted it, so the owner can see
+which refusals matter: a URL the site's sitemap lists, or its menu links to, is one the site asks for and blocks.
+The page says how many of the origin's blocked URLs do, and `conflict` lists them alone:
+
+```json
+{"origin":"https://www.example.com","total":12,"matching":1,"offset":0,
+ "rows":[{"id":3411,"url":"https://www.example.com/private/listed","reason":"rule","line":2,"rule":"Disallow: /private/","error":null,
+          "linkingPages":0,"inSitemap":true,"sitemaps":1,"sitemap":{"id":3,"url":"https://www.example.com/sitemaps/extra.xml"},
+          "inMenu":false,"conflict":true}],
+ "conflicts":1}
+```
+
+- **`linkingPages`**: the pages that link to the URL, a page's links to itself left out (the URL grid's
+  `linkingPages`). The Links grid's links to it are `to.id` equal to its `id`, `selfLink` false, `kind` `hyperlink`.
+- **`inSitemap`**: a sitemap lists it; `false` only when every sitemap was read and none does, `null` otherwise when
+  none of those read does (the URL grid's `inSitemap`). **`sitemap`** is the first sitemap that lists it, in the order
+  the crawl found them, by the `id` the Sitemaps screen opens, and **`sitemaps`** how many do; both null where
+  `inSitemap` isn't true.
+- **`inMenu`**: a page links to it from its navigation (a hyperlink whose `position` is `navigation`), a page's link
+  to itself left out.
+- **`conflict`**: `inSitemap` or `inMenu`. **`conflicts`**, on the page, is how many of the origin's blocked URLs
+  conflict, whatever `line`, `reason`, `urlId` or `conflict` narrow the rows to.
+- **`conflict` in the request** (optional): `true` lists only the URLs that conflict, `false` only those that don't;
+  with `line`, `reason` and `urlId` as they narrow. `matching` is what it narrows to; `total` stays the origin's.
+- **All of these are null** (and `conflicts` too, and `conflict` in the request lists nothing) while the crawl has
+  changed since its analysis or was never analysed, as the URL grid's columns of the URL summary are: what they count
+  is the analysis's. The UI says they're known once the crawl is analysed.
+- **Cost of the read**: two lookups by key for each of the origin's blocked URLs (its row of the URL summary; a row of
+  the link summary, or the links to it on their `(to_id, kind)` index where an older analysis left no link summary),
+  never a pass over the links, kept as the origin's list is. `sitemap` and `sitemaps` are looked up for the page's
+  rows alone, a lookup by key in each sitemap's list. readbench, 100k bench crawl (11 blocked URLs, 20 runs, nothing
+  cached): the site's blocked URLs 47.8 ms at p95, the conflicts alone 48.6 ms, one blocked URL's row 50.0 ms (the
+  `robots` gate is 200 ms). On a copy of it with 50,011 of its URLs stored as blocked: the site's file (no costs)
+  105 ms at p50, its blocked URLs with their costs 141 ms at p50, 169 ms at p95.
+- **The export** (`robotsBlocked`) takes `conflict` too, and writes every row with five more columns: Linked from
+  (pages), In a sitemap (Yes or No), Sitemap (the first's address), In a menu (Yes or No) and Conflict ("In your
+  sitemap but blocked", "In your menu but blocked", "In your sitemap and menu but blocked"), each empty while not
+  known. `si export --kind robotsBlocked --conflict true` is the same.
+
 ### Export (E5)
 
 What a grid shows as CSV or as an Excel workbook, the workbook of everything, and the report, each written **by the
@@ -2258,12 +2456,13 @@ An export only reads the crawl.
   | `links` | The links grid | `csv`, `xlsx` | The same but `linkEnds`, over the links grid's columns; one sort key |
   | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's five |
   | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's five, the check's own columns among them |
-  | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
+  | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line`, `reason` and `conflict` (step 3b) to narrow them, as `/robots/blocked` takes them |
   | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId`, `hiddenChecks` (round 5's review) |
   | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
   | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |
   | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
   | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
+  | `linkGroups` (step 3b) | The links grouped by target, as [`/links/groups`](#links-grouped-by-target-step-3b) lists them: one row a target | `csv`, `xlsx` | `filters`, `search`, `sort` (one key: `pages`, `links` or a column of the target) and `hiddenChecks`, as the grouped view takes them; no `columns` |
 
 - **`hiddenChecks`** (round 5, `report`, `workbook` and `check`): the ids of the checks the user hid, at most 500. They are
   left out of the lists, the counts and the sheets (discovery decision 2: "the analysis still runs it, and exports
@@ -2308,7 +2507,7 @@ its export writes:
 A link's own columns have their titles ("Kind", "Anchor or alt text", "Links to its own page"), and either end's is
 the URL grid's under "Source" or "Target": `from.url` is "Source URL", `to.statusCode` "Target status". The fixed
 kinds have fixed headers: `robotsBlocked` writes "Blocked URL", "Blocked by" ("A rule", "robots.txt couldn’t be read"
-or "No rule kept"), "Line", "Rule" and "Error"; `check` and the workbook's sheets write "Address", "Page title", "What
+or "No matching rule"), "Line", "Rule" and "Error"; `check` and the workbook's sheets write "Address", "Page title", "What
 was found" and "Other address". The two lists (E7) write their screens' columns, in their cells' words:
 
 - `sitemaps`: "Sitemap", "Index" (Yes or No), "Listed by" (the index that lists it), "Found via" ("robots.txt",
@@ -2323,6 +2522,12 @@ was found" and "Other address". The two lists (E7) write their screens' columns,
   "Missing: nothing refused", "Missing when last asked", "Couldn’t be read: URLs refused", "Couldn’t be read: ignored",
   "No answer: crawled anyway", "No answer when last asked", "No answer: ignored", "None kept"), "Status", "Error",
   "Blocked URLs", "Read" (a date, in the computer's own time) and "Size (bytes)", in the list's order.
+- `linkGroups` (step 3b): "Target", "Status" (its code), "Outcome" (what became of the request, in the URL grid's words),
+  "Linking pages", "Links", "Text" (the text most of its links have), "Other texts", "Positions" ("Footer, Navigation"),
+  "Likely template" (Yes or No), "Content type", "Size (bytes)", "Pixel width", "Pixel height" (after any redirects)
+  and "Redirects to" (where its redirects end), one row a target in the grouped view's order, on a sheet called
+  "Links by target". Read from one snapshot of the file, a page of targets at a time: a running crawl's are of one
+  moment of it. It costs the grouped view's pass over the links, then each target's row as the view reads it.
 
 #### The files
 

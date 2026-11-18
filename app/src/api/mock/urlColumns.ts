@@ -55,6 +55,7 @@ export const URL_COLUMNS: readonly UrlColumn[] = [
   column('redirectTarget', 'text'),
   // Looked up per row: it filters, but doesn't sort.
   column('redirectTargetStatusCode', 'number', { sortable: false }),
+  column('redirectKind', 'text', { sortable: false, filterable: false }),
   column('indexable', 'boolean'),
   column('indexability', 'enum', {
     values: [

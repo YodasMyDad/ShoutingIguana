@@ -189,11 +189,20 @@ export function validateNewCrawlSearch(search: Record<string, unknown>): NewCraw
 export interface OverviewSearch {
   /** The score's breakdown, open over the Summary (Simple) or Overview: "How the score is worked out". */
   score?: 1 | undefined;
+  /** The fix loop: Compare with… open, from the library's row menu. */
+  compare?: 1 | undefined;
 }
 
 export function validateOverviewSearch(search: Record<string, unknown>): OverviewSearch {
-  return strictSearch(search, { score: search.score === 1 || search.score === '1' ? 1 : undefined });
+  return strictSearch(search, {
+    score: search.score === 1 || search.score === '1' ? 1 : undefined,
+    compare: search.compare === 1 || search.compare === '1' ? 1 : undefined,
+  });
 }
+
+/** The fix loop: Issues narrowed to the checks that moved one way since the crawl compared with, or any way. */
+export const CHANGE_FILTERS = ['new', 'fixed', 'fewer', 'more', 'changed'] as const;
+export type ChangeFilterSearch = (typeof CHANGE_FILTERS)[number];
 
 export interface CrawlSettingsSearch {
   /** The setting to put focus on: what Continue may change (`speed`, `headers`, `proxy`). */
@@ -231,6 +240,8 @@ export interface IssuesSearch {
   sort?: GridSort[] | undefined;
   /** The URL open in the inspector, by its id in the crawl file. */
   inspect?: number | undefined;
+  /** The fix loop: the checks that moved this way since the crawl compared with (New, Fixed, Fewer, More, Changed). */
+  change?: ChangeFilterSearch | undefined;
 }
 
 export function validateIssuesSearch(search: Record<string, unknown>): IssuesSearch {
@@ -243,6 +254,7 @@ export function validateIssuesSearch(search: Record<string, unknown>): IssuesSea
     group: groupRef(search.group) ?? undefined,
     sort: parseSort(search.sort),
     inspect: positiveInteger(search.inspect),
+    change: CHANGE_FILTERS.find((filter) => filter === search.change),
   });
 }
 
@@ -320,6 +332,8 @@ function linkColumnName(value: unknown): string | undefined {
  */
 export interface LinksSearch extends GridSearch {
   end?: 'from' | undefined;
+  /** Step 3b: one row a target, the view's links grouped by where they lead; left out for one row a link. */
+  by?: 'target' | undefined;
 }
 
 /**
@@ -338,6 +352,7 @@ export function validateLinksSearch(search: Record<string, unknown>): LinksSearc
     inspect,
     // Only with a URL inspected, and only the end that isn't the default: a target needs no word in the address.
     end: inspect !== undefined && search.end === 'from' ? 'from' : undefined,
+    by: search.by === 'target' ? 'target' : undefined,
   });
 }
 
@@ -374,14 +389,18 @@ export interface RobotsSearch {
   line?: number | undefined;
   /** The blocked URLs no line refused, by why. A line and a reason can't both narrow: the line wins. */
   reason?: RobotsReasonSearch | undefined;
+  /** Step 3b: the blocked URLs a sitemap lists or a menu links to. A line or a reason wins over it. */
+  conflict?: true | undefined;
   inspect?: number | undefined;
 }
 
 export function validateRobotsSearch(search: Record<string, unknown>): RobotsSearch {
   const line = positiveInteger(search.line);
+  const reason = line === undefined ? ROBOTS_REASONS.find((each) => each === search.reason) : undefined;
   return strictSearch(search, {
     line,
-    reason: line === undefined ? ROBOTS_REASONS.find((reason) => reason === search.reason) : undefined,
+    reason,
+    conflict: line === undefined && reason === undefined && search.conflict === true ? true : undefined,
     inspect: positiveInteger(search.inspect),
   });
 }

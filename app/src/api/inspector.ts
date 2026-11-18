@@ -4,6 +4,7 @@
 import type {
   IndexabilityReason,
   IssueGroupOfUrl,
+  RelatedFacts,
   SummaryState,
   UrlOutcome,
   UrlRef,
@@ -35,7 +36,8 @@ export type LinkKind =
   | 'hreflang'
   | 'pagination'
   | 'metaRefresh'
-  | 'redirect';
+  | 'redirect'
+  | 'socialImage';
 
 /**
  * Why a URL found wasn't fetched. `none` is what the sidecar serialises for `SkipReason.None`; the contract's list of
@@ -57,6 +59,7 @@ export const LINK_KINDS = [
   'pagination',
   'metaRefresh',
   'redirect',
+  'socialImage',
 ] as const satisfies readonly LinkKind[];
 
 export interface UrlDiscovery {
@@ -397,6 +400,8 @@ export interface IssueTarget {
   pixelHeight?: number | null;
   /** Its own answer (not its redirects' end's): how long the whole response took, as the URL grid's column. */
   responseMs?: number | null;
+  /** What its own redirect changes (`httpToHttps,addsWww`…); null when it doesn't redirect. */
+  redirectKind?: string | null;
   /** Where its redirects end; null when it doesn't redirect. */
   final?: TargetEnd | null;
   /** As the URL grid's column: `none` for indexable, null when not judged. */
@@ -447,4 +452,33 @@ export interface IssueTargetsOfUrl {
 export interface IssueTargetsPage {
   checkId: string;
   urls: IssueTargetsOfUrl[];
+}
+
+// ------------------------------------------------------------------------------- A page's images (step 3b)
+
+/** An image file a page shows (`POST /urls/images`), with how the page shows it and what the file is. */
+export interface PageImage extends UrlRef {
+  /** How many times the page shows it: each `img`, `srcset` candidate or other image link to it. */
+  links: number;
+  /** The alt text of the first of them that has one; null when none has. */
+  text: string | null;
+  positions: LinkPosition[];
+  /** What the file is, its size and pixels after any redirects: what `image-too-large` judges it by. */
+  target: RelatedFacts;
+}
+
+/** The images a page shows, each file once, the largest first. */
+export interface PageImages {
+  urlId: number;
+  /** The image files the page shows, each once. */
+  total: number;
+  /** Its image links: an image shown twice is two. */
+  links: number;
+  rows: PageImage[];
+  /**
+   * Step 3b, round 2: whether the crawl measured images' pixel sizes. False for a crawl made before they were read, whose
+   * images' widths and heights are all unknown: the app leaves out its pixel size columns and says so. Left out by a
+   * sidecar from before it, and by every grid but the links grid.
+   */
+  pixelSizes?: boolean;
 }

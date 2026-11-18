@@ -45,6 +45,11 @@ export function setCrawlSettingsOpener(open: ((id: string) => void) | null): voi
   openCrawlSettings = open;
 }
 
+/** "Open its settings", for a toast that asks for what the crawl file doesn't keep: none until the shell has set it. */
+export function openSettingsAction(id: string): { label: string; onClick: () => void } | null {
+  return openCrawlSettings ? { label: 'Open its settings', onClick: () => openCrawlSettings?.(id) } : null;
+}
+
 /** Continues a stopped crawl. When its headers or proxy password must be given again, says so plainly. */
 export async function continueCrawl(id: string, options: { skipMissingHeaders?: boolean } = {}): Promise<boolean> {
   try {

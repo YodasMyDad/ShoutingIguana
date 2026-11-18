@@ -18,6 +18,81 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
 {
     private TestSidecar Sidecar => grid.Sidecar;
 
+    /// <summary>
+    /// Never a count over an empty list (round 4): every check that found something, in the whole catalog, lists its URLs.
+    /// Its first page of rows isn't empty and matches its count; a grouped check has groups, as many URLs as its count
+    /// in them (a check grouped by the other URL has a page in a group per URL it names, so at least its count).
+    /// </summary>
+    [Fact]
+    public async Task EveryCheckThatFoundSomethingListsItsUrls()
+    {
+        var counts = (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis"))["counts"]!.AsArray()
+            .Select(count => ((string)count!["checkId"]!, (long)count["count"]!)).Where(count => count.Item2 > 0).ToList();
+        Assert.True(counts.Count >= 40, $"only {counts.Count} checks found something on the synthetic site");
+        foreach (var (checkId, count) in counts)
+        {
+            var rows = await PostOkAsync($"api/crawls/{grid.Id}/issues/{checkId}/rows", JsonNode.Parse("""{"limit":5}"""));
+            Assert.True(rows["rows"]!.AsArray().Count > 0, $"{checkId}: {count} flagged, no rows");
+            Assert.True((long)rows["matching"]! == count, $"{checkId}: {count} flagged, {rows["matching"]} rows");
+
+            var grouping = IssueCatalog.Find(checkId)!.Grouping;
+            if (grouping == IssueGrouping.None)
+            {
+                continue;
+            }
+
+            long pages = 0;
+            long groupCount = 0;
+            for (var offset = 0; ; offset += 1_000)
+            {
+                var groups = await PostOkAsync($"api/crawls/{grid.Id}/issues/{checkId}/groups", JsonNode.Parse($$"""{"offset":{{offset}},"limit":1000}"""));
+                Assert.Equal(count, (long)groups["total"]!);
+                groupCount = (long)groups["groupCount"]!;
+                pages += groups["groups"]!.AsArray().Sum(group => (long)group!["pages"]!);
+                if (offset + 1_000 >= groupCount)
+                {
+                    break;
+                }
+            }
+
+            Assert.True(groupCount > 0, $"{checkId}: {count} flagged, no groups");
+            Assert.True(grouping == IssueGrouping.RelatedUrl ? pages >= count : pages == count, $"{checkId}: {count} flagged, {pages} in its groups");
+        }
+    }
+
+    /// <summary>
+    /// The analysis says what each check comes to as work, and what a fix of it clears, as the engine counts them; the
+    /// catalog says which checks a fix can clear.
+    /// </summary>
+    [Fact]
+    public async Task TheAnalysisSaysTheThingsToChangeAndWhatAFixClears()
+    {
+        var engine = IssueCauseReader.Read(grid.Path)!.Checks;
+        var counts = (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis"))["counts"]!.AsArray().Select(count => count!).ToList();
+        Assert.All(counts, count => Assert.Equal(["checkId", "count", "likelyTemplate", "causes", "templateCauses", "clears"],
+            count.AsObject().Select(property => property.Key)));
+        foreach (var count in counts)
+        {
+            var id = (string)count["checkId"]!;
+            if ((long)count["count"]! == 0)
+            {
+                Assert.Equal((null, null, "[]"), ((long?)count["causes"], (long?)count["templateCauses"], count["clears"]!.ToJsonString()));
+                continue;
+            }
+
+            Assert.Equal((engine[id].Causes, engine[id].InTemplate), ((long)count["causes"]!, (long)count["templateCauses"]!));
+            Assert.Equal(engine[id].Clears.Select(cleared => (cleared.CheckId, cleared.Pages, cleared.All)),
+                count["clears"]!.AsArray().Select(cleared => ((string)cleared!["checkId"]!, (long)cleared["pages"]!, (bool)cleared["all"]!)));
+        }
+
+        var cleared = counts.Single(count => (string?)count["checkId"] == "internal-client-error")["clears"]!.AsArray();
+        Assert.Contains(cleared, entry => (string?)entry!["checkId"] == "broken-internal-links" && (long)entry["pages"]! > 0);
+
+        var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
+        Assert.Equal("""["links-to-redirects","pagination-broken"]""", checks.Single(check => (string?)check!["id"] == "redirect-chain")!["clears"]!.ToJsonString());
+        Assert.Equal("[]", checks.Single(check => (string?)check!["id"] == "title-too-long")!["clears"]!.ToJsonString());
+    }
+
     [Fact]
     public async Task TheColumnsListWhatEachGridTakes()
     {
@@ -467,7 +542,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal(ids, named["urls"]!.AsArray().Select(page => (int)page!["urlId"]!));
         var target = named["urls"]![0]!["targets"]![0]!;
         Assert.Equal(
-            ["id", "url", "statusCode", "fetched", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "responseMs", "final", "indexability", "canonical",
+            ["id", "url", "statusCode", "fetched", "outcome", "contentType", "sizeBytes", "pixelWidth", "pixelHeight", "responseMs", "redirectKind", "final", "indexability", "canonical",
              "kind", "text", "position", "fragment", "flags", "links", "img"],
             target.AsObject().Select(property => property.Key));
         Assert.True((int?)target["statusCode"] >= 400);

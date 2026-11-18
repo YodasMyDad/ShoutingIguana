@@ -73,7 +73,8 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     [Fact]
     public void ACheckGroupedByTheOtherUrlStoresEveryIssueUnderTheUrlsItNames()
     {
-        string[] duplicates = ["title-duplicate", "description-duplicate", "h1-duplicate", "duplicate-content", "near-duplicate-content"];
+        string[] duplicates =
+            ["title-duplicate", "description-duplicate", "h1-duplicate", "duplicate-content", "near-duplicate-content", "og-title-duplicate", "og-description-duplicate"];
         foreach (var check in Checks().Where(check => IssueCatalog.Find(check)!.Grouping == IssueGrouping.RelatedUrl))
         {
             foreach (var issue in Flagged(check))
@@ -357,7 +358,7 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
         var check = Checks().Where(check => IssueCatalog.Find(check)!.Grouping != IssueGrouping.None)
             .OrderByDescending(check => Flagged(check).Select(issue => issue.Detail).Distinct().Count()).ThenBy(check => check, StringComparer.Ordinal).First();
         var flagged = Flagged(check);
-        Assert.True(flagged.Count > PAGE);
+        Assert.True(flagged.Count > PAGE, $"{check}: {flagged.Count} rows");
         foreach (var descending in new[] { false, true })
         {
             // Unknown last, and ties in the order of the last key, as in the URL grid.

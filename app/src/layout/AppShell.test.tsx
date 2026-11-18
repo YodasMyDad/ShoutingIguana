@@ -150,6 +150,30 @@ describe('the sidebar, on a running crawl’s Overview', () => {
   });
 });
 
+describe('the sidebar, while a crawl is rechecked (the fix loop)', () => {
+  afterEach(() => liveStore.reset());
+
+  it('lists it as rechecking its site, under Checking now in Simple', async () => {
+    updateSettings({ mode: 'simple' });
+    try {
+      setTransport(fakeSidecar(standardRoutes(testCrawlItem({ status: 'rechecking' }))));
+      await open('/');
+      act(() => {
+        liveStore.ingest({ event: 'hello', id: '', data: JSON.stringify({ live: [TEST_CRAWL_ID] }) });
+        liveStore.ingest({
+          event: 'crawl',
+          id: '',
+          data: JSON.stringify({ crawlId: TEST_CRAWL_ID, status: 'rechecking' }),
+        });
+      });
+      const running = await screen.findByRole('region', { name: 'Checking now' });
+      expect(await within(running).findByRole('link', { name: /^Rechecking example\.com/ })).toBeInTheDocument();
+    } finally {
+      updateSettings({ mode: 'advanced' });
+    }
+  });
+});
+
 describe('Esc in the URL grid', () => {
   it('closes the inspector first, after a row was clicked and inspected; the next Esc clears the selection', async () => {
     const router = await open(`${CRAWL}/urls`);

@@ -45,10 +45,13 @@ import { LiveBadge } from '../../ui/LiveBadge';
 import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { GridHeader, ResultCount, SectionHeader } from '../../ui/PageHeader';
 import { RelativeTime } from '../../ui/RelativeTime';
+import { SeverityBadge } from '../../ui/SeverityBadge';
+import { SeverityMark } from '../../ui/SeverityMark';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { copyUrls } from '../issues/copyUrls';
+import { linksOfUrl } from '../links/linkPlaces';
 import { blockedUrlsReader } from './copyBlocked';
 import {
   blockedQueryOf,
@@ -61,11 +64,30 @@ import {
   obeyedWords,
   type Narrowing,
 } from './robotsFile';
-import { IGNORED, UNMATCHED_WORDS, blockedWhy, nothingBlockedWords, stateWords, type Obeyed } from './robotsWords';
+import {
+  IGNORED,
+  UNKNOWN_ACTION,
+  UNMATCHED_WORDS,
+  blockedWhy,
+  conflictShortWords,
+  conflictWords,
+  conflictsWords,
+  costsUnknownWords,
+  inSitemapWords,
+  linkedFromWords,
+  nothingBlockedWords,
+  stateWords,
+  type Obeyed,
+} from './robotsWords';
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
-const WHY_WIDTH = 200;
+// Every column fits beside the URL in the pane, at 1440 px and at the window's least (stacked there): a few words in
+// each, the whole of it behind them on hover and for a screen reader.
+const WHY_WIDTH = 136;
+const LINKED_WIDTH = 104;
+const SITEMAP_WIDTH = 112;
+const CONFLICT_WIDTH = 128;
 const MIN_URL_WIDTH = 140;
 /** The grid's edges and the card's around it, and the room its scrollbar takes. */
 const FRAME_SLACK = 36;
@@ -123,8 +145,8 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   });
   const obeyed: Obeyed | undefined = respectedRead.data ?? (respectedRead.isError ? null : undefined);
   // By the two params alone: the inspector moving (the route's `inspect`) narrows nothing anew.
-  const { line, reason } = search;
-  const narrowing = useMemo(() => narrowingOf({ line, reason }), [line, reason]);
+  const { line, reason, conflict } = search;
+  const narrowing = useMemo(() => narrowingOf({ line, reason, conflict }), [line, reason, conflict]);
   /** The blocked URL the list's cursor is on: the file shows the line that decided it. */
   const [cursor, setCursor] = useState<RobotsBlockedUrl | undefined>(undefined);
 
@@ -136,6 +158,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
           ...previous,
           line: next.by === 'line' ? next.line : undefined,
           reason: next.by === 'reason' ? next.reason : undefined,
+          conflict: next.by === 'conflict' ? true : undefined,
         }),
         replace: true,
         // In place: an inspector walked to here keeps the steps back to where it opened.
@@ -238,6 +261,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             origin,
             line: narrowing.by === 'line' ? narrowing.line : undefined,
             reason: narrowing.by === 'reason' ? narrowing.reason : undefined,
+            conflict: narrowing.by === 'conflict',
             rows: narrowing.by === 'none' ? blockedCount : null,
           })
         : null,
@@ -286,7 +310,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
       {/* The frame every grid screen shares: what's over the two panes keeps its height, and the panes take the rest,
           never less than their own least (the blocked URLs keep five rows): a window too short for that scrolls the
           screen. In a narrow panel the two stack, each at its own height, and the screen scrolls through them. */}
-      <GridScreen className="@max-split:h-auto">
+      <GridScreen className="@max-robots-split:h-auto">
         <div className="px-6 pt-2">{back}</div>
         <GridHeader
           titleRef={title}
@@ -340,13 +364,13 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             {IGNORED}
           </Banner>
         ) : null}
-        <GridScreenBody className="grid grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-split:flex-none @max-split:grid-cols-1">
+        <GridScreenBody className="grid grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-robots-split:flex-none @max-robots-split:grid-cols-1">
           <Card
             as="section"
             flush
             aria-label="The file"
             aria-busy={file.isFetching && !crawl.crawling}
-            className="flex min-h-(--robots-file-min-height) flex-col @max-split:h-(--robots-pane-height)"
+            className="flex min-h-(--robots-file-min-height) flex-col @max-robots-split:h-(--robots-pane-height)"
           >
             <FilePane
               file={file.data}
@@ -367,7 +391,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             flush
             aria-label="Blocked URLs"
             // At least as tall as the file beside or over it, and never less than its list's five rows need.
-            className="flex min-h-(--robots-file-min-height) flex-col @max-split:min-h-(--robots-pane-height)"
+            className="flex min-h-(--robots-file-min-height) flex-col @max-robots-split:min-h-(--robots-pane-height)"
           >
             <BlockedUrls
               crawlId={crawlId}
@@ -387,6 +411,16 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
         </GridScreenBody>
       </GridScreen>
     </div>
+  );
+}
+
+/** A cost the analysis hasn't counted yet: a dash, with why on hover and for a screen reader. */
+function NotCounted({ why }: { why: string }) {
+  return (
+    <span className="text-text-muted" title={why}>
+      <span aria-hidden="true">–</span>
+      <span className="sr-only">{why}</span>
+    </span>
   );
 }
 
@@ -499,12 +533,21 @@ function BlockedUrls({
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
   const inspector = useInspector();
+  const navigate = useNavigate();
   const rowMenu = useRowMenu<RobotsBlockedUrl>();
   const query = useMemo(() => blockedQueryOf(origin, narrowing), [origin, narrowing]);
   const queryKey = useMemo(() => robotsKeys.blocked(crawlId, query), [crawlId, query]);
+  /**
+   * How many of the origin's blocked URLs a sitemap lists or a menu links to, as each page read says (the origin's,
+   * whatever the list is narrowed to): null while the analysis hasn't counted them, undefined until a page is read.
+   */
+  const [conflicts, setConflicts] = useState<number | null | undefined>(undefined);
   const fetchPage = useCallback(
-    async (offset: number, limit: number, signal: AbortSignal) =>
-      blockedAsGridPage(await api.robotsBlocked(crawlId, { ...query, offset, limit }, signal)),
+    async (offset: number, limit: number, signal: AbortSignal) => {
+      const page = await api.robotsBlocked(crawlId, { ...query, offset, limit }, signal);
+      setConflicts(page.conflicts ?? null);
+      return blockedAsGridPage(page);
+    },
     [crawlId, query],
   );
   const rows = usePagedRows<RobotsBlockedUrl>({ queryKey, fetchPage, rowHeight });
@@ -520,7 +563,12 @@ function BlockedUrls({
     if (live && blockedNow !== null && blockedInFile !== undefined && blockedNow !== blockedInFile) onFileChanged();
   }, [live, blockedNow, blockedInFile, onFileChanged]);
 
-  const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 400) - WHY_WIDTH - FRAME_SLACK);
+  // The URL and whether it conflicts lead, as they're what a site owner decides on; the rule is the file's to show.
+  const urlWidth = Math.max(
+    MIN_URL_WIDTH,
+    (width ?? 400) - CONFLICT_WIDTH - LINKED_WIDTH - SITEMAP_WIDTH - WHY_WIDTH - FRAME_SLACK,
+  );
+  const unknown = costsUnknownWords(live);
   const columns = useMemo<GridColumn<RobotsBlockedUrl>[]>(
     () => [
       {
@@ -532,17 +580,99 @@ function BlockedUrls({
         text: (row) => row.url,
       },
       {
+        id: 'conflict',
+        header: 'Conflict',
+        width: CONFLICT_WIDTH,
+        // The site asks for it and blocks it: the decision point, flagged as a warning.
+        cell: (row) => {
+          const words = conflictWords(row);
+          if (words !== null) {
+            return (
+              // A few words to see; the sentence to hover and to hear.
+              <span title={words} className="block truncate">
+                <span aria-hidden="true">
+                  <SeverityBadge severity="warning" variant="inline">
+                    {conflictShortWords(row) ?? words}
+                  </SeverityBadge>
+                </span>
+                <span className="sr-only">{words}</span>
+              </span>
+            );
+          }
+          return row.conflict === false ? null : <NotCounted why={unknown} />;
+        },
+        text: (row) => conflictWords(row) ?? '',
+      },
+      {
+        id: 'linkingPages',
+        header: 'Linked from',
+        width: LINKED_WIDTH,
+        numeric: true,
+        cell: (row) => {
+          const words = linkedFromWords(row.linkingPages);
+          if (words === null) return <NotCounted why={unknown} />;
+          if (!row.linkingPages) return <span className="text-text-muted">{words}</span>;
+          return (
+            // The links to it in Links, as the inspector's "All N in Links" leads: Enter on the cell does the same.
+            <TextLink
+              to="/crawls/$crawl/links"
+              params={{ crawl: crawlId }}
+              search={{ filter: linksOfUrl('inlinks', row.id, 'hyperlink') }}
+              tabIndex={-1}
+              aria-label={`Linked from ${words}: show the links in Links`}
+            >
+              {words}
+            </TextLink>
+          );
+        },
+        text: (row) => (row.linkingPages === null || row.linkingPages === undefined ? '' : String(row.linkingPages)),
+      },
+      {
+        id: 'sitemap',
+        header: 'In a sitemap',
+        width: SITEMAP_WIDTH,
+        cell: (row) => {
+          const words = inSitemapWords(row);
+          if (words === null) return <NotCounted why={unknown} />;
+          if (!row.sitemap) {
+            return (
+              <span title={words.title} className="block truncate">
+                {words.short}
+              </span>
+            );
+          }
+          return (
+            // The sitemap's name cut short where it's long, its whole address on hover.
+            <TextLink
+              to="/crawls/$crawl/sitemaps/{-$sitemap}"
+              params={{ crawl: crawlId, sitemap: String(row.sitemap.id) }}
+              search={{}}
+              tabIndex={-1}
+              title={words.title}
+              className="block truncate"
+            >
+              {words.short}
+            </TextLink>
+          );
+        },
+        text: (row) => inSitemapWords(row)?.short ?? '',
+      },
+      {
         id: 'why',
         header: 'Blocked by',
         width: WHY_WIDTH,
         cell: (row) => {
           const why = blockedWhy(row);
-          return <span title={withRecorded(why.sentence, why.recorded)}>{why.short}</span>;
+          return (
+            <span title={withRecorded(why.sentence, why.recorded)} className="block truncate">
+              {why.cell}
+            </span>
+          );
         },
         text: (row) => blockedWhy(row).short,
       },
     ],
-    [origin, urlWidth],
+    [origin, urlWidth, crawlId, unknown],
   );
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('robots.blocked', columns);
@@ -571,6 +701,8 @@ function BlockedUrls({
   );
 
   const unmatched = file?.unmatched;
+  // Said once the analysis has counted them and the origin blocked something; not while narrowed to them and empty.
+  const showConflicts = typeof conflicts === 'number' && (file?.blocked ?? 0) > 0;
   /** What the list holds, over it: said once there's something in it. */
   const note =
     (file?.blocked ?? 0) > 0
@@ -620,21 +752,45 @@ function BlockedUrls({
           </p>
         )}
       </div>
-      {unmatched && (unmatched.unreachable > 0 || unmatched.unknown > 0) ? (
-        <ul className="flex flex-col gap-1 px-4 pb-2 text-12">
+      {(unmatched && (unmatched.unreachable > 0 || unmatched.unknown > 0)) || showConflicts ? (
+        <ul className="flex flex-col px-4 pb-2 text-12">
+          {/* Each row a whole target high, as the links stack (WCAG 2.2, 2.5.8). */}
+          {showConflicts ? (
+            // The blocked URLs the site asks for (a sitemap lists them, a menu links to them): the ones to decide on.
+            <li className="flex min-h-(--target-min) items-center gap-1.5">
+              {conflicts > 0 ? (
+                <>
+                  <SeverityMark severity="warning" size="sm" decorative />
+                  <TextLink
+                    to={ROUTE}
+                    params={{ crawl: crawlId, origin }}
+                    search={(previous) => ({ ...previous, line: undefined, reason: undefined, conflict: true })}
+                    replace
+                    variant="inline"
+                    aria-current={narrowing.by === 'conflict' ? 'true' : undefined}
+                  >
+                    {conflictsWords(conflicts)}
+                  </TextLink>
+                </>
+              ) : (
+                <span className="text-text-muted">{conflictsWords(0)}</span>
+              )}
+            </li>
+          ) : null}
           {(['unreachable', 'unknown'] as const).map((reason) =>
-            unmatched[reason] > 0 ? (
-              <li key={reason}>
+            unmatched && unmatched[reason] > 0 ? (
+              <li key={reason} className="flex min-h-(--target-min) flex-wrap items-center gap-x-1.5">
                 <TextLink
                   to={ROUTE}
                   params={{ crawl: crawlId, origin }}
-                  search={(previous) => ({ ...previous, line: undefined, reason })}
+                  search={(previous) => ({ ...previous, line: undefined, reason, conflict: undefined })}
                   replace
                   variant="inline"
                   aria-current={narrowing.by === 'reason' && narrowing.reason === reason ? 'true' : undefined}
                 >
                   {UNMATCHED_WORDS[reason](unmatched[reason])}
                 </TextLink>
+                {reason === 'unknown' ? <span className="text-text-muted">{UNKNOWN_ACTION}</span> : null}
               </li>
             ) : null,
           )}
@@ -661,8 +817,22 @@ function BlockedUrls({
           onRangeChange={rows.onRangeChange}
           onScrollOffset={rows.onScrollOffset}
           fetchRows={rows.fetchRows}
-          onActivate={(_index, row) => {
-            if (row) inspector.open(row.id);
+          // Enter on the Linked from or In a sitemap cell goes where its link does; anywhere else, the URL is inspected.
+          onActivateCell={(_index, row, column) => {
+            if (!row) return;
+            if (column === 'linkingPages' && (row.linkingPages ?? 0) > 0) {
+              void navigate({
+                to: '/crawls/$crawl/links',
+                params: { crawl: crawlId },
+                search: { filter: linksOfUrl('inlinks', row.id, 'hyperlink') },
+              });
+            } else if (column === 'sitemap' && row.sitemap) {
+              void navigate({
+                to: '/crawls/$crawl/sitemaps/{-$sitemap}',
+                params: { crawl: crawlId, sitemap: String(row.sitemap.id) },
+                search: {},
+              });
+            } else inspector.open(row.id);
           }}
           // The file shows the line that decided the URL under the cursor; an open inspector follows it, in place.
           onActiveRowChange={(index) => {
@@ -680,7 +850,13 @@ function BlockedUrls({
             ) : (
               <FilteredEmptyState
                 title={
-                  narrowing.by === 'line' ? emptyLineWords(file, narrowing.line) : 'No blocked URLs like that here.'
+                  narrowing.by === 'line'
+                    ? emptyLineWords(file, narrowing.line)
+                    : narrowing.by === 'conflict'
+                      ? conflicts === null
+                        ? `Whether they’re in your sitemap or menu isn’t known yet. ${costsUnknownWords(live)}`
+                        : conflictsWords(0)
+                      : 'No blocked URLs like that here.'
                 }
                 level="none"
                 filters={chip}

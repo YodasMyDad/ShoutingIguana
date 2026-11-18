@@ -34,14 +34,19 @@ async function openIssues(page: Page) {
 
 test('triage: pick a check, read it, open a group, its URLs, inspect one, then Esc and Alt+Left', async ({ page }) => {
   await openIssues(page);
-  await expect(page.getByText(/^\d+ checks found [\d,]+ issues on this crawl\./)).toBeVisible();
+  // What moves the score leads the answer, then the notices' things in the same unit, then the counts (rounds 3 and 4).
+  await expect(page.locator('.si-page-header__subtitle')).toHaveText(
+    /^(About [\d,]+ things to fix|1 thing to fix|Nothing to fix)[^·]*( · (about )?[\d,]+ (more|things?) worth a look)? · \d+ checks found [\d,]+ issues on this crawl\./,
+  );
 
   await page.getByRole('option', { name: /Duplicate title/ }).click();
   await expect(page).toHaveURL(/\/issues\/title-duplicate$/);
   await expect(page.getByRole('heading', { name: 'Duplicate title', level: 2 })).toBeVisible();
-  await expect(page.getByText('What’s wrong')).toBeVisible();
-  await expect(page.getByText('Why it matters')).toBeVisible();
-  await expect(page.getByText('How to fix it')).toBeVisible();
+  // What's wrong in the check's head; why it matters and how to fix it after its evidence, a button away.
+  await expect(page.getByRole('heading', { name: 'What’s wrong', level: 3 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Why it matters', level: 3 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How to fix it', level: 3 })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Why it matters and how to fix it' })).toBeVisible();
 
   // Its groups: open the first with the keyboard, as the treegrid pattern has it.
   const groups = page.getByRole('treegrid', { name: /Duplicate title: affected pages/ });
@@ -152,8 +157,10 @@ test('the checks list runs on the keyboard: arrows move the selection and the ro
   await page.keyboard.press('End');
   await expect(list.getByRole('option').last()).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Tab');
-  // Out of the list, into the selected check: its first action.
-  await expect(page.locator(':focus')).toHaveAccessibleName(/Copy URLs|Hide this check|Show this check|Learn more/);
+  // Out of the list, into the selected check: its first action (the fix loop's Recheck leads them).
+  await expect(page.locator(':focus')).toHaveAccessibleName(
+    /^Recheck|Check the site again|Copy URLs|Hide this check|Show this check|Learn more/,
+  );
   await page.keyboard.press('Control+f');
   await expect(page.getByRole('searchbox', { name: 'Filter checks' })).toBeFocused();
   await page.keyboard.type('sitemap');

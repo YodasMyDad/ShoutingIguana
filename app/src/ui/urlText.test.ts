@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ELLIPSIS, middleTruncate, originLength, urlDisplay } from './urlText';
+import {
+  ELLIPSIS,
+  fileLabelOf,
+  isResourceType,
+  middleTruncate,
+  originLength,
+  splitExtension,
+  urlDisplay,
+} from './urlText';
 
 /** Monospace: every character the same width. */
 const mono = (text: string) => text.length * 8;
@@ -93,5 +101,86 @@ describe('originLength', () => {
     expect(originLength(`${SITE}/a`, SITE)).toBe(SITE.length);
     expect(originLength(`https://www.g${ELLIPSIS}graphite`, SITE)).toBe('https://www.g'.length);
     expect(originLength('/a', '')).toBe(0);
+  });
+});
+
+describe('fileLabelOf', () => {
+  const SITE_ORIGIN = 'https://www.example.com';
+
+  it('leads with the file’s name, without its query, the query or the folder after it', () => {
+    expect(fileLabelOf(`${SITE_ORIGIN}/media/5265/harpswell-metal-patio-set-9.jpg?width=896`, SITE_ORIGIN)).toEqual({
+      name: 'harpswell-metal-patio-set-9.jpg',
+      rest: '?width=896',
+    });
+    expect(fileLabelOf(`${SITE_ORIGIN}/wp-content/uploads/2024/05/hero.webp`, SITE_ORIGIN)).toEqual({
+      name: 'hero.webp',
+      rest: '/wp-content/uploads/2024/05/',
+    });
+    expect(fileLabelOf(`${SITE_ORIGIN}/favicon.ico`, SITE_ORIGIN)).toEqual({ name: 'favicon.ico', rest: null });
+  });
+
+  it('decodes an encoded name, and keeps one that won’t decode as it is', () => {
+    expect(fileLabelOf(`${SITE_ORIGIN}/img/caf%C3%A9%20menu.png`, SITE_ORIGIN).name).toBe('café menu.png');
+    expect(fileLabelOf(`${SITE_ORIGIN}/img/100%25-cotton.jpg`, SITE_ORIGIN).name).toBe('100%-cotton.jpg');
+    expect(fileLabelOf(`${SITE_ORIGIN}/img/bad%E0%A4%A.png`, SITE_ORIGIN).name).toBe('bad%E0%A4%A.png');
+  });
+
+  it('names a path that ends in a slash by its last folder, and one with no path by its host', () => {
+    expect(fileLabelOf(`${SITE_ORIGIN}/garden/sofas/`, SITE_ORIGIN)).toEqual({ name: 'sofas/', rest: '/garden/' });
+    expect(fileLabelOf(`${SITE_ORIGIN}/`, SITE_ORIGIN)).toEqual({ name: 'www.example.com', rest: null });
+    expect(fileLabelOf('https://cdn.example.net', SITE_ORIGIN)).toEqual({ name: 'cdn.example.net', rest: null });
+  });
+
+  it('says another host’s file is on it, and cuts a long query', () => {
+    expect(fileLabelOf('https://cdn.example.net/assets/site.css?v=3', SITE_ORIGIN)).toEqual({
+      name: 'site.css',
+      rest: 'cdn.example.net ?v=3',
+    });
+    const long = `?mode=crop&center=0.50,0.50&width=1200&height=800&format=webp&quality=80&rnd=133784512345678901`;
+    const label = fileLabelOf(`${SITE_ORIGIN}/media/4364/rattan.jpg${long}`, SITE_ORIGIN);
+    expect(label.name).toBe('rattan.jpg');
+    expect(label.rest?.length).toBeLessThanOrEqual(61);
+    expect(label.rest?.startsWith('?mode=crop&center=0.50,0.50')).toBe(true);
+    expect(label.rest?.endsWith(ELLIPSIS)).toBe(true);
+  });
+
+  it('names an image written into the page, and keeps text that isn’t a URL as it is', () => {
+    expect(fileLabelOf('data:image/png;base64,iVBORw0KGgo=')).toEqual({ name: 'Image in the page', rest: 'image/png' });
+    expect(fileLabelOf('data:,Hello')).toEqual({ name: 'Data in the page', rest: null });
+    expect(fileLabelOf('not a url')).toEqual({ name: 'not a url', rest: null });
+  });
+});
+
+describe('isResourceType', () => {
+  it('is a file a page loads, not a page', () => {
+    expect(
+      ['image/jpeg', 'image/svg+xml', 'text/css', 'application/javascript', 'text/javascript', 'font/woff2'].map(
+        isResourceType,
+      ),
+    ).toEqual([true, true, true, true, true, true]);
+    expect(['text/html', 'application/xhtml+xml', null, undefined].map(isResourceType)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+});
+
+describe('splitExtension', () => {
+  it('parts a name from its extension, so a cut name keeps it', () => {
+    expect(splitExtension('harpswell-metal-patio-set-9.jpg')).toEqual({
+      stem: 'harpswell-metal-patio-set-9',
+      ext: '.jpg',
+    });
+    expect(splitExtension('archive.tar.gz')).toEqual({ stem: 'archive.tar', ext: '.gz' });
+    expect(splitExtension('hero.WEBP')).toEqual({ stem: 'hero', ext: '.WEBP' });
+  });
+
+  it('leaves a name without an extension whole', () => {
+    expect(splitExtension('index')).toEqual({ stem: 'index', ext: '' });
+    expect(splitExtension('folder/')).toEqual({ stem: 'folder/', ext: '' });
+    expect(splitExtension('.htaccess')).toEqual({ stem: '.htaccess', ext: '' });
+    expect(splitExtension('notes.markdown2')).toEqual({ stem: 'notes.markdown2', ext: '' });
   });
 });

@@ -121,7 +121,7 @@ public sealed class PageRuleTests
         site.Fetched($"{site.Site}/huge.jpg", FetchOutcome.Success, 200, size: 900_000);
         site.Fetched($"{site.Site}/small.jpg", FetchOutcome.Success, 200, size: 20_000);
         var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
-            "<img src=\"/gone.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/huge.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/small.jpg\" alt=\"x\" width=\"1\" height=\"2\">"));
+            "<img src=\"/gone.jpg\" alt=\"A photo\" width=\"1\" height=\"2\"><img src=\"/huge.jpg\" alt=\"A photo\" width=\"1\" height=\"2\"><img src=\"/small.jpg\" alt=\"A photo\" width=\"1\" height=\"2\">"));
 
         var issues = Issues(new ImageRules(SETTINGS, site.Table(), site.Find), page);
 
@@ -287,7 +287,7 @@ public sealed class PageRuleTests
     public void UppercaseIgnoresPercentEscapes()
     {
         var site = new RuleHarness();
-        var rules = new UrlRules(SETTINGS);
+        var rules = new FirstUrlRules();
 
         Assert.Empty(Issues(rules, site.Page($"{site.Site}/caf%C3%A9/a%2Fb", RuleHarness.Html())));
         Assert.Equal([IssueCatalog.URL_UPPERCASE, IssueCatalog.URL_UNDERSCORES], Issues(rules, site.Page($"{site.Site}/About_Us", RuleHarness.Html())));
@@ -342,7 +342,7 @@ public sealed class PageRuleTests
     public void StructuredDataRequiresValidJsonAndThePropertiesGoogleStillRequires()
     {
         var site = new RuleHarness();
-        var rules = new StructuredDataRules();
+        var rules = new SyntaxAndRequiredRules();
         string Script(string json) => $"<script type=\"application/ld+json\">{json}</script>";
 
         // Google stopped showing FAQ rich results, so a FAQPage needs nothing.
@@ -378,7 +378,7 @@ public sealed class PageRuleTests
     public void StructuredDataSubtypesNeedWhatTheirParentTypesNeed()
     {
         var site = new RuleHarness();
-        var rules = new StructuredDataRules();
+        var rules = new SyntaxAndRequiredRules();
         string Script(string json) => $"<script type=\"application/ld+json\">{json}</script>";
 
         var subtypes = site.Page($"{site.Site}/a", RuleHarness.Html(Script(
@@ -500,7 +500,7 @@ public sealed class PageRuleTests
               {"@type":"Product","@id":"#product","name":"Widget","aggregateRating":{"@id":"#rating"}},
               {"@type":"AggregateRating","@id":"#rating","ratingValue":4.5,"reviewCount":12}]}</script>
             """));
-        var rules = new StructuredDataRules();
+        var rules = new SyntaxAndRequiredRules();
 
         Assert.Empty(Issues(rules, truncated));
         Assert.Empty(Issues(rules, graph));
@@ -510,7 +510,7 @@ public sealed class PageRuleTests
     public void StructuredDataWithUnreadableStringsCountsThemAsPresent()
     {
         var site = new RuleHarness();
-        var rules = new StructuredDataRules();
+        var rules = new SyntaxAndRequiredRules();
         string Script(string json) => $"<script type=\"application/ld+json\">{json}</script>";
 
         // JSON.stringify of text cut mid-emoji leaves half a surrogate pair, which System.Text.Json can't read as a string.
@@ -544,7 +544,7 @@ public sealed class PageRuleTests
         var nested = string.Concat(Enumerable.Repeat("""{"a":""", 10_000)) + "1" + new string('}', 10_000);
         var page = site.Page($"{site.Site}/", RuleHarness.Html($"<script type=\"application/ld+json\">{nested}</script>"));
 
-        Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(new StructuredDataRules(), page));
+        Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(new SyntaxAndRequiredRules(), page));
     }
 
     [Fact]
@@ -568,10 +568,27 @@ public sealed class PageRuleTests
 
         // 80 readable characters of path, but 480 once percent-encoded.
         Assert.True(cyrillic.Url.Length > 400);
-        Assert.Empty(Issues(new UrlRules(SETTINGS), cyrillic));
+        Assert.Empty(Issues(new FirstUrlRules(), cyrillic));
     }
 
     private static List<IssueDefinition> Issues(IPageRule rule, AnalyzedPage page) => rule.Check(page).Select(hit => hit.Issue).ToList();
+
+    /// <summary>
+    /// The structured data rules' first two checks, invalid JSON-LD and missing required properties, which these tests are
+    /// about: batch 5's (schema.org faults, recommended properties, noindex) are StructuredDataCheckTests'.
+    /// </summary>
+    /// <summary>The URL rules' first three checks (uppercase, underscores, length), which these tests are about: batch 7's are SecurityUrlCheckTests'.</summary>
+    private sealed class FirstUrlRules : IPageRule
+    {
+        public IEnumerable<IssueHit> Check(AnalyzedPage page) => new UrlRules(SETTINGS).Check(page)
+            .Where(hit => hit.Issue == IssueCatalog.URL_UPPERCASE || hit.Issue == IssueCatalog.URL_UNDERSCORES || hit.Issue == IssueCatalog.URL_TOO_LONG);
+    }
+
+    private sealed class SyntaxAndRequiredRules : IPageRule
+    {
+        public IEnumerable<IssueHit> Check(AnalyzedPage page) => new StructuredDataRules().Check(page)
+            .Where(hit => hit.Issue == IssueCatalog.STRUCTURED_DATA_INVALID || hit.Issue == IssueCatalog.STRUCTURED_DATA_MISSING_REQUIRED);
+    }
 
     private static string Words(int count) => string.Join(' ', Enumerable.Range(0, count).Select(index => $"word{index % 50}"));
 }

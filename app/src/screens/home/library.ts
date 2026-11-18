@@ -4,7 +4,9 @@
 import type { CrawlListItem, CrawlStatus } from '../../api/types';
 import { crawlControls, type CrawlControls } from '../../crawl/status';
 import { formatCountOf } from '../../lib/format';
+import type { CompareChoice } from '../../settings/compareWith';
 import { siteGroups, type SiteGroup } from '../../simple/home/sites';
+import { notComparableReason } from '../compare/comparing';
 
 export interface LibraryView {
   /** The crawls this sidecar is working on now (crawling, paused, stopping, analysing): the cards above the table. */
@@ -151,4 +153,38 @@ export function crawlActions(item: CrawlListItem, status: CrawlStatus): CrawlAct
 /** "Analyse it" for a crawl never analysed, else "Analyse again". */
 export function analyseWords(item: CrawlListItem, status: CrawlStatus): string {
   return neverAnalysed(item, status) ? 'Analyse it' : 'Analyse again';
+}
+
+/**
+ * A row's Compare with… (docs/v2-fix-loop.md, Advanced, "Home, the library"): on an older crawl it opens the site's
+ * latest crawl's Overview with this one picked (`choice`, the previous crawl being the default); on the latest, its own
+ * Overview, where the picker is. Disabled, with why, for a crawl that can't be compared and a site's only crawl.
+ */
+export interface CompareAction {
+  enabled: boolean;
+  /** Why it's disabled, beside it in the menu. */
+  why: string | null;
+  /** The crawl whose Overview it opens: the site's latest. */
+  latestId: string;
+  /** What that crawl is then compared with; null to leave its choice as it is. */
+  choice: CompareChoice | null;
+}
+
+export function compareAction(
+  item: CrawlListItem,
+  status: CrawlStatus,
+  latest: Pick<CrawlListItem, 'id' | 'previous'>,
+  siteCrawls: number,
+): CompareAction {
+  if (item.id === latest.id) {
+    const alone = siteCrawls < 2;
+    return { enabled: !alone, why: alone ? 'No other crawl' : null, latestId: item.id, choice: null };
+  }
+  const why = notComparableReason(item, status);
+  return {
+    enabled: why === null,
+    why,
+    latestId: latest.id,
+    choice: item.id === latest.previous?.id ? 'previous' : item.id,
+  };
 }

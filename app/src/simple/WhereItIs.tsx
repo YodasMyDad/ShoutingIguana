@@ -1,3 +1,6 @@
+import { groupChangeWords, rowChangeWords } from '../changes/changeWords';
+import type { SimpleChanges } from './useSimpleChanges';
+import { CausesFixedSince } from './WhereItIsSince';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { ArrowUpRight, ChevronDown, Copy, FileSpreadsheet } from 'lucide-react';
@@ -17,6 +20,8 @@ import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
 import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
 import { ImageThumb } from '../ui/ImageThumb';
+import { fileLabelOf } from '../ui/urlText';
+import { isBrokenImage } from '../ui/imageFacts';
 import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
 import { pathOrigin, shownWords } from './whereWords';
@@ -35,21 +40,47 @@ function rowColumns(check: Pick<Check, 'evidence'>): string[] {
   return [...ROW_COLUMNS, ...evidenceOf(check).filter((id) => !ROW_COLUMNS.includes(id))];
 }
 
-const groupsQuery = (crawlId: string, checkId: string, limit: number) => ({
-  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-groups', limit] as const,
+/** The fix loop: compared with the site's last check (each cause and page then gains its `change`), or not. */
+type Compare = 'previous' | null;
+
+const groupsQuery = (crawlId: string, checkId: string, limit: number, compare: Compare = null) => ({
+  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-groups', limit, compare] as const,
   queryFn: ({ signal }: { signal: AbortSignal }): Promise<IssueGroupPage> =>
-    api.issueGroups(crawlId, checkId, { offset: 0, limit }, signal),
+    api.issueGroups(crawlId, checkId, { offset: 0, limit, ...(compare ? { compareWith: compare } : {}) }, signal),
   staleTime: Infinity,
 });
 
-const rowsQuery = (crawlId: string, check: Check, group: CheckGroupRef | null, limit: number) => ({
+const rowsQuery = (
+  crawlId: string,
+  check: Check,
+  group: CheckGroupRef | null,
+  limit: number,
+  compare: Compare = null,
+) => ({
   // The check's evidence decides the columns: its id and its evidence are the key.
-  queryKey: [...queryKeys.crawl(crawlId), 'issues', check.id, 'simple-rows', group, limit, rowColumns(check)] as const,
+  queryKey: [
+    ...queryKeys.crawl(crawlId),
+    'issues',
+    check.id,
+    'simple-rows',
+    group,
+    limit,
+    rowColumns(check),
+    compare,
+  ] as const,
   queryFn: ({ signal }: { signal: AbortSignal }): Promise<GridPage<IssueRow>> =>
     api.issueRows(
       crawlId,
       check.id,
-      { columns: rowColumns(check), filters: [], sort: [], offset: 0, limit, ...(group ? { group } : {}) },
+      {
+        columns: rowColumns(check),
+        filters: [],
+        sort: [],
+        offset: 0,
+        limit,
+        ...(group ? { group } : {}),
+        ...(compare ? { compareWith: compare } : {}),
+      },
       signal,
     ),
   staleTime: Infinity,
@@ -76,12 +107,36 @@ function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; or
   );
 }
 
+/** The fix loop: a cause's or a page's change since the site's last check, muted under it. */
+function ChangeLine({ words }: { words: string }) {
+  return <span className="mt-1 block text-12 text-text-muted">{words}</span>;
+}
+
 /** An address as Where it is shows it: its path on the site's own origin, else in full; the full one is read. */
-function Address({ url, origin, small = false }: { url: string; origin: string | null; small?: boolean }) {
+function Address({
+  url,
+  origin,
+  small = false,
+  file = false,
+}: {
+  url: string;
+  origin: string | null;
+  small?: boolean;
+  /** A file a page loads (an image): named by its file, its folder or query after it, muted. */
+  file?: boolean;
+}) {
   const shown = origin && url.startsWith(origin) ? url.slice(origin.length) || '/' : url;
+  const label = file ? fileLabelOf(url, origin) : null;
   return (
     <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'} title={url}>
-      <span aria-hidden="true">{shown}</span>
+      {label ? (
+        <span aria-hidden="true">
+          <span className="si-file-name">{label.name}</span>
+          {label.rest ? <span className="block text-12 text-text-muted">{label.rest}</span> : null}
+        </span>
+      ) : (
+        <span aria-hidden="true">{shown}</span>
+      )}
       <span className="sr-only">{url}</span>
       <OpenUrlButton url={url} className="ml-1" />
     </span>
@@ -122,6 +177,7 @@ export function WhereItIs({
   total,
   onCopy,
   onSave,
+  changes,
 }: {
   crawlId: string;
   item: CrawlListItem;
@@ -130,17 +186,25 @@ export function WhereItIs({
   total: number;
   onCopy: () => void;
   onSave: () => void;
+  /** The fix loop: what changed since the site's last check; each cause and page says whether it's new or still there. */
+  changes?: SimpleChanges | undefined;
 }) {
   const router = useRouter();
   const [limit, setLimit] = useState(WHERE_STEP);
-  const grouped = check.grouping !== 'none';
+  const groupedCheck = check.grouping !== 'none';
+  // Counts only (another start address, other rules): no cause or page can be matched, so none is marked.
+  const compare: Compare = changes?.comparison && changes.comparison.comparable !== 'countsOnly' ? 'previous' : null;
+  const since = changes?.since ?? null;
   const groups = useQuery({
-    ...groupsQuery(crawlId, check.id, limit),
-    enabled: grouped,
+    ...groupsQuery(crawlId, check.id, limit, compare),
+    enabled: groupedCheck,
     placeholderData: keepPreviousData,
   });
+  // Its groups, unless they come back empty though the check flagged addresses (a file its reader can't group): then the
+  // addresses list on their own, so a count is never over an empty list (round 4).
+  const grouped = groupedCheck && !(groups.data?.groupCount === 0 && total > 0);
   const rows = useQuery({
-    ...rowsQuery(crawlId, check, null, limit),
+    ...rowsQuery(crawlId, check, null, limit, compare),
     enabled: !grouped,
     placeholderData: keepPreviousData,
   });
@@ -201,12 +265,14 @@ export function WhereItIs({
                     group={group}
                     origin={origin}
                     noun={noun}
+                    since={since}
                   />
                 ))
               : (rows.data?.rows ?? []).map((row) => (
                   <tr key={row.id}>
                     <td>
                       <PageLine row={row} origin={origin} />
+                      {row.change ? <ChangeLine words={rowChangeWords(row.change.state, since, 'simple')} /> : null}
                       <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                     </td>
                     <td className="text-text-secondary">
@@ -219,6 +285,7 @@ export function WhereItIs({
           </tbody>
         </table>
       )}
+      {changes ? <CausesFixedSince crawlId={crawlId} item={item} check={check} changes={changes} /> : null}
       {read ? (
         <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle bg-surface-sunken px-6 py-3 text-14 text-text-secondary">
           <span>
@@ -259,12 +326,15 @@ function GroupRow({
   group,
   origin,
   noun,
+  since,
 }: {
   crawlId: string;
   check: Check;
   group: IssueGroup;
   origin: string | null;
   noun: (count: number) => string;
+  /** The fix loop: when the site's last check was, for the cause's "Still there since 3 Nov". */
+  since: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -296,8 +366,7 @@ function GroupRow({
       : plainRelated(group.related, check, origin);
   // An image is known by sight before by its address.
   const image = check.grouping === 'relatedUrl' && check.id.startsWith('image-') && group.relatedUrl !== null;
-  const broken =
-    typeof group.related?.statusCode === 'number' ? group.related.statusCode >= 400 : Boolean(group.related?.outcome);
+  const broken = isBrokenImage(group.related ?? {});
   // Each page's own facts in plain words: the engine's detail is Advanced's words, so these lines say it instead.
   const pageLines = (row: IssueRow) => (
     <>
@@ -322,7 +391,12 @@ function GroupRow({
               {origin && (group.relatedUrl === origin || group.relatedUrl === `${origin}/`) ? (
                 <span className="block font-medium">Your home page</span>
               ) : null}
-              <Address url={group.relatedUrl} origin={origin} small={group.relatedUrl === `${origin ?? ''}/`} />
+              <Address
+                url={group.relatedUrl}
+                origin={origin}
+                small={group.relatedUrl === `${origin ?? ''}/`}
+                file={image}
+              />
               {about ? (
                 <span className="si-cause-facts mt-1 block text-13 text-text-secondary">{about}</span>
               ) : status !== null && status >= 400 ? (
@@ -335,6 +409,9 @@ function GroupRow({
         ) : (
           <span>{group.detail ?? ''}</span>
         )}
+        {group.change ? (
+          <ChangeLine words={groupChangeWords(group.change, group.urls ?? group.pages, since, 'simple')} />
+        ) : null}
       </td>
       <td>
         {many ? (

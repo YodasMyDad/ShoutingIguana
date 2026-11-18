@@ -20,7 +20,7 @@ public sealed class SitemapReaderTests
             </urlset>
             """);
 
-        Assert.Equal([new SitemapEntry("https://example.com/a", false), new SitemapEntry("https://example.com/b", false)], entries);
+        Assert.Equal([new SitemapEntry("https://example.com/a", false, "2026-01-01"), new SitemapEntry("https://example.com/b", false)], entries);
     }
 
     [Fact]

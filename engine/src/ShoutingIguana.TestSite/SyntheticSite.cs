@@ -168,7 +168,7 @@ public sealed partial class SyntheticSite
         // Revision 1 lets the crawler into one URL of the private area, the one robots.txt now allows.
         if (path == "/robots.txt")
         {
-            var sitemap = _options.Sitemaps ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
+            var sitemap = _options is { Sitemaps: true, SitemapInRobots: true } ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
             var allowed = Revision >= 1 ? $"Allow: {UNBLOCKED_PRIVATE}\n" : string.Empty;
             return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\n{allowed}Disallow: /private/\n{sitemap}", null, null);
         }
@@ -186,6 +186,12 @@ public sealed partial class SyntheticSite
         if (_options.Sitemaps && path == "/sitemaps/extra.xml")
         {
             return Xml(RenderExtraSitemap());
+        }
+
+        // A sitemap the index lists that lists nothing: sitemap-empty.
+        if (_options.Sitemaps && path == "/sitemaps/empty.xml")
+        {
+            return Xml("<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"></urlset>");
         }
 
         if (_options.Sitemaps && TryNumber(path, "/sitemaps/pages-", ".xml", out var chunk) && chunk < ChunkCount)
@@ -358,6 +364,11 @@ public sealed partial class SyntheticSite
                 images.Add(ImagePath(product, image));
             }
 
+            if (IsNoindex(product) && HasProductMarkup(product))
+            {
+                Flag("structured-data-on-noindex", path);
+            }
+
             if (IsNoindex(product))
             {
                 Flag("noindex-page", path);
@@ -441,6 +452,10 @@ public sealed partial class SyntheticSite
         // site without TLS, which is no duplicate.
         // Revision 1 drops a security header from the home page, and mends the plain-HTTP side of the HTTPS site.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
+
+        // The tracked link's URL: the thin page, canonicalised to itself without the tag.
+        Flag("url-tracking-parameters", PLANTS_PATH + "thin?utm_source=newsletter");
+        Flag("canonicalised-page", PLANTS_PATH + "thin?utm_source=newsletter");
         if (!IsHttps && Revision >= 1)
         {
             Flag("security-headers-missing", "/");
@@ -460,11 +475,20 @@ public sealed partial class SyntheticSite
 
         if (_options.Sitemaps)
         {
-            // The sitemap index lists a file that doesn't exist (until revision 1 drops it), and the orphans are only in
-            // the extra sitemap.
+            // The sitemap index lists a file that doesn't exist (until revision 1 drops it) and one that lists nothing, the
+            // orphans are only in the extra sitemap, and the thin plant is in two sitemaps, one giving it a lastmod in the
+            // year 3000.
             if (Revision == 0)
             {
                 Flag("sitemap-error", "/");
+            }
+
+            Flag("sitemap-empty", "/");
+            Flag("sitemap-lastmod-invalid", "/");
+            Flag("sitemap-url-repeated", PLANTS_PATH + "thin");
+            if (!_options.SitemapInRobots)
+            {
+                Flag("robots-txt-no-sitemap", "/");
             }
 
             for (var orphan = 0; orphan < OrphanCount; orphan++)
@@ -499,7 +523,8 @@ public sealed partial class SyntheticSite
         var products = PageCount - 1;
         var orphans = _options.Sitemaps ? OrphanCount : 0;
         var unblocked = UnblockedPrivate is null ? 0 : 1;
-        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + restored.Count + unblocked +
+        // The tracked link's URL is the thin page again, at another URL (url-tracking-parameters).
+        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + restored.Count + unblocked + 1 +
                         _plants.Count(plant => plant is { Status: 200, IsPage: true } && !plant.Path.Contains("/cdn-cgi/", StringComparison.Ordinal));
         // Cloudflare's /cdn-cgi/ endpoint is no page of the site's in any count (the engine's CrawlSchema.PAGE), so it's
         // out of both; a page the analysis doesn't audit for another reason would be out of this one alone.
@@ -574,6 +599,9 @@ public sealed partial class SyntheticSite
     private static bool IsCanonicalised(int product) => product % 73 == 0;
 
     private bool IsIndexable(int product) => !IsNoindex(product) && !IsCanonicalised(product);
+
+    /// <summary>Every fifth product carries complete Product JSON-LD; a noindex one is structured data on a noindex page.</summary>
+    private static bool HasProductMarkup(int product) => product % 5 == 0;
 
     private static bool MissesAlt(int product) => product % 31 == 0;
 
@@ -688,8 +716,8 @@ public sealed partial class SyntheticSite
             Content = content.ToString(),
             Canonical = IsCanonicalised(product) ? $"{_base}/p/{product - 1}" : PageSpec.SELF,
             Robots = IsNoindex(product) ? "noindex" : null,
-            JsonLd = product % 5 == 0
-                ? $$$"""{"@context":"https://schema.org","@type":"Product","name":"Product {{{product}}}","sku":"SKU-{{{product}}}","offers":{"@type":"Offer","price":"19.99","priceCurrency":"GBP"}}"""
+            JsonLd = HasProductMarkup(product)
+                ? $$$"""{"@context":"https://schema.org","@type":"Product","name":"Product {{{product}}}","sku":"SKU-{{{product}}}","image":"{{{_base}}}/img/{{{product}}}.jpg","offers":{"@type":"Offer","price":"19.99","priceCurrency":"GBP","availability":"https://schema.org/InStock"}}"""
                 : null
         });
     }
@@ -890,6 +918,11 @@ public sealed partial class SyntheticSite
                 .Append("<meta property=\"og:image\" content=\"").Append(_base).Append("/img/0.jpg\">");
         }
 
+        if (page.TwitterCard)
+        {
+            html.Append("<meta name=\"twitter:card\" content=\"summary_large_image\">");
+        }
+
         html.Append("<link rel=\"stylesheet\" href=\"/static/site.css\"><script src=\"/static/app.js\" defer></script>");
         html.Append("<style>").Append(FILLER_STYLES).Append("</style>");
         if (page.JsonLd is not null)
@@ -941,8 +974,9 @@ public sealed partial class SyntheticSite
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/pages-").Append(chunk).Append(".xml</loc></sitemap>");
         }
 
-        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends.
+        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends. The one before it lists nothing.
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/extra.xml</loc></sitemap>");
+        xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/empty.xml</loc></sitemap>");
         if (Revision == 0)
         {
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap>");
@@ -958,6 +992,13 @@ public sealed partial class SyntheticSite
         for (var page = chunk * SITEMAP_CHUNK_SIZE; page < end; page++)
         {
             xml.Append("<url><loc>").Append(_base).Append(page == 0 ? "/" : $"/p/{page}").Append("</loc></url>");
+        }
+
+        // The thin plant is in the extra sitemap too (sitemap-url-repeated), listed here with a lastmod that hasn't happened
+        // yet (sitemap-lastmod-invalid).
+        if (chunk == 0)
+        {
+            xml.Append("<url><loc>").Append(_base).Append(PLANTS_PATH).Append("thin</loc><lastmod>3000-01-01</lastmod></url>");
         }
 
         return xml.Append("</urlset>").ToString();
@@ -1074,6 +1115,20 @@ public sealed partial class SyntheticSite
     /// A JPEG of <paramref name="size"/> bytes whose frame header says it is <paramref name="width"/> by
     /// <paramref name="height"/> pixels: its start, a JFIF segment, a baseline frame header, then nothing up to its end.
     /// </summary>
+    /// <summary>A PNG of the given size whose header gives its width and height, as the crawler reads image sizes.</summary>
+    private static byte[] BuildPng(int size, int width, int height)
+    {
+        var bytes = new byte[size];
+        byte[] header =
+        [
+            0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, (byte)'I', (byte)'H', (byte)'D', (byte)'R',
+            (byte)(width >> 24), (byte)(width >> 16), (byte)(width >> 8), (byte)width, (byte)(height >> 24), (byte)(height >> 16), (byte)(height >> 8), (byte)height,
+            0x08, 0x02, 0x00, 0x00, 0x00
+        ];
+        header.CopyTo(bytes, 0);
+        return bytes;
+    }
+
     private static byte[] BuildImage(int size, int width, int height)
     {
         var bytes = new byte[size];

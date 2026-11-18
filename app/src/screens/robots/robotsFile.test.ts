@@ -150,6 +150,10 @@ describe('a URL and its line, both ways', () => {
     expect(narrowingOf({ line: 6 })).toEqual({ by: 'line', line: 6 });
     expect(narrowingOf({ reason: 'unknown' })).toEqual({ by: 'reason', reason: 'unknown' });
     expect(narrowingOf({ line: 6, reason: 'unknown' })).toEqual({ by: 'line', line: 6 });
+    // The conflicts (in a sitemap or a menu, yet blocked): a line or a reason wins over them.
+    expect(narrowingOf({ conflict: true })).toEqual({ by: 'conflict' });
+    expect(narrowingOf({ line: 6, conflict: true })).toEqual({ by: 'line', line: 6 });
+    expect(narrowingOf({ reason: 'unknown', conflict: true })).toEqual({ by: 'reason', reason: 'unknown' });
   });
 
   it('asks the engine for exactly what the route narrows to', () => {
@@ -157,6 +161,7 @@ describe('a URL and its line, both ways', () => {
     expect(blockedQueryOf(origin, { by: 'none' })).toEqual({ origin });
     expect(blockedQueryOf(origin, { by: 'line', line: 6 })).toEqual({ origin, line: 6 });
     expect(blockedQueryOf(origin, { by: 'reason', reason: 'unreachable' })).toEqual({ origin, reason: 'unreachable' });
+    expect(blockedQueryOf(origin, { by: 'conflict' })).toEqual({ origin, conflict: true });
   });
 
   it('choosing a line lists exactly the URLs the file says it blocked', () => {
@@ -182,6 +187,7 @@ describe('a URL and its line, both ways', () => {
     expect(markedLine({ by: 'none' }, undefined)).toBeNull();
     expect(markedLine({ by: 'line', line: 3 }, TEST_BLOCKED[0])).toBe(3);
     expect(markedLine({ by: 'reason', reason: 'unknown' }, TEST_BLOCKED[3])).toBeNull();
+    expect(markedLine({ by: 'conflict' }, TEST_BLOCKED[0])).toBe(6);
   });
 
   it('words what the list is narrowed to, with the line’s own text when the file has it', () => {
@@ -200,7 +206,11 @@ describe('a URL and its line, both ways', () => {
     expect(narrowingWords({ by: 'reason', reason: 'unreachable' }, TEST_FILE)?.value).toBe(
       'robots.txt couldn’t be read',
     );
-    expect(narrowingWords({ by: 'reason', reason: 'unknown' }, TEST_FILE)?.value).toBe('no rule kept');
+    expect(narrowingWords({ by: 'reason', reason: 'unknown' }, TEST_FILE)?.value).toBe('no matching rule');
+    expect(narrowingWords({ by: 'conflict' }, TEST_FILE)).toEqual({
+      field: 'Conflict',
+      value: 'in your sitemap or menu but blocked',
+    });
   });
 
   it('says why no URLs are listed for a line: no such line, no rule, or a rule that blocked nothing', () => {

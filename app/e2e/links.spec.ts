@@ -113,6 +113,8 @@ const PRESETS: { name: string; filters: Filter[]; chip: RegExp; planted: string 
   },
 ];
 
+/** The kinds of link to a file a page loads: the grid names their targets by the file. */
+const RESOURCE_KINDS = ['image', 'script', 'stylesheet', 'icon', 'media'];
 const main = (page: Page) => page.getByRole('main');
 const grid = (page: Page) => page.getByRole('grid', { name: 'Links' });
 const inspectorOf = (page: Page) => page.getByRole('complementary', { name: 'Inspector' });
@@ -174,10 +176,20 @@ test('opens from the sidebar on every link, in crawl order, with what each is an
       [0, 'from.url'],
       [1, 'to.url'],
     ] as const) {
-      // The whole URL is the cell's name; what shows of it is its path on the site.
+      // The whole URL is the cell's name; what shows of it is its path on the site, or, for a file the page loads
+      // (an image, a stylesheet), the file's name.
       const url = row.getByRole('gridcell').nth(cell).locator('.si-url__go');
       await expect(url).toHaveAccessibleName(String(link[end]));
-      await expect(url.locator('.si-url__shown')).toHaveText(shownIn(String(link[end])));
+      if (end === 'to.url' && RESOURCE_KINDS.includes(String(link.kind))) {
+        const name =
+          new URL(String(link[end])).pathname
+            .split('/')
+            .filter((part) => part)
+            .at(-1) ?? '';
+        await expect(url.locator('.si-url__file')).toHaveText(decodeURIComponent(name));
+      } else {
+        await expect(url.locator('.si-url__shown')).toHaveText(shownIn(String(link[end])));
+      }
     }
     await expect(row.getByRole('gridcell').nth(2)).toHaveText(
       link.text === null || link.text === '' ? 'None' : String(link.text),

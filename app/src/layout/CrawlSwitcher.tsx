@@ -9,10 +9,10 @@ import { goToSection } from '../app/goToSection';
 import { sectionOf } from '../app/sections';
 import { CrawlFavicon } from '../crawl/CrawlFavicon';
 import { effectiveStatus, statusLabel } from '../crawl/status';
-import { formatExactTime } from '../lib/format';
+import { formatCount, formatExactTime } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import type { Mode } from '../mode/mode';
-import { siteName } from '../simple/home/sites';
+import { rowScore, siteName } from '../simple/home/sites';
 import { Icon } from '../ui/Icon';
 import { DropdownMenu, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator } from '../ui/Menu';
 import { Tooltip } from '../ui/Tooltip';
@@ -72,17 +72,20 @@ function SwitcherButton({ ref, crawl, name, date, label, switchTo, collapsed, cl
  * A crawl in the switcher's menu: the site, as Home names it, then when it was crawled and, unless it simply finished,
  * its state in the mode's words, as Home says it ("Paused", "Stopped early"): two crawls of a site in the same minute
  * are told apart by it (gallery 6). Two lines, so a long name keeps its room. The state is the live one while this
- * sidecar works on the crawl.
+ * sidecar works on the crawl. In Advanced, its score at the end (the fix loop), "so far" under one of a crawl that
+ * didn't read all of the site; none for a crawl with no score, never 0.
  */
 function SwitcherRow({ item, mode }: { item: CrawlListItem; mode: Mode }) {
   const live = useLiveCrawl(item.id);
   const status = effectiveStatus(item, live);
   const state = status && status !== 'completed' ? statusLabel(status, mode) : null;
   const date = item.startedAt ? formatExactTime(item.startedAt) : null;
+  const score =
+    mode === 'advanced' && status && status !== 'unreadable' && !item.missing ? rowScore(item, status) : null;
   return (
-    <span className="flex min-w-0 items-center gap-2.5">
+    <span className="flex min-w-0 flex-1 items-center gap-2.5">
       <CrawlFavicon item={item} size="md" />
-      <span className="flex min-w-0 flex-col">
+      <span className="flex min-w-0 flex-1 flex-col">
         <span className="si-switcher-menu__name truncate">{siteName(item)}</span>
         {date || state ? (
           <span className="si-switcher-menu__date truncate">
@@ -92,6 +95,13 @@ function SwitcherRow({ item, mode }: { item: CrawlListItem; mode: Mode }) {
           </span>
         ) : null}
       </span>
+      {score ? (
+        <span className="si-switcher-menu__score">
+          <span className="sr-only">Score </span>
+          <span className="figures">{formatCount(score.value)}</span>
+          {score.partial ? <span className="si-switcher-menu__date"> so far</span> : null}
+        </span>
+      ) : null}
     </span>
   );
 }
