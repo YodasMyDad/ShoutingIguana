@@ -27,5 +27,12 @@ internal sealed record CheckCountDto(string CheckId, long Count, bool LikelyTemp
 
     public IReadOnlyList<ClearedCheckDto> Clears { get; init; } = [];
 
+    /// <summary>
+    /// For a check of the site's own files (<c>about</c> on the check): every robots.txt or sitemap it found at fault, in the
+    /// order its detail names them, for a view to name instead of the home page the issue is on. Null for any other check,
+    /// and for an analysis before files were stored, or one that changed while it was read.
+    /// </summary>
+    public IReadOnlyList<IssueFileDto>? Files { get; init; }
+
     public PlatformDto? Platform { get; init; }
 }

@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(16, AnalysisFreshness.VERSION);
+        Assert.Equal(17, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -75,14 +75,26 @@ public sealed class AnalysisFreshnessTests
     }
 
     /// <summary>
-    /// Version 16 marks the checks of what a Shopify store's platform sets as Shopify's, out of the score and Fix first, and
-    /// says Shopify's reason and the fix in the note for the pages a store refused. An analysis 15 stored is out of date.
+    /// Version 16 is the "can I fix it from this?" pass's (index part): the checks of the site's robots.txt and sitemaps store
+    /// the files they're about (<c>issue_files</c>), <c>blocked-by-robots</c> names the rule and its line, and the sitemap and
+    /// robots.txt details say more (the sitemaps listing a URL twice, the first wrong lastmod, an empty robots.txt). An
+    /// analysis 15 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeTheFilesAndRulesWereNamedIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 17 marks the checks of what a Shopify store's platform sets as Shopify's, out of the score and Fix first, and
+    /// says Shopify's reason and the fix in the note for the pages a store refused. An analysis 16 stored is out of date.
     /// </summary>
     [Fact]
     public void AnAnalysisFromBeforeWhatShopifySetsIsOutOfDate()
     {
-        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 17 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

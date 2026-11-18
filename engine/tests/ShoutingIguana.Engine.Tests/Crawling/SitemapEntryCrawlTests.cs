@@ -51,9 +51,12 @@ public sealed class SitemapEntryCrawlTests : IAsyncLifetime
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
         Assert.Equal(["sitemap-empty", "sitemap-lastmod-invalid"],
             TestCrawls.Rows(_path, "SELECT i.issue FROM issues i JOIN urls u ON u.id = i.url_id WHERE i.issue IN ('sitemap-empty', 'sitemap-lastmod-invalid') ORDER BY i.issue"));
-        Assert.Equal(["1 entry: 1 in the future (" + server.BaseUri.AbsoluteUri + "sitemaps/pages-0.xml)"],
+        // The first wrong entry and what it says, and the sitemaps listing a URL twice (the fix-it pass).
+        var site = server.BaseUri.AbsoluteUri;
+        Assert.Equal([$"1 entry: 1 in the future ({site}sitemaps/pages-0.xml): {site}plants/thin, lastmod 3000-01-01"],
             TestCrawls.Rows(_path, "SELECT detail FROM issues WHERE issue = 'sitemap-lastmod-invalid'"));
-        Assert.Equal(["In 2 sitemaps"], TestCrawls.Rows(_path, "SELECT detail FROM issues WHERE issue = 'sitemap-url-repeated'"));
+        Assert.Equal([$"In 2 sitemaps: {site}sitemaps/pages-0.xml and {site}sitemaps/extra.xml"],
+            TestCrawls.Rows(_path, "SELECT detail FROM issues WHERE issue = 'sitemap-url-repeated'"));
         Assert.Equal(0, TestCrawls.Count(_path, "SELECT COUNT(*) FROM issues WHERE issue = 'robots-txt-no-sitemap'"));
     }
 

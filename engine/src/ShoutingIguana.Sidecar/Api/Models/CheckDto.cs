@@ -65,12 +65,27 @@ internal sealed record CheckDto(
     IReadOnlyList<string> Clears,
     IReadOnlyList<RecheckKind> Recheck)
 {
+    /// <summary>
+    /// The kind of file a check of the whole site is about (robotsTxt, sitemap): the analysis's count for it names the files
+    /// (<see cref="CheckCountDto.Files"/>), for a view to show instead of the home page. Null for a check of pages or URLs.
+    /// </summary>
+    public IssueAbout? About { get; init; }
+
+    /// <summary>
+    /// The order the check's rows come in when none is asked for: importance (the most linked, or the most used, first) or
+    /// fewestLinksFirst (the pages links lead to least first: pages missing from the sitemaps).
+    /// </summary>
+    public IssueRowOrder RowOrder { get; init; }
+
     /// <param name="settings">The thresholds the plain words' limits are filled from.</param>
     public static CheckDto From(IssueDefinition check, AnalysisSettings settings)
     {
         var plain = PlainLimits.Fill(check.Plain, settings);
         return new CheckDto(check.Id, check.Category, check.Severity, check.Title, check.Description, check.Fix, check.Why, check.LearnMore,
             GridRequests.Grouping(check.Grouping), check.Subject, check.References, check.SiteWide, check.ReportedOnce,
-            plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts, check.Clears, check.Recheck);
+            plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts, check.Clears, check.Recheck)
+        {
+            About = check.About, RowOrder = check.RowOrder
+        };
     }
 }

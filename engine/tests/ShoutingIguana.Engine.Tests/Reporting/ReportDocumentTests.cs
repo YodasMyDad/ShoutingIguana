@@ -104,9 +104,11 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             var most = check.Severity == IssueSeverity.Notice ? ReportOptions.DEFAULT_LOOK_EXAMPLES : ReportOptions.DEFAULT_EXAMPLES;
             Assert.Equal((int)Math.Min(most, results.Counts[check.Id]), listed);
 
-            // They are the check's first rows, in the order its list has them (by importance), each linked to its own address.
+            // They are the check's first rows, in the order its list has them (by importance), each linked to its own address;
+            // a check of the site's files (reported once, on the home page) names its first file instead.
+            var files = check.About is null ? null : IssueFileReader.Read(crawl.Path)!.Checks.GetValueOrDefault(check.Id);
             Assert.Equal(
-                FirstRows(check.Id, most).Select(row => (string)row.Values[1]!),
+                files is { Count: > 0 } ? [files[0].Url] : FirstRows(check.Id, most).Select(row => (string)row.Values[1]!),
                 problems[index].QuerySelectorAll(".examples tbody tr").Select(row => row.QuerySelector("td .mono a")!.GetAttribute("href")));
             if (results.Counts[check.Id] > most)
             {
@@ -748,6 +750,28 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         // A check of pages still counts pages, which name the address they share.
         var pages = document.QuerySelectorAll(".onefix").Select(fix => fix.TextContent).Where(text => text != oneFix).ToList();
         Assert.All(pages, text => Assert.Matches("^One fix clears [0-9,]+ of these [0-9,]+ pages?\\. ", text));
+    }
+
+    /// <summary>
+    /// The "can I fix it from this?" pass: a check of the site's sitemaps or robots.txt names the file, not the home page it's
+    /// reported on; and a check of the canonicals or hreflang a page names says what its column holds, the URL it names,
+    /// as the fix is the page's own tag, not a change to that URL.
+    /// </summary>
+    [Fact]
+    public void AFileCheckNamesItsFileAndACanonicalsColumnSaysWhatItNames()
+    {
+        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10 }, SETTINGS));
+        AngleSharp.Dom.IElement Problem(string checkId) => document.QuerySelectorAll("article.problem")
+            .Single(article => article.QuerySelector(".problem__tech")!.TextContent.StartsWith(IssueCatalog.Find(checkId)!.Title + " ·", StringComparison.Ordinal));
+
+        var error = Problem("sitemap-error");
+        Assert.Equal(["File", "What was found"], error.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+        Assert.Equal("/sitemaps/missing.xml", Assert.Single(error.QuerySelectorAll(".examples tbody tr")).QuerySelector("td .mono")!.TextContent);
+        Assert.Equal("/sitemaps/empty.xml", Assert.Single(Problem("sitemap-empty").QuerySelectorAll(".examples tbody tr")).QuerySelector("td .mono")!.TextContent);
+
+        Assert.Equal(["Page", "What was found", "Main address it names"], Problem("canonical-broken").QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+        Assert.Equal(["Page", "What was found", "Language versions it names"],
+            Problem("hreflang-broken-target").QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
     }
 
     /// <summary>

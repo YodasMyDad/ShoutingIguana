@@ -69,7 +69,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     {
         var engine = IssueCauseReader.Read(grid.Path)!.Checks;
         var counts = (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis"))["counts"]!.AsArray().Select(count => count!).ToList();
-        Assert.All(counts, count => Assert.Equal(["checkId", "count", "likelyTemplate", "causes", "templateCauses", "clears", "platform"],
+        Assert.All(counts, count => Assert.Equal(["checkId", "count", "likelyTemplate", "causes", "templateCauses", "clears", "files", "platform"],
             count.AsObject().Select(property => property.Key)));
         foreach (var count in counts)
         {
@@ -91,6 +91,40 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
         Assert.Equal("""["links-to-redirects","pagination-broken"]""", checks.Single(check => (string?)check!["id"] == "redirect-chain")!["clears"]!.ToJsonString());
         Assert.Equal("[]", checks.Single(check => (string?)check!["id"] == "title-too-long")!["clears"]!.ToJsonString());
+    }
+
+    /// <summary>
+    /// The fix-it pass's contract: a check of the site's robots.txt or sitemaps says so (<c>about</c>), and its count names
+    /// the files with each sitemap's id, for a view to show instead of the home page; every other check's count names none.
+    /// And a check says what order its rows come in (<c>rowOrder</c>).
+    /// </summary>
+    [Fact]
+    public async Task AFileChecksCountNamesItsFilesAndEachCheckSaysItsOrder()
+    {
+        var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray().Select(check => check!).ToDictionary(check => (string)check["id"]!);
+        Assert.Equal("sitemap", (string?)checks["sitemap-error"]["about"]);
+        Assert.Equal("robotsTxt", (string?)checks["robots-txt-no-sitemap"]["about"]);
+        Assert.Null(checks["title-too-long"]["about"]);
+        Assert.Equal("fewestLinksFirst", (string?)checks["not-in-sitemap"]["rowOrder"]);
+        Assert.Equal("importance", (string?)checks["title-too-long"]["rowOrder"]);
+
+        var counts = (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis"))["counts"]!.AsArray().Select(count => count!).ToList();
+        var stored = IssueFileReader.Read(grid.Path)!.Checks;
+        foreach (var count in counts)
+        {
+            var id = (string)count["checkId"]!;
+            if (stored.TryGetValue(id, out var files))
+            {
+                Assert.Equal(files.Select(file => (file.Url, file.SitemapId)),
+                    count["files"]!.AsArray().Select(file => ((string)file!["url"]!, (long?)file["sitemapId"])));
+            }
+            else
+            {
+                Assert.Null(count["files"]);
+            }
+        }
+
+        Assert.Contains(counts, count => (string?)count["checkId"] == "sitemap-error" && count["files"]!.AsArray().Count == 1);
     }
 
     [Fact]

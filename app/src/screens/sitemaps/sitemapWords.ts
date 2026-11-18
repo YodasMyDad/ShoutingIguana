@@ -10,6 +10,7 @@ import type {
   SitemapSource,
   SummaryReason,
 } from '../../api/grids';
+import type { Check, CheckCount } from '../../api/types';
 import { failureOf, type Failure } from '../../lib/failure';
 import { formatCount, formatCountOf } from '../../lib/format';
 import type { SentencePart } from '../countSentence';
@@ -100,7 +101,7 @@ export function notReadReason(error: string | null): string | null {
  */
 export function stateWords(
   sitemap: Pick<Sitemap, 'state' | 'error' | 'entries' | 'urls' | 'isIndex'> &
-    Partial<Pick<Sitemap, 'foundVia' | 'statusCode'>>,
+    Partial<Pick<Sitemap, 'foundVia' | 'statusCode' | 'listedSitemaps'>>,
   crawling: boolean,
   /** An index's: how far the crawl got with the sitemaps under it. Left out, the index is taken as read whole. */
   subtree?: Subtree,
@@ -178,13 +179,22 @@ export function indexHoldsWords(sitemap: Pick<Sitemap, 'sitemaps'>, subtree: Sub
 /** The words of `stateWords`. `failure`: why a failed sitemap failed, or null. */
 function wordsOf(
   sitemap: Pick<Sitemap, 'state' | 'error' | 'entries' | 'urls' | 'isIndex'> &
-    Partial<Pick<Sitemap, 'foundVia' | 'statusCode'>>,
+    Partial<Pick<Sitemap, 'foundVia' | 'statusCode' | 'listedSitemaps'>>,
   crawling: boolean,
   failure: Failure | null,
 ): Omit<StateWords, 'recorded'> {
   const why = failure && failure.words !== '' ? `: ${failure.words}` : '';
   switch (sitemap.state) {
     case 'read':
+      // An empty sitemap is flagged (sitemap-empty): only where the engine counted what the file lists, as an engine from
+      // before the count can't tell an empty file from an index it read.
+      if (!sitemap.isIndex && sitemap.entries === 0 && sitemap.listedSitemaps === 0) {
+        return {
+          tone: 'failed',
+          short: 'Empty: lists no URLs',
+          sentence: 'The crawl read it, and it lists no URLs: an empty sitemap, which search engines ignore.',
+        };
+      }
       return {
         tone: 'read',
         short: 'Read',
@@ -326,8 +336,17 @@ export const OWN_JUDGEMENT: Record<SummaryReason, string> = {
 
 // ------------------------------------------------------------------------------------- What no sitemap lists
 
-/** The site's pages counted by whether a sitemap lists them: one read of the URL grid's facets. */
-export const COVERAGE_FACETS = { filters: [...ANSWERED_SITE_PAGES], facets: ['inSitemap'] as const };
+/**
+ * The site's pages that can appear in search, counted by whether a sitemap lists them: one read of the URL grid's facets.
+ * The pages the not-in-sitemap check counts, so the line and the check agree: a page that names another as its main
+ * address (page 2 of a list), or asks not to be indexed, is rightly in no sitemap.
+ */
+export const INDEXABLE_SITE_PAGES: readonly GridFilter[] = [
+  ...ANSWERED_SITE_PAGES,
+  { column: 'indexable', op: 'is', value: true },
+];
+
+export const COVERAGE_FACETS = { filters: [...INDEXABLE_SITE_PAGES], facets: ['inSitemap'] as const };
 
 export type Coverage =
   /** The site's pages no sitemap lists, of all its pages, and the filters that open exactly them in URLs. */
@@ -357,7 +376,7 @@ export function coverageOf(facets: FacetsPage): Coverage {
     known: true,
     missing: missing?.count ?? 0,
     pages: facets.matching,
-    filters: [...ANSWERED_SITE_PAGES, missing?.filter ?? { column: 'inSitemap', op: 'is', value: false }],
+    filters: [...INDEXABLE_SITE_PAGES, missing?.filter ?? { column: 'inSitemap', op: 'is', value: false }],
   };
 }
 
@@ -382,11 +401,21 @@ export function coverageSkippedWords(why: string | null): string {
     : `${said}: it couldn’t compare every page with the sitemaps.`;
 }
 
-/** The words either side of the count that opens the pages no sitemap lists: "264", " of the site’s 265 pages aren’t in any sitemap." */
+/**
+ * The words either side of the count that opens the pages no sitemap lists: "18", " of the site’s 257 indexable pages
+ * aren’t in any sitemap."
+ */
 export function coverageWords(coverage: Extract<Coverage, { known: true }>): SentencePart[] {
-  if (coverage.pages === 0) return ['The crawl read no pages on this site, so there’s nothing for a sitemap to list.'];
-  // The site's pages, as Overview counts them: the count opens exactly them.
-  const pages = { text: formatCountOf(coverage.pages, 'page'), filters: ANSWERED_SITE_PAGES };
+  if (coverage.pages === 0) {
+    return [
+      'The crawl found no pages on this site that can appear in search, so there’s nothing for a sitemap to list.',
+    ];
+  }
+  // The site's indexable pages: the count opens exactly them.
+  const pages = {
+    text: `${formatCount(coverage.pages)} indexable ${coverage.pages === 1 ? 'page' : 'pages'}`,
+    filters: INDEXABLE_SITE_PAGES,
+  };
   if (coverage.missing === 0) {
     return coverage.pages === 1
       ? ['The site’s ', pages, ' is in a sitemap.']
@@ -398,4 +427,32 @@ export function coverageWords(coverage: Extract<Coverage, { known: true }>): Sen
     pages,
     coverage.missing === 1 ? ' isn’t in any sitemap.' : ' aren’t in any sitemap.',
   ];
+}
+
+// ------------------------------------------------------------------------------------- What the checks found
+
+/** The checks of the sitemaps, as the catalog files them: the Sitemaps screen lists what they found. */
+export const SITEMAPS_CATEGORY = 'sitemaps';
+
+export interface SitemapCheckCount {
+  id: string;
+  title: string;
+  count: number;
+}
+
+/**
+ * Each check of the sitemaps that found something, with its count, in the analysis's order: what the Sitemaps screen
+ * links to, so its own counts (every listed URL, other sites' among them) and the checks' (the site's own) are told apart.
+ */
+export function sitemapChecksOf(
+  checks: readonly Pick<Check, 'id' | 'title' | 'category'>[],
+  counts: readonly Pick<CheckCount, 'checkId' | 'count'>[],
+): SitemapCheckCount[] {
+  const byId = new Map(checks.map((check) => [check.id, check]));
+  return counts.flatMap((count) => {
+    const check = byId.get(count.checkId);
+    return check?.category === SITEMAPS_CATEGORY && count.count > 0
+      ? [{ id: check.id, title: check.title, count: count.count }]
+      : [];
+  });
 }

@@ -1,3 +1,5 @@
+import { Fragment, createElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { FacetsPage, GridFilter, UrlRow } from '../../api/grids';
 import { answerFacets, answerGridQuery } from '../../api/mock/gridQuery';
@@ -8,6 +10,7 @@ import { withFacetValue } from '../links/facets';
 import {
   DEFAULT_URL_COLUMNS,
   URL_MIN_WIDTH,
+  URL_GRID_AT_1440,
   URL_PRESETS,
   activeUrlPreset,
   colsParam,
@@ -17,11 +20,19 @@ import {
   urlColumnWidth,
   urlFilterColumns,
   urlGridColumns,
+  urlPresetFits,
   urlQueryColumns,
   urlStatusWords,
 } from './urlColumns';
 import { buildUrlFacets, urlFacetValueWords } from './urlFacets';
 import { urlIdsOf } from './useUrlFilterWords';
+
+/** A cell as the grid draws it, to read its words. */
+function render(node: ReactNode): HTMLElement {
+  const element = document.createElement('div');
+  element.innerHTML = renderToStaticMarkup(createElement(Fragment, null, node));
+  return element;
+}
 
 describe('the URL grid’s presets', () => {
   it('lead with the URL, show more than the nine columns of before, and name only columns the engine has', () => {
@@ -39,6 +50,19 @@ describe('the URL grid’s presets', () => {
       'Performance',
       'Links',
     ]);
+  });
+
+  it('fit the URL grid of a 1,440-pixel window, the URL at its least width or more (the fix-it pass)', () => {
+    // The Indexability preset's Redirects to was off the right edge at 1,440 pixels, where the grid is 1,120 wide.
+    for (const preset of URL_PRESETS) {
+      expect({ preset: preset.id, fits: urlPresetFits(preset.columns, URL_COLUMNS, URL_GRID_AT_1440) }).toEqual({
+        preset: preset.id,
+        fits: true,
+      });
+    }
+    // A redirect's target and a page's canonical lead the Indexability preset's reasons.
+    const indexability = URL_PRESETS.find((preset) => preset.id === 'indexability')!.columns;
+    expect(indexability).toEqual(expect.arrayContaining(['canonicalUrl', 'metaRobots', 'inSitemap', 'redirectTarget']));
   });
 
   it('reads as chosen exactly while the columns are its own, in its order', () => {
@@ -69,13 +93,15 @@ describe('the columns shown', () => {
 
   it('ask for the URL always, and with the status how the request went', () => {
     expect(urlQueryColumns(['title'])).toEqual(['url', 'title']);
+    // With indexability, the type: a file isn't a page to judge.
+    expect(urlQueryColumns(['url', 'indexability'])).toEqual(['url', 'indexability', 'type']);
     expect(urlQueryColumns(['url', 'statusCode'])).toEqual(['url', 'statusCode', 'statusClass', 'outcome', 'fetched']);
   });
 
   it('give the URL the room the others leave, never less than its least, so a narrow grid scrolls sideways', () => {
     const shown = ['url', 'statusCode', 'title'];
     expect(urlColumnWidth(shown, URL_COLUMNS, null)).toBeUndefined();
-    expect(urlColumnWidth(shown, URL_COLUMNS, 1000)).toBe(1000 - 104 - 240);
+    expect(urlColumnWidth(shown, URL_COLUMNS, 1000)).toBe(1000 - 88 - 208);
     expect(urlColumnWidth(shown, URL_COLUMNS, 400)).toBe(URL_MIN_WIDTH);
     expect(urlColumnWidth(['title'], URL_COLUMNS, 1000)).toBeUndefined();
   });
@@ -120,6 +146,35 @@ describe('the URL grid’s cells', () => {
     expect(column('inSitemap').text(row)).toBe('No');
     // A URL is copied whole, whatever the cell shows.
     expect(column('url').text(row)).toBe('https://example.com/a');
+  });
+
+  it('say a page’s canonical names itself, and a file isn’t a page to judge (the fix-it pass)', () => {
+    const canonical = column('canonicalUrl');
+    const self: UrlRow = { id: 1, url: 'https://example.com/a', canonicalUrl: 'https://example.com/a' };
+    const other: UrlRow = { id: 2, url: 'https://example.com/a?p=2', canonicalUrl: 'https://example.com/a' };
+    expect(render(canonical.cell(self)).textContent).toBe('Self');
+    // Another URL is drawn as the address it is.
+    expect(render(canonical.cell(other)).textContent).not.toContain('Self');
+    expect(render(canonical.cell(other)).textContent).toContain('/a');
+    // Copied whole either way.
+    expect(canonical.text(self)).toBe('https://example.com/a');
+
+    const indexability = column('indexability');
+    expect(
+      indexability.text({ id: 3, url: 'https://example.com/s.css', indexability: 'none', type: 'stylesheet' }),
+    ).toBe('Not a page');
+    expect(indexability.text({ id: 4, url: 'https://example.com/i.png', indexability: 'none', type: 'image' })).toBe(
+      'Not a page',
+    );
+    expect(indexability.text({ id: 5, url: 'https://example.com/a', indexability: 'none', type: 'page' })).toBe(
+      'Indexable',
+    );
+    expect(
+      indexability.text({ id: 6, url: 'https://example.com/gone.png', indexability: 'clientError', type: 'image' }),
+    ).toBe('Client error');
+    expect(indexability.text({ id: 7, url: 'https://example.com/x', indexability: 'blocked', type: 'page' })).toBe(
+      'Blocked by a firewall',
+    );
   });
 
   it('name the host once in the URL column’s header, unless every URL is shown whole', () => {
@@ -233,6 +288,40 @@ describe('the URL grid’s facets', () => {
       '2000 ms or more',
     ]);
     expect(facets.find((facet) => facet.id === 'severity')!.values[0]!.words).toBe('No issues');
+  });
+
+  it('tell a firewall’s block from robots.txt’s, and say why a URL wasn’t judged (the fix-it pass)', () => {
+    const indexability = (value: string | null) =>
+      urlFacetValueWords(
+        'indexability',
+        { value, count: 1, filter: { column: 'indexability', op: 'isEmpty' } },
+        false,
+        {
+          blocked: 'Blocked',
+          blockedByRobots: 'Blocked by robots.txt',
+        },
+      );
+    expect(indexability('blocked')).toBe('Blocked by a firewall');
+    expect(indexability('blockedByRobots')).toBe('Blocked by robots.txt');
+    expect(indexability(null)).toBe('Not crawled, so not judged');
+  });
+
+  it('offer the pages the not-in-sitemap check found, in one click, on a view not narrowed yet', () => {
+    const sitemaps: FacetsPage = {
+      ...page,
+      facets: { inSitemap: [{ value: false, count: 5_811, filter: { column: 'inSitemap', op: 'is', value: false } }] },
+    };
+    const check = { column: 'check', op: 'in', values: ['not-in-sitemap'] };
+    const values = (filters: GridFilter[], count: number | null) =>
+      buildUrlFacets(sitemaps, filters, false, undefined, count).find((facet) => facet.id === 'inSitemap')!.values;
+    expect(values([], 18).map((value) => [value.words, value.count, value.filter])).toEqual([
+      ['In no sitemap', 5_811, { column: 'inSitemap', op: 'is', value: false }],
+      ['Indexable pages in no sitemap', 18, check],
+    ]);
+    // Not when the check found none, nor on a view already narrowed, whose count it wouldn't be.
+    expect(values([], 0)).toHaveLength(1);
+    expect(values([], null)).toHaveLength(1);
+    expect(values([{ column: 'type', op: 'in', values: ['page'] }], 18)).toHaveLength(1);
   });
 
   it('say a URL not crawled yet is so far, while the crawl runs', () => {

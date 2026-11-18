@@ -107,12 +107,19 @@ public static class IssueCauseReader
                 continue;
             }
 
-            var pages = context.Scalar("""
-                SELECT COUNT(*) FROM (
-                    SELECT t.url_id FROM issue_targets t WHERE t.issue = $other
-                    GROUP BY t.url_id
-                    HAVING MIN(EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = t.related_url_id)) = 1)
-                """, [new("$other", other), new("$check", check.Id)]);
+            // A check of pages naming targets (links to a 404) is cleared where every target a page names is fixed; a check of
+            // the URL itself (a sitemap entry that fails with a server error) where it's one of the fixed URLs.
+            var pages = IssueCatalog.Find(other)?.References == IssueReferences.Targets
+                ? context.Scalar("""
+                    SELECT COUNT(*) FROM (
+                        SELECT t.url_id FROM issue_targets t WHERE t.issue = $other
+                        GROUP BY t.url_id
+                        HAVING MIN(EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = t.related_url_id)) = 1)
+                    """, [new("$other", other), new("$check", check.Id)])
+                : context.Scalar("""
+                    SELECT COUNT(*) FROM issues o
+                    WHERE o.issue = $other AND EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = o.url_id)
+                    """, [new("$other", other), new("$check", check.Id)]);
             if (pages > 0)
             {
                 cleared.Add(new ClearedCheck(other, pages, pages == flagged));

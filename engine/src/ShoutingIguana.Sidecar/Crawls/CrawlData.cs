@@ -62,6 +62,9 @@ internal sealed class CrawlData(CrawlManager crawls, ReadCache cache)
         // The checks as things to change, and what a fix of each clears: read apart, so only when it's of the same analysis.
         var causes = EngineErrors.Read(() => IssueCauseReader.Read(path, cache)) is { } read && read.AnalyzedAt == analysis.AnalyzedAt ? read.Checks : null;
 
+        // The files the checks of robots.txt and the sitemaps are about, likewise only of the same analysis.
+        var files = EngineErrors.Read(() => IssueFileReader.Read(path, cache)) is { } stored && stored.AnalyzedAt == analysis.AnalyzedAt ? stored.Checks : null;
+
         // In catalog order. A check from a newer engine, which this one doesn't know, still counts, after the rest.
         List<CheckCountDto> ran =
         [
@@ -71,6 +74,7 @@ internal sealed class CrawlData(CrawlManager crawls, ReadCache cache)
                     Causes = causes?.GetValueOrDefault(check.Id)?.Causes,
                     TemplateCauses = causes?.GetValueOrDefault(check.Id)?.InTemplate,
                     Clears = causes?.GetValueOrDefault(check.Id) is { } found ? [.. found.Clears.Select(cleared => new ClearedCheckDto(cleared.CheckId, cleared.Pages, cleared.All))] : [],
+                    Files = check.About is not null && files?.GetValueOrDefault(check.Id) is { } named ? [.. named.Select(file => new IssueFileDto(file.Url, file.SitemapId))] : null,
                     Platform = results.PlatformOwned.GetValueOrDefault(check.Id) is { } platform ? new PlatformDto(platform.Name, platform.Reason) : null
                 })
         ];

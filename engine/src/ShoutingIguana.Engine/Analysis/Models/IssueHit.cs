@@ -31,6 +31,13 @@ internal readonly record struct IssueHit(IssueDefinition Issue, int UrlId, strin
     /// </summary>
     public PlatformOwner? Platform { get; init; }
 
+    /// <summary>
+    /// For a check of the site's files (<see cref="IssueDefinition.About"/>): every robots.txt or sitemap it found at fault, as
+    /// full URLs in the order its detail names them, stored in <c>issue_files</c> so a view can name the file instead of the
+    /// home page the issue is reported on. Null for any other check.
+    /// </summary>
+    public IReadOnlyList<string>? Files { get; init; }
+
     /// <summary>The URLs the issue is about, as <see cref="Targets"/> says: those, or the related URL, or none.</summary>
     public IReadOnlyList<int> AllTargets => Targets ?? (RelatedUrlId is { } related ? [related] : []);
 

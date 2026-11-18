@@ -44,6 +44,11 @@ internal sealed class IssueWriter : IDisposable
     private readonly SqliteParameter _faultIssue;
     private readonly SqliteParameter _fault;
     private readonly SqliteParameter _faultUrlId;
+    private readonly SqliteCommand _insertFile;
+    private readonly SqliteParameter _fileIssue;
+    private readonly SqliteParameter _fileUrlId;
+    private readonly SqliteParameter _filePosition;
+    private readonly SqliteParameter _file;
     private readonly ILogger _logger;
 
     // Per check stored: the platform that set every issue so far (null once one was the site's own, or another's).
@@ -57,7 +62,7 @@ internal sealed class IssueWriter : IDisposable
         _transaction = connection.BeginTransaction();
         CrawlDatabase.Execute(connection, """
             DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes; DELETE FROM effective_indexability;
-            DELETE FROM skipped_checks; DELETE FROM issue_targets; DELETE FROM issue_faults;
+            DELETE FROM skipped_checks; DELETE FROM issue_targets; DELETE FROM issue_faults; DELETE FROM issue_files;
             """, _transaction);
 
         _insert = connection.CreateCommand();
@@ -83,6 +88,13 @@ internal sealed class IssueWriter : IDisposable
         _fault = _insertFault.Parameters.Add("$fault", SqliteType.Text);
         _faultUrlId = _insertFault.Parameters.Add("$urlId", SqliteType.Integer);
         _insertFault.Prepare();
+
+        _insertFile = Command("INSERT OR IGNORE INTO issue_files (issue, url_id, position, file) VALUES ($issue, $urlId, $position, $file)");
+        _fileIssue = _insertFile.Parameters.Add("$issue", SqliteType.Text);
+        _fileUrlId = _insertFile.Parameters.Add("$urlId", SqliteType.Integer);
+        _filePosition = _insertFile.Parameters.Add("$position", SqliteType.Integer);
+        _file = _insertFile.Parameters.Add("$file", SqliteType.Text);
+        _insertFile.Prepare();
     }
 
     /// <exception cref="InvalidOperationException">
@@ -165,6 +177,18 @@ internal sealed class IssueWriter : IDisposable
             _faultUrlId.Value = hit.UrlId;
             _insertFault.ExecuteNonQuery();
         }
+
+        if (hit.Files is { } files)
+        {
+            _fileIssue.Value = hit.Issue.Id;
+            _fileUrlId.Value = hit.UrlId;
+            for (var position = 0; position < files.Count; position++)
+            {
+                _filePosition.Value = position;
+                _file.Value = files[position];
+                _insertFile.ExecuteNonQuery();
+            }
+        }
     }
 
     /// <summary>Stores indexability the analysis judged differently from the crawl, for the stats and the UI.</summary>
@@ -179,7 +203,7 @@ internal sealed class IssueWriter : IDisposable
             _platforms.Remove(check.Id);
         }
 
-        foreach (var table in new[] { "issues", "issue_targets", "issue_faults" })
+        foreach (var table in new[] { "issues", "issue_targets", "issue_faults", "issue_files" })
         {
             using var delete = Command($"DELETE FROM {table} WHERE issue = $issue");
             var issue = delete.Parameters.Add("$issue", SqliteType.Text);
@@ -351,6 +375,7 @@ internal sealed class IssueWriter : IDisposable
             _insert.Dispose();
             _insertTarget.Dispose();
             _insertFault.Dispose();
+            _insertFile.Dispose();
             _transaction.Dispose();
         }
         catch (SqliteException exception)

@@ -25,14 +25,16 @@ export interface UrlPreset {
 }
 
 /**
- * The presets. Each leads with the URL and what an expert reads first for that kind of audit; a window that has room
- * shows them all, and a narrower one scrolls the grid sideways (never the page). Overview is the default view.
+ * The presets. Each leads with the URL and what an expert reads first for that kind of audit, and fits the grid of a
+ * 1,440-pixel window (`URL_GRID_AT_1440`) with nothing off its right edge (the fix-it pass: the Indexability preset's
+ * redirect targets were); a narrower one scrolls the grid sideways (never the page), and the Columns menu adds the rest.
+ * Overview is the default view.
  */
 export const URL_PRESETS: readonly UrlPreset[] = [
   {
     id: 'overview',
     title: 'Overview',
-    hint: 'Status, indexability, title, depth, inlinks and issues, then speed and size',
+    hint: 'Status, indexability, title, depth, inlinks and issues, then speed, size and type',
     columns: [
       'url',
       'statusCode',
@@ -44,47 +46,24 @@ export const URL_PRESETS: readonly UrlPreset[] = [
       'responseMs',
       'sizeBytes',
       'type',
-      'wordCount',
     ],
   },
   {
     id: 'indexability',
     title: 'Indexability',
-    hint: 'Why each URL can or can’t be indexed: robots, canonical, sitemaps, redirects',
-    columns: [
-      'url',
-      'statusCode',
-      'indexability',
-      'canonicalUrl',
-      'noindex',
-      'nofollow',
-      'inSitemap',
-      'metaRobots',
-      'xRobotsTag',
-      'redirectTarget',
-    ],
+    hint: 'Why each URL can or can’t be indexed: its canonical, robots meta tag, sitemaps and redirect',
+    columns: ['url', 'indexability', 'canonicalUrl', 'metaRobots', 'inSitemap', 'redirectTarget'],
   },
   {
     id: 'content',
     title: 'Content',
-    hint: 'Titles, descriptions, headings and words',
-    columns: [
-      'url',
-      'title',
-      'titleLength',
-      'titleWidth',
-      'h1',
-      'h1Count',
-      'wordCount',
-      'description',
-      'descriptionLength',
-      'descriptionWidth',
-    ],
+    hint: 'Titles and descriptions with their widths in results, and how many main headings',
+    columns: ['url', 'title', 'titleWidth', 'description', 'descriptionWidth', 'h1Count'],
   },
   {
     id: 'performance',
     title: 'Performance',
-    hint: 'How fast each URL answered, and how big it is: an image’s file and its pixels',
+    hint: 'How fast each URL answered, and how big it is: an image’s file and its pixels, and the pages using it',
     columns: [
       'url',
       'statusCode',
@@ -94,14 +73,14 @@ export const URL_PRESETS: readonly UrlPreset[] = [
       'sizeBytes',
       'pixelWidth',
       'pixelHeight',
-      'contentType',
+      'usedOn',
       'depth',
     ],
   },
   {
     id: 'links',
     title: 'Links',
-    hint: 'Links to each URL and from it, the pages a file is used on, and where its redirects lead',
+    hint: 'Links to each URL and from it, and the pages a file is used on',
     columns: [
       'url',
       'statusCode',
@@ -112,9 +91,6 @@ export const URL_PRESETS: readonly UrlPreset[] = [
       'nofollowInlinks',
       'linkingPages',
       'outlinks',
-      'redirectTarget',
-      'finalUrl',
-      'finalStatusCode',
     ],
   },
 ];
@@ -175,6 +151,8 @@ export function shownUrlColumns(
 export function urlQueryColumns(shown: readonly string[]): string[] {
   const asked = new Set<string>(['url', ...shown]);
   if (shown.includes('statusCode')) ['statusClass', 'outcome', 'fetched'].forEach((id) => asked.add(id));
+  // A file (a stylesheet, an image) isn't a page to judge for search: its indexability cell says so by its type.
+  if (shown.includes('indexability')) asked.add('type');
   return [...asked];
 }
 
@@ -399,10 +377,22 @@ const CELL_VALUES: Record<string, Record<string, string>> = {
   outcome: OUTCOME_WORDS,
 };
 
-/** An enum value in a cell's words: the engine's (`titles`, its `valueTitles`), else this version's, else the value. */
+/**
+ * Words this version says more plainly than the engine's: "Blocked" beside "Blocked by robots.txt" read as the same thing
+ * (the fix-it pass); it's a firewall or a bot check that answered.
+ */
+const CLEARER_VALUES: Record<string, Record<string, string>> = { indexability: { blocked: 'Blocked by a firewall' } };
+
+/**
+ * An enum value in a cell's words: this version's clearer words, else the engine's (`titles`, its `valueTitles`), else
+ * this version's, else the value.
+ */
 export function urlCellValue(column: string, value: string, titles?: Readonly<Record<string, string>>): string {
-  return titles?.[value] ?? CELL_VALUES[column]?.[value] ?? value;
+  return CLEARER_VALUES[column]?.[value] ?? titles?.[value] ?? CELL_VALUES[column]?.[value] ?? value;
 }
+
+/** A file's indexability, where it has none to judge: search engines index pages, not stylesheets or images. */
+export const NOT_A_PAGE = 'Not a page';
 
 /** Columns that hold a URL: drawn in the URL's face, a path where it's on the crawl's own site. */
 const URL_TEXT: ReadonlySet<string> = new Set(['redirectTarget', 'canonicalUrl', 'finalUrl']);
@@ -421,18 +411,18 @@ function numberWords(column: string, value: number): string {
 
 const TYPE_WIDTHS: Record<UrlColumnType, number> = { number: 96, boolean: 96, enum: 136, text: 240, object: 320 };
 const WIDTHS: Record<string, number> = {
-  statusCode: 104,
+  statusCode: 88,
   statusClass: 96,
   outcome: 168,
-  indexability: 132,
+  indexability: 120,
   indexable: 96,
-  type: 88,
+  type: 80,
   source: 136,
   depth: 64,
   isInternal: 112,
   fetched: 88,
   contentType: 200,
-  title: 240,
+  title: 208,
   description: 320,
   h1: 240,
   h1Count: 64,
@@ -449,9 +439,9 @@ const WIDTHS: Record<string, number> = {
   nofollowInlinks: 136,
   linkingPages: 120,
   outlinks: 96,
-  responseMs: 96,
+  responseMs: 88,
   ttfbMs: 96,
-  sizeBytes: 88,
+  sizeBytes: 80,
   issues: 72,
   errors: 72,
   warnings: 96,
@@ -461,10 +451,10 @@ const WIDTHS: Record<string, number> = {
   inSitemap: 112,
   metaRobots: 176,
   xRobotsTag: 176,
-  redirectTarget: 240,
+  redirectTarget: 224,
   redirectTargetStatusCode: 136,
   redirectKind: 200,
-  canonicalUrl: 240,
+  canonicalUrl: 224,
   finalUrl: 240,
   finalStatusCode: 104,
   usedOn: 88,
@@ -500,6 +490,22 @@ export function urlColumnWidth(
     .filter((id) => id !== 'url')
     .reduce((sum, id) => sum + (widths[id] ?? widthOf(id, byId.get(id)?.type ?? 'text')), 0);
   return Math.max(URL_MIN_WIDTH, Math.floor(available - others));
+}
+
+/** The URL grid's width in a 1,440-pixel window, the sidebar open: what every preset fits (its frame and scrollbar left out). */
+export const URL_GRID_AT_1440 = 1_120;
+
+/** Whether these columns fit a grid this wide with the URL at its least width or more: nothing off the right edge. */
+export function urlPresetFits(
+  shown: readonly string[],
+  catalogue: readonly UrlColumn[] | undefined,
+  available: number,
+): boolean {
+  const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
+  const others = shown
+    .filter((id) => id !== 'url')
+    .reduce((sum, id) => sum + widthOf(id, byId.get(id)?.type ?? 'text'), 0);
+  return others + URL_MIN_WIDTH <= available;
 }
 
 /** How many columns are wholly in view from the left, at a grid's width: what a preset shows without scrolling. */
@@ -639,6 +645,8 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
     case 'enum': {
       const words = (row: UrlRow) => {
         const raw = valueOf(row, id);
+        // A file that answered isn't "Indexable": it isn't a page. One that failed still says how.
+        if (id === 'indexability' && raw === 'none' && row.type && RESOURCE_URL_TYPES.has(row.type)) return NOT_A_PAGE;
         return typeof raw === 'string' ? urlCellValue(id, raw, column?.valueTitles) : '';
       };
       return {
@@ -669,8 +677,19 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
         return {
           ...base,
           mono: true,
-          cell: (row) =>
-            words(row) ? <Url url={words(row)} siteOrigin={origin} copyable={false} tabbable={false} /> : muted('–'),
+          cell: (row) => {
+            const url = words(row);
+            if (!url) return muted('–');
+            // A canonical to the page itself is the usual, right case: said as "Self", so one to another URL stands out.
+            if (id === 'canonicalUrl' && url === row.url) {
+              return (
+                <span className="text-text-muted" title="The page names itself as its main address">
+                  Self
+                </span>
+              );
+            }
+            return <Url url={url} siteOrigin={origin} copyable={false} tabbable={false} />;
+          },
           text: words,
         };
       }

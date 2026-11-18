@@ -426,7 +426,7 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         var blocked = await PostOkAsync($"api/crawls/{id}/robots/blocked", new JsonObject { ["origin"] = site });
         Assert.Equal(["origin", "total", "matching", "offset", "rows", "conflicts"], blocked.AsObject().Select(property => property.Key));
         var row = Assert.Single(blocked["rows"]!.AsArray())!;
-        Assert.Equal(["id", "url", "reason", "line", "rule", "error", "linkingPages", "inSitemap", "sitemaps", "sitemap", "inMenu", "conflict"],
+        Assert.Equal(["id", "url", "reason", "line", "rule", "error", "linkingPages", "usedOn", "inSitemap", "sitemaps", "sitemap", "inMenu", "conflict"],
             row.AsObject().Select(property => property.Key));
         Assert.Equal((grid.Url("/private/listed"), "rule", 2, "Disallow: /private/"), ((string?)row["url"], (string?)row["reason"], (int)row["line"]!, (string?)row["rule"]));
         Assert.Equal((1L, 1L, 1L), ((long)blocked["total"]!, (long)blocked["matching"]!, (long)blocked["conflicts"]!));
@@ -438,7 +438,7 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         // conflicts can be listed alone.
         var listing = (await Sidecar.GetJsonAsync($"api/crawls/{id}/sitemaps"))["sitemaps"]!.AsArray()
             .Single(sitemap => ((string)sitemap!["url"]!).EndsWith("/sitemaps/extra.xml", StringComparison.Ordinal))!;
-        Assert.Equal($$"""{"linkingPages":0,"inSitemap":true,"sitemaps":1,"sitemap":{"id":{{(int)listing["id"]!}},"url":"{{(string)listing["url"]!}}"},"inMenu":false,"conflict":true}""",
+        Assert.Equal($$"""{"linkingPages":0,"usedOn":0,"inSitemap":true,"sitemaps":1,"sitemap":{"id":{{(int)listing["id"]!}},"url":"{{(string)listing["url"]!}}"},"inMenu":false,"conflict":true}""",
             new JsonObject(row.AsObject().Skip(6).Select(property => KeyValuePair.Create(property.Key, property.Value?.DeepClone()))).ToJsonString());
         Assert.Equal((1L, 1L), await MatchingAsync(new JsonObject { ["origin"] = site, ["conflict"] = true }));
         Assert.Equal((1L, 0L), await MatchingAsync(new JsonObject { ["origin"] = site, ["conflict"] = false }));

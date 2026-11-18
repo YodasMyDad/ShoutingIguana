@@ -64,8 +64,13 @@ internal static class GridExport
     /// <param name="columns">The columns written, which the query is asked for.</param>
     /// <param name="titles">The header's words, where they aren't the columns' own.</param>
     /// <param name="extra">Columns after the grid's own, read a page of rows at a time (where a check's URLs are found).</param>
+    /// <param name="rewrite">
+    /// What a cell says instead, given its column's index, its value and the row's cells so far (a check's sheet leaves a final
+    /// URL that is the address itself empty); null writes every cell as read.
+    /// </param>
     public static void WriteGrid(ExportRun run, ITableWriter table, string name, IReadOnlyList<UrlColumnInfo> columns, bool links, string? checkId, int? sitemapId,
-        IReadOnlyList<string>? titles = null, IssueGroupKey? group = null, UrlQuery? query = null, ExportExtraColumns? extra = null)
+        IReadOnlyList<string>? titles = null, IssueGroupKey? group = null, UrlQuery? query = null, ExportExtraColumns? extra = null,
+        Func<int, object?, object?[], object?>? rewrite = null)
     {
         query = (query ?? run.Request.Query) with { Columns = [.. columns.Select(column => column.Id).Distinct(StringComparer.Ordinal)] };
         group ??= run.Request.Kind == ExportKind.IssueRows ? run.Request.Group : null;
@@ -103,6 +108,14 @@ internal static class GridExport
                 for (var index = 0; index < columns.Count; index++)
                 {
                     cells[index] = places[index] < 0 ? null : Cell(columns[index], row.Values[places[index]]);
+                }
+
+                if (rewrite is not null)
+                {
+                    for (var index = 0; index < columns.Count; index++)
+                    {
+                        cells[index] = rewrite(index, cells[index], cells);
+                    }
                 }
 
                 if (extra is not null)
